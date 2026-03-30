@@ -29,6 +29,7 @@ namespace Test.Automated
             runner.AddSuite(new ApprovalPolicyTests(liveMode));
             runner.AddSuite(new EndpointSwitchingTests(liveMode));
             runner.AddSuite(new MultiEditTests(liveMode));
+            runner.AddSuite(new LineBufferTests());
 
             int exitCode = await runner.RunAllAsync().ConfigureAwait(false);
             return exitCode;

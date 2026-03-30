@@ -228,15 +228,15 @@ namespace Mux.Cli.Commands
 
         /// <summary>
         /// Reads multi-line input from the console with support for Shift+Enter and Ctrl+Enter
-        /// to insert newlines, and Enter to submit.
+        /// to insert newlines, Enter to submit, and left/right/Home/End for cursor navigation.
         /// </summary>
         /// <returns>The full input string, or null if the user signals exit.</returns>
         private string? ReadMultiLineInput()
         {
-            StringBuilder buffer = new StringBuilder();
-            int currentLine = 0;
+            LineBuffer lineBuffer = new LineBuffer();
+            int promptWidth = 5; // "mux> " or "...> "
 
-            WritePrompt(currentLine);
+            WritePrompt(0);
 
             while (true)
             {
@@ -251,6 +251,7 @@ namespace Mux.Cli.Commands
                     return null;
                 }
 
+                // Ctrl+C: clear or exit
                 if (keyInfo.Key == ConsoleKey.C
                     && (keyInfo.Modifiers & ConsoleModifiers.Control) != 0)
                 {
@@ -264,12 +265,12 @@ namespace Mux.Cli.Commands
 
                     _LastCtrlCTime = now;
                     AnsiConsole.WriteLine();
-                    buffer.Clear();
-                    currentLine = 0;
-                    WritePrompt(currentLine);
+                    lineBuffer.Clear();
+                    WritePrompt(0);
                     continue;
                 }
 
+                // Enter: submit or newline
                 if (keyInfo.Key == ConsoleKey.Enter)
                 {
                     bool isShiftEnter = (keyInfo.Modifiers & ConsoleModifiers.Shift) != 0;
@@ -277,52 +278,114 @@ namespace Mux.Cli.Commands
 
                     if (isShiftEnter || isCtrlEnter)
                     {
-                        buffer.Append(Environment.NewLine);
-                        currentLine++;
+                        lineBuffer.InsertNewLine();
                         Console.WriteLine();
-                        WritePrompt(currentLine);
+                        WritePrompt(lineBuffer.CurrentLineIndex);
                         continue;
                     }
 
                     Console.WriteLine();
-                    return buffer.ToString();
+                    return lineBuffer.GetText();
                 }
 
-                if (keyInfo.Key == ConsoleKey.Backspace)
+                // Left arrow
+                if (keyInfo.Key == ConsoleKey.LeftArrow)
                 {
-                    if (buffer.Length > 0)
+                    if (lineBuffer.MoveLeft())
                     {
-                        char lastChar = buffer[buffer.Length - 1];
-                        buffer.Remove(buffer.Length - 1, 1);
-
-                        if (lastChar == '\n' || lastChar == '\r')
-                        {
-                            if (buffer.Length > 0 && buffer[buffer.Length - 1] == '\r')
-                            {
-                                buffer.Remove(buffer.Length - 1, 1);
-                            }
-
-                            currentLine = Math.Max(0, currentLine - 1);
-                            RedrawCurrentLine(buffer, currentLine);
-                        }
-                        else
-                        {
-                            Console.Write("\b \b");
-                        }
+                        Console.SetCursorPosition(promptWidth + lineBuffer.CursorColumn, Console.CursorTop);
                     }
-
                     continue;
                 }
 
+                // Right arrow
+                if (keyInfo.Key == ConsoleKey.RightArrow)
+                {
+                    if (lineBuffer.MoveRight())
+                    {
+                        Console.SetCursorPosition(promptWidth + lineBuffer.CursorColumn, Console.CursorTop);
+                    }
+                    continue;
+                }
+
+                // Home
+                if (keyInfo.Key == ConsoleKey.Home)
+                {
+                    lineBuffer.MoveHome();
+                    Console.SetCursorPosition(promptWidth, Console.CursorTop);
+                    continue;
+                }
+
+                // End
+                if (keyInfo.Key == ConsoleKey.End)
+                {
+                    lineBuffer.MoveEnd();
+                    Console.SetCursorPosition(promptWidth + lineBuffer.CursorColumn, Console.CursorTop);
+                    continue;
+                }
+
+                // Delete key (forward delete)
+                if (keyInfo.Key == ConsoleKey.Delete)
+                {
+                    if (lineBuffer.Delete())
+                    {
+                        RedrawFromCursor(lineBuffer, promptWidth);
+                    }
+                    continue;
+                }
+
+                // Backspace
+                if (keyInfo.Key == ConsoleKey.Backspace)
+                {
+                    if (lineBuffer.IsCursorAtStart && lineBuffer.CurrentLineIndex > 0)
+                    {
+                        // At start of continuation line — merge up
+                        lineBuffer.RemoveCurrentLineAndMergeUp();
+                        RedrawCurrentLine(lineBuffer, promptWidth);
+                    }
+                    else if (lineBuffer.Backspace())
+                    {
+                        if (lineBuffer.IsCursorAtEnd)
+                        {
+                            // Simple case: cursor at end, just erase last char
+                            Console.Write("\b \b");
+                        }
+                        else
+                        {
+                            // Mid-line: redraw from cursor position
+                            RedrawFromCursor(lineBuffer, promptWidth);
+                        }
+                    }
+                    continue;
+                }
+
+                // Escape: ignore
                 if (keyInfo.Key == ConsoleKey.Escape)
                 {
                     continue;
                 }
 
+                // Up/Down arrows: ignore for now
+                if (keyInfo.Key == ConsoleKey.UpArrow || keyInfo.Key == ConsoleKey.DownArrow)
+                {
+                    continue;
+                }
+
+                // Regular character
                 if (keyInfo.KeyChar != '\0' && !char.IsControl(keyInfo.KeyChar))
                 {
-                    buffer.Append(keyInfo.KeyChar);
-                    Console.Write(keyInfo.KeyChar);
+                    lineBuffer.Insert(keyInfo.KeyChar);
+
+                    if (lineBuffer.IsCursorAtEnd)
+                    {
+                        // Appending at end: just write the char
+                        Console.Write(keyInfo.KeyChar);
+                    }
+                    else
+                    {
+                        // Inserting mid-line: redraw from cursor
+                        RedrawFromCursor(lineBuffer, promptWidth);
+                    }
                 }
             }
         }
@@ -344,23 +407,38 @@ namespace Mux.Cli.Commands
         }
 
         /// <summary>
-        /// Redraws the current line after a backspace crosses a newline boundary.
+        /// Redraws the text from the cursor position to the end of the current line,
+        /// clearing any leftover characters and repositioning the cursor.
         /// </summary>
-        /// <param name="buffer">The current input buffer.</param>
-        /// <param name="currentLine">The current zero-based line number.</param>
-        private static void RedrawCurrentLine(StringBuilder buffer, int currentLine)
+        /// <param name="lineBuffer">The line buffer.</param>
+        /// <param name="promptWidth">The width of the prompt prefix in characters.</param>
+        private static void RedrawFromCursor(LineBuffer lineBuffer, int promptWidth)
         {
-            string text = buffer.ToString();
-            string[] lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-            string lastLine = lines.Length > 0 ? lines[lines.Length - 1] : string.Empty;
+            int cursorX = promptWidth + lineBuffer.CursorColumn;
+            string textAfter = lineBuffer.TextAfterCursor;
 
-            int cursorLeft = Console.CursorLeft;
+            Console.SetCursorPosition(cursorX, Console.CursorTop);
+            Console.Write(textAfter);
+            // Clear any trailing characters from the previous longer text
+            Console.Write("  ");
+            Console.SetCursorPosition(cursorX, Console.CursorTop);
+        }
+
+        /// <summary>
+        /// Redraws the entire current line including the prompt.
+        /// Used when merging lines (backspace at start of continuation line).
+        /// </summary>
+        /// <param name="lineBuffer">The line buffer.</param>
+        /// <param name="promptWidth">The width of the prompt prefix in characters.</param>
+        private static void RedrawCurrentLine(LineBuffer lineBuffer, int promptWidth)
+        {
             Console.SetCursorPosition(0, Console.CursorTop);
-            Console.Write(new string(' ', Math.Max(cursorLeft, 80)));
+            Console.Write(new string(' ', promptWidth + lineBuffer.CurrentLine.Length + 10));
             Console.SetCursorPosition(0, Console.CursorTop);
 
-            WritePrompt(currentLine);
-            Console.Write(lastLine);
+            WritePrompt(lineBuffer.CurrentLineIndex);
+            Console.Write(lineBuffer.CurrentLine);
+            Console.SetCursorPosition(promptWidth + lineBuffer.CursorColumn, Console.CursorTop);
         }
 
         /// <summary>
