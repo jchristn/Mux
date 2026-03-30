@@ -21,6 +21,7 @@ namespace Mux.Core.Llm
         /// <param name="action">The asynchronous action to execute.</param>
         /// <param name="maxRetries">The maximum number of retry attempts. Defaults to 3.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <param name="onRetry">Optional callback invoked on each retry with attempt number, max retries, and error message.</param>
         /// <returns>The result of the action on success.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="action"/> is null.</exception>
         public static async Task<T> ExecuteWithRetryAsync<T>(

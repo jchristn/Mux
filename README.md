@@ -11,8 +11,11 @@
 <p align="center">
   <a href="https://github.com/jchristn/Mux/blob/main/LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <img src="https://img.shields.io/badge/version-0.1.0-green.svg" alt="v0.1.0">
+  <img src="https://img.shields.io/badge/version-0.1.0%20alpha-orange.svg" alt="v0.1.0-alpha">
 </p>
+
+> **v0.1.0 — Alpha Release**
+> This is an early alpha. APIs, interfaces, configuration formats, tool schemas, and CLI behavior are all subject to change. Feedback welcome via [issues](https://github.com/jchristn/Mux/issues) and [discussions](https://github.com/jchristn/Mux/discussions).
 
 ---
 
@@ -21,6 +24,8 @@
 mux is a CLI AI agent that gives you a Claude Code / Codex-like experience using **any model** on **any backend** you choose. Run it against Ollama on your laptop, vLLM on a GPU server, OpenAI's API, Azure, Groq, Together AI, or any OpenAI-compatible endpoint.
 
 mux reads your files, writes code, runs commands, searches your codebase, and manages your project — all through a conversational REPL or single-shot commands. You own the models. You own the data. Nothing leaves your machine unless you point it at a cloud API.
+
+**mux does not install, configure, or manage model runners.** You bring your own inference backend (Ollama, vLLM, OpenAI, etc.) — mux connects to it. See the [Quick Start](#quick-start) section for setup.
 
 ## Why mux?
 
@@ -33,10 +38,37 @@ mux reads your files, writes code, runs commands, searches your codebase, and ma
 
 ## Quick Start
 
-**Prerequisites:** [.NET 8 SDK](https://dotnet.microsoft.com/download) or later, [Ollama](https://ollama.ai) (for local models)
+### Prerequisites
+
+- [.NET 8 SDK](https://dotnet.microsoft.com/download) or later
+- A model runner installed and running separately — mux does not manage model runners
+
+### Step 1: Install a model runner
+
+mux connects to model runners that you install and manage independently. The default configuration assumes [Ollama](https://ollama.ai) running locally. Install Ollama from [ollama.ai](https://ollama.ai), then pull the recommended model:
 
 ```bash
-# Clone and install
+ollama pull qwen2.5-coder:7b
+```
+
+Verify the model is available:
+
+```bash
+ollama ls
+```
+
+You should see:
+
+```
+NAME                  ID              SIZE      MODIFIED
+qwen2.5-coder:7b     2b0496514e35    4.7 GB    just now
+```
+
+Make sure Ollama is running (`ollama serve` if it's not already started as a service).
+
+### Step 2: Install mux
+
+```bash
 git clone https://github.com/jchristn/Mux.git
 cd Mux
 
@@ -48,16 +80,19 @@ chmod +x install-tool.sh
 ./install-tool.sh
 ```
 
-Pull a model and start:
+### Step 3: Run
 
 ```bash
-ollama pull qwen2.5-coder:7b
 mux
 ```
 
-That's it. mux creates `~/.mux/endpoints.json` on first run with sensible defaults.
+On first run, mux creates `~/.mux/endpoints.json` configured to connect to Ollama at `localhost:11434` with `qwen2.5-coder:7b`. No additional configuration needed if you followed the steps above.
 
 See [GETTING_STARTED.md](https://github.com/jchristn/Mux/blob/main/GETTING_STARTED.md) for the full walkthrough.
+
+### Using a different model runner?
+
+mux works with any OpenAI-compatible API. See [USAGE.md](https://github.com/jchristn/Mux/blob/main/USAGE.md) for backend-specific examples (vLLM, OpenAI, Azure, Groq, Together AI, LM Studio, etc.).
 
 ## Verify It Works
 
@@ -67,7 +102,7 @@ After install, try this prompt to confirm the LLM and tools are working end-to-e
 mux> create a file called hello.py that prints "hello world", then read it back to verify. if the file already exists, overwrite it.
 ```
 
-You should see `write_file` and `read_file` tool calls, the file created on disk, and the contents read back.
+You should see `write_file` and `read_file` tool calls, the file created on disk, and the contents read back. If you're prompted for approval, type `always` to auto-approve for the session, or start mux with `--yolo` to skip prompts.
 
 ## What Can It Do?
 
@@ -97,17 +132,19 @@ mux> run the test suite and fix any failures
 
 ### Supported Backends
 
-| Backend | Adapter Type |
-|---------|-------------|
-| [Ollama](https://ollama.ai) | `ollama` |
-| [OpenAI](https://openai.com) | `openai` |
-| [vLLM](https://vllm.ai) | `openai-compatible` |
-| [Azure OpenAI](https://azure.microsoft.com/en-us/products/ai-services/openai-service) | `openai-compatible` |
-| [Together AI](https://together.ai) | `openai-compatible` |
-| [Groq](https://groq.com) | `openai-compatible` |
-| [Fireworks](https://fireworks.ai) | `openai-compatible` |
-| [LM Studio](https://lmstudio.ai) | `openai-compatible` |
-| Any OpenAI-compatible API | `openai-compatible` |
+mux connects to model runners that you install and manage separately. It does not download, install, or serve models.
+
+| Backend | Adapter Type | Notes |
+|---------|-------------|-------|
+| [Ollama](https://ollama.ai) | `ollama` | Default. Local inference, free, open source. |
+| [OpenAI](https://openai.com) | `openai` | GPT-4o, GPT-4o-mini. Requires API key. |
+| [vLLM](https://vllm.ai) | `openai-compatible` | High-throughput self-hosted serving. |
+| [Azure OpenAI](https://azure.microsoft.com/en-us/products/ai-services/openai-service) | `openai-compatible` | Enterprise Azure deployments. |
+| [Together AI](https://together.ai) | `openai-compatible` | Cloud inference. Requires API key. |
+| [Groq](https://groq.com) | `openai-compatible` | Fast cloud inference. Requires API key. |
+| [Fireworks](https://fireworks.ai) | `openai-compatible` | Cloud inference. Requires API key. |
+| [LM Studio](https://lmstudio.ai) | `openai-compatible` | Local GUI + API server. |
+| Any OpenAI-compatible API | `openai-compatible` | Anything that speaks the OpenAI chat completions format. |
 
 ## Interactive Mode
 
@@ -136,11 +173,11 @@ echo "refactor AuthService" | mux print --yolo
 
 ## Configuration
 
-All config lives in `~/.mux/`:
+All config lives in `~/.mux/`. mux tells the model runner what model to use and how to call it — but you must install and run the model runner yourself.
 
 | File | Purpose |
 |------|---------|
-| `endpoints.json` | Model runner endpoints (Ollama, OpenAI, etc.) |
+| `endpoints.json` | Model runner connection details (URL, model, adapter type, auth) |
 | `mcp-servers.json` | MCP tool server definitions |
 | `settings.json` | Global settings (approval policy, timeouts, etc.) |
 | `system-prompt.md` | Custom system prompt (optional) |
