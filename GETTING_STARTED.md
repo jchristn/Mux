@@ -55,7 +55,7 @@ To uninstall:
 If you don't have a model yet:
 
 ```bash
-ollama pull gemma3:4b
+ollama pull qwen2.5-coder:7b
 ```
 
 Make sure Ollama is running:
@@ -72,7 +72,17 @@ Just type:
 mux
 ```
 
-On first run, mux creates `~/.mux/` with a default `endpoints.json` pointing to Ollama at `localhost:11434` with `gemma3:4b`. You can start chatting immediately.
+On first run, mux creates `~/.mux/` with a default `endpoints.json` pointing to Ollama at `localhost:11434` with `qwen2.5-coder:7b`. You can start chatting immediately.
+
+## Verify It Works
+
+Try this prompt to confirm the LLM and tools are working:
+
+```
+mux> create a file called hello.py that prints "hello world", then read it back to verify. if the file already exists, overwrite it.
+```
+
+You should see `write_file` and `read_file` tool calls execute, the file created on disk, and the contents echoed back. If you're not running with `--yolo`, type `always` at the first approval prompt to auto-approve for the session.
 
 ## Interactive Commands
 

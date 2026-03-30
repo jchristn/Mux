@@ -33,7 +33,10 @@ namespace Mux.Core.Tools
             RegisterTool(new WriteFileTool());
             RegisterTool(new EditFileTool());
             RegisterTool(new MultiEditTool());
+            RegisterTool(new DeleteFileTool());
+            RegisterTool(new FileMetadataTool());
             RegisterTool(new ListDirectoryTool());
+            RegisterTool(new ManageDirectoryTool());
             RegisterTool(new GlobTool());
             RegisterTool(new GrepTool());
             RegisterTool(new RunProcessTool());

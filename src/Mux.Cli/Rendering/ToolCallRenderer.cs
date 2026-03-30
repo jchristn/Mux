@@ -51,7 +51,10 @@ namespace Mux.Cli.Rendering
         /// <summary>
         /// Formats a tool call into a concise one-line summary.
         /// </summary>
-        private static string FormatToolSummary(string toolName, string arguments)
+        /// <param name="toolName">The tool name.</param>
+        /// <param name="arguments">The raw JSON arguments string.</param>
+        /// <returns>A human-readable summary string.</returns>
+        public static string FormatToolSummary(string toolName, string arguments)
         {
             string argSummary = ExtractArgSummary(toolName, arguments);
             if (string.IsNullOrEmpty(argSummary))
@@ -96,8 +99,24 @@ namespace Mux.Cli.Rendering
                         }
                         return editPath;
 
+                    case "delete_file":
+                        return GetShortPath(GetStringProp(root, "file_path"));
+
+                    case "file_metadata":
+                        return GetShortPath(GetStringProp(root, "path"));
+
                     case "list_directory":
                         return GetShortPath(GetStringProp(root, "path"));
+
+                    case "manage_directory":
+                        string action = GetStringProp(root, "action");
+                        string dirPath = GetShortPath(GetStringProp(root, "path"));
+                        string newDirPath = GetStringProp(root, "new_path");
+                        if (action == "rename" && !string.IsNullOrEmpty(newDirPath))
+                        {
+                            return $"{action} {dirPath} -> {GetShortPath(newDirPath)}";
+                        }
+                        return $"{action} {dirPath}";
 
                     case "glob":
                         return GetStringProp(root, "pattern");

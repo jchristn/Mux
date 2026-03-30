@@ -133,6 +133,11 @@ namespace Mux.Cli.Commands
                 }
             }
 
+            if (approvalPolicy == ApprovalPolicyEnum.AutoApprove)
+            {
+                AnsiConsole.MarkupLine("[yellow]notice: all tool calls will be auto-approved (--yolo)[/]");
+            }
+
             AnsiConsole.MarkupLine($"[dim]Endpoint:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]|[/] [dim]Model:[/] {Markup.Escape(_CurrentEndpoint.Model)}");
             AnsiConsole.MarkupLine("[dim]Type /help for commands, Ctrl+C to cancel, Ctrl+C twice to exit.[/]");
             AnsiConsole.WriteLine();
@@ -538,15 +543,19 @@ namespace Mux.Cli.Commands
             table.Border = TableBorder.Rounded;
             table.AddColumn("[bold]Tool[/]");
             table.AddColumn("[bold]Description[/]");
+            table.AddColumn("[bold]Source[/]");
 
-            table.AddRow("ReadFile", "Read file contents from disk");
-            table.AddRow("WriteFile", "Write content to a file");
-            table.AddRow("EditFile", "Apply a search-and-replace edit to a file");
-            table.AddRow("MultiEdit", "Apply multiple edits to a file in one operation");
-            table.AddRow("ListDirectory", "List files and directories at a path");
-            table.AddRow("Glob", "Find files matching a glob pattern");
-            table.AddRow("Grep", "Search file contents using regex patterns");
-            table.AddRow("RunProcess", "Execute a shell command");
+            table.AddRow("read_file", "Read file contents from disk", "[green]built-in[/]");
+            table.AddRow("write_file", "Write content to a file", "[green]built-in[/]");
+            table.AddRow("edit_file", "Apply a search-and-replace edit to a file", "[green]built-in[/]");
+            table.AddRow("multi_edit", "Apply multiple edits to a file atomically", "[green]built-in[/]");
+            table.AddRow("delete_file", "Delete a file from disk", "[green]built-in[/]");
+            table.AddRow("file_metadata", "Read file/directory metadata (size, timestamps)", "[green]built-in[/]");
+            table.AddRow("list_directory", "List files and directories at a path", "[green]built-in[/]");
+            table.AddRow("manage_directory", "Create, delete, or rename directories", "[green]built-in[/]");
+            table.AddRow("glob", "Find files matching a glob pattern", "[green]built-in[/]");
+            table.AddRow("grep", "Search file contents using regex patterns", "[green]built-in[/]");
+            table.AddRow("run_process", "Execute a shell command", "[green]built-in[/]");
 
             if (_McpToolManager != null)
             {
@@ -555,7 +564,8 @@ namespace Mux.Cli.Commands
                 {
                     table.AddRow(
                         $"[dim]{Markup.Escape(tool.Name)}[/]",
-                        $"[dim]{Markup.Escape(tool.Description)}[/]");
+                        $"[dim]{Markup.Escape(tool.Description)}[/]",
+                        "[cyan]mcp[/]");
                 }
             }
 

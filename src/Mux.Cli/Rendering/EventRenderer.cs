@@ -9,7 +9,7 @@ namespace Mux.Cli.Rendering
     using Spectre.Console;
 
     /// <summary>
-    /// Renders agent events to the terminal in a style similar to Claude Code.
+    /// Renders agent events to the terminal in a compact Claude Code-inspired style.
     /// </summary>
     public static class EventRenderer
     {
@@ -26,15 +26,13 @@ namespace Mux.Cli.Rendering
         /// Asynchronously renders a stream of agent events to the console.
         /// </summary>
         /// <param name="events">The async stream of agent events to render.</param>
-        /// <param name="verbose">Whether to render verbose diagnostic output such as heartbeat events.</param>
+        /// <param name="verbose">Whether to render verbose diagnostic output.</param>
         /// <returns>A task representing the async rendering operation.</returns>
         public static async Task RenderAsync(IAsyncEnumerable<AgentEvent> events, bool verbose)
         {
             bool wasStreaming = false;
             bool wasToolCall = false;
             bool waitingForFirstEvent = true;
-            bool hadToolCalls = false;
-            StringBuilder assistantTextBuffer = new StringBuilder();
 
             AnsiConsole.Markup("[dim]Thinking...[/]");
 
@@ -50,9 +48,6 @@ namespace Mux.Cli.Rendering
 
                 if (wasStreaming && !isTextEvent)
                 {
-                    // Flush streamed text — but if we also got tool calls,
-                    // the streamed text was likely just the model dumping tool call JSON.
-                    // We'll handle suppression below.
                     Console.WriteLine();
                     wasStreaming = false;
                 }
@@ -66,32 +61,18 @@ namespace Mux.Cli.Rendering
                 switch (agentEvent)
                 {
                     case AssistantTextEvent textEvent:
-                        assistantTextBuffer.Append(textEvent.Text);
-                        if (!hadToolCalls)
-                        {
-                            // Only stream text if we haven't seen tool calls yet.
-                            // Models that dump tool JSON as text before actual tool calls
-                            // will have hadToolCalls=false during streaming, so we show it.
-                            // After tool calls complete, final text is shown normally.
-                            Console.Write(textEvent.Text);
-                        }
-                        else
-                        {
-                            Console.Write(textEvent.Text);
-                        }
+                        Console.Write(textEvent.Text);
                         wasStreaming = true;
                         wasToolCall = false;
                         break;
 
                     case ToolCallProposedEvent proposedEvent:
-                        // Don't render here — the approval prompt (ToolCallRenderer)
-                        // will show the tool name. Just mark that we entered tool mode.
-                        hadToolCalls = true;
+                        // Always render the tool call proposal line
+                        RenderToolProposal(proposedEvent);
                         wasToolCall = true;
                         break;
 
                     case ToolCallApprovedEvent approvedEvent:
-                        // Rendered inline by ToolCallRenderer after approval
                         wasToolCall = true;
                         break;
 
@@ -153,7 +134,19 @@ namespace Mux.Cli.Rendering
         }
 
         /// <summary>
-        /// Renders a tool result with a compact success/failure indicator.
+        /// Renders a tool call proposal with a compact one-line summary.
+        /// </summary>
+        /// <param name="proposedEvent">The tool call proposed event.</param>
+        private static void RenderToolProposal(ToolCallProposedEvent proposedEvent)
+        {
+            string summary = ToolCallRenderer.FormatToolSummary(
+                proposedEvent.ToolCall.Name,
+                proposedEvent.ToolCall.Arguments);
+            AnsiConsole.MarkupLine($"  [cyan]●[/] [bold]{Markup.Escape(summary)}[/]");
+        }
+
+        /// <summary>
+        /// Renders a tool result on the same line area as the proposal.
         /// </summary>
         /// <param name="completedEvent">The tool call completed event.</param>
         private static void RenderToolResult(ToolCallCompletedEvent completedEvent)
@@ -182,8 +175,6 @@ namespace Mux.Cli.Rendering
         /// <summary>
         /// Summarizes a tool result for compact display.
         /// </summary>
-        /// <param name="content">The raw result content.</param>
-        /// <returns>A display-friendly summary string.</returns>
         private static string SummarizeResult(string content)
         {
             if (string.IsNullOrEmpty(content))
@@ -191,13 +182,11 @@ namespace Mux.Cli.Rendering
                 return "(empty)";
             }
 
-            // Try to parse as JSON and extract key info
             try
             {
                 JsonDocument doc = JsonDocument.Parse(content);
                 JsonElement root = doc.RootElement;
 
-                // For structured results like {"success":true,"file_path":"...","edits_applied":1}
                 if (root.TryGetProperty("success", out JsonElement successEl) && successEl.GetBoolean())
                 {
                     if (root.TryGetProperty("file_path", out JsonElement pathEl))
@@ -214,11 +203,15 @@ namespace Mux.Cli.Rendering
                         }
                         return fileName;
                     }
+                    if (root.TryGetProperty("path", out JsonElement dirPathEl))
+                    {
+                        return System.IO.Path.GetFileName(dirPathEl.GetString() ?? "") + "/";
+                    }
                 }
             }
             catch
             {
-                // Not JSON, fall through to line-based summary
+                // Not JSON
             }
 
             int lineCount = 1;
