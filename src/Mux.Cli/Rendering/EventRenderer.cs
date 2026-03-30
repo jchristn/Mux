@@ -16,7 +16,7 @@ namespace Mux.Cli.Rendering
         #region Private-Members
 
         private static readonly int _MaxResultPreview = 300;
-        private static readonly int _StatusLineWidth = 80;
+        private static ThinkingAnimation? _ActiveAnimation = null;
 
         #endregion
 
@@ -34,73 +34,85 @@ namespace Mux.Cli.Rendering
             bool wasToolCall = false;
             bool waitingForFirstEvent = true;
 
-            AnsiConsole.Markup("[dim]Thinking...[/]");
+            // Start animated thinking indicator
+            ThinkingAnimation animation = new ThinkingAnimation();
+            _ActiveAnimation = animation;
+            animation.Start();
 
-            await foreach (AgentEvent agentEvent in events)
+            try
             {
-                if (waitingForFirstEvent)
+                await foreach (AgentEvent agentEvent in events)
                 {
-                    ClearStatusLine();
-                    waitingForFirstEvent = false;
-                }
+                    if (waitingForFirstEvent)
+                    {
+                        animation.Stop();
+                        _ActiveAnimation = null;
+                        waitingForFirstEvent = false;
+                    }
 
-                bool isTextEvent = agentEvent is AssistantTextEvent;
+                    bool isTextEvent = agentEvent is AssistantTextEvent;
 
-                if (wasStreaming && !isTextEvent)
-                {
-                    Console.WriteLine();
-                    wasStreaming = false;
-                }
+                    if (wasStreaming && !isTextEvent)
+                    {
+                        Console.WriteLine();
+                        wasStreaming = false;
+                    }
 
-                if (wasToolCall && isTextEvent)
-                {
-                    Console.WriteLine();
-                    wasToolCall = false;
-                }
-
-                switch (agentEvent)
-                {
-                    case AssistantTextEvent textEvent:
-                        Console.Write(textEvent.Text);
-                        wasStreaming = true;
+                    if (wasToolCall && isTextEvent)
+                    {
+                        Console.WriteLine();
                         wasToolCall = false;
-                        break;
+                    }
 
-                    case ToolCallProposedEvent proposedEvent:
-                        // Always render the tool call proposal line
-                        RenderToolProposal(proposedEvent);
-                        wasToolCall = true;
-                        break;
+                    switch (agentEvent)
+                    {
+                        case AssistantTextEvent textEvent:
+                            Console.Write(textEvent.Text);
+                            wasStreaming = true;
+                            wasToolCall = false;
+                            break;
 
-                    case ToolCallApprovedEvent approvedEvent:
-                        wasToolCall = true;
-                        break;
+                        case ToolCallProposedEvent proposedEvent:
+                            RenderToolProposal(proposedEvent);
+                            wasToolCall = true;
+                            break;
 
-                    case ToolCallCompletedEvent completedEvent:
-                        RenderToolResult(completedEvent);
-                        wasToolCall = true;
-                        break;
+                        case ToolCallApprovedEvent approvedEvent:
+                            wasToolCall = true;
+                            break;
 
-                    case ErrorEvent errorEvent:
-                        RenderError(errorEvent);
-                        wasToolCall = false;
-                        break;
+                        case ToolCallCompletedEvent completedEvent:
+                            RenderToolResult(completedEvent);
+                            wasToolCall = true;
+                            break;
 
-                    case HeartbeatEvent heartbeatEvent:
-                        if (verbose)
-                        {
-                            Console.Error.WriteLine($"  [step {heartbeatEvent.StepNumber}]");
-                        }
-                        break;
+                        case ErrorEvent errorEvent:
+                            RenderError(errorEvent);
+                            wasToolCall = false;
+                            break;
 
-                    default:
-                        break;
+                        case HeartbeatEvent heartbeatEvent:
+                            if (verbose)
+                            {
+                                Console.Error.WriteLine($"  [step {heartbeatEvent.StepNumber}]");
+                            }
+                            break;
+
+                        default:
+                            break;
+                    }
                 }
             }
-
-            if (waitingForFirstEvent)
+            finally
             {
-                ClearStatusLine();
+                // Ensure animation is always stopped
+                if (waitingForFirstEvent)
+                {
+                    animation.Stop();
+                    _ActiveAnimation = null;
+                }
+
+                animation.Dispose();
             }
 
             if (wasStreaming)
@@ -111,27 +123,29 @@ namespace Mux.Cli.Rendering
 
         /// <summary>
         /// Updates the thinking/status line in-place for retry progress.
+        /// Called from the retry handler callback to show connection retry status
+        /// while the animation is running.
         /// </summary>
         /// <param name="message">The status message to display.</param>
         public static void UpdateStatusLine(string message)
         {
-            ClearStatusLine();
-            AnsiConsole.Markup($"[dim]{Markup.Escape(message)}[/]");
+            ThinkingAnimation? animation = _ActiveAnimation;
+            if (animation != null)
+            {
+                animation.ShowStatus(message);
+            }
+            else
+            {
+                Console.Write("\r");
+                Console.Write(new string(' ', 80));
+                Console.Write("\r");
+                Console.Write($"\x1b[90m{message}\x1b[0m");
+            }
         }
 
         #endregion
 
         #region Private-Methods
-
-        /// <summary>
-        /// Clears the current status/thinking line.
-        /// </summary>
-        private static void ClearStatusLine()
-        {
-            Console.Write("\r");
-            Console.Write(new string(' ', _StatusLineWidth));
-            Console.Write("\r");
-        }
 
         /// <summary>
         /// Renders a tool call proposal with a compact one-line summary.
