@@ -139,7 +139,7 @@ namespace Mux.Cli.Commands
             }
 
             AnsiConsole.MarkupLine($"[dim]Endpoint:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]|[/] [dim]Model:[/] {Markup.Escape(_CurrentEndpoint.Model)}");
-            AnsiConsole.MarkupLine("[dim]Type /help for commands, Ctrl+C to cancel, Ctrl+C twice to exit.[/]");
+            AnsiConsole.MarkupLine("[dim]Type /help for commands, Shift+Enter for newline, Ctrl+C to cancel, Ctrl+C twice to exit.[/]");
             AnsiConsole.WriteLine();
 
             while (true)
