@@ -206,6 +206,8 @@ See [CONFIG.md](https://github.com/jchristn/Mux/blob/main/CONFIG.md) for the ful
 | [GETTING_STARTED.md](https://github.com/jchristn/Mux/blob/main/GETTING_STARTED.md) | Install, first run, basic usage |
 | [USAGE.md](https://github.com/jchristn/Mux/blob/main/USAGE.md) | Backend-specific examples and configuration |
 | [CONFIG.md](https://github.com/jchristn/Mux/blob/main/CONFIG.md) | Full configuration reference |
+| [TESTING.md](https://github.com/jchristn/Mux/blob/main/TESTING.md) | Running unit and integration tests |
+| [CHANGELOG.md](https://github.com/jchristn/Mux/blob/main/CHANGELOG.md) | Version history and release notes |
 
 ## Scripts
 
