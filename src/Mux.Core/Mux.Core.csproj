@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Core models, agent loop, tools, and LLM client for mux</Description>
+    <PackageId>Mux.Core</PackageId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Voltaic" Version="0.1.11" />
+  </ItemGroup>
+
+</Project>

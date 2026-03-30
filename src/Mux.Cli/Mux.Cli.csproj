@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Description>CLI interface for mux AI agent</Description>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>mux</ToolCommandName>
+    <PackageId>Mux.Cli</PackageId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" Version="0.54.0" />
+    <PackageReference Include="Spectre.Console.Cli" Version="0.53.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mux.Core\Mux.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,3 @@
+@echo off
+echo Removing mux...
+dotnet tool uninstall -g Mux.Cli
