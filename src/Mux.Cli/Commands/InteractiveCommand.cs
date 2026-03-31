@@ -162,12 +162,6 @@ namespace Mux.Cli.Commands
                     continue;
                 }
 
-                _ConversationHistory.Add(new ConversationMessage
-                {
-                    Role = RoleEnum.User,
-                    Content = trimmed
-                });
-
                 AgentLoopOptions loopOptions = new AgentLoopOptions(_CurrentEndpoint)
                 {
                     ConversationHistory = _ConversationHistory,
@@ -198,7 +192,39 @@ namespace Mux.Cli.Commands
                 {
                     AgentLoop agentLoop = new AgentLoop(loopOptions);
                     IAsyncEnumerable<AgentEvent> events = agentLoop.RunAsync(trimmed, _CurrentCts.Token);
-                    await EventRenderer.RenderAsync(events, settings.Verbose);
+
+                    // Collect assistant text while rendering for conversation history
+                    StringBuilder assistantResponse = new StringBuilder();
+                    async IAsyncEnumerable<AgentEvent> WrapEvents(IAsyncEnumerable<AgentEvent> source)
+                    {
+                        await foreach (AgentEvent evt in source)
+                        {
+                            if (evt is AssistantTextEvent textEvt)
+                            {
+                                assistantResponse.Append(textEvt.Text);
+                            }
+                            yield return evt;
+                        }
+                    }
+
+                    await EventRenderer.RenderAsync(WrapEvents(events), settings.Verbose);
+
+                    // Add user message and assistant response to conversation history
+                    _ConversationHistory.Add(new ConversationMessage
+                    {
+                        Role = RoleEnum.User,
+                        Content = trimmed
+                    });
+
+                    string responseText = assistantResponse.ToString();
+                    if (!string.IsNullOrEmpty(responseText))
+                    {
+                        _ConversationHistory.Add(new ConversationMessage
+                        {
+                            Role = RoleEnum.Assistant,
+                            Content = responseText
+                        });
+                    }
                 }
                 catch (OperationCanceledException)
                 {

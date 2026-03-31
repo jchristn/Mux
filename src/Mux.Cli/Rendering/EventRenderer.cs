@@ -156,12 +156,12 @@ namespace Mux.Cli.Rendering
             if (completedEvent.Result.Success)
             {
                 AnsiConsole.MarkupLine(
-                    $"  [dim][[tool:{Markup.Escape(name)}]][/] [dim]{Markup.Escape(summary)}[/] [green]{status}[/] [dim]{elapsed}ms[/]");
+                    $"[dim][[tool:{Markup.Escape(name)}]][/] [dim]{Markup.Escape(summary)}[/] [green]{status}[/] [dim]{elapsed}ms[/]");
             }
             else
             {
                 AnsiConsole.MarkupLine(
-                    $"  [dim][[tool:{Markup.Escape(name)}]][/] [red]{Markup.Escape(summary)}[/] [red]{status}[/] [dim]{elapsed}ms[/]");
+                    $"[dim][[tool:{Markup.Escape(name)}]][/] [red]{Markup.Escape(summary)}[/] [red]{status}[/] [dim]{elapsed}ms[/]");
             }
         }
 
