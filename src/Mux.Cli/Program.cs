@@ -22,6 +22,8 @@ namespace Mux.Cli
         /// <returns>The process exit code.</returns>
         public static int Main(string[] args)
         {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+
             // Handle --version / /version early
             // Note: -v is also --verbose, so only treat bare "mux -v" as version
             bool isVersionRequest = args.Any(a => a == "--version" || a == "/version")
