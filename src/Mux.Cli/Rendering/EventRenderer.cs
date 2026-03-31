@@ -2,6 +2,7 @@ namespace Mux.Cli.Rendering
 {
     using System;
     using System.Collections.Generic;
+    using System.Text;
     using System.Text.Json;
     using System.Threading.Tasks;
     using Mux.Core.Agent;
@@ -36,6 +37,8 @@ namespace Mux.Cli.Rendering
             bool wasStreaming = false;
             bool wasToolCall = false;
             bool waitingForFirstEvent = true;
+            bool inCodeBlock = false;
+            StringBuilder lineBuffer = new StringBuilder();
 
             ThinkingAnimation animation = new ThinkingAnimation();
             _ActiveAnimation = animation;
@@ -56,7 +59,13 @@ namespace Mux.Cli.Rendering
 
                     if (wasStreaming && !isTextEvent)
                     {
-                        Console.Write(_TextStyleOff);
+                        // Flush remaining line buffer
+                        FlushLineBuffer(lineBuffer, inCodeBlock);
+                        if (inCodeBlock)
+                        {
+                            Console.Write(_TextStyleOff);
+                            inCodeBlock = false;
+                        }
                         Console.WriteLine();
                         wasStreaming = false;
                     }
@@ -70,11 +79,45 @@ namespace Mux.Cli.Rendering
                     switch (agentEvent)
                     {
                         case AssistantTextEvent textEvent:
-                            if (!wasStreaming)
+                            // Buffer text and render line-by-line to detect code fences
+                            foreach (char c in textEvent.Text)
                             {
-                                Console.Write(_TextStyleOn);
+                                if (c == '\n')
+                                {
+                                    string line = lineBuffer.ToString();
+                                    lineBuffer.Clear();
+
+                                    // Check for code fence toggle
+                                    if (line.TrimStart().StartsWith("```"))
+                                    {
+                                        if (!inCodeBlock)
+                                        {
+                                            // Entering code block — print the fence line plain, then switch style
+                                            Console.Write(line);
+                                            Console.Write('\n');
+                                            Console.Write(_TextStyleOn);
+                                            inCodeBlock = true;
+                                        }
+                                        else
+                                        {
+                                            // Leaving code block — reset style, then print the fence line plain
+                                            Console.Write(_TextStyleOff);
+                                            Console.Write(line);
+                                            Console.Write('\n');
+                                            inCodeBlock = false;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        Console.Write(line);
+                                        Console.Write('\n');
+                                    }
+                                }
+                                else
+                                {
+                                    lineBuffer.Append(c);
+                                }
                             }
-                            Console.Write(textEvent.Text);
                             wasStreaming = true;
                             wasToolCall = false;
                             break;
@@ -122,7 +165,11 @@ namespace Mux.Cli.Rendering
 
             if (wasStreaming)
             {
-                Console.Write(_TextStyleOff);
+                FlushLineBuffer(lineBuffer, inCodeBlock);
+                if (inCodeBlock)
+                {
+                    Console.Write(_TextStyleOff);
+                }
                 Console.WriteLine();
             }
         }
@@ -150,6 +197,20 @@ namespace Mux.Cli.Rendering
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Flushes any remaining text in the line buffer to the console.
+        /// </summary>
+        /// <param name="lineBuffer">The line buffer to flush.</param>
+        /// <param name="inCodeBlock">Whether we are currently inside a code block.</param>
+        private static void FlushLineBuffer(StringBuilder lineBuffer, bool inCodeBlock)
+        {
+            if (lineBuffer.Length > 0)
+            {
+                Console.Write(lineBuffer.ToString());
+                lineBuffer.Clear();
+            }
+        }
 
         /// <summary>
         /// Renders a completed tool call as a single line:
