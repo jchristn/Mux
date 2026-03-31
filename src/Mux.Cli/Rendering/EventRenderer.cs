@@ -17,6 +17,10 @@ namespace Mux.Cli.Rendering
         private static readonly int _MaxResultPreview = 200;
         private static ThinkingAnimation? _ActiveAnimation = null;
 
+        // ANSI: dark grey background (236) + light grey text (250)
+        private static readonly string _TextStyleOn = "\x1b[38;5;250m\x1b[48;5;236m";
+        private static readonly string _TextStyleOff = "\x1b[0m";
+
         #endregion
 
         #region Public-Methods
@@ -52,6 +56,7 @@ namespace Mux.Cli.Rendering
 
                     if (wasStreaming && !isTextEvent)
                     {
+                        Console.Write(_TextStyleOff);
                         Console.WriteLine();
                         wasStreaming = false;
                     }
@@ -65,6 +70,10 @@ namespace Mux.Cli.Rendering
                     switch (agentEvent)
                     {
                         case AssistantTextEvent textEvent:
+                            if (!wasStreaming)
+                            {
+                                Console.Write(_TextStyleOn);
+                            }
                             Console.Write(textEvent.Text);
                             wasStreaming = true;
                             wasToolCall = false;
@@ -113,6 +122,7 @@ namespace Mux.Cli.Rendering
 
             if (wasStreaming)
             {
+                Console.Write(_TextStyleOff);
                 Console.WriteLine();
             }
         }
