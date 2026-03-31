@@ -109,9 +109,22 @@ namespace Test.Xunit.Tools
         /// </summary>
         public void Dispose()
         {
-            if (Directory.Exists(_TempDir))
+            if (!Directory.Exists(_TempDir))
             {
-                Directory.Delete(_TempDir, recursive: true);
+                return;
+            }
+
+            for (int attempt = 0; attempt < 5; attempt++)
+            {
+                try
+                {
+                    Directory.Delete(_TempDir, recursive: true);
+                    return;
+                }
+                catch (IOException) when (attempt < 4)
+                {
+                    Thread.Sleep(200);
+                }
             }
         }
 

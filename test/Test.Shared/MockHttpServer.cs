@@ -247,8 +247,22 @@ namespace Test.Shared
 
             lock (_Lock)
             {
-                matchedRoute = _Routes.FirstOrDefault(
-                    (MockRoute r) => requestBody.Contains(r.PromptContains, StringComparison.OrdinalIgnoreCase));
+                int bestLength = -1;
+
+                for (int i = _Routes.Count - 1; i >= 0; i--)
+                {
+                    MockRoute route = _Routes[i];
+                    if (!requestBody.Contains(route.PromptContains, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (route.PromptContains.Length > bestLength)
+                    {
+                        matchedRoute = route;
+                        bestLength = route.PromptContains.Length;
+                    }
+                }
             }
 
             if (matchedRoute == null)

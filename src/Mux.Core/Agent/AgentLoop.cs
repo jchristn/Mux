@@ -2,6 +2,7 @@ namespace Mux.Core.Agent
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Runtime.CompilerServices;
     using System.Text;
     using System.Text.Json;
@@ -61,6 +62,27 @@ namespace Mux.Core.Agent
             if (string.IsNullOrWhiteSpace(prompt))
                 throw new ArgumentException("Prompt cannot be null or empty.", nameof(prompt));
 
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            string runId = Guid.NewGuid().ToString("N");
+            int iterationCount = 0;
+            int toolCallCount = 0;
+            int errorCount = 0;
+            int assistantTextChars = 0;
+            bool maxIterationsReached = false;
+
+            yield return new RunStartedEvent
+            {
+                RunId = runId,
+                EndpointName = _Options.Endpoint.Name,
+                AdapterType = _Options.Endpoint.AdapterType.ToString(),
+                BaseUrl = _Options.Endpoint.BaseUrl,
+                Model = _Options.Endpoint.Model,
+                ApprovalPolicy = _Options.ApprovalPolicy.ToString(),
+                WorkingDirectory = _Options.WorkingDirectory,
+                MaxIterations = _Options.MaxIterations,
+                ToolsEnabled = _Options.Endpoint.Quirks?.SupportsTools ?? true
+            };
+
             // 1. Build conversation
             List<ConversationMessage> conversation = BuildConversation(prompt);
 
@@ -71,6 +93,7 @@ namespace Mux.Core.Agent
             for (int step = 0; step < _Options.MaxIterations; step++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                iterationCount = step + 1;
 
                 // 3a. Stream LLM response, yielding text events immediately
                 StringBuilder assistantTextBuilder = new StringBuilder();
@@ -84,6 +107,7 @@ namespace Mux.Core.Agent
                     if (streamEvent is AssistantTextEvent textEvent)
                     {
                         assistantTextBuilder.Append(textEvent.Text);
+                        assistantTextChars += textEvent.Text.Length;
                         yield return streamEvent;
                     }
                     else if (streamEvent is ToolCallProposedEvent proposedEvent)
@@ -94,6 +118,10 @@ namespace Mux.Core.Agent
                     else
                     {
                         // Yield error events and others immediately
+                        if (streamEvent is ErrorEvent)
+                        {
+                            errorCount++;
+                        }
                         yield return streamEvent;
                     }
                 }
@@ -118,6 +146,7 @@ namespace Mux.Core.Agent
                 foreach (ToolCall toolCall in proposedToolCalls)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    toolCallCount++;
 
                     // Yield proposed event
                     yield return new ToolCallProposedEvent { ToolCall = toolCall };
@@ -146,6 +175,7 @@ namespace Mux.Core.Agent
 
                     if (approvalError != null)
                     {
+                        errorCount++;
                         yield return approvalError;
                         // Add an error tool result to conversation
                         conversation.Add(new ConversationMessage
@@ -159,6 +189,7 @@ namespace Mux.Core.Agent
 
                     if (!approved)
                     {
+                        errorCount++;
                         yield return new ErrorEvent
                         {
                             Code = "tool_call_denied",
@@ -227,6 +258,8 @@ namespace Mux.Core.Agent
                 ConversationMessage lastMessage = conversation[conversation.Count - 1];
                 if (lastMessage.Role == RoleEnum.Tool)
                 {
+                    maxIterationsReached = true;
+                    errorCount++;
                     yield return new ErrorEvent
                     {
                         Code = "max_iterations_reached",
@@ -234,6 +267,21 @@ namespace Mux.Core.Agent
                     };
                 }
             }
+
+            stopwatch.Stop();
+
+            yield return new RunCompletedEvent
+            {
+                RunId = runId,
+                Status = maxIterationsReached
+                    ? "max_iterations_reached"
+                    : (errorCount > 0 ? "completed_with_errors" : "completed"),
+                IterationsCompleted = iterationCount,
+                ToolCallCount = toolCallCount,
+                ErrorCount = errorCount,
+                AssistantTextChars = assistantTextChars,
+                DurationMs = stopwatch.ElapsedMilliseconds
+            };
         }
 
         /// <summary>
@@ -315,7 +363,7 @@ namespace Mux.Core.Agent
 
         private async Task<ToolResult> ExecuteToolCallAsync(ToolCall toolCall, CancellationToken cancellationToken)
         {
-            JsonElement arguments = JsonDocument.Parse(toolCall.Arguments).RootElement;
+            JsonElement arguments = ParseToolArguments(toolCall.Arguments);
 
             // Check if it is a built-in tool
             if (_ToolRegistry.HasTool(toolCall.Name))
@@ -345,6 +393,19 @@ namespace Mux.Core.Agent
         private static Task<string> DefaultPromptUserFunc(ToolCall toolCall)
         {
             return Task.FromResult("y");
+        }
+
+        private static JsonElement ParseToolArguments(string argumentsJson)
+        {
+            try
+            {
+                return JsonDocument.Parse(argumentsJson).RootElement.Clone();
+            }
+            catch (JsonException)
+            {
+                string repairedJson = argumentsJson.Replace("\\", "\\\\", StringComparison.Ordinal);
+                return JsonDocument.Parse(repairedJson).RootElement.Clone();
+            }
         }
 
         #endregion

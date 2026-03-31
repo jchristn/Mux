@@ -41,7 +41,7 @@ namespace Mux.Cli.Rendering
             {
                 await foreach (AgentEvent agentEvent in events)
                 {
-                    if (waitingForFirstEvent)
+                    if (waitingForFirstEvent && ShouldStopThinkingAnimation(agentEvent))
                     {
                         animation.Stop();
                         _ActiveAnimation = null;
@@ -256,6 +256,22 @@ namespace Mux.Cli.Rendering
             }
 
             return value.Substring(0, maxLength) + "...";
+        }
+
+        /// <summary>
+        /// Determines whether an event represents visible work output and should replace the initial thinking animation.
+        /// Lifecycle-only events do not count because they can arrive immediately before the model has produced user-visible output.
+        /// </summary>
+        /// <param name="agentEvent">The event to inspect.</param>
+        /// <returns>True if the thinking animation should stop.</returns>
+        private static bool ShouldStopThinkingAnimation(AgentEvent agentEvent)
+        {
+            return agentEvent is AssistantTextEvent
+                || agentEvent is ToolCallProposedEvent
+                || agentEvent is ToolCallApprovedEvent
+                || agentEvent is ToolCallCompletedEvent
+                || agentEvent is ErrorEvent
+                || agentEvent is HeartbeatEvent;
         }
 
         #endregion

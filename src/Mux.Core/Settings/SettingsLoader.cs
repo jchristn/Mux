@@ -212,6 +212,11 @@ namespace Mux.Core.Settings
             {
                 selected = endpoints.FirstOrDefault(
                     (EndpointConfig e) => string.Equals(e.Name, endpointName, StringComparison.OrdinalIgnoreCase));
+
+                if (selected == null)
+                {
+                    throw new InvalidOperationException($"No endpoint named '{endpointName}' was found in {Path.Combine(GetConfigDirectory(), "endpoints.json")}.");
+                }
             }
 
             if (selected == null)

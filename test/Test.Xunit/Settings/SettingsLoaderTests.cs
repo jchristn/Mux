@@ -297,6 +297,39 @@ namespace Test.Xunit.Settings
             Assert.Equal(Defaults.SystemPrompt, prompt);
         }
 
+        /// <summary>
+        /// Verifies that requesting a missing named endpoint throws instead of silently falling back.
+        /// </summary>
+        [Fact]
+        public void ResolveEndpoint_UnknownName_Throws()
+        {
+            List<EndpointConfig> endpoints = new List<EndpointConfig>
+            {
+                new EndpointConfig { Name = "alpha", Model = "model-a", BaseUrl = "http://a" }
+            };
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                SettingsLoader.ResolveEndpoint(endpoints, "missing", null, null, null, null, null));
+
+            Assert.Contains("No endpoint named 'missing'", exception.Message);
+        }
+
+        /// <summary>
+        /// Verifies that EnsureConfigDirectory creates missing defaults without overwriting an existing endpoints file.
+        /// </summary>
+        [Fact]
+        public void EnsureConfigDirectory_DoesNotOverwriteExistingEndpoints()
+        {
+            string endpointsPath = Path.Combine(_TempDir, "endpoints.json");
+            string existingJson = @"{ ""endpoints"": [{ ""name"": ""custom"", ""adapterType"": ""Ollama"", ""baseUrl"": ""http://custom"", ""model"": ""custom-model"" }] }";
+            File.WriteAllText(endpointsPath, existingJson);
+
+            SettingsLoader.EnsureConfigDirectory();
+
+            string finalJson = File.ReadAllText(endpointsPath);
+            Assert.Equal(existingJson, finalJson);
+        }
+
         #endregion
     }
 }

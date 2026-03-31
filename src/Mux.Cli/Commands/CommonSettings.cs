@@ -94,6 +94,13 @@ namespace Mux.Cli.Commands
         [CommandOption("--no-mcp")]
         public bool NoMcp { get; set; }
 
+        /// <summary>
+        /// Output format for command results.
+        /// </summary>
+        [Description("Output format: text, json, or jsonl depending on the command.")]
+        [CommandOption("--output-format")]
+        public string? OutputFormat { get; set; }
+
         #endregion
     }
 }

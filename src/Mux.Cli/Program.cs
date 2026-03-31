@@ -63,6 +63,9 @@ namespace Mux.Cli
 
                 config.AddCommand<PrintCommand>("print")
                     .WithDescription("Run a single prompt and print the result to stdout.");
+
+                config.AddCommand<ProbeCommand>("probe")
+                    .WithDescription("Validate config, backend reachability, auth, and model access.");
             });
 
             app.SetDefaultCommand<InteractiveCommand>();
@@ -87,14 +90,16 @@ USAGE:
     mux [OPTIONS] [prompt]               Interactive with overrides
     mux --print [OPTIONS] <prompt>       Single-shot mode
     echo ""prompt"" | mux --print          Read prompt from stdin
+    mux probe [OPTIONS]                  Validate config and backend access
 
 OPTIONS:
     -h, --help, /?                       Show this help message and exit
         --version, /version, -v          Show version and exit
     -p, --print                          Single-shot: process prompt, print result, exit
+        --output-format <format>         text, json, or jsonl depending on the command
 
   Endpoint / Model:
-    -e, --endpoint <name>                Named endpoint from ~/.mux/endpoints.json
+    -e, --endpoint <name>                Named endpoint from active config endpoints.json
     -m, --model <name>                   Override model name
         --base-url <url>                 Override base URL
         --adapter-type <type>            Adapter: ollama, openai, vllm, openai-compatible
@@ -110,6 +115,10 @@ OPTIONS:
         --system-prompt <path>           Path to system prompt file
         --no-mcp                         Skip MCP server initialization
     -v, --verbose                        Emit detailed progress to stderr
+
+PROBE:
+    mux probe --output-format json       Machine-readable health check
+    mux probe -e openai-prod             Validate a specific configured endpoint
 
 INTERACTIVE COMMANDS:
     /endpoint [name]   List or switch endpoints
@@ -131,15 +140,15 @@ EXAMPLES:
     mux                                  Start interactive session (default endpoint)
     mux --endpoint ollama-qwen           Start with specific endpoint
     mux -p --yolo ""read README.md""       Single-shot with auto-approval
+    mux print --output-format jsonl --yolo ""read README.md""
     mux -p -e openai-gpt4 ""explain x""   Single-shot with OpenAI
+    mux probe --output-format json
     mux --base-url http://localhost:11434/v1 --model llama3.1:70b
                                          Ad-hoc endpoint, no config needed
 
 CONFIG:
-    ~/.mux/endpoints.json                Model runner endpoints (use ""headers"" dict for auth)
-    ~/.mux/mcp-servers.json              MCP tool servers
-    ~/.mux/settings.json                 Global settings
-    ~/.mux/system-prompt.md              Custom system prompt (optional)
+    Active config dir defaults to ~/.mux/
+    Override with MUX_CONFIG_DIR for isolated runs and orchestration
 
     See CONFIG.md for full configuration reference.
     See USAGE.md for detailed usage examples.";

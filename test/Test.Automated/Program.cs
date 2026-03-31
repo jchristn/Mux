@@ -26,6 +26,7 @@ namespace Test.Automated
             runner.AddSuite(new SingleTurnTests(liveMode));
             runner.AddSuite(new ToolUseTests(liveMode));
             runner.AddSuite(new PrintModeTests(liveMode));
+            runner.AddSuite(new CliContractTests(liveMode));
             runner.AddSuite(new ApprovalPolicyTests(liveMode));
             runner.AddSuite(new EndpointSwitchingTests(liveMode));
             runner.AddSuite(new MultiEditTests(liveMode));

@@ -2,128 +2,111 @@
 
 ## Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download) or later
-- [Ollama](https://ollama.ai) installed and running (for local models)
+- .NET 8 SDK or later
+- A model runner installed and running separately
+- Ollama is the easiest local first-run option
 
 ## Install
 
-mux is not yet published to NuGet. Install from source using the provided scripts:
-
-**Windows:**
-
-```cmd
-cd c:\code\mux
-install-tool.bat
-```
-
-**Linux / macOS:**
+From source:
 
 ```bash
-cd ~/code/mux
+cd c:\code\mux
+
+# Windows
+install-tool.bat
+
+# Linux / macOS
 chmod +x install-tool.sh
 ./install-tool.sh
 ```
 
-Or manually:
-
-```bash
-cd c:\code\mux
-dotnet pack src/Mux.Cli/Mux.Cli.csproj --configuration Release
-dotnet tool install -g --add-source src/Mux.Cli/bin/Release Mux.Cli
-```
-
-Verify the install:
+Verify:
 
 ```bash
 mux --version
 ```
 
-To reinstall after code changes:
-
-| Windows | Linux / macOS |
-|---------|---------------|
-| `reinstall-tool.bat` | `./reinstall-tool.sh` |
-
-To uninstall:
-
-| Windows | Linux / macOS |
-|---------|---------------|
-| `remove-tool.bat` | `./remove-tool.sh` |
-
 ## Pull a Model
 
-If you don't have a model yet:
+Example with Ollama:
 
 ```bash
 ollama pull qwen2.5-coder:7b
-```
-
-Make sure Ollama is running:
-
-```bash
 ollama serve
 ```
 
 ## First Run
 
-Just type:
-
 ```bash
 mux
 ```
 
-On first run, mux creates `~/.mux/` with a default `endpoints.json` pointing to Ollama at `localhost:11434` with `qwen2.5-coder:7b`. You can start chatting immediately.
+By default, first run creates `~/.mux/endpoints.json` with a local Ollama endpoint.
+
+If you want an isolated config directory instead:
+
+```bash
+# Bash
+export MUX_CONFIG_DIR=/tmp/mux-first-run
+
+# PowerShell
+$env:MUX_CONFIG_DIR = "C:\\temp\\mux-first-run"
+```
+
+Then run `mux` or `mux probe`.
 
 ## Verify It Works
 
-Try this prompt to confirm the LLM and tools are working:
+Interactive test:
 
-```
+```text
 mux> create a file called hello.py that prints "hello world", then read it back to verify. if the file already exists, overwrite it.
 ```
 
-You should see `write_file` and `read_file` tool calls execute, the file created on disk, and the contents echoed back. If you're not running with `--yolo`, type `always` at the first approval prompt to auto-approve for the session.
+You should see tool calls such as `write_file` and `read_file`.
 
-## Interactive Commands
+## Useful First Commands
 
-Inside the REPL:
+Interactive:
 
-```
-mux> hello, what can you do?
-```
-
-Multi-line input: press **Shift+Enter** or **Ctrl+Enter** to insert a newline. **Enter** submits.
-
-```
-mux> write a function that
-...> takes a list of integers
-...> and returns the sum
+```text
+/endpoint
+/tools
+/clear
+/exit
 ```
 
-Slash commands:
-
-```
-/endpoint              List available endpoints
-/endpoint ollama-big   Switch to a different endpoint
-/tools              List available tools
-/clear              Reset conversation
-/help               Show all commands
-/exit               Quit
-```
-
-## Single-Shot Mode
-
-Run a prompt and exit:
+Single-shot:
 
 ```bash
 mux print --yolo "read README.md and summarize it"
 ```
 
-The `--yolo` flag auto-approves tool calls (file reads, writes, shell commands). Without it, tool calls are denied in non-interactive mode.
+Structured automation:
 
-## Configure Endpoints
+```bash
+mux print --output-format jsonl --yolo "read README.md"
+```
 
-Edit `~/.mux/endpoints.json` to add more backends:
+Health check:
+
+```bash
+mux probe
+mux probe --output-format json
+```
+
+## Approval Policy
+
+- interactive mode usually asks before tool calls
+- `mux print` defaults to denied tool calls unless overridden
+- `--yolo` or `--approval-policy auto` enables automatic execution
+
+## Configure More Endpoints
+
+Edit `endpoints.json` in the active config directory to add more backends.
+
+Example:
 
 ```json
 {
@@ -132,48 +115,31 @@ Edit `~/.mux/endpoints.json` to add more backends:
       "name": "ollama-local",
       "adapterType": "ollama",
       "baseUrl": "http://localhost:11434/v1",
-      "model": "gemma3:4b",
-      "isDefault": true,
-      "maxTokens": 8192,
-      "temperature": 0.1,
-      "contextWindow": 32768
+      "model": "qwen2.5-coder:7b",
+      "isDefault": true
     },
     {
-      "name": "ollama-big",
-      "adapterType": "ollama",
-      "baseUrl": "http://localhost:11434/v1",
-      "model": "qwen2.5-coder:32b",
-      "isDefault": false,
-      "maxTokens": 8192,
-      "temperature": 0.1,
-      "contextWindow": 32768
+      "name": "openai-gpt4o",
+      "adapterType": "openai",
+      "baseUrl": "https://api.openai.com/v1",
+      "model": "gpt-4o",
+      "headers": {
+        "Authorization": "Bearer ${OPENAI_API_KEY}"
+      }
     }
   ]
 }
 ```
 
-Switch between endpoints at runtime:
+Use one:
 
 ```bash
-mux --endpoint ollama-big
-```
-
-Or inside the REPL:
-
-```
-/endpoint ollama-big
-```
-
-## Ad-Hoc Endpoint (No Config File)
-
-You don't need `endpoints.json` at all:
-
-```bash
-mux --base-url http://localhost:11434/v1 --model llama3.1:70b --adapter-type ollama
+mux --endpoint openai-gpt4o
 ```
 
 ## Next Steps
 
-- [USAGE.md](USAGE.md) — Backend-specific examples (Ollama, vLLM, OpenAI, Azure, etc.)
-- [CONFIG.md](CONFIG.md) — Full configuration reference for `~/.mux/` files
-- `mux --help` — All CLI flags and options
+- [README.md](README.md)
+- [USAGE.md](USAGE.md)
+- [CONFIG.md](CONFIG.md)
+- [TESTING.md](TESTING.md)

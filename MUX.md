@@ -1,9 +1,21 @@
-You are designing a C# CLI application called Mux that will provide a Claude Code or Codex like experience over a user-specified model runner backend, user-specified model, and user-specified model parameters.  It should use Specter.Console for the console library (unless you come up with something better), and Voltaic (NuGet package, source is in c:\code\voltaic) for MCP tool calls.  The user should be able to define in the ~/.mux/endpoints.json file all of the model runners, models, and model parameters that can be used, and one of them should be marked as "IsDefault".  
+# mux Design Notes
 
-Common CLI conventions such as `/endpoint` should be supported, allowing a user to jump between endpoints.  Ultimately, Mux will need to be started via a terminal session `mux` command, and should behave in a manner consistent with Claude Code and Codex when invoked by an Orchestrator (such as Armada, see c:\code\armada\armada) so that the Orchestrator can distribute work to it, and the work will be handled by the specified model/runner/config.  
+This file is retained as a short historical note.
 
-Repo setup should have all of the C# in src/ including Mux.Core, Mux.Cli, Test.Automated (refer to the structure of c:\code\armada\armada\src\Test.Automated), Test.Xunit (refer to the structure of c:\code\armada\armada\src\Test.Xunit), and Test.Shared (also in armada\src).  Add a .gitignore, README.md, CHANGELOG.md, LICENSE.md (MIT), set the version to v0.1.0, set the copyright to (c)2026 Joel Christner, and set up Mux.Cli to be installable as a dotnet tool `mux`.
+`mux` is a C# CLI AI agent with:
+- `Mux.Core` for agent logic, models, adapters, and tools
+- `Mux.Cli` for the terminal experience and command surface
+- `Test.Xunit`, `Test.Automated`, and `Test.Shared` for automated coverage
 
-Coding conventions need to follow c:\code\armada, c:\code\assistanthub, c:\code\verbex, c:\code\lattice, c:\code\conductor, c:\code\committedcoaches\chronos.  
+Current authoritative user-facing documentation lives in:
+- [README.md](README.md)
+- [GETTING_STARTED.md](GETTING_STARTED.md)
+- [USAGE.md](USAGE.md)
+- [CONFIG.md](CONFIG.md)
+- [TESTING.md](TESTING.md)
 
-Code style rules: For C#: no var, no tuples, using statements instead of declarations, using statements inside the namespace blocks, XML documentation, public things named LikeThis, private things named _LikeThis, one entity per file, null check on set where appropriate and value-clamping to reasonable ranges where appropriate.  Don't use JsonElement property accessors for things that should be defined types and instances
+Current orchestration-related capabilities include:
+- `mux print` for non-interactive execution
+- `mux print --output-format jsonl` for structured event streaming
+- `mux probe` for backend and config health validation
+- `MUX_CONFIG_DIR` for config isolation

@@ -1,0 +1,104 @@
+namespace Test.Xunit.Commands
+{
+    using System.Text.Json;
+    using global::Xunit;
+    using Mux.Cli.Commands;
+    using Mux.Core.Agent;
+    using Mux.Core.Models;
+
+    /// <summary>
+    /// Unit tests for structured CLI output formatting.
+    /// </summary>
+    public class StructuredOutputFormatterTests
+    {
+        /// <summary>
+        /// Verifies that lifecycle events serialize with stable event type names.
+        /// </summary>
+        [Fact]
+        public void FormatEvent_RunLifecycleEvents_UsesStableNames()
+        {
+            RunStartedEvent started = new RunStartedEvent
+            {
+                RunId = "run-1",
+                EndpointName = "local",
+                AdapterType = "OpenAiCompatible",
+                BaseUrl = "http://localhost:1234",
+                Model = "test-model",
+                ApprovalPolicy = "AutoApprove",
+                WorkingDirectory = "C:\\Code\\Mux",
+                MaxIterations = 10,
+                ToolsEnabled = true
+            };
+
+            RunCompletedEvent completed = new RunCompletedEvent
+            {
+                RunId = "run-1",
+                Status = "completed",
+                IterationsCompleted = 1,
+                ToolCallCount = 0,
+                ErrorCount = 0,
+                AssistantTextChars = 12,
+                DurationMs = 25
+            };
+
+            JsonDocument startedJson = JsonDocument.Parse(StructuredOutputFormatter.FormatEvent(started));
+            JsonDocument completedJson = JsonDocument.Parse(StructuredOutputFormatter.FormatEvent(completed));
+
+            Assert.Equal("run_started", startedJson.RootElement.GetProperty("eventType").GetString());
+            Assert.Equal("local", startedJson.RootElement.GetProperty("endpointName").GetString());
+            Assert.Equal("run_completed", completedJson.RootElement.GetProperty("eventType").GetString());
+            Assert.Equal("completed", completedJson.RootElement.GetProperty("status").GetString());
+        }
+
+        /// <summary>
+        /// Verifies that sensitive values are redacted from structured tool payloads.
+        /// </summary>
+        [Fact]
+        public void FormatEvent_ToolPayloads_RedactsSensitiveValues()
+        {
+            ToolCallProposedEvent agentEvent = new ToolCallProposedEvent
+            {
+                ToolCall = new ToolCall
+                {
+                    Id = "call-1",
+                    Name = "run_process",
+                    Arguments = "{\"authorization\":\"Bearer sk-secret-token\",\"path\":\"README.md\"}"
+                }
+            };
+
+            JsonDocument json = JsonDocument.Parse(StructuredOutputFormatter.FormatEvent(agentEvent));
+            JsonElement toolCall = json.RootElement.GetProperty("toolCall");
+            JsonElement arguments = toolCall.GetProperty("arguments");
+
+            Assert.Equal("***REDACTED***", arguments.GetProperty("authorization").GetString());
+            Assert.Equal("README.md", arguments.GetProperty("path").GetString());
+        }
+
+        /// <summary>
+        /// Verifies that tool results retain structure while redacting secret-looking values.
+        /// </summary>
+        [Fact]
+        public void FormatEvent_ToolResults_RedactsSecretStrings()
+        {
+            ToolCallCompletedEvent agentEvent = new ToolCallCompletedEvent
+            {
+                ToolCallId = "call-1",
+                ToolName = "read_file",
+                Result = new ToolResult
+                {
+                    ToolCallId = "call-1",
+                    Success = true,
+                    Content = "{\"token\":\"sk-super-secret\",\"message\":\"ok\"}"
+                },
+                ElapsedMs = 15
+            };
+
+            JsonDocument json = JsonDocument.Parse(StructuredOutputFormatter.FormatEvent(agentEvent));
+            JsonElement result = json.RootElement.GetProperty("result");
+            JsonElement content = result.GetProperty("content");
+
+            Assert.Equal("***REDACTED***", content.GetProperty("token").GetString());
+            Assert.Equal("ok", content.GetProperty("message").GetString());
+        }
+    }
+}

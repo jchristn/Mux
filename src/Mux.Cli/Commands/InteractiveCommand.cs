@@ -595,6 +595,7 @@ namespace Mux.Cli.Commands
                 table.AddColumn("[bold]Endpoint[/]");
                 table.AddColumn("[bold]Model[/]");
                 table.AddColumn("[bold]Adapter[/]");
+                table.AddColumn("[bold]URL[/]");
 
                 foreach (EndpointConfig ep in _AllEndpoints)
                 {
@@ -608,7 +609,10 @@ namespace Mux.Cli.Commands
                     string adapterDisplay = isCurrent
                         ? $"[green]{Markup.Escape(ep.AdapterType.ToString())}[/]"
                         : Markup.Escape(ep.AdapterType.ToString());
-                    table.AddRow(nameDisplay, modelDisplay, adapterDisplay);
+                    string urlDisplay = isCurrent
+                        ? $"[green]{Markup.Escape(ep.BaseUrl)}[/]"
+                        : Markup.Escape(ep.BaseUrl);
+                    table.AddRow(nameDisplay, modelDisplay, adapterDisplay, urlDisplay);
                 }
 
                 AnsiConsole.Write(table);
@@ -623,7 +627,8 @@ namespace Mux.Cli.Commands
                 {
                     _CurrentEndpoint = found;
                     _ConversationHistory.Clear();
-                    AnsiConsole.MarkupLine($"[green]Switched to endpoint:[/] {Markup.Escape(found.Name)} [dim]([/]{Markup.Escape(found.Model)}[dim])[/]");
+                    AnsiConsole.MarkupLine(
+                        $"[green]Switched to endpoint:[/] {Markup.Escape(found.Name)} [dim]([/]{Markup.Escape(found.Model)}[dim])[/] [dim]|[/] [dim]{Markup.Escape(found.AdapterType.ToString())}[/] [dim]|[/] {Markup.Escape(found.BaseUrl)}");
                     AnsiConsole.MarkupLine("[dim]Conversation history cleared.[/]");
                 }
                 else

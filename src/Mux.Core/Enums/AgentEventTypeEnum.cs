@@ -10,6 +10,12 @@ namespace Mux.Core.Enums
     public enum AgentEventTypeEnum
     {
         /// <summary>
+        /// The run has started and effective runtime metadata is available.
+        /// </summary>
+        [EnumMember(Value = "run_started")]
+        RunStarted,
+
+        /// <summary>
         /// Streamed or complete text from the assistant.
         /// </summary>
         [EnumMember(Value = "assistant_text")]
@@ -43,6 +49,12 @@ namespace Mux.Core.Enums
         /// Periodic heartbeat indicating the agent is alive.
         /// </summary>
         [EnumMember(Value = "heartbeat")]
-        Heartbeat
+        Heartbeat,
+
+        /// <summary>
+        /// The run has finished and a final summary is available.
+        /// </summary>
+        [EnumMember(Value = "run_completed")]
+        RunCompleted
     }
 }

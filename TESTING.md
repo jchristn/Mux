@@ -1,29 +1,36 @@
 # Testing mux
 
-## Unit Tests (Test.Xunit)
+## Build
 
-Fast, deterministic, no external dependencies. Covers settings, adapters, tools, approval handler, and agent loop.
+```bash
+dotnet build src/Mux.sln
+```
+
+## Unit Tests
+
+`Test.Xunit` covers settings, adapters, CLI formatting, command behavior, tools, and agent loop behavior.
 
 ```bash
 dotnet test test/Test.Xunit/Test.Xunit.csproj
 ```
 
-## Automated Tests (Test.Automated)
+## Automated Tests
 
-Integration tests that exercise the agent loop with a mock HTTP server. No Ollama or external LLM required.
+`Test.Automated` runs the mock-server integration suites, including:
+- agent loop lifecycle coverage
+- tool-use flows
+- `mux print` JSONL contract checks
+- `mux probe` JSON output checks
+
+Because the project targets multiple frameworks, specify one when using `dotnet run`:
 
 ```bash
-dotnet run --project test/Test.Automated/Test.Automated.csproj
+dotnet run --project test/Test.Automated/Test.Automated.csproj --framework net10.0
 ```
 
-## Run Everything
+## Recommended Full Validation
 
 ```bash
-dotnet test test/Test.Xunit/Test.Xunit.csproj && dotnet run --project test/Test.Automated/Test.Automated.csproj
-```
-
-## Build Only (No Tests)
-
-```bash
-dotnet build src/Mux.sln
+dotnet test test/Test.Xunit/Test.Xunit.csproj
+dotnet run --project test/Test.Automated/Test.Automated.csproj --framework net10.0
 ```
