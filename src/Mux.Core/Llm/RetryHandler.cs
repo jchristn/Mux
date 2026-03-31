@@ -85,9 +85,16 @@ namespace Mux.Core.Llm
                 return true;
             }
 
-            if (ex is TaskCanceledException)
+            if (ex is TaskCanceledException tce)
             {
-                // Treat as timeout — retryable
+                // Only retry if it's an HTTP timeout, not user cancellation.
+                // User cancellation has a CancellationToken that is canceled.
+                if (tce.CancellationToken.IsCancellationRequested)
+                {
+                    return false;
+                }
+
+                // HTTP timeout — retryable
                 return true;
             }
 
