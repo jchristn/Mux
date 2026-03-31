@@ -17,9 +17,10 @@ namespace Mux.Cli.Rendering
         private static readonly int _WindowSize = 2;
         private static readonly int _IntervalMs = 120;
 
-        // ANSI escape codes — avoid Spectre markup to prevent flicker
-        private static readonly string _Dim = "\x1b[90m";     // dark grey
-        private static readonly string _Bright = "\x1b[97m";  // bright white
+        // ANSI 256-color codes — avoid Spectre markup to prevent flicker
+        private static readonly string _DarkGrey = "\x1b[38;5;240m";   // dark grey (base)
+        private static readonly string _Grey = "\x1b[38;5;248m";       // grey (flank)
+        private static readonly string _LightGrey = "\x1b[38;5;255m";  // light grey (center)
         private static readonly string _Reset = "\x1b[0m";
 
         private CancellationTokenSource _Cts = new CancellationTokenSource();
@@ -91,7 +92,7 @@ namespace Mux.Cli.Rendering
             Console.Write("\r");
             Console.Write(new string(' ', Math.Max(_Text.Length + 10, message.Length + 5)));
             Console.Write("\r");
-            Console.Write($"{_Dim}{message}{_Reset}");
+            Console.Write($"{_DarkGrey}{message}{_Reset}");
         }
 
         /// <summary>
@@ -108,9 +109,11 @@ namespace Mux.Cli.Rendering
         #region Private-Methods
 
         /// <summary>
-        /// Renders a single animation frame with the bright window at the given position.
+        /// Renders a single animation frame. The center 2 characters at windowStart
+        /// are light grey, the 1 character on each side is grey, and the rest is dark grey.
+        /// All positions wrap around the text length.
         /// </summary>
-        /// <param name="windowStart">The starting character index of the bright window.</param>
+        /// <param name="windowStart">The starting character index of the light grey center.</param>
         private void RenderFrame(int windowStart)
         {
             if (Interlocked.CompareExchange(ref _Stopped, 0, 0) == 1)
@@ -118,36 +121,42 @@ namespace Mux.Cli.Rendering
                 return;
             }
 
+            int len = _Text.Length;
+
+            // Precompute which tier each character belongs to
+            // Center (light grey): windowStart, windowStart+1
+            // Flank (grey): windowStart-1, windowStart+2
+            // Everything else: dark grey
+            int center0 = windowStart % len;
+            int center1 = (windowStart + 1) % len;
+            int flankLeft = (windowStart - 1 + len) % len;
+            int flankRight = (windowStart + 2) % len;
+
             StringBuilder sb = new StringBuilder();
             sb.Append('\r');
 
-            for (int i = 0; i < _Text.Length; i++)
+            for (int i = 0; i < len; i++)
             {
-                // Check if this character is within the bright window (wrapping)
-                bool isBright = false;
-                for (int w = 0; w < _WindowSize; w++)
-                {
-                    if ((windowStart + w) % _Text.Length == i)
-                    {
-                        isBright = true;
-                        break;
-                    }
-                }
+                string color;
 
-                if (isBright)
+                if (i == center0 || i == center1)
                 {
-                    sb.Append(_Bright);
-                    sb.Append(_Text[i]);
-                    sb.Append(_Reset);
+                    color = _LightGrey;
+                }
+                else if (i == flankLeft || i == flankRight)
+                {
+                    color = _Grey;
                 }
                 else
                 {
-                    sb.Append(_Dim);
-                    sb.Append(_Text[i]);
-                    sb.Append(_Reset);
+                    color = _DarkGrey;
                 }
+
+                sb.Append(color);
+                sb.Append(_Text[i]);
             }
 
+            sb.Append(_Reset);
             Console.Write(sb.ToString());
         }
 
