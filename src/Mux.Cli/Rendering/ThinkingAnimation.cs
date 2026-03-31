@@ -14,7 +14,6 @@ namespace Mux.Cli.Rendering
         #region Private-Members
 
         private static readonly string _Text = "Thinking...";
-        private static readonly int _WindowSize = 2;
         private static readonly int _IntervalMs = 120;
 
         // ANSI 256-color codes — avoid Spectre markup to prevent flicker
