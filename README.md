@@ -99,7 +99,7 @@ mux works with any OpenAI-compatible API. See [USAGE.md](https://github.com/jchr
 After install, try this prompt to confirm the LLM and tools are working end-to-end:
 
 ```
-mux> create a file called hello.py that prints "hello world", then read it back to verify. if the file already exists, overwrite it.
+Create a file called hello.py that prints 'hello world' to the console.  Read it back and display it here.  If the file already exists, overwrite it.  When finished, delete the file.
 ```
 
 You should see `write_file` and `read_file` tool calls, the file created on disk, and the contents read back. If you're prompted for approval, type `always` to auto-approve for the session, or start mux with `--yolo` to skip prompts.
