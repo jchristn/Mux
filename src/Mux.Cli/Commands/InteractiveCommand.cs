@@ -542,8 +542,9 @@ namespace Mux.Cli.Commands
                     Environment.Exit(0);
                     return true;
 
+                case "/endpoint":
                 case "/model":
-                    HandleModelCommand(argument);
+                    HandleEndpointCommand(argument);
                     return true;
 
                 case "/tools":
@@ -574,12 +575,12 @@ namespace Mux.Cli.Commands
         }
 
         /// <summary>
-        /// Handles the /model command. With no arguments, lists all configured endpoints
+        /// Handles the /endpoint command. With no arguments, lists all configured endpoints
         /// with the current one highlighted in green with an asterisk marker.
         /// With an argument, switches to the named endpoint, clears the conversation, and prints confirmation.
         /// </summary>
         /// <param name="argument">The optional endpoint name to switch to.</param>
-        private void HandleModelCommand(string argument)
+        private void HandleEndpointCommand(string argument)
         {
             if (string.IsNullOrWhiteSpace(argument))
             {
@@ -718,8 +719,8 @@ namespace Mux.Cli.Commands
             table.AddColumn("[bold]Description[/]");
 
             table.AddRow("[cyan]/help[/], [cyan]/?[/]", "Show this help message");
-            table.AddRow("[cyan]/model[/]", "List all configured endpoints with current one highlighted");
-            table.AddRow("[cyan]/model[/] [dim]<name>[/]", "Switch to a named endpoint (clears conversation)");
+            table.AddRow("[cyan]/endpoint[/]", "List all configured endpoints with current one highlighted");
+            table.AddRow("[cyan]/endpoint[/] [dim]<name>[/]", "Switch to a named endpoint (clears conversation)");
             table.AddRow("[cyan]/tools[/]", "List all available tools with descriptions");
             table.AddRow("[cyan]/clear[/]", "Clear conversation history");
             table.AddRow("[cyan]/system[/]", "Show current system prompt (truncated to 500 chars)");

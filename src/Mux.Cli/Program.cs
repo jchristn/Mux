@@ -112,7 +112,7 @@ OPTIONS:
     -v, --verbose                        Emit detailed progress to stderr
 
 INTERACTIVE COMMANDS:
-    /model [name]      List or switch endpoints
+    /endpoint [name]   List or switch endpoints
     /tools             List available tools (built-in + MCP)
     /mcp list|add|remove   Manage MCP servers
     /clear             Reset conversation history

@@ -146,7 +146,35 @@ mux connects to model runners that you install and manage separately. It does no
 | [LM Studio](https://lmstudio.ai) | `openai-compatible` | Local GUI + API server. |
 | Any OpenAI-compatible API | `openai-compatible` | Anything that speaks the OpenAI chat completions format. |
 
-## Interactive Mode
+## CLI Usage
+
+```
+mux [OPTIONS] [prompt]                Interactive REPL (default)
+mux --print [OPTIONS] <prompt>        Single-shot mode
+echo "prompt" | mux --print           Read prompt from stdin
+```
+
+### Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--help` | `-h`, `/?` | Show help message and exit |
+| `--version` | `/version` | Show version and exit |
+| `--print` | `-p` | Single-shot: process prompt, print result, exit |
+| `--endpoint <name>` | `-e` | Named endpoint from `~/.mux/endpoints.json` |
+| `--model <name>` | `-m` | Override model name |
+| `--base-url <url>` | | Override base URL |
+| `--adapter-type <type>` | | Adapter: `ollama`, `openai`, `vllm`, `openai-compatible` |
+| `--temperature <float>` | | Override temperature (0.0–2.0) |
+| `--max-tokens <int>` | | Override max output tokens |
+| `--yolo` | | Auto-approve all tool calls |
+| `--approval-policy <policy>` | | `ask`, `auto`, or `deny` (default: `ask` if TTY, `deny` otherwise) |
+| `--working-directory <path>` | `-w` | Set working directory for tool execution |
+| `--system-prompt <path>` | | Path to a custom system prompt file |
+| `--no-mcp` | | Skip MCP server initialization |
+| `--verbose` | `-v` | Emit detailed progress to stderr |
+
+### Interactive Commands
 
 ```
 mux> hello, what can you do?
@@ -155,20 +183,23 @@ mux> write a function that       # Shift+Enter for multi-line input
 ...> takes a list of integers
 ...> and returns the sum
 
-/model                            # list configured endpoints
-/model ollama-big                 # switch endpoint
+/endpoint                         # list configured endpoints
+/endpoint ollama-big              # switch to a named endpoint
 /tools                            # list available tools
+/mcp list|add|remove              # manage MCP servers
 /clear                            # reset conversation
+/system [text]                    # view or set system prompt
 /?                                # show all commands
 /exit                             # quit
 ```
 
-## Single-Shot Mode
+### Single-Shot Mode
 
 ```bash
-mux print --yolo "read README.md and summarize it"
-mux print --yolo --endpoint openai-gpt4o "explain the architecture"
-echo "refactor AuthService" | mux print --yolo
+mux --print --yolo "read README.md and summarize it"
+mux -p -e openai-gpt4o "explain the architecture"
+mux --base-url http://localhost:11434/v1 --model llama3.1:70b
+echo "refactor AuthService" | mux --print --yolo
 ```
 
 ## Configuration
