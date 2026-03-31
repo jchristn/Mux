@@ -178,7 +178,7 @@ namespace Test.Automated.Suites
                 AdapterType = AdapterTypeEnum.OpenAiCompatible,
                 BaseUrl = baseUrl,
                 Model = "test-model",
-                ApiKey = "test-key"
+                Headers = new Dictionary<string, string>()
             };
             return endpoint;
         }

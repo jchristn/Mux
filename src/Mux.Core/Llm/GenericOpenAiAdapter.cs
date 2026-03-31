@@ -4,7 +4,6 @@ namespace Mux.Core.Llm
     using System.Collections.Generic;
     using System.IO;
     using System.Net.Http;
-    using System.Net.Http.Headers;
     using System.Runtime.CompilerServices;
     using System.Text;
     using System.Text.Json;
@@ -84,10 +83,9 @@ namespace Mux.Core.Llm
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, url);
             request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            string? authToken = endpoint.BearerToken ?? endpoint.ApiKey;
-            if (!string.IsNullOrEmpty(authToken))
+            foreach (KeyValuePair<string, string> header in endpoint.Headers)
             {
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authToken);
+                request.Headers.TryAddWithoutValidation(header.Key, header.Value);
             }
 
             return request;

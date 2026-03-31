@@ -65,7 +65,6 @@ namespace Mux.Cli.Commands
                 settings.Model,
                 settings.BaseUrl,
                 settings.AdapterType,
-                settings.ApiKey,
                 settings.Temperature,
                 settings.MaxTokens);
 

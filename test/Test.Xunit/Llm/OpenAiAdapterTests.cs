@@ -25,17 +25,16 @@ namespace Test.Xunit.Llm
         #region Tests
 
         /// <summary>
-        /// Verifies that BuildRequest throws an InvalidOperationException when no API key is set.
+        /// Verifies that BuildRequest throws an InvalidOperationException when no Authorization header is set.
         /// </summary>
         [Fact]
-        public void BuildRequest_RequiresApiKey_ThrowsWithoutIt()
+        public void BuildRequest_RequiresAuthorizationHeader_ThrowsWithoutIt()
         {
             EndpointConfig endpoint = new EndpointConfig
             {
                 Name = "test",
                 BaseUrl = "https://api.openai.com/v1",
                 Model = "gpt-4o",
-                ApiKey = null,
                 Quirks = new BackendQuirks { SupportsParallelToolCalls = true }
             };
 
@@ -60,7 +59,7 @@ namespace Test.Xunit.Llm
                 Name = "test",
                 BaseUrl = "https://api.openai.com/v1",
                 Model = "gpt-4o",
-                ApiKey = "sk-test",
+                Headers = new Dictionary<string, string> { { "Authorization", "Bearer sk-test" } },
                 Quirks = new BackendQuirks { SupportsParallelToolCalls = true }
             };
 

@@ -2,20 +2,19 @@ namespace Mux.Cli.Rendering
 {
     using System;
     using System.Collections.Generic;
-    using System.Text;
     using System.Text.Json;
     using System.Threading.Tasks;
     using Mux.Core.Agent;
     using Spectre.Console;
 
     /// <summary>
-    /// Renders agent events to the terminal in a compact Claude Code-inspired style.
+    /// Renders agent events to the terminal.
     /// </summary>
     public static class EventRenderer
     {
         #region Private-Members
 
-        private static readonly int _MaxResultPreview = 300;
+        private static readonly int _MaxResultPreview = 200;
         private static ThinkingAnimation? _ActiveAnimation = null;
 
         #endregion
@@ -34,7 +33,6 @@ namespace Mux.Cli.Rendering
             bool wasToolCall = false;
             bool waitingForFirstEvent = true;
 
-            // Start animated thinking indicator
             ThinkingAnimation animation = new ThinkingAnimation();
             _ActiveAnimation = animation;
             animation.Start();
@@ -73,7 +71,6 @@ namespace Mux.Cli.Rendering
                             break;
 
                         case ToolCallProposedEvent proposedEvent:
-                            RenderToolProposal(proposedEvent);
                             wasToolCall = true;
                             break;
 
@@ -105,7 +102,6 @@ namespace Mux.Cli.Rendering
             }
             finally
             {
-                // Ensure animation is always stopped
                 if (waitingForFirstEvent)
                 {
                     animation.Stop();
@@ -123,8 +119,6 @@ namespace Mux.Cli.Rendering
 
         /// <summary>
         /// Updates the thinking/status line in-place for retry progress.
-        /// Called from the retry handler callback to show connection retry status
-        /// while the animation is running.
         /// </summary>
         /// <param name="message">The status message to display.</param>
         public static void UpdateStatusLine(string message)
@@ -148,32 +142,26 @@ namespace Mux.Cli.Rendering
         #region Private-Methods
 
         /// <summary>
-        /// Renders a tool call proposal with a compact one-line summary.
-        /// </summary>
-        /// <param name="proposedEvent">The tool call proposed event.</param>
-        private static void RenderToolProposal(ToolCallProposedEvent proposedEvent)
-        {
-            string summary = ToolCallRenderer.FormatToolSummary(
-                proposedEvent.ToolCall.Name,
-                proposedEvent.ToolCall.Arguments);
-            AnsiConsole.MarkupLine($"  [cyan]●[/] [bold]{Markup.Escape(summary)}[/]");
-        }
-
-        /// <summary>
-        /// Renders a tool result on the same line area as the proposal.
+        /// Renders a completed tool call as a single line:
+        /// [tool:name]: summary success/fail Nms
         /// </summary>
         /// <param name="completedEvent">The tool call completed event.</param>
         private static void RenderToolResult(ToolCallCompletedEvent completedEvent)
         {
+            string name = completedEvent.ToolName;
+            string summary = SummarizeResult(completedEvent.Result.Content);
+            string status = completedEvent.Result.Success ? "ok" : "FAIL";
+            long elapsed = completedEvent.ElapsedMs;
+
             if (completedEvent.Result.Success)
             {
-                string summary = SummarizeResult(completedEvent.Result.Content);
-                AnsiConsole.MarkupLine($"    [green]✓[/] [dim]{Markup.Escape(summary)}[/]");
+                AnsiConsole.MarkupLine(
+                    $"  [dim][[tool:{Markup.Escape(name)}]][/] [dim]{Markup.Escape(summary)}[/] [green]{status}[/] [dim]{elapsed}ms[/]");
             }
             else
             {
-                string errorContent = TruncateString(completedEvent.Result.Content, _MaxResultPreview);
-                AnsiConsole.MarkupLine($"    [red]✗ {Markup.Escape(errorContent)}[/]");
+                AnsiConsole.MarkupLine(
+                    $"  [dim][[tool:{Markup.Escape(name)}]][/] [red]{Markup.Escape(summary)}[/] [red]{status}[/] [dim]{elapsed}ms[/]");
             }
         }
 
@@ -213,13 +201,25 @@ namespace Mux.Cli.Rendering
                         }
                         if (root.TryGetProperty("edits_applied", out JsonElement eaEl))
                         {
-                            return $"{fileName} ({eaEl.GetInt32()} edits applied)";
+                            return $"{fileName} ({eaEl.GetInt32()} edits)";
                         }
                         return fileName;
                     }
                     if (root.TryGetProperty("path", out JsonElement dirPathEl))
                     {
                         return System.IO.Path.GetFileName(dirPathEl.GetString() ?? "") + "/";
+                    }
+                }
+
+                if (root.TryGetProperty("success", out JsonElement failEl) && !failEl.GetBoolean())
+                {
+                    if (root.TryGetProperty("error", out JsonElement errEl))
+                    {
+                        return errEl.GetString() ?? "error";
+                    }
+                    if (root.TryGetProperty("message", out JsonElement msgEl))
+                    {
+                        return TruncateString(msgEl.GetString() ?? "", _MaxResultPreview);
                     }
                 }
             }

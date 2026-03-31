@@ -1,6 +1,7 @@
 namespace Mux.Core.Models
 {
     using System;
+    using System.Collections.Generic;
     using System.Text.Json.Serialization;
     using Mux.Core.Enums;
 
@@ -20,8 +21,7 @@ namespace Mux.Core.Models
         private double _Temperature = 0.1;
         private int _ContextWindow = 32768;
         private int _TimeoutMs = 120000;
-        private string? _ApiKey = null;
-        private string? _BearerToken = null;
+        private Dictionary<string, string> _Headers = new Dictionary<string, string>();
         private BackendQuirks? _Quirks = null;
 
         #endregion
@@ -134,24 +134,14 @@ namespace Mux.Core.Models
         }
 
         /// <summary>
-        /// The optional API key for authentication with this endpoint.
+        /// Custom HTTP headers to include in every request to this endpoint.
+        /// Common use: authentication headers like Authorization or x-api-key.
         /// </summary>
-        [JsonPropertyName("apiKey")]
-        public string? ApiKey
+        [JsonPropertyName("headers")]
+        public Dictionary<string, string> Headers
         {
-            get => _ApiKey;
-            set => _ApiKey = value;
-        }
-
-        /// <summary>
-        /// An optional bearer token for endpoint authentication. When set, sent as the
-        /// Authorization: Bearer header. Takes precedence over <see cref="ApiKey"/>.
-        /// </summary>
-        [JsonPropertyName("bearerToken")]
-        public string? BearerToken
-        {
-            get => _BearerToken;
-            set => _BearerToken = value;
+            get => _Headers;
+            set => _Headers = value ?? new Dictionary<string, string>();
         }
 
         /// <summary>

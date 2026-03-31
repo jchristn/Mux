@@ -39,13 +39,6 @@ namespace Mux.Cli.Commands
         public string? AdapterType { get; set; }
 
         /// <summary>
-        /// Override the API key used for authentication.
-        /// </summary>
-        [Description("API key for endpoint authentication.")]
-        [CommandOption("--api-key")]
-        public string? ApiKey { get; set; }
-
-        /// <summary>
         /// Override the sampling temperature.
         /// </summary>
         [Description("Sampling temperature (0.0 - 2.0).")]

@@ -103,7 +103,7 @@ python -m vllm.entrypoints.openai.api_server \
       "maxTokens": 16384,
       "temperature": 0.0,
       "contextWindow": 131072,
-      "apiKey": "sk-local-dev",
+      "headers": { "Authorization": "Bearer sk-local-dev" },
       "quirks": {
         "assembleToolCallDeltas": true,
         "supportsParallelToolCalls": true,
@@ -154,7 +154,7 @@ $env:OPENAI_API_KEY = "sk-..."
       "maxTokens": 16384,
       "temperature": 0.1,
       "contextWindow": 128000,
-      "apiKey": "${OPENAI_API_KEY}",
+      "headers": { "Authorization": "Bearer ${OPENAI_API_KEY}" },
       "quirks": {
         "supportsParallelToolCalls": true
       }
@@ -168,7 +168,7 @@ $env:OPENAI_API_KEY = "sk-..."
       "maxTokens": 16384,
       "temperature": 0.1,
       "contextWindow": 128000,
-      "apiKey": "${OPENAI_API_KEY}",
+      "headers": { "Authorization": "Bearer ${OPENAI_API_KEY}" },
       "quirks": {
         "supportsParallelToolCalls": true
       }
@@ -183,7 +183,6 @@ $env:OPENAI_API_KEY = "sk-..."
 mux --endpoint openai-gpt4o
 mux print --yolo -e openai-gpt4o "explain the architecture of this project"
 mux -e openai-gpt4o --model gpt-4-turbo     # override model on the fly
-mux -e openai-gpt4o --api-key sk-...         # override API key via CLI
 ```
 
 ---
@@ -204,7 +203,7 @@ mux -e openai-gpt4o --api-key sk-...         # override API key via CLI
       "maxTokens": 16384,
       "temperature": 0.1,
       "contextWindow": 128000,
-      "apiKey": "${AZURE_OPENAI_API_KEY}",
+      "headers": { "Authorization": "Bearer ${AZURE_OPENAI_API_KEY}" },
       "quirks": {
         "supportsParallelToolCalls": true
       }
@@ -237,7 +236,7 @@ Any OpenAI-compatible cloud API works with `adapterType: "openai-compatible"`.
   "maxTokens": 8192,
   "temperature": 0.1,
   "contextWindow": 131072,
-  "apiKey": "${TOGETHER_API_KEY}"
+  "headers": { "Authorization": "Bearer ${TOGETHER_API_KEY}" }
 }
 ```
 
@@ -253,7 +252,7 @@ Any OpenAI-compatible cloud API works with `adapterType: "openai-compatible"`.
   "maxTokens": 8192,
   "temperature": 0.1,
   "contextWindow": 131072,
-  "apiKey": "${GROQ_API_KEY}"
+  "headers": { "Authorization": "Bearer ${GROQ_API_KEY}" }
 }
 ```
 
@@ -269,7 +268,7 @@ Any OpenAI-compatible cloud API works with `adapterType: "openai-compatible"`.
   "maxTokens": 8192,
   "temperature": 0.1,
   "contextWindow": 131072,
-  "apiKey": "${FIREWORKS_API_KEY}"
+  "headers": { "Authorization": "Bearer ${FIREWORKS_API_KEY}" }
 }
 ```
 
@@ -304,8 +303,8 @@ Pass everything via CLI flags — no `endpoints.json` needed:
 # Ollama
 mux --base-url http://localhost:11434/v1 --model gemma3:4b --adapter-type ollama
 
-# OpenAI
-mux --base-url https://api.openai.com/v1 --model gpt-4o --adapter-type openai --api-key sk-...
+# OpenAI (set OPENAI_API_KEY env var, then configure headers in endpoints.json)
+mux --base-url https://api.openai.com/v1 --model gpt-4o --adapter-type openai
 
 # vLLM
 mux --base-url http://localhost:8000/v1 --model deepseek-coder-v2 --adapter-type openai-compatible

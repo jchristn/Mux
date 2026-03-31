@@ -86,7 +86,7 @@ namespace Test.Xunit.Settings
                         ""adapterType"": ""OpenAi"",
                         ""baseUrl"": ""https://api.openai.com/v1"",
                         ""model"": ""gpt-4o"",
-                        ""apiKey"": ""sk-test""
+                        ""headers"": { ""Authorization"": ""Bearer sk-test"" }
                     }
                 ]
             }";
@@ -110,7 +110,7 @@ namespace Test.Xunit.Settings
             Assert.Equal("test-openai", second.Name);
             Assert.Equal(AdapterTypeEnum.OpenAi, second.AdapterType);
             Assert.Equal("gpt-4o", second.Model);
-            Assert.Equal("sk-test", second.ApiKey);
+            Assert.Equal("Bearer sk-test", second.Headers["Authorization"]);
         }
 
         /// <summary>
@@ -186,7 +186,7 @@ namespace Test.Xunit.Settings
             };
 
             EndpointConfig resolved = SettingsLoader.ResolveEndpoint(
-                endpoints, "beta", null, null, null, null, null, null);
+                endpoints, "beta", null, null, null, null, null);
 
             Assert.Equal("beta", resolved.Name);
             Assert.Equal("model-b", resolved.Model);
@@ -205,7 +205,7 @@ namespace Test.Xunit.Settings
             };
 
             EndpointConfig resolved = SettingsLoader.ResolveEndpoint(
-                endpoints, null, null, null, null, null, null, null);
+                endpoints, null, null, null, null, null, null);
 
             Assert.Equal("second", resolved.Name);
         }
@@ -230,7 +230,7 @@ namespace Test.Xunit.Settings
             };
 
             EndpointConfig resolved = SettingsLoader.ResolveEndpoint(
-                endpoints, null, "override-model", null, null, null, 1.0, 16384);
+                endpoints, null, "override-model", null, null, 1.0, 16384);
 
             Assert.Equal("override-model", resolved.Model);
             Assert.Equal(1.0, resolved.Temperature);
@@ -246,7 +246,7 @@ namespace Test.Xunit.Settings
             List<EndpointConfig> endpoints = new List<EndpointConfig>();
 
             EndpointConfig resolved = SettingsLoader.ResolveEndpoint(
-                endpoints, null, null, null, null, null, null, null);
+                endpoints, null, null, null, null, null, null);
 
             Assert.Equal("ollama-local", resolved.Name);
             Assert.Equal(AdapterTypeEnum.Ollama, resolved.AdapterType);

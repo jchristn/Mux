@@ -96,7 +96,6 @@ OPTIONS:
     -m, --model <name>                   Override model name
         --base-url <url>                 Override base URL
         --adapter-type <type>            Adapter: ollama, openai, vllm, openai-compatible
-        --api-key <key>                  Override API key (or set MUX_API_KEY env var)
         --temperature <float>            Override temperature (0.0 - 2.0)
         --max-tokens <int>               Override max output tokens
 
@@ -135,7 +134,7 @@ EXAMPLES:
                                          Ad-hoc endpoint, no config needed
 
 CONFIG:
-    ~/.mux/endpoints.json                Model runner endpoints
+    ~/.mux/endpoints.json                Model runner endpoints (use ""headers"" dict for auth)
     ~/.mux/mcp-servers.json              MCP tool servers
     ~/.mux/settings.json                 Global settings
     ~/.mux/system-prompt.md              Custom system prompt (optional)

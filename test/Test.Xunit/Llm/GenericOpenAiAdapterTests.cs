@@ -136,17 +136,21 @@ namespace Test.Xunit.Llm
         }
 
         /// <summary>
-        /// Verifies that BuildRequest sets the Authorization header when an API key is configured.
+        /// Verifies that BuildRequest sets custom headers from the endpoint configuration.
         /// </summary>
         [Fact]
-        public void BuildRequest_WithApiKey_SetsAuthHeader()
+        public void BuildRequest_WithHeaders_SetsCustomHeaders()
         {
             EndpointConfig endpoint = new EndpointConfig
             {
                 Name = "test",
                 BaseUrl = "http://localhost:8080",
                 Model = "test-model",
-                ApiKey = "sk-testkey123",
+                Headers = new Dictionary<string, string>
+                {
+                    { "Authorization", "Bearer sk-testkey123" },
+                    { "x-api-key", "custom-key" }
+                },
                 Quirks = new BackendQuirks()
             };
 
@@ -162,6 +166,7 @@ namespace Test.Xunit.Llm
             Assert.NotNull(request.Headers.Authorization);
             Assert.Equal("Bearer", request.Headers.Authorization!.Scheme);
             Assert.Equal("sk-testkey123", request.Headers.Authorization.Parameter);
+            Assert.True(request.Headers.Contains("x-api-key"));
         }
 
         /// <summary>

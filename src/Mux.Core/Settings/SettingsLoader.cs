@@ -72,8 +72,7 @@ namespace Mux.Core.Settings
                     ["temperature"] = 0.1,
                     ["contextWindow"] = 32768,
                     ["timeoutMs"] = 120000,
-                    ["apiKey"] = (JsonNode?)null,
-                    ["bearerToken"] = (JsonNode?)null,
+                    ["headers"] = new JsonObject(),
                     ["quirks"] = (JsonNode?)null
                 };
 
@@ -195,7 +194,6 @@ namespace Mux.Core.Settings
         /// <param name="cliModel">An optional model name override from the CLI.</param>
         /// <param name="cliBaseUrl">An optional base URL override from the CLI.</param>
         /// <param name="cliAdapterType">An optional adapter type override from the CLI.</param>
-        /// <param name="cliApiKey">An optional API key override from the CLI.</param>
         /// <param name="cliTemperature">An optional temperature override from the CLI.</param>
         /// <param name="cliMaxTokens">An optional max tokens override from the CLI.</param>
         /// <returns>The fully resolved <see cref="EndpointConfig"/>.</returns>
@@ -205,7 +203,6 @@ namespace Mux.Core.Settings
             string? cliModel,
             string? cliBaseUrl,
             string? cliAdapterType,
-            string? cliApiKey,
             double? cliTemperature,
             int? cliMaxTokens)
         {
@@ -234,7 +231,8 @@ namespace Mux.Core.Settings
                     Name = "ollama-local",
                     AdapterType = AdapterTypeEnum.Ollama,
                     BaseUrl = "http://localhost:11434/v1",
-                    Model = "qwen2.5-coder:7b"
+                    Model = "qwen2.5-coder:7b",
+                    Headers = new Dictionary<string, string>()
                 };
             }
 
@@ -256,11 +254,6 @@ namespace Mux.Core.Settings
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(cliApiKey))
-            {
-                selected.ApiKey = ExpandEnvironmentVariables(cliApiKey!);
-            }
-
             if (cliTemperature.HasValue)
             {
                 selected.Temperature = cliTemperature.Value;
@@ -271,14 +264,11 @@ namespace Mux.Core.Settings
                 selected.MaxTokens = cliMaxTokens.Value;
             }
 
-            if (!string.IsNullOrWhiteSpace(selected.ApiKey))
+            // Expand environment variables in all header values
+            List<string> headerKeys = new List<string>(selected.Headers.Keys);
+            foreach (string key in headerKeys)
             {
-                selected.ApiKey = ExpandEnvironmentVariables(selected.ApiKey!);
-            }
-
-            if (!string.IsNullOrWhiteSpace(selected.BearerToken))
-            {
-                selected.BearerToken = ExpandEnvironmentVariables(selected.BearerToken!);
+                selected.Headers[key] = ExpandEnvironmentVariables(selected.Headers[key]);
             }
 
             if (selected.Quirks == null)

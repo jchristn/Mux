@@ -21,27 +21,13 @@ namespace Mux.Cli.Rendering
         /// <returns>The user's response string (e.g. "y", "n", "always").</returns>
         public static async Task<string> PromptApprovalAsync(ToolCall toolCall)
         {
-            AnsiConsole.WriteLine();
             string summary = FormatToolSummary(toolCall.Name, toolCall.Arguments);
-            AnsiConsole.MarkupLine($"  [cyan]●[/] [bold]{Markup.Escape(summary)}[/]");
-
+            AnsiConsole.MarkupLine($"  [dim][[tool:{Markup.Escape(toolCall.Name)}]][/] {Markup.Escape(summary)}");
             AnsiConsole.Markup("    Allow? [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ");
 
             string? response = await Task.Run(() => Console.ReadLine());
 
             return response?.Trim() ?? "n";
-        }
-
-        /// <summary>
-        /// Displays a compact tool call summary without prompting (for auto-approve mode).
-        /// Called by EventRenderer when no approval is needed.
-        /// </summary>
-        /// <param name="toolCall">The tool call to display.</param>
-        public static void RenderAutoApproved(ToolCall toolCall)
-        {
-            AnsiConsole.WriteLine();
-            string summary = FormatToolSummary(toolCall.Name, toolCall.Arguments);
-            AnsiConsole.MarkupLine($"  [cyan]●[/] [bold]{Markup.Escape(summary)}[/]");
         }
 
         #endregion

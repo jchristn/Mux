@@ -37,7 +37,7 @@ Defines the model runner backends mux can connect to. Each entry is a named endp
       "maxTokens": "integer (default: 8192)",
       "temperature": "number (default: 0.1)",
       "contextWindow": "integer (default: 32768)",
-      "apiKey": "string or null (default: null)",
+      "headers": "object (default: {})",
       "quirks": "object or null (default: null)"
     }
   ]
@@ -60,7 +60,7 @@ Selects the backend adapter that handles request shaping and response normalizat
 | Value | Description |
 |-------|-------------|
 | `ollama` | Ollama runner. Strips unsupported fields, handles Ollama's tool-call assembly quirks, maps Ollama-specific finish reasons. |
-| `openai` | OpenAI direct API (`api.openai.com`). Requires `apiKey`. Full support for parallel tool calls and structured outputs. |
+| `openai` | OpenAI direct API (`api.openai.com`). Requires authentication via `headers`. Full support for parallel tool calls and structured outputs. |
 | `vllm` | Reserved for future vLLM-specific adapter. Currently maps to `openai-compatible`. |
 | `openai-compatible` | Generic OpenAI-compatible API. Works with vLLM, LM Studio, llama.cpp server, Together AI, Groq, Fireworks, Azure OpenAI, and other OpenAI-format endpoints. |
 
@@ -122,14 +122,14 @@ The model's total context window size in tokens. mux uses this for conversation 
 - This should match the model's actual context window, not a desired limit
 - Common values: 8192, 32768, 65536, 128000, 131072
 
-#### `apiKey` (string or null, default: `null`)
+#### `headers` (object, default: `{}`)
 
-API key sent as a `Bearer` token in the `Authorization` header of every request.
+Custom HTTP headers included in every request to this endpoint. Use for authentication or any custom headers the backend requires.
 
+- **Authentication**: Set `"Authorization": "Bearer ${OPENAI_API_KEY}"` for bearer token auth, or `"x-api-key": "..."` for key-based auth
 - **Required** for `adapterType: "openai"` and most cloud APIs
-- **Optional** for local runners (Ollama typically doesn't need one)
-- **Supports environment variable expansion**: `"${OPENAI_API_KEY}"` is replaced with the value of the `OPENAI_API_KEY` environment variable at config load time
-- Can be overridden via `--api-key` CLI flag or `MUX_API_KEY` environment variable
+- **Optional** for local runners (Ollama typically doesn't need any headers)
+- **Supports environment variable expansion**: `"${VAR_NAME}"` is replaced with the value of the environment variable at config load time
 
 **Security note**: Use environment variable expansion (`"${VAR_NAME}"`) rather than pasting keys directly into the config file. The config file may be checked into source control or shared.
 
@@ -196,7 +196,7 @@ Per-endpoint behavioral flags consumed by the backend adapter. When `null`, the 
       "maxTokens": 16384,
       "temperature": 0.1,
       "contextWindow": 128000,
-      "apiKey": "${OPENAI_API_KEY}",
+      "headers": { "Authorization": "Bearer ${OPENAI_API_KEY}" },
       "quirks": {
         "supportsParallelToolCalls": true
       }
@@ -210,7 +210,7 @@ Per-endpoint behavioral flags consumed by the backend adapter. When `null`, the 
       "maxTokens": 16384,
       "temperature": 0.1,
       "contextWindow": 128000,
-      "apiKey": "${OPENAI_API_KEY}",
+      "headers": { "Authorization": "Bearer ${OPENAI_API_KEY}" },
       "quirks": {
         "supportsParallelToolCalls": true
       }
@@ -224,7 +224,7 @@ Per-endpoint behavioral flags consumed by the backend adapter. When `null`, the 
       "maxTokens": 16384,
       "temperature": 0.0,
       "contextWindow": 131072,
-      "apiKey": "sk-local-dev",
+      "headers": { "Authorization": "Bearer sk-local-dev" },
       "quirks": {
         "assembleToolCallDeltas": true,
         "supportsParallelToolCalls": true,
@@ -240,7 +240,7 @@ Per-endpoint behavioral flags consumed by the backend adapter. When `null`, the 
       "maxTokens": 8192,
       "temperature": 0.1,
       "contextWindow": 131072,
-      "apiKey": "${TOGETHER_API_KEY}"
+      "headers": { "Authorization": "Bearer ${TOGETHER_API_KEY}" }
     }
   ]
 }
@@ -417,14 +417,13 @@ mux recognizes the following environment variables:
 
 | Variable | Description |
 |----------|-------------|
-| `MUX_API_KEY` | API key override. Takes precedence over the selected endpoint's `apiKey` field but is overridden by `--api-key` CLI flag. |
 | `MUX_CONFIG_DIR` | Override the config directory (default: `~/.mux/`). Useful for testing or running multiple mux configurations. |
 
 Additionally, any environment variable can be referenced in config files using `${VAR_NAME}` syntax:
 
 ```json
 {
-  "apiKey": "${OPENAI_API_KEY}",
+  "headers": { "Authorization": "Bearer ${OPENAI_API_KEY}" },
   "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
 }
 ```
@@ -439,10 +438,9 @@ When the same setting is specified in multiple places, the highest-precedence va
 
 | Priority | Source | Example |
 |----------|--------|---------|
-| 1 (highest) | CLI flags | `--model gpt-4o`, `--api-key sk-...`, `--temperature 0.5` |
-| 2 | Environment variables | `MUX_API_KEY=sk-...` |
-| 3 | Named endpoint | `--endpoint openai-gpt4o` selects from `endpoints.json` |
-| 4 (lowest) | Default endpoint | The endpoint with `isDefault: true` in `endpoints.json` |
+| 1 (highest) | CLI flags | `--model gpt-4o`, `--temperature 0.5` |
+| 2 | Named endpoint | `--endpoint openai-gpt4o` selects from `endpoints.json` |
+| 3 (lowest) | Default endpoint | The endpoint with `isDefault: true` in `endpoints.json` |
 
 **Resolution flow in `SettingsLoader`:**
 
@@ -451,11 +449,10 @@ When the same setting is specified in multiple places, the highest-precedence va
 2. If --endpoint <name> given: select that endpoint. Error if not found.
 3. Else: select the endpoint where isDefault == true. Error if none found
    (unless --base-url and --model are both provided as CLI flags).
-4. Expand environment variables in apiKey fields (${VAR_NAME}).
-5. Apply MUX_API_KEY env var if set (overrides endpoint apiKey).
-6. Apply CLI flag overrides: --model, --base-url, --temperature,
-   --max-tokens, --adapter-type, --api-key onto the selected endpoint.
-7. Return the fully resolved EndpointConfig.
+4. Expand environment variables in headers values (${VAR_NAME}).
+5. Apply CLI flag overrides: --model, --base-url, --temperature,
+   --max-tokens, --adapter-type onto the selected endpoint.
+6. Return the fully resolved EndpointConfig.
 ```
 
 ---

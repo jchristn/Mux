@@ -25,14 +25,14 @@ namespace Mux.Core.Llm
         #region Public-Methods
 
         /// <summary>
-        /// Builds an <see cref="HttpRequestMessage"/> for the OpenAI API, requiring an API key
-        /// and ensuring parallel tool calls are enabled.
+        /// Builds an <see cref="HttpRequestMessage"/> for the OpenAI API, requiring an Authorization
+        /// header and ensuring parallel tool calls are enabled.
         /// </summary>
         /// <param name="messages">The conversation messages to send.</param>
         /// <param name="tools">The tool definitions available to the model.</param>
         /// <param name="endpoint">The endpoint configuration for the OpenAI backend.</param>
         /// <returns>A fully configured <see cref="HttpRequestMessage"/>.</returns>
-        /// <exception cref="InvalidOperationException">Thrown when the endpoint has no API key configured.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the endpoint has no Authorization header configured.</exception>
         public override HttpRequestMessage BuildRequest(
             List<ConversationMessage> messages,
             List<ToolDefinition> tools,
@@ -40,10 +40,10 @@ namespace Mux.Core.Llm
         {
             if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
 
-            if (string.IsNullOrEmpty(endpoint.ApiKey))
+            if (!endpoint.Headers.ContainsKey("Authorization"))
             {
                 throw new InvalidOperationException(
-                    "OpenAI adapter requires an API key. Set the ApiKey property on the endpoint configuration.");
+                    "OpenAI adapter requires an Authorization header. Add an 'Authorization' entry to the endpoint's headers dictionary.");
             }
 
             HttpRequestMessage request = base.BuildRequest(messages, tools, endpoint);

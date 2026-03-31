@@ -12,7 +12,9 @@ namespace Mux.Core.Agent
         #region Private-Members
 
         private string _ToolCallId = string.Empty;
+        private string _ToolName = string.Empty;
         private ToolResult _Result = new ToolResult();
+        private long _ElapsedMs = 0;
 
         #endregion
 
@@ -40,12 +42,30 @@ namespace Mux.Core.Agent
         }
 
         /// <summary>
+        /// The name of the tool that was executed.
+        /// </summary>
+        public string ToolName
+        {
+            get => _ToolName;
+            set => _ToolName = value ?? string.Empty;
+        }
+
+        /// <summary>
         /// The result produced by the tool execution.
         /// </summary>
         public ToolResult Result
         {
             get => _Result;
             set => _Result = value ?? throw new ArgumentNullException(nameof(Result));
+        }
+
+        /// <summary>
+        /// The elapsed time in milliseconds for the tool execution.
+        /// </summary>
+        public long ElapsedMs
+        {
+            get => _ElapsedMs;
+            set => _ElapsedMs = value;
         }
 
         #endregion

@@ -180,6 +180,7 @@ namespace Mux.Core.Agent
 
                     // Execute the tool
                     ToolResult result;
+                    System.Diagnostics.Stopwatch toolStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                     try
                     {
@@ -195,10 +196,14 @@ namespace Mux.Core.Agent
                         };
                     }
 
+                    toolStopwatch.Stop();
+
                     yield return new ToolCallCompletedEvent
                     {
                         ToolCallId = toolCall.Id,
-                        Result = result
+                        ToolName = toolCall.Name,
+                        Result = result,
+                        ElapsedMs = toolStopwatch.ElapsedMilliseconds
                     };
 
                     // Append tool result to conversation

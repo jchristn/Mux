@@ -1,6 +1,7 @@
 namespace Test.Xunit.Settings
 {
     using System;
+    using System.Collections.Generic;
     using System.Text.Json;
     using global::Xunit;
     using Mux.Core.Enums;
@@ -30,7 +31,7 @@ namespace Test.Xunit.Settings
                 MaxTokens = 16384,
                 Temperature = 0.7,
                 ContextWindow = 128000,
-                ApiKey = "sk-test-key",
+                Headers = new Dictionary<string, string> { { "Authorization", "Bearer sk-test-key" } },
                 Quirks = new BackendQuirks
                 {
                     SupportsParallelToolCalls = true,
@@ -50,7 +51,7 @@ namespace Test.Xunit.Settings
             Assert.Equal(original.MaxTokens, deserialized.MaxTokens);
             Assert.Equal(original.Temperature, deserialized.Temperature);
             Assert.Equal(original.ContextWindow, deserialized.ContextWindow);
-            Assert.Equal(original.ApiKey, deserialized.ApiKey);
+            Assert.Equal(original.Headers["Authorization"], deserialized.Headers["Authorization"]);
             Assert.NotNull(deserialized.Quirks);
             Assert.True(deserialized.Quirks!.SupportsParallelToolCalls);
             Assert.False(deserialized.Quirks.AssembleToolCallDeltas);
