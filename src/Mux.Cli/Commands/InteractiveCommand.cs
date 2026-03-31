@@ -543,7 +543,6 @@ namespace Mux.Cli.Commands
                     return true;
 
                 case "/endpoint":
-                case "/model":
                     HandleEndpointCommand(argument);
                     return true;
 

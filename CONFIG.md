@@ -48,7 +48,7 @@ Defines the model runner backends mux can connect to. Each entry is a named endp
 
 #### `name` (string, required)
 
-A unique identifier for this endpoint. Used with `--endpoint <name>` to select it from the CLI or with `/model <name>` in interactive mode.
+A unique identifier for this endpoint. Used with `--endpoint <name>` to select it from the CLI or with `/endpoint <name>` in interactive mode.
 
 - Must be unique across all endpoints
 - Convention: lowercase with hyphens (e.g., `ollama-qwen`, `openai-gpt4o`, `vllm-deepseek`)

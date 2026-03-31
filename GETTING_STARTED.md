@@ -103,8 +103,8 @@ mux> write a function that
 Slash commands:
 
 ```
-/model              List available endpoints
-/model ollama-big   Switch to a different endpoint
+/endpoint              List available endpoints
+/endpoint ollama-big   Switch to a different endpoint
 /tools              List available tools
 /clear              Reset conversation
 /help               Show all commands
@@ -161,7 +161,7 @@ mux --endpoint ollama-big
 Or inside the REPL:
 
 ```
-/model ollama-big
+/endpoint ollama-big
 ```
 
 ## Ad-Hoc Endpoint (No Config File)
