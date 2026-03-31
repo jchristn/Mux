@@ -6,7 +6,7 @@ namespace Mux.Core.Enums
     /// <summary>
     /// Type of LLM backend adapter.
     /// </summary>
-    [JsonConverter(typeof(JsonStringEnumConverter))]
+    [JsonConverter(typeof(AdapterTypeEnumConverter))]
     public enum AdapterTypeEnum
     {
         /// <summary>
