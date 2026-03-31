@@ -110,6 +110,8 @@ namespace Mux.Core.Llm
             if (messages == null) throw new ArgumentNullException(nameof(messages));
             if (tools == null) throw new ArgumentNullException(nameof(tools));
 
+            string sendUrl = _Endpoint.BaseUrl.TrimEnd('/') + "/chat/completions";
+
             return await RetryHandler.ExecuteWithRetryAsync(async () =>
             {
                 HttpRequestMessage request = _Adapter.BuildRequest(messages, tools, _Endpoint);
@@ -125,7 +127,7 @@ namespace Mux.Core.Llm
                 if (!response.IsSuccessStatusCode)
                 {
                     throw new HttpRequestException(
-                        $"LLM request failed with status {(int)response.StatusCode} ({response.StatusCode}): {responseBody}",
+                        $"LLM request to {sendUrl} failed with status {(int)response.StatusCode} ({response.StatusCode}): {responseBody}",
                         null,
                         (System.Net.HttpStatusCode)(int)response.StatusCode);
                 }
@@ -150,6 +152,8 @@ namespace Mux.Core.Llm
             if (messages == null) throw new ArgumentNullException(nameof(messages));
             if (tools == null) throw new ArgumentNullException(nameof(tools));
 
+            string requestUrl = _Endpoint.BaseUrl.TrimEnd('/') + "/chat/completions";
+
             ErrorEvent? connectionError = null;
             HttpResponseMessage? response = null;
 
@@ -168,7 +172,7 @@ namespace Mux.Core.Llm
                 connectionError = new ErrorEvent
                 {
                     Code = "llm_connection_error",
-                    Message = $"Failed to connect to LLM endpoint: {ex.Message}"
+                    Message = $"Failed to connect to {requestUrl}: {ex.Message}"
                 };
             }
 
@@ -215,7 +219,7 @@ namespace Mux.Core.Llm
                         retryError = new ErrorEvent
                         {
                             Code = "llm_connection_error",
-                            Message = $"Retry without tools failed: {retryEx.Message}"
+                            Message = $"Retry without tools failed to {requestUrl}: {retryEx.Message}"
                         };
                     }
 
@@ -232,7 +236,7 @@ namespace Mux.Core.Llm
                         yield return new ErrorEvent
                         {
                             Code = "llm_error",
-                            Message = $"LLM request failed with status {(int)retryResponse.StatusCode}: {retryBody}"
+                            Message = $"LLM request to {requestUrl} failed with status {(int)retryResponse.StatusCode}: {retryBody}"
                         };
                         yield break;
                     }
@@ -244,7 +248,7 @@ namespace Mux.Core.Llm
                     yield return new ErrorEvent
                     {
                         Code = "llm_error",
-                        Message = $"LLM request failed with status {(int)response.StatusCode} ({response.StatusCode}): {errorBody}"
+                        Message = $"LLM request to {requestUrl} failed with status {(int)response.StatusCode} ({response.StatusCode}): {errorBody}"
                     };
                     yield break;
                 }
@@ -264,7 +268,7 @@ namespace Mux.Core.Llm
                 streamError = new ErrorEvent
                 {
                     Code = "llm_stream_error",
-                    Message = $"Failed to read response stream: {ex.Message}"
+                    Message = $"Failed to read response stream from {requestUrl}: {ex.Message}"
                 };
             }
 
