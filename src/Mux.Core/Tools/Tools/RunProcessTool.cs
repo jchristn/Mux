@@ -20,6 +20,7 @@ namespace Mux.Core.Tools.Tools
         #region Private-Members
 
         private const int _DefaultTimeoutMs = 120000;
+        private static readonly bool _IsWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
         #endregion
 
@@ -34,6 +35,8 @@ namespace Mux.Core.Tools.Tools
         /// A human-readable description of what this tool does.
         /// </summary>
         public string Description => "Runs a shell command and captures its output. "
+            + $"Current runtime: {GetOperatingSystemLabel()} using shell {GetShellProgram()} {GetShellInvocationArgsHint()}. "
+            + "Use commands that are valid for that shell and operating system. "
             + "Returns stdout, stderr, exit code, and whether the process timed out.";
 
         /// <summary>
@@ -42,12 +45,23 @@ namespace Mux.Core.Tools.Tools
         public object ParametersSchema => new
         {
             type = "object",
+            description = "Execute a command using the current runtime shell. "
+                + $"Runtime context: operating_system={GetOperatingSystemLabel()}, platform_family={GetPlatformFamily()}, "
+                + $"shell_program={GetShellProgram()}, shell_invocation={GetShellInvocation()}.",
+            mux_runtime_context = new
+            {
+                operating_system = GetOperatingSystemLabel(),
+                platform_family = GetPlatformFamily(),
+                shell_program = GetShellProgram(),
+                shell_invocation = GetShellInvocation(),
+                command_guidance = "Use commands and syntax compatible with the runtime shell and operating system shown here."
+            },
             properties = new
             {
                 command = new
                 {
                     type = "string",
-                    description = "The command to execute."
+                    description = "The command to execute. Write it for the runtime shell and operating system in mux_runtime_context."
                 },
                 args = new
                 {
@@ -113,7 +127,7 @@ namespace Mux.Core.Tools.Tools
                 startInfo.UseShellExecute = false;
                 startInfo.CreateNoWindow = true;
 
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                if (_IsWindows)
                 {
                     startInfo.FileName = "cmd.exe";
                     startInfo.Arguments = $"/c {fullCommand}";
@@ -270,6 +284,31 @@ namespace Mux.Core.Tools.Tools
             }
 
             return Path.GetFullPath(Path.Combine(workingDirectory, filePath));
+        }
+
+        private static string GetOperatingSystemLabel()
+        {
+            return RuntimeInformation.OSDescription.Trim();
+        }
+
+        private static string GetPlatformFamily()
+        {
+            return _IsWindows ? "windows" : "unix";
+        }
+
+        private static string GetShellProgram()
+        {
+            return _IsWindows ? "cmd.exe" : "/bin/sh";
+        }
+
+        private static string GetShellInvocation()
+        {
+            return _IsWindows ? "cmd.exe /c <command>" : "/bin/sh -c \"<command>\"";
+        }
+
+        private static string GetShellInvocationArgsHint()
+        {
+            return _IsWindows ? "/c" : "-c";
         }
 
         #endregion

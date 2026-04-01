@@ -14,6 +14,7 @@ Your AI agent, your models, your infrastructure.
 
 - Backend-agnostic: one CLI for local and remote model runners
 - Built-in tools: file edit/read/write/delete, directory management, glob, grep, process execution
+- Shell-aware process execution metadata: `run_process` tells the model which OS and shell it will run under
 - MCP extensible in interactive mode: external tool servers appear beside built-in tools
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory

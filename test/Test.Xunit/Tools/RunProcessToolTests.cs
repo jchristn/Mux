@@ -2,6 +2,7 @@ namespace Test.Xunit.Tools
 {
     using System;
     using System.IO;
+    using System.Runtime.InteropServices;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
@@ -102,6 +103,58 @@ namespace Test.Xunit.Tools
             JsonDocument doc = JsonDocument.Parse(result.Content);
             bool timedOut = doc.RootElement.GetProperty("timed_out").GetBoolean();
             Assert.True(timedOut);
+        }
+
+        /// <summary>
+        /// Verifies that the tool description exposes the active runtime shell and OS guidance.
+        /// </summary>
+        [Fact]
+        public void RunProcess_Description_ExposesRuntimeShellContext()
+        {
+            Assert.Contains("Current runtime:", _Tool.Description);
+            Assert.Contains(RuntimeInformation.OSDescription.Trim(), _Tool.Description);
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Assert.Contains("cmd.exe", _Tool.Description);
+                Assert.Contains("/c", _Tool.Description);
+            }
+            else
+            {
+                Assert.Contains("/bin/sh", _Tool.Description);
+                Assert.Contains("-c", _Tool.Description);
+            }
+        }
+
+        /// <summary>
+        /// Verifies that the tool schema exposes runtime metadata for shell-aware command generation.
+        /// </summary>
+        [Fact]
+        public void RunProcess_ParametersSchema_ExposesRuntimeContextMetadata()
+        {
+            JsonElement schema = JsonSerializer.SerializeToElement(_Tool.ParametersSchema);
+
+            Assert.Equal("object", schema.GetProperty("type").GetString());
+            Assert.Contains("Runtime context:", schema.GetProperty("description").GetString());
+
+            JsonElement runtimeContext = schema.GetProperty("mux_runtime_context");
+            Assert.Equal(RuntimeInformation.OSDescription.Trim(), runtimeContext.GetProperty("operating_system").GetString());
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Assert.Equal("windows", runtimeContext.GetProperty("platform_family").GetString());
+                Assert.Equal("cmd.exe", runtimeContext.GetProperty("shell_program").GetString());
+                Assert.Equal("cmd.exe /c <command>", runtimeContext.GetProperty("shell_invocation").GetString());
+            }
+            else
+            {
+                Assert.Equal("unix", runtimeContext.GetProperty("platform_family").GetString());
+                Assert.Equal("/bin/sh", runtimeContext.GetProperty("shell_program").GetString());
+                Assert.Equal("/bin/sh -c \"<command>\"", runtimeContext.GetProperty("shell_invocation").GetString());
+            }
+
+            JsonElement commandProperty = schema.GetProperty("properties").GetProperty("command");
+            Assert.Contains("mux_runtime_context", commandProperty.GetProperty("description").GetString());
         }
 
         /// <summary>
