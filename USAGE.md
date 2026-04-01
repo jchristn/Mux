@@ -34,6 +34,20 @@ mux probe --output-format json
 mux probe -e vllm-deepseek
 ```
 
+## Built-In Process Execution
+
+The built-in `run_process` tool executes commands using the host shell for the current operating system:
+- Windows: `cmd.exe /c`
+- Linux and macOS: `/bin/sh -c`
+
+`run_process` now exposes runtime metadata in its tool description and schema so the model can see:
+- the operating system
+- the platform family
+- the shell program
+- the shell invocation form
+
+This matters for command generation. For example, a Windows runtime should use `dir`/`type`/`copy` style commands, while a Unix runtime should use `ls`/`cat`/`cp`.
+
 ## Output Formats
 
 `mux print` supports:
