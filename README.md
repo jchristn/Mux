@@ -14,7 +14,7 @@ Your AI agent, your models, your infrastructure.
 
 - Backend-agnostic: one CLI for local and remote model runners
 - Built-in tools: file edit/read/write/delete, directory management, glob, grep, process execution
-- MCP extensible: external tool servers appear beside built-in tools
+- MCP extensible in interactive mode: external tool servers appear beside built-in tools
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
 - Health checks: `mux probe` validates config, backend reachability, auth, and model access
@@ -75,7 +75,7 @@ Common options:
 | `--working-directory <path>` | `-w` | Tool execution directory |
 | `--system-prompt <path>` |  | Override system prompt file |
 | `--yolo` |  | Auto-approve tool calls |
-| `--approval-policy <policy>` |  | `ask`, `auto`, or `deny` |
+| `--approval-policy <policy>` |  | interactive: `ask`, `auto`, or `deny` | print/probe: `auto` or `deny` |
 | `--output-format <format>` |  | `text`, `json`, or `jsonl` depending on the command |
 | `--verbose` | `-v` | Extra progress to stderr in text mode |
 
@@ -107,6 +107,7 @@ In `jsonl` mode:
 - all structured events are written to `stdout`
 - each line is a complete JSON object
 - default human-readable progress output is suppressed
+- `run_started` includes effective non-interactive capability metadata such as `commandName`, `endpointSelectionSource`, `cliOverridesApplied`, built-in tool counts, and MCP support/config status
 
 Event types currently emitted:
 - `run_started`
@@ -127,6 +128,11 @@ Exit codes:
 - `1`: config, runtime, backend, or command failure
 - `2`: tool call denied
 
+Non-interactive constraints:
+- `mux print` and `mux probe` do not load MCP servers
+- `--no-mcp` is interactive-only and is rejected in `print`/`probe`
+- `--approval-policy ask` is rejected in `print`/`probe`; use `auto`/`--yolo` or `deny`
+
 ## Probe Command
 
 `mux probe` uses the same config resolution path as `mux print` and performs a lightweight backend validation.
@@ -144,6 +150,11 @@ mux probe -e openai-gpt4o
 - backend reachability
 - auth/header configuration
 - model access through a minimal completion request
+
+Machine-readable `probe` output also includes:
+- effective config/runtime metadata such as `configDirectory`, `endpointSelectionSource`, and `cliOverridesApplied`
+- capability data such as `toolsEnabled`, built-in tool counts, and MCP support/config state
+- classified failures via `errorCode` and `failureCategory`
 
 ## Configuration
 

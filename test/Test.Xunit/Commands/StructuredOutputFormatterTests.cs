@@ -24,10 +24,19 @@ namespace Test.Xunit.Commands
                 AdapterType = "OpenAiCompatible",
                 BaseUrl = "http://localhost:1234",
                 Model = "test-model",
+                CommandName = "print",
                 ApprovalPolicy = "AutoApprove",
                 WorkingDirectory = "C:\\Code\\Mux",
                 MaxIterations = 10,
-                ToolsEnabled = true
+                ToolsEnabled = true,
+                ConfigDirectory = "C:\\Users\\test\\.mux",
+                EndpointSelectionSource = "named_endpoint",
+                CliOverridesApplied = new System.Collections.Generic.List<string> { "endpoint", "model" },
+                McpSupported = false,
+                McpConfigured = true,
+                McpServerCount = 2,
+                BuiltInToolCount = 11,
+                EffectiveToolCount = 11
             };
 
             RunCompletedEvent completed = new RunCompletedEvent
@@ -46,6 +55,9 @@ namespace Test.Xunit.Commands
 
             Assert.Equal("run_started", startedJson.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("local", startedJson.RootElement.GetProperty("endpointName").GetString());
+            Assert.Equal("print", startedJson.RootElement.GetProperty("commandName").GetString());
+            Assert.False(startedJson.RootElement.GetProperty("mcp").GetProperty("supported").GetBoolean());
+            Assert.True(startedJson.RootElement.GetProperty("mcp").GetProperty("configured").GetBoolean());
             Assert.Equal("run_completed", completedJson.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("completed", completedJson.RootElement.GetProperty("status").GetString());
         }

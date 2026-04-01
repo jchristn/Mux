@@ -45,10 +45,22 @@ namespace Mux.Cli.Commands
                     payload["adapterType"] = startedEvent.AdapterType;
                     payload["baseUrl"] = startedEvent.BaseUrl;
                     payload["model"] = startedEvent.Model;
+                    payload["commandName"] = startedEvent.CommandName;
                     payload["approvalPolicy"] = startedEvent.ApprovalPolicy;
                     payload["workingDirectory"] = startedEvent.WorkingDirectory;
                     payload["maxIterations"] = startedEvent.MaxIterations;
                     payload["toolsEnabled"] = startedEvent.ToolsEnabled;
+                    payload["configDirectory"] = startedEvent.ConfigDirectory;
+                    payload["endpointSelectionSource"] = startedEvent.EndpointSelectionSource;
+                    payload["cliOverridesApplied"] = startedEvent.CliOverridesApplied;
+                    payload["builtInToolCount"] = startedEvent.BuiltInToolCount;
+                    payload["effectiveToolCount"] = startedEvent.EffectiveToolCount;
+                    payload["mcp"] = new Dictionary<string, object?>
+                    {
+                        ["supported"] = startedEvent.McpSupported,
+                        ["configured"] = startedEvent.McpConfigured,
+                        ["serverCount"] = startedEvent.McpServerCount
+                    };
                     break;
 
                 case AssistantTextEvent textEvent:

@@ -1,6 +1,7 @@
 namespace Mux.Core.Agent
 {
     using System;
+    using System.Collections.Generic;
     using Mux.Core.Enums;
 
     /// <summary>
@@ -19,6 +20,15 @@ namespace Mux.Core.Agent
         private string _WorkingDirectory = string.Empty;
         private int _MaxIterations = 25;
         private bool _ToolsEnabled = true;
+        private string _CommandName = string.Empty;
+        private string _ConfigDirectory = string.Empty;
+        private string _EndpointSelectionSource = string.Empty;
+        private List<string> _CliOverridesApplied = new List<string>();
+        private bool _McpSupported = false;
+        private bool _McpConfigured = false;
+        private int _McpServerCount = 0;
+        private int _BuiltInToolCount = 0;
+        private int _EffectiveToolCount = 0;
 
         #endregion
 
@@ -115,6 +125,87 @@ namespace Mux.Core.Agent
         {
             get => _ToolsEnabled;
             set => _ToolsEnabled = value;
+        }
+
+        /// <summary>
+        /// The command mode executing the run, such as print.
+        /// </summary>
+        public string CommandName
+        {
+            get => _CommandName;
+            set => _CommandName = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// The effective mux configuration directory.
+        /// </summary>
+        public string ConfigDirectory
+        {
+            get => _ConfigDirectory;
+            set => _ConfigDirectory = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// How mux selected the effective endpoint.
+        /// </summary>
+        public string EndpointSelectionSource
+        {
+            get => _EndpointSelectionSource;
+            set => _EndpointSelectionSource = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// The CLI override categories applied to the run.
+        /// </summary>
+        public List<string> CliOverridesApplied
+        {
+            get => _CliOverridesApplied;
+            set => _CliOverridesApplied = value ?? new List<string>();
+        }
+
+        /// <summary>
+        /// Whether the command mode supports MCP integration.
+        /// </summary>
+        public bool McpSupported
+        {
+            get => _McpSupported;
+            set => _McpSupported = value;
+        }
+
+        /// <summary>
+        /// Whether MCP servers are configured in the active config directory.
+        /// </summary>
+        public bool McpConfigured
+        {
+            get => _McpConfigured;
+            set => _McpConfigured = value;
+        }
+
+        /// <summary>
+        /// Number of configured MCP servers in the active config directory.
+        /// </summary>
+        public int McpServerCount
+        {
+            get => _McpServerCount;
+            set => _McpServerCount = value;
+        }
+
+        /// <summary>
+        /// Number of built-in tools compiled into mux.
+        /// </summary>
+        public int BuiltInToolCount
+        {
+            get => _BuiltInToolCount;
+            set => _BuiltInToolCount = value;
+        }
+
+        /// <summary>
+        /// Number of tools effectively available to the model for this run.
+        /// </summary>
+        public int EffectiveToolCount
+        {
+            get => _EffectiveToolCount;
+            set => _EffectiveToolCount = value;
         }
 
         #endregion

@@ -101,6 +101,8 @@ mux probe --output-format json
 - interactive mode usually asks before tool calls
 - `mux print` defaults to denied tool calls unless overridden
 - `--yolo` or `--approval-policy auto` enables automatic execution
+- `mux print` and `mux probe` reject `--approval-policy ask`
+- MCP servers are only loaded in interactive mode
 
 ## Configure More Endpoints
 

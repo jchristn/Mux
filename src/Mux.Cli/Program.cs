@@ -108,12 +108,12 @@ OPTIONS:
 
   Approval / Safety:
         --yolo                           Auto-approve all tool calls
-        --approval-policy <policy>       ask, auto, or deny (default: ask if TTY, deny otherwise)
+        --approval-policy <policy>       interactive: ask, auto, or deny | print/probe: auto or deny
 
   Execution:
     -w, --working-directory <path>       Set working directory for tool execution
         --system-prompt <path>           Path to system prompt file
-        --no-mcp                         Skip MCP server initialization
+        --no-mcp                         Interactive only: skip MCP server initialization
     -v, --verbose                        Emit detailed progress to stderr
 
 PROBE:

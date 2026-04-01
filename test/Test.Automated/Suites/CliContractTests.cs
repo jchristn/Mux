@@ -124,6 +124,8 @@ namespace Test.Automated.Suites
             JsonDocument completed = JsonDocument.Parse(lines[^1]);
 
             AssertEqual("run_started", started.RootElement.GetProperty("eventType").GetString());
+            AssertEqual("print", started.RootElement.GetProperty("commandName").GetString());
+            AssertFalse(started.RootElement.GetProperty("mcp").GetProperty("supported").GetBoolean(), "Expected MCP to be reported as unsupported in print mode");
             AssertEqual("run_completed", completed.RootElement.GetProperty("eventType").GetString());
             AssertEqual("completed", completed.RootElement.GetProperty("status").GetString());
             return Task.CompletedTask;
@@ -151,6 +153,8 @@ namespace Test.Automated.Suites
             JsonDocument json = JsonDocument.Parse(stdout);
             AssertTrue(json.RootElement.GetProperty("success").GetBoolean());
             AssertEqual("test-model", json.RootElement.GetProperty("model").GetString());
+            AssertEqual("probe", json.RootElement.GetProperty("commandName").GetString());
+            AssertFalse(json.RootElement.GetProperty("mcpSupported").GetBoolean(), "Expected probe to report MCP as unsupported");
             return Task.CompletedTask;
         }
 

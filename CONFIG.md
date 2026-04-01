@@ -37,6 +37,10 @@ If the directory does not exist, `mux` creates it. If `endpoints.json` is missin
 | `settings.json` | Global mux settings | No |
 | `system-prompt.md` | Custom default system prompt | No |
 
+For current non-interactive orchestration paths:
+- `settings.json` is optional
+- `mux print` resolves base endpoint values from `endpoints.json` or the internal default, then applies CLI overrides
+
 ## `endpoints.json`
 
 Defines named model runner endpoints.
@@ -159,6 +163,8 @@ Fields:
 Notes:
 - `mux print` still defaults to deny semantics unless `--yolo` or `--approval-policy` overrides it
 - CLI flags override settings file values
+- `mux print` and `mux probe` reject `--approval-policy ask`
+- `mux print` and `mux probe` do not load MCP servers, even if `mcp-servers.json` exists
 
 ## `system-prompt.md`
 

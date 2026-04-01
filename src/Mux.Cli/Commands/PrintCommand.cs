@@ -71,7 +71,7 @@ namespace Mux.Cli.Commands
             ResolvedRuntime runtime;
             try
             {
-                runtime = CommandRuntimeResolver.ResolveRuntime(settings);
+                runtime = CommandRuntimeResolver.ResolveRuntime(settings, "print", supportsMcp: false, allowAskApproval: false);
             }
             catch (Exception ex)
             {
@@ -85,6 +85,15 @@ namespace Mux.Cli.Commands
                 ApprovalPolicy = runtime.ApprovalPolicy,
                 WorkingDirectory = runtime.WorkingDirectory,
                 MaxIterations = runtime.MuxSettings.MaxAgentIterations,
+                CommandName = runtime.Metadata.CommandName,
+                ConfigDirectory = runtime.Metadata.ConfigDirectory,
+                EndpointSelectionSource = runtime.Metadata.EndpointSelectionSource,
+                CliOverridesApplied = runtime.Metadata.CliOverridesApplied,
+                McpSupported = runtime.Capabilities.McpSupported,
+                McpConfigured = runtime.Capabilities.McpConfigured,
+                McpServerCount = runtime.Capabilities.McpServerCount,
+                BuiltInToolCount = runtime.Capabilities.BuiltInToolCount,
+                EffectiveToolCount = runtime.Capabilities.EffectiveToolCount,
                 Verbose = settings.Verbose
             };
 
@@ -228,7 +237,7 @@ namespace Mux.Cli.Commands
                 ? OutputFormatEnum.Jsonl
                 : OutputFormatEnum.Text;
 
-            EmitRuntimeError(format, "print_error", message);
+            EmitRuntimeError(format, ClassifyBootstrapErrorCode(message), message);
         }
 
         private static void EmitRuntimeError(OutputFormatEnum outputFormat, string code, string message)
@@ -242,6 +251,29 @@ namespace Mux.Cli.Commands
             {
                 Console.Error.WriteLine($"[error] {message}");
             }
+        }
+
+        private static string ClassifyBootstrapErrorCode(string message)
+        {
+            if (message.Contains("No endpoint named", StringComparison.OrdinalIgnoreCase))
+            {
+                return "endpoint_not_found";
+            }
+
+            if (message.Contains("MCP is only supported in interactive mode", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("Approval policy 'ask' is not supported", StringComparison.OrdinalIgnoreCase))
+            {
+                return "unsupported_option";
+            }
+
+            if (message.Contains("Unsupported output format", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("Unsupported approval policy", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("No prompt provided", StringComparison.OrdinalIgnoreCase))
+            {
+                return "invalid_argument";
+            }
+
+            return "print_error";
         }
 
         #endregion

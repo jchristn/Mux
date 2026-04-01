@@ -1,6 +1,7 @@
 namespace Test.Xunit.Commands
 {
     using System;
+    using System.Collections.Generic;
     using System.IO;
     using System.Text.Json;
     using global::Xunit;
@@ -44,9 +45,107 @@ namespace Test.Xunit.Commands
             JsonDocument last = JsonDocument.Parse(lines[^1]);
 
             Assert.Equal("run_started", first.RootElement.GetProperty("eventType").GetString());
+            Assert.Equal("print", first.RootElement.GetProperty("commandName").GetString());
+            Assert.False(first.RootElement.GetProperty("mcp").GetProperty("supported").GetBoolean());
+            Assert.True(first.RootElement.GetProperty("builtInToolCount").GetInt32() > 0);
             Assert.Equal("assistant_text", second.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("run_completed", last.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("completed", last.RootElement.GetProperty("status").GetString());
+        }
+
+        /// <summary>
+        /// Verifies that print mode rejects ask approval in non-interactive mode with a structured error code.
+        /// </summary>
+        [Fact]
+        public void PrintCommand_AskApproval_ReturnsUnsupportedOption()
+        {
+            (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+            {
+                "print",
+                "--output-format", "jsonl",
+                "--approval-policy", "ask",
+                "--base-url", "http://localhost:65534",
+                "--model", "test-model",
+                "--adapter-type", "openai-compatible",
+                "jsonl print test"
+            });
+
+            Assert.Equal(1, exitCode);
+            Assert.Equal(string.Empty, stderr.Trim());
+
+            JsonDocument json = JsonDocument.Parse(stdout);
+            Assert.Equal("error", json.RootElement.GetProperty("eventType").GetString());
+            Assert.Equal("unsupported_option", json.RootElement.GetProperty("code").GetString());
+        }
+
+        /// <summary>
+        /// Verifies that print mode rejects MCP flags with a structured configuration error.
+        /// </summary>
+        [Fact]
+        public void PrintCommand_NoMcp_ReturnsUnsupportedOption()
+        {
+            (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+            {
+                "print",
+                "--output-format", "jsonl",
+                "--no-mcp",
+                "--base-url", "http://localhost:65534",
+                "--model", "test-model",
+                "--adapter-type", "openai-compatible",
+                "jsonl print test"
+            });
+
+            Assert.Equal(1, exitCode);
+            Assert.Equal(string.Empty, stderr.Trim());
+
+            JsonDocument json = JsonDocument.Parse(stdout);
+            Assert.Equal("error", json.RootElement.GetProperty("eventType").GetString());
+            Assert.Equal("unsupported_option", json.RootElement.GetProperty("code").GetString());
+        }
+
+        /// <summary>
+        /// Verifies that probe mode classifies a missing named endpoint without string parsing.
+        /// </summary>
+        [Fact]
+        public void ProbeCommand_MissingEndpoint_ReturnsEndpointNotFound()
+        {
+            string tempDir = CreateTempConfigDirectory(new[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["name"] = "configured-endpoint",
+                    ["adapterType"] = "openai-compatible",
+                    ["baseUrl"] = "http://localhost:1234",
+                    ["model"] = "test-model",
+                    ["isDefault"] = true
+                }
+            });
+
+            string? originalConfigDir = Environment.GetEnvironmentVariable("MUX_CONFIG_DIR");
+
+            try
+            {
+                Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", tempDir);
+                (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+                {
+                    "probe",
+                    "--output-format", "json",
+                    "--endpoint", "missing-endpoint"
+                });
+
+                Assert.Equal(1, exitCode);
+                Assert.Equal(string.Empty, stderr.Trim());
+
+                JsonDocument json = JsonDocument.Parse(stdout);
+                Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+                Assert.Equal("endpoint_not_found", json.RootElement.GetProperty("errorCode").GetString());
+                Assert.Equal("configuration", json.RootElement.GetProperty("failureCategory").GetString());
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", originalConfigDir);
+                Directory.Delete(tempDir, true);
+            }
         }
 
         /// <summary>
@@ -97,6 +196,20 @@ namespace Test.Xunit.Commands
                 Console.SetOut(originalOut);
                 Console.SetError(originalErr);
             }
+        }
+
+        private static string CreateTempConfigDirectory(IEnumerable<Dictionary<string, object?>> endpoints)
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "mux_cli_tests_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+
+            string json = JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["endpoints"] = endpoints
+            });
+
+            File.WriteAllText(Path.Combine(tempDir, "endpoints.json"), json);
+            return tempDir;
         }
     }
 }

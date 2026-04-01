@@ -80,7 +80,16 @@ namespace Mux.Core.Agent
                 ApprovalPolicy = _Options.ApprovalPolicy.ToString(),
                 WorkingDirectory = _Options.WorkingDirectory,
                 MaxIterations = _Options.MaxIterations,
-                ToolsEnabled = _Options.Endpoint.Quirks?.SupportsTools ?? true
+                ToolsEnabled = _Options.Endpoint.Quirks?.SupportsTools ?? true,
+                CommandName = _Options.CommandName,
+                ConfigDirectory = _Options.ConfigDirectory,
+                EndpointSelectionSource = _Options.EndpointSelectionSource,
+                CliOverridesApplied = new List<string>(_Options.CliOverridesApplied),
+                McpSupported = _Options.McpSupported,
+                McpConfigured = _Options.McpConfigured,
+                McpServerCount = _Options.McpServerCount,
+                BuiltInToolCount = _Options.BuiltInToolCount,
+                EffectiveToolCount = _Options.EffectiveToolCount
             };
 
             // 1. Build conversation

@@ -57,7 +57,11 @@ Depending on the event, additional fields may include:
 - `baseUrl`
 - `model`
 - `approvalPolicy`
+- `commandName`
 - `workingDirectory`
+- `configDirectory`
+- `endpointSelectionSource`
+- `cliOverridesApplied`
 - `toolCall`
 - `toolCallId`
 - `toolName`
@@ -66,6 +70,9 @@ Depending on the event, additional fields may include:
 - `message`
 - `status`
 - `durationMs`
+- `builtInToolCount`
+- `effectiveToolCount`
+- `mcp`
 
 Current event types:
 - `run_started`
@@ -95,6 +102,7 @@ Notes:
 - machine-readable output is on `stdout`
 - secret-like values in structured payloads are redacted on a best-effort basis
 - default text mode is unchanged
+- `run_started.mcp.supported` is always `false` in `print` mode today because non-interactive mode does not load MCP servers
 
 ## Exit Codes
 
@@ -122,6 +130,7 @@ Policies:
 Notes:
 - `mux print` defaults to `deny` unless `--yolo` or `--approval-policy` overrides it
 - interactive mode typically uses ask semantics
+- `mux print` and `mux probe` reject `--approval-policy ask`
 
 ## Config Isolation
 
@@ -262,6 +271,11 @@ Skip MCP startup:
 mux --no-mcp
 ```
 
+Important:
+- MCP integration is interactive-only today
+- `mux print` and `mux probe` do not load MCP servers
+- passing `--no-mcp` to `print` or `probe` returns a structured configuration error instead of silently implying MCP support
+
 ## Orchestrator Integration
 
 Recommended command forms:
@@ -279,3 +293,5 @@ Recommendations:
 - prefer `--output-format json` for `probe`
 - use explicit `--endpoint` in production automation
 - use `--yolo` or `--approval-policy auto` only when automatic tool execution is intended
+- rely on `run_started` and `probe` JSON metadata instead of inferring tool/MCP capability from docs alone
+- treat `errorCode` and `failureCategory` from `probe` as the stable failure classification surface
