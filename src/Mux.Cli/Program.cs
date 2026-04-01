@@ -120,22 +120,6 @@ PROBE:
     mux probe --output-format json       Machine-readable health check
     mux probe -e openai-prod             Validate a specific configured endpoint
 
-INTERACTIVE COMMANDS:
-    /endpoint [name]   List or switch endpoints
-    /tools             List available tools (built-in + MCP)
-    /mcp list|add|remove   Manage MCP servers
-    /clear             Reset conversation history
-    /system [text]     View or set system prompt
-    /help, /?          Show interactive commands
-    /exit, /quit       Exit mux
-
-INPUT:
-    Enter              Submit input
-    Shift+Enter        Insert newline (multi-line input)
-    Ctrl+Enter         Insert newline (multi-line input)
-    Ctrl+C             Cancel generation / clear input
-    Ctrl+C x2          Exit mux
-
 EXAMPLES:
     mux                                  Start interactive session (default endpoint)
     mux --endpoint ollama-qwen           Start with specific endpoint
