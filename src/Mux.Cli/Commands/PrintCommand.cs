@@ -7,6 +7,7 @@ namespace Mux.Cli.Commands
     using System.Threading.Tasks;
     using Mux.Core.Agent;
     using Spectre.Console.Cli;
+    using Mux.Core.Settings;
 
     /// <summary>
     /// Settings specific to the print (single-shot) command.
@@ -116,6 +117,11 @@ namespace Mux.Cli.Commands
 
                     await foreach (AgentEvent agentEvent in events.WithCancellation(cts.Token))
                     {
+                        if (agentEvent is ErrorEvent structuredErrorEvent)
+                        {
+                            EnrichErrorEvent(structuredErrorEvent, runtime);
+                        }
+
                         if (outputFormat == OutputFormatEnum.Jsonl)
                         {
                             Console.WriteLine(StructuredOutputFormatter.FormatEvent(agentEvent));
@@ -194,12 +200,12 @@ namespace Mux.Cli.Commands
                 }
                 catch (OperationCanceledException)
                 {
-                    EmitRuntimeError(outputFormat, "cancelled", "Operation was cancelled.");
+                    EmitRuntimeError(outputFormat, CreateRuntimeError("cancelled", "Operation was cancelled.", runtime));
                     exitCode = 1;
                 }
                 catch (Exception ex)
                 {
-                    EmitRuntimeError(outputFormat, "print_error", ex.Message);
+                    EmitRuntimeError(outputFormat, CreateRuntimeError("print_error", ex.Message, runtime));
                     exitCode = 1;
                 }
             }
@@ -237,20 +243,104 @@ namespace Mux.Cli.Commands
                 ? OutputFormatEnum.Jsonl
                 : OutputFormatEnum.Text;
 
-            EmitRuntimeError(format, ClassifyBootstrapErrorCode(message), message);
+            ErrorEvent errorEvent = StructuredOutputFormatter.CreateErrorEvent(ClassifyBootstrapErrorCode(message), message);
+            errorEvent.CommandName = "print";
+            errorEvent.FailureCategory = "configuration";
+
+            TryPopulateBootstrapMetadata(errorEvent, settings);
+
+            EmitRuntimeError(format, errorEvent);
         }
 
-        private static void EmitRuntimeError(OutputFormatEnum outputFormat, string code, string message)
+        private static void EmitRuntimeError(OutputFormatEnum outputFormat, ErrorEvent errorEvent)
         {
             if (outputFormat == OutputFormatEnum.Jsonl)
             {
-                Console.WriteLine(StructuredOutputFormatter.FormatEvent(
-                    StructuredOutputFormatter.CreateErrorEvent(code, message)));
+                Console.WriteLine(StructuredOutputFormatter.FormatEvent(errorEvent));
             }
             else
             {
-                Console.Error.WriteLine($"[error] {message}");
+                Console.Error.WriteLine($"[error] {errorEvent.Message}");
             }
+        }
+
+        private static ErrorEvent CreateRuntimeError(string code, string message, ResolvedRuntime runtime)
+        {
+            ErrorEvent errorEvent = StructuredOutputFormatter.CreateErrorEvent(code, message);
+            EnrichErrorEvent(errorEvent, runtime);
+            return errorEvent;
+        }
+
+        private static void EnrichErrorEvent(ErrorEvent errorEvent, ResolvedRuntime runtime)
+        {
+            errorEvent.FailureCategory = string.IsNullOrWhiteSpace(errorEvent.FailureCategory)
+                ? ClassifyFailureCategory(errorEvent.Code)
+                : errorEvent.FailureCategory;
+            errorEvent.EndpointName = string.IsNullOrWhiteSpace(errorEvent.EndpointName) ? runtime.Endpoint.Name : errorEvent.EndpointName;
+            errorEvent.AdapterType = string.IsNullOrWhiteSpace(errorEvent.AdapterType) ? runtime.Endpoint.AdapterType.ToString() : errorEvent.AdapterType;
+            errorEvent.BaseUrl = string.IsNullOrWhiteSpace(errorEvent.BaseUrl) ? runtime.Endpoint.BaseUrl : errorEvent.BaseUrl;
+            errorEvent.Model = string.IsNullOrWhiteSpace(errorEvent.Model) ? runtime.Endpoint.Model : errorEvent.Model;
+            errorEvent.CommandName = string.IsNullOrWhiteSpace(errorEvent.CommandName) ? runtime.Metadata.CommandName : errorEvent.CommandName;
+            errorEvent.ConfigDirectory = string.IsNullOrWhiteSpace(errorEvent.ConfigDirectory) ? runtime.Metadata.ConfigDirectory : errorEvent.ConfigDirectory;
+            errorEvent.EndpointSelectionSource = string.IsNullOrWhiteSpace(errorEvent.EndpointSelectionSource)
+                ? runtime.Metadata.EndpointSelectionSource
+                : errorEvent.EndpointSelectionSource;
+            if (errorEvent.CliOverridesApplied.Count == 0)
+            {
+                errorEvent.CliOverridesApplied = new List<string>(runtime.Metadata.CliOverridesApplied);
+            }
+        }
+
+        private static void TryPopulateBootstrapMetadata(ErrorEvent errorEvent, PrintSettings settings)
+        {
+            try
+            {
+                SettingsLoader.EnsureConfigDirectory();
+                errorEvent.ConfigDirectory = SettingsLoader.GetConfigDirectory();
+                errorEvent.CliOverridesApplied = GetCliOverrides(settings);
+                if (!string.IsNullOrWhiteSpace(settings.Endpoint))
+                {
+                    errorEvent.EndpointSelectionSource = "named_endpoint";
+                    errorEvent.EndpointName = settings.Endpoint!;
+                }
+
+                if (!string.IsNullOrWhiteSpace(settings.Model))
+                {
+                    errorEvent.Model = settings.Model!;
+                }
+
+                if (!string.IsNullOrWhiteSpace(settings.BaseUrl))
+                {
+                    errorEvent.BaseUrl = settings.BaseUrl!;
+                }
+
+                if (!string.IsNullOrWhiteSpace(settings.AdapterType))
+                {
+                    errorEvent.AdapterType = settings.AdapterType!;
+                }
+            }
+            catch
+            {
+                // Best-effort only. Bootstrap error emission should not fail while collecting metadata.
+            }
+        }
+
+        private static List<string> GetCliOverrides(CommonSettings settings)
+        {
+            List<string> overrides = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(settings.Endpoint)) overrides.Add("endpoint");
+            if (!string.IsNullOrWhiteSpace(settings.Model)) overrides.Add("model");
+            if (!string.IsNullOrWhiteSpace(settings.BaseUrl)) overrides.Add("baseUrl");
+            if (!string.IsNullOrWhiteSpace(settings.AdapterType)) overrides.Add("adapterType");
+            if (settings.Temperature.HasValue) overrides.Add("temperature");
+            if (settings.MaxTokens.HasValue) overrides.Add("maxTokens");
+            if (!string.IsNullOrWhiteSpace(settings.WorkingDirectory)) overrides.Add("workingDirectory");
+            if (!string.IsNullOrWhiteSpace(settings.SystemPrompt)) overrides.Add("systemPrompt");
+            if (settings.Yolo) overrides.Add("yolo");
+            if (!string.IsNullOrWhiteSpace(settings.ApprovalPolicy)) overrides.Add("approvalPolicy");
+
+            return overrides;
         }
 
         private static string ClassifyBootstrapErrorCode(string message)
@@ -274,6 +364,27 @@ namespace Mux.Cli.Commands
             }
 
             return "print_error";
+        }
+
+        private static string ClassifyFailureCategory(string code)
+        {
+            return code switch
+            {
+                "endpoint_not_found" => "configuration",
+                "unsupported_option" => "configuration",
+                "invalid_argument" => "configuration",
+                "config_error" => "configuration",
+                "cancelled" => "cancellation",
+                "tool_call_denied" => "approval",
+                "approval_error" => "approval",
+                "tool_execution_error" => "tool",
+                "llm_connection_error" => "network",
+                "llm_error" => "backend",
+                "llm_stream_error" => "backend",
+                "max_iterations_reached" => "runtime",
+                "print_error" => "unknown",
+                _ => "unknown"
+            };
         }
 
         #endregion

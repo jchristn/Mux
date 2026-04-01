@@ -12,10 +12,12 @@ All notable changes to mux are documented here.
 - Machine-readable `json` output for `mux probe`
 - Best-effort redaction for secret-like values in structured event payloads
 - Documentation for the orchestration contract, output formats, exit codes, and `MUX_CONFIG_DIR`
+- Shared `contractVersion` marker across `print` JSONL events and `probe` JSON payloads
 
 ### Changed
 
 - `mux print` now has a formal non-interactive contract with documented exit codes
+- `mux print` `error` events now expose `errorCode`, `failureCategory`, and runtime metadata when known while remaining backward compatible with existing `code` consumers
 - Named endpoint selection now fails explicitly when `--endpoint` references a missing endpoint
 - CLI approval parsing now accepts documented values `ask`, `auto`, and `deny`
 - Tool-call argument parsing is more tolerant of malformed Windows-style path escaping

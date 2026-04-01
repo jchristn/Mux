@@ -61,6 +61,7 @@ This matters for command generation. For example, a Windows runtime should use `
 ## Structured JSONL Contract
 
 `mux print --output-format jsonl` emits newline-delimited JSON with stable top-level fields such as:
+- `contractVersion`
 - `eventType`
 - `timestampUtc`
 
@@ -81,6 +82,8 @@ Depending on the event, additional fields may include:
 - `toolName`
 - `result`
 - `code`
+- `errorCode`
+- `failureCategory`
 - `message`
 - `status`
 - `durationMs`
@@ -107,9 +110,9 @@ mux print --output-format jsonl --yolo "read README.md"
 Example JSONL lines:
 
 ```json
-{"eventType":"run_started","timestampUtc":"2026-03-31T20:00:00Z","runId":"...","endpointName":"ollama-local","model":"qwen2.5-coder:7b"}
-{"eventType":"assistant_text","timestampUtc":"2026-03-31T20:00:01Z","text":"Here is the summary..."}
-{"eventType":"run_completed","timestampUtc":"2026-03-31T20:00:02Z","runId":"...","status":"completed","durationMs":1042}
+{"contractVersion":1,"eventType":"run_started","timestampUtc":"2026-03-31T20:00:00Z","runId":"...","endpointName":"ollama-local","model":"qwen2.5-coder:7b"}
+{"contractVersion":1,"eventType":"assistant_text","timestampUtc":"2026-03-31T20:00:01Z","text":"Here is the summary..."}
+{"contractVersion":1,"eventType":"run_completed","timestampUtc":"2026-03-31T20:00:02Z","runId":"...","status":"completed","durationMs":1042}
 ```
 
 Notes:
@@ -117,6 +120,8 @@ Notes:
 - secret-like values in structured payloads are redacted on a best-effort basis
 - default text mode is unchanged
 - `run_started.mcp.supported` is always `false` in `print` mode today because non-interactive mode does not load MCP servers
+- `error` events retain `code` for backward compatibility and also expose `errorCode` plus `failureCategory`
+- `contractVersion` is shared across `print` JSONL events and `probe` JSON payloads
 
 ## Exit Codes
 
@@ -308,4 +313,14 @@ Recommendations:
 - use explicit `--endpoint` in production automation
 - use `--yolo` or `--approval-policy auto` only when automatic tool execution is intended
 - rely on `run_started` and `probe` JSON metadata instead of inferring tool/MCP capability from docs alone
-- treat `errorCode` and `failureCategory` from `probe` as the stable failure classification surface
+- rely on `contractVersion` for parser compatibility gating
+- treat `print.errorCode`/`print.failureCategory` and `probe.errorCode`/`probe.failureCategory` as the stable failure classification surface
+
+## Contract Compatibility
+
+Structured non-interactive output uses a shared `contractVersion`.
+
+Compatibility rules:
+- additive fields are non-breaking within a contract version
+- consumers should ignore unknown fields within a known contract version
+- a contract-version bump is required for removals, renames, type changes, or semantic changes to required fields

@@ -53,11 +53,13 @@ namespace Test.Xunit.Commands
             JsonDocument startedJson = JsonDocument.Parse(StructuredOutputFormatter.FormatEvent(started));
             JsonDocument completedJson = JsonDocument.Parse(StructuredOutputFormatter.FormatEvent(completed));
 
+            Assert.Equal(1, startedJson.RootElement.GetProperty("contractVersion").GetInt32());
             Assert.Equal("run_started", startedJson.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("local", startedJson.RootElement.GetProperty("endpointName").GetString());
             Assert.Equal("print", startedJson.RootElement.GetProperty("commandName").GetString());
             Assert.False(startedJson.RootElement.GetProperty("mcp").GetProperty("supported").GetBoolean());
             Assert.True(startedJson.RootElement.GetProperty("mcp").GetProperty("configured").GetBoolean());
+            Assert.Equal(1, completedJson.RootElement.GetProperty("contractVersion").GetInt32());
             Assert.Equal("run_completed", completedJson.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("completed", completedJson.RootElement.GetProperty("status").GetString());
         }
@@ -111,6 +113,32 @@ namespace Test.Xunit.Commands
 
             Assert.Equal("***REDACTED***", content.GetProperty("token").GetString());
             Assert.Equal("ok", content.GetProperty("message").GetString());
+        }
+
+        /// <summary>
+        /// Verifies that error events expose the versioned compatibility contract and classification metadata.
+        /// </summary>
+        [Fact]
+        public void FormatEvent_ErrorEvent_UsesContractVersionAndFailureMetadata()
+        {
+            ErrorEvent agentEvent = new ErrorEvent
+            {
+                Code = "llm_connection_error",
+                Message = "Connection refused",
+                CommandName = "print",
+                ConfigDirectory = "C:\\Users\\test\\.mux",
+                BaseUrl = "http://127.0.0.1:1"
+            };
+
+            JsonDocument json = JsonDocument.Parse(StructuredOutputFormatter.FormatEvent(agentEvent));
+
+            Assert.Equal(1, json.RootElement.GetProperty("contractVersion").GetInt32());
+            Assert.Equal("error", json.RootElement.GetProperty("eventType").GetString());
+            Assert.Equal("llm_connection_error", json.RootElement.GetProperty("code").GetString());
+            Assert.Equal("llm_connection_error", json.RootElement.GetProperty("errorCode").GetString());
+            Assert.Equal("network", json.RootElement.GetProperty("failureCategory").GetString());
+            Assert.Equal("print", json.RootElement.GetProperty("commandName").GetString());
+            Assert.Equal("http://127.0.0.1:1", json.RootElement.GetProperty("baseUrl").GetString());
         }
     }
 }

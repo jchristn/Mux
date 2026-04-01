@@ -16,6 +16,8 @@ namespace Mux.Cli.Commands
     {
         #region Private-Members
 
+        private const int StructuredOutputContractVersion = 1;
+
         private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
         {
             WriteIndented = false,
@@ -33,6 +35,7 @@ namespace Mux.Cli.Commands
         {
             Dictionary<string, object?> payload = new Dictionary<string, object?>
             {
+                ["contractVersion"] = StructuredOutputContractVersion,
                 ["eventType"] = GetEventTypeName(agentEvent.EventType),
                 ["timestampUtc"] = agentEvent.TimestampUtc
             };
@@ -84,7 +87,22 @@ namespace Mux.Cli.Commands
 
                 case ErrorEvent errorEvent:
                     payload["code"] = errorEvent.Code;
+                    payload["errorCode"] = errorEvent.Code;
                     payload["message"] = RedactString(errorEvent.Message);
+                    AddIfNotEmpty(payload, "failureCategory", !string.IsNullOrWhiteSpace(errorEvent.FailureCategory)
+                        ? errorEvent.FailureCategory
+                        : ClassifyFailureCategory(errorEvent.Code));
+                    AddIfNotEmpty(payload, "endpointName", errorEvent.EndpointName);
+                    AddIfNotEmpty(payload, "adapterType", errorEvent.AdapterType);
+                    AddIfNotEmpty(payload, "baseUrl", errorEvent.BaseUrl);
+                    AddIfNotEmpty(payload, "model", errorEvent.Model);
+                    AddIfNotEmpty(payload, "commandName", errorEvent.CommandName);
+                    AddIfNotEmpty(payload, "configDirectory", errorEvent.ConfigDirectory);
+                    AddIfNotEmpty(payload, "endpointSelectionSource", errorEvent.EndpointSelectionSource);
+                    if (errorEvent.CliOverridesApplied.Count > 0)
+                    {
+                        payload["cliOverridesApplied"] = errorEvent.CliOverridesApplied;
+                    }
                     break;
 
                 case HeartbeatEvent heartbeatEvent:
@@ -110,7 +128,9 @@ namespace Mux.Cli.Commands
         /// </summary>
         public static string FormatObject(object value)
         {
-            return JsonSerializer.Serialize(value, _JsonOptions);
+            JsonObject payload = JsonSerializer.SerializeToNode(value, _JsonOptions)?.AsObject() ?? new JsonObject();
+            payload["contractVersion"] = StructuredOutputContractVersion;
+            return payload.ToJsonString(_JsonOptions);
         }
 
         /// <summary>
@@ -128,6 +148,14 @@ namespace Mux.Cli.Commands
         #endregion
 
         #region Private-Methods
+
+        private static void AddIfNotEmpty(Dictionary<string, object?> payload, string propertyName, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                payload[propertyName] = value;
+            }
+        }
 
         private static object FormatToolCall(ToolCall toolCall)
         {
@@ -309,6 +337,27 @@ namespace Mux.Cli.Commands
                 AgentEventTypeEnum.Heartbeat => "heartbeat",
                 AgentEventTypeEnum.RunCompleted => "run_completed",
                 _ => eventType.ToString()
+            };
+        }
+
+        private static string ClassifyFailureCategory(string code)
+        {
+            return code switch
+            {
+                "endpoint_not_found" => "configuration",
+                "unsupported_option" => "configuration",
+                "invalid_argument" => "configuration",
+                "config_error" => "configuration",
+                "cancelled" => "cancellation",
+                "tool_call_denied" => "approval",
+                "approval_error" => "approval",
+                "tool_execution_error" => "tool",
+                "llm_connection_error" => "network",
+                "llm_error" => "backend",
+                "llm_stream_error" => "backend",
+                "max_iterations_reached" => "runtime",
+                "print_error" => "unknown",
+                _ => string.Empty
             };
         }
 

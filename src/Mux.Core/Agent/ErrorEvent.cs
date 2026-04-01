@@ -12,6 +12,14 @@ namespace Mux.Core.Agent
 
         private string _Code = string.Empty;
         private string _Message = string.Empty;
+        private string _FailureCategory = string.Empty;
+        private string _EndpointName = string.Empty;
+        private string _AdapterType = string.Empty;
+        private string _BaseUrl = string.Empty;
+        private string _Model = string.Empty;
+        private string _CommandName = string.Empty;
+        private string _ConfigDirectory = string.Empty;
+        private string _EndpointSelectionSource = string.Empty;
 
         #endregion
 
@@ -46,6 +54,83 @@ namespace Mux.Core.Agent
             get => _Message;
             set => _Message = value ?? throw new ArgumentNullException(nameof(Message));
         }
+
+        /// <summary>
+        /// A stable machine-readable failure category (e.g. "configuration", "network").
+        /// </summary>
+        public string FailureCategory
+        {
+            get => _FailureCategory;
+            set => _FailureCategory = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Effective endpoint name when known.
+        /// </summary>
+        public string EndpointName
+        {
+            get => _EndpointName;
+            set => _EndpointName = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Effective adapter type when known.
+        /// </summary>
+        public string AdapterType
+        {
+            get => _AdapterType;
+            set => _AdapterType = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Effective base URL when known.
+        /// </summary>
+        public string BaseUrl
+        {
+            get => _BaseUrl;
+            set => _BaseUrl = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Effective model when known.
+        /// </summary>
+        public string Model
+        {
+            get => _Model;
+            set => _Model = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Command mode that produced the error when known.
+        /// </summary>
+        public string CommandName
+        {
+            get => _CommandName;
+            set => _CommandName = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Effective mux config directory when known.
+        /// </summary>
+        public string ConfigDirectory
+        {
+            get => _ConfigDirectory;
+            set => _ConfigDirectory = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// How mux selected the effective endpoint when known.
+        /// </summary>
+        public string EndpointSelectionSource
+        {
+            get => _EndpointSelectionSource;
+            set => _EndpointSelectionSource = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// CLI override categories applied to the run when known.
+        /// </summary>
+        public System.Collections.Generic.List<string> CliOverridesApplied { get; set; } = new System.Collections.Generic.List<string>();
 
         #endregion
     }

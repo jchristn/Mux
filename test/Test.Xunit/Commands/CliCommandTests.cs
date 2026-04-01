@@ -44,6 +44,7 @@ namespace Test.Xunit.Commands
             JsonDocument second = JsonDocument.Parse(lines[1]);
             JsonDocument last = JsonDocument.Parse(lines[^1]);
 
+            Assert.Equal(1, first.RootElement.GetProperty("contractVersion").GetInt32());
             Assert.Equal("run_started", first.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("print", first.RootElement.GetProperty("commandName").GetString());
             Assert.False(first.RootElement.GetProperty("mcp").GetProperty("supported").GetBoolean());
@@ -74,8 +75,13 @@ namespace Test.Xunit.Commands
             Assert.Equal(string.Empty, stderr.Trim());
 
             JsonDocument json = JsonDocument.Parse(stdout);
+            Assert.Equal(1, json.RootElement.GetProperty("contractVersion").GetInt32());
             Assert.Equal("error", json.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("unsupported_option", json.RootElement.GetProperty("code").GetString());
+            Assert.Equal("unsupported_option", json.RootElement.GetProperty("errorCode").GetString());
+            Assert.Equal("configuration", json.RootElement.GetProperty("failureCategory").GetString());
+            Assert.Equal("print", json.RootElement.GetProperty("commandName").GetString());
+            Assert.True(json.RootElement.TryGetProperty("configDirectory", out _));
         }
 
         /// <summary>
@@ -99,8 +105,46 @@ namespace Test.Xunit.Commands
             Assert.Equal(string.Empty, stderr.Trim());
 
             JsonDocument json = JsonDocument.Parse(stdout);
+            Assert.Equal(1, json.RootElement.GetProperty("contractVersion").GetInt32());
             Assert.Equal("error", json.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("unsupported_option", json.RootElement.GetProperty("code").GetString());
+            Assert.Equal("unsupported_option", json.RootElement.GetProperty("errorCode").GetString());
+            Assert.Equal("configuration", json.RootElement.GetProperty("failureCategory").GetString());
+        }
+
+        /// <summary>
+        /// Verifies that print mode runtime failures expose failure classification and runtime metadata.
+        /// </summary>
+        [Fact]
+        public void PrintCommand_RuntimeFailure_ReturnsStructuredClassification()
+        {
+            (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+            {
+                "print",
+                "--output-format", "jsonl",
+                "--yolo",
+                "--base-url", "http://127.0.0.1:1",
+                "--model", "test-model",
+                "--adapter-type", "openai-compatible",
+                "jsonl print test"
+            });
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("[mux] retry", stderr, StringComparison.OrdinalIgnoreCase);
+
+            string[] lines = stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            Assert.True(lines.Length >= 3);
+
+            JsonDocument errorJson = JsonDocument.Parse(Array.Find(lines, static line => line.Contains("\"eventType\":\"error\"", StringComparison.Ordinal))!);
+
+            Assert.Equal(1, errorJson.RootElement.GetProperty("contractVersion").GetInt32());
+            Assert.Equal("error", errorJson.RootElement.GetProperty("eventType").GetString());
+            Assert.Equal("llm_connection_error", errorJson.RootElement.GetProperty("code").GetString());
+            Assert.Equal("llm_connection_error", errorJson.RootElement.GetProperty("errorCode").GetString());
+            Assert.Equal("network", errorJson.RootElement.GetProperty("failureCategory").GetString());
+            Assert.Equal("print", errorJson.RootElement.GetProperty("commandName").GetString());
+            Assert.Equal("http://127.0.0.1:1", errorJson.RootElement.GetProperty("baseUrl").GetString());
+            Assert.Equal("test-model", errorJson.RootElement.GetProperty("model").GetString());
         }
 
         /// <summary>
@@ -137,6 +181,7 @@ namespace Test.Xunit.Commands
                 Assert.Equal(string.Empty, stderr.Trim());
 
                 JsonDocument json = JsonDocument.Parse(stdout);
+                Assert.Equal(1, json.RootElement.GetProperty("contractVersion").GetInt32());
                 Assert.False(json.RootElement.GetProperty("success").GetBoolean());
                 Assert.Equal("endpoint_not_found", json.RootElement.GetProperty("errorCode").GetString());
                 Assert.Equal("configuration", json.RootElement.GetProperty("failureCategory").GetString());
@@ -172,6 +217,7 @@ namespace Test.Xunit.Commands
             Assert.Equal(string.Empty, stderr.Trim());
 
             JsonDocument json = JsonDocument.Parse(stdout);
+            Assert.Equal(1, json.RootElement.GetProperty("contractVersion").GetInt32());
             Assert.True(json.RootElement.GetProperty("success").GetBoolean());
             Assert.Equal("test-model", json.RootElement.GetProperty("model").GetString());
             Assert.Contains("OK", json.RootElement.GetProperty("responsePreview").GetString(), StringComparison.OrdinalIgnoreCase);

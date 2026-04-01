@@ -108,7 +108,9 @@ In `jsonl` mode:
 - all structured events are written to `stdout`
 - each line is a complete JSON object
 - default human-readable progress output is suppressed
+- every event includes `contractVersion`
 - `run_started` includes effective non-interactive capability metadata such as `commandName`, `endpointSelectionSource`, `cliOverridesApplied`, built-in tool counts, and MCP support/config status
+- `error` events keep `code` and also expose `errorCode`, `failureCategory`, and resolved runtime metadata when known
 
 Event types currently emitted:
 - `run_started`
@@ -153,6 +155,7 @@ mux probe -e openai-gpt4o
 - model access through a minimal completion request
 
 Machine-readable `probe` output also includes:
+- `contractVersion` for explicit parser compatibility
 - effective config/runtime metadata such as `configDirectory`, `endpointSelectionSource`, and `cliOverridesApplied`
 - capability data such as `toolsEnabled`, built-in tool counts, and MCP support/config state
 - classified failures via `errorCode` and `failureCategory`
