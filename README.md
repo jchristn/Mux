@@ -1,6 +1,25 @@
-# mux
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/icon-white.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/icon-black.png">
+    <img src="assets/icon-black.png" width="256" height="256" alt="mux">
+  </picture>
+</p>
 
-Your AI agent, your models, your infrastructure.
+<h1 align="center">mux</h1>
+
+<p align="center">
+  <em>Your AI agent, your models, your infrastructure.</em>
+</p>
+
+<p align="center">
+  <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+  <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.1.0%20ALPHA-orange.svg" alt="v0.1.0 ALPHA"></a>
+</p>
+
+> **v0.1.0 ALPHA**
+> This is an early alpha. APIs, interfaces, configuration formats, tool schemas, and CLI behavior are all subject to change. Feedback is welcome via [issues](https://github.com/jchristn/Mux/issues) and [discussions](https://github.com/jchristn/Mux/discussions).
 
 ## What is mux?
 
@@ -9,6 +28,8 @@ Your AI agent, your models, your infrastructure.
 `mux` can read and write files, run commands, search code, and manage a project through either:
 - an interactive REPL
 - a single-shot non-interactive command surface
+
+`mux` does not install or manage model runners. You bring your own local or remote inference backend, and `mux` connects to it.
 
 ## Highlights
 
@@ -55,32 +76,68 @@ mux
 
 On first run, `mux` creates `~/.mux/endpoints.json` with a default local Ollama endpoint. If you want an isolated config instead, set `MUX_CONFIG_DIR` before first launch.
 
+See [GETTING_STARTED.md](GETTING_STARTED.md) for the full walkthrough.
+
+## Verify It Works
+
+After install, try this prompt to confirm the model and tools are working end to end:
+
+```text
+mux> create a file called hello.py that prints "hello world", then read it back to verify. if the file already exists, overwrite it. when finished, delete the file.
+```
+
+You should see `write_file` and `read_file` tool calls, the file created on disk, and the contents read back.
+
 ## CLI Usage
 
 ```text
-mux [OPTIONS] [prompt]                Interactive REPL (default)
-mux --print [OPTIONS] <prompt>        Single-shot mode
-echo "prompt" | mux --print           Read prompt from stdin
-mux probe [OPTIONS]                   Validate config and backend access
+mux [prompt]                         Interactive REPL (default)
+mux [OPTIONS] [prompt]               Interactive with overrides
+mux --print [OPTIONS] <prompt>       Single-shot mode
+echo "prompt" | mux --print          Read prompt from stdin
+mux probe [OPTIONS]                  Validate config and backend access
 ```
 
-Common options:
+Use `mux print` as the preferred non-interactive entrypoint in scripts and automation. `--print` remains supported and is convenient for stdin piping.
 
-| Option | Short | Description |
+### Options
+
+| Option | Short / Alias | Description |
 |---|---|---|
+| `--help` | `-h`, `/?` | Show help and exit |
+| `--version` | `/version` | Show version and exit; bare `mux -v` also prints the version |
 | `--print` | `-p` | Single-shot mode |
 | `--endpoint <name>` | `-e` | Use a named endpoint |
 | `--model <name>` | `-m` | Override model |
 | `--base-url <url>` |  | Override base URL |
 | `--adapter-type <type>` |  | `ollama`, `openai`, `vllm`, `openai-compatible` |
+| `--temperature <float>` |  | Override temperature |
+| `--max-tokens <int>` |  | Override max output tokens |
 | `--working-directory <path>` | `-w` | Tool execution directory |
 | `--system-prompt <path>` |  | Override system prompt file |
 | `--yolo` |  | Auto-approve tool calls |
-| `--approval-policy <policy>` |  | interactive: `ask`, `auto`, or `deny` | print/probe: `auto` or `deny` |
+| `--approval-policy <policy>` |  | interactive: `ask`, `auto`, or `deny`; print/probe: `auto` or `deny` |
 | `--output-format <format>` |  | `text`, `json`, or `jsonl` depending on the command |
+| `--no-mcp` |  | Interactive only: skip MCP server initialization |
 | `--verbose` | `-v` | Extra progress to stderr in text mode |
 
-## Interactive Examples
+### Interactive Commands
+
+```text
+/endpoint                         List configured endpoints
+/endpoint <name>                  Switch to a named endpoint
+/tools                            List available tools
+/mcp list                         Show MCP server status
+/mcp add <name> <cmd> [args...]   Add an MCP server at runtime
+/mcp remove <name>                Remove an MCP server
+/system                           Show the current system prompt preview
+/system <text>                    Replace the system prompt for this session
+/clear                            Clear conversation history
+/help or /?                       Show command help
+/exit                             Quit mux
+```
+
+### Interactive Examples
 
 ```text
 mux> read README.md and suggest improvements
@@ -88,7 +145,7 @@ mux> refactor the UserService class to be async
 mux> run the tests and fix failures
 ```
 
-## Single-Shot Examples
+### Single-Shot Examples
 
 ```bash
 mux print --yolo "read README.md and summarize it"
@@ -133,8 +190,8 @@ Exit codes:
 
 Non-interactive constraints:
 - `mux print` and `mux probe` do not load MCP servers
-- `--no-mcp` is interactive-only and is rejected in `print`/`probe`
-- `--approval-policy ask` is rejected in `print`/`probe`; use `auto`/`--yolo` or `deny`
+- `--no-mcp` is interactive-only and is rejected in `print` and `probe`
+- `--approval-policy ask` is rejected in `print` and `probe`; use `auto` or `--yolo`, or `deny`
 
 ## Probe Command
 
@@ -159,6 +216,9 @@ Machine-readable `probe` output also includes:
 - effective config/runtime metadata such as `configDirectory`, `endpointSelectionSource`, and `cliOverridesApplied`
 - capability data such as `toolsEnabled`, built-in tool counts, and MCP support/config state
 - classified failures via `errorCode` and `failureCategory`
+
+Probe-specific option:
+- `--probe-prompt <text>` overrides the default confirmation prompt used during backend validation
 
 ## Configuration
 
