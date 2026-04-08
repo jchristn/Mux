@@ -35,6 +35,7 @@ namespace Mux.Cli.Commands
         private CancellationTokenSource? _CurrentCts = null;
         private DateTime _LastCtrlCTime = DateTime.MinValue;
         private List<ConversationMessage> _ConversationHistory = new List<ConversationMessage>();
+        private PromptHistory _PromptHistory = new PromptHistory();
         private McpToolManager? _McpToolManager = null;
         private List<EndpointConfig> _AllEndpoints = new List<EndpointConfig>();
         private EndpointConfig _CurrentEndpoint = new EndpointConfig();
@@ -138,7 +139,7 @@ namespace Mux.Cli.Commands
             }
 
             AnsiConsole.MarkupLine($"[dim]Endpoint:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]|[/] [dim]Model:[/] {Markup.Escape(_CurrentEndpoint.Model)}");
-            AnsiConsole.MarkupLine("[dim]Type /help for commands, Shift+Enter for newline, Ctrl+C to cancel, Ctrl+C twice to exit.[/]");
+            AnsiConsole.MarkupLine("[dim]Type /help for commands, Up/Down for prompt history, Shift+Enter for newline, Ctrl+C to cancel, Ctrl+C twice to exit.[/]");
             AnsiConsole.WriteLine();
 
             while (true)
@@ -161,6 +162,8 @@ namespace Mux.Cli.Commands
                 {
                     continue;
                 }
+
+                _PromptHistory.Add(trimmed);
 
                 AgentLoopOptions loopOptions = new AgentLoopOptions(_CurrentEndpoint)
                 {
@@ -252,14 +255,19 @@ namespace Mux.Cli.Commands
         #region Private-Methods
 
         /// <summary>
-        /// Reads multi-line input from the console with support for Shift+Enter and Ctrl+Enter
-        /// to insert newlines, Enter to submit, and left/right/Home/End for cursor navigation.
+        /// Reads multi-line input from the console with support for Up/Down prompt history,
+        /// Shift+Enter and Ctrl+Enter to insert newlines, Enter to submit, and left/right/Home/End
+        /// for cursor navigation.
         /// </summary>
         /// <returns>The full input string, or null if the user signals exit.</returns>
         private string? ReadMultiLineInput()
         {
+            _PromptHistory.ResetNavigation();
+
             LineBuffer lineBuffer = new LineBuffer();
             int promptWidth = 5; // "mux> " or "...> "
+            int promptTop = Console.CursorTop;
+            int renderedLineCount = 1;
 
             WritePrompt(0);
 
@@ -291,6 +299,9 @@ namespace Mux.Cli.Commands
                     _LastCtrlCTime = now;
                     AnsiConsole.WriteLine();
                     lineBuffer.Clear();
+                    _PromptHistory.ResetNavigation();
+                    promptTop = Console.CursorTop;
+                    renderedLineCount = 1;
                     WritePrompt(0);
                     continue;
                 }
@@ -303,9 +314,9 @@ namespace Mux.Cli.Commands
 
                     if (isShiftEnter || isCtrlEnter)
                     {
+                        _PromptHistory.ResetNavigation();
                         lineBuffer.InsertNewLine();
-                        Console.WriteLine();
-                        WritePrompt(lineBuffer.CurrentLineIndex);
+                        renderedLineCount = RedrawBuffer(lineBuffer, promptWidth, promptTop, renderedLineCount);
                         continue;
                     }
 
@@ -354,6 +365,7 @@ namespace Mux.Cli.Commands
                 {
                     if (lineBuffer.Delete())
                     {
+                        _PromptHistory.ResetNavigation();
                         RedrawFromCursor(lineBuffer, promptWidth);
                     }
                     continue;
@@ -365,11 +377,13 @@ namespace Mux.Cli.Commands
                     if (lineBuffer.IsCursorAtStart && lineBuffer.CurrentLineIndex > 0)
                     {
                         // At start of continuation line — merge up
+                        _PromptHistory.ResetNavigation();
                         lineBuffer.RemoveCurrentLineAndMergeUp();
-                        RedrawCurrentLine(lineBuffer, promptWidth);
+                        renderedLineCount = RedrawBuffer(lineBuffer, promptWidth, promptTop, renderedLineCount);
                     }
                     else if (lineBuffer.Backspace())
                     {
+                        _PromptHistory.ResetNavigation();
                         if (lineBuffer.IsCursorAtEnd)
                         {
                             // Simple case: cursor at end, just erase last char
@@ -390,15 +404,30 @@ namespace Mux.Cli.Commands
                     continue;
                 }
 
-                // Up/Down arrows: ignore for now
-                if (keyInfo.Key == ConsoleKey.UpArrow || keyInfo.Key == ConsoleKey.DownArrow)
+                if (keyInfo.Key == ConsoleKey.UpArrow)
                 {
+                    if (_PromptHistory.TryMovePrevious(lineBuffer.GetText(), out string previousPrompt))
+                    {
+                        lineBuffer.SetText(previousPrompt);
+                        renderedLineCount = RedrawBuffer(lineBuffer, promptWidth, promptTop, renderedLineCount);
+                    }
+                    continue;
+                }
+
+                if (keyInfo.Key == ConsoleKey.DownArrow)
+                {
+                    if (_PromptHistory.TryMoveNext(out string nextPrompt))
+                    {
+                        lineBuffer.SetText(nextPrompt);
+                        renderedLineCount = RedrawBuffer(lineBuffer, promptWidth, promptTop, renderedLineCount);
+                    }
                     continue;
                 }
 
                 // Regular character
                 if (keyInfo.KeyChar != '\0' && !char.IsControl(keyInfo.KeyChar))
                 {
+                    _PromptHistory.ResetNavigation();
                     lineBuffer.Insert(keyInfo.KeyChar);
 
                     if (lineBuffer.IsCursorAtEnd)
@@ -413,6 +442,37 @@ namespace Mux.Cli.Commands
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Redraws the full prompt buffer, clearing any leftover lines from a previous render
+        /// and restoring the cursor to the logical buffer position.
+        /// </summary>
+        /// <param name="lineBuffer">The line buffer.</param>
+        /// <param name="promptWidth">The width of the prompt prefix in characters.</param>
+        /// <param name="promptTop">The console row where the prompt starts.</param>
+        /// <param name="previousRenderedLineCount">The number of prompt lines rendered previously.</param>
+        /// <returns>The new rendered line count.</returns>
+        private static int RedrawBuffer(LineBuffer lineBuffer, int promptWidth, int promptTop, int previousRenderedLineCount)
+        {
+            int linesToClear = Math.Max(previousRenderedLineCount, lineBuffer.LineCount);
+            int clearWidth = Math.Max(1, Console.BufferWidth - 1);
+
+            for (int i = 0; i < linesToClear; i++)
+            {
+                Console.SetCursorPosition(0, promptTop + i);
+                Console.Write(new string(' ', clearWidth));
+            }
+
+            for (int i = 0; i < lineBuffer.LineCount; i++)
+            {
+                Console.SetCursorPosition(0, promptTop + i);
+                WritePrompt(i);
+                Console.Write(lineBuffer.GetLine(i));
+            }
+
+            Console.SetCursorPosition(promptWidth + lineBuffer.CursorColumn, promptTop + lineBuffer.CurrentLineIndex);
+            return lineBuffer.LineCount;
         }
 
         /// <summary>
@@ -447,23 +507,6 @@ namespace Mux.Cli.Commands
             // Clear any trailing characters from the previous longer text
             Console.Write("  ");
             Console.SetCursorPosition(cursorX, Console.CursorTop);
-        }
-
-        /// <summary>
-        /// Redraws the entire current line including the prompt.
-        /// Used when merging lines (backspace at start of continuation line).
-        /// </summary>
-        /// <param name="lineBuffer">The line buffer.</param>
-        /// <param name="promptWidth">The width of the prompt prefix in characters.</param>
-        private static void RedrawCurrentLine(LineBuffer lineBuffer, int promptWidth)
-        {
-            Console.SetCursorPosition(0, Console.CursorTop);
-            Console.Write(new string(' ', promptWidth + lineBuffer.CurrentLine.Length + 10));
-            Console.SetCursorPosition(0, Console.CursorTop);
-
-            WritePrompt(lineBuffer.CurrentLineIndex);
-            Console.Write(lineBuffer.CurrentLine);
-            Console.SetCursorPosition(promptWidth + lineBuffer.CursorColumn, Console.CursorTop);
         }
 
         /// <summary>
@@ -739,6 +782,7 @@ namespace Mux.Cli.Commands
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[bold]Input:[/]");
             AnsiConsole.MarkupLine("  [dim]Enter[/]           Submit input");
+            AnsiConsole.MarkupLine("  [dim]Up / Down[/]       Recall submitted prompts");
             AnsiConsole.MarkupLine("  [dim]Shift+Enter[/]     Insert newline");
             AnsiConsole.MarkupLine("  [dim]Ctrl+Enter[/]      Insert newline");
             AnsiConsole.MarkupLine("  [dim]Ctrl+C[/]          Cancel generation / clear input");

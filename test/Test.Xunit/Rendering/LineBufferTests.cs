@@ -387,6 +387,38 @@ namespace Test.Xunit.Rendering
             Assert.Equal(1, buffer.LineCount);
         }
 
+        /// <summary>
+        /// SetText replaces the buffer with a single line and moves the cursor to the end.
+        /// </summary>
+        [Fact]
+        public void SetText_SingleLine_LoadsContentAndMovesCursorToEnd()
+        {
+            LineBuffer buffer = new LineBuffer();
+
+            buffer.SetText("prompt");
+
+            Assert.Equal("prompt", buffer.GetText());
+            Assert.Equal(0, buffer.CurrentLineIndex);
+            Assert.Equal(6, buffer.CursorColumn);
+            Assert.Equal(1, buffer.LineCount);
+        }
+
+        /// <summary>
+        /// SetText normalizes multi-line content and positions the cursor on the final line.
+        /// </summary>
+        [Fact]
+        public void SetText_MultiLine_LoadsContentAndMovesCursorToFinalLine()
+        {
+            LineBuffer buffer = new LineBuffer();
+
+            buffer.SetText("first\r\nsecond");
+
+            Assert.Equal("first" + System.Environment.NewLine + "second", buffer.GetText());
+            Assert.Equal(1, buffer.CurrentLineIndex);
+            Assert.Equal(6, buffer.CursorColumn);
+            Assert.Equal(2, buffer.LineCount);
+        }
+
         #endregion
 
         #region ComplexSequences

@@ -228,6 +228,31 @@ namespace Mux.Cli.Rendering
         }
 
         /// <summary>
+        /// Replaces the entire buffer contents and places the cursor at the end of the final line.
+        /// </summary>
+        /// <param name="text">The text to load into the buffer.</param>
+        public void SetText(string? text)
+        {
+            string normalized = text?
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Replace("\r", "\n", StringComparison.Ordinal)
+                ?? string.Empty;
+
+            string[] lines = normalized.Split('\n');
+
+            _Lines.Clear();
+            _Lines.AddRange(lines.Length > 0 ? lines : new[] { string.Empty });
+
+            if (_Lines.Count == 0)
+            {
+                _Lines.Add(string.Empty);
+            }
+
+            _CurrentLineIndex = _Lines.Count - 1;
+            _CursorColumn = _Lines[_CurrentLineIndex].Length;
+        }
+
+        /// <summary>
         /// Returns the full buffer contents as a single string with newlines between lines.
         /// </summary>
         /// <returns>The complete buffer text.</returns>

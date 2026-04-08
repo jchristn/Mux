@@ -137,6 +137,8 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 /exit                             Quit mux
 ```
 
+In interactive mode, `Up` and `Down` recall prompts submitted earlier in the current session.
+
 ### Interactive Examples
 
 ```text
