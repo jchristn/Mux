@@ -38,11 +38,13 @@ namespace Mux.Core.Llm
         /// <param name="messages">The conversation messages to send.</param>
         /// <param name="tools">The tool definitions available to the model.</param>
         /// <param name="endpoint">The endpoint configuration for the target backend.</param>
+        /// <param name="stream">True to request an SSE stream; false for a single JSON response.</param>
         /// <returns>A fully configured <see cref="HttpRequestMessage"/>.</returns>
         public virtual HttpRequestMessage BuildRequest(
             List<ConversationMessage> messages,
             List<ToolDefinition> tools,
-            EndpointConfig endpoint)
+            EndpointConfig endpoint,
+            bool stream = true)
         {
             if (messages == null) throw new ArgumentNullException(nameof(messages));
             if (tools == null) throw new ArgumentNullException(nameof(tools));
@@ -53,7 +55,7 @@ namespace Mux.Core.Llm
             body["messages"] = ConvertMessages(messages);
             body["temperature"] = endpoint.Temperature;
             body["max_tokens"] = endpoint.MaxTokens;
-            body["stream"] = true;
+            body["stream"] = stream;
 
             BackendQuirks quirks = endpoint.Quirks ?? new BackendQuirks();
 
@@ -95,13 +97,16 @@ namespace Mux.Core.Llm
         /// Reads a server-sent events stream from an OpenAI-compatible endpoint and yields agent events.
         /// </summary>
         /// <param name="responseStream">The HTTP response body stream.</param>
+        /// <param name="endpoint">The endpoint configuration for the active request.</param>
         /// <param name="cancellationToken">A token to cancel the streaming operation.</param>
         /// <returns>An async sequence of <see cref="AgentEvent"/> instances.</returns>
         public virtual async IAsyncEnumerable<AgentEvent> ReadStreamingEvents(
             Stream responseStream,
+            EndpointConfig endpoint,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             if (responseStream == null) throw new ArgumentNullException(nameof(responseStream));
+            if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
 
             // Accumulated tool call deltas keyed by index
             Dictionary<int, ToolCallAccumulator> toolCallAccumulators = new Dictionary<int, ToolCallAccumulator>();
@@ -109,6 +114,8 @@ namespace Mux.Core.Llm
             // Accumulated assistant text for malformed tool call fallback
             StringBuilder assistantTextBuilder = new StringBuilder();
             bool foundToolCalls = false;
+            bool enableMalformedToolCallRecovery =
+                endpoint.Quirks?.EnableMalformedToolCallRecovery ?? true;
 
             using (StreamReader reader = new StreamReader(responseStream, Encoding.UTF8))
             {
@@ -155,7 +162,7 @@ namespace Mux.Core.Llm
                         }
 
                         // Malformed tool call fallback
-                        if (!foundToolCalls)
+                        if (enableMalformedToolCallRecovery && !foundToolCalls)
                         {
                             string accumulatedText = assistantTextBuilder.ToString();
                             List<ToolCall>? malformedCalls = MalformedToolCallParser.TryExtractToolCalls(accumulatedText);
@@ -288,7 +295,7 @@ namespace Mux.Core.Llm
                 }
 
                 // Malformed tool call fallback at end of stream
-                if (!foundToolCalls)
+                if (enableMalformedToolCallRecovery && !foundToolCalls)
                 {
                     string accumulatedText = assistantTextBuilder.ToString();
                     List<ToolCall>? malformedCalls = MalformedToolCallParser.TryExtractToolCalls(accumulatedText);

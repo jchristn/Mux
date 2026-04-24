@@ -105,6 +105,7 @@ OPTIONS:
         --adapter-type <type>            Adapter: ollama, openai, vllm, openai-compatible
         --temperature <float>            Override temperature (0.0 - 2.0)
         --max-tokens <int>               Override max output tokens
+        --compaction-strategy <mode>     summary or trim
 
   Approval / Safety:
         --yolo                           Auto-approve all tool calls

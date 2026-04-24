@@ -3,6 +3,7 @@ namespace Test.Xunit.Commands
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Text.Json;
     using global::Xunit;
     using Test.Shared;
@@ -52,6 +53,42 @@ namespace Test.Xunit.Commands
             Assert.Equal("assistant_text", second.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("run_completed", last.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("completed", last.RootElement.GetProperty("status").GetString());
+        }
+
+        /// <summary>
+        /// Verifies that the CLI compaction-strategy override is reflected in the effective runtime metadata.
+        /// </summary>
+        [Fact]
+        public void PrintCommand_Jsonl_CompactionStrategyOverride_IsApplied()
+        {
+            using MockHttpServer server = new MockHttpServer();
+            string sseChunk = "{\"choices\":[{\"delta\":{\"content\":\"Strategy override works.\"},\"finish_reason\":\"stop\"}]}";
+            server.RegisterStreamingResponse("strategy override test", new System.Collections.Generic.List<string> { sseChunk });
+            server.Start();
+
+            (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+            {
+                "print",
+                "--output-format", "jsonl",
+                "--yolo",
+                "--base-url", server.BaseUrl,
+                "--model", "test-model",
+                "--adapter-type", "openai-compatible",
+                "--compaction-strategy", "trim",
+                "strategy override test"
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Equal(string.Empty, stderr.Trim());
+
+            string[] lines = stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            JsonDocument started = JsonDocument.Parse(lines[0]);
+
+            Assert.Equal("run_started", started.RootElement.GetProperty("eventType").GetString());
+            Assert.Equal("trim", started.RootElement.GetProperty("compactionStrategy").GetString());
+            Assert.Contains(
+                started.RootElement.GetProperty("cliOverridesApplied").EnumerateArray().Select(static item => item.GetString()),
+                value => string.Equals(value, "compactionStrategy", StringComparison.Ordinal));
         }
 
         /// <summary>
@@ -130,7 +167,7 @@ namespace Test.Xunit.Commands
             });
 
             Assert.Equal(1, exitCode);
-            Assert.Contains("[mux] retry", stderr, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Retry", stderr, StringComparison.OrdinalIgnoreCase);
 
             string[] lines = stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             Assert.True(lines.Length >= 3);
@@ -145,6 +182,148 @@ namespace Test.Xunit.Commands
             Assert.Equal("print", errorJson.RootElement.GetProperty("commandName").GetString());
             Assert.Equal("http://127.0.0.1:1", errorJson.RootElement.GetProperty("baseUrl").GetString());
             Assert.Equal("test-model", errorJson.RootElement.GetProperty("model").GetString());
+        }
+
+        /// <summary>
+        /// Verifies that print JSONL output includes additive context status events under context pressure.
+        /// </summary>
+        [Fact]
+        public void PrintCommand_Jsonl_EmitsContextStatusEventsWhenPressured()
+        {
+            using MockHttpServer server = new MockHttpServer();
+            string tempDir = Path.Combine(Path.GetTempPath(), "mux_cli_compaction_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            string largeFile = Path.Combine(tempDir, "large.txt");
+            string repeatedLine = new string('X', 80);
+            string largeContent = string.Join(Environment.NewLine, Enumerable.Repeat(repeatedLine, 80));
+            File.WriteAllText(largeFile, largeContent);
+            string routeContains = new string('X', 40);
+
+            string escapedPath = largeFile.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            string toolCallChunk = "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_ctx\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"file_path\\\":\\\"" + escapedPath + "\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}";
+
+            server.RegisterStreamingResponse("context stress test", new System.Collections.Generic.List<string> { toolCallChunk });
+            server.RegisterStreamingResponse(routeContains, new System.Collections.Generic.List<string> { toolCallChunk });
+            server.Start();
+
+            string configDir = CreateTempConfigDirectory(
+                new[]
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["name"] = "compact-endpoint",
+                        ["adapterType"] = "openai-compatible",
+                        ["baseUrl"] = server.BaseUrl,
+                        ["model"] = "test-model",
+                        ["contextWindow"] = 8192,
+                        ["maxTokens"] = 1024,
+                        ["isDefault"] = true
+                    }
+                },
+                settingsJson: "{\"maxAgentIterations\":8,\"tokenEstimationRatio\":2.0}");
+
+            string? originalConfigDir = Environment.GetEnvironmentVariable("MUX_CONFIG_DIR");
+
+            try
+            {
+                Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", configDir);
+
+                (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+                {
+                    "print",
+                    "--output-format", "jsonl",
+                    "--yolo",
+                    "--endpoint", "compact-endpoint",
+                    "context stress test"
+                });
+
+                Assert.Equal(1, exitCode);
+                Assert.Equal(string.Empty, stderr.Trim());
+                string[] lines = stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+                Assert.Contains(lines, static line => line.Contains("\"eventType\":\"context_status\"", StringComparison.Ordinal));
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", originalConfigDir);
+                if (Directory.Exists(configDir))
+                {
+                    Directory.Delete(configDir, true);
+                }
+                if (Directory.Exists(tempDir))
+                {
+                    Directory.Delete(tempDir, true);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Verifies that print text mode writes context warnings to stderr under context pressure.
+        /// </summary>
+        [Fact]
+        public void PrintCommand_Text_EmitsContextWarningsToStderr()
+        {
+            using MockHttpServer server = new MockHttpServer();
+            string tempDir = Path.Combine(Path.GetTempPath(), "mux_cli_compaction_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            string largeFile = Path.Combine(tempDir, "large.txt");
+            string repeatedLine = new string('Y', 80);
+            string largeContent = string.Join(Environment.NewLine, Enumerable.Repeat(repeatedLine, 80));
+            File.WriteAllText(largeFile, largeContent);
+            string routeContains = new string('Y', 40);
+
+            string escapedPath = largeFile.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            string toolCallChunk = "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_ctx\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"file_path\\\":\\\"" + escapedPath + "\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}";
+
+            server.RegisterStreamingResponse("context stderr test", new System.Collections.Generic.List<string> { toolCallChunk });
+            server.RegisterStreamingResponse(routeContains, new System.Collections.Generic.List<string> { toolCallChunk });
+            server.Start();
+
+            string configDir = CreateTempConfigDirectory(
+                new[]
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["name"] = "compact-endpoint",
+                        ["adapterType"] = "openai-compatible",
+                        ["baseUrl"] = server.BaseUrl,
+                        ["model"] = "test-model",
+                        ["contextWindow"] = 8192,
+                        ["maxTokens"] = 1024,
+                        ["isDefault"] = true
+                    }
+                },
+                settingsJson: "{\"maxAgentIterations\":8,\"tokenEstimationRatio\":2.0}");
+
+            string? originalConfigDir = Environment.GetEnvironmentVariable("MUX_CONFIG_DIR");
+
+            try
+            {
+                Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", configDir);
+
+                (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+                {
+                    "print",
+                    "--output-format", "text",
+                    "--yolo",
+                    "--endpoint", "compact-endpoint",
+                    "context stderr test"
+                });
+
+                Assert.Equal(1, exitCode);
+                Assert.Contains("Context usage:", stderr, StringComparison.Ordinal);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", originalConfigDir);
+                if (Directory.Exists(configDir))
+                {
+                    Directory.Delete(configDir, true);
+                }
+                if (Directory.Exists(tempDir))
+                {
+                    Directory.Delete(tempDir, true);
+                }
+            }
         }
 
         /// <summary>
@@ -244,7 +423,7 @@ namespace Test.Xunit.Commands
             }
         }
 
-        private static string CreateTempConfigDirectory(IEnumerable<Dictionary<string, object?>> endpoints)
+        private static string CreateTempConfigDirectory(IEnumerable<Dictionary<string, object?>> endpoints, string? settingsJson = null)
         {
             string tempDir = Path.Combine(Path.GetTempPath(), "mux_cli_tests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
@@ -255,6 +434,12 @@ namespace Test.Xunit.Commands
             });
 
             File.WriteAllText(Path.Combine(tempDir, "endpoints.json"), json);
+
+            if (!string.IsNullOrWhiteSpace(settingsJson))
+            {
+                File.WriteAllText(Path.Combine(tempDir, "settings.json"), settingsJson);
+            }
+
             return tempDir;
         }
     }

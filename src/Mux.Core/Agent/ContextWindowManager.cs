@@ -2,6 +2,7 @@ namespace Mux.Core.Agent
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json;
     using Mux.Core.Enums;
     using Mux.Core.Models;
 
@@ -124,6 +125,30 @@ namespace Mux.Core.Agent
         }
 
         /// <summary>
+        /// Estimates the total number of tokens contributed by tool definitions.
+        /// </summary>
+        /// <param name="tools">The tool definitions to estimate.</param>
+        /// <returns>The total estimated token count.</returns>
+        public int EstimateTokens(List<ToolDefinition> tools)
+        {
+            if (tools == null || tools.Count == 0)
+            {
+                return 0;
+            }
+
+            int total = 0;
+
+            foreach (ToolDefinition tool in tools)
+            {
+                total += EstimateTokens(tool.Name);
+                total += EstimateTokens(tool.Description);
+                total += EstimateTokens(JsonSerializer.Serialize(tool.ParametersSchema));
+            }
+
+            return total;
+        }
+
+        /// <summary>
         /// Trims the conversation history to fit within the effective context window limit.
         /// Keeps the system message (first message if it is a system role) and always preserves
         /// the last two messages. Removes oldest non-system messages first.
@@ -170,6 +195,50 @@ namespace Mux.Core.Agent
             int totalTokens = EstimateTokens(messages);
             double threshold = effectiveLimit * 0.8;
             return totalTokens > threshold;
+        }
+
+        /// <summary>
+        /// Creates a detailed context budget snapshot for a conversation and tool surface.
+        /// </summary>
+        /// <param name="systemPrompt">The active system prompt.</param>
+        /// <param name="messages">The persisted conversation history.</param>
+        /// <param name="tools">The available tool definitions.</param>
+        /// <param name="reservedOutputTokens">Tokens reserved for response generation.</param>
+        /// <param name="warningThresholdPercent">Warning threshold percentage applied to the usable input limit.</param>
+        /// <returns>A detailed context budget snapshot.</returns>
+        public ContextBudgetSnapshot GetBudgetSnapshot(
+            string? systemPrompt,
+            List<ConversationMessage>? messages,
+            List<ToolDefinition>? tools,
+            int reservedOutputTokens,
+            int warningThresholdPercent = 80)
+        {
+            int safetyMarginTokens = (int)(_ContextWindowSize * (_SafetyMarginPercent / 100.0));
+            int clampedReservedOutputTokens = Math.Clamp(reservedOutputTokens, 0, _ContextWindowSize);
+            int usableInputLimit = Math.Max(256, _ContextWindowSize - safetyMarginTokens - clampedReservedOutputTokens);
+            int systemPromptTokens = EstimateTokens(systemPrompt ?? string.Empty);
+            int messageTokens = EstimateTokens(messages ?? new List<ConversationMessage>());
+            int toolTokens = EstimateTokens(tools ?? new List<ToolDefinition>());
+            int usedTokens = systemPromptTokens + messageTokens + toolTokens;
+            int safeWarningThresholdPercent = Math.Clamp(warningThresholdPercent, 1, 99);
+            int warningThresholdTokens = Math.Max(1, (int)(usableInputLimit * (safeWarningThresholdPercent / 100.0)));
+
+            return new ContextBudgetSnapshot
+            {
+                ContextWindowSize = _ContextWindowSize,
+                ReservedOutputTokens = clampedReservedOutputTokens,
+                SafetyMarginTokens = safetyMarginTokens,
+                UsableInputLimit = usableInputLimit,
+                SystemPromptTokens = systemPromptTokens,
+                MessageTokens = messageTokens,
+                ToolTokens = toolTokens,
+                UsedTokens = usedTokens,
+                RemainingTokens = Math.Max(0, usableInputLimit - usedTokens),
+                OverflowTokens = Math.Max(0, usedTokens - usableInputLimit),
+                WarningThresholdTokens = warningThresholdTokens,
+                IsApproachingLimit = usedTokens >= warningThresholdTokens,
+                IsOverLimit = usedTokens > usableInputLimit
+            };
         }
 
         #endregion

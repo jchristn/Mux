@@ -58,6 +58,12 @@ namespace Mux.Cli.Commands
                     payload["cliOverridesApplied"] = startedEvent.CliOverridesApplied;
                     payload["builtInToolCount"] = startedEvent.BuiltInToolCount;
                     payload["effectiveToolCount"] = startedEvent.EffectiveToolCount;
+                    payload["contextWindow"] = startedEvent.ContextWindow;
+                    payload["reservedOutputTokens"] = startedEvent.ReservedOutputTokens;
+                    payload["usableInputLimit"] = startedEvent.UsableInputLimit;
+                    payload["warningThresholdTokens"] = startedEvent.WarningThresholdTokens;
+                    payload["tokenEstimationRatio"] = startedEvent.TokenEstimationRatio;
+                    payload["compactionStrategy"] = startedEvent.CompactionStrategy;
                     payload["mcp"] = new Dictionary<string, object?>
                     {
                         ["supported"] = startedEvent.McpSupported,
@@ -109,6 +115,30 @@ namespace Mux.Cli.Commands
                     payload["stepNumber"] = heartbeatEvent.StepNumber;
                     break;
 
+                case ContextStatusEvent contextStatusEvent:
+                    payload["scope"] = contextStatusEvent.Scope;
+                    payload["estimatedTokens"] = contextStatusEvent.EstimatedTokens;
+                    payload["usableInputLimit"] = contextStatusEvent.UsableInputLimit;
+                    payload["remainingTokens"] = contextStatusEvent.RemainingTokens;
+                    payload["remainingPercent"] = contextStatusEvent.RemainingPercent;
+                    payload["warningThresholdTokens"] = contextStatusEvent.WarningThresholdTokens;
+                    payload["messageCount"] = contextStatusEvent.MessageCount;
+                    payload["trigger"] = contextStatusEvent.Trigger;
+                    payload["warningLevel"] = contextStatusEvent.WarningLevel;
+                    break;
+
+                case ContextCompactedEvent contextCompactedEvent:
+                    payload["scope"] = contextCompactedEvent.Scope;
+                    payload["mode"] = contextCompactedEvent.Mode;
+                    payload["strategy"] = contextCompactedEvent.Strategy;
+                    payload["messagesBefore"] = contextCompactedEvent.MessagesBefore;
+                    payload["messagesAfter"] = contextCompactedEvent.MessagesAfter;
+                    payload["estimatedTokensBefore"] = contextCompactedEvent.EstimatedTokensBefore;
+                    payload["estimatedTokensAfter"] = contextCompactedEvent.EstimatedTokensAfter;
+                    payload["summaryCreated"] = contextCompactedEvent.SummaryCreated;
+                    payload["reason"] = contextCompactedEvent.Reason;
+                    break;
+
                 case RunCompletedEvent runCompletedEvent:
                     payload["runId"] = runCompletedEvent.RunId;
                     payload["status"] = runCompletedEvent.Status;
@@ -117,6 +147,8 @@ namespace Mux.Cli.Commands
                     payload["errorCount"] = runCompletedEvent.ErrorCount;
                     payload["assistantTextChars"] = runCompletedEvent.AssistantTextChars;
                     payload["durationMs"] = runCompletedEvent.DurationMs;
+                    payload["finalEstimatedTokens"] = runCompletedEvent.FinalEstimatedTokens;
+                    payload["compactionCount"] = runCompletedEvent.CompactionCount;
                     break;
             }
 
@@ -335,6 +367,8 @@ namespace Mux.Cli.Commands
                 AgentEventTypeEnum.ToolCallCompleted => "tool_call_completed",
                 AgentEventTypeEnum.Error => "error",
                 AgentEventTypeEnum.Heartbeat => "heartbeat",
+                AgentEventTypeEnum.ContextStatus => "context_status",
+                AgentEventTypeEnum.ContextCompacted => "context_compacted",
                 AgentEventTypeEnum.RunCompleted => "run_completed",
                 _ => eventType.ToString()
             };
@@ -355,6 +389,7 @@ namespace Mux.Cli.Commands
                 "llm_connection_error" => "network",
                 "llm_error" => "backend",
                 "llm_stream_error" => "backend",
+                "context_limit_exceeded" => "runtime",
                 "max_iterations_reached" => "runtime",
                 "print_error" => "unknown",
                 _ => string.Empty

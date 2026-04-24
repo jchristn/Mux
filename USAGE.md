@@ -87,6 +87,28 @@ Depending on the event, additional fields may include:
 - `message`
 - `status`
 - `durationMs`
+- `contextWindow`
+- `reservedOutputTokens`
+- `usableInputLimit`
+- `warningThresholdTokens`
+- `tokenEstimationRatio`
+- `estimatedTokens`
+- `remainingTokens`
+- `remainingPercent`
+- `messageCount`
+- `trigger`
+- `warningLevel`
+- `scope`
+- `mode`
+- `strategy`
+- `messagesBefore`
+- `messagesAfter`
+- `estimatedTokensBefore`
+- `estimatedTokensAfter`
+- `summaryCreated`
+- `reason`
+- `finalEstimatedTokens`
+- `compactionCount`
 - `builtInToolCount`
 - `effectiveToolCount`
 - `mcp`
@@ -98,6 +120,8 @@ Current event types:
 - `tool_call_approved`
 - `tool_call_completed`
 - `heartbeat`
+- `context_status`
+- `context_compacted`
 - `error`
 - `run_completed`
 
@@ -120,6 +144,8 @@ Notes:
 - secret-like values in structured payloads are redacted on a best-effort basis
 - default text mode is unchanged
 - `run_started.mcp.supported` is always `false` in `print` mode today because non-interactive mode does not load MCP servers
+- `run_started` now includes context-budget metadata, and `run_completed` includes `finalEstimatedTokens` plus `compactionCount`
+- `context_status` and `context_compacted` are additive event types within `contractVersion = 1`; consumers should ignore unknown event types in a known contract version
 - `error` events retain `code` for backward compatibility and also expose `errorCode` plus `failureCategory`
 - `contractVersion` is shared across `print` JSONL events and `probe` JSON payloads
 

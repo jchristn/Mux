@@ -13,6 +13,7 @@ namespace Mux.Core.Models
         private bool _AssembleToolCallDeltas = true;
         private bool _SupportsParallelToolCalls = false;
         private bool _SupportsTools = true;
+        private bool _EnableMalformedToolCallRecovery = true;
         private bool _RequiresToolResultContentAsString = false;
         private string _DefaultFinishReason = "stop";
         private List<string> _StripRequestFields = new List<string>();
@@ -60,6 +61,16 @@ namespace Mux.Core.Models
         {
             get => _SupportsTools;
             set => _SupportsTools = value;
+        }
+
+        /// <summary>
+        /// Whether mux should try to infer tool calls from malformed freeform assistant text.
+        /// </summary>
+        [JsonPropertyName("enableMalformedToolCallRecovery")]
+        public bool EnableMalformedToolCallRecovery
+        {
+            get => _EnableMalformedToolCallRecovery;
+            set => _EnableMalformedToolCallRecovery = value;
         }
 
         /// <summary>

@@ -6,8 +6,10 @@ namespace Mux.Cli.Commands
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Agent;
+    using Mux.Core.Enums;
     using Spectre.Console.Cli;
     using Mux.Core.Settings;
+    using Mux.Core.Utility;
 
     /// <summary>
     /// Settings specific to the print (single-shot) command.
@@ -86,6 +88,12 @@ namespace Mux.Cli.Commands
                 ApprovalPolicy = runtime.ApprovalPolicy,
                 WorkingDirectory = runtime.WorkingDirectory,
                 MaxIterations = runtime.MuxSettings.MaxAgentIterations,
+                TokenEstimationRatio = runtime.MuxSettings.TokenEstimationRatio,
+                ContextWindowSafetyMarginPercent = runtime.MuxSettings.ContextWindowSafetyMarginPercent,
+                AutoCompactEnabled = runtime.MuxSettings.AutoCompactEnabled,
+                ContextWarningThresholdPercent = runtime.MuxSettings.ContextWarningThresholdPercent,
+                CompactionStrategy = runtime.MuxSettings.CompactionStrategy,
+                CompactionPreserveTurns = runtime.MuxSettings.CompactionPreserveTurns,
                 CommandName = runtime.Metadata.CommandName,
                 ConfigDirectory = runtime.Metadata.ConfigDirectory,
                 EndpointSelectionSource = runtime.Metadata.EndpointSelectionSource,
@@ -140,14 +148,39 @@ namespace Mux.Cli.Commands
                                 stepCount = heartbeatEvent.StepNumber;
                                 if (outputFormat == OutputFormatEnum.Text)
                                 {
-                                    Console.Error.WriteLine($"[mux] working... (step {heartbeatEvent.StepNumber})");
+                                    Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Working... (step {heartbeatEvent.StepNumber})"));
+                                }
+                                break;
+
+                            case ContextStatusEvent contextStatusEvent:
+                                if (outputFormat == OutputFormatEnum.Text)
+                                {
+                                    string contextLine =
+                                        $"Context usage: est. {contextStatusEvent.EstimatedTokens} / {contextStatusEvent.UsableInputLimit} tokens | {contextStatusEvent.RemainingTokens} remaining.";
+                                    if (string.Equals(contextStatusEvent.WarningLevel, "critical", StringComparison.Ordinal))
+                                    {
+                                        Console.Error.WriteLine(ConsoleMessageStyler.Failure(contextLine));
+                                    }
+                                    else if (string.Equals(contextStatusEvent.WarningLevel, "approaching", StringComparison.Ordinal))
+                                    {
+                                        Console.Error.WriteLine(ConsoleMessageStyler.Notification(contextLine));
+                                    }
+                                }
+                                break;
+
+                            case ContextCompactedEvent contextCompactedEvent:
+                                if (outputFormat == OutputFormatEnum.Text)
+                                {
+                                    Console.Error.WriteLine(
+                                        ConsoleMessageStyler.Notification(
+                                            $"Auto-compacted context ({contextCompactedEvent.Strategy}): est. {contextCompactedEvent.EstimatedTokensBefore} -> {contextCompactedEvent.EstimatedTokensAfter} tokens."));
                                 }
                                 break;
 
                             case ErrorEvent errorEvent:
                                 if (outputFormat == OutputFormatEnum.Text)
                                 {
-                                    Console.Error.WriteLine($"[error] {errorEvent.Code}: {errorEvent.Message}");
+                                    Console.Error.WriteLine(ConsoleMessageStyler.Failure($"Error: {errorEvent.Code}: {errorEvent.Message}"));
                                 }
                                 if (exitCode == 0 || errorEvent.Code != "tool_call_denied")
                                 {
@@ -159,18 +192,18 @@ namespace Mux.Cli.Commands
                                 stepCount++;
                                 if (outputFormat == OutputFormatEnum.Text)
                                 {
-                                    Console.Error.WriteLine($"[mux] working... (step {stepCount})");
+                                    Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Working... (step {stepCount})"));
                                     if (settings.Verbose)
                                     {
-                                        Console.Error.WriteLine($"[mux] tool call: {proposedEvent.ToolCall.Name}");
+                                        Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Tool call: {proposedEvent.ToolCall.Name}"));
                                     }
                                 }
-                                if (runtime.ApprovalPolicy == Mux.Core.Enums.ApprovalPolicyEnum.Deny)
+                                if (runtime.ApprovalPolicy == ApprovalPolicyEnum.Deny)
                                 {
                                     if (outputFormat == OutputFormatEnum.Text)
                                     {
                                         Console.Error.WriteLine(
-                                            $"[denied] Tool call denied in non-interactive mode: {proposedEvent.ToolCall.Name}");
+                                            ConsoleMessageStyler.Failure($"Tool call denied in non-interactive mode: {proposedEvent.ToolCall.Name}"));
                                     }
                                     if (exitCode == 0) exitCode = 2;
                                 }
@@ -184,7 +217,7 @@ namespace Mux.Cli.Commands
                                     {
                                         resultPreview = resultPreview.Substring(0, 200) + "...";
                                     }
-                                    Console.Error.WriteLine($"[mux] tool result ({completedEvent.ToolCallId}): {resultPreview}");
+                                    Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Tool result ({completedEvent.ToolCallId}): {resultPreview}"));
                                 }
                                 break;
 
@@ -260,7 +293,7 @@ namespace Mux.Cli.Commands
             }
             else
             {
-                Console.Error.WriteLine($"[error] {errorEvent.Message}");
+                Console.Error.WriteLine(ConsoleMessageStyler.Failure($"Error: {errorEvent.Message}"));
             }
         }
 
@@ -381,6 +414,7 @@ namespace Mux.Cli.Commands
                 "llm_connection_error" => "network",
                 "llm_error" => "backend",
                 "llm_stream_error" => "backend",
+                "context_limit_exceeded" => "runtime",
                 "max_iterations_reached" => "runtime",
                 "print_error" => "unknown",
                 _ => "unknown"

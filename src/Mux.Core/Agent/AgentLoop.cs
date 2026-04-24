@@ -11,6 +11,7 @@ namespace Mux.Core.Agent
     using Mux.Core.Enums;
     using Mux.Core.Llm;
     using Mux.Core.Models;
+    using Mux.Core.Settings;
     using Mux.Core.Tools;
 
     /// <summary>
@@ -20,6 +21,10 @@ namespace Mux.Core.Agent
     public class AgentLoop : IDisposable
     {
         #region Private-Members
+
+        private const int InRunCompactionTargetPercent = 60;
+        private const int InRunProtectedTailMessageCount = 6;
+        private const string SyntheticSummaryPrefix = "[mux summary generated automatically; older conversation condensed]";
 
         private AgentLoopOptions _Options;
         private LlmClient _LlmClient;
@@ -69,6 +74,14 @@ namespace Mux.Core.Agent
             int errorCount = 0;
             int assistantTextChars = 0;
             bool maxIterationsReached = false;
+            int compactionCount = 0;
+
+            // 1. Build conversation
+            List<ConversationMessage> conversation = BuildConversation(prompt);
+
+            // 2. Merge tool definitions
+            List<ToolDefinition> allTools = MergeToolDefinitions();
+            ContextBudgetSnapshot initialSnapshot = GetContextBudgetSnapshot(conversation, allTools);
 
             yield return new RunStartedEvent
             {
@@ -89,20 +102,46 @@ namespace Mux.Core.Agent
                 McpConfigured = _Options.McpConfigured,
                 McpServerCount = _Options.McpServerCount,
                 BuiltInToolCount = _Options.BuiltInToolCount,
-                EffectiveToolCount = _Options.EffectiveToolCount
+                EffectiveToolCount = _Options.EffectiveToolCount,
+                ContextWindow = initialSnapshot.ContextWindowSize,
+                ReservedOutputTokens = initialSnapshot.ReservedOutputTokens,
+                UsableInputLimit = initialSnapshot.UsableInputLimit,
+                WarningThresholdTokens = initialSnapshot.WarningThresholdTokens,
+                TokenEstimationRatio = _Options.TokenEstimationRatio,
+                CompactionStrategy = _Options.CompactionStrategy
             };
-
-            // 1. Build conversation
-            List<ConversationMessage> conversation = BuildConversation(prompt);
-
-            // 2. Merge tool definitions
-            List<ToolDefinition> allTools = MergeToolDefinitions();
 
             // 3. Enter loop
             for (int step = 0; step < _Options.MaxIterations; step++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 iterationCount = step + 1;
+
+                bool shouldAbortBeforeModelCall;
+                List<AgentEvent> contextEvents = PrepareConversationForModelCall(
+                    ref conversation,
+                    allTools,
+                    step == 0 ? "preflight" : "iteration",
+                    cancellationToken,
+                    out shouldAbortBeforeModelCall,
+                    out int compactionDelta);
+
+                foreach (AgentEvent contextEvent in contextEvents)
+                {
+                    if (contextEvent is ErrorEvent)
+                    {
+                        errorCount++;
+                    }
+
+                    yield return contextEvent;
+                }
+
+                compactionCount += compactionDelta;
+
+                if (shouldAbortBeforeModelCall)
+                {
+                    break;
+                }
 
                 // 3a. Stream LLM response, yielding text events immediately
                 StringBuilder assistantTextBuilder = new StringBuilder();
@@ -278,6 +317,7 @@ namespace Mux.Core.Agent
             }
 
             stopwatch.Stop();
+            ContextBudgetSnapshot finalSnapshot = GetContextBudgetSnapshot(conversation, allTools);
 
             yield return new RunCompletedEvent
             {
@@ -289,7 +329,9 @@ namespace Mux.Core.Agent
                 ToolCallCount = toolCallCount,
                 ErrorCount = errorCount,
                 AssistantTextChars = assistantTextChars,
-                DurationMs = stopwatch.ElapsedMilliseconds
+                DurationMs = stopwatch.ElapsedMilliseconds,
+                FinalEstimatedTokens = finalSnapshot.UsedTokens,
+                CompactionCount = compactionCount
             };
         }
 
@@ -368,6 +410,507 @@ namespace Mux.Core.Agent
             }
 
             return allTools;
+        }
+
+        private ContextBudgetSnapshot GetContextBudgetSnapshot(
+            List<ConversationMessage> conversation,
+            List<ToolDefinition> allTools)
+        {
+            ContextWindowManager manager = new ContextWindowManager(
+                _Options.Endpoint.ContextWindow,
+                _Options.TokenEstimationRatio,
+                _Options.ContextWindowSafetyMarginPercent);
+
+            return manager.GetBudgetSnapshot(
+                systemPrompt: null,
+                messages: conversation,
+                tools: allTools,
+                reservedOutputTokens: _Options.Endpoint.MaxTokens,
+                warningThresholdPercent: _Options.ContextWarningThresholdPercent);
+        }
+
+        private List<AgentEvent> PrepareConversationForModelCall(
+            ref List<ConversationMessage> conversation,
+            List<ToolDefinition> allTools,
+            string trigger,
+            CancellationToken cancellationToken,
+            out bool shouldAbort,
+            out int compactionCountDelta)
+        {
+            shouldAbort = false;
+            compactionCountDelta = 0;
+
+            List<AgentEvent> events = new List<AgentEvent>();
+            ContextBudgetSnapshot snapshot = GetContextBudgetSnapshot(conversation, allTools);
+            string warningLevel = GetWarningLevel(snapshot);
+
+            if (!string.Equals(warningLevel, "ok", StringComparison.Ordinal))
+            {
+                events.Add(CreateContextStatusEvent(snapshot, conversation.Count, trigger));
+            }
+
+            if (!snapshot.IsOverLimit)
+            {
+                return events;
+            }
+
+            if (!_Options.AutoCompactEnabled)
+            {
+                events.Add(CreateContextLimitExceededError(snapshot, "automatic compaction is disabled"));
+                shouldAbort = true;
+                return events;
+            }
+
+            List<ConversationMessage> compactedConversation = new List<ConversationMessage>(conversation);
+            ContextCompactedEvent? compactionEvent = TryCompactActiveConversation(
+                compactedConversation,
+                allTools,
+                snapshot,
+                cancellationToken,
+                out List<ConversationMessage> workingConversation,
+                out string failureDetail);
+
+            if (compactionEvent == null)
+            {
+                events.Add(CreateContextLimitExceededError(snapshot, failureDetail));
+                shouldAbort = true;
+                return events;
+            }
+
+            conversation = workingConversation;
+            compactionCountDelta = 1;
+
+            ContextBudgetSnapshot afterSnapshot = GetContextBudgetSnapshot(conversation, allTools);
+            events.Add(compactionEvent);
+            events.Add(CreateContextStatusEvent(afterSnapshot, conversation.Count, "post_compaction"));
+
+            if (afterSnapshot.IsOverLimit)
+            {
+                events.Add(CreateContextLimitExceededError(afterSnapshot, "active conversation still exceeds the usable context budget after compaction"));
+                shouldAbort = true;
+            }
+
+            return events;
+        }
+
+        private ContextCompactedEvent? TryCompactActiveConversation(
+            List<ConversationMessage> conversation,
+            List<ToolDefinition> allTools,
+            ContextBudgetSnapshot snapshot,
+            CancellationToken cancellationToken,
+            out List<ConversationMessage> compactedConversation,
+            out string failureDetail)
+        {
+            compactedConversation = new List<ConversationMessage>(conversation);
+            failureDetail = "no older active conversation messages were eligible for in-run compaction";
+
+            bool usedSummary = false;
+            bool usedTrim = false;
+            List<ConversationMessage> workingConversation = new List<ConversationMessage>(conversation);
+
+            if (string.Equals(_Options.CompactionStrategy, "summary", StringComparison.Ordinal))
+            {
+                if (TryCreateSummaryCompactedConversation(
+                    workingConversation,
+                    cancellationToken,
+                    out List<ConversationMessage> summaryConversation,
+                    out string? summaryFailure))
+                {
+                    workingConversation = summaryConversation;
+                    usedSummary = true;
+                }
+                else if (!string.IsNullOrWhiteSpace(summaryFailure))
+                {
+                    failureDetail = $"summary-based in-run compaction failed: {summaryFailure}";
+                }
+            }
+
+            ContextBudgetSnapshot postSummarySnapshot = GetContextBudgetSnapshot(workingConversation, allTools);
+            if (string.Equals(_Options.CompactionStrategy, "trim", StringComparison.Ordinal) || postSummarySnapshot.IsOverLimit)
+            {
+                ConversationTrimResult trimResult = TrimActiveConversationToTarget(workingConversation, allTools, postSummarySnapshot);
+                if (trimResult.DidTrim)
+                {
+                    workingConversation = trimResult.CompactedHistory;
+                    usedTrim = true;
+                }
+                else if (!usedSummary)
+                {
+                    return null;
+                }
+            }
+
+            ContextBudgetSnapshot finalSnapshot = GetContextBudgetSnapshot(workingConversation, allTools);
+            if (!usedSummary && !usedTrim)
+            {
+                return null;
+            }
+
+            compactedConversation = workingConversation;
+            return new ContextCompactedEvent
+            {
+                Scope = "active_conversation",
+                Mode = "auto",
+                Strategy = usedSummary && usedTrim
+                    ? "summary+trim"
+                    : (usedSummary ? "summary" : "trim"),
+                MessagesBefore = conversation.Count,
+                MessagesAfter = workingConversation.Count,
+                EstimatedTokensBefore = snapshot.UsedTokens,
+                EstimatedTokensAfter = finalSnapshot.UsedTokens,
+                SummaryCreated = usedSummary,
+                Reason = "Active conversation exceeded the usable context budget before a model call."
+            };
+        }
+
+        private ConversationTrimResult TrimActiveConversationToTarget(
+            List<ConversationMessage> conversation,
+            List<ToolDefinition> allTools,
+            ContextBudgetSnapshot snapshot)
+        {
+            int targetUsedTokens = Math.Max(
+                1,
+                (int)(snapshot.UsableInputLimit * (InRunCompactionTargetPercent / 100.0)));
+
+            ConversationTrimResult trimResult = ConversationTrimCompactor.TrimToTarget(
+                conversation,
+                _Options.CompactionPreserveTurns,
+                targetUsedTokens,
+                candidateHistory => GetContextBudgetSnapshot(candidateHistory, allTools).UsedTokens);
+
+            ContextBudgetSnapshot postPlannerSnapshot = GetContextBudgetSnapshot(trimResult.CompactedHistory, allTools);
+            if (!postPlannerSnapshot.IsOverLimit)
+            {
+                return trimResult;
+            }
+
+            return EmergencyTrimActiveConversation(trimResult.CompactedHistory, allTools, targetUsedTokens);
+        }
+
+        private ConversationTrimResult EmergencyTrimActiveConversation(
+            List<ConversationMessage> conversation,
+            List<ToolDefinition> allTools,
+            int targetUsedTokens)
+        {
+            List<ConversationMessage> result = new List<ConversationMessage>(conversation);
+            int usedTokensBefore = GetContextBudgetSnapshot(result, allTools).UsedTokens;
+            int protectedPrefixCount = GetLeadingSystemMessageCount(result);
+
+            while (GetContextBudgetSnapshot(result, allTools).UsedTokens > targetUsedTokens)
+            {
+                int latestUserIndex = FindLastUserIndex(result);
+                int protectedTailStart = Math.Max(protectedPrefixCount, result.Count - InRunProtectedTailMessageCount);
+                int removeIndex = -1;
+
+                for (int i = protectedPrefixCount; i < result.Count; i++)
+                {
+                    bool isLatestUser = i == latestUserIndex;
+                    bool isProtectedTail = i >= protectedTailStart;
+                    if (!isLatestUser && !isProtectedTail)
+                    {
+                        removeIndex = i;
+                        break;
+                    }
+                }
+
+                if (removeIndex < 0)
+                {
+                    break;
+                }
+
+                result.RemoveAt(removeIndex);
+            }
+
+            int usedTokensAfter = GetContextBudgetSnapshot(result, allTools).UsedTokens;
+            return new ConversationTrimResult
+            {
+                CompactedHistory = result,
+                RemovedMessageCount = Math.Max(0, conversation.Count - result.Count),
+                UsedTokensBefore = usedTokensBefore,
+                UsedTokensAfter = usedTokensAfter,
+                ReachedTarget = usedTokensAfter <= targetUsedTokens
+            };
+        }
+
+        private bool TryCreateSummaryCompactedConversation(
+            List<ConversationMessage> conversation,
+            CancellationToken cancellationToken,
+            out List<ConversationMessage> compactedConversation,
+            out string? failureMessage)
+        {
+            int protectedPrefixCount = GetLeadingSystemMessageCount(conversation);
+            List<ConversationMessage> protectedPrefix = new List<ConversationMessage>();
+
+            for (int i = 0; i < protectedPrefixCount; i++)
+            {
+                if (!IsSyntheticSummaryMessage(conversation[i]))
+                {
+                    protectedPrefix.Add(conversation[i]);
+                }
+            }
+
+            List<ConversationMessage> compactableConversation = conversation.Count > protectedPrefixCount
+                ? conversation.GetRange(protectedPrefixCount, conversation.Count - protectedPrefixCount)
+                : new List<ConversationMessage>();
+
+            ConversationCompactionPlan plan = ConversationCompactionPlanner.CreatePlan(
+                compactableConversation,
+                _Options.CompactionPreserveTurns,
+                SyntheticSummaryPrefix);
+
+            if (!plan.CanCompact)
+            {
+                compactedConversation = new List<ConversationMessage>(conversation);
+                failureMessage = null;
+                return false;
+            }
+
+            try
+            {
+                string summary = GenerateCompactionSummary(plan.MessagesToCompact, cancellationToken);
+                if (string.IsNullOrWhiteSpace(summary))
+                {
+                    compactedConversation = new List<ConversationMessage>(conversation);
+                    failureMessage = "compaction produced no summary";
+                    return false;
+                }
+
+                compactedConversation = new List<ConversationMessage>(protectedPrefix)
+                {
+                    new ConversationMessage
+                    {
+                        Role = RoleEnum.System,
+                        Content = $"{SyntheticSummaryPrefix}{Environment.NewLine}{Environment.NewLine}{summary.Trim()}"
+                    }
+                };
+                compactedConversation.AddRange(plan.MessagesToPreserve);
+                failureMessage = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                compactedConversation = new List<ConversationMessage>(conversation);
+                failureMessage = ex.Message;
+                return false;
+            }
+        }
+
+        private string GenerateCompactionSummary(List<ConversationMessage> messagesToCompact, CancellationToken cancellationToken)
+        {
+            string compactableDigest = BuildConversationDigest(messagesToCompact, maxChars: 12000);
+            string systemPrompt =
+                "You compact older conversation history for a coding agent. " +
+                "Preserve goals, constraints, important files, decisions, errors, and unresolved work. " +
+                "Return plain text only, concise but information-dense, suitable to carry forward as session memory.";
+            string userPrompt =
+                $"Compact this older conversation history:{Environment.NewLine}{Environment.NewLine}{compactableDigest}";
+
+            string summary = RunSidecarPromptAsync(systemPrompt, userPrompt, cancellationToken)
+                .GetAwaiter()
+                .GetResult();
+
+            return summary.Trim();
+        }
+
+        private async Task<string> RunSidecarPromptAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken)
+        {
+            EndpointConfig sidecarEndpoint = CreateSidecarEndpoint();
+            using LlmClient client = new LlmClient(sidecarEndpoint);
+            client.OnRetry = _Options.OnRetry;
+
+            ConversationMessage response = await client.SendAsync(
+                new List<ConversationMessage>
+                {
+                    new ConversationMessage
+                    {
+                        Role = RoleEnum.System,
+                        Content = systemPrompt
+                    },
+                    new ConversationMessage
+                    {
+                        Role = RoleEnum.User,
+                        Content = userPrompt
+                    }
+                },
+                new List<ToolDefinition>(),
+                cancellationToken).ConfigureAwait(false);
+
+            return response.Content?.Trim() ?? string.Empty;
+        }
+
+        private EndpointConfig CreateSidecarEndpoint()
+        {
+            EndpointConfig sidecarEndpoint = CloneEndpoint(_Options.Endpoint);
+            sidecarEndpoint.Quirks ??= Defaults.QuirksForAdapter(sidecarEndpoint.AdapterType);
+            sidecarEndpoint.Quirks.SupportsTools = false;
+            sidecarEndpoint.Quirks.EnableMalformedToolCallRecovery = false;
+            sidecarEndpoint.Temperature = 0.0;
+            sidecarEndpoint.MaxTokens = Math.Min(sidecarEndpoint.MaxTokens, 2048);
+            return sidecarEndpoint;
+        }
+
+        private static EndpointConfig CloneEndpoint(EndpointConfig endpoint)
+        {
+            return new EndpointConfig
+            {
+                Name = endpoint.Name,
+                AdapterType = endpoint.AdapterType,
+                BaseUrl = endpoint.BaseUrl,
+                Model = endpoint.Model,
+                IsDefault = endpoint.IsDefault,
+                MaxTokens = endpoint.MaxTokens,
+                Temperature = endpoint.Temperature,
+                ContextWindow = endpoint.ContextWindow,
+                TimeoutMs = endpoint.TimeoutMs,
+                Headers = new Dictionary<string, string>(endpoint.Headers),
+                Quirks = CloneBackendQuirks(endpoint.Quirks)
+            };
+        }
+
+        private static BackendQuirks? CloneBackendQuirks(BackendQuirks? quirks)
+        {
+            if (quirks == null)
+            {
+                return null;
+            }
+
+            return new BackendQuirks
+            {
+                AssembleToolCallDeltas = quirks.AssembleToolCallDeltas,
+                SupportsParallelToolCalls = quirks.SupportsParallelToolCalls,
+                SupportsTools = quirks.SupportsTools,
+                EnableMalformedToolCallRecovery = quirks.EnableMalformedToolCallRecovery,
+                RequiresToolResultContentAsString = quirks.RequiresToolResultContentAsString,
+                DefaultFinishReason = quirks.DefaultFinishReason,
+                StripRequestFields = new List<string>(quirks.StripRequestFields)
+            };
+        }
+
+        private static bool IsSyntheticSummaryMessage(ConversationMessage message)
+        {
+            return message.Role == RoleEnum.System
+                && !string.IsNullOrWhiteSpace(message.Content)
+                && message.Content.StartsWith(SyntheticSummaryPrefix, StringComparison.Ordinal);
+        }
+
+        private static string BuildConversationDigest(IEnumerable<ConversationMessage> messages, int maxChars)
+        {
+            StringBuilder sb = new StringBuilder();
+
+            foreach (ConversationMessage message in messages)
+            {
+                if (string.IsNullOrWhiteSpace(message.Content) && (message.ToolCalls == null || message.ToolCalls.Count == 0))
+                {
+                    continue;
+                }
+
+                sb.Append('[');
+                sb.Append(message.Role.ToString().ToLowerInvariant());
+                sb.Append("] ");
+
+                if (!string.IsNullOrWhiteSpace(message.Content))
+                {
+                    sb.Append(message.Content.Trim());
+                }
+                else if (message.ToolCalls != null && message.ToolCalls.Count > 0)
+                {
+                    sb.Append("tool calls: ");
+
+                    for (int i = 0; i < message.ToolCalls.Count; i++)
+                    {
+                        if (i > 0)
+                        {
+                            sb.Append(", ");
+                        }
+
+                        sb.Append(message.ToolCalls[i].Name);
+                    }
+                }
+
+                sb.AppendLine();
+                sb.AppendLine();
+            }
+
+            string digest = sb.ToString().Trim();
+
+            if (digest.Length <= maxChars)
+            {
+                return digest;
+            }
+
+            int half = Math.Max(1, (maxChars - 24) / 2);
+            return digest.Substring(0, half).TrimEnd()
+                + Environment.NewLine
+                + "...[conversation truncated]..."
+                + Environment.NewLine
+                + digest.Substring(Math.Max(0, digest.Length - half)).TrimStart();
+        }
+
+        private static int GetLeadingSystemMessageCount(List<ConversationMessage> conversation)
+        {
+            int count = 0;
+
+            while (count < conversation.Count && conversation[count].Role == RoleEnum.System)
+            {
+                count++;
+            }
+
+            return count;
+        }
+
+        private static int FindLastUserIndex(List<ConversationMessage> conversation)
+        {
+            for (int i = conversation.Count - 1; i >= 0; i--)
+            {
+                if (conversation[i].Role == RoleEnum.User)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private static string GetWarningLevel(ContextBudgetSnapshot snapshot)
+        {
+            if (snapshot.IsOverLimit)
+            {
+                return "critical";
+            }
+
+            if (snapshot.IsApproachingLimit)
+            {
+                return "approaching";
+            }
+
+            return "ok";
+        }
+
+        private static ContextStatusEvent CreateContextStatusEvent(ContextBudgetSnapshot snapshot, int messageCount, string trigger)
+        {
+            return new ContextStatusEvent
+            {
+                Scope = "active_conversation",
+                EstimatedTokens = snapshot.UsedTokens,
+                UsableInputLimit = snapshot.UsableInputLimit,
+                RemainingTokens = snapshot.RemainingTokens,
+                RemainingPercent = snapshot.UsableInputLimit <= 0
+                    ? 0
+                    : Math.Round((snapshot.RemainingTokens / (double)snapshot.UsableInputLimit) * 100.0, 1),
+                WarningThresholdTokens = snapshot.WarningThresholdTokens,
+                MessageCount = messageCount,
+                Trigger = trigger,
+                WarningLevel = GetWarningLevel(snapshot)
+            };
+        }
+
+        private static ErrorEvent CreateContextLimitExceededError(ContextBudgetSnapshot snapshot, string detail)
+        {
+            return new ErrorEvent
+            {
+                Code = "context_limit_exceeded",
+                Message = $"Estimated context usage exceeds the usable limit ({snapshot.UsedTokens} / {snapshot.UsableInputLimit} tokens); {detail}."
+            };
         }
 
         private async Task<ToolResult> ExecuteToolCallAsync(ToolCall toolCall, CancellationToken cancellationToken)

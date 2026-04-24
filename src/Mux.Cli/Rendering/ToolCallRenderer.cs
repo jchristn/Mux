@@ -22,7 +22,7 @@ namespace Mux.Cli.Rendering
         public static async Task<string> PromptApprovalAsync(ToolCall toolCall)
         {
             string summary = FormatToolSummary(toolCall.Name, toolCall.Arguments);
-            AnsiConsole.MarkupLine($"[dim][[tool:{Markup.Escape(toolCall.Name)}]][/] {Markup.Escape(summary)}");
+            AnsiConsole.MarkupLine($"[dim]Tool call: {Markup.Escape(summary)}[/]");
             AnsiConsole.Markup("  Allow? [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ");
 
             string? response = await Task.Run(() => Console.ReadLine());

@@ -144,6 +144,10 @@ Example:
   "processTimeoutMs": 120000,
   "contextWindowSafetyMarginPercent": 15,
   "tokenEstimationRatio": 3.5,
+  "autoCompactEnabled": true,
+  "contextWarningThresholdPercent": 80,
+  "compactionStrategy": "summary",
+  "compactionPreserveTurns": 3,
   "maxAgentIterations": 25
 }
 ```
@@ -158,6 +162,10 @@ Fields:
 | `processTimeoutMs` | int | `run_process` timeout |
 | `contextWindowSafetyMarginPercent` | int | safety margin for conversation truncation |
 | `tokenEstimationRatio` | number | rough chars-to-tokens estimate |
+| `autoCompactEnabled` | bool | automatically compact persisted history before interactive runs when the next prompt would exceed the usable context budget |
+| `contextWarningThresholdPercent` | int | warning threshold for estimated context usage; clamped to `50-95` |
+| `compactionStrategy` | string | `summary` or `trim`; controls `/compact`, interactive preflight auto-compaction, and in-run active-conversation compaction |
+| `compactionPreserveTurns` | int | number of recent user-led turns to preserve during compaction; clamped to `1-10` |
 | `maxAgentIterations` | int | loop guard for tool-using runs |
 
 Notes:
@@ -195,6 +203,7 @@ Common CLI overrides:
 - `--adapter-type`
 - `--temperature`
 - `--max-tokens`
+- `--compaction-strategy`
 - `--approval-policy`
 - `--system-prompt`
 - `--working-directory`

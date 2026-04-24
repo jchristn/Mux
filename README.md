@@ -15,10 +15,10 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.1.0%20ALPHA-orange.svg" alt="v0.1.0 ALPHA"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.2.0%20ALPHA-orange.svg" alt="v0.2.0 ALPHA"></a>
 </p>
 
-> **v0.1.0 ALPHA**
+> **v0.2.0 ALPHA**
 > This is an early alpha. APIs, interfaces, configuration formats, tool schemas, and CLI behavior are all subject to change. Feedback is welcome via [issues](https://github.com/jchristn/Mux/issues) and [discussions](https://github.com/jchristn/Mux/discussions).
 
 ## What is mux?
@@ -37,6 +37,8 @@
 - Built-in tools: file edit/read/write/delete, directory management, glob, grep, process execution
 - Shell-aware process execution metadata: `run_process` tells the model which OS and shell it will run under
 - MCP extensible in interactive mode: external tool servers appear beside built-in tools
+- Interactive queueing: keep typing while mux is busy, queue follow-up prompts with `Tab`, and edit the newest queued prompt with `Alt+Up`
+- Inline interactive status: when mux is busy, paused, or awaiting approval, it shows a live status line above the prompt instead of pinning a footer to the bottom of the terminal
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
 - Health checks: `mux probe` validates config, backend reachability, auth, and model access
@@ -113,6 +115,7 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 | `--adapter-type <type>` |  | `ollama`, `openai`, `vllm`, `openai-compatible` |
 | `--temperature <float>` |  | Override temperature |
 | `--max-tokens <int>` |  | Override max output tokens |
+| `--compaction-strategy <mode>` |  | Override compaction strategy: `summary` or `trim` |
 | `--working-directory <path>` | `-w` | Tool execution directory |
 | `--system-prompt <path>` |  | Override system prompt file |
 | `--yolo` |  | Auto-approve tool calls |
@@ -127,10 +130,22 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 /endpoint                         List configured endpoints
 /endpoint <name>                  Switch to a named endpoint
 /tools                            List available tools
+/status                           Show session metadata, title, queue state, and estimated context usage
+/context                          Alias for /status
+/compact                          Compact older conversation history with the configured strategy
+/compact summary                  Compact older conversation history with a one-off summary pass
+/compact trim                     Trim older conversation history without asking the model to summarize it
+/compact strategy [summary|trim]  Show or set the session compaction strategy
+/title                            Show the current conversation title
+/title <text>                     Set the conversation title and disable automatic retitling
+/queue                            List queued prompts and whether dispatch is paused
+/queue clear                      Clear all queued prompts
+/queue drop-last                  Remove the newest queued prompt
+/queue resume                     Resume automatic queue dispatch
 /mcp list                         Show MCP server status
 /mcp add <name> <cmd> [args...]   Add an MCP server at runtime
 /mcp remove <name>                Remove an MCP server
-/system                           Show the current system prompt preview
+/system                           Show the full current system prompt
 /system <text>                    Replace the system prompt for this session
 /clear                            Clear conversation history
 /help or /?                       Show command help
@@ -138,6 +153,23 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 ```
 
 In interactive mode, `Up` and `Down` recall prompts submitted earlier in the current session.
+
+### Interactive Input
+
+Interactive mode keeps the prompt live while mux is generating. When mux is busy, paused, or awaiting approval, it renders a status line directly above the prompt.
+
+Each interactive session also maintains a short conversation title. By default mux asks the current model to revisit that title periodically as the discussion evolves. If you set a title manually with `/title <text>`, mux keeps that title fixed until you change it again.
+
+While mux is generating, you can keep drafting the next prompt:
+
+- `Tab` queues the current draft to run after the active completion
+- `Alt+Up` loads the newest queued prompt back into the editor
+- `Esc` cancels the active generation and pauses automatic queue dispatch
+- `/queue resume` resumes queued execution after a cancellation or failure pause
+
+Slash commands are session controls and are not queueable.
+
+`/status` reports the active title, model, endpoint, queue state, compaction policy, and estimated context budget; `/context` is an alias. New prompts are checked against that budget before each run. When a prompt would exceed the usable context budget, mux automatically compacts older persisted history before sending the next model call. If an active tool-using run grows too large mid-flight, mux now honors the configured compaction strategy there too: `summary` uses a summary sidecar pass first and trims only if needed, while `trim` stays trim-only. mux also emits a dim post-turn context line when the session is approaching the usable limit, but it does not keep a persistent meter on screen. `/compact` uses the configured compaction strategy, `/compact summary` and `/compact trim` provide one-off overrides, and `/compact strategy [summary|trim]` changes the interactive session policy without touching `settings.json`. `/clear` clears the transcript state and redraws the screen with the current title at the top.
 
 ### Interactive Examples
 
@@ -169,6 +201,8 @@ In `jsonl` mode:
 - default human-readable progress output is suppressed
 - every event includes `contractVersion`
 - `run_started` includes effective non-interactive capability metadata such as `commandName`, `endpointSelectionSource`, `cliOverridesApplied`, built-in tool counts, and MCP support/config status
+- `run_started` also includes context metadata such as `contextWindow`, `reservedOutputTokens`, `usableInputLimit`, `warningThresholdTokens`, `tokenEstimationRatio`, and `compactionStrategy`
+- `run_completed` also includes `finalEstimatedTokens` and `compactionCount`
 - `error` events keep `code` and also expose `errorCode`, `failureCategory`, and resolved runtime metadata when known
 
 Event types currently emitted:
@@ -178,6 +212,8 @@ Event types currently emitted:
 - `tool_call_approved`
 - `tool_call_completed`
 - `heartbeat`
+- `context_status`
+- `context_compacted`
 - `error`
 - `run_completed`
 

@@ -2,6 +2,7 @@ namespace Mux.Core.Agent
 {
     using System;
     using System.IO;
+    using Mux.Core.Utility;
 
     /// <summary>
     /// Provides path resolution and safety checks relative to the agent's working directory.
@@ -37,7 +38,8 @@ namespace Mux.Core.Agent
 
             if (warn && !IsWithinWorkingDirectory(resolvedPath, workingDirectory))
             {
-                Console.Error.WriteLine($"[mux] warning: path '{resolvedPath}' escapes working directory '{workingDirectory}'");
+                Console.Error.WriteLine(ConsoleMessageStyler.Failure(
+                    $"Warning: path '{resolvedPath}' escapes working directory '{workingDirectory}'"));
             }
 
             return resolvedPath;

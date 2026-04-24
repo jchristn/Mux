@@ -17,6 +17,8 @@ namespace Mux.Core.Agent
         private int _ErrorCount = 0;
         private int _AssistantTextChars = 0;
         private long _DurationMs = 0;
+        private int _FinalEstimatedTokens = 0;
+        private int _CompactionCount = 0;
 
         #endregion
 
@@ -95,6 +97,24 @@ namespace Mux.Core.Agent
         {
             get => _DurationMs;
             set => _DurationMs = value;
+        }
+
+        /// <summary>
+        /// Estimated used tokens in the final conversation state at the end of the run.
+        /// </summary>
+        public int FinalEstimatedTokens
+        {
+            get => _FinalEstimatedTokens;
+            set => _FinalEstimatedTokens = value;
+        }
+
+        /// <summary>
+        /// Total number of compaction passes applied during the run.
+        /// </summary>
+        public int CompactionCount
+        {
+            get => _CompactionCount;
+            set => _CompactionCount = value;
         }
 
         #endregion

@@ -10,6 +10,7 @@ namespace Mux.Cli.Commands
     using System.Threading.Tasks;
     using Mux.Core.Llm;
     using Mux.Core.Models;
+    using Mux.Core.Utility;
     using Spectre.Console.Cli;
 
     /// <summary>
@@ -63,7 +64,7 @@ namespace Mux.Cli.Commands
                 {
                     if (result.Success)
                     {
-                        Console.WriteLine($"[ok] Probe succeeded for endpoint '{result.EndpointName}' using model '{result.Model}'.");
+                        Console.WriteLine(ConsoleMessageStyler.Success($"Probe succeeded for endpoint '{result.EndpointName}' using model '{result.Model}'."));
                         Console.WriteLine($"Base URL: {result.BaseUrl}");
                         Console.WriteLine($"Duration: {result.DurationMs}ms");
                         if (!string.IsNullOrWhiteSpace(result.ResponsePreview))
@@ -73,7 +74,7 @@ namespace Mux.Cli.Commands
                     }
                     else
                     {
-                        Console.Error.WriteLine($"[error] Probe failed for endpoint '{result.EndpointName}': {result.ErrorMessage}");
+                        Console.Error.WriteLine(ConsoleMessageStyler.Failure($"Probe failed for endpoint '{result.EndpointName}': {result.ErrorMessage}"));
                     }
                 }
 
@@ -94,7 +95,7 @@ namespace Mux.Cli.Commands
                 }
                 else
                 {
-                    Console.Error.WriteLine($"[error] {ex.Message}");
+                    Console.Error.WriteLine(ConsoleMessageStyler.Failure($"Error: {ex.Message}"));
                 }
 
                 return 1;
@@ -187,7 +188,7 @@ namespace Mux.Cli.Commands
             }
             else
             {
-                Console.Error.WriteLine($"[error] {message}");
+                Console.Error.WriteLine(ConsoleMessageStyler.Failure($"Error: {message}"));
             }
         }
 

@@ -123,8 +123,9 @@ namespace Mux.Core.Models
         }
 
         /// <summary>
-        /// The HTTP request timeout in milliseconds. Clamped to a minimum of 10000 (10 seconds).
-        /// Defaults to 120000 (2 minutes).
+        /// The HTTP request timeout in milliseconds for bounded requests.
+        /// Clamped to a minimum of 10000 (10 seconds). Defaults to 120000 (2 minutes).
+        /// Streaming chat responses may exceed this value and are cancelled by the caller instead.
         /// </summary>
         [JsonPropertyName("timeoutMs")]
         public int TimeoutMs

@@ -36,7 +36,13 @@ namespace Test.Xunit.Commands
                 McpConfigured = true,
                 McpServerCount = 2,
                 BuiltInToolCount = 11,
-                EffectiveToolCount = 11
+                EffectiveToolCount = 11,
+                ContextWindow = 32768,
+                ReservedOutputTokens = 4096,
+                UsableInputLimit = 23756,
+                WarningThresholdTokens = 19004,
+                TokenEstimationRatio = 3.5,
+                CompactionStrategy = "trim"
             };
 
             RunCompletedEvent completed = new RunCompletedEvent
@@ -47,7 +53,9 @@ namespace Test.Xunit.Commands
                 ToolCallCount = 0,
                 ErrorCount = 0,
                 AssistantTextChars = 12,
-                DurationMs = 25
+                DurationMs = 25,
+                FinalEstimatedTokens = 512,
+                CompactionCount = 1
             };
 
             JsonDocument startedJson = JsonDocument.Parse(StructuredOutputFormatter.FormatEvent(started));
@@ -57,11 +65,18 @@ namespace Test.Xunit.Commands
             Assert.Equal("run_started", startedJson.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("local", startedJson.RootElement.GetProperty("endpointName").GetString());
             Assert.Equal("print", startedJson.RootElement.GetProperty("commandName").GetString());
+            Assert.Equal(32768, startedJson.RootElement.GetProperty("contextWindow").GetInt32());
+            Assert.Equal(4096, startedJson.RootElement.GetProperty("reservedOutputTokens").GetInt32());
+            Assert.Equal(23756, startedJson.RootElement.GetProperty("usableInputLimit").GetInt32());
+            Assert.Equal(19004, startedJson.RootElement.GetProperty("warningThresholdTokens").GetInt32());
+            Assert.Equal("trim", startedJson.RootElement.GetProperty("compactionStrategy").GetString());
             Assert.False(startedJson.RootElement.GetProperty("mcp").GetProperty("supported").GetBoolean());
             Assert.True(startedJson.RootElement.GetProperty("mcp").GetProperty("configured").GetBoolean());
             Assert.Equal(1, completedJson.RootElement.GetProperty("contractVersion").GetInt32());
             Assert.Equal("run_completed", completedJson.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("completed", completedJson.RootElement.GetProperty("status").GetString());
+            Assert.Equal(512, completedJson.RootElement.GetProperty("finalEstimatedTokens").GetInt32());
+            Assert.Equal(1, completedJson.RootElement.GetProperty("compactionCount").GetInt32());
         }
 
         /// <summary>
@@ -139,6 +154,53 @@ namespace Test.Xunit.Commands
             Assert.Equal("network", json.RootElement.GetProperty("failureCategory").GetString());
             Assert.Equal("print", json.RootElement.GetProperty("commandName").GetString());
             Assert.Equal("http://127.0.0.1:1", json.RootElement.GetProperty("baseUrl").GetString());
+        }
+
+        /// <summary>
+        /// Verifies that context-related events serialize with stable additive shapes.
+        /// </summary>
+        [Fact]
+        public void FormatEvent_ContextEvents_UsesStableNamesAndFields()
+        {
+            ContextStatusEvent statusEvent = new ContextStatusEvent
+            {
+                Scope = "active_conversation",
+                EstimatedTokens = 910,
+                UsableInputLimit = 1000,
+                RemainingTokens = 90,
+                RemainingPercent = 9.0,
+                WarningThresholdTokens = 800,
+                MessageCount = 7,
+                Trigger = "preflight",
+                WarningLevel = "approaching"
+            };
+
+            ContextCompactedEvent compactedEvent = new ContextCompactedEvent
+            {
+                Scope = "active_conversation",
+                Mode = "auto",
+                Strategy = "trim",
+                MessagesBefore = 14,
+                MessagesAfter = 8,
+                EstimatedTokensBefore = 1400,
+                EstimatedTokensAfter = 620,
+                SummaryCreated = false,
+                Reason = "Active conversation exceeded the usable context budget before a model call."
+            };
+
+            JsonDocument statusJson = JsonDocument.Parse(StructuredOutputFormatter.FormatEvent(statusEvent));
+            JsonDocument compactedJson = JsonDocument.Parse(StructuredOutputFormatter.FormatEvent(compactedEvent));
+
+            Assert.Equal("context_status", statusJson.RootElement.GetProperty("eventType").GetString());
+            Assert.Equal("active_conversation", statusJson.RootElement.GetProperty("scope").GetString());
+            Assert.Equal("approaching", statusJson.RootElement.GetProperty("warningLevel").GetString());
+            Assert.Equal(7, statusJson.RootElement.GetProperty("messageCount").GetInt32());
+
+            Assert.Equal("context_compacted", compactedJson.RootElement.GetProperty("eventType").GetString());
+            Assert.Equal("trim", compactedJson.RootElement.GetProperty("strategy").GetString());
+            Assert.False(compactedJson.RootElement.GetProperty("summaryCreated").GetBoolean());
+            Assert.Equal(1400, compactedJson.RootElement.GetProperty("estimatedTokensBefore").GetInt32());
+            Assert.Equal(620, compactedJson.RootElement.GetProperty("estimatedTokensAfter").GetInt32());
         }
     }
 }

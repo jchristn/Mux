@@ -23,6 +23,12 @@ namespace Mux.Core.Agent
         private string _WorkingDirectory = Directory.GetCurrentDirectory();
         private int _MaxIterations = 25;
         private bool _Verbose = false;
+        private double _TokenEstimationRatio = 3.5;
+        private int _ContextWindowSafetyMarginPercent = 15;
+        private bool _AutoCompactEnabled = true;
+        private int _ContextWarningThresholdPercent = 80;
+        private string _CompactionStrategy = "summary";
+        private int _CompactionPreserveTurns = 3;
         private string _CommandName = string.Empty;
         private string _ConfigDirectory = string.Empty;
         private string _EndpointSelectionSource = string.Empty;
@@ -116,6 +122,71 @@ namespace Mux.Core.Agent
         {
             get => _Verbose;
             set => _Verbose = value;
+        }
+
+        /// <summary>
+        /// Approximate characters-to-token ratio used for context estimation.
+        /// Clamped to the range 2.0-6.0.
+        /// </summary>
+        public double TokenEstimationRatio
+        {
+            get => _TokenEstimationRatio;
+            set => _TokenEstimationRatio = Math.Clamp(value, 2.0, 6.0);
+        }
+
+        /// <summary>
+        /// Percentage of the context window reserved as a safety margin.
+        /// Clamped to the range 5-50.
+        /// </summary>
+        public int ContextWindowSafetyMarginPercent
+        {
+            get => _ContextWindowSafetyMarginPercent;
+            set => _ContextWindowSafetyMarginPercent = Math.Clamp(value, 5, 50);
+        }
+
+        /// <summary>
+        /// Whether the agent loop should automatically compact active conversation state
+        /// before a model call when the estimated usable context budget is exceeded.
+        /// </summary>
+        public bool AutoCompactEnabled
+        {
+            get => _AutoCompactEnabled;
+            set => _AutoCompactEnabled = value;
+        }
+
+        /// <summary>
+        /// Percentage of the usable context budget at which warning-level context events begin.
+        /// Clamped to the range 50-95.
+        /// </summary>
+        public int ContextWarningThresholdPercent
+        {
+            get => _ContextWarningThresholdPercent;
+            set => _ContextWarningThresholdPercent = Math.Clamp(value, 50, 95);
+        }
+
+        /// <summary>
+        /// Configured compaction strategy name. Supported values are "summary" and "trim".
+        /// Any other value falls back to "summary".
+        /// </summary>
+        public string CompactionStrategy
+        {
+            get => _CompactionStrategy;
+            set
+            {
+                _CompactionStrategy = MuxSettings.TryNormalizeCompactionStrategy(value, out string normalized)
+                    ? normalized
+                    : "summary";
+            }
+        }
+
+        /// <summary>
+        /// Number of recent user-led turns to preserve during compaction.
+        /// Clamped to the range 1-10.
+        /// </summary>
+        public int CompactionPreserveTurns
+        {
+            get => _CompactionPreserveTurns;
+            set => _CompactionPreserveTurns = Math.Clamp(value, 1, 10);
         }
 
         /// <summary>
