@@ -88,6 +88,12 @@ namespace Mux.Cli.Commands
                 ApprovalPolicy = runtime.ApprovalPolicy,
                 WorkingDirectory = runtime.WorkingDirectory,
                 MaxIterations = runtime.MuxSettings.MaxAgentIterations,
+                TokenEstimationRatio = runtime.MuxSettings.TokenEstimationRatio,
+                ContextWindowSafetyMarginPercent = runtime.MuxSettings.ContextWindowSafetyMarginPercent,
+                AutoCompactEnabled = runtime.MuxSettings.AutoCompactEnabled,
+                ContextWarningThresholdPercent = runtime.MuxSettings.ContextWarningThresholdPercent,
+                CompactionStrategy = runtime.MuxSettings.CompactionStrategy,
+                CompactionPreserveTurns = runtime.MuxSettings.CompactionPreserveTurns,
                 CommandName = runtime.Metadata.CommandName,
                 ConfigDirectory = runtime.Metadata.ConfigDirectory,
                 EndpointSelectionSource = runtime.Metadata.EndpointSelectionSource,
@@ -143,6 +149,31 @@ namespace Mux.Cli.Commands
                                 if (outputFormat == OutputFormatEnum.Text)
                                 {
                                     Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Working... (step {heartbeatEvent.StepNumber})"));
+                                }
+                                break;
+
+                            case ContextStatusEvent contextStatusEvent:
+                                if (outputFormat == OutputFormatEnum.Text)
+                                {
+                                    string contextLine =
+                                        $"Context usage: est. {contextStatusEvent.EstimatedTokens} / {contextStatusEvent.UsableInputLimit} tokens | {contextStatusEvent.RemainingTokens} remaining.";
+                                    if (string.Equals(contextStatusEvent.WarningLevel, "critical", StringComparison.Ordinal))
+                                    {
+                                        Console.Error.WriteLine(ConsoleMessageStyler.Failure(contextLine));
+                                    }
+                                    else if (string.Equals(contextStatusEvent.WarningLevel, "approaching", StringComparison.Ordinal))
+                                    {
+                                        Console.Error.WriteLine(ConsoleMessageStyler.Notification(contextLine));
+                                    }
+                                }
+                                break;
+
+                            case ContextCompactedEvent contextCompactedEvent:
+                                if (outputFormat == OutputFormatEnum.Text)
+                                {
+                                    Console.Error.WriteLine(
+                                        ConsoleMessageStyler.Notification(
+                                            $"Auto-compacted context ({contextCompactedEvent.Strategy}): est. {contextCompactedEvent.EstimatedTokensBefore} -> {contextCompactedEvent.EstimatedTokensAfter} tokens."));
                                 }
                                 break;
 
@@ -383,6 +414,7 @@ namespace Mux.Cli.Commands
                 "llm_connection_error" => "network",
                 "llm_error" => "backend",
                 "llm_stream_error" => "backend",
+                "context_limit_exceeded" => "runtime",
                 "max_iterations_reached" => "runtime",
                 "print_error" => "unknown",
                 _ => "unknown"

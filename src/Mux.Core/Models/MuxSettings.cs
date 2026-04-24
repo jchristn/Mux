@@ -16,6 +16,10 @@ namespace Mux.Core.Models
         private int _ProcessTimeoutMs = 120000;
         private int _ContextWindowSafetyMarginPercent = 15;
         private double _TokenEstimationRatio = 3.5;
+        private bool _AutoCompactEnabled = true;
+        private int _ContextWarningThresholdPercent = 80;
+        private string _CompactionStrategy = "summary";
+        private int _CompactionPreserveTurns = 3;
         private int _MaxAgentIterations = 25;
 
         #endregion
@@ -98,6 +102,55 @@ namespace Mux.Core.Models
         }
 
         /// <summary>
+        /// Whether mux should automatically compact persisted conversation history before a run
+        /// when the estimated prompt would exceed the usable context budget.
+        /// </summary>
+        [JsonPropertyName("autoCompactEnabled")]
+        public bool AutoCompactEnabled
+        {
+            get => _AutoCompactEnabled;
+            set => _AutoCompactEnabled = value;
+        }
+
+        /// <summary>
+        /// The percentage of the usable input budget at which mux starts warning that context
+        /// pressure is getting high. Clamped to the range 50-95.
+        /// </summary>
+        [JsonPropertyName("contextWarningThresholdPercent")]
+        public int ContextWarningThresholdPercent
+        {
+            get => _ContextWarningThresholdPercent;
+            set => _ContextWarningThresholdPercent = Math.Clamp(value, 50, 95);
+        }
+
+        /// <summary>
+        /// The automatic/manual compaction strategy. Supported values are "summary" and "trim".
+        /// Any other value falls back to "summary".
+        /// </summary>
+        [JsonPropertyName("compactionStrategy")]
+        public string CompactionStrategy
+        {
+            get => _CompactionStrategy;
+            set
+            {
+                _CompactionStrategy = TryNormalizeCompactionStrategy(value, out string normalized)
+                    ? normalized
+                    : "summary";
+            }
+        }
+
+        /// <summary>
+        /// The number of recent user-led turns to preserve during compaction.
+        /// Clamped to the range 1-10.
+        /// </summary>
+        [JsonPropertyName("compactionPreserveTurns")]
+        public int CompactionPreserveTurns
+        {
+            get => _CompactionPreserveTurns;
+            set => _CompactionPreserveTurns = Math.Clamp(value, 1, 10);
+        }
+
+        /// <summary>
         /// The maximum number of agent loop iterations before forcing a stop.
         /// Clamped to the range 1-100.
         /// </summary>
@@ -106,6 +159,34 @@ namespace Mux.Core.Models
         {
             get => _MaxAgentIterations;
             set => _MaxAgentIterations = Math.Clamp(value, 1, 100);
+        }
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Normalizes a compaction strategy string.
+        /// </summary>
+        /// <param name="value">The raw strategy value.</param>
+        /// <param name="normalized">The normalized value when successful.</param>
+        /// <returns>True if the input matched a supported strategy; otherwise false.</returns>
+        public static bool TryNormalizeCompactionStrategy(string? value, out string normalized)
+        {
+            string candidate = (value ?? string.Empty).Trim().ToLowerInvariant();
+
+            switch (candidate)
+            {
+                case "summary":
+                    normalized = "summary";
+                    return true;
+                case "trim":
+                    normalized = "trim";
+                    return true;
+                default:
+                    normalized = "summary";
+                    return false;
+            }
         }
 
         #endregion

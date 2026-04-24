@@ -9,16 +9,24 @@ All notable changes to mux are documented here.
 - Interactive queued-message support in the REPL so users can keep drafting while mux is busy and queue the next prompt with `Tab`
 - `/queue`, `/queue clear`, `/queue drop-last`, and `/queue resume` interactive commands for queue inspection and control
 - `/status`, `/compact`, and `/title` interactive commands for session inspection, history compaction, and direct title control
+- `/compact summary` and `/compact strategy [summary|trim]` so compaction policy can be overridden per command or changed for the live interactive session
+- `/compact trim` for explicit trim-only history compaction without a summary-model sidecar call
+- `/context` as an interactive alias for `/status`
 - `Alt+Up` editing for the newest queued prompt during interactive sessions
 - Inline interactive status above the prompt for busy, paused, and approval states
 - Automatic conversation-title tracking in interactive mode, including `Conversation title update: ...` transcript notices when the model revises the title
 - Estimated context-budget reporting for system prompt, persisted history, tool surface, remaining budget, and compaction metadata
+- Compaction-related settings in `settings.json` for automatic preflight compaction, warning threshold, strategy, and preserved turns
 
 ### Changed
 
 - `Esc` now cancels the active interactive generation without exiting mux
 - Cancelling or failing an interactive run pauses queued-message auto-dispatch until the user resumes it
 - Interactive `/clear` now redraws the screen with the current conversation title at the top
+- Interactive runs now check the pending prompt against the estimated context budget before starting and automatically compact older history when needed
+- `--compaction-strategy <summary|trim>` now overrides the effective compaction policy for interactive, print, and probe startup
+- Interactive mode now emits a low-noise post-turn context notice only when the session is approaching or over the usable context budget
+- `AgentLoop` now honors the configured compaction strategy for oversized active conversation state before model calls and emits additive `context_status` / `context_compacted` JSONL events plus extended context metadata on `run_started` / `run_completed`
 - Non-streaming LLM calls now build non-streaming backend requests, which stabilizes `probe` and the new model-driven title/compaction sidecar calls
 - Interactive help and README documentation now describe queueing, cancellation, and the inline status-line behavior
 

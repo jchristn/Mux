@@ -139,6 +139,10 @@ namespace Test.Xunit.Settings
                 ""defaultApprovalPolicy"": ""auto"",
                 ""toolTimeoutMs"": 60000,
                 ""processTimeoutMs"": 240000,
+                ""autoCompactEnabled"": false,
+                ""contextWarningThresholdPercent"": 85,
+                ""compactionStrategy"": ""trim"",
+                ""compactionPreserveTurns"": 4,
                 ""maxAgentIterations"": 50
             }";
 
@@ -150,6 +154,10 @@ namespace Test.Xunit.Settings
             Assert.Equal("auto", settings.DefaultApprovalPolicy);
             Assert.Equal(60000, settings.ToolTimeoutMs);
             Assert.Equal(240000, settings.ProcessTimeoutMs);
+            Assert.False(settings.AutoCompactEnabled);
+            Assert.Equal(85, settings.ContextWarningThresholdPercent);
+            Assert.Equal("trim", settings.CompactionStrategy);
+            Assert.Equal(4, settings.CompactionPreserveTurns);
             Assert.Equal(50, settings.MaxAgentIterations);
         }
 
@@ -166,7 +174,32 @@ namespace Test.Xunit.Settings
             Assert.Equal("ask", settings.DefaultApprovalPolicy);
             Assert.Equal(30000, settings.ToolTimeoutMs);
             Assert.Equal(120000, settings.ProcessTimeoutMs);
+            Assert.True(settings.AutoCompactEnabled);
+            Assert.Equal(80, settings.ContextWarningThresholdPercent);
+            Assert.Equal("summary", settings.CompactionStrategy);
+            Assert.Equal(3, settings.CompactionPreserveTurns);
             Assert.Equal(25, settings.MaxAgentIterations);
+        }
+
+        /// <summary>
+        /// Verifies that new compaction-related settings are clamped and normalized.
+        /// </summary>
+        [Fact]
+        public void LoadSettings_CompactionFields_AreClampedAndNormalized()
+        {
+            string json = @"{
+                ""contextWarningThresholdPercent"": 10,
+                ""compactionStrategy"": ""unexpected"",
+                ""compactionPreserveTurns"": 99
+            }";
+
+            File.WriteAllText(Path.Combine(_TempDir, "settings.json"), json);
+
+            MuxSettings settings = SettingsLoader.LoadSettings();
+
+            Assert.Equal(50, settings.ContextWarningThresholdPercent);
+            Assert.Equal("summary", settings.CompactionStrategy);
+            Assert.Equal(10, settings.CompactionPreserveTurns);
         }
 
         #endregion

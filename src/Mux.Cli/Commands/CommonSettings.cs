@@ -101,6 +101,13 @@ namespace Mux.Cli.Commands
         [CommandOption("--output-format")]
         public string? OutputFormat { get; set; }
 
+        /// <summary>
+        /// Override the compaction strategy used for automatic and manual history compaction.
+        /// </summary>
+        [Description("Compaction strategy (summary or trim).")]
+        [CommandOption("--compaction-strategy")]
+        public string? CompactionStrategy { get; set; }
+
         #endregion
     }
 }

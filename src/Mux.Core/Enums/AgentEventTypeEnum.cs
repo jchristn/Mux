@@ -52,6 +52,18 @@ namespace Mux.Core.Enums
         Heartbeat,
 
         /// <summary>
+        /// Estimated context state for the current conversation.
+        /// </summary>
+        [EnumMember(Value = "context_status")]
+        ContextStatus,
+
+        /// <summary>
+        /// A compaction action was applied to reduce context usage.
+        /// </summary>
+        [EnumMember(Value = "context_compacted")]
+        ContextCompacted,
+
+        /// <summary>
         /// The run has finished and a final summary is available.
         /// </summary>
         [EnumMember(Value = "run_completed")]

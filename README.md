@@ -115,6 +115,7 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 | `--adapter-type <type>` |  | `ollama`, `openai`, `vllm`, `openai-compatible` |
 | `--temperature <float>` |  | Override temperature |
 | `--max-tokens <int>` |  | Override max output tokens |
+| `--compaction-strategy <mode>` |  | Override compaction strategy: `summary` or `trim` |
 | `--working-directory <path>` | `-w` | Tool execution directory |
 | `--system-prompt <path>` |  | Override system prompt file |
 | `--yolo` |  | Auto-approve tool calls |
@@ -130,7 +131,11 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 /endpoint <name>                  Switch to a named endpoint
 /tools                            List available tools
 /status                           Show session metadata, title, queue state, and estimated context usage
-/compact                          Compact older conversation history with the current model
+/context                          Alias for /status
+/compact                          Compact older conversation history with the configured strategy
+/compact summary                  Compact older conversation history with a one-off summary pass
+/compact trim                     Trim older conversation history without asking the model to summarize it
+/compact strategy [summary|trim]  Show or set the session compaction strategy
 /title                            Show the current conversation title
 /title <text>                     Set the conversation title and disable automatic retitling
 /queue                            List queued prompts and whether dispatch is paused
@@ -164,7 +169,7 @@ While mux is generating, you can keep drafting the next prompt:
 
 Slash commands are session controls and are not queueable.
 
-`/status` reports the active title, model, endpoint, queue state, and estimated context budget. `/compact` uses the current model to summarize older preserved history into a synthetic memory message so the session can keep going with less context pressure. `/clear` clears the transcript state and redraws the screen with the current title at the top.
+`/status` reports the active title, model, endpoint, queue state, compaction policy, and estimated context budget; `/context` is an alias. New prompts are checked against that budget before each run. When a prompt would exceed the usable context budget, mux automatically compacts older persisted history before sending the next model call. If an active tool-using run grows too large mid-flight, mux now honors the configured compaction strategy there too: `summary` uses a summary sidecar pass first and trims only if needed, while `trim` stays trim-only. mux also emits a dim post-turn context line when the session is approaching the usable limit, but it does not keep a persistent meter on screen. `/compact` uses the configured compaction strategy, `/compact summary` and `/compact trim` provide one-off overrides, and `/compact strategy [summary|trim]` changes the interactive session policy without touching `settings.json`. `/clear` clears the transcript state and redraws the screen with the current title at the top.
 
 ### Interactive Examples
 
@@ -196,6 +201,8 @@ In `jsonl` mode:
 - default human-readable progress output is suppressed
 - every event includes `contractVersion`
 - `run_started` includes effective non-interactive capability metadata such as `commandName`, `endpointSelectionSource`, `cliOverridesApplied`, built-in tool counts, and MCP support/config status
+- `run_started` also includes context metadata such as `contextWindow`, `reservedOutputTokens`, `usableInputLimit`, `warningThresholdTokens`, `tokenEstimationRatio`, and `compactionStrategy`
+- `run_completed` also includes `finalEstimatedTokens` and `compactionCount`
 - `error` events keep `code` and also expose `errorCode`, `failureCategory`, and resolved runtime metadata when known
 
 Event types currently emitted:
@@ -205,6 +212,8 @@ Event types currently emitted:
 - `tool_call_approved`
 - `tool_call_completed`
 - `heartbeat`
+- `context_status`
+- `context_compacted`
 - `error`
 - `run_completed`
 

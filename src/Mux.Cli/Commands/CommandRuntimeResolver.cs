@@ -65,6 +65,7 @@ namespace Mux.Cli.Commands
             List<McpServerConfig> mcpServers = SettingsLoader.LoadMcpServers();
 
             ValidateCommandSettings(settings, commandName, supportsMcp, allowAskApproval);
+            ApplyMuxSettingsOverrides(settings, muxSettings);
 
             EndpointConfig endpoint = SettingsLoader.ResolveEndpoint(
                 endpoints,
@@ -215,8 +216,31 @@ namespace Mux.Cli.Commands
             if (!string.IsNullOrWhiteSpace(settings.SystemPrompt)) overrides.Add("systemPrompt");
             if (settings.Yolo) overrides.Add("yolo");
             if (!string.IsNullOrWhiteSpace(settings.ApprovalPolicy)) overrides.Add("approvalPolicy");
+            if (!string.IsNullOrWhiteSpace(settings.CompactionStrategy)) overrides.Add("compactionStrategy");
 
             return overrides;
+        }
+
+        /// <summary>
+        /// Applies CLI overrides that target mux settings rather than endpoint selection.
+        /// </summary>
+        /// <param name="settings">The parsed command settings.</param>
+        /// <param name="muxSettings">The loaded mux settings instance to mutate.</param>
+        public static void ApplyMuxSettingsOverrides(CommonSettings settings, MuxSettings muxSettings)
+        {
+            if (settings == null) throw new ArgumentNullException(nameof(settings));
+            if (muxSettings == null) throw new ArgumentNullException(nameof(muxSettings));
+
+            if (!string.IsNullOrWhiteSpace(settings.CompactionStrategy))
+            {
+                if (!MuxSettings.TryNormalizeCompactionStrategy(settings.CompactionStrategy, out string normalizedStrategy))
+                {
+                    throw new InvalidOperationException(
+                        $"Unsupported compaction strategy '{settings.CompactionStrategy}'. Supported values: summary, trim.");
+                }
+
+                muxSettings.CompactionStrategy = normalizedStrategy;
+            }
         }
     }
 

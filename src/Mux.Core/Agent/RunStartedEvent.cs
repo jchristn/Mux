@@ -29,6 +29,12 @@ namespace Mux.Core.Agent
         private int _McpServerCount = 0;
         private int _BuiltInToolCount = 0;
         private int _EffectiveToolCount = 0;
+        private int _ContextWindow = 0;
+        private int _ReservedOutputTokens = 0;
+        private int _UsableInputLimit = 0;
+        private int _WarningThresholdTokens = 0;
+        private double _TokenEstimationRatio = 0;
+        private string _CompactionStrategy = "summary";
 
         #endregion
 
@@ -206,6 +212,60 @@ namespace Mux.Core.Agent
         {
             get => _EffectiveToolCount;
             set => _EffectiveToolCount = value;
+        }
+
+        /// <summary>
+        /// Total configured context window for the selected model endpoint.
+        /// </summary>
+        public int ContextWindow
+        {
+            get => _ContextWindow;
+            set => _ContextWindow = value;
+        }
+
+        /// <summary>
+        /// Tokens reserved for the model's response generation.
+        /// </summary>
+        public int ReservedOutputTokens
+        {
+            get => _ReservedOutputTokens;
+            set => _ReservedOutputTokens = value;
+        }
+
+        /// <summary>
+        /// Estimated usable input budget after reservations.
+        /// </summary>
+        public int UsableInputLimit
+        {
+            get => _UsableInputLimit;
+            set => _UsableInputLimit = value;
+        }
+
+        /// <summary>
+        /// Warning threshold in tokens for this run.
+        /// </summary>
+        public int WarningThresholdTokens
+        {
+            get => _WarningThresholdTokens;
+            set => _WarningThresholdTokens = value;
+        }
+
+        /// <summary>
+        /// Approximate character-to-token ratio used for budget estimation.
+        /// </summary>
+        public double TokenEstimationRatio
+        {
+            get => _TokenEstimationRatio;
+            set => _TokenEstimationRatio = value;
+        }
+
+        /// <summary>
+        /// Effective compaction strategy for the run.
+        /// </summary>
+        public string CompactionStrategy
+        {
+            get => _CompactionStrategy;
+            set => _CompactionStrategy = value ?? "summary";
         }
 
         #endregion

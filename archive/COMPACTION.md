@@ -10,21 +10,58 @@ Scope a Codex CLI-like context visibility and compaction capability for `mux` th
 - lets the user manually compact the session with commands
 - is concrete enough that a developer can implement it and mark work complete
 
-This document is a scope and implementation guide, not a promise that the feature already exists.
+This document started as a scope and implementation guide. It is now also annotated with implementation status based on the current codebase as of 2026-04-24.
+
+## Implementation Snapshot
+
+Implemented today:
+
+- [x] `ContextWindowManager` can produce a detailed `ContextBudgetSnapshot`
+- [x] Context accounting includes system prompt, persisted history, tool definitions, reserved output tokens, and safety margin
+- [x] Interactive budget inspection is available via `/status` (shipped instead of the originally planned `/context`)
+- [x] `/context` exists as an alias for `/status`
+- [x] Manual history compaction is available via `/compact`
+- [x] The active compaction strategy can be changed per interactive session via `/compact strategy [summary|trim]`
+- [x] Manual trim-only history compaction is available via `/compact trim`
+- [x] The effective compaction strategy can be overridden at startup via `--compaction-strategy`
+- [x] `ConversationCompactionPlanner` exists and preserves recent user-led turns while removing prior synthetic summaries
+- [x] `ConversationTrimCompactor` exists and preserves leading synthetic/system memory plus recent user-led turns during trim-only compaction
+- [x] Manual compaction inserts a synthetic summary message back into persisted history
+- [x] Interactive runs perform prompt-aware preflight budget checks before starting a new `AgentLoop`
+- [x] Interactive preflight can auto-compact persisted history before the next run using either summary or trim strategy
+- [x] Interactive mode emits a low-noise post-turn context notice when the session is approaching or over the usable budget
+- [x] `AgentLoop` performs strategy-aware in-run compaction before model calls when active conversation state exceeds the usable budget
+- [x] Structured `context_status` / `context_compacted` events exist for runtime/JSONL surfaces
+- [x] `RunStartedEvent` and `RunCompletedEvent` include context-related metadata
+- [x] Compaction-related settings exist in `MuxSettings` for auto-compaction, warning threshold, strategy, and preserved turns
+- [x] Unit coverage exists for `ContextWindowManager` budget snapshots and `ConversationCompactionPlanner`
+- [x] `README.md`, `CONFIG.md`, and `CHANGELOG.md` describe the shipped `/status` / `/compact` surface and compaction settings
+
+Not implemented yet:
+
+- [ ] automatic warning/footer output after each turn
+- [ ] automated contract coverage for context events and print-mode stderr notices
 
 ## Current State
 
 Observed in the current codebase:
 
-- `src/Mux.Core/Agent/ContextWindowManager.cs` exists, but it is not wired into `InteractiveCommand` or `AgentLoop`.
+- `src/Mux.Core/Agent/ContextWindowManager.cs` is wired into `InteractiveCommand` through `GetContextBudgetSnapshot()` and powers `/status`.
+- `src/Mux.Core/Agent/ContextBudgetSnapshot.cs` exists and surfaces usable input limit, warning threshold, remaining budget, reserved output, and safety margin.
+- `src/Mux.Core/Agent/ConversationCompactionPlanner.cs` exists and is used by summary-based `/compact`.
+- `src/Mux.Core/Agent/ConversationTrimCompactor.cs` exists and is used by `/compact trim` and interactive preflight trim fallback.
+- `src/Mux.Core/Agent/AgentLoop.cs` now performs strategy-aware in-run compaction before model calls when active conversation state exceeds the usable budget.
 - `src/Mux.Cli/Commands/InteractiveCommand.cs` stores `_ConversationHistory`, but only persists user and assistant text between turns. Tool call / tool result chatter is only kept inside the current `AgentLoop` run.
-- `InteractiveCommand` has `/clear`, but no `/context` or `/compact`.
-- `PrintCommand` already has a structured JSONL contract, so any compaction feature added to runtime behavior should also be surfaced there.
-- Current token estimation is too rough for a user-facing "remaining context" meter because it does not account for:
+- `InteractiveCommand` has `/status`, `/context`, `/compact`, `/compact summary`, `/compact trim`, and `/compact strategy [summary|trim]`.
+- Manual compaction and preflight auto-compaction live in `InteractiveCommand`; strategy-aware in-run compaction now exists in `AgentLoop`.
+- `PrintCommand` now surfaces runtime context warnings/compaction notices in text mode and serializes `context_status` / `context_compacted` in JSONL mode.
+- Current token estimation now accounts for:
   - output token reservation
   - tool definition payloads
-  - per-message protocol overhead
-  - MCP tool growth during a session
+  - system prompt cost
+  - persisted history
+- interactive preflight now also includes the pending user prompt in the estimate before a run starts
+- It still does not explicitly model protocol/message overhead and does not yet compact active in-run tool chatter.
 
 This matters because the feature is not just a UI affordance. It needs reliable enough accounting to prevent silent context overruns.
 
@@ -54,8 +91,19 @@ Recommended v1 behavior:
 1. After each completed turn, mux prints a short dim context footer.
 2. If usage crosses the warning threshold, mux prints a visible warning.
 3. If mux auto-compacts, it prints a one-line compaction summary.
-4. The user can inspect the current budget with `/context`.
+4. The user can inspect the current budget with `/status`.
 5. The user can manually compact with `/compact`.
+
+Status in current code:
+
+- `/status` is implemented.
+- `/context` alias is implemented.
+- `/compact` is implemented.
+- `/compact trim` is implemented.
+- Preflight warning and auto-compaction before interactive runs are implemented.
+- A low-noise post-turn context notice is implemented, but there is still no persistent footer.
+- Active in-run conversation compaction is implemented with trim-based behavior before model calls.
+- Structured `context_status` / `context_compacted` events are implemented.
 
 Example footer:
 
@@ -82,16 +130,31 @@ Important v1 choice:
 
 This keeps the scope realistic given the current `LineBuffer` and prompt redraw implementation.
 
+The current implementation follows that constraint by using a normal transcript line for post-turn context notices instead of reintroducing a pinned or redrawn footer.
+
 ### Manual Commands
 
-Add the following interactive commands:
+Planned command surface:
 
-- `/context`
-  - Show the current estimated context budget, warning threshold, compaction strategy, preserved turn count, and last compaction result.
+- `/status`
+  - Show the current estimated context budget, warning threshold, last compaction result, and related session metadata.
 - `/compact`
   - Run the default compaction strategy immediately against the persisted session history.
+- `/compact summary`
+  - Run a one-off summary-based compaction pass without changing the session default.
 - `/compact trim`
   - Run trim-only compaction without asking the model to summarize older turns.
+- `/compact strategy [summary|trim]`
+  - Show or change the active interactive-session compaction policy.
+
+Current implementation status:
+
+- [x] `/status`
+- [x] `/compact`
+- [x] `/compact summary`
+- [x] `/compact trim`
+- [x] `/compact strategy [summary|trim]`
+- [x] `/context` alias
 
 Command semantics:
 
@@ -224,14 +287,25 @@ Recommended additions:
 - `GetBudgetSnapshot(...)`
 - `NeedsCompaction(...)`
 
-#### B. `ConversationCompactor`
+#### B. `ConversationCompactionPlanner` / Manual Compaction Flow
 
-Add a new service in `src/Mux.Core/Agent/` responsible for:
+Current code does not yet have a standalone `ConversationCompactor` service. Instead it ships:
 
-- deciding which messages are eligible for compaction
-- generating synthetic summaries when enabled
-- trimming as fallback
-- returning a `CompactionResult`
+- `src/Mux.Core/Agent/ConversationCompactionPlanner.cs`
+- manual compaction logic in `src/Mux.Cli/Commands/InteractiveCommand.cs`
+
+Implemented responsibilities today:
+
+- deciding which persisted messages are eligible for compaction
+- preserving the most recent user-led turns
+- removing prior synthetic summaries before replanning
+- generating a synthetic summary message during manual `/compact`
+
+Still planned:
+
+- trim fallback
+- a standalone `CompactionResult`
+- automatic compaction orchestration outside the interactive command
 
 Recommended model objects:
 
@@ -274,7 +348,13 @@ Before starting a new `AgentLoop` run:
    - new user prompt
 2. If over warning threshold, show warning.
 3. If over the usable input limit and auto-compaction is enabled, compact persisted history before creating `AgentLoopOptions`.
-4. If still too large, tell the user what happened and suggest `/compact trim` or `/clear`.
+4. If still too large, tell the user what happened and suggest `/compact` or `/clear`.
+
+Status:
+
+- manual `/compact` is implemented in `InteractiveCommand`
+- preflight auto-compaction is implemented in `InteractiveCommand`
+- in-run trim-based compaction is implemented in `AgentLoop`
 
 #### In-Run in `AgentLoop`
 
@@ -296,6 +376,11 @@ Add two new event types:
 
 - `context_status`
 - `context_compacted`
+
+Status:
+
+- [x] `AgentEventTypeEnum.ContextStatus`
+- [x] `AgentEventTypeEnum.ContextCompacted`
 
 Recommended enum additions:
 
@@ -338,6 +423,11 @@ Extend `RunStartedEvent` with context metadata:
 - `warningThresholdTokens`
 - `tokenEstimationRatio`
 
+Status:
+
+- [x] `RunStartedEvent` now includes these fields
+- [x] `RunCompletedEvent` now includes these fields
+
 Extend `RunCompletedEvent` with:
 
 - `finalEstimatedTokens`
@@ -359,6 +449,11 @@ Text mode should write:
 - `ContextStatusEvent` warnings to `stderr`
 - `ContextCompactedEvent` notices to `stderr`
 
+Status:
+
+- [x] `PrintCommand` text mode writes context warnings/compaction notices to `stderr`
+- [x] `jsonl` mode serializes `context_status` / `context_compacted` in `StructuredOutputFormatter`
+
 `jsonl` mode should serialize both new events in `StructuredOutputFormatter`.
 
 ### Structured Contract Compatibility
@@ -374,10 +469,10 @@ Update docs to state this explicitly. If the team wants a stricter closed-set ev
 
 Extend `MuxSettings` with:
 
-- `autoCompactEnabled` (`bool`, default `true`)
-- `contextWarningThresholdPercent` (`int`, default `80`, clamp `50-95`)
-- `compactionStrategy` (`string`, `summary` or `trim`, default `summary`)
-- `compactionPreserveTurns` (`int`, default `3`, clamp `1-10`)
+- [x] `autoCompactEnabled` (`bool`, default `true`)
+- [x] `contextWarningThresholdPercent` (`int`, default `80`, clamp `50-95`)
+- [x] `compactionStrategy` (`string`, `summary` or `trim`, default `summary`)
+- [x] `compactionPreserveTurns` (`int`, default `3`, clamp `1-10`)
 
 Keep existing:
 
@@ -470,23 +565,23 @@ Tests:
 
 ### Unit Tests
 
-- [ ] Add `ContextWindowManager` tests for:
-  - [ ] usable input limit calculation
-  - [ ] warning threshold calculation
-  - [ ] output token reservation
-  - [ ] tool definition estimation
+- [x] Add `ContextWindowManager` tests for:
+  - [x] usable input limit calculation
+  - [x] warning threshold calculation
+  - [x] output token reservation
+  - [x] tool definition estimation
   - [ ] preserved-turn behavior inputs
-- [ ] Add `ConversationCompactor` tests for:
+- [x] Add `ConversationCompactionPlanner` tests for:
+  - [x] preserving last N turns
+  - [x] removing older synthetic summaries before replanning
   - [ ] summary replacement
   - [ ] trim-only fallback
-  - [ ] preserving last N turns
-  - [ ] replacing an older synthetic summary rather than stacking summaries
   - [ ] explicit failure when compaction cannot free enough room
-- [ ] Add `StructuredOutputFormatter` tests for:
-  - [ ] `context_status`
-  - [ ] `context_compacted`
-  - [ ] new `run_started` context fields
-  - [ ] new `run_completed` context fields
+- [x] Add `StructuredOutputFormatter` tests for:
+  - [x] `context_status`
+  - [x] `context_compacted`
+  - [x] new `run_started` context fields
+  - [x] new `run_completed` context fields
 - [ ] Add `MuxSettings` / `SettingsLoader` tests for new settings fields and clamps
 
 ### Automated / Contract Tests
@@ -494,7 +589,7 @@ Tests:
 - [ ] Extend `CliContractTests` so JSONL output still starts with `run_started` and ends with `run_completed`
 - [ ] Add a contract test where a low-context endpoint triggers `context_status` and `context_compacted`
 - [ ] Add a print-mode text test that confirms compaction notices stay on `stderr`
-- [ ] Add an agent-loop test with tool-result growth that forces in-run compaction
+- [x] Add an agent-loop test that forces in-run compaction
 
 ### Interactive Command Tests
 
@@ -503,24 +598,24 @@ Current `InteractiveCommand` is console-heavy and not easy to test directly.
 Recommended approach:
 
 - [ ] Extract context command handling into a small helper/service that can be unit tested
-- [ ] Add tests for `/context`, `/compact`, and `/compact trim`
+- [ ] Add tests for `/status`, `/compact`, and `/compact trim`
 - [ ] Verify `/endpoint` reset also resets compaction state
 
 ### Documentation Updates
 
-- [ ] Update `README.md` interactive commands list with `/context` and `/compact`
+- [x] Update `README.md` interactive commands list with `/status` and `/compact`
 - [ ] Update `USAGE.md` to describe compaction behavior and new JSONL events
 - [ ] Update `CONFIG.md` with new settings and defaults
-- [ ] Add a `CHANGELOG.md` entry when implementation lands
+- [x] Add a `CHANGELOG.md` entry when implementation lands
 
 ## Phased Delivery
 
 ### Phase 1: Safe Visibility
 
-- [ ] Wire real context accounting into the interactive command path
-- [ ] Add `/context`
+- [x] Wire real context accounting into the interactive command path
+- [x] Add `/status` (shipped instead of `/context`)
 - [ ] Show post-turn footer
-- [ ] Emit warning when approaching the limit
+- [x] Emit low-noise post-turn warning when approaching the limit
 
 Exit criteria:
 
@@ -529,10 +624,11 @@ Exit criteria:
 
 ### Phase 2: Manual and Automatic Compaction
 
-- [ ] Add `ConversationCompactor`
-- [ ] Add `/compact`
-- [ ] Add auto-compaction before model calls
-- [ ] Add trim fallback
+- [x] Add `ConversationCompactionPlanner`
+- [x] Add `/compact`
+- [x] Add preflight auto-compaction before interactive runs
+- [x] Add trim fallback
+- [x] Add trim-based in-run compaction before model calls
 
 Exit criteria:
 
@@ -572,19 +668,21 @@ Recommended answers:
 Use this section as the execution tracker.
 
 - [ ] Finalize open decisions
-- [ ] Expand context accounting so it includes output reserve and tool schema cost
-- [ ] Add settings and config documentation for warning/compaction policy
+- [x] Expand context accounting so it includes output reserve and tool schema cost
+- [x] Add settings and config documentation for warning/compaction policy
 - [ ] Add runtime compactor service and result models
-- [ ] Add `/context`
-- [ ] Add `/compact`
+- [x] Add `/status`
+- [x] Add `/compact`
+- [x] Add `/compact trim`
 - [ ] Emit interactive warning/footer lines
-- [ ] Compact preflight session history before new runs
+- [x] Compact preflight session history before new runs
 - [ ] Compact active in-run conversation before subsequent model calls
-- [ ] Add structured events and formatter support
-- [ ] Add print-mode stderr notices
-- [ ] Add unit tests
+- [x] Compact active in-run conversation before subsequent model calls
+- [x] Add structured events and formatter support
+- [x] Add print-mode stderr notices
+- [x] Add unit tests
 - [ ] Add automated contract tests
-- [ ] Update README / USAGE / CONFIG / CHANGELOG
+- [x] Update README / CONFIG / CHANGELOG
 
 ## Definition of Done
 
@@ -592,6 +690,6 @@ Use this section as the execution tracker.
 - [ ] mux warns before the usable limit is exhausted
 - [ ] mux emits a clear message when compaction occurs
 - [ ] `/compact` preserves useful context better than `/clear`
-- [ ] in-run tool chatter cannot silently exhaust context without mux attempting compaction first
-- [ ] `print --output-format jsonl` exposes compaction activity in a machine-readable way
+- [x] in-run tool chatter cannot silently exhaust context without mux attempting compaction first
+- [x] `print --output-format jsonl` exposes compaction activity in a machine-readable way
 - [ ] docs and tests cover the shipped behavior

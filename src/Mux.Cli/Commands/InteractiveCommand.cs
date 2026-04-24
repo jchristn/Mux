@@ -42,8 +42,7 @@ namespace Mux.Cli.Commands
         private const int TitleReviewIntervalTurns = 3;
         private const int MinimumTitleReviewMessages = 4;
         private const int MinimumTitleReviewChars = 240;
-        private const int ConversationStatusWarningThresholdPercent = 80;
-        private const int CompactionPreserveTurns = 3;
+        private const int PreflightCompactionTargetPercent = 60;
         private const string SyntheticSummaryPrefix = "[mux summary generated automatically; older conversation condensed]";
 
         private readonly QueuedMessageManager _QueuedMessages = new QueuedMessageManager();
@@ -102,6 +101,7 @@ namespace Mux.Cli.Commands
             SettingsLoader.EnsureConfigDirectory();
             _AllEndpoints = SettingsLoader.LoadEndpoints();
             _MuxSettings = SettingsLoader.LoadSettings();
+            CommandRuntimeResolver.ApplyMuxSettingsOverrides(settings, _MuxSettings);
             _McpServers = settings.NoMcp
                 ? new List<McpServerConfig>()
                 : SettingsLoader.LoadMcpServers();
@@ -713,6 +713,11 @@ namespace Mux.Cli.Commands
 
         private void StartRun(string prompt)
         {
+            if (!EnsureConversationFitsForPrompt(prompt))
+            {
+                return;
+            }
+
             EndpointConfig runEndpoint = CreateInteractiveRunEndpoint();
             _PromptHistory.Add(prompt);
             _CurrentCts?.Dispose();
@@ -730,6 +735,12 @@ namespace Mux.Cli.Commands
                 WorkingDirectory = _WorkingDirectory,
                 MaxIterations = _MuxSettings.MaxAgentIterations,
                 Verbose = _Verbose,
+                TokenEstimationRatio = _MuxSettings.TokenEstimationRatio,
+                ContextWindowSafetyMarginPercent = _MuxSettings.ContextWindowSafetyMarginPercent,
+                AutoCompactEnabled = _MuxSettings.AutoCompactEnabled,
+                ContextWarningThresholdPercent = _MuxSettings.ContextWarningThresholdPercent,
+                CompactionStrategy = _MuxSettings.CompactionStrategy,
+                CompactionPreserveTurns = _MuxSettings.CompactionPreserveTurns,
                 PromptUserFunc = RequestApprovalAsync,
                 AdditionalTools = _McpToolManager?.GetToolDefinitions(),
                 ExternalToolExecutor = _McpToolManager != null
@@ -904,6 +915,8 @@ namespace Mux.Cli.Commands
                 {
                     await MaybeRefreshConversationTitleAsync().ConfigureAwait(false);
                 }
+
+                MaybeWritePostTurnContextNotice();
             }
 
             if (_QueuedMessages.Count == 0 && _QueuePaused)
@@ -953,6 +966,26 @@ namespace Mux.Cli.Commands
                 case ErrorEvent errorEvent:
                     _RunHasVisibleOutput = true;
                     WriteFailureLine($"Error: {errorEvent.Code}: {errorEvent.Message}");
+                    break;
+
+                case ContextStatusEvent contextStatusEvent:
+                    _RunHasVisibleOutput = true;
+                    string contextLine =
+                        $"Context usage: est. {FormatTokenEstimate(contextStatusEvent.EstimatedTokens)} / {FormatTokenEstimate(contextStatusEvent.UsableInputLimit)} used | {FormatTokenEstimate(contextStatusEvent.RemainingTokens)} remaining.";
+                    if (string.Equals(contextStatusEvent.WarningLevel, "critical", StringComparison.Ordinal))
+                    {
+                        WriteFailureLine(contextLine);
+                    }
+                    else if (string.Equals(contextStatusEvent.WarningLevel, "approaching", StringComparison.Ordinal))
+                    {
+                        WriteNotificationLine(contextLine);
+                    }
+                    break;
+
+                case ContextCompactedEvent compactedEvent:
+                    _RunHasVisibleOutput = true;
+                    WriteNotificationLine(
+                        $"Auto-compacted context ({compactedEvent.Strategy}): est. {FormatTokenEstimate(compactedEvent.EstimatedTokensBefore)} -> {FormatTokenEstimate(compactedEvent.EstimatedTokensAfter)}.");
                     break;
 
                 case HeartbeatEvent:
@@ -1238,8 +1271,23 @@ namespace Mux.Cli.Commands
             return InteractiveChromeLayout.Calculate(_DraftBuffer, PromptWidth, GetBufferWidthSafe());
         }
 
-        private ContextBudgetSnapshot GetContextBudgetSnapshot()
+        private ContextBudgetSnapshot GetContextBudgetSnapshot(
+            List<ConversationMessage>? historyOverride = null,
+            string? pendingPrompt = null)
         {
+            List<ConversationMessage> messages = historyOverride != null
+                ? new List<ConversationMessage>(historyOverride)
+                : new List<ConversationMessage>(_ConversationHistory);
+
+            if (!string.IsNullOrWhiteSpace(pendingPrompt))
+            {
+                messages.Add(new ConversationMessage
+                {
+                    Role = RoleEnum.User,
+                    Content = pendingPrompt
+                });
+            }
+
             ContextWindowManager manager = new ContextWindowManager(
                 _CurrentEndpoint.ContextWindow,
                 _MuxSettings.TokenEstimationRatio,
@@ -1247,10 +1295,201 @@ namespace Mux.Cli.Commands
 
             return manager.GetBudgetSnapshot(
                 _SystemPrompt,
-                _ConversationHistory,
+                messages,
                 GetAllToolDefinitions(),
                 _CurrentEndpoint.MaxTokens,
-                ConversationStatusWarningThresholdPercent);
+                _MuxSettings.ContextWarningThresholdPercent);
+        }
+
+        private bool EnsureConversationFitsForPrompt(string prompt)
+        {
+            ContextBudgetSnapshot preflightSnapshot = GetContextBudgetSnapshot(pendingPrompt: prompt);
+
+            if (!preflightSnapshot.IsApproachingLimit)
+            {
+                return true;
+            }
+
+            if (!preflightSnapshot.IsOverLimit)
+            {
+                WriteNotificationLine(
+                    $"Context nearing the usable limit: est. {FormatTokenEstimate(preflightSnapshot.UsedTokens)} / {FormatTokenEstimate(preflightSnapshot.UsableInputLimit)} used. Older history will be compacted automatically if needed.");
+                return true;
+            }
+
+            if (!_MuxSettings.AutoCompactEnabled)
+            {
+                WriteFailureLine(
+                    $"Prompt exceeds the usable context budget: est. {FormatTokenEstimate(preflightSnapshot.UsedTokens)} / {FormatTokenEstimate(preflightSnapshot.UsableInputLimit)} used. Use /compact or /clear before retrying.");
+                return false;
+            }
+
+            return TryAutoCompactForPrompt(prompt, preflightSnapshot);
+        }
+
+        private void MaybeWritePostTurnContextNotice()
+        {
+            ContextBudgetSnapshot snapshot = GetContextBudgetSnapshot();
+
+            if (snapshot.IsOverLimit)
+            {
+                WriteFailureLine(
+                    $"Context is over the usable limit: est. {FormatTokenEstimate(snapshot.UsedTokens)} / {FormatTokenEstimate(snapshot.UsableInputLimit)} used. mux will compact older history before the next run.");
+                return;
+            }
+
+            if (snapshot.IsApproachingLimit)
+            {
+                WriteNotificationLine(
+                    $"Context usage: est. {FormatTokenEstimate(snapshot.UsedTokens)} / {FormatTokenEstimate(snapshot.UsableInputLimit)} used | {FormatTokenEstimate(snapshot.RemainingTokens)} remaining.");
+            }
+        }
+
+        private bool TryAutoCompactForPrompt(string prompt, ContextBudgetSnapshot beforeSnapshot)
+        {
+            string strategy = _MuxSettings.CompactionStrategy;
+            List<ConversationMessage> workingHistory = new List<ConversationMessage>(_ConversationHistory);
+            bool usedSummary = false;
+            bool usedTrim = false;
+            bool usedTrimFallback = false;
+
+            try
+            {
+                if (string.Equals(strategy, "summary", StringComparison.Ordinal))
+                {
+                    SetStatusNotice("compacting conversation...", 30000);
+                    if (TryCreateSummaryCompactedHistory(workingHistory, out List<ConversationMessage> summaryHistory, out string? summaryFailure))
+                    {
+                        workingHistory = summaryHistory;
+                        usedSummary = true;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(summaryFailure))
+                    {
+                        usedTrimFallback = true;
+                    }
+                    else
+                    {
+                        WriteFailureLine(
+                            $"Prompt exceeds the usable context budget: est. {FormatTokenEstimate(beforeSnapshot.UsedTokens)} / {FormatTokenEstimate(beforeSnapshot.UsableInputLimit)} used. No older history is eligible for automatic compaction.");
+                        return false;
+                    }
+                }
+
+                ContextBudgetSnapshot afterSummarySnapshot = GetContextBudgetSnapshot(workingHistory, pendingPrompt: prompt);
+                int targetUsedTokens = Math.Max(
+                    1,
+                    (int)(afterSummarySnapshot.UsableInputLimit * (PreflightCompactionTargetPercent / 100.0)));
+
+                if (string.Equals(strategy, "trim", StringComparison.Ordinal) || afterSummarySnapshot.IsOverLimit)
+                {
+                    ConversationTrimResult trimResult = ConversationTrimCompactor.TrimToTarget(
+                        workingHistory,
+                        _MuxSettings.CompactionPreserveTurns,
+                        targetUsedTokens,
+                        candidateHistory => GetContextBudgetSnapshot(candidateHistory, pendingPrompt: prompt).UsedTokens);
+
+                    if (trimResult.DidTrim)
+                    {
+                        workingHistory = trimResult.CompactedHistory;
+                        usedTrim = true;
+                    }
+                    else if (!usedSummary)
+                    {
+                        WriteFailureLine(
+                            $"Prompt exceeds the usable context budget: est. {FormatTokenEstimate(beforeSnapshot.UsedTokens)} / {FormatTokenEstimate(beforeSnapshot.UsableInputLimit)} used. No older history is eligible for automatic compaction.");
+                        return false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteFailureLine($"Automatic compaction failed: {ex.Message}");
+                return false;
+            }
+            finally
+            {
+                ClearStatusNotice();
+            }
+
+            ContextBudgetSnapshot afterSnapshot = GetContextBudgetSnapshot(workingHistory, pendingPrompt: prompt);
+
+            if (afterSnapshot.IsOverLimit)
+            {
+                WriteFailureLine(
+                    $"Prompt still exceeds the usable context budget after compaction: est. {FormatTokenEstimate(afterSnapshot.UsedTokens)} / {FormatTokenEstimate(afterSnapshot.UsableInputLimit)} used. Use /clear or shorten the next prompt.");
+                return false;
+            }
+
+            string strategyLabel = usedSummary && usedTrim
+                ? "summary + trim"
+                : usedSummary
+                    ? "summary"
+                    : usedTrimFallback
+                        ? "trim fallback"
+                        : "trim";
+
+            CommitCompactedHistory(
+                workingHistory,
+                $"auto {strategyLabel}: {FormatTokenEstimate(beforeSnapshot.UsedTokens)} -> {FormatTokenEstimate(afterSnapshot.UsedTokens)}");
+
+            WriteSuccessLine(
+                $"Auto-compacted older history ({strategyLabel}): est. {FormatTokenEstimate(beforeSnapshot.UsedTokens)} -> {FormatTokenEstimate(afterSnapshot.UsedTokens)} before the next run.");
+            return true;
+        }
+
+        private bool TryCreateSummaryCompactedHistory(
+            List<ConversationMessage> history,
+            out List<ConversationMessage> compactedHistory,
+            out string? failureMessage)
+        {
+            ConversationCompactionPlan plan = ConversationCompactionPlanner.CreatePlan(
+                history,
+                _MuxSettings.CompactionPreserveTurns,
+                SyntheticSummaryPrefix);
+
+            if (!plan.CanCompact)
+            {
+                compactedHistory = new List<ConversationMessage>(history);
+                failureMessage = null;
+                return false;
+            }
+
+            try
+            {
+                string summary = GenerateCompactionSummary(plan.MessagesToCompact);
+                if (string.IsNullOrWhiteSpace(summary))
+                {
+                    compactedHistory = new List<ConversationMessage>(history);
+                    failureMessage = "Compaction produced no summary.";
+                    return false;
+                }
+
+                compactedHistory = new List<ConversationMessage>
+                {
+                    new ConversationMessage
+                    {
+                        Role = RoleEnum.System,
+                        Content = $"{SyntheticSummaryPrefix}{Environment.NewLine}{Environment.NewLine}{summary.Trim()}"
+                    }
+                };
+                compactedHistory.AddRange(plan.MessagesToPreserve);
+                failureMessage = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                compactedHistory = new List<ConversationMessage>(history);
+                failureMessage = ex.Message;
+                return false;
+            }
+        }
+
+        private void CommitCompactedHistory(List<ConversationMessage> compactedHistory, string summary)
+        {
+            _ConversationHistory = compactedHistory ?? new List<ConversationMessage>();
+            _CompactionCount++;
+            _LastCompactionUtc = DateTime.UtcNow;
+            _LastCompactionSummary = summary ?? string.Empty;
         }
 
         private List<ToolDefinition> GetAllToolDefinitions()
@@ -1992,7 +2231,7 @@ namespace Mux.Cli.Commands
 
             if (allowBusyCommandsOnly && !CanExecuteSlashCommandWhileBusy(command, argument))
             {
-                WriteNotificationLine("That command can't run while mux is busy. Use /queue, /status, /help, /title, /tools, /system, /endpoint, or /mcp list.");
+                WriteNotificationLine("That command can't run while mux is busy. Use /queue, /status, /context, /compact strategy, /help, /title, /tools, /system, /endpoint, or /mcp list.");
                 return true;
             }
 
@@ -2016,6 +2255,7 @@ namespace Mux.Cli.Commands
                     return true;
 
                 case "/status":
+                case "/context":
                     HandleStatusCommand();
                     return true;
 
@@ -2209,19 +2449,23 @@ namespace Mux.Cli.Commands
             table.AddRow("Queued prompts", _QueuedMessages.Count.ToString());
             table.AddRow("Queue paused", _QueuePaused ? "yes" : "no");
             table.AddRow("Auto title updates", _ConversationTitleSetByUser ? "disabled (user title)" : $"enabled ({TitleReviewIntervalTurns} successful turns)");
+            table.AddRow("Auto compaction", _MuxSettings.AutoCompactEnabled ? "enabled" : "disabled");
+            table.AddRow("Compaction strategy", Markup.Escape(_MuxSettings.CompactionStrategy));
+            table.AddRow("Preserve turns", _MuxSettings.CompactionPreserveTurns.ToString());
             table.AddRow("Available tools", allTools.Count.ToString());
             table.AddRow("System prompt", $"{_SystemPrompt.Length} chars | est. {FormatTokenEstimate(snapshot.SystemPromptTokens)}");
             table.AddRow("History usage", FormatTokenEstimate(snapshot.MessageTokens));
             table.AddRow("Tool surface usage", FormatTokenEstimate(snapshot.ToolTokens));
             table.AddRow("Context usage", $"{FormatTokenEstimate(snapshot.UsedTokens)} / {FormatTokenEstimate(snapshot.UsableInputLimit)} used");
             table.AddRow("Context remaining", FormatTokenEstimate(snapshot.RemainingTokens));
-            table.AddRow("Warning threshold", FormatTokenEstimate(snapshot.WarningThresholdTokens));
+            table.AddRow("Warning threshold", $"{FormatTokenEstimate(snapshot.WarningThresholdTokens)} ({_MuxSettings.ContextWarningThresholdPercent}%)");
             table.AddRow("Hard window", FormatTokenEstimate(snapshot.ContextWindowSize));
             table.AddRow("Reserved output", FormatTokenEstimate(snapshot.ReservedOutputTokens));
             table.AddRow("Safety margin", FormatTokenEstimate(snapshot.SafetyMarginTokens));
             table.AddRow("Compactions", _CompactionCount.ToString());
             table.AddRow("Last compaction", string.IsNullOrWhiteSpace(_LastCompactionSummary) ? "none" : Markup.Escape(_LastCompactionSummary));
             table.AddRow("Estimate scope", "system prompt + persisted history + tools");
+            table.AddRow("Preflight behavior", "new prompts are checked before each run and compacted automatically when needed");
 
             WriteOutputBlock(() =>
             {
@@ -2232,73 +2476,118 @@ namespace Mux.Cli.Commands
         }
 
         /// <summary>
-        /// Handles the /compact command by summarizing older preserved history into one synthetic summary message.
+        /// Handles the /compact command by summarizing or trimming older preserved history.
         /// </summary>
         /// <param name="argument">Optional compact subcommand.</param>
         private void HandleCompactCommand(string argument)
         {
+            string trimmedArgument = argument?.Trim() ?? string.Empty;
+
+            if (TryHandleCompactStrategyCommand(trimmedArgument))
+            {
+                return;
+            }
+
             if (!EnsureQueueEmptyForStateChange("compact the conversation"))
             {
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(argument))
-            {
-                WriteMarkupLine("[yellow]Usage: /compact[/]");
-                return;
-            }
+            string strategy = _MuxSettings.CompactionStrategy;
 
-            ConversationCompactionPlan plan = ConversationCompactionPlanner.CreatePlan(
-                _ConversationHistory,
-                CompactionPreserveTurns,
-                SyntheticSummaryPrefix);
-
-            if (!plan.CanCompact)
+            if (!string.IsNullOrWhiteSpace(trimmedArgument))
             {
-                WriteMarkupLine("[dim]Nothing old enough to compact yet.[/]");
-                return;
+                if (!MuxSettings.TryNormalizeCompactionStrategy(trimmedArgument, out strategy))
+                {
+                    WriteMarkupLine("[yellow]Usage: /compact, /compact [summary|trim], or /compact strategy [summary|trim][/]");
+                    return;
+                }
             }
 
             ContextBudgetSnapshot beforeSnapshot = GetContextBudgetSnapshot();
-            string summary;
 
-            try
+            if (string.Equals(strategy, "trim", StringComparison.Ordinal))
             {
-                SetStatusNotice("compacting conversation...");
-                summary = GenerateCompactionSummary(plan.MessagesToCompact);
+                ConversationTrimResult trimResult = ConversationTrimCompactor.TrimAllEligible(
+                    _ConversationHistory,
+                    _MuxSettings.CompactionPreserveTurns,
+                    candidateHistory => GetContextBudgetSnapshot(candidateHistory).UsedTokens);
+
+                if (!trimResult.DidTrim)
+                {
+                    WriteMarkupLine("[dim]Nothing old enough to compact yet.[/]");
+                    return;
+                }
+
+                CommitCompactedHistory(
+                    trimResult.CompactedHistory,
+                    $"manual trim: {FormatTokenEstimate(beforeSnapshot.UsedTokens)} -> {FormatTokenEstimate(trimResult.UsedTokensAfter)}");
+                WriteSuccessLine(
+                    $"Manual trim compaction complete: est. {FormatTokenEstimate(beforeSnapshot.UsedTokens)} -> {FormatTokenEstimate(trimResult.UsedTokensAfter)}.");
+                return;
             }
-            catch (Exception ex)
+
+            SetStatusNotice("compacting conversation...", 30000);
+
+            if (!TryCreateSummaryCompactedHistory(_ConversationHistory, out List<ConversationMessage> compactedHistory, out string? failureMessage))
             {
                 ClearStatusNotice();
-                WriteMarkupLine($"[red]Compaction failed: {Markup.Escape(ex.Message)}[/]");
+
+                if (string.IsNullOrWhiteSpace(failureMessage))
+                {
+                    WriteMarkupLine("[dim]Nothing old enough to compact yet.[/]");
+                }
+                else
+                {
+                    WriteFailureLine($"Compaction failed: {failureMessage}");
+                }
                 return;
             }
 
             ClearStatusNotice();
+            CommitCompactedHistory(
+                compactedHistory,
+                string.Empty);
+            ContextBudgetSnapshot afterSnapshot = GetContextBudgetSnapshot();
+            _LastCompactionSummary = $"manual summary: {FormatTokenEstimate(beforeSnapshot.UsedTokens)} -> {FormatTokenEstimate(afterSnapshot.UsedTokens)}";
+            WriteSuccessLine($"Manual summary compaction complete: est. {FormatTokenEstimate(beforeSnapshot.UsedTokens)} -> {FormatTokenEstimate(afterSnapshot.UsedTokens)}.");
+        }
 
-            if (string.IsNullOrWhiteSpace(summary))
+        private bool TryHandleCompactStrategyCommand(string trimmedArgument)
+        {
+            if (string.IsNullOrWhiteSpace(trimmedArgument))
             {
-                WriteFailureLine("Compaction produced no summary.");
-                return;
+                return false;
             }
 
-            List<ConversationMessage> compactedHistory = new List<ConversationMessage>
+            string[] parts = trimmedArgument.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            if (!string.Equals(parts[0], "strategy", StringComparison.OrdinalIgnoreCase))
             {
-                new ConversationMessage
-                {
-                    Role = RoleEnum.System,
-                    Content = $"{SyntheticSummaryPrefix}{Environment.NewLine}{Environment.NewLine}{summary.Trim()}"
-                }
-            };
-            compactedHistory.AddRange(plan.MessagesToPreserve);
-            _ConversationHistory = compactedHistory;
-            _CompactionCount++;
-            _LastCompactionUtc = DateTime.UtcNow;
+                return false;
+            }
 
-            ContextBudgetSnapshot afterSnapshot = GetContextBudgetSnapshot();
-            _LastCompactionSummary = $"manual: {FormatTokenEstimate(beforeSnapshot.UsedTokens)} -> {FormatTokenEstimate(afterSnapshot.UsedTokens)}";
+            if (parts.Length == 1)
+            {
+                WriteNotificationLine($"Compaction strategy: {_MuxSettings.CompactionStrategy}");
+                return true;
+            }
 
-            WriteSuccessLine($"Manual compaction complete: est. {FormatTokenEstimate(beforeSnapshot.UsedTokens)} -> {FormatTokenEstimate(afterSnapshot.UsedTokens)}.");
+            string requestedStrategy = parts[1].Trim();
+            if (!MuxSettings.TryNormalizeCompactionStrategy(requestedStrategy, out string normalizedStrategy))
+            {
+                WriteMarkupLine("[yellow]Usage: /compact strategy [summary|trim][/]");
+                return true;
+            }
+
+            if (string.Equals(_MuxSettings.CompactionStrategy, normalizedStrategy, StringComparison.Ordinal))
+            {
+                WriteNotificationLine($"Compaction strategy is already set to {normalizedStrategy}.");
+                return true;
+            }
+
+            _MuxSettings.CompactionStrategy = normalizedStrategy;
+            WriteSuccessLine($"Compaction strategy set to {normalizedStrategy} for this session.");
+            return true;
         }
 
         /// <summary>
@@ -2454,7 +2743,11 @@ namespace Mux.Cli.Commands
             table.AddRow("[cyan]/endpoint[/] [dim]<name>[/]", "Switch to a named endpoint (clears conversation)");
             table.AddRow("[cyan]/tools[/]", "List all available tools with descriptions");
             table.AddRow("[cyan]/status[/]", "Show session metadata, context usage, title, and queue state");
-            table.AddRow("[cyan]/compact[/]", "Compact older conversation history into a synthetic summary");
+            table.AddRow("[cyan]/context[/]", "Alias for /status");
+            table.AddRow("[cyan]/compact[/]", "Compact older conversation history with the configured strategy");
+            table.AddRow("[cyan]/compact summary[/]", "Compact older conversation history with a one-off summary pass");
+            table.AddRow("[cyan]/compact trim[/]", "Trim older conversation history without asking the model to summarize it");
+            table.AddRow("[cyan]/compact strategy[/] [dim][summary|trim][/]", "Show or set the session compaction strategy");
             table.AddRow("[cyan]/title[/]", "Show the current conversation title");
             table.AddRow("[cyan]/title[/] [dim]<text>[/]", "Set the conversation title and disable automatic retitling");
             table.AddRow("[cyan]/clear[/]", "Clear conversation history");
@@ -2490,6 +2783,18 @@ namespace Mux.Cli.Commands
             });
         }
 
+        private static bool IsCompactStrategyCommand(string argument)
+        {
+            if (string.IsNullOrWhiteSpace(argument))
+            {
+                return false;
+            }
+
+            string[] parts = argument.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length > 0
+                && string.Equals(parts[0], "strategy", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static bool CanExecuteSlashCommandWhileBusy(string command, string argument)
         {
             switch (command)
@@ -2497,10 +2802,14 @@ namespace Mux.Cli.Commands
                 case "/help":
                 case "/?":
                 case "/status":
+                case "/context":
                 case "/tools":
                 case "/queue":
                 case "/title":
                     return true;
+
+                case "/compact":
+                    return IsCompactStrategyCommand(argument);
 
                 case "/system":
                 case "/endpoint":

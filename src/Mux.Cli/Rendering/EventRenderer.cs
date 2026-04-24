@@ -96,6 +96,16 @@ namespace Mux.Cli.Rendering
                             }
                             break;
 
+                        case ContextStatusEvent contextStatusEvent:
+                            RenderContextStatus(contextStatusEvent);
+                            wasToolCall = false;
+                            break;
+
+                        case ContextCompactedEvent contextCompactedEvent:
+                            RenderContextCompacted(contextCompactedEvent);
+                            wasToolCall = false;
+                            break;
+
                         default:
                             break;
                     }
@@ -171,6 +181,36 @@ namespace Mux.Cli.Rendering
         private static void RenderError(ErrorEvent errorEvent)
         {
             AnsiConsole.MarkupLine($"[red]Error: {Markup.Escape(errorEvent.Code)}: {Markup.Escape(errorEvent.Message)}[/]");
+        }
+
+        /// <summary>
+        /// Renders a context usage event.
+        /// </summary>
+        /// <param name="contextStatusEvent">The context status event.</param>
+        private static void RenderContextStatus(ContextStatusEvent contextStatusEvent)
+        {
+            string line =
+                $"Context usage: est. {contextStatusEvent.EstimatedTokens} / {contextStatusEvent.UsableInputLimit} tokens | {contextStatusEvent.RemainingTokens} remaining.";
+
+            if (string.Equals(contextStatusEvent.WarningLevel, "critical", StringComparison.Ordinal))
+            {
+                AnsiConsole.MarkupLine($"[red]{Markup.Escape(line)}[/]");
+            }
+            else if (string.Equals(contextStatusEvent.WarningLevel, "approaching", StringComparison.Ordinal))
+            {
+                AnsiConsole.MarkupLine($"[dim]{Markup.Escape(line)}[/]");
+            }
+        }
+
+        /// <summary>
+        /// Renders a context compaction event.
+        /// </summary>
+        /// <param name="contextCompactedEvent">The compaction event.</param>
+        private static void RenderContextCompacted(ContextCompactedEvent contextCompactedEvent)
+        {
+            string line =
+                $"Auto-compacted context ({contextCompactedEvent.Strategy}): est. {contextCompactedEvent.EstimatedTokensBefore} -> {contextCompactedEvent.EstimatedTokensAfter} tokens.";
+            AnsiConsole.MarkupLine($"[dim]{Markup.Escape(line)}[/]");
         }
 
         /// <summary>
@@ -270,6 +310,8 @@ namespace Mux.Cli.Rendering
                 || agentEvent is ToolCallApprovedEvent
                 || agentEvent is ToolCallCompletedEvent
                 || agentEvent is ErrorEvent
+                || agentEvent is ContextStatusEvent
+                || agentEvent is ContextCompactedEvent
                 || agentEvent is HeartbeatEvent;
         }
 

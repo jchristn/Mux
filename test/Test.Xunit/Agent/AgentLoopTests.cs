@@ -48,6 +48,12 @@ namespace Test.Xunit.Agent
             Assert.Equal(ApprovalPolicyEnum.Ask, options.ApprovalPolicy);
             Assert.Equal(25, options.MaxIterations);
             Assert.False(options.Verbose);
+            Assert.Equal(3.5, options.TokenEstimationRatio);
+            Assert.Equal(15, options.ContextWindowSafetyMarginPercent);
+            Assert.True(options.AutoCompactEnabled);
+            Assert.Equal(80, options.ContextWarningThresholdPercent);
+            Assert.Equal("summary", options.CompactionStrategy);
+            Assert.Equal(3, options.CompactionPreserveTurns);
             Assert.Null(options.AdditionalTools);
             Assert.Null(options.PromptUserFunc);
             Assert.Null(options.ExternalToolExecutor);

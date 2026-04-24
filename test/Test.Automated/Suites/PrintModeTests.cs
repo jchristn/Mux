@@ -54,6 +54,7 @@ namespace Test.Automated.Suites
             await RunTest("AgentLoop_CompletesSuccessfully", AgentLoop_CompletesSuccessfully);
             await RunTest("HeartbeatEmitted_WhenToolsUsed", HeartbeatEmitted_WhenToolsUsed);
             await RunTest("MaxIterations_StopsLoop", MaxIterations_StopsLoop);
+            await RunTest("ContextCompaction_EmittedWhenHistoryIsTooLarge", ContextCompaction_EmittedWhenHistoryIsTooLarge);
         }
 
         #endregion
@@ -147,6 +148,65 @@ namespace Test.Automated.Suites
                 bool hasMaxIterationsError = events.Any((AgentEvent e) =>
                     e is ErrorEvent errorEvent && errorEvent.Code == "max_iterations_reached");
                 AssertTrue(hasMaxIterationsError, "Expected ErrorEvent with code 'max_iterations_reached'");
+            }
+        }
+
+        /// <summary>
+        /// Verifies that the agent loop emits context warning and compaction events when
+        /// the carried conversation history exceeds the active usable context budget.
+        /// </summary>
+        private async Task ContextCompaction_EmittedWhenHistoryIsTooLarge()
+        {
+            using (MockHttpServer server = new MockHttpServer())
+            {
+                string sseChunk = "{\"choices\":[{\"delta\":{\"content\":\"Context compaction succeeded.\"},\"finish_reason\":\"stop\"}]}";
+                server.RegisterStreamingResponse("context compaction test", new List<string> { sseChunk });
+                server.Start();
+
+                EndpointConfig endpoint = BuildEndpoint(server.BaseUrl);
+                endpoint.ContextWindow = 1024;
+                endpoint.MaxTokens = 1024;
+
+                List<ConversationMessage> history = new List<ConversationMessage>();
+                for (int i = 0; i < 8; i++)
+                {
+                    history.Add(new ConversationMessage
+                    {
+                        Role = RoleEnum.User,
+                        Content = new string('u', 100)
+                    });
+                    history.Add(new ConversationMessage
+                    {
+                        Role = RoleEnum.Assistant,
+                        Content = new string('a', 100)
+                    });
+                }
+
+                AgentLoopOptions options = new AgentLoopOptions(endpoint)
+                {
+                    ApprovalPolicy = ApprovalPolicyEnum.AutoApprove,
+                    MaxIterations = 5,
+                    ConversationHistory = history,
+                    CompactionPreserveTurns = 1,
+                    ContextWindowSafetyMarginPercent = 15,
+                    ContextWarningThresholdPercent = 80,
+                    TokenEstimationRatio = 2.0
+                };
+
+                List<AgentEvent> events = await CollectEvents(options, "context compaction test");
+
+                bool hasContextStatus = events.Any((AgentEvent e) => e is ContextStatusEvent);
+                AssertTrue(hasContextStatus, "Expected a ContextStatusEvent when usage approaches or exceeds the usable budget");
+
+                bool hasContextCompacted = events.Any((AgentEvent e) => e is ContextCompactedEvent);
+                AssertTrue(hasContextCompacted, "Expected a ContextCompactedEvent when old history is trimmed");
+
+                bool hasTextEvent = events.Any((AgentEvent e) => e is AssistantTextEvent);
+                AssertTrue(hasTextEvent, "Expected the run to continue successfully after compaction");
+
+                bool hasContextLimitError = events.Any((AgentEvent e) =>
+                    e is ErrorEvent errorEvent && errorEvent.Code == "context_limit_exceeded");
+                AssertFalse(hasContextLimitError, "Did not expect context_limit_exceeded after successful compaction");
             }
         }
 
