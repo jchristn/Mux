@@ -31,12 +31,14 @@ namespace Mux.Core.Llm
         /// <param name="messages">The conversation messages to send.</param>
         /// <param name="tools">The tool definitions available to the model.</param>
         /// <param name="endpoint">The endpoint configuration for the OpenAI backend.</param>
+        /// <param name="stream">True to request an SSE stream; false for a single JSON response.</param>
         /// <returns>A fully configured <see cref="HttpRequestMessage"/>.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the endpoint has no Authorization header configured.</exception>
         public override HttpRequestMessage BuildRequest(
             List<ConversationMessage> messages,
             List<ToolDefinition> tools,
-            EndpointConfig endpoint)
+            EndpointConfig endpoint,
+            bool stream = true)
         {
             if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
 
@@ -46,7 +48,7 @@ namespace Mux.Core.Llm
                     "OpenAI adapter requires an Authorization header. Add an 'Authorization' entry to the endpoint's headers dictionary.");
             }
 
-            HttpRequestMessage request = base.BuildRequest(messages, tools, endpoint);
+            HttpRequestMessage request = base.BuildRequest(messages, tools, endpoint, stream);
 
             // Ensure parallel_tool_calls is set in the request body if tools are provided
             if (tools != null && tools.Count > 0 && request.Content != null)

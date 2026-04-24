@@ -5,6 +5,7 @@ namespace Mux.Cli.Rendering
     using System.Text.Json;
     using System.Threading.Tasks;
     using Mux.Core.Agent;
+    using Mux.Core.Utility;
     using Spectre.Console;
 
     /// <summary>
@@ -91,7 +92,7 @@ namespace Mux.Cli.Rendering
                         case HeartbeatEvent heartbeatEvent:
                             if (verbose)
                             {
-                                Console.Error.WriteLine($"  [step {heartbeatEvent.StepNumber}]");
+                                Console.Error.WriteLine(ConsoleMessageStyler.Notification($"  Step {heartbeatEvent.StepNumber}"));
                             }
                             break;
 
@@ -142,26 +143,24 @@ namespace Mux.Cli.Rendering
         #region Private-Methods
 
         /// <summary>
-        /// Renders a completed tool call as a single line:
-        /// [tool:name]: summary success/fail Nms
+        /// Renders a completed tool call as a single line.
         /// </summary>
         /// <param name="completedEvent">The tool call completed event.</param>
         private static void RenderToolResult(ToolCallCompletedEvent completedEvent)
         {
             string name = completedEvent.ToolName;
             string summary = SummarizeResult(completedEvent.Result.Content);
-            string status = completedEvent.Result.Success ? "ok" : "FAIL";
             long elapsed = completedEvent.ElapsedMs;
 
             if (completedEvent.Result.Success)
             {
                 AnsiConsole.MarkupLine(
-                    $"[dim][[tool:{Markup.Escape(name)}]][/] [dim]{Markup.Escape(summary)}[/] [green]{status}[/] [dim]{elapsed}ms[/]");
+                    $"[green]Tool {Markup.Escape(name)}: {Markup.Escape(summary)} ok {elapsed}ms[/]");
             }
             else
             {
                 AnsiConsole.MarkupLine(
-                    $"[dim][[tool:{Markup.Escape(name)}]][/] [red]{Markup.Escape(summary)}[/] [red]{status}[/] [dim]{elapsed}ms[/]");
+                    $"[red]Tool {Markup.Escape(name)}: {Markup.Escape(summary)} failed {elapsed}ms[/]");
             }
         }
 
@@ -171,7 +170,7 @@ namespace Mux.Cli.Rendering
         /// <param name="errorEvent">The error event.</param>
         private static void RenderError(ErrorEvent errorEvent)
         {
-            AnsiConsole.MarkupLine($"[red][[error]] {Markup.Escape(errorEvent.Code)}: {Markup.Escape(errorEvent.Message)}[/]");
+            AnsiConsole.MarkupLine($"[red]Error: {Markup.Escape(errorEvent.Code)}: {Markup.Escape(errorEvent.Message)}[/]");
         }
 
         /// <summary>

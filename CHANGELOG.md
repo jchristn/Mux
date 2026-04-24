@@ -2,7 +2,32 @@
 
 All notable changes to mux are documented here.
 
-## 2026-03-31
+## v0.2.0 - 2026-04-24
+
+### Added
+
+- Interactive queued-message support in the REPL so users can keep drafting while mux is busy and queue the next prompt with `Tab`
+- `/queue`, `/queue clear`, `/queue drop-last`, and `/queue resume` interactive commands for queue inspection and control
+- `/status`, `/compact`, and `/title` interactive commands for session inspection, history compaction, and direct title control
+- `Alt+Up` editing for the newest queued prompt during interactive sessions
+- Inline interactive status above the prompt for busy, paused, and approval states
+- Automatic conversation-title tracking in interactive mode, including `Conversation title update: ...` transcript notices when the model revises the title
+- Estimated context-budget reporting for system prompt, persisted history, tool surface, remaining budget, and compaction metadata
+
+### Changed
+
+- `Esc` now cancels the active interactive generation without exiting mux
+- Cancelling or failing an interactive run pauses queued-message auto-dispatch until the user resumes it
+- Interactive `/clear` now redraws the screen with the current conversation title at the top
+- Non-streaming LLM calls now build non-streaming backend requests, which stabilizes `probe` and the new model-driven title/compaction sidecar calls
+- Interactive help and README documentation now describe queueing, cancellation, and the inline status-line behavior
+
+### Testing
+
+- Added `QueuedMessageManager` unit coverage for FIFO dequeue, newest-item editing/removal, and queue clearing
+- Verified with `dotnet test src\Mux.sln --nologo`
+
+## v0.1.0 - 2026-03-31
 
 ### Added
 

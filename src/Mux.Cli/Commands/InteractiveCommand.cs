@@ -7,10 +7,12 @@ namespace Mux.Cli.Commands
     using System.Text;
     using System.Text.Json;
     using System.Threading;
+    using System.Threading.Channels;
     using System.Threading.Tasks;
     using Mux.Cli.Rendering;
     using Mux.Core.Agent;
     using Mux.Core.Enums;
+    using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Settings;
     using Mux.Core.Tools;
@@ -26,11 +28,26 @@ namespace Mux.Cli.Commands
     }
 
     /// <summary>
-    /// Interactive REPL command that provides a multi-line input prompt and streams agent responses.
+    /// Interactive REPL command that supports queued prompts while the current run is still active.
     /// </summary>
     public class InteractiveCommand : AsyncCommand<InteractiveSettings>
     {
         #region Private-Members
+
+        private const int PromptWidth = 5;
+        private const int InputPollDelayMs = 25;
+        private const int PromptTopPaddingLines = 1;
+        private const int PromptSpacingBelowStatusLines = 1;
+        private const string ThinkingText = "Thinking...";
+        private const int TitleReviewIntervalTurns = 3;
+        private const int MinimumTitleReviewMessages = 4;
+        private const int MinimumTitleReviewChars = 240;
+        private const int ConversationStatusWarningThresholdPercent = 80;
+        private const int CompactionPreserveTurns = 3;
+        private const string SyntheticSummaryPrefix = "[mux summary generated automatically; older conversation condensed]";
+
+        private readonly QueuedMessageManager _QueuedMessages = new QueuedMessageManager();
+        private readonly object _ConsoleSync = new object();
 
         private CancellationTokenSource? _CurrentCts = null;
         private DateTime _LastCtrlCTime = DateTime.MinValue;
@@ -38,7 +55,36 @@ namespace Mux.Cli.Commands
         private PromptHistory _PromptHistory = new PromptHistory();
         private McpToolManager? _McpToolManager = null;
         private List<EndpointConfig> _AllEndpoints = new List<EndpointConfig>();
+        private List<McpServerConfig> _McpServers = new List<McpServerConfig>();
         private EndpointConfig _CurrentEndpoint = new EndpointConfig();
+        private MuxSettings _MuxSettings = new MuxSettings();
+        private ApprovalPolicyEnum _ApprovalPolicy = ApprovalPolicyEnum.Ask;
+        private string _WorkingDirectory = string.Empty;
+        private string _SystemPrompt = string.Empty;
+        private bool _Verbose = false;
+        private bool _ShouldExit = false;
+        private bool _QueuePaused = false;
+        private bool _AssistantTextOpen = false;
+        private bool _RunHasVisibleOutput = false;
+        private int _ChromeTop = 0;
+        private int _PromptTop = 0;
+        private int _RenderedPromptRowCount = 0;
+        private int _OutputCursorLeft = 0;
+        private int _OutputCursorTop = 0;
+        private bool _OutputEndsWithPromptSpacer = false;
+        private int _LastBufferWidth = -1;
+        private string _TransientStatusNotice = string.Empty;
+        private DateTime _TransientStatusNoticeExpiresUtc = DateTime.MinValue;
+        private string? _RetryStatusMessage = null;
+        private string _ConversationTitle = SessionTitleHelper.DefaultTitle;
+        private bool _ConversationTitleSetByUser = false;
+        private int _TurnsSinceLastTitleReview = 0;
+        private int _CompactionCount = 0;
+        private string _LastCompactionSummary = string.Empty;
+        private DateTime _LastCompactionUtc = DateTime.MinValue;
+        private LineBuffer _DraftBuffer = new LineBuffer();
+        private ApprovalRequestState? _PendingApproval = null;
+        private ActiveRunState? _ActiveRun = null;
 
         #endregion
 
@@ -55,10 +101,11 @@ namespace Mux.Cli.Commands
         {
             SettingsLoader.EnsureConfigDirectory();
             _AllEndpoints = SettingsLoader.LoadEndpoints();
-            MuxSettings muxSettings = SettingsLoader.LoadSettings();
-            List<McpServerConfig> mcpServers = settings.NoMcp
+            _MuxSettings = SettingsLoader.LoadSettings();
+            _McpServers = settings.NoMcp
                 ? new List<McpServerConfig>()
                 : SettingsLoader.LoadMcpServers();
+            _Verbose = settings.Verbose;
 
             _CurrentEndpoint = SettingsLoader.ResolveEndpoint(
                 _AllEndpoints,
@@ -69,9 +116,8 @@ namespace Mux.Cli.Commands
                 settings.Temperature,
                 settings.MaxTokens);
 
-            string workingDirectory = settings.WorkingDirectory ?? Directory.GetCurrentDirectory();
+            _WorkingDirectory = settings.WorkingDirectory ?? Directory.GetCurrentDirectory();
 
-            // Build tool descriptions from registry
             BuiltInToolRegistry toolRegistry = new BuiltInToolRegistry();
             List<ToolDefinition> builtInTools = toolRegistry.GetToolDefinitions();
             bool toolsEnabled = _CurrentEndpoint.Quirks?.SupportsTools ?? true;
@@ -85,12 +131,11 @@ namespace Mux.Cli.Commands
                 }
             }
 
-            string systemPrompt = SettingsLoader.LoadSystemPrompt(settings.SystemPrompt, muxSettings);
+            _SystemPrompt = SettingsLoader.LoadSystemPrompt(settings.SystemPrompt, _MuxSettings);
 
             if (!toolsEnabled)
             {
-                // Strip tool references for models that don't support tools
-                systemPrompt = "You are mux, an AI assistant. You help the user by reading, writing, and editing data including documents, code, and other types " +
+                _SystemPrompt = "You are mux, an AI assistant. You help the user by reading, writing, and editing data including documents, code, and other types " +
                     "in their project.\n\n" +
                     "Your current working directory is: {WorkingDirectory}\n\n" +
                     "Guidelines:\n" +
@@ -98,16 +143,17 @@ namespace Mux.Cli.Commands
                     "- If a task is ambiguous, ask for clarification before proceeding.";
             }
 
-            systemPrompt = systemPrompt
-                .Replace("{WorkingDirectory}", workingDirectory)
+            _SystemPrompt = _SystemPrompt
+                .Replace("{WorkingDirectory}", _WorkingDirectory)
                 .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd());
 
-            ApprovalPolicyEnum approvalPolicy = ResolveApprovalPolicy(settings, muxSettings);
+            _ApprovalPolicy = ResolveApprovalPolicy(settings, _MuxSettings);
+            TryClearInteractiveScreen();
+            RenderWelcomeScreen();
 
-            // Initialize MCP servers
-            if (mcpServers.Count > 0)
+            if (_McpServers.Count > 0)
             {
-                _McpToolManager = new McpToolManager(mcpServers);
+                _McpToolManager = new McpToolManager(_McpServers);
 
                 try
                 {
@@ -133,118 +179,52 @@ namespace Mux.Cli.Commands
                 }
             }
 
-            if (approvalPolicy == ApprovalPolicyEnum.AutoApprove)
+            if (_ApprovalPolicy == ApprovalPolicyEnum.AutoApprove)
             {
                 AnsiConsole.MarkupLine("[yellow]notice: all tool calls will be auto-approved (--yolo)[/]");
             }
 
-            AnsiConsole.MarkupLine($"[dim]Endpoint:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]|[/] [dim]Model:[/] {Markup.Escape(_CurrentEndpoint.Model)}");
-            AnsiConsole.MarkupLine("[dim]Type /help for commands, Up/Down for prompt history, Shift+Enter for newline, Ctrl+C to cancel, Ctrl+C twice to exit.[/]");
-            AnsiConsole.WriteLine();
+            bool originalTreatControlCAsInput = Console.TreatControlCAsInput;
+            bool originalCursorVisible = GetCursorVisibleSafe();
+            ConsoleCancelEventHandler cancelHandler = HandleConsoleCancelKeyPress;
+            Console.CancelKeyPress += cancelHandler;
+            Console.TreatControlCAsInput = false;
 
-            while (true)
+            try
             {
-                string? input = ReadMultiLineInput();
+                _ChromeTop = Console.CursorTop;
+                _PromptTop = Console.CursorTop;
+                _OutputCursorLeft = 0;
+                _OutputCursorTop = _PromptTop;
+                RenderInteractiveChrome();
 
-                if (input == null)
+                while (!_ShouldExit)
                 {
-                    break;
-                }
+                    cancellationToken.ThrowIfCancellationRequested();
 
-                if (string.IsNullOrWhiteSpace(input))
-                {
-                    continue;
-                }
-
-                string trimmed = input.Trim();
-
-                if (HandleSlashCommand(trimmed, _CurrentEndpoint, ref systemPrompt, mcpServers))
-                {
-                    continue;
-                }
-
-                _PromptHistory.Add(trimmed);
-
-                AgentLoopOptions loopOptions = new AgentLoopOptions(_CurrentEndpoint)
-                {
-                    ConversationHistory = _ConversationHistory,
-                    SystemPrompt = systemPrompt,
-                    ApprovalPolicy = approvalPolicy,
-                    WorkingDirectory = workingDirectory,
-                    MaxIterations = muxSettings.MaxAgentIterations,
-                    Verbose = settings.Verbose,
-                    PromptUserFunc = ToolCallRenderer.PromptApprovalAsync,
-                    AdditionalTools = _McpToolManager?.GetToolDefinitions(),
-                    ExternalToolExecutor = _McpToolManager != null
-                        ? (Func<string, JsonElement, string, CancellationToken, Task<ToolResult>>)(async (string toolName, JsonElement arguments, string workDir, CancellationToken ct) =>
-                        {
-                            return await _McpToolManager.ExecuteAsync(toolName, toolName, arguments, ct).ConfigureAwait(false);
-                        })
-                        : null,
-                    OnRetry = (int attempt, int maxRetries, string message) =>
+                    if (_ActiveRun == null && !_QueuePaused && _QueuedMessages.TryDequeue(out QueuedMessageEntry queuedEntry))
                     {
-                        EventRenderer.UpdateStatusLine($"Connection failed, retrying ({attempt}/{maxRetries})...");
-                    }
-                };
-
-                _CurrentCts = new CancellationTokenSource();
-
-                Console.CancelKeyPress += OnCancelKeyPress;
-
-                try
-                {
-                    AgentLoop agentLoop = new AgentLoop(loopOptions);
-                    IAsyncEnumerable<AgentEvent> events = agentLoop.RunAsync(trimmed, _CurrentCts.Token);
-
-                    // Collect assistant text while rendering for conversation history
-                    StringBuilder assistantResponse = new StringBuilder();
-                    async IAsyncEnumerable<AgentEvent> WrapEvents(IAsyncEnumerable<AgentEvent> source)
-                    {
-                        await foreach (AgentEvent evt in source)
-                        {
-                            if (evt is AssistantTextEvent textEvt)
-                            {
-                                assistantResponse.Append(textEvt.Text);
-                            }
-                            yield return evt;
-                        }
+                        StartRun(queuedEntry.Text);
+                        continue;
                     }
 
-                    await EventRenderer.RenderAsync(WrapEvents(events), settings.Verbose);
-
-                    // Add user message and assistant response to conversation history
-                    _ConversationHistory.Add(new ConversationMessage
+                    if (_ActiveRun != null)
                     {
-                        Role = RoleEnum.User,
-                        Content = trimmed
-                    });
-
-                    string responseText = assistantResponse.ToString();
-                    if (!string.IsNullOrEmpty(responseText))
+                        await ProcessActiveRunAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    else
                     {
-                        _ConversationHistory.Add(new ConversationMessage
-                        {
-                            Role = RoleEnum.Assistant,
-                            Content = responseText
-                        });
+                        await ProcessIdleInputAsync(cancellationToken).ConfigureAwait(false);
                     }
                 }
-                catch (OperationCanceledException)
-                {
-                    AnsiConsole.MarkupLine("[yellow]Generation cancelled.[/]");
-                }
-                catch (Exception ex)
-                {
-                    AnsiConsole.MarkupLine($"[red]Error: {Markup.Escape(ex.Message)}[/]");
-                }
-                finally
-                {
-                    Console.CancelKeyPress -= OnCancelKeyPress;
-                    _CurrentCts?.Dispose();
-                    _CurrentCts = null;
-                }
-
-                AnsiConsole.WriteLine();
+            }
+            finally
+            {
+                Console.CancelKeyPress -= cancelHandler;
+                Console.TreatControlCAsInput = originalTreatControlCAsInput;
+                SetCursorVisibleSafe(originalCursorVisible);
+                _CurrentCts?.Dispose();
+                _CurrentCts = null;
             }
 
             return 0;
@@ -254,24 +234,59 @@ namespace Mux.Cli.Commands
 
         #region Private-Methods
 
-        /// <summary>
-        /// Reads multi-line input from the console with support for Up/Down prompt history,
-        /// Shift+Enter and Ctrl+Enter to insert newlines, Enter to submit, and left/right/Home/End
-        /// for cursor navigation.
-        /// </summary>
-        /// <returns>The full input string, or null if the user signals exit.</returns>
-        private string? ReadMultiLineInput()
+        private async Task ProcessActiveRunAsync(CancellationToken cancellationToken)
         {
-            _PromptHistory.ResetNavigation();
+            if (_ActiveRun == null)
+            {
+                return;
+            }
 
-            LineBuffer lineBuffer = new LineBuffer();
-            int promptWidth = 5; // "mux> " or "...> "
-            int promptTop = Console.CursorTop;
-            int renderedLineCount = 1;
+            DrainRunEvents();
 
-            WritePrompt(0);
+            if (_ActiveRun.CompletionTask.IsCompleted && _ActiveRun.Events.Reader.Completion.IsCompleted)
+            {
+                await FinalizeActiveRunAsync().ConfigureAwait(false);
+                return;
+            }
 
-            while (true)
+            if (ClearExpiredStatusNotice())
+            {
+                RenderInteractiveChrome();
+                return;
+            }
+
+            if (HasConsoleWidthChanged())
+            {
+                RenderInteractiveChrome();
+                return;
+            }
+
+            if (Console.KeyAvailable)
+            {
+                ConsoleKeyInfo keyInfo = Console.ReadKey(intercept: true);
+                HandleBusyKey(keyInfo);
+            }
+            else
+            {
+                await Task.Delay(InputPollDelayMs, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        private async Task ProcessIdleInputAsync(CancellationToken cancellationToken)
+        {
+            if (ClearExpiredStatusNotice())
+            {
+                RenderInteractiveChrome();
+                return;
+            }
+
+            if (HasConsoleWidthChanged())
+            {
+                RenderInteractiveChrome();
+                return;
+            }
+
+            if (Console.KeyAvailable)
             {
                 ConsoleKeyInfo keyInfo;
 
@@ -281,198 +296,1583 @@ namespace Mux.Cli.Commands
                 }
                 catch (InvalidOperationException)
                 {
-                    return null;
+                    _ShouldExit = true;
+                    return;
                 }
 
-                // Ctrl+C: clear or exit
-                if (keyInfo.Key == ConsoleKey.C
-                    && (keyInfo.Modifiers & ConsoleModifiers.Control) != 0)
+                HandleIdleKey(keyInfo);
+                return;
+            }
+
+            await Task.Delay(InputPollDelayMs, cancellationToken).ConfigureAwait(false);
+        }
+
+        private void HandleIdleKey(ConsoleKeyInfo keyInfo)
+        {
+            if (HandleCommonKey(keyInfo, allowPromptHistory: true, busyMode: false))
+            {
+                return;
+            }
+
+            if (keyInfo.Key == ConsoleKey.Enter)
+            {
+                bool isShiftEnter = (keyInfo.Modifiers & ConsoleModifiers.Shift) != 0;
+                bool isCtrlEnter = (keyInfo.Modifiers & ConsoleModifiers.Control) != 0;
+
+                if (isShiftEnter || isCtrlEnter)
                 {
-                    DateTime now = DateTime.UtcNow;
-
-                    if ((now - _LastCtrlCTime).TotalSeconds <= 2.0)
-                    {
-                        AnsiConsole.WriteLine();
-                        return null;
-                    }
-
-                    _LastCtrlCTime = now;
-                    AnsiConsole.WriteLine();
-                    lineBuffer.Clear();
                     _PromptHistory.ResetNavigation();
-                    promptTop = Console.CursorTop;
-                    renderedLineCount = 1;
-                    WritePrompt(0);
-                    continue;
+                    _DraftBuffer.InsertNewLine();
+                    RenderInteractiveChrome();
+                    return;
                 }
 
-                // Enter: submit or newline
+                SubmitCurrentDraft();
+                return;
+            }
+
+            if (keyInfo.Key == ConsoleKey.UpArrow)
+            {
+                if (_PromptHistory.TryMovePrevious(_DraftBuffer.GetText(), out string previousPrompt))
+                {
+                    _DraftBuffer.SetText(previousPrompt);
+                    RenderInteractiveChrome();
+                }
+                return;
+            }
+
+            if (keyInfo.Key == ConsoleKey.DownArrow)
+            {
+                if (_PromptHistory.TryMoveNext(out string nextPrompt))
+                {
+                    _DraftBuffer.SetText(nextPrompt);
+                    RenderInteractiveChrome();
+                }
+                return;
+            }
+        }
+
+        private void HandleBusyKey(ConsoleKeyInfo keyInfo)
+        {
+            if (_PendingApproval != null)
+            {
+                if (keyInfo.Key == ConsoleKey.C && (keyInfo.Modifiers & ConsoleModifiers.Control) != 0)
+                {
+                    CancelActiveRun();
+                    return;
+                }
+
                 if (keyInfo.Key == ConsoleKey.Enter)
                 {
-                    bool isShiftEnter = (keyInfo.Modifiers & ConsoleModifiers.Shift) != 0;
-                    bool isCtrlEnter = (keyInfo.Modifiers & ConsoleModifiers.Control) != 0;
-
-                    if (isShiftEnter || isCtrlEnter)
-                    {
-                        _PromptHistory.ResetNavigation();
-                        lineBuffer.InsertNewLine();
-                        renderedLineCount = RedrawBuffer(lineBuffer, promptWidth, promptTop, renderedLineCount);
-                        continue;
-                    }
-
-                    Console.WriteLine();
-                    return lineBuffer.GetText();
+                    ResolveApproval("y");
+                    return;
                 }
 
-                // Left arrow
-                if (keyInfo.Key == ConsoleKey.LeftArrow)
+                if (keyInfo.KeyChar == 'y' || keyInfo.KeyChar == 'Y')
                 {
-                    if (lineBuffer.MoveLeft())
-                    {
-                        Console.SetCursorPosition(promptWidth + lineBuffer.CursorColumn, Console.CursorTop);
-                    }
-                    continue;
+                    ResolveApproval("y");
+                    return;
                 }
 
-                // Right arrow
-                if (keyInfo.Key == ConsoleKey.RightArrow)
+                if (keyInfo.KeyChar == 'n' || keyInfo.KeyChar == 'N')
                 {
-                    if (lineBuffer.MoveRight())
-                    {
-                        Console.SetCursorPosition(promptWidth + lineBuffer.CursorColumn, Console.CursorTop);
-                    }
-                    continue;
+                    ResolveApproval("n");
+                    return;
                 }
 
-                // Home
-                if (keyInfo.Key == ConsoleKey.Home)
+                if (keyInfo.KeyChar == 'a' || keyInfo.KeyChar == 'A')
                 {
-                    lineBuffer.MoveHome();
-                    Console.SetCursorPosition(promptWidth, Console.CursorTop);
-                    continue;
+                    ResolveApproval("always");
+                    return;
                 }
 
-                // End
-                if (keyInfo.Key == ConsoleKey.End)
-                {
-                    lineBuffer.MoveEnd();
-                    Console.SetCursorPosition(promptWidth + lineBuffer.CursorColumn, Console.CursorTop);
-                    continue;
-                }
+                return;
+            }
 
-                // Delete key (forward delete)
-                if (keyInfo.Key == ConsoleKey.Delete)
-                {
-                    if (lineBuffer.Delete())
-                    {
-                        _PromptHistory.ResetNavigation();
-                        RedrawFromCursor(lineBuffer, promptWidth);
-                    }
-                    continue;
-                }
+            if (keyInfo.Key == ConsoleKey.Escape)
+            {
+                CancelActiveRun();
+                return;
+            }
 
-                // Backspace
-                if (keyInfo.Key == ConsoleKey.Backspace)
-                {
-                    if (lineBuffer.IsCursorAtStart && lineBuffer.CurrentLineIndex > 0)
-                    {
-                        // At start of continuation line — merge up
-                        _PromptHistory.ResetNavigation();
-                        lineBuffer.RemoveCurrentLineAndMergeUp();
-                        renderedLineCount = RedrawBuffer(lineBuffer, promptWidth, promptTop, renderedLineCount);
-                    }
-                    else if (lineBuffer.Backspace())
-                    {
-                        _PromptHistory.ResetNavigation();
-                        if (lineBuffer.IsCursorAtEnd)
-                        {
-                            // Simple case: cursor at end, just erase last char
-                            Console.Write("\b \b");
-                        }
-                        else
-                        {
-                            // Mid-line: redraw from cursor position
-                            RedrawFromCursor(lineBuffer, promptWidth);
-                        }
-                    }
-                    continue;
-                }
+            if (keyInfo.Key == ConsoleKey.Tab)
+            {
+                QueueCurrentDraft();
+                return;
+            }
 
-                // Escape: ignore
-                if (keyInfo.Key == ConsoleKey.Escape)
-                {
-                    continue;
-                }
+            if (HandleCommonKey(keyInfo, allowPromptHistory: false, busyMode: true))
+            {
+                return;
+            }
 
-                if (keyInfo.Key == ConsoleKey.UpArrow)
-                {
-                    if (_PromptHistory.TryMovePrevious(lineBuffer.GetText(), out string previousPrompt))
-                    {
-                        lineBuffer.SetText(previousPrompt);
-                        renderedLineCount = RedrawBuffer(lineBuffer, promptWidth, promptTop, renderedLineCount);
-                    }
-                    continue;
-                }
+            if (keyInfo.Key == ConsoleKey.Enter)
+            {
+                bool isShiftEnter = (keyInfo.Modifiers & ConsoleModifiers.Shift) != 0;
+                bool isCtrlEnter = (keyInfo.Modifiers & ConsoleModifiers.Control) != 0;
 
-                if (keyInfo.Key == ConsoleKey.DownArrow)
-                {
-                    if (_PromptHistory.TryMoveNext(out string nextPrompt))
-                    {
-                        lineBuffer.SetText(nextPrompt);
-                        renderedLineCount = RedrawBuffer(lineBuffer, promptWidth, promptTop, renderedLineCount);
-                    }
-                    continue;
-                }
-
-                // Regular character
-                if (keyInfo.KeyChar != '\0' && !char.IsControl(keyInfo.KeyChar))
+                if (isShiftEnter || isCtrlEnter)
                 {
                     _PromptHistory.ResetNavigation();
-                    lineBuffer.Insert(keyInfo.KeyChar);
+                    _DraftBuffer.InsertNewLine();
+                    RenderInteractiveChrome();
+                }
+                else if (TryExecuteBusySlashCommand())
+                {
+                    return;
+                }
+                else
+                {
+                    QueueCurrentDraft();
+                }
 
-                    if (lineBuffer.IsCursorAtEnd)
+                return;
+            }
+        }
+
+        private bool HandleCommonKey(ConsoleKeyInfo keyInfo, bool allowPromptHistory, bool busyMode)
+        {
+            if (keyInfo.Key == ConsoleKey.C
+                && (keyInfo.Modifiers & ConsoleModifiers.Control) != 0)
+            {
+                HandleCtrlC(busyMode);
+                return true;
+            }
+
+            if (keyInfo.Key == ConsoleKey.UpArrow
+                && (keyInfo.Modifiers & ConsoleModifiers.Alt) != 0)
+            {
+                EditLastQueuedPrompt();
+                return true;
+            }
+
+            if (keyInfo.Key == ConsoleKey.LeftArrow)
+            {
+                if (_DraftBuffer.MoveLeft())
+                {
+                    RenderInteractiveChrome();
+                }
+                return true;
+            }
+
+            if (keyInfo.Key == ConsoleKey.RightArrow)
+            {
+                if (_DraftBuffer.MoveRight())
+                {
+                    RenderInteractiveChrome();
+                }
+                return true;
+            }
+
+            if (keyInfo.Key == ConsoleKey.Home)
+            {
+                if (_DraftBuffer.MoveHome())
+                {
+                    RenderInteractiveChrome();
+                }
+                return true;
+            }
+
+            if (keyInfo.Key == ConsoleKey.End)
+            {
+                if (_DraftBuffer.MoveEnd())
+                {
+                    RenderInteractiveChrome();
+                }
+                return true;
+            }
+
+            if (keyInfo.Key == ConsoleKey.Delete)
+            {
+                if (_DraftBuffer.Delete())
+                {
+                    _PromptHistory.ResetNavigation();
+                    RenderInteractiveChrome();
+                }
+                return true;
+            }
+
+            if (keyInfo.Key == ConsoleKey.Backspace)
+            {
+                if (_DraftBuffer.IsCursorAtStart && _DraftBuffer.CurrentLineIndex > 0)
+                {
+                    _PromptHistory.ResetNavigation();
+                    _DraftBuffer.RemoveCurrentLineAndMergeUp();
+                    RenderInteractiveChrome();
+                }
+                else if (_DraftBuffer.Backspace())
+                {
+                    _PromptHistory.ResetNavigation();
+                    RenderInteractiveChrome();
+                }
+                return true;
+            }
+
+            if (keyInfo.Key == ConsoleKey.Escape)
+            {
+                return true;
+            }
+
+            if (!allowPromptHistory
+                && (keyInfo.Key == ConsoleKey.UpArrow || keyInfo.Key == ConsoleKey.DownArrow))
+            {
+                return true;
+            }
+
+            if (keyInfo.KeyChar != '\0' && !char.IsControl(keyInfo.KeyChar))
+            {
+                _PromptHistory.ResetNavigation();
+                _DraftBuffer.Insert(keyInfo.KeyChar);
+                RenderInteractiveChrome();
+                return true;
+            }
+
+            return false;
+        }
+
+        private void HandleCtrlC(bool busyMode)
+        {
+            HandleUserCancellationRequest(busyMode);
+        }
+
+        private void HandleConsoleCancelKeyPress(object? sender, ConsoleCancelEventArgs e)
+        {
+            e.Cancel = true;
+            HandleUserCancellationRequest(_ActiveRun != null || _PendingApproval != null);
+        }
+
+        private void HandleUserCancellationRequest(bool busyMode)
+        {
+            if (_ShouldExit)
+            {
+                return;
+            }
+
+            if (busyMode || _ActiveRun != null)
+            {
+                if (_CurrentCts?.IsCancellationRequested == true)
+                {
+                    return;
+                }
+
+                CancelActiveRun("Cancellation requested via Ctrl+C");
+                return;
+            }
+
+            DateTime now = DateTime.UtcNow;
+            bool draftIsEmpty = string.IsNullOrWhiteSpace(_DraftBuffer.GetText());
+            bool exitRequested = draftIsEmpty && (now - _LastCtrlCTime).TotalSeconds <= 2.0;
+
+            if (exitRequested)
+            {
+                _ShouldExit = true;
+                WriteOutputBlock(() => AnsiConsole.MarkupLine("[dim]Exiting due to user cancellation.[/]"), renderChromeAfterWrite: false);
+                return;
+            }
+
+            _LastCtrlCTime = now;
+
+            if (!draftIsEmpty)
+            {
+                _DraftBuffer.Clear();
+                _PromptHistory.ResetNavigation();
+                SetStatusNotice("draft cleared; press Ctrl+C again to exit");
+                return;
+            }
+
+            SetStatusNotice("press Ctrl+C again to exit");
+        }
+
+        private void SubmitCurrentDraft()
+        {
+            string input = _DraftBuffer.GetText();
+            string trimmed = input.Trim();
+
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                return;
+            }
+
+            _DraftBuffer.Clear();
+            _PromptHistory.ResetNavigation();
+
+            if (trimmed.StartsWith("/", StringComparison.Ordinal))
+            {
+                WriteSubmittedPrompt(input);
+            }
+
+            if (HandleSlashCommand(trimmed))
+            {
+                RenderInteractiveChrome();
+                return;
+            }
+
+            WriteSubmittedPrompt(input);
+            StartRun(trimmed);
+        }
+
+        private void QueueCurrentDraft()
+        {
+            string draftText = _DraftBuffer.GetText();
+            string trimmed = draftText.Trim();
+
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                return;
+            }
+
+            if (trimmed.StartsWith("/", StringComparison.Ordinal))
+            {
+                SetStatusNotice("press Enter to run slash commands immediately while mux is busy");
+                return;
+            }
+
+            QueuedMessageEntry entry = _QueuedMessages.Enqueue(trimmed);
+            _DraftBuffer.Clear();
+            _PromptHistory.ResetNavigation();
+            SetStatusNotice($"queued #{entry.SequenceNumber}: {TruncateString(trimmed, 40)}");
+        }
+
+        private bool TryExecuteBusySlashCommand()
+        {
+            string input = _DraftBuffer.GetText();
+            string trimmed = input.Trim();
+
+            if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            _DraftBuffer.Clear();
+            _PromptHistory.ResetNavigation();
+            WriteSubmittedPrompt(input);
+
+            if (HandleSlashCommand(trimmed, allowBusyCommandsOnly: true))
+            {
+                RenderInteractiveChrome();
+            }
+
+            return true;
+        }
+
+        private void EditLastQueuedPrompt()
+        {
+            if (_QueuedMessages.Count == 0)
+            {
+                SetStatusNotice("no queued prompts to edit");
+                return;
+            }
+
+            string currentDraft = _DraftBuffer.GetText();
+            if (string.IsNullOrWhiteSpace(currentDraft))
+            {
+                if (_QueuedMessages.TryTakeLast(out QueuedMessageEntry last))
+                {
+                    _DraftBuffer.SetText(last.Text);
+                    RenderInteractiveChrome();
+                }
+
+                return;
+            }
+
+            if (_QueuedMessages.TryReplaceLast(currentDraft, out QueuedMessageEntry previous))
+            {
+                _DraftBuffer.SetText(previous.Text);
+                RenderInteractiveChrome();
+            }
+        }
+
+        private void CancelActiveRun(string? statusNotice = null)
+        {
+            if (_ActiveRun == null)
+            {
+                return;
+            }
+
+            if (_CurrentCts?.IsCancellationRequested == true)
+            {
+                return;
+            }
+
+            _QueuePaused = true;
+            _RetryStatusMessage = "Cancelling current run...";
+
+            if (!string.IsNullOrWhiteSpace(statusNotice))
+            {
+                _TransientStatusNotice = statusNotice;
+                _TransientStatusNoticeExpiresUtc = DateTime.UtcNow.AddMilliseconds(2500);
+            }
+
+            if (_CurrentCts?.IsCancellationRequested != true)
+            {
+                _CurrentCts?.Cancel();
+            }
+
+            RenderInteractiveChrome();
+        }
+
+        private void StartRun(string prompt)
+        {
+            EndpointConfig runEndpoint = CreateInteractiveRunEndpoint();
+            _PromptHistory.Add(prompt);
+            _CurrentCts?.Dispose();
+            _CurrentCts = new CancellationTokenSource();
+            _RetryStatusMessage = null;
+            _PendingApproval = null;
+            _RunHasVisibleOutput = false;
+            ClearStatusNotice();
+
+            AgentLoopOptions loopOptions = new AgentLoopOptions(runEndpoint)
+            {
+                ConversationHistory = _ConversationHistory,
+                SystemPrompt = _SystemPrompt,
+                ApprovalPolicy = _ApprovalPolicy,
+                WorkingDirectory = _WorkingDirectory,
+                MaxIterations = _MuxSettings.MaxAgentIterations,
+                Verbose = _Verbose,
+                PromptUserFunc = RequestApprovalAsync,
+                AdditionalTools = _McpToolManager?.GetToolDefinitions(),
+                ExternalToolExecutor = _McpToolManager != null
+                    ? (Func<string, JsonElement, string, CancellationToken, Task<ToolResult>>)(async (string toolName, JsonElement arguments, string workDir, CancellationToken ct) =>
                     {
-                        // Appending at end: just write the char
-                        Console.Write(keyInfo.KeyChar);
+                        return await _McpToolManager.ExecuteAsync(toolName, toolName, arguments, ct).ConfigureAwait(false);
+                    })
+                    : null,
+                OnRetry = (int attempt, int maxRetries, string message) =>
+                {
+                    _RetryStatusMessage = $"Connection failed, retrying ({attempt}/{maxRetries})...";
+                }
+            };
+
+            Channel<AgentEvent> channel = Channel.CreateUnbounded<AgentEvent>(new UnboundedChannelOptions
+            {
+                SingleReader = true,
+                SingleWriter = true
+            });
+
+            Task<RunExecutionResult> completionTask = Task.Run(async () =>
+            {
+                StringBuilder assistantResponse = new StringBuilder();
+
+                try
+                {
+                    using AgentLoop agentLoop = new AgentLoop(loopOptions);
+                    await foreach (AgentEvent evt in agentLoop.RunAsync(prompt, _CurrentCts.Token).ConfigureAwait(false))
+                    {
+                        if (evt is AssistantTextEvent textEvent)
+                        {
+                            assistantResponse.Append(textEvent.Text);
+                        }
+
+                        await channel.Writer.WriteAsync(evt).ConfigureAwait(false);
+                    }
+
+                    return new RunExecutionResult
+                    {
+                        Prompt = prompt,
+                        AssistantResponse = assistantResponse.ToString()
+                    };
+                }
+                catch (OperationCanceledException)
+                {
+                    return new RunExecutionResult
+                    {
+                        Prompt = prompt,
+                        AssistantResponse = assistantResponse.ToString(),
+                        Cancelled = true
+                    };
+                }
+                catch (Exception ex)
+                {
+                    return new RunExecutionResult
+                    {
+                        Prompt = prompt,
+                        AssistantResponse = assistantResponse.ToString(),
+                        Error = ex
+                    };
+                }
+                finally
+                {
+                    channel.Writer.TryComplete();
+                }
+            });
+
+            _ActiveRun = new ActiveRunState
+            {
+                Prompt = prompt,
+                Events = channel,
+                CompletionTask = completionTask
+            };
+
+            _AssistantTextOpen = false;
+            WriteThinkingLine();
+            RenderInteractiveChrome();
+        }
+
+        private void DrainRunEvents()
+        {
+            if (_ActiveRun == null)
+            {
+                return;
+            }
+
+            ActiveRunState activeRun = _ActiveRun;
+            while (activeRun.Events.Reader.TryRead(out AgentEvent? agentEvent))
+            {
+                if (agentEvent == null)
+                {
+                    continue;
+                }
+
+                _RetryStatusMessage = null;
+
+                RenderAgentEvent(agentEvent);
+            }
+        }
+
+        private async Task FinalizeActiveRunAsync()
+        {
+            if (_ActiveRun == null)
+            {
+                return;
+            }
+
+            RunExecutionResult result = await _ActiveRun.CompletionTask.ConfigureAwait(false);
+            ActiveRunState activeRun = _ActiveRun;
+            _ActiveRun = null;
+            _PendingApproval = null;
+            _RetryStatusMessage = null;
+            ClearStatusNotice();
+            bool cancellationWasRequested = _CurrentCts?.IsCancellationRequested == true;
+
+            _CurrentCts?.Dispose();
+            _CurrentCts = null;
+
+            bool treatAsCancellation = result.Cancelled
+                || (cancellationWasRequested && IsCancellationException(result.Error));
+
+            if (result.Error != null && !treatAsCancellation)
+            {
+                WriteMarkupLine($"[red]Error: {Markup.Escape(result.Error.Message)}[/]");
+                if (_QueuedMessages.Count > 0)
+                {
+                    _QueuePaused = true;
+                    WriteFailureLine($"Current run failed. Queue paused with {_QueuedMessages.Count} queued messages remaining.");
+                }
+                else
+                {
+                    _QueuePaused = false;
+                }
+            }
+            else if (treatAsCancellation)
+            {
+                if (_QueuedMessages.Count > 0)
+                {
+                    _QueuePaused = true;
+                    WriteNotificationLine($"Current run cancelled by user. Queue paused with {_QueuedMessages.Count} queued messages remaining.");
+                }
+                else
+                {
+                    _QueuePaused = false;
+                    WriteNotificationLine("Current run cancelled by user.");
+                }
+            }
+            else
+            {
+                _ConversationHistory.Add(new ConversationMessage
+                {
+                    Role = RoleEnum.User,
+                    Content = result.Prompt
+                });
+
+                if (!string.IsNullOrEmpty(result.AssistantResponse))
+                {
+                    _ConversationHistory.Add(new ConversationMessage
+                    {
+                        Role = RoleEnum.Assistant,
+                        Content = result.AssistantResponse
+                    });
+                }
+                else if (!_RunHasVisibleOutput)
+                {
+                    WriteNotificationLine("Run completed without visible output.");
+                }
+
+                _TurnsSinceLastTitleReview++;
+
+                if (!_ConversationTitleSetByUser && _QueuedMessages.Count == 0)
+                {
+                    await MaybeRefreshConversationTitleAsync().ConfigureAwait(false);
+                }
+            }
+
+            if (_QueuedMessages.Count == 0 && _QueuePaused)
+            {
+                _QueuePaused = false;
+            }
+
+            RenderInteractiveChrome();
+        }
+
+        private void RenderAgentEvent(AgentEvent agentEvent)
+        {
+            switch (agentEvent)
+            {
+                case AssistantTextEvent textEvent:
+                    _RunHasVisibleOutput = true;
+                    WriteAssistantTextChunk(textEvent.Text);
+                    break;
+
+                case ToolCallProposedEvent proposedEvent:
+                    _RunHasVisibleOutput = true;
+                    string proposedSummary = ToolCallRenderer.FormatToolSummary(
+                        proposedEvent.ToolCall.Name,
+                        proposedEvent.ToolCall.Arguments);
+                    WriteNotificationLine($"Tool call: {proposedSummary}");
+                    break;
+
+                case ToolCallApprovedEvent approvedEvent:
+                    break;
+
+                case ToolCallCompletedEvent completedEvent:
+                    _RunHasVisibleOutput = true;
+                    string summary = SummarizeToolResult(completedEvent.Result.Content);
+                    string line = completedEvent.Result.Success
+                        ? $"Tool {completedEvent.ToolName}: {summary} ok {completedEvent.ElapsedMs}ms"
+                        : $"Tool {completedEvent.ToolName}: {summary} failed {completedEvent.ElapsedMs}ms";
+                    if (completedEvent.Result.Success)
+                    {
+                        WriteSuccessLine(line);
                     }
                     else
                     {
-                        // Inserting mid-line: redraw from cursor
-                        RedrawFromCursor(lineBuffer, promptWidth);
+                        WriteFailureLine(line);
                     }
+                    break;
+
+                case ErrorEvent errorEvent:
+                    _RunHasVisibleOutput = true;
+                    WriteFailureLine($"Error: {errorEvent.Code}: {errorEvent.Message}");
+                    break;
+
+                case HeartbeatEvent:
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+        private Task<string> RequestApprovalAsync(ToolCall toolCall)
+        {
+            string summary = ToolCallRenderer.FormatToolSummary(toolCall.Name, toolCall.Arguments);
+            TaskCompletionSource<string> completionSource = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            _PendingApproval = new ApprovalRequestState
+            {
+                ToolCall = toolCall,
+                Summary = summary,
+                CompletionSource = completionSource
+            };
+
+            RenderInteractiveChrome();
+            return completionSource.Task;
+        }
+
+        private void ResolveApproval(string response)
+        {
+            if (_PendingApproval == null)
+            {
+                return;
+            }
+
+            ApprovalRequestState pending = _PendingApproval;
+            _PendingApproval = null;
+            pending.CompletionSource.TrySetResult(response);
+            SetStatusNotice(BuildApprovalNotice(response, pending.ToolCall.Name), 1500);
+        }
+
+        private void WriteAssistantTextChunk(string text)
+        {
+            lock (_ConsoleSync)
+            {
+                BeginOutputWrite(closeAssistantText: false);
+                Console.Write(text);
+                _AssistantTextOpen = !EndsWithLineBreak(text);
+                EndOutputWrite();
+            }
+        }
+
+        private void WriteMarkupLine(string markup)
+        {
+            WriteOutputBlock(() =>
+            {
+                AnsiConsole.MarkupLine(markup);
+                Console.WriteLine();
+            }, outputEndsWithPromptSpacer: true);
+        }
+
+        private void WritePlainLine(string line)
+        {
+            WriteOutputBlock(() => Console.WriteLine(line));
+        }
+
+        private void WriteNotificationLine(string line)
+        {
+            WriteMarkupLine($"[dim]{Markup.Escape(line)}[/]");
+        }
+
+        private void WriteSuccessLine(string line)
+        {
+            WriteMarkupLine($"[green]{Markup.Escape(line)}[/]");
+        }
+
+        private void WriteFailureLine(string line)
+        {
+            WriteMarkupLine($"[red]{Markup.Escape(line)}[/]");
+        }
+
+        private void WriteSubmittedPrompt(string input)
+        {
+            WriteOutputBlock(() =>
+            {
+                string normalized = input
+                    .Replace("\r\n", "\n", StringComparison.Ordinal)
+                    .Replace("\r", "\n", StringComparison.Ordinal);
+
+                string[] lines = normalized.Split('\n');
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    WritePrompt(i);
+                    Console.WriteLine(lines[i]);
+                }
+            }, renderChromeAfterWrite: false, startAtPrompt: true);
+        }
+
+        private void WriteThinkingLine()
+        {
+            WriteOutputBlock(() =>
+            {
+                AnsiConsole.MarkupLine($"[dim]{ThinkingText}[/]");
+                Console.WriteLine();
+            }, renderChromeAfterWrite: false, outputEndsWithPromptSpacer: true);
+        }
+
+        private void RenderWelcomeScreen()
+        {
+            string configDir = SettingsLoader.GetConfigDirectory();
+            string endpointsPath = Path.Combine(configDir, "endpoints.json");
+            const string logo = @" _____ _ _ _ _
+|     | | |_'_|
+|_|_|_|___|_,_|
+";
+
+            AnsiConsole.Markup($"[bold cyan]{logo}[/]");
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine($"[bold cyan]{Defaults.ProductName}[/] [dim]v{Defaults.ProductVersion}[/] [dim]|[/] [dim]AI agent for local and remote LLMs[/]");
+            AnsiConsole.MarkupLine($"[bold]Title:[/] {Markup.Escape(_ConversationTitle)}");
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine($"[dim]Using endpoints defined in: {Markup.Escape(endpointsPath)}[/]");
+            AnsiConsole.MarkupLine($"[dim]Endpoint:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]|[/] [dim]Model:[/] {Markup.Escape(_CurrentEndpoint.Model)}");
+            AnsiConsole.MarkupLine("[dim]Type /help for commands, Tab queues while busy, Alt+Up edits the last queued prompt, Esc cancels active generation.[/]");
+        }
+
+        private void WriteOutputBlock(
+            Action writer,
+            bool renderChromeAfterWrite = true,
+            bool startAtPrompt = false,
+            bool outputEndsWithPromptSpacer = false)
+        {
+            lock (_ConsoleSync)
+            {
+                BeginOutputWrite(startAtPrompt: startAtPrompt);
+                writer();
+                _AssistantTextOpen = false;
+                EndOutputWrite(renderChromeAfterWrite, outputEndsWithPromptSpacer);
+            }
+        }
+
+        private void BeginOutputWrite(bool closeAssistantText = true, bool startAtPrompt = false)
+        {
+            ClearInteractiveChrome();
+
+            if (startAtPrompt)
+            {
+                SetCursorPositionSafe(0, _PromptTop);
+            }
+            else
+            {
+                SetCursorPositionSafe(_OutputCursorLeft, _OutputCursorTop);
+            }
+
+            if (closeAssistantText && _AssistantTextOpen && !startAtPrompt)
+            {
+                Console.WriteLine();
+                _AssistantTextOpen = false;
+            }
+        }
+
+        private void EndOutputWrite(bool renderChromeAfterWrite = true, bool outputEndsWithPromptSpacer = false)
+        {
+            _OutputCursorLeft = Console.CursorLeft;
+            _OutputCursorTop = Console.CursorTop;
+            _OutputEndsWithPromptSpacer = outputEndsWithPromptSpacer;
+            _RenderedPromptRowCount = 0;
+            _ChromeTop = _PromptTop;
+
+            if (renderChromeAfterWrite)
+            {
+                RenderInteractiveChrome();
+            }
+        }
+
+        private void ClearInteractiveChrome()
+        {
+            if (_RenderedPromptRowCount > 0)
+            {
+                ClearRows(_ChromeTop, _RenderedPromptRowCount);
+            }
+        }
+
+        private void RenderInteractiveChrome()
+        {
+            lock (_ConsoleSync)
+            {
+                bool shouldShowCursor = ShouldShowInteractiveCursor();
+                if (!shouldShowCursor)
+                {
+                    SetCursorVisibleSafe(false);
+                }
+
+                try
+                {
+                    PromptLayout promptLayout = GetPromptLayout();
+                    int nextOutputRow = GetNextAvailableOutputRow();
+                    string statusText = TruncateToConsoleWidth(BuildStatusText(), Math.Max(1, GetBufferWidthSafe() - 1));
+                    bool hasStatusLine = !string.IsNullOrWhiteSpace(statusText);
+                    int promptTopPadding = (_ActiveRun != null || _OutputEndsWithPromptSpacer) ? 0 : PromptTopPaddingLines;
+                    int chromeTop = hasStatusLine
+                        ? nextOutputRow
+                        : nextOutputRow + promptTopPadding;
+                    int promptTop = hasStatusLine
+                        ? chromeTop + 1 + PromptSpacingBelowStatusLines
+                        : chromeTop;
+
+                    if (_RenderedPromptRowCount > 0)
+                    {
+                        ClearRows(_ChromeTop, _RenderedPromptRowCount);
+                    }
+
+                    _ChromeTop = chromeTop;
+                    _PromptTop = promptTop;
+
+                    if (hasStatusLine)
+                    {
+                        ClearRows(_ChromeTop, 1);
+                        SetCursorPositionSafe(0, _ChromeTop);
+                        AnsiConsole.Markup($"[dim]{Markup.Escape(statusText)}[/]");
+                    }
+
+                    for (int lineIndex = 0; lineIndex < _DraftBuffer.LineCount; lineIndex++)
+                    {
+                        SetCursorPositionSafe(0, _PromptTop + promptLayout.LineRowOffsets[lineIndex]);
+                        WritePrompt(lineIndex);
+                        Console.Write(_DraftBuffer.GetLine(lineIndex));
+                    }
+
+                    SetCursorPositionSafe(promptLayout.CursorColumn, _PromptTop + promptLayout.CursorRowOffset);
+                    _RenderedPromptRowCount = promptLayout.TotalRows + (hasStatusLine ? 1 + PromptSpacingBelowStatusLines : 0);
+                    CaptureConsoleWidth();
+                }
+                finally
+                {
+                    SetCursorVisibleSafe(shouldShowCursor);
                 }
             }
         }
 
-        /// <summary>
-        /// Redraws the full prompt buffer, clearing any leftover lines from a previous render
-        /// and restoring the cursor to the logical buffer position.
-        /// </summary>
-        /// <param name="lineBuffer">The line buffer.</param>
-        /// <param name="promptWidth">The width of the prompt prefix in characters.</param>
-        /// <param name="promptTop">The console row where the prompt starts.</param>
-        /// <param name="previousRenderedLineCount">The number of prompt lines rendered previously.</param>
-        /// <returns>The new rendered line count.</returns>
-        private static int RedrawBuffer(LineBuffer lineBuffer, int promptWidth, int promptTop, int previousRenderedLineCount)
+        private string BuildStatusText()
         {
-            int linesToClear = Math.Max(previousRenderedLineCount, lineBuffer.LineCount);
-            int clearWidth = Math.Max(1, Console.BufferWidth - 1);
+            string baseInfo = $"model={_CurrentEndpoint.Model} | endpoint={_CurrentEndpoint.Name}";
 
-            for (int i = 0; i < linesToClear; i++)
+            if (_PendingApproval != null)
             {
-                Console.SetCursorPosition(0, promptTop + i);
+                return $"Approval required | {baseInfo} | {TruncateString(_PendingApproval.Summary, 80)} | Y / n / always";
+            }
+
+            if (_ActiveRun != null)
+            {
+                if (!string.IsNullOrWhiteSpace(_RetryStatusMessage))
+                {
+                    return $"Busy | {baseInfo} | {_RetryStatusMessage}";
+                }
+
+                if (TryGetStatusNotice(out string busyNotice))
+                {
+                    return $"Busy | {baseInfo} | {busyNotice}";
+                }
+
+                return string.Empty;
+            }
+
+            if (_QueuePaused && _QueuedMessages.Count > 0)
+            {
+                if (TryGetStatusNotice(out string pausedNotice))
+                {
+                    return $"Queue paused | {baseInfo} | {pausedNotice}";
+                }
+
+                return $"Queue paused | {baseInfo} | {_QueuedMessages.Count} queued | /queue resume";
+            }
+
+            if (TryGetStatusNotice(out string readyNotice))
+            {
+                return readyNotice;
+            }
+
+            return string.Empty;
+        }
+
+        private PromptLayout GetPromptLayout()
+        {
+            return InteractiveChromeLayout.Calculate(_DraftBuffer, PromptWidth, GetBufferWidthSafe());
+        }
+
+        private ContextBudgetSnapshot GetContextBudgetSnapshot()
+        {
+            ContextWindowManager manager = new ContextWindowManager(
+                _CurrentEndpoint.ContextWindow,
+                _MuxSettings.TokenEstimationRatio,
+                _MuxSettings.ContextWindowSafetyMarginPercent);
+
+            return manager.GetBudgetSnapshot(
+                _SystemPrompt,
+                _ConversationHistory,
+                GetAllToolDefinitions(),
+                _CurrentEndpoint.MaxTokens,
+                ConversationStatusWarningThresholdPercent);
+        }
+
+        private List<ToolDefinition> GetAllToolDefinitions()
+        {
+            if (!(_CurrentEndpoint.Quirks?.SupportsTools ?? true))
+            {
+                return new List<ToolDefinition>();
+            }
+
+            BuiltInToolRegistry toolRegistry = new BuiltInToolRegistry();
+            List<ToolDefinition> tools = toolRegistry.GetToolDefinitions();
+
+            if (_McpToolManager != null)
+            {
+                tools.AddRange(_McpToolManager.GetToolDefinitions());
+            }
+
+            return tools;
+        }
+
+        private void ResetConversationState()
+        {
+            _ConversationHistory.Clear();
+            _CompactionCount = 0;
+            _LastCompactionSummary = string.Empty;
+            _LastCompactionUtc = DateTime.MinValue;
+            _TurnsSinceLastTitleReview = 0;
+            ClearStatusNotice();
+
+            if (!_ConversationTitleSetByUser)
+            {
+                _ConversationTitle = SessionTitleHelper.DefaultTitle;
+            }
+        }
+
+        private void ResetInteractiveScreenForCurrentTitle()
+        {
+            lock (_ConsoleSync)
+            {
+                _RenderedPromptRowCount = 0;
+                _OutputCursorLeft = 0;
+                _OutputCursorTop = 0;
+                _OutputEndsWithPromptSpacer = false;
+                _ChromeTop = 0;
+                _PromptTop = 0;
+                _LastBufferWidth = -1;
+
+                TryClearInteractiveScreen();
+                RenderSessionTitleHeader();
+                _ChromeTop = Console.CursorTop;
+                _PromptTop = _ChromeTop;
+                _OutputCursorTop = _PromptTop;
+            }
+        }
+
+        private void RenderSessionTitleHeader()
+        {
+            AnsiConsole.MarkupLine($"[bold]Title:[/] {Markup.Escape(_ConversationTitle)}");
+            Console.WriteLine();
+        }
+
+        private bool TryUpdateConversationTitle(string title, bool setByUser, bool emitUpdateMessage)
+        {
+            string normalizedTitle = SessionTitleHelper.Normalize(title, _ConversationTitle);
+            bool changed = !string.Equals(_ConversationTitle, normalizedTitle, StringComparison.Ordinal);
+
+            if (changed)
+            {
+                _ConversationTitle = normalizedTitle;
+
+                if (emitUpdateMessage)
+                {
+                    WriteNotificationLine($"Conversation title update: {normalizedTitle}");
+                }
+            }
+
+            if (setByUser)
+            {
+                _ConversationTitleSetByUser = true;
+            }
+            else if (changed)
+            {
+                _ConversationTitleSetByUser = false;
+            }
+
+            return changed;
+        }
+
+        private async Task MaybeRefreshConversationTitleAsync()
+        {
+            if (_ConversationTitleSetByUser)
+            {
+                return;
+            }
+
+            if (!HasEnoughContextForAutomaticTitleReview())
+            {
+                return;
+            }
+
+            bool shouldReview = string.Equals(_ConversationTitle, SessionTitleHelper.DefaultTitle, StringComparison.Ordinal)
+                || _TurnsSinceLastTitleReview >= TitleReviewIntervalTurns;
+
+            if (!shouldReview)
+            {
+                return;
+            }
+
+            try
+            {
+                string? generatedTitle = await GenerateConversationTitleAsync().ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(generatedTitle))
+                {
+                    TryUpdateConversationTitle(generatedTitle, setByUser: false, emitUpdateMessage: true);
+                }
+            }
+            catch
+            {
+                // Title refresh is best-effort only.
+            }
+            finally
+            {
+                _TurnsSinceLastTitleReview = 0;
+            }
+        }
+
+        private bool HasEnoughContextForAutomaticTitleReview()
+        {
+            int conversationalMessageCount = 0;
+            int conversationalCharCount = 0;
+            bool hasUserMessage = false;
+            bool hasAssistantMessage = false;
+
+            foreach (ConversationMessage message in _ConversationHistory)
+            {
+                if ((message.Role != RoleEnum.User && message.Role != RoleEnum.Assistant)
+                    || string.IsNullOrWhiteSpace(message.Content))
+                {
+                    continue;
+                }
+
+                string content = message.Content.Trim();
+                conversationalMessageCount++;
+                conversationalCharCount += content.Length;
+                hasUserMessage |= message.Role == RoleEnum.User;
+                hasAssistantMessage |= message.Role == RoleEnum.Assistant;
+            }
+
+            return hasUserMessage
+                && hasAssistantMessage
+                && conversationalMessageCount >= MinimumTitleReviewMessages
+                && conversationalCharCount >= MinimumTitleReviewChars;
+        }
+
+        private async Task<string?> GenerateConversationTitleAsync()
+        {
+            if (_ConversationHistory.Count == 0)
+            {
+                return null;
+            }
+
+            string conversationDigest = BuildConversationDigest(_ConversationHistory, maxChars: 5000);
+            string systemPrompt =
+                "You generate a short session title for a CLI coding conversation. " +
+                "Return only the title text, 3 to 8 words, plain text, no quotes, no markdown, and no trailing punctuation.";
+            string userPrompt =
+                $"Current title: {_ConversationTitle}{Environment.NewLine}{Environment.NewLine}" +
+                $"Conversation:{Environment.NewLine}{conversationDigest}";
+
+            string title = await RunSidecarPromptAsync(systemPrompt, userPrompt, CancellationToken.None).ConfigureAwait(false);
+            return SessionTitleHelper.Normalize(title, _ConversationTitle);
+        }
+
+        private string GenerateCompactionSummary(List<ConversationMessage> messagesToCompact)
+        {
+            string compactableDigest = BuildConversationDigest(messagesToCompact, maxChars: 12000);
+            string systemPrompt =
+                "You compact older conversation history for a coding agent. " +
+                "Preserve goals, constraints, important files, decisions, errors, and unresolved work. " +
+                "Return plain text only, concise but information-dense, suitable to carry forward as session memory.";
+            string userPrompt =
+                $"Compact this older conversation history:{Environment.NewLine}{Environment.NewLine}{compactableDigest}";
+
+            string summary = RunSidecarPromptAsync(systemPrompt, userPrompt, CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+
+            return summary.Trim();
+        }
+
+        private async Task<string> RunSidecarPromptAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken)
+        {
+            EndpointConfig sidecarEndpoint = CreateSidecarEndpoint();
+            using LlmClient client = new LlmClient(sidecarEndpoint);
+
+            ConversationMessage response = await client.SendAsync(
+                new List<ConversationMessage>
+                {
+                    new ConversationMessage
+                    {
+                        Role = RoleEnum.System,
+                        Content = systemPrompt
+                    },
+                    new ConversationMessage
+                    {
+                        Role = RoleEnum.User,
+                        Content = userPrompt
+                    }
+                },
+                new List<ToolDefinition>(),
+                cancellationToken).ConfigureAwait(false);
+
+            return response.Content?.Trim() ?? string.Empty;
+        }
+
+        private EndpointConfig CreateSidecarEndpoint()
+        {
+            EndpointConfig sidecarEndpoint = CloneEndpoint(_CurrentEndpoint);
+            sidecarEndpoint.Quirks ??= Defaults.QuirksForAdapter(sidecarEndpoint.AdapterType);
+            sidecarEndpoint.Quirks.SupportsTools = false;
+            sidecarEndpoint.Quirks.EnableMalformedToolCallRecovery = false;
+            sidecarEndpoint.Temperature = 0.0;
+            sidecarEndpoint.MaxTokens = Math.Min(sidecarEndpoint.MaxTokens, 2048);
+            return sidecarEndpoint;
+        }
+
+        private static string BuildConversationDigest(IEnumerable<ConversationMessage> messages, int maxChars)
+        {
+            StringBuilder sb = new StringBuilder();
+
+            foreach (ConversationMessage message in messages)
+            {
+                if (string.IsNullOrWhiteSpace(message.Content) && (message.ToolCalls == null || message.ToolCalls.Count == 0))
+                {
+                    continue;
+                }
+
+                sb.Append('[');
+                sb.Append(message.Role.ToString().ToLowerInvariant());
+                sb.Append("] ");
+
+                if (!string.IsNullOrWhiteSpace(message.Content))
+                {
+                    sb.Append(message.Content.Trim());
+                }
+                else if (message.ToolCalls != null && message.ToolCalls.Count > 0)
+                {
+                    sb.Append("tool calls: ");
+                    sb.Append(string.Join(", ", message.ToolCalls.Select(static tc => tc.Name)));
+                }
+
+                sb.AppendLine();
+                sb.AppendLine();
+            }
+
+            string digest = sb.ToString().Trim();
+
+            if (digest.Length <= maxChars)
+            {
+                return digest;
+            }
+
+            int half = Math.Max(1, (maxChars - 24) / 2);
+            return digest.Substring(0, half).TrimEnd()
+                + Environment.NewLine
+                + "...[conversation truncated]..."
+                + Environment.NewLine
+                + digest.Substring(Math.Max(0, digest.Length - half)).TrimStart();
+        }
+
+        private static string FormatTokenEstimate(int tokens)
+        {
+            if (tokens >= 1000000)
+            {
+                return $"{tokens / 1000000.0:0.0}m";
+            }
+
+            if (tokens >= 1000)
+            {
+                return $"{tokens / 1000.0:0.0}k";
+            }
+
+            return tokens.ToString();
+        }
+
+        private bool ShouldShowInteractiveCursor()
+        {
+            return true;
+        }
+
+        private void SetStatusNotice(string message, int durationMs = 2000)
+        {
+            _TransientStatusNotice = message ?? string.Empty;
+            _TransientStatusNoticeExpiresUtc = string.IsNullOrWhiteSpace(_TransientStatusNotice)
+                ? DateTime.MinValue
+                : DateTime.UtcNow.AddMilliseconds(Math.Max(1, durationMs));
+            RenderInteractiveChrome();
+        }
+
+        private void ClearStatusNotice()
+        {
+            _TransientStatusNotice = string.Empty;
+            _TransientStatusNoticeExpiresUtc = DateTime.MinValue;
+        }
+
+        private bool TryGetStatusNotice(out string message)
+        {
+            ClearExpiredStatusNotice();
+
+            if (!string.IsNullOrWhiteSpace(_TransientStatusNotice))
+            {
+                message = _TransientStatusNotice;
+                return true;
+            }
+
+            message = string.Empty;
+            return false;
+        }
+
+        private bool ClearExpiredStatusNotice()
+        {
+            if (string.IsNullOrWhiteSpace(_TransientStatusNotice))
+            {
+                return false;
+            }
+
+            if (DateTime.UtcNow < _TransientStatusNoticeExpiresUtc)
+            {
+                return false;
+            }
+
+            ClearStatusNotice();
+            return true;
+        }
+
+        private static string BuildApprovalNotice(string response, string toolName)
+        {
+            return response.ToLowerInvariant() switch
+            {
+                "y" => $"approved {toolName}",
+                "always" => $"auto-approving {toolName}",
+                "n" => $"denied {toolName}",
+                _ => $"approval response sent for {toolName}"
+            };
+        }
+
+        private static string TruncateToConsoleWidth(string value, int maxWidth)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length <= maxWidth)
+            {
+                return value;
+            }
+
+            if (maxWidth <= 3)
+            {
+                return value.Substring(0, Math.Max(0, maxWidth));
+            }
+
+            return value.Substring(0, maxWidth - 3) + "...";
+        }
+
+        private static string TruncateString(string value, int maxLength)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
+            {
+                return value;
+            }
+
+            return value.Substring(0, maxLength - 3) + "...";
+        }
+
+        private static bool EndsWithLineBreak(string value)
+        {
+            return value.EndsWith("\n", StringComparison.Ordinal)
+                || value.EndsWith("\r", StringComparison.Ordinal);
+        }
+
+        private static bool IsCancellationException(Exception? exception)
+        {
+            while (exception != null)
+            {
+                if (exception is OperationCanceledException || exception is TaskCanceledException)
+                {
+                    return true;
+                }
+
+                exception = exception.InnerException;
+            }
+
+            return false;
+        }
+
+        private static string SummarizeToolResult(string content)
+        {
+            if (string.IsNullOrEmpty(content))
+            {
+                return "(empty)";
+            }
+
+            try
+            {
+                JsonDocument doc = JsonDocument.Parse(content);
+                JsonElement root = doc.RootElement;
+
+                if (root.TryGetProperty("success", out JsonElement successEl) && successEl.GetBoolean())
+                {
+                    if (root.TryGetProperty("file_path", out JsonElement pathEl))
+                    {
+                        string path = pathEl.GetString() ?? string.Empty;
+                        string fileName = Path.GetFileName(path);
+                        if (root.TryGetProperty("line_count", out JsonElement lineCountEl))
+                        {
+                            return $"{fileName} ({lineCountEl.GetInt32()} lines)";
+                        }
+
+                        if (root.TryGetProperty("edits_applied", out JsonElement editsAppliedEl))
+                        {
+                            return $"{fileName} ({editsAppliedEl.GetInt32()} edits)";
+                        }
+
+                        return fileName;
+                    }
+
+                    if (root.TryGetProperty("path", out JsonElement dirPathEl))
+                    {
+                        return Path.GetFileName(dirPathEl.GetString() ?? string.Empty) + "/";
+                    }
+                }
+
+                if (root.TryGetProperty("success", out JsonElement failEl) && !failEl.GetBoolean())
+                {
+                    if (root.TryGetProperty("error", out JsonElement errorEl))
+                    {
+                        return errorEl.GetString() ?? "error";
+                    }
+
+                    if (root.TryGetProperty("message", out JsonElement messageEl))
+                    {
+                        return TruncateString(messageEl.GetString() ?? string.Empty, 120);
+                    }
+                }
+            }
+            catch
+            {
+                // Not JSON.
+            }
+
+            string normalized = content.Replace("\r\n", " ", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal);
+            return TruncateString(normalized, 120);
+        }
+
+        /// <summary>
+        /// Clears the requested rows used by the live prompt chrome.
+        /// </summary>
+        /// <param name="top">The zero-based buffer row to start clearing from.</param>
+        /// <param name="lineCount">The number of rows to clear.</param>
+        private static void ClearRows(int top, int lineCount)
+        {
+            if (lineCount <= 0)
+            {
+                return;
+            }
+
+            int clearWidth = Math.Max(1, GetBufferWidthSafe() - 1);
+            int clearEnd = top + lineCount - 1;
+            EnsureBufferHeightForRow(clearEnd);
+
+            for (int row = top; row <= clearEnd; row++)
+            {
+                SetCursorPositionSafe(0, row);
                 Console.Write(new string(' ', clearWidth));
             }
+        }
 
-            for (int i = 0; i < lineBuffer.LineCount; i++)
+        /// <summary>
+        /// Returns the first buffer row available for prompt rendering after the current output.
+        /// </summary>
+        /// <returns>The next available output row.</returns>
+        private int GetNextAvailableOutputRow()
+        {
+            return _AssistantTextOpen || _OutputCursorLeft > 0
+                ? _OutputCursorTop + 1
+                : _OutputCursorTop;
+        }
+
+        /// <summary>
+        /// Captures the current console width used by the interactive renderer.
+        /// </summary>
+        private void CaptureConsoleWidth()
+        {
+            _LastBufferWidth = GetBufferWidthSafe();
+        }
+
+        /// <summary>
+        /// Determines whether the console width changed since the last render.
+        /// </summary>
+        /// <returns>True when the width changed.</returns>
+        private bool HasConsoleWidthChanged()
+        {
+            return _LastBufferWidth != GetBufferWidthSafe();
+        }
+
+        /// <summary>
+        /// Returns the current console buffer width, or a safe fallback.
+        /// </summary>
+        /// <returns>The buffer width.</returns>
+        private static int GetBufferWidthSafe()
+        {
+            try
             {
-                Console.SetCursorPosition(0, promptTop + i);
-                WritePrompt(i);
-                Console.Write(lineBuffer.GetLine(i));
+                return Math.Max(1, Console.BufferWidth);
+            }
+            catch
+            {
+                return 80;
+            }
+        }
+
+        private static bool GetCursorVisibleSafe()
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return true;
             }
 
-            Console.SetCursorPosition(promptWidth + lineBuffer.CursorColumn, promptTop + lineBuffer.CurrentLineIndex);
-            return lineBuffer.LineCount;
+            try
+            {
+                return Console.CursorVisible;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        private static void SetCursorVisibleSafe(bool visible)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return;
+            }
+
+            try
+            {
+                if (Console.CursorVisible != visible)
+                {
+                    Console.CursorVisible = visible;
+                }
+            }
+            catch
+            {
+                // Best effort only. Some terminals do not expose cursor visibility.
+            }
+        }
+
+        private static void TryClearInteractiveScreen()
+        {
+            try
+            {
+                Console.Clear();
+            }
+            catch
+            {
+                // Best effort only. Some hosts do not support clearing.
+            }
+        }
+
+        /// <summary>
+        /// Ensures the console buffer can accommodate the requested row.
+        /// </summary>
+        /// <param name="row">The zero-based row that must exist in the buffer.</param>
+        private static void EnsureBufferHeightForRow(int row)
+        {
+            if (row < 0 || !OperatingSystem.IsWindows())
+            {
+                return;
+            }
+
+            try
+            {
+                if (row < Console.BufferHeight)
+                {
+                    return;
+                }
+
+                int requiredHeight = row + 1;
+                int minimumVisibleHeight = Console.WindowTop + Console.WindowHeight;
+                if (requiredHeight < minimumVisibleHeight)
+                {
+                    requiredHeight = minimumVisibleHeight;
+                }
+
+                Console.BufferHeight = requiredHeight;
+            }
+            catch
+            {
+                // Best effort only. Some terminals restrict buffer resizing.
+            }
+        }
+
+        /// <summary>
+        /// Moves the cursor without throwing when the requested row falls on the current buffer edge.
+        /// </summary>
+        /// <param name="left">The zero-based column.</param>
+        /// <param name="top">The zero-based row.</param>
+        private static void SetCursorPositionSafe(int left, int top)
+        {
+            int safeTop = Math.Max(0, top);
+            EnsureBufferHeightForRow(safeTop);
+
+            try
+            {
+                int bufferWidth = Math.Max(1, Console.BufferWidth);
+                int bufferHeight = Math.Max(1, Console.BufferHeight);
+                int safeLeft = Math.Clamp(left, 0, bufferWidth - 1);
+                safeTop = Math.Clamp(safeTop, 0, bufferHeight - 1);
+                Console.SetCursorPosition(safeLeft, safeTop);
+            }
+            catch
+            {
+                // If the terminal rejects cursor movement, leave the cursor where it is.
+            }
         }
 
         /// <summary>
@@ -491,31 +1891,49 @@ namespace Mux.Cli.Commands
             }
         }
 
-        /// <summary>
-        /// Redraws the text from the cursor position to the end of the current line,
-        /// clearing any leftover characters and repositioning the cursor.
-        /// </summary>
-        /// <param name="lineBuffer">The line buffer.</param>
-        /// <param name="promptWidth">The width of the prompt prefix in characters.</param>
-        private static void RedrawFromCursor(LineBuffer lineBuffer, int promptWidth)
+        private EndpointConfig CreateInteractiveRunEndpoint()
         {
-            int cursorX = promptWidth + lineBuffer.CursorColumn;
-            string textAfter = lineBuffer.TextAfterCursor;
-
-            Console.SetCursorPosition(cursorX, Console.CursorTop);
-            Console.Write(textAfter);
-            // Clear any trailing characters from the previous longer text
-            Console.Write("  ");
-            Console.SetCursorPosition(cursorX, Console.CursorTop);
+            EndpointConfig runEndpoint = CloneEndpoint(_CurrentEndpoint);
+            runEndpoint.Quirks ??= Defaults.QuirksForAdapter(runEndpoint.AdapterType);
+            runEndpoint.Quirks.EnableMalformedToolCallRecovery = false;
+            return runEndpoint;
         }
 
-        /// <summary>
-        /// Handles Ctrl+C during generation to cancel the current operation.
-        /// </summary>
-        private void OnCancelKeyPress(object? sender, ConsoleCancelEventArgs e)
+        private static EndpointConfig CloneEndpoint(EndpointConfig endpoint)
         {
-            e.Cancel = true;
-            _CurrentCts?.Cancel();
+            return new EndpointConfig
+            {
+                Name = endpoint.Name,
+                AdapterType = endpoint.AdapterType,
+                BaseUrl = endpoint.BaseUrl,
+                Model = endpoint.Model,
+                IsDefault = endpoint.IsDefault,
+                MaxTokens = endpoint.MaxTokens,
+                Temperature = endpoint.Temperature,
+                ContextWindow = endpoint.ContextWindow,
+                TimeoutMs = endpoint.TimeoutMs,
+                Headers = new Dictionary<string, string>(endpoint.Headers),
+                Quirks = CloneBackendQuirks(endpoint.Quirks)
+            };
+        }
+
+        private static BackendQuirks? CloneBackendQuirks(BackendQuirks? quirks)
+        {
+            if (quirks == null)
+            {
+                return null;
+            }
+
+            return new BackendQuirks
+            {
+                AssembleToolCallDeltas = quirks.AssembleToolCallDeltas,
+                SupportsParallelToolCalls = quirks.SupportsParallelToolCalls,
+                SupportsTools = quirks.SupportsTools,
+                EnableMalformedToolCallRecovery = quirks.EnableMalformedToolCallRecovery,
+                RequiresToolResultContentAsString = quirks.RequiresToolResultContentAsString,
+                DefaultFinishReason = quirks.DefaultFinishReason,
+                StripRequestFields = new List<string>(quirks.StripRequestFields)
+            };
         }
 
         /// <summary>
@@ -559,17 +1977,11 @@ namespace Mux.Cli.Commands
         /// Processes slash commands typed at the REPL prompt.
         /// </summary>
         /// <param name="input">The trimmed user input.</param>
-        /// <param name="endpoint">The current endpoint configuration (kept for signature compatibility).</param>
-        /// <param name="systemPrompt">The current system prompt (may be modified by /system).</param>
-        /// <param name="mcpServers">The loaded MCP server configurations.</param>
+        /// <param name="allowBusyCommandsOnly">True to allow only the subset of slash commands that are safe while a run is active.</param>
         /// <returns>True if the input was a slash command and was handled; false otherwise.</returns>
-        private bool HandleSlashCommand(
-            string input,
-            EndpointConfig endpoint,
-            ref string systemPrompt,
-            List<McpServerConfig> mcpServers)
+        private bool HandleSlashCommand(string input, bool allowBusyCommandsOnly = false)
         {
-            if (!input.StartsWith("/"))
+            if (!input.StartsWith("/", StringComparison.Ordinal))
             {
                 return false;
             }
@@ -578,11 +1990,17 @@ namespace Mux.Cli.Commands
             string command = parts[0].ToLowerInvariant();
             string argument = parts.Length > 1 ? parts[1] : string.Empty;
 
+            if (allowBusyCommandsOnly && !CanExecuteSlashCommandWhileBusy(command, argument))
+            {
+                WriteNotificationLine("That command can't run while mux is busy. Use /queue, /status, /help, /title, /tools, /system, /endpoint, or /mcp list.");
+                return true;
+            }
+
             switch (command)
             {
                 case "/exit":
                 case "/quit":
-                    Environment.Exit(0);
+                    _ShouldExit = true;
                     return true;
 
                 case "/endpoint":
@@ -597,12 +2015,28 @@ namespace Mux.Cli.Commands
                     HandleClearCommand();
                     return true;
 
+                case "/status":
+                    HandleStatusCommand();
+                    return true;
+
+                case "/compact":
+                    HandleCompactCommand(argument);
+                    return true;
+
+                case "/title":
+                    HandleTitleCommand(argument);
+                    return true;
+
+                case "/queue":
+                    HandleQueueCommand(argument);
+                    return true;
+
                 case "/system":
-                    HandleSystemCommand(argument, ref systemPrompt);
+                    HandleSystemCommand(argument);
                     return true;
 
                 case "/mcp":
-                    HandleMcpCommand(argument, mcpServers);
+                    HandleMcpCommand(argument);
                     return true;
 
                 case "/help":
@@ -611,15 +2045,13 @@ namespace Mux.Cli.Commands
                     return true;
 
                 default:
-                    AnsiConsole.MarkupLine($"[yellow]Unknown command: {Markup.Escape(command)}. Type /help for available commands.[/]");
+                    WriteMarkupLine($"[yellow]Unknown command: {Markup.Escape(command)}. Type /help for available commands.[/]");
                     return true;
             }
         }
 
         /// <summary>
-        /// Handles the /endpoint command. With no arguments, lists all configured endpoints
-        /// with the current one highlighted in green with an asterisk marker.
-        /// With an argument, switches to the named endpoint, clears the conversation, and prints confirmation.
+        /// Handles the /endpoint command.
         /// </summary>
         /// <param name="argument">The optional endpoint name to switch to.</param>
         private void HandleEndpointCommand(string argument)
@@ -628,8 +2060,8 @@ namespace Mux.Cli.Commands
             {
                 if (_AllEndpoints.Count == 0)
                 {
-                    AnsiConsole.MarkupLine($"[dim]Current:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]([/]{Markup.Escape(_CurrentEndpoint.Model)}[dim])[/]");
-                    AnsiConsole.MarkupLine("[dim]No other endpoints configured.[/]");
+                    WriteMarkupLine($"[dim]Current:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]([/]{Markup.Escape(_CurrentEndpoint.Model)}[dim])[/]");
+                    WriteMarkupLine("[dim]No other endpoints configured.[/]");
                     return;
                 }
 
@@ -658,10 +2090,19 @@ namespace Mux.Cli.Commands
                     table.AddRow(nameDisplay, modelDisplay, adapterDisplay, urlDisplay);
                 }
 
-                AnsiConsole.Write(table);
+                WriteOutputBlock(() =>
+                {
+                    AnsiConsole.Write(table);
+                    Console.WriteLine();
+                });
             }
             else
             {
+                if (!EnsureQueueEmptyForStateChange("switch endpoints"))
+                {
+                    return;
+                }
+
                 string targetName = argument.Trim();
                 EndpointConfig? found = _AllEndpoints
                     .FirstOrDefault((EndpointConfig e) => string.Equals(e.Name, targetName, StringComparison.OrdinalIgnoreCase));
@@ -669,17 +2110,17 @@ namespace Mux.Cli.Commands
                 if (found != null)
                 {
                     _CurrentEndpoint = found;
-                    _ConversationHistory.Clear();
-                    AnsiConsole.MarkupLine(
+                    ResetConversationState();
+                    WriteMarkupLine(
                         $"[green]Switched to endpoint:[/] {Markup.Escape(found.Name)} [dim]([/]{Markup.Escape(found.Model)}[dim])[/] [dim]|[/] [dim]{Markup.Escape(found.AdapterType.ToString())}[/] [dim]|[/] {Markup.Escape(found.BaseUrl)}");
-                    AnsiConsole.MarkupLine("[dim]Conversation history cleared.[/]");
+                    WriteMarkupLine("[dim]Conversation history cleared.[/]");
                 }
                 else
                 {
                     _CurrentEndpoint.Model = targetName;
-                    _ConversationHistory.Clear();
-                    AnsiConsole.MarkupLine($"[green]Model changed to:[/] {Markup.Escape(targetName)}");
-                    AnsiConsole.MarkupLine("[dim]Conversation history cleared.[/]");
+                    ResetConversationState();
+                    WriteMarkupLine($"[green]Model changed to:[/] {Markup.Escape(targetName)}");
+                    WriteMarkupLine("[dim]Conversation history cleared.[/]");
                 }
             }
         }
@@ -720,7 +2161,11 @@ namespace Mux.Cli.Commands
                 }
             }
 
-            AnsiConsole.Write(table);
+            WriteOutputBlock(() =>
+            {
+                AnsiConsole.Write(table);
+                Console.WriteLine();
+            });
         }
 
         /// <summary>
@@ -728,30 +2173,269 @@ namespace Mux.Cli.Commands
         /// </summary>
         private void HandleClearCommand()
         {
-            _ConversationHistory.Clear();
-            AnsiConsole.MarkupLine("[green]Conversation history cleared.[/]");
+            if (!EnsureQueueEmptyForStateChange("clear the conversation"))
+            {
+                return;
+            }
+
+            ResetConversationState();
+            ResetInteractiveScreenForCurrentTitle();
+            SetStatusNotice("conversation history cleared");
         }
 
         /// <summary>
-        /// Handles the /system command. With no arguments, displays the current system prompt
-        /// (truncated to 500 characters). With an argument, replaces the system prompt for this session.
+        /// Handles the /status command by displaying session metadata and estimated context usage.
+        /// </summary>
+        private void HandleStatusCommand()
+        {
+            ContextBudgetSnapshot snapshot = GetContextBudgetSnapshot();
+            string titleSource = _ConversationTitleSetByUser ? "user" : "model";
+            List<ToolDefinition> allTools = GetAllToolDefinitions();
+
+            Table table = new Table();
+            table.Border = TableBorder.Rounded;
+            table.AddColumn("[bold]Field[/]");
+            table.AddColumn("[bold]Value[/]");
+
+            table.AddRow("Title", Markup.Escape(_ConversationTitle));
+            table.AddRow("Title source", titleSource);
+            table.AddRow("Endpoint", Markup.Escape(_CurrentEndpoint.Name));
+            table.AddRow("Model", Markup.Escape(_CurrentEndpoint.Model));
+            table.AddRow("Adapter", Markup.Escape(_CurrentEndpoint.AdapterType.ToString()));
+            table.AddRow("Base URL", Markup.Escape(_CurrentEndpoint.BaseUrl));
+            table.AddRow("Working directory", Markup.Escape(_WorkingDirectory));
+            table.AddRow("Approval policy", Markup.Escape(_ApprovalPolicy.ToString()));
+            table.AddRow("Conversation messages", _ConversationHistory.Count.ToString());
+            table.AddRow("Queued prompts", _QueuedMessages.Count.ToString());
+            table.AddRow("Queue paused", _QueuePaused ? "yes" : "no");
+            table.AddRow("Auto title updates", _ConversationTitleSetByUser ? "disabled (user title)" : $"enabled ({TitleReviewIntervalTurns} successful turns)");
+            table.AddRow("Available tools", allTools.Count.ToString());
+            table.AddRow("System prompt", $"{_SystemPrompt.Length} chars | est. {FormatTokenEstimate(snapshot.SystemPromptTokens)}");
+            table.AddRow("History usage", FormatTokenEstimate(snapshot.MessageTokens));
+            table.AddRow("Tool surface usage", FormatTokenEstimate(snapshot.ToolTokens));
+            table.AddRow("Context usage", $"{FormatTokenEstimate(snapshot.UsedTokens)} / {FormatTokenEstimate(snapshot.UsableInputLimit)} used");
+            table.AddRow("Context remaining", FormatTokenEstimate(snapshot.RemainingTokens));
+            table.AddRow("Warning threshold", FormatTokenEstimate(snapshot.WarningThresholdTokens));
+            table.AddRow("Hard window", FormatTokenEstimate(snapshot.ContextWindowSize));
+            table.AddRow("Reserved output", FormatTokenEstimate(snapshot.ReservedOutputTokens));
+            table.AddRow("Safety margin", FormatTokenEstimate(snapshot.SafetyMarginTokens));
+            table.AddRow("Compactions", _CompactionCount.ToString());
+            table.AddRow("Last compaction", string.IsNullOrWhiteSpace(_LastCompactionSummary) ? "none" : Markup.Escape(_LastCompactionSummary));
+            table.AddRow("Estimate scope", "system prompt + persisted history + tools");
+
+            WriteOutputBlock(() =>
+            {
+                AnsiConsole.MarkupLine($"[bold]Session title:[/] {Markup.Escape(_ConversationTitle)} [dim]({Markup.Escape(titleSource)})[/]");
+                AnsiConsole.Write(table);
+                Console.WriteLine();
+            });
+        }
+
+        /// <summary>
+        /// Handles the /compact command by summarizing older preserved history into one synthetic summary message.
+        /// </summary>
+        /// <param name="argument">Optional compact subcommand.</param>
+        private void HandleCompactCommand(string argument)
+        {
+            if (!EnsureQueueEmptyForStateChange("compact the conversation"))
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(argument))
+            {
+                WriteMarkupLine("[yellow]Usage: /compact[/]");
+                return;
+            }
+
+            ConversationCompactionPlan plan = ConversationCompactionPlanner.CreatePlan(
+                _ConversationHistory,
+                CompactionPreserveTurns,
+                SyntheticSummaryPrefix);
+
+            if (!plan.CanCompact)
+            {
+                WriteMarkupLine("[dim]Nothing old enough to compact yet.[/]");
+                return;
+            }
+
+            ContextBudgetSnapshot beforeSnapshot = GetContextBudgetSnapshot();
+            string summary;
+
+            try
+            {
+                SetStatusNotice("compacting conversation...");
+                summary = GenerateCompactionSummary(plan.MessagesToCompact);
+            }
+            catch (Exception ex)
+            {
+                ClearStatusNotice();
+                WriteMarkupLine($"[red]Compaction failed: {Markup.Escape(ex.Message)}[/]");
+                return;
+            }
+
+            ClearStatusNotice();
+
+            if (string.IsNullOrWhiteSpace(summary))
+            {
+                WriteFailureLine("Compaction produced no summary.");
+                return;
+            }
+
+            List<ConversationMessage> compactedHistory = new List<ConversationMessage>
+            {
+                new ConversationMessage
+                {
+                    Role = RoleEnum.System,
+                    Content = $"{SyntheticSummaryPrefix}{Environment.NewLine}{Environment.NewLine}{summary.Trim()}"
+                }
+            };
+            compactedHistory.AddRange(plan.MessagesToPreserve);
+            _ConversationHistory = compactedHistory;
+            _CompactionCount++;
+            _LastCompactionUtc = DateTime.UtcNow;
+
+            ContextBudgetSnapshot afterSnapshot = GetContextBudgetSnapshot();
+            _LastCompactionSummary = $"manual: {FormatTokenEstimate(beforeSnapshot.UsedTokens)} -> {FormatTokenEstimate(afterSnapshot.UsedTokens)}";
+
+            WriteSuccessLine($"Manual compaction complete: est. {FormatTokenEstimate(beforeSnapshot.UsedTokens)} -> {FormatTokenEstimate(afterSnapshot.UsedTokens)}.");
+        }
+
+        /// <summary>
+        /// Handles the /title command by showing or updating the session title.
+        /// </summary>
+        /// <param name="argument">Optional new title text.</param>
+        private void HandleTitleCommand(string argument)
+        {
+            if (string.IsNullOrWhiteSpace(argument))
+            {
+                WriteNotificationLine($"Conversation title: {_ConversationTitle} ({(_ConversationTitleSetByUser ? "user" : "model")})");
+                return;
+            }
+
+            bool wasUserSet = _ConversationTitleSetByUser;
+            string normalizedTitle = SessionTitleHelper.Normalize(argument, _ConversationTitle);
+            bool titleChanged = TryUpdateConversationTitle(normalizedTitle, setByUser: true, emitUpdateMessage: true);
+
+            if (!titleChanged && !wasUserSet)
+            {
+                WriteNotificationLine("Conversation title locked to the current value.");
+            }
+            else if (!titleChanged)
+            {
+                WriteNotificationLine("Conversation title is already set to that value.");
+            }
+        }
+
+        /// <summary>
+        /// Handles queue management commands.
+        /// </summary>
+        /// <param name="argument">Optional queue subcommand.</param>
+        private void HandleQueueCommand(string argument)
+        {
+            string normalized = string.IsNullOrWhiteSpace(argument)
+                ? "list"
+                : argument.Trim().ToLowerInvariant();
+
+            switch (normalized)
+            {
+                case "list":
+                    if (_QueuedMessages.Count == 0)
+                    {
+                        WriteMarkupLine(_QueuePaused
+                            ? "[dim]No queued prompts. Queue is paused.[/]"
+                            : "[dim]No queued prompts.[/]");
+                        return;
+                    }
+
+                    Table table = new Table();
+                    table.Border = TableBorder.Rounded;
+                    table.AddColumn("[bold]#[/]");
+                    table.AddColumn("[bold]Queued[/]");
+                    table.AddColumn("[bold]Preview[/]");
+
+                    foreach (QueuedMessageEntry entry in _QueuedMessages.Snapshot())
+                    {
+                        table.AddRow(
+                            entry.SequenceNumber.ToString(),
+                            entry.EnqueuedAtUtc.ToLocalTime().ToString("HH:mm:ss"),
+                            Markup.Escape(TruncateString(entry.Text, 80)));
+                    }
+
+                    WriteOutputBlock(() =>
+                    {
+                        AnsiConsole.MarkupLine(_QueuePaused
+                            ? "[yellow]Queue paused[/]"
+                            : "[green]Queue active[/]");
+                        AnsiConsole.Write(table);
+                        Console.WriteLine();
+                    });
+                    return;
+
+                case "clear":
+                    _QueuedMessages.Clear();
+                    _QueuePaused = false;
+                    WriteSuccessLine("Cleared all queued prompts.");
+                    return;
+
+                case "drop-last":
+                    if (_QueuedMessages.TryTakeLast(out QueuedMessageEntry removed))
+                    {
+                        if (_QueuedMessages.Count == 0)
+                        {
+                            _QueuePaused = false;
+                        }
+
+                        WriteSuccessLine($"Removed #{removed.SequenceNumber} \"{TruncateString(removed.Text, 80)}\"");
+                    }
+                    else
+                    {
+                        WriteNotificationLine("No queued prompts to remove.");
+                    }
+                    return;
+
+                case "resume":
+                    if (_QueuedMessages.Count == 0)
+                    {
+                        _QueuePaused = false;
+                        WriteNotificationLine("No queued prompts to resume.");
+                        return;
+                    }
+
+                    _QueuePaused = false;
+                    WriteSuccessLine($"Resumed. {_QueuedMessages.Count} queued prompts remain.");
+                    return;
+
+                default:
+                    WriteMarkupLine("[yellow]Usage: /queue, /queue clear, /queue drop-last, /queue resume[/]");
+                    return;
+            }
+        }
+
+        /// <summary>
+        /// Handles the /system command.
         /// </summary>
         /// <param name="argument">The optional new system prompt text.</param>
-        /// <param name="systemPrompt">Reference to the current system prompt.</param>
-        private void HandleSystemCommand(string argument, ref string systemPrompt)
+        private void HandleSystemCommand(string argument)
         {
             if (!string.IsNullOrWhiteSpace(argument))
             {
-                systemPrompt = argument;
-                AnsiConsole.MarkupLine("[green]System prompt updated for this session.[/]");
+                if (!EnsureQueueEmptyForStateChange("change the system prompt"))
+                {
+                    return;
+                }
+
+                _SystemPrompt = argument;
+                WriteMarkupLine("[green]System prompt updated for this session.[/]");
             }
             else
             {
-                AnsiConsole.MarkupLine($"[dim]System prompt ({systemPrompt.Length} chars):[/]");
-                string preview = systemPrompt.Length > 500
-                    ? systemPrompt.Substring(0, 500) + "..."
-                    : systemPrompt;
-                AnsiConsole.WriteLine(preview);
+                WriteOutputBlock(() =>
+                {
+                    AnsiConsole.MarkupLine($"[dim]System prompt ({_SystemPrompt.Length} chars):[/]");
+                    Console.WriteLine(_SystemPrompt);
+                    Console.WriteLine();
+                });
             }
         }
 
@@ -769,32 +2453,74 @@ namespace Mux.Cli.Commands
             table.AddRow("[cyan]/endpoint[/]", "List all configured endpoints with current one highlighted");
             table.AddRow("[cyan]/endpoint[/] [dim]<name>[/]", "Switch to a named endpoint (clears conversation)");
             table.AddRow("[cyan]/tools[/]", "List all available tools with descriptions");
+            table.AddRow("[cyan]/status[/]", "Show session metadata, context usage, title, and queue state");
+            table.AddRow("[cyan]/compact[/]", "Compact older conversation history into a synthetic summary");
+            table.AddRow("[cyan]/title[/]", "Show the current conversation title");
+            table.AddRow("[cyan]/title[/] [dim]<text>[/]", "Set the conversation title and disable automatic retitling");
             table.AddRow("[cyan]/clear[/]", "Clear conversation history");
-            table.AddRow("[cyan]/system[/]", "Show current system prompt (truncated to 500 chars)");
+            table.AddRow("[cyan]/queue[/]", "List queued prompts and whether dispatch is paused");
+            table.AddRow("[cyan]/queue clear[/]", "Clear all queued prompts");
+            table.AddRow("[cyan]/queue drop-last[/]", "Remove the newest queued prompt");
+            table.AddRow("[cyan]/queue resume[/]", "Resume automatic queue dispatch");
+            table.AddRow("[cyan]/system[/]", "Show the full current system prompt");
             table.AddRow("[cyan]/system[/] [dim]<text>[/]", "Replace system prompt for this session");
             table.AddRow("[cyan]/mcp list[/]", "List MCP server connections and status");
             table.AddRow("[cyan]/mcp add[/] [dim]<name> <cmd>[/]", "Add an MCP server at runtime");
             table.AddRow("[cyan]/mcp remove[/] [dim]<name>[/]", "Remove an MCP server");
             table.AddRow("[cyan]/exit[/]", "Exit mux");
 
-            AnsiConsole.Write(table);
+            WriteOutputBlock(() =>
+            {
+                Console.WriteLine();
+                AnsiConsole.MarkupLine($"[bold]Session title:[/] {Markup.Escape(_ConversationTitle)} [dim]({(_ConversationTitleSetByUser ? "user" : "model")})[/]");
+                AnsiConsole.Write(table);
+                Console.WriteLine();
+                AnsiConsole.MarkupLine("[bold]Input:[/]");
+                AnsiConsole.MarkupLine("  [dim]Enter[/]           Submit input when idle");
+                AnsiConsole.MarkupLine("  [dim]Up / Down[/]       Recall submitted prompts when idle");
+                AnsiConsole.MarkupLine("  [dim]Shift+Enter[/]     Insert newline");
+                AnsiConsole.MarkupLine("  [dim]Ctrl+Enter[/]      Insert newline");
+                AnsiConsole.MarkupLine("  [dim]Tab[/]             Queue the current draft while mux is busy");
+                AnsiConsole.MarkupLine("  [dim]Enter on /command[/] Run supported slash commands immediately while busy");
+                AnsiConsole.MarkupLine("  [dim]Alt+Up[/]          Edit the newest queued prompt");
+                AnsiConsole.MarkupLine("  [dim]Esc[/]             Cancel active generation");
+                AnsiConsole.MarkupLine("  [dim]Ctrl+C[/]          Cancel active generation / clear idle draft");
+                AnsiConsole.MarkupLine("  [dim]Ctrl+C x2[/]       Exit mux when idle with an empty draft");
+                Console.WriteLine();
+            });
+        }
 
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine("[bold]Input:[/]");
-            AnsiConsole.MarkupLine("  [dim]Enter[/]           Submit input");
-            AnsiConsole.MarkupLine("  [dim]Up / Down[/]       Recall submitted prompts");
-            AnsiConsole.MarkupLine("  [dim]Shift+Enter[/]     Insert newline");
-            AnsiConsole.MarkupLine("  [dim]Ctrl+Enter[/]      Insert newline");
-            AnsiConsole.MarkupLine("  [dim]Ctrl+C[/]          Cancel generation / clear input");
-            AnsiConsole.MarkupLine("  [dim]Ctrl+C x2[/]       Exit mux");
+        private static bool CanExecuteSlashCommandWhileBusy(string command, string argument)
+        {
+            switch (command)
+            {
+                case "/help":
+                case "/?":
+                case "/status":
+                case "/tools":
+                case "/queue":
+                case "/title":
+                    return true;
+
+                case "/system":
+                case "/endpoint":
+                    return string.IsNullOrWhiteSpace(argument);
+
+                case "/mcp":
+                    string[] subParts = argument.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    string subCommand = subParts.Length > 0 ? subParts[0].ToLowerInvariant() : "list";
+                    return string.Equals(subCommand, "list", StringComparison.Ordinal);
+
+                default:
+                    return false;
+            }
         }
 
         /// <summary>
         /// Handles /mcp subcommands: list, add, remove.
         /// </summary>
         /// <param name="argument">The argument string after /mcp.</param>
-        /// <param name="mcpServers">The loaded MCP server configurations.</param>
-        private void HandleMcpCommand(string argument, List<McpServerConfig> mcpServers)
+        private void HandleMcpCommand(string argument)
         {
             string[] subParts = argument.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             string subCommand = subParts.Length > 0 ? subParts[0].ToLowerInvariant() : "list";
@@ -804,14 +2530,14 @@ namespace Mux.Cli.Commands
                 case "list":
                     if (_McpToolManager == null)
                     {
-                        AnsiConsole.MarkupLine("[dim]No MCP servers configured.[/]");
+                        WriteMarkupLine("[dim]No MCP servers configured.[/]");
                         return;
                     }
 
                     List<(string Name, int ToolCount, bool Connected)> status = _McpToolManager.GetServerStatus();
                     if (status.Count == 0)
                     {
-                        AnsiConsole.MarkupLine("[dim]No MCP servers connected.[/]");
+                        WriteMarkupLine("[dim]No MCP servers connected.[/]");
                         return;
                     }
 
@@ -831,13 +2557,22 @@ namespace Mux.Cli.Commands
                             statusText);
                     }
 
-                    AnsiConsole.Write(mcpTable);
+                    WriteOutputBlock(() =>
+                    {
+                        AnsiConsole.Write(mcpTable);
+                        Console.WriteLine();
+                    });
                     break;
 
                 case "add":
+                    if (!EnsureQueueEmptyForStateChange("modify MCP servers"))
+                    {
+                        return;
+                    }
+
                     if (subParts.Length < 3)
                     {
-                        AnsiConsole.MarkupLine("[yellow]Usage: /mcp add <name> <command> [args...][/]");
+                        WriteMarkupLine("[yellow]Usage: /mcp add <name> <command> [args...][/]");
                         return;
                     }
 
@@ -858,7 +2593,7 @@ namespace Mux.Cli.Commands
                     {
                         _McpToolManager.AddServerAsync(addName, addCommand, addArgs, CancellationToken.None)
                             .GetAwaiter().GetResult();
-                        AnsiConsole.MarkupLine($"[green]Added MCP server:[/] {Markup.Escape(addName)}");
+                        WriteMarkupLine($"[green]Added MCP server:[/] {Markup.Escape(addName)}");
 
                         List<ToolDefinition> newTools = _McpToolManager.GetToolDefinitions();
                         int toolCount = 0;
@@ -870,18 +2605,23 @@ namespace Mux.Cli.Commands
                             }
                         }
 
-                        AnsiConsole.MarkupLine($"  [dim]Discovered {toolCount} tools[/]");
+                        WriteMarkupLine($"[dim]Discovered {toolCount} tools[/]");
                     }
                     catch (Exception ex)
                     {
-                        AnsiConsole.MarkupLine($"[red]Failed to add MCP server: {Markup.Escape(ex.Message)}[/]");
+                        WriteMarkupLine($"[red]Failed to add MCP server: {Markup.Escape(ex.Message)}[/]");
                     }
                     break;
 
                 case "remove":
+                    if (!EnsureQueueEmptyForStateChange("modify MCP servers"))
+                    {
+                        return;
+                    }
+
                     if (subParts.Length < 2)
                     {
-                        AnsiConsole.MarkupLine("[yellow]Usage: /mcp remove <name>[/]");
+                        WriteMarkupLine("[yellow]Usage: /mcp remove <name>[/]");
                         return;
                     }
 
@@ -889,26 +2629,70 @@ namespace Mux.Cli.Commands
 
                     if (_McpToolManager == null)
                     {
-                        AnsiConsole.MarkupLine("[dim]No MCP servers configured.[/]");
+                        WriteMarkupLine("[dim]No MCP servers configured.[/]");
                         return;
                     }
 
                     try
                     {
                         _McpToolManager.RemoveServerAsync(removeName).GetAwaiter().GetResult();
-                        AnsiConsole.MarkupLine($"[green]Removed MCP server:[/] {Markup.Escape(removeName)}");
+                        WriteMarkupLine($"[green]Removed MCP server:[/] {Markup.Escape(removeName)}");
                     }
                     catch (Exception ex)
                     {
-                        AnsiConsole.MarkupLine($"[red]Failed to remove MCP server: {Markup.Escape(ex.Message)}[/]");
+                        WriteMarkupLine($"[red]Failed to remove MCP server: {Markup.Escape(ex.Message)}[/]");
                     }
                     break;
 
                 default:
-                    // Fallback: treat bare /mcp as /mcp list
-                    HandleMcpCommand("list", mcpServers);
+                    HandleMcpCommand("list");
                     break;
             }
+        }
+
+        private bool EnsureQueueEmptyForStateChange(string action)
+        {
+            if (_QueuedMessages.Count > 0)
+            {
+                WriteMarkupLine($"[yellow]Cannot {Markup.Escape(action)} while {_QueuedMessages.Count} queued prompts remain. Use /queue clear or /queue resume first.[/]");
+                return false;
+            }
+
+            return true;
+        }
+
+        #endregion
+
+        #region Private-Types
+
+        private class ApprovalRequestState
+        {
+            public ToolCall ToolCall { get; set; } = new ToolCall();
+
+            public string Summary { get; set; } = string.Empty;
+
+            public TaskCompletionSource<string> CompletionSource { get; set; } =
+                new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        private class ActiveRunState
+        {
+            public string Prompt { get; set; } = string.Empty;
+
+            public Channel<AgentEvent> Events { get; set; } = Channel.CreateUnbounded<AgentEvent>();
+
+            public Task<RunExecutionResult> CompletionTask { get; set; } = Task.FromResult(new RunExecutionResult());
+        }
+
+        private class RunExecutionResult
+        {
+            public string Prompt { get; set; } = string.Empty;
+
+            public string AssistantResponse { get; set; } = string.Empty;
+
+            public bool Cancelled { get; set; } = false;
+
+            public Exception? Error { get; set; } = null;
         }
 
         #endregion

@@ -36,11 +36,26 @@ namespace Mux.Core.Llm
         /// <param name="endpoint">The endpoint configuration to use for LLM requests.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is null.</exception>
         public LlmClient(EndpointConfig endpoint)
+            : this(endpoint, null, null)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LlmClient"/> class with optional transport overrides.
+        /// </summary>
+        /// <param name="endpoint">The endpoint configuration to use for LLM requests.</param>
+        /// <param name="httpClient">An optional HTTP client override, primarily for tests.</param>
+        /// <param name="adapter">An optional backend adapter override, primarily for tests.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is null.</exception>
+        public LlmClient(EndpointConfig endpoint, HttpClient? httpClient, IBackendAdapter? adapter = null)
         {
             _Endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
-            _HttpClient = new HttpClient();
-            _HttpClient.Timeout = TimeSpan.FromMilliseconds(endpoint.TimeoutMs);
-            _Adapter = ResolveAdapter(endpoint.AdapterType);
+            _HttpClient = httpClient ?? new HttpClient();
+
+            // Streaming chat responses can remain open for minutes. Per-request timeouts are
+            // applied explicitly where needed instead of letting HttpClient cancel the whole stream.
+            _HttpClient.Timeout = Timeout.InfiniteTimeSpan;
+            _Adapter = adapter ?? ResolveAdapter(endpoint.AdapterType);
         }
 
         /// <summary>
@@ -114,15 +129,26 @@ namespace Mux.Core.Llm
 
             return await RetryHandler.ExecuteWithRetryAsync(async () =>
             {
-                HttpRequestMessage request = _Adapter.BuildRequest(messages, tools, _Endpoint);
+                HttpRequestMessage request = _Adapter.BuildRequest(messages, tools, _Endpoint, stream: false);
+                using CancellationTokenSource requestCts = CreateRequestTimeoutTokenSource(cancellationToken);
 
-                HttpResponseMessage response = await _HttpClient
-                    .SendAsync(request, cancellationToken)
-                    .ConfigureAwait(false);
+                HttpResponseMessage response;
+                string responseBody;
 
-                string responseBody = await response.Content
-                    .ReadAsStringAsync()
-                    .ConfigureAwait(false);
+                try
+                {
+                    response = await _HttpClient
+                        .SendAsync(request, requestCts.Token)
+                        .ConfigureAwait(false);
+
+                    responseBody = await response.Content
+                        .ReadAsStringAsync(requestCts.Token)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException ex) when (IsRequestTimeout(requestCts, cancellationToken))
+                {
+                    throw CreateTimeoutException(ex);
+                }
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -161,11 +187,15 @@ namespace Mux.Core.Llm
             {
                 response = await RetryHandler.ExecuteWithRetryAsync(async () =>
                 {
-                    HttpRequestMessage retryRequest = _Adapter.BuildRequest(messages, tools, _Endpoint);
+                    HttpRequestMessage retryRequest = _Adapter.BuildRequest(messages, tools, _Endpoint, stream: true);
                     return await _HttpClient
                         .SendAsync(retryRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                         .ConfigureAwait(false);
                 }, maxRetries: 3, cancellationToken: cancellationToken, onRetry: _OnRetry).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -209,10 +239,14 @@ namespace Mux.Core.Llm
 
                     try
                     {
-                        HttpRequestMessage retryRequest = _Adapter.BuildRequest(messages, emptyTools, _Endpoint);
+                        HttpRequestMessage retryRequest = _Adapter.BuildRequest(messages, emptyTools, _Endpoint, stream: true);
                         retryResponse = await _HttpClient
                             .SendAsync(retryRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                             .ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
                     }
                     catch (Exception retryEx)
                     {
@@ -260,8 +294,12 @@ namespace Mux.Core.Llm
             try
             {
                 responseStream = await response.Content
-                    .ReadAsStreamAsync()
+                    .ReadAsStreamAsync(cancellationToken)
                     .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -279,7 +317,7 @@ namespace Mux.Core.Llm
             }
 
             await foreach (AgentEvent agentEvent in _Adapter
-                .ReadStreamingEvents(responseStream!, cancellationToken)
+                .ReadStreamingEvents(responseStream!, _Endpoint, cancellationToken)
                 .ConfigureAwait(false))
             {
                 yield return agentEvent;
@@ -314,6 +352,24 @@ namespace Mux.Core.Llm
 
                 _Disposed = true;
             }
+        }
+
+        private CancellationTokenSource CreateRequestTimeoutTokenSource(CancellationToken cancellationToken)
+        {
+            CancellationTokenSource requestCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            requestCts.CancelAfter(_Endpoint.TimeoutMs);
+            return requestCts;
+        }
+
+        private static bool IsRequestTimeout(CancellationTokenSource requestCts, CancellationToken cancellationToken)
+        {
+            return requestCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested;
+        }
+
+        private TaskCanceledException CreateTimeoutException(OperationCanceledException innerException)
+        {
+            string message = $"The request timed out after {_Endpoint.TimeoutMs}ms.";
+            return new TaskCanceledException(message, innerException);
         }
 
         #endregion

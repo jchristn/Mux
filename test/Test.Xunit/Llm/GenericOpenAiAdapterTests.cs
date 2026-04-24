@@ -24,6 +24,14 @@ namespace Test.Xunit.Llm
         #region Private-Members
 
         private readonly GenericOpenAiAdapter _Adapter = new GenericOpenAiAdapter();
+        private readonly EndpointConfig _Endpoint = new EndpointConfig
+        {
+            Name = "test",
+            BaseUrl = "http://localhost:8080",
+            Model = "test-model",
+            AdapterType = AdapterTypeEnum.OpenAiCompatible,
+            Quirks = new BackendQuirks()
+        };
 
         #endregion
 
@@ -133,6 +141,34 @@ namespace Test.Xunit.Llm
             JsonNode? parsed = JsonNode.Parse(body);
 
             Assert.Null(parsed!["tools"]);
+        }
+
+        /// <summary>
+        /// Verifies that non-streaming requests set the stream flag to false.
+        /// </summary>
+        [Fact]
+        public async Task BuildRequest_NonStreaming_SetsStreamFalse()
+        {
+            EndpointConfig endpoint = new EndpointConfig
+            {
+                Name = "test",
+                BaseUrl = "http://localhost:8080",
+                Model = "test-model",
+                Quirks = new BackendQuirks()
+            };
+
+            List<ConversationMessage> messages = new List<ConversationMessage>
+            {
+                new ConversationMessage { Role = RoleEnum.User, Content = "Hello" }
+            };
+
+            HttpRequestMessage request = _Adapter.BuildRequest(messages, new List<ToolDefinition>(), endpoint, stream: false);
+
+            string body = await request.Content!.ReadAsStringAsync();
+            JsonNode? parsed = JsonNode.Parse(body);
+
+            Assert.NotNull(parsed);
+            Assert.False(parsed!["stream"]!.GetValue<bool>());
         }
 
         /// <summary>
@@ -273,7 +309,7 @@ namespace Test.Xunit.Llm
             MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
 
             List<AgentEvent> events = new List<AgentEvent>();
-            await foreach (AgentEvent agentEvent in _Adapter.ReadStreamingEvents(stream, CancellationToken.None))
+            await foreach (AgentEvent agentEvent in _Adapter.ReadStreamingEvents(stream, _Endpoint, CancellationToken.None))
             {
                 events.Add(agentEvent);
             }
@@ -301,7 +337,7 @@ namespace Test.Xunit.Llm
             MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
 
             List<AgentEvent> events = new List<AgentEvent>();
-            await foreach (AgentEvent agentEvent in _Adapter.ReadStreamingEvents(stream, CancellationToken.None))
+            await foreach (AgentEvent agentEvent in _Adapter.ReadStreamingEvents(stream, _Endpoint, CancellationToken.None))
             {
                 events.Add(agentEvent);
             }
@@ -336,7 +372,7 @@ namespace Test.Xunit.Llm
             MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
 
             List<AgentEvent> events = new List<AgentEvent>();
-            await foreach (AgentEvent agentEvent in _Adapter.ReadStreamingEvents(stream, CancellationToken.None))
+            await foreach (AgentEvent agentEvent in _Adapter.ReadStreamingEvents(stream, _Endpoint, CancellationToken.None))
             {
                 events.Add(agentEvent);
             }
@@ -344,6 +380,41 @@ namespace Test.Xunit.Llm
             Assert.Single(events);
             Assert.IsType<AssistantTextEvent>(events[0]);
             Assert.Equal("Hi", ((AssistantTextEvent)events[0]).Text);
+        }
+
+        /// <summary>
+        /// Verifies that malformed tool-call recovery can be disabled for freeform assistant text.
+        /// </summary>
+        [Fact]
+        public async Task ReadStreamingEvents_MalformedRecoveryDisabled_DoesNotInferToolCalls()
+        {
+            EndpointConfig endpoint = new EndpointConfig
+            {
+                Name = "test",
+                BaseUrl = "http://localhost:8080",
+                Model = "test-model",
+                AdapterType = AdapterTypeEnum.OpenAiCompatible,
+                Quirks = new BackendQuirks
+                {
+                    EnableMalformedToolCallRecovery = false
+                }
+            };
+
+            string sseData =
+                "data: {\"choices\":[{\"delta\":{\"content\":\"```json\\n{\\\"name\\\":\\\"read_file\\\",\\\"arguments\\\":{\\\"path\\\":\\\"example.txt\\\"}}\\n```\"},\"finish_reason\":\"stop\"}]}\n\n" +
+                "data: [DONE]\n\n";
+
+            MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
+
+            List<AgentEvent> events = new List<AgentEvent>();
+            await foreach (AgentEvent agentEvent in _Adapter.ReadStreamingEvents(stream, endpoint, CancellationToken.None))
+            {
+                events.Add(agentEvent);
+            }
+
+            Assert.Single(events);
+            AssistantTextEvent textEvent = Assert.IsType<AssistantTextEvent>(events[0]);
+            Assert.Contains("read_file", textEvent.Text, StringComparison.Ordinal);
         }
 
         #endregion

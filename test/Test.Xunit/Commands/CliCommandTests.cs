@@ -130,7 +130,7 @@ namespace Test.Xunit.Commands
             });
 
             Assert.Equal(1, exitCode);
-            Assert.Contains("[mux] retry", stderr, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Retry", stderr, StringComparison.OrdinalIgnoreCase);
 
             string[] lines = stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             Assert.True(lines.Length >= 3);

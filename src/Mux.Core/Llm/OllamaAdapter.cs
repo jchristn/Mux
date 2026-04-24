@@ -36,15 +36,17 @@ namespace Mux.Core.Llm
         /// <param name="messages">The conversation messages to send.</param>
         /// <param name="tools">The tool definitions available to the model.</param>
         /// <param name="endpoint">The endpoint configuration for the Ollama backend.</param>
+        /// <param name="stream">True to request an SSE stream; false for a single JSON response.</param>
         /// <returns>A fully configured <see cref="HttpRequestMessage"/>.</returns>
         public override HttpRequestMessage BuildRequest(
             List<ConversationMessage> messages,
             List<ToolDefinition> tools,
-            EndpointConfig endpoint)
+            EndpointConfig endpoint,
+            bool stream = true)
         {
             if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
 
-            HttpRequestMessage request = base.BuildRequest(messages, tools, endpoint);
+            HttpRequestMessage request = base.BuildRequest(messages, tools, endpoint, stream);
 
             // Strip parallel_tool_calls and stream_options — Ollama does not support them
             if (request.Content != null)
@@ -73,16 +75,18 @@ namespace Mux.Core.Llm
         /// tool calls in single chunks rather than deltas, so this override handles both modes.
         /// </summary>
         /// <param name="responseStream">The HTTP response body stream.</param>
+        /// <param name="endpoint">The endpoint configuration for the active request.</param>
         /// <param name="cancellationToken">A token to cancel the streaming operation.</param>
         /// <returns>An async sequence of <see cref="AgentEvent"/> instances.</returns>
         public override async IAsyncEnumerable<AgentEvent> ReadStreamingEvents(
             Stream responseStream,
+            EndpointConfig endpoint,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             // Ollama uses the same SSE format but may deliver complete tool calls
             // in a single chunk rather than streaming deltas. The base implementation
             // handles both cases via the accumulator pattern, so delegate to it.
-            await foreach (AgentEvent agentEvent in base.ReadStreamingEvents(responseStream, cancellationToken)
+            await foreach (AgentEvent agentEvent in base.ReadStreamingEvents(responseStream, endpoint, cancellationToken)
                 .ConfigureAwait(false))
             {
                 yield return agentEvent;
