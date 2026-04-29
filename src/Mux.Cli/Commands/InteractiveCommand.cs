@@ -2,6 +2,7 @@ namespace Mux.Cli.Commands
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Linq;
     using System.Text;
@@ -2231,7 +2232,7 @@ namespace Mux.Cli.Commands
 
             if (allowBusyCommandsOnly && !CanExecuteSlashCommandWhileBusy(command, argument))
             {
-                WriteNotificationLine("That command can't run while mux is busy. Use /queue, /status, /context, /compact strategy, /help, /title, /tools, /system, /endpoint, or /mcp list.");
+                WriteNotificationLine("That command can't run while mux is busy. Use /queue, /status, /context, /compact strategy, /help, /title, /tools, /system, /endpoint list, or /mcp list.");
                 return true;
             }
 
@@ -2296,73 +2297,288 @@ namespace Mux.Cli.Commands
         /// <param name="argument">The optional endpoint name to switch to.</param>
         private void HandleEndpointCommand(string argument)
         {
-            if (string.IsNullOrWhiteSpace(argument))
+            EndpointCommandParseResult parseResult = EndpointCommandParser.Parse(argument);
+            if (!parseResult.Success)
             {
-                if (_AllEndpoints.Count == 0)
-                {
-                    WriteMarkupLine($"[dim]Current:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]([/]{Markup.Escape(_CurrentEndpoint.Model)}[dim])[/]");
-                    WriteMarkupLine("[dim]No other endpoints configured.[/]");
+                WriteMarkupLine($"[yellow]{Markup.Escape(parseResult.ErrorMessage)}[/]");
+                return;
+            }
+
+            EndpointCommandRequest request = parseResult.Request!;
+            switch (request.Action)
+            {
+                case EndpointCommandAction.List:
+                    HandleEndpointListCommand();
                     return;
-                }
 
-                Table table = new Table();
-                table.Border = TableBorder.Rounded;
-                table.AddColumn("[bold]Endpoint[/]");
-                table.AddColumn("[bold]Model[/]");
-                table.AddColumn("[bold]Adapter[/]");
-                table.AddColumn("[bold]URL[/]");
+                case EndpointCommandAction.Switch:
+                    HandleEndpointSwitchCommand(request.Name ?? string.Empty);
+                    return;
 
-                foreach (EndpointConfig ep in _AllEndpoints)
-                {
-                    bool isCurrent = string.Equals(ep.Name, _CurrentEndpoint.Name, StringComparison.OrdinalIgnoreCase);
-                    string nameDisplay = isCurrent
-                        ? $"[green]* {Markup.Escape(ep.Name)}[/]"
-                        : $"  {Markup.Escape(ep.Name)}";
-                    string modelDisplay = isCurrent
-                        ? $"[green]{Markup.Escape(ep.Model)}[/]"
-                        : Markup.Escape(ep.Model);
-                    string adapterDisplay = isCurrent
-                        ? $"[green]{Markup.Escape(ep.AdapterType.ToString())}[/]"
-                        : Markup.Escape(ep.AdapterType.ToString());
-                    string urlDisplay = isCurrent
-                        ? $"[green]{Markup.Escape(ep.BaseUrl)}[/]"
-                        : Markup.Escape(ep.BaseUrl);
-                    table.AddRow(nameDisplay, modelDisplay, adapterDisplay, urlDisplay);
-                }
+                case EndpointCommandAction.Show:
+                    HandleEndpointShowCommand(request.Name ?? string.Empty);
+                    return;
 
-                WriteOutputBlock(() =>
-                {
-                    AnsiConsole.Write(table);
-                    Console.WriteLine();
-                });
+                case EndpointCommandAction.Add:
+                    if (request.Endpoint == null)
+                    {
+                        WriteFailureLine("Endpoint add request was missing parsed details.");
+                        return;
+                    }
+
+                    HandleEndpointAddCommand(request.Endpoint);
+                    return;
+
+                case EndpointCommandAction.Remove:
+                    HandleEndpointRemoveCommand(request.Name ?? string.Empty);
+                    return;
+            }
+        }
+
+        private void HandleEndpointListCommand()
+        {
+            if (_AllEndpoints.Count == 0)
+            {
+                WriteMarkupLine($"[dim]Current:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]([/]{Markup.Escape(_CurrentEndpoint.Model)}[dim])[/]");
+                WriteMarkupLine("[dim]No configured endpoints found in endpoints.json.[/]");
+                return;
+            }
+
+            Table table = new Table();
+            table.Border = TableBorder.Rounded;
+            table.AddColumn("[bold]Endpoint[/]");
+            table.AddColumn("[bold]Model[/]");
+            table.AddColumn("[bold]Adapter[/]");
+            table.AddColumn("[bold]Default[/]");
+            table.AddColumn("[bold]URL[/]");
+
+            foreach (EndpointConfig ep in _AllEndpoints)
+            {
+                bool isCurrent = string.Equals(ep.Name, _CurrentEndpoint.Name, StringComparison.OrdinalIgnoreCase);
+                string nameDisplay = isCurrent
+                    ? $"[green]* {Markup.Escape(ep.Name)}[/]"
+                    : $"  {Markup.Escape(ep.Name)}";
+                string modelDisplay = isCurrent
+                    ? $"[green]{Markup.Escape(ep.Model)}[/]"
+                    : Markup.Escape(ep.Model);
+                string adapterDisplay = isCurrent
+                    ? $"[green]{Markup.Escape(ep.AdapterType.ToString())}[/]"
+                    : Markup.Escape(ep.AdapterType.ToString());
+                string defaultDisplay = ep.IsDefault
+                    ? (isCurrent ? "[green]yes[/]" : "[cyan]yes[/]")
+                    : "no";
+                string urlDisplay = isCurrent
+                    ? $"[green]{Markup.Escape(ep.BaseUrl)}[/]"
+                    : Markup.Escape(ep.BaseUrl);
+                table.AddRow(nameDisplay, modelDisplay, adapterDisplay, defaultDisplay, urlDisplay);
+            }
+
+            WriteOutputBlock(() =>
+            {
+                AnsiConsole.Write(table);
+                Console.WriteLine();
+            }, outputEndsWithPromptSpacer: true);
+        }
+
+        private void HandleEndpointSwitchCommand(string targetName)
+        {
+            if (!EnsureQueueEmptyForStateChange("switch endpoints"))
+            {
+                return;
+            }
+
+            targetName = targetName.Trim();
+            EndpointConfig? found = _AllEndpoints
+                .FirstOrDefault((EndpointConfig e) => string.Equals(e.Name, targetName, StringComparison.OrdinalIgnoreCase));
+
+            if (found != null)
+            {
+                _CurrentEndpoint = found;
+                ResetConversationState();
+                WriteMarkupLine(
+                    $"[green]Switched to endpoint:[/] {Markup.Escape(found.Name)} [dim]([/]{Markup.Escape(found.Model)}[dim])[/] [dim]|[/] [dim]{Markup.Escape(found.AdapterType.ToString())}[/] [dim]|[/] {Markup.Escape(found.BaseUrl)}");
+                WriteMarkupLine("[dim]Conversation history cleared.[/]");
             }
             else
             {
-                if (!EnsureQueueEmptyForStateChange("switch endpoints"))
-                {
-                    return;
-                }
+                _CurrentEndpoint.Model = targetName;
+                ResetConversationState();
+                WriteMarkupLine($"[green]Model changed to:[/] {Markup.Escape(targetName)}");
+                WriteMarkupLine("[dim]Conversation history cleared.[/]");
+            }
+        }
 
-                string targetName = argument.Trim();
-                EndpointConfig? found = _AllEndpoints
-                    .FirstOrDefault((EndpointConfig e) => string.Equals(e.Name, targetName, StringComparison.OrdinalIgnoreCase));
+        private void HandleEndpointShowCommand(string endpointName)
+        {
+            EndpointConfig? found = _AllEndpoints
+                .FirstOrDefault((EndpointConfig e) => string.Equals(e.Name, endpointName, StringComparison.OrdinalIgnoreCase));
 
-                if (found != null)
+            if (found == null)
+            {
+                WriteFailureLine($"No endpoint named '{endpointName}' is configured.");
+                return;
+            }
+
+            EndpointProbeSnapshot probe = ProbeEndpoint(found);
+            Table table = new Table();
+            table.Border = TableBorder.Rounded;
+            table.AddColumn("[bold]Field[/]");
+            table.AddColumn("[bold]Value[/]");
+
+            table.AddRow("Name", Markup.Escape(found.Name));
+            table.AddRow("Adapter", Markup.Escape(found.AdapterType.ToString()));
+            table.AddRow("Base URL", Markup.Escape(found.BaseUrl));
+            table.AddRow("Model", Markup.Escape(found.Model));
+            table.AddRow("Default", found.IsDefault ? "yes" : "no");
+            table.AddRow("Active in session", string.Equals(found.Name, _CurrentEndpoint.Name, StringComparison.OrdinalIgnoreCase) ? "yes" : "no");
+            table.AddRow("Max tokens", found.MaxTokens.ToString());
+            table.AddRow("Temperature", found.Temperature.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+            table.AddRow("Context window", found.ContextWindow.ToString());
+            table.AddRow("Timeout (ms)", found.TimeoutMs.ToString());
+            table.AddRow("Headers", Markup.Escape(FormatEndpointHeaders(found)));
+            table.AddRow("Tool calling", (found.Quirks?.SupportsTools ?? Defaults.QuirksForAdapter(found.AdapterType).SupportsTools) ? "enabled" : "disabled");
+            table.AddRow("Connected", probe.Success ? "[green]yes[/]" : "[red]no[/]");
+            table.AddRow("Probe duration", probe.DurationMs.ToString() + "ms");
+            table.AddRow("Probe detail", Markup.Escape(probe.Detail));
+
+            WriteOutputBlock(() =>
+            {
+                AnsiConsole.Write(table);
+                Console.WriteLine();
+            }, outputEndsWithPromptSpacer: true);
+        }
+
+        private void HandleEndpointAddCommand(EndpointConfig endpoint)
+        {
+            if (!EnsureQueueEmptyForStateChange("modify endpoints"))
+            {
+                return;
+            }
+
+            if (_AllEndpoints.Any(existing => string.Equals(existing.Name, endpoint.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                WriteFailureLine($"An endpoint named '{endpoint.Name}' already exists.");
+                return;
+            }
+
+            List<EndpointConfig> updatedEndpoints = new List<EndpointConfig>(_AllEndpoints);
+            if (endpoint.IsDefault)
+            {
+                foreach (EndpointConfig existing in updatedEndpoints)
                 {
-                    _CurrentEndpoint = found;
-                    ResetConversationState();
-                    WriteMarkupLine(
-                        $"[green]Switched to endpoint:[/] {Markup.Escape(found.Name)} [dim]([/]{Markup.Escape(found.Model)}[dim])[/] [dim]|[/] [dim]{Markup.Escape(found.AdapterType.ToString())}[/] [dim]|[/] {Markup.Escape(found.BaseUrl)}");
-                    WriteMarkupLine("[dim]Conversation history cleared.[/]");
-                }
-                else
-                {
-                    _CurrentEndpoint.Model = targetName;
-                    ResetConversationState();
-                    WriteMarkupLine($"[green]Model changed to:[/] {Markup.Escape(targetName)}");
-                    WriteMarkupLine("[dim]Conversation history cleared.[/]");
+                    existing.IsDefault = false;
                 }
             }
+
+            updatedEndpoints.Add(endpoint);
+            SettingsLoader.SaveEndpoints(updatedEndpoints);
+            ReloadConfiguredEndpoints();
+
+            string defaultSuffix = endpoint.IsDefault
+                ? " It is now the default endpoint for future sessions."
+                : string.Empty;
+            WriteSuccessLine($"Added endpoint '{endpoint.Name}'.{defaultSuffix}");
+        }
+
+        private void HandleEndpointRemoveCommand(string endpointName)
+        {
+            if (!EnsureQueueEmptyForStateChange("modify endpoints"))
+            {
+                return;
+            }
+
+            EndpointConfig? existing = _AllEndpoints
+                .FirstOrDefault((EndpointConfig e) => string.Equals(e.Name, endpointName, StringComparison.OrdinalIgnoreCase));
+
+            if (existing == null)
+            {
+                WriteFailureLine($"No endpoint named '{endpointName}' is configured.");
+                return;
+            }
+
+            if (string.Equals(existing.Name, _CurrentEndpoint.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                WriteFailureLine("Cannot remove the active endpoint for this session. Switch to another endpoint first.");
+                return;
+            }
+
+            List<EndpointConfig> updatedEndpoints = _AllEndpoints
+                .Where((EndpointConfig e) => !string.Equals(e.Name, endpointName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            SettingsLoader.SaveEndpoints(updatedEndpoints);
+            ReloadConfiguredEndpoints();
+            WriteSuccessLine($"Removed endpoint '{endpointName}'.");
+        }
+
+        private void ReloadConfiguredEndpoints()
+        {
+            _AllEndpoints = SettingsLoader.LoadEndpoints();
+        }
+
+        private EndpointProbeSnapshot ProbeEndpoint(EndpointConfig endpoint)
+        {
+            EndpointConfig probeEndpoint = CloneEndpoint(endpoint);
+            probeEndpoint.TimeoutMs = Math.Min(endpoint.TimeoutMs, 15000);
+
+            List<string> headerKeys = new List<string>(probeEndpoint.Headers.Keys);
+            foreach (string key in headerKeys)
+            {
+                probeEndpoint.Headers[key] = SettingsLoader.ExpandEnvironmentVariables(probeEndpoint.Headers[key]);
+            }
+
+            probeEndpoint.Quirks ??= Defaults.QuirksForAdapter(probeEndpoint.AdapterType);
+
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            try
+            {
+                using LlmClient client = new LlmClient(probeEndpoint);
+                using CancellationTokenSource cts = new CancellationTokenSource(probeEndpoint.TimeoutMs);
+                ConversationMessage response = client.SendAsync(
+                    new List<ConversationMessage>
+                    {
+                        new ConversationMessage
+                        {
+                            Role = RoleEnum.System,
+                            Content = "You are mux endpoint probe mode. Reply briefly with OK."
+                        },
+                        new ConversationMessage
+                        {
+                            Role = RoleEnum.User,
+                            Content = "Respond with OK."
+                        }
+                    },
+                    new List<ToolDefinition>(),
+                    cts.Token).GetAwaiter().GetResult();
+
+                stopwatch.Stop();
+                string detail = string.IsNullOrWhiteSpace(response.Content)
+                    ? "Probe succeeded."
+                    : TruncateString(response.Content.Trim(), 120);
+                return new EndpointProbeSnapshot(true, stopwatch.ElapsedMilliseconds, detail);
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                return new EndpointProbeSnapshot(false, stopwatch.ElapsedMilliseconds, ex.Message);
+            }
+        }
+
+        private static string FormatEndpointHeaders(EndpointConfig endpoint)
+        {
+            if (endpoint.Headers == null || endpoint.Headers.Count == 0)
+            {
+                return "(none)";
+            }
+
+            List<string> parts = new List<string>();
+            foreach (KeyValuePair<string, string> header in endpoint.Headers)
+            {
+                parts.Add($"{header.Key}=<configured>");
+            }
+
+            return string.Join(", ", parts);
         }
 
         /// <summary>
@@ -2739,8 +2955,11 @@ namespace Mux.Cli.Commands
             table.AddColumn("[bold]Description[/]");
 
             table.AddRow("[cyan]/help[/], [cyan]/?[/]", "Show this help message");
-            table.AddRow("[cyan]/endpoint[/]", "List all configured endpoints with current one highlighted");
-            table.AddRow("[cyan]/endpoint[/] [dim]<name>[/]", "Switch to a named endpoint (clears conversation)");
+            table.AddRow("[cyan]/endpoint[/], [cyan]/endpoint list[/]", "List all configured endpoints with current one highlighted");
+            table.AddRow("[cyan]/endpoint[/] [dim]<name>[/]", "Switch to a named endpoint or treat the value as a model override");
+            table.AddRow("[cyan]/endpoint show[/] [dim]<name>[/]", "Show endpoint details and probe connectivity");
+            table.AddRow("[cyan]/endpoint add[/] [dim]<name> --adapter <type> --base-url <url> --model <name>[/]", "Add an endpoint to endpoints.json");
+            table.AddRow("[cyan]/endpoint remove[/] [dim]<name>[/]", "Remove an endpoint from endpoints.json");
             table.AddRow("[cyan]/tools[/]", "List all available tools with descriptions");
             table.AddRow("[cyan]/status[/]", "Show session metadata, context usage, title, and queue state");
             table.AddRow("[cyan]/context[/]", "Alias for /status");
@@ -2812,8 +3031,12 @@ namespace Mux.Cli.Commands
                     return IsCompactStrategyCommand(argument);
 
                 case "/system":
-                case "/endpoint":
                     return string.IsNullOrWhiteSpace(argument);
+
+                case "/endpoint":
+                    EndpointCommandParseResult parseResult = EndpointCommandParser.Parse(argument);
+                    return !parseResult.Success
+                        || (parseResult.Request != null && parseResult.Request.Action == EndpointCommandAction.List);
 
                 case "/mcp":
                     string[] subParts = argument.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -3002,6 +3225,22 @@ namespace Mux.Cli.Commands
             public bool Cancelled { get; set; } = false;
 
             public Exception? Error { get; set; } = null;
+        }
+
+        private sealed class EndpointProbeSnapshot
+        {
+            public EndpointProbeSnapshot(bool success, long durationMs, string detail)
+            {
+                Success = success;
+                DurationMs = durationMs;
+                Detail = detail ?? string.Empty;
+            }
+
+            public bool Success { get; }
+
+            public long DurationMs { get; }
+
+            public string Detail { get; }
         }
 
         #endregion

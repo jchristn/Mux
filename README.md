@@ -128,7 +128,12 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 
 ```text
 /endpoint                         List configured endpoints
+/endpoint list                    Alias for /endpoint
 /endpoint <name>                  Switch to a named endpoint
+/endpoint show <name>             Show endpoint details and probe connectivity
+/endpoint add <name> --adapter <type> --base-url <url> --model <name>
+                                  Add an endpoint to endpoints.json
+/endpoint remove <name>           Remove an endpoint from endpoints.json
 /tools                            List available tools
 /status                           Show session metadata, title, queue state, and estimated context usage
 /context                          Alias for /status
@@ -153,6 +158,8 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 ```
 
 In interactive mode, `Up` and `Down` recall prompts submitted earlier in the current session.
+
+Endpoint management happens directly against `endpoints.json`. `show` performs a lightweight probe of the configured endpoint, and `add` also supports `--default`, `--temperature`, `--max-tokens`, `--context-window`, `--timeout-ms`, and repeated `--header key=value` options.
 
 ### Interactive Input
 

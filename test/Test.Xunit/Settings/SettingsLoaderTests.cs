@@ -124,6 +124,44 @@ namespace Test.Xunit.Settings
             Assert.Empty(endpoints);
         }
 
+        /// <summary>
+        /// Verifies that saving endpoints promotes the first endpoint to default when none are marked.
+        /// </summary>
+        [Fact]
+        public void SaveEndpoints_NoDefault_AssignsFirstEndpointAsDefault()
+        {
+            SettingsLoader.SaveEndpoints(new List<EndpointConfig>
+            {
+                new EndpointConfig { Name = "alpha", AdapterType = AdapterTypeEnum.Ollama, BaseUrl = "http://alpha", Model = "model-a" },
+                new EndpointConfig { Name = "beta", AdapterType = AdapterTypeEnum.OpenAiCompatible, BaseUrl = "http://beta", Model = "model-b" }
+            });
+
+            List<EndpointConfig> endpoints = SettingsLoader.LoadEndpoints();
+
+            Assert.Equal(2, endpoints.Count);
+            Assert.True(endpoints[0].IsDefault);
+            Assert.False(endpoints[1].IsDefault);
+        }
+
+        /// <summary>
+        /// Verifies that saving endpoints collapses multiple defaults to a single persisted default.
+        /// </summary>
+        [Fact]
+        public void SaveEndpoints_MultipleDefaults_RetainsOnlyFirstDefault()
+        {
+            SettingsLoader.SaveEndpoints(new List<EndpointConfig>
+            {
+                new EndpointConfig { Name = "alpha", AdapterType = AdapterTypeEnum.Ollama, BaseUrl = "http://alpha", Model = "model-a", IsDefault = true },
+                new EndpointConfig { Name = "beta", AdapterType = AdapterTypeEnum.OpenAiCompatible, BaseUrl = "http://beta", Model = "model-b", IsDefault = true }
+            });
+
+            List<EndpointConfig> endpoints = SettingsLoader.LoadEndpoints();
+
+            Assert.Equal(2, endpoints.Count);
+            Assert.True(endpoints[0].IsDefault);
+            Assert.False(endpoints[1].IsDefault);
+        }
+
         #endregion
 
         #region LoadSettings

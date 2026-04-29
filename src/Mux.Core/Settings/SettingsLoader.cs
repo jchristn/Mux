@@ -25,6 +25,11 @@ namespace Mux.Core.Settings
             AllowTrailingCommas = true
         };
 
+        private static readonly JsonSerializerOptions _JsonWriteOptions = new JsonSerializerOptions
+        {
+            WriteIndented = true
+        };
+
         #endregion
 
         #region Public-Methods
@@ -108,6 +113,29 @@ namespace Mux.Core.Settings
             }
 
             return file.Endpoints;
+        }
+
+        /// <summary>
+        /// Saves endpoint configurations to <c>~/.mux/endpoints.json</c>.
+        /// </summary>
+        /// <param name="endpoints">The endpoint configurations to persist.</param>
+        public static void SaveEndpoints(List<EndpointConfig> endpoints)
+        {
+            if (endpoints == null)
+            {
+                throw new ArgumentNullException(nameof(endpoints));
+            }
+
+            EnsureConfigDirectory();
+            List<EndpointConfig> normalizedEndpoints = NormalizeEndpointsForPersistence(endpoints);
+
+            EndpointsFile file = new EndpointsFile
+            {
+                Endpoints = normalizedEndpoints
+            };
+
+            string json = JsonSerializer.Serialize(file, _JsonWriteOptions);
+            File.WriteAllText(Path.Combine(GetConfigDirectory(), "endpoints.json"), json);
         }
 
         /// <summary>
@@ -318,6 +346,74 @@ namespace Mux.Core.Settings
             /// </summary>
             [JsonPropertyName("endpoints")]
             public List<EndpointConfig>? Endpoints { get; set; }
+        }
+
+        private static List<EndpointConfig> NormalizeEndpointsForPersistence(List<EndpointConfig> endpoints)
+        {
+            List<EndpointConfig> normalized = new List<EndpointConfig>();
+            bool defaultAssigned = false;
+
+            foreach (EndpointConfig endpoint in endpoints)
+            {
+                if (endpoint == null)
+                {
+                    continue;
+                }
+
+                EndpointConfig copy = CloneEndpoint(endpoint);
+                copy.Headers ??= new Dictionary<string, string>();
+                copy.Quirks ??= Defaults.QuirksForAdapter(copy.AdapterType);
+
+                if (copy.IsDefault)
+                {
+                    if (!defaultAssigned)
+                    {
+                        defaultAssigned = true;
+                    }
+                    else
+                    {
+                        copy.IsDefault = false;
+                    }
+                }
+
+                normalized.Add(copy);
+            }
+
+            if (normalized.Count > 0 && !defaultAssigned)
+            {
+                normalized[0].IsDefault = true;
+            }
+
+            return normalized;
+        }
+
+        private static EndpointConfig CloneEndpoint(EndpointConfig source)
+        {
+            return new EndpointConfig
+            {
+                Name = source.Name,
+                AdapterType = source.AdapterType,
+                BaseUrl = source.BaseUrl,
+                Model = source.Model,
+                IsDefault = source.IsDefault,
+                MaxTokens = source.MaxTokens,
+                Temperature = source.Temperature,
+                ContextWindow = source.ContextWindow,
+                TimeoutMs = source.TimeoutMs,
+                Headers = new Dictionary<string, string>(source.Headers ?? new Dictionary<string, string>()),
+                Quirks = source.Quirks == null
+                    ? null
+                    : new BackendQuirks
+                    {
+                        AssembleToolCallDeltas = source.Quirks.AssembleToolCallDeltas,
+                        SupportsParallelToolCalls = source.Quirks.SupportsParallelToolCalls,
+                        SupportsTools = source.Quirks.SupportsTools,
+                        EnableMalformedToolCallRecovery = source.Quirks.EnableMalformedToolCallRecovery,
+                        RequiresToolResultContentAsString = source.Quirks.RequiresToolResultContentAsString,
+                        DefaultFinishReason = source.Quirks.DefaultFinishReason,
+                        StripRequestFields = new List<string>(source.Quirks.StripRequestFields)
+                    }
+            };
         }
 
         /// <summary>

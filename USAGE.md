@@ -34,6 +34,21 @@ mux probe --output-format json
 mux probe -e vllm-deepseek
 ```
 
+Interactive endpoint management:
+
+```bash
+/endpoint
+/endpoint show openai-prod
+/endpoint add openai-prod --adapter openai-compatible --base-url https://api.openai.com/v1 --model gpt-4.1 --default --header "Authorization=Bearer ${OPENAI_API_KEY}"
+/endpoint remove old-endpoint
+```
+
+Notes:
+- `/endpoint` and `/endpoint list` show the configured endpoints and highlight the active session endpoint
+- `/endpoint show <name>` runs a lightweight connectivity probe and reports whether the endpoint is reachable
+- `/endpoint add` writes to `endpoints.json`; accepted options are `--adapter`, `--base-url`, `--model`, `--default`, `--temperature`, `--max-tokens`, `--context-window`, `--timeout-ms`, and repeated `--header key=value`
+- `/endpoint remove <name>` refuses to remove the endpoint currently active in the session; switch first if you need to delete it
+
 ## Built-In Process Execution
 
 The built-in `run_process` tool executes commands using the host shell for the current operating system:

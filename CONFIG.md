@@ -93,6 +93,11 @@ Header values support environment expansion:
 }
 ```
 
+Interactive endpoint management:
+- `/endpoint add ...` writes a new entry to `endpoints.json`
+- `/endpoint remove <name>` removes a saved entry
+- `/endpoint show <name>` displays the stored endpoint fields and performs a lightweight connectivity probe
+
 Endpoint resolution:
 1. If `--endpoint <name>` is provided, mux requires that endpoint to exist.
 2. Otherwise mux uses the endpoint marked `isDefault: true`.

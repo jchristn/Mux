@@ -6,6 +6,7 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- Interactive endpoint management via `/endpoint list`, `/endpoint show <name>`, `/endpoint add ...`, and `/endpoint remove <name>` so endpoints can be inspected and maintained from within mux itself
 - Interactive queued-message support in the REPL so users can keep drafting while mux is busy and queue the next prompt with `Tab`
 - `/queue`, `/queue clear`, `/queue drop-last`, and `/queue resume` interactive commands for queue inspection and control
 - `/status`, `/compact`, and `/title` interactive commands for session inspection, history compaction, and direct title control
@@ -32,6 +33,7 @@ All notable changes to mux are documented here.
 
 ### Testing
 
+- Added endpoint command parser and endpoint persistence unit coverage
 - Added `QueuedMessageManager` unit coverage for FIFO dequeue, newest-item editing/removal, and queue clearing
 - Verified with `dotnet test src\Mux.sln --nologo`
 
