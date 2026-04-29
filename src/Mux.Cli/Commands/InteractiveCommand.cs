@@ -2499,7 +2499,7 @@ namespace Mux.Cli.Commands
             {
                 if (!MuxSettings.TryNormalizeCompactionStrategy(trimmedArgument, out strategy))
                 {
-                    WriteMarkupLine("[yellow]Usage: /compact, /compact [summary|trim], or /compact strategy [summary|trim][/]");
+                    WriteMarkupLine("[yellow]Usage: /compact, /compact [[summary|trim]], or /compact strategy [[summary|trim]][/]");
                     return;
                 }
             }
@@ -2575,7 +2575,7 @@ namespace Mux.Cli.Commands
             string requestedStrategy = parts[1].Trim();
             if (!MuxSettings.TryNormalizeCompactionStrategy(requestedStrategy, out string normalizedStrategy))
             {
-                WriteMarkupLine("[yellow]Usage: /compact strategy [summary|trim][/]");
+                WriteMarkupLine("[yellow]Usage: /compact strategy [[summary|trim]][/]");
                 return true;
             }
 
@@ -2747,7 +2747,7 @@ namespace Mux.Cli.Commands
             table.AddRow("[cyan]/compact[/]", "Compact older conversation history with the configured strategy");
             table.AddRow("[cyan]/compact summary[/]", "Compact older conversation history with a one-off summary pass");
             table.AddRow("[cyan]/compact trim[/]", "Trim older conversation history without asking the model to summarize it");
-            table.AddRow("[cyan]/compact strategy[/] [dim][summary|trim][/]", "Show or set the session compaction strategy");
+            table.AddRow("[cyan]/compact strategy[/] [dim][[summary|trim]][/]", "Show or set the session compaction strategy");
             table.AddRow("[cyan]/title[/]", "Show the current conversation title");
             table.AddRow("[cyan]/title[/] [dim]<text>[/]", "Set the conversation title and disable automatic retitling");
             table.AddRow("[cyan]/clear[/]", "Clear conversation history");
@@ -2881,7 +2881,7 @@ namespace Mux.Cli.Commands
 
                     if (subParts.Length < 3)
                     {
-                        WriteMarkupLine("[yellow]Usage: /mcp add <name> <command> [args...][/]");
+                        WriteMarkupLine("[yellow]Usage: /mcp add <name> <command> [[args...]][/]");
                         return;
                     }
 
