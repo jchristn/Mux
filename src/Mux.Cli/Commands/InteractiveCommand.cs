@@ -37,6 +37,8 @@ namespace Mux.Cli.Commands
 
         private const int PromptWidth = 5;
         private const int InputPollDelayMs = 25;
+        private const int PasteLookaheadDelayMs = 40;
+        private const int PasteContinuationWindowMs = 200;
         private const int PromptTopPaddingLines = 1;
         private const int PromptSpacingBelowStatusLines = 1;
         private const string ThinkingText = "Thinking...";
@@ -82,6 +84,7 @@ namespace Mux.Cli.Commands
         private int _CompactionCount = 0;
         private string _LastCompactionSummary = string.Empty;
         private DateTime _LastCompactionUtc = DateTime.MinValue;
+        private DateTime _LastPasteTextHandledUtc = DateTime.MinValue;
         private LineBuffer _DraftBuffer = new LineBuffer();
         private ApprovalRequestState? _PendingApproval = null;
         private ActiveRunState? _ActiveRun = null;
@@ -264,8 +267,13 @@ namespace Mux.Cli.Commands
 
             if (Console.KeyAvailable)
             {
-                ConsoleKeyInfo keyInfo = Console.ReadKey(intercept: true);
-                HandleBusyKey(keyInfo);
+                if (!TryReadPendingKeyBatch(out List<ConsoleKeyInfo> keyBatch))
+                {
+                    return;
+                }
+
+                List<ConsoleKeyInfo> expandedBatch = await ExpandPotentialPasteBatchAsync(keyBatch, cancellationToken).ConfigureAwait(false);
+                ProcessPendingKeyBatch(expandedBatch);
             }
             else
             {
@@ -289,23 +297,149 @@ namespace Mux.Cli.Commands
 
             if (Console.KeyAvailable)
             {
-                ConsoleKeyInfo keyInfo;
-
-                try
+                if (!TryReadPendingKeyBatch(out List<ConsoleKeyInfo> keyBatch))
                 {
-                    keyInfo = Console.ReadKey(intercept: true);
-                }
-                catch (InvalidOperationException)
-                {
-                    _ShouldExit = true;
                     return;
                 }
 
-                HandleIdleKey(keyInfo);
+                List<ConsoleKeyInfo> expandedBatch = await ExpandPotentialPasteBatchAsync(keyBatch, cancellationToken).ConfigureAwait(false);
+                ProcessPendingKeyBatch(expandedBatch);
                 return;
             }
 
             await Task.Delay(InputPollDelayMs, cancellationToken).ConfigureAwait(false);
+        }
+
+        private bool TryReadPendingKeyBatch(out List<ConsoleKeyInfo> keyBatch)
+        {
+            keyBatch = new List<ConsoleKeyInfo>();
+
+            try
+            {
+                keyBatch.Add(Console.ReadKey(intercept: true));
+
+                while (Console.KeyAvailable)
+                {
+                    keyBatch.Add(Console.ReadKey(intercept: true));
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                _ShouldExit = true;
+                return false;
+            }
+
+            return true;
+        }
+
+        private async Task<List<ConsoleKeyInfo>> ExpandPotentialPasteBatchAsync(List<ConsoleKeyInfo> keyBatch, CancellationToken cancellationToken)
+        {
+            if (_PendingApproval != null
+                || !InteractivePasteHeuristics.ShouldWaitForPasteContinuation(keyBatch))
+            {
+                return keyBatch;
+            }
+
+            await Task.Delay(PasteLookaheadDelayMs, cancellationToken).ConfigureAwait(false);
+
+            if (_ShouldExit)
+            {
+                return keyBatch;
+            }
+
+            if (!TryAppendAvailableKeys(keyBatch))
+            {
+                return keyBatch;
+            }
+
+            return keyBatch;
+        }
+
+        private bool TryAppendAvailableKeys(List<ConsoleKeyInfo> keyBatch)
+        {
+            try
+            {
+                while (Console.KeyAvailable)
+                {
+                    keyBatch.Add(Console.ReadKey(intercept: true));
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                _ShouldExit = true;
+                return false;
+            }
+
+            return true;
+        }
+
+        private void ProcessPendingKeyBatch(IReadOnlyList<ConsoleKeyInfo> keyBatch)
+        {
+            if (keyBatch.Count == 0)
+            {
+                return;
+            }
+
+            if (_PendingApproval == null
+                && InteractivePasteHeuristics.ShouldTreatBatchAsPastedText(
+                    keyBatch,
+                    continueRecentPaste: IsWithinPasteContinuationWindow()))
+            {
+                InsertPastedText(keyBatch);
+                _LastPasteTextHandledUtc = DateTime.UtcNow;
+                return;
+            }
+
+            foreach (ConsoleKeyInfo keyInfo in keyBatch)
+            {
+                if (_PendingApproval != null || _ActiveRun != null)
+                {
+                    HandleBusyKey(keyInfo);
+                }
+                else
+                {
+                    HandleIdleKey(keyInfo);
+                }
+            }
+        }
+
+        private bool IsWithinPasteContinuationWindow()
+        {
+            return (DateTime.UtcNow - _LastPasteTextHandledUtc).TotalMilliseconds <= PasteContinuationWindowMs;
+        }
+
+        private void InsertPastedText(IReadOnlyList<ConsoleKeyInfo> keyBatch)
+        {
+            bool changed = false;
+            _PromptHistory.ResetNavigation();
+
+            foreach (ConsoleKeyInfo keyInfo in keyBatch)
+            {
+                if (keyInfo.Key == ConsoleKey.Enter)
+                {
+                    _DraftBuffer.InsertNewLine();
+                    changed = true;
+                    continue;
+                }
+
+                if (keyInfo.Key == ConsoleKey.Tab)
+                {
+                    _DraftBuffer.Insert('\t');
+                    changed = true;
+                    continue;
+                }
+
+                if (keyInfo.KeyChar != '\0' && !char.IsControl(keyInfo.KeyChar))
+                {
+                    _DraftBuffer.Insert(keyInfo.KeyChar);
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                RenderInteractiveChrome();
+            }
         }
 
         private void HandleIdleKey(ConsoleKeyInfo keyInfo)
