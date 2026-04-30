@@ -64,11 +64,15 @@ cd Mux
 
 # Windows
 install-tool.bat
+install-tool.bat net8.0
 
 # Linux / macOS
 chmod +x install-tool.sh
 ./install-tool.sh
+./install-tool.sh net8.0
 ```
+
+The install scripts accept an optional target framework argument. They default to `net10.0` when a .NET 10 SDK is installed and otherwise fall back to `net8.0`.
 
 Run it:
 
