@@ -1076,7 +1076,10 @@ namespace Mux.Cli.Commands
                     string proposedSummary = ToolCallRenderer.FormatToolSummary(
                         proposedEvent.ToolCall.Name,
                         proposedEvent.ToolCall.Arguments);
-                    WriteNotificationLine($"Tool call: {proposedSummary}");
+                    if (_ApprovalPolicy != ApprovalPolicyEnum.Ask)
+                    {
+                        WriteNotificationLine($"Tool call: {proposedSummary}");
+                    }
                     break;
 
                 case ToolCallApprovedEvent approvedEvent:
@@ -1143,7 +1146,8 @@ namespace Mux.Cli.Commands
                 CompletionSource = completionSource
             };
 
-            RenderInteractiveChrome();
+            _RunHasVisibleOutput = true;
+            WriteApprovalRequestLine(summary);
             return completionSource.Task;
         }
 
@@ -1189,6 +1193,11 @@ namespace Mux.Cli.Commands
         private void WriteNotificationLine(string line)
         {
             WriteMarkupLine($"[dim]{Markup.Escape(line)}[/]");
+        }
+
+        private void WriteApprovalRequestLine(string summary)
+        {
+            WriteMarkupLine($"[yellow]Approval required:[/] {Markup.Escape(summary)} [dim](Y / n / always)[/]");
         }
 
         private void WriteSuccessLine(string line)
@@ -1388,7 +1397,7 @@ namespace Mux.Cli.Commands
 
             if (_PendingApproval != null)
             {
-                return $"Approval required | {baseInfo} | {TruncateString(_PendingApproval.Summary, 80)} | Y / n / always";
+                return $"Approval required | {baseInfo} | Y / n / always";
             }
 
             if (_ActiveRun != null)
@@ -2340,7 +2349,7 @@ namespace Mux.Cli.Commands
         /// <param name="settings">The interactive command settings.</param>
         /// <param name="muxSettings">The global mux settings.</param>
         /// <returns>The resolved approval policy.</returns>
-        private static ApprovalPolicyEnum ResolveApprovalPolicy(
+        internal static ApprovalPolicyEnum ResolveApprovalPolicy(
             InteractiveSettings settings,
             MuxSettings muxSettings)
         {
@@ -2351,6 +2360,12 @@ namespace Mux.Cli.Commands
 
             if (!string.IsNullOrWhiteSpace(settings.ApprovalPolicy))
             {
+                string normalizedPolicy = settings.ApprovalPolicy.Trim().ToLowerInvariant();
+                if (normalizedPolicy == "auto" || normalizedPolicy == "autoapprove")
+                {
+                    return ApprovalPolicyEnum.AutoApprove;
+                }
+
                 if (Enum.TryParse<ApprovalPolicyEnum>(settings.ApprovalPolicy, true, out ApprovalPolicyEnum parsed))
                 {
                     return parsed;
