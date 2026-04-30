@@ -39,15 +39,19 @@ Interactive endpoint management:
 ```bash
 /endpoint
 /endpoint show openai-prod
-/endpoint add openai-prod --adapter openai-compatible --base-url https://api.openai.com/v1 --model gpt-4.1 --default --header "Authorization=Bearer ${OPENAI_API_KEY}"
+/endpoint add
+/endpoint edit openai-prod
 /endpoint remove old-endpoint
 ```
 
 Notes:
 - `/endpoint` and `/endpoint list` show the configured endpoints and highlight the active session endpoint
 - `/endpoint show <name>` runs a lightweight connectivity probe and reports whether the endpoint is reachable
-- `/endpoint add` writes to `endpoints.json`; accepted options are `--adapter`, `--base-url`, `--model`, `--default`, `--temperature`, `--max-tokens`, `--context-window`, `--timeout-ms`, and repeated `--header key=value`
-- `/endpoint remove <name>` refuses to remove the endpoint currently active in the session; switch first if you need to delete it
+- `/endpoint add` launches a guided creation wizard that prompts for the adapter, base URL, model, auth mode, default status, and optional advanced settings before probing and saving
+- `/endpoint edit <name>` launches the same guided workflow for an existing endpoint; editing the active endpoint clears the current conversation state after the update is saved
+- Auth modes are `none`, `bearer token`, and `custom headers`; for auth values you can store either a discrete value in `endpoints.json` or an environment-variable reference
+- The wizard accepts bare environment variable names plus `${VAR}`, `%VAR%`, `$VAR`, and `$env:VAR`, then stores environment references canonically as `${VAR}`
+- `/endpoint remove <name>` asks for confirmation and refuses to remove the endpoint currently active in the session; switch first if you need to delete it
 
 ## Built-In Process Execution
 
@@ -214,6 +218,8 @@ When `MUX_CONFIG_DIR` is set:
 ## Backend Examples
 
 ### Ollama
+
+Mux's `ollama` adapter uses Ollama's OpenAI-compatible API surface, so the base URL is typically `http://localhost:11434/v1`.
 
 ```json
 {

@@ -324,12 +324,67 @@ namespace Mux.Core.Settings
                 return value;
             }
 
-            return Regex.Replace(value, @"\$\{([^}]+)\}", (Match match) =>
+            string expanded = Regex.Replace(value, @"%([A-Za-z_][A-Za-z0-9_]*)%", static (Match match) =>
             {
                 string varName = match.Groups[1].Value;
                 string? envValue = Environment.GetEnvironmentVariable(varName);
                 return envValue ?? match.Value;
             });
+
+            expanded = Regex.Replace(expanded, @"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", static (Match match) =>
+            {
+                string varName = match.Groups[1].Value;
+                string? envValue = Environment.GetEnvironmentVariable(varName);
+                return envValue ?? match.Value;
+            });
+
+            expanded = Regex.Replace(expanded, @"\$env:([A-Za-z_][A-Za-z0-9_]*)", static (Match match) =>
+            {
+                string varName = match.Groups[1].Value;
+                string? envValue = Environment.GetEnvironmentVariable(varName);
+                return envValue ?? match.Value;
+            });
+
+            expanded = Regex.Replace(expanded, @"\$(?!env:)([A-Za-z_][A-Za-z0-9_]*)\b", static (Match match) =>
+            {
+                string varName = match.Groups[1].Value;
+                string? envValue = Environment.GetEnvironmentVariable(varName);
+                return envValue ?? match.Value;
+            }, RegexOptions.IgnoreCase);
+
+            return expanded;
+        }
+
+        /// <summary>
+        /// Normalizes a user-provided environment variable reference into the canonical <c>${VAR_NAME}</c> form.
+        /// Accepts bare names as well as <c>${VAR}</c>, <c>%VAR%</c>, <c>$VAR</c>, and <c>$env:VAR</c>.
+        /// </summary>
+        /// <param name="value">The user-provided environment variable reference.</param>
+        /// <param name="normalizedReference">The normalized canonical reference when parsing succeeds.</param>
+        /// <returns>True when the input could be interpreted as an environment variable reference.</returns>
+        public static bool TryNormalizeEnvironmentVariableReference(string value, out string normalizedReference)
+        {
+            normalizedReference = string.Empty;
+
+            if (!TryExtractEnvironmentVariableName(value, allowBareName: true, out string variableName))
+            {
+                return false;
+            }
+
+            normalizedReference = "${" + variableName + "}";
+            return true;
+        }
+
+        /// <summary>
+        /// Attempts to extract an environment variable name from a stored explicit reference.
+        /// Supports <c>${VAR}</c>, <c>%VAR%</c>, and <c>$env:VAR</c>.
+        /// </summary>
+        /// <param name="value">The stored value to inspect.</param>
+        /// <param name="variableName">The extracted variable name when parsing succeeds.</param>
+        /// <returns>True when an explicit environment reference was found.</returns>
+        public static bool TryGetEnvironmentVariableName(string value, out string variableName)
+        {
+            return TryExtractEnvironmentVariableName(value, allowBareName: false, out variableName);
         }
 
         #endregion
@@ -346,6 +401,54 @@ namespace Mux.Core.Settings
             /// </summary>
             [JsonPropertyName("endpoints")]
             public List<EndpointConfig>? Endpoints { get; set; }
+        }
+
+        private static bool TryExtractEnvironmentVariableName(string value, bool allowBareName, out string variableName)
+        {
+            variableName = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            string trimmed = value.Trim();
+
+            Match canonicalMatch = Regex.Match(trimmed, @"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$");
+            if (canonicalMatch.Success)
+            {
+                variableName = canonicalMatch.Groups[1].Value;
+                return true;
+            }
+
+            Match windowsMatch = Regex.Match(trimmed, @"^%([A-Za-z_][A-Za-z0-9_]*)%$");
+            if (windowsMatch.Success)
+            {
+                variableName = windowsMatch.Groups[1].Value;
+                return true;
+            }
+
+            Match powerShellMatch = Regex.Match(trimmed, @"^\$env:([A-Za-z_][A-Za-z0-9_]*)$", RegexOptions.IgnoreCase);
+            if (powerShellMatch.Success)
+            {
+                variableName = powerShellMatch.Groups[1].Value;
+                return true;
+            }
+
+            Match posixMatch = Regex.Match(trimmed, @"^\$([A-Za-z_][A-Za-z0-9_]*)$");
+            if (posixMatch.Success)
+            {
+                variableName = posixMatch.Groups[1].Value;
+                return true;
+            }
+
+            if (allowBareName && Regex.IsMatch(trimmed, @"^[A-Za-z_][A-Za-z0-9_]*$"))
+            {
+                variableName = trimmed;
+                return true;
+            }
+
+            return false;
         }
 
         private static List<EndpointConfig> NormalizeEndpointsForPersistence(List<EndpointConfig> endpoints)

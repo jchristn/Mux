@@ -49,5 +49,79 @@ namespace Test.Xunit.Rendering
             Assert.Equal(7, layout.CursorColumn);
             Assert.Equal(2, layout.TotalRows);
         }
+
+        [Fact]
+        public void CalculateNextOutputRow_OpenAssistantTextMidLine_AdvancesToNextRow()
+        {
+            int nextRow = InteractiveChromeLayout.CalculateNextOutputRow(
+                outputCursorTop: 12,
+                outputCursorLeft: 9,
+                assistantTextOpen: true);
+
+            Assert.Equal(13, nextRow);
+        }
+
+        [Fact]
+        public void CalculateNextOutputRow_OpenAssistantTextAtColumnZero_AdvancesToNextRow()
+        {
+            int nextRow = InteractiveChromeLayout.CalculateNextOutputRow(
+                outputCursorTop: 12,
+                outputCursorLeft: 0,
+                assistantTextOpen: true);
+
+            Assert.Equal(13, nextRow);
+        }
+
+        [Fact]
+        public void CalculateNextOutputRow_ClosedAssistantTextMidLine_AdvancesToNextRow()
+        {
+            int nextRow = InteractiveChromeLayout.CalculateNextOutputRow(
+                outputCursorTop: 12,
+                outputCursorLeft: 5,
+                assistantTextOpen: false);
+
+            Assert.Equal(13, nextRow);
+        }
+
+        [Fact]
+        public void CalculateNextOutputRow_ClosedAssistantTextAtColumnZero_StaysOnCurrentRow()
+        {
+            int nextRow = InteractiveChromeLayout.CalculateNextOutputRow(
+                outputCursorTop: 12,
+                outputCursorLeft: 0,
+                assistantTextOpen: false);
+
+            Assert.Equal(12, nextRow);
+        }
+
+        [Fact]
+        public void GetAssistantTextPromptLineAdvanceCount_CompletedStreaming_ReturnsTwo()
+        {
+            int lineAdvanceCount = InteractiveChromeLayout.GetAssistantTextPromptLineAdvanceCount(
+                assistantTextOpen: true,
+                outputMayContinue: false);
+
+            Assert.Equal(2, lineAdvanceCount);
+        }
+
+        [Fact]
+        public void GetAssistantTextPromptLineAdvanceCount_ActiveStreaming_ReturnsZero()
+        {
+            int lineAdvanceCount = InteractiveChromeLayout.GetAssistantTextPromptLineAdvanceCount(
+                assistantTextOpen: true,
+                outputMayContinue: true);
+
+            Assert.Equal(0, lineAdvanceCount);
+        }
+
+        [Fact]
+        public void GetAssistantTextPromptLineAdvanceCount_NoOpenAssistantText_ReturnsZero()
+        {
+            int lineAdvanceCount = InteractiveChromeLayout.GetAssistantTextPromptLineAdvanceCount(
+                assistantTextOpen: false,
+                outputMayContinue: false);
+
+            Assert.Equal(0, lineAdvanceCount);
+        }
     }
 }

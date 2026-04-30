@@ -11,6 +11,35 @@ namespace Mux.Cli.Rendering
         #region Public-Methods
 
         /// <summary>
+        /// Determines how many physical line advances are required before prompt
+        /// chrome can be rendered after streamed assistant text completes.
+        /// </summary>
+        /// <param name="assistantTextOpen">Whether assistant text is still logically continuing on the current line.</param>
+        /// <param name="outputMayContinue">Whether more output may still arrive for the current response.</param>
+        /// <returns>The number of real line advances required before prompt rendering.</returns>
+        public static int GetAssistantTextPromptLineAdvanceCount(bool assistantTextOpen, bool outputMayContinue)
+        {
+            return assistantTextOpen && !outputMayContinue
+                ? 2
+                : 0;
+        }
+
+        /// <summary>
+        /// Calculates the first buffer row that is safe for rendering prompt chrome
+        /// after the latest output write.
+        /// </summary>
+        /// <param name="outputCursorTop">The buffer row where the cursor ended after output.</param>
+        /// <param name="outputCursorLeft">The buffer column where the cursor ended after output.</param>
+        /// <param name="assistantTextOpen">Whether assistant text is still logically continuing on the current line.</param>
+        /// <returns>The first row available for chrome rendering.</returns>
+        public static int CalculateNextOutputRow(int outputCursorTop, int outputCursorLeft, bool assistantTextOpen)
+        {
+            return assistantTextOpen || outputCursorLeft > 0
+                ? outputCursorTop + 1
+                : outputCursorTop;
+        }
+
+        /// <summary>
         /// Calculates the rendered prompt layout for the current draft buffer.
         /// </summary>
         /// <param name="buffer">The current prompt draft buffer.</param>

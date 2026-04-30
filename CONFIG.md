@@ -73,14 +73,14 @@ Fields:
 |---|---|---|
 | `name` | string | unique endpoint name |
 | `adapterType` | string | `ollama`, `openai`, `vllm`, or `openai-compatible` |
-| `baseUrl` | string | base API URL; mux appends `/chat/completions` |
+| `baseUrl` | string | API root URL; mux appends `/chat/completions`. For `ollama`, mux uses Ollama's OpenAI-compatible API root, usually `http://localhost:11434/v1` |
 | `model` | string | model identifier sent to the backend |
 | `isDefault` | bool | preferred default endpoint |
 | `maxTokens` | int | max output tokens |
 | `temperature` | number | sampling temperature |
 | `contextWindow` | int | model context window |
 | `timeoutMs` | int | HTTP timeout |
-| `headers` | object | auth or custom headers |
+| `headers` | object | auth or custom headers; values may be stored directly or sourced from environment-variable references |
 | `quirks` | object or null | backend behavior flags |
 
 Header values support environment expansion:
@@ -94,9 +94,18 @@ Header values support environment expansion:
 ```
 
 Interactive endpoint management:
-- `/endpoint add ...` writes a new entry to `endpoints.json`
-- `/endpoint remove <name>` removes a saved entry
+- `/endpoint` or `/endpoint list` shows saved endpoints and highlights the current session endpoint
+- `/endpoint add` starts a guided endpoint creation wizard
+- `/endpoint edit <name>` starts a guided endpoint edit wizard
 - `/endpoint show <name>` displays the stored endpoint fields and performs a lightweight connectivity probe
+- `/endpoint remove <name>` asks for confirmation and refuses to remove the endpoint active in the current session
+
+Wizard auth options:
+- `none`
+- `bearer token`
+- `custom headers`
+
+When the wizard collects auth values, you can either store the value directly in `endpoints.json` or provide an environment-variable reference. The wizard accepts `OPENAI_API_KEY`, `${OPENAI_API_KEY}`, `%OPENAI_API_KEY%`, `$OPENAI_API_KEY`, and `$env:OPENAI_API_KEY`, then stores environment references canonically as `${OPENAI_API_KEY}`.
 
 Endpoint resolution:
 1. If `--endpoint <name>` is provided, mux requires that endpoint to exist.
@@ -197,7 +206,7 @@ Resolution priority:
 |---|---|
 | `MUX_CONFIG_DIR` | override the active config directory |
 
-Any config value may reference environment variables with `${VAR_NAME}` syntax.
+Config values may reference environment variables using `${VAR_NAME}`, `%VAR_NAME%`, `$VAR_NAME`, or `$env:VAR_NAME`. The interactive endpoint wizard accepts the same forms and writes stored references as `${VAR_NAME}`.
 
 ## CLI Override Notes
 

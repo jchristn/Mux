@@ -1033,7 +1033,8 @@ namespace Mux.Cli.Commands
                 BeginOutputWrite(closeAssistantText: false);
                 Console.Write(text);
                 _AssistantTextOpen = !EndsWithLineBreak(text);
-                EndOutputWrite();
+                // Keep streamed assistant output append-only until the turn finishes.
+                EndOutputWrite(renderChromeAfterWrite: false);
             }
         }
 
@@ -1180,6 +1181,28 @@ namespace Mux.Cli.Commands
 
                 try
                 {
+                    int assistantPromptLineAdvanceCount = InteractiveChromeLayout.GetAssistantTextPromptLineAdvanceCount(_AssistantTextOpen, _ActiveRun != null);
+                    if (assistantPromptLineAdvanceCount > 0)
+                    {
+                        // Once a streamed assistant turn is complete, materialize both the
+                        // response terminator and the required blank spacer line before
+                        // re-rendering the prompt. This preserves the expected empty line
+                        // even when the terminal must scroll at the bottom edge.
+                        ClearInteractiveChrome();
+                        SetCursorPositionSafe(_OutputCursorLeft, _OutputCursorTop);
+                        for (int i = 0; i < assistantPromptLineAdvanceCount; i++)
+                        {
+                            Console.WriteLine();
+                        }
+
+                        _AssistantTextOpen = false;
+                        _OutputCursorLeft = Console.CursorLeft;
+                        _OutputCursorTop = Console.CursorTop;
+                        _OutputEndsWithPromptSpacer = assistantPromptLineAdvanceCount > 1;
+                        _RenderedPromptRowCount = 0;
+                        _ChromeTop = _PromptTop;
+                    }
+
                     PromptLayout promptLayout = GetPromptLayout();
                     int nextOutputRow = GetNextAvailableOutputRow();
                     string statusText = TruncateToConsoleWidth(BuildStatusText(), Math.Max(1, GetBufferWidthSafe() - 1));
@@ -1971,9 +1994,10 @@ namespace Mux.Cli.Commands
         /// <returns>The next available output row.</returns>
         private int GetNextAvailableOutputRow()
         {
-            return _AssistantTextOpen || _OutputCursorLeft > 0
-                ? _OutputCursorTop + 1
-                : _OutputCursorTop;
+            return InteractiveChromeLayout.CalculateNextOutputRow(
+                _OutputCursorTop,
+                _OutputCursorLeft,
+                _AssistantTextOpen);
         }
 
         /// <summary>
@@ -2320,13 +2344,11 @@ namespace Mux.Cli.Commands
                     return;
 
                 case EndpointCommandAction.Add:
-                    if (request.Endpoint == null)
-                    {
-                        WriteFailureLine("Endpoint add request was missing parsed details.");
-                        return;
-                    }
+                    HandleEndpointAddCommand(request.Name);
+                    return;
 
-                    HandleEndpointAddCommand(request.Endpoint);
+                case EndpointCommandAction.Edit:
+                    HandleEndpointEditCommand(request.Name ?? string.Empty);
                     return;
 
                 case EndpointCommandAction.Remove:
@@ -2337,44 +2359,55 @@ namespace Mux.Cli.Commands
 
         private void HandleEndpointListCommand()
         {
-            if (_AllEndpoints.Count == 0)
-            {
-                WriteMarkupLine($"[dim]Current:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]([/]{Markup.Escape(_CurrentEndpoint.Model)}[dim])[/]");
-                WriteMarkupLine("[dim]No configured endpoints found in endpoints.json.[/]");
-                return;
-            }
-
-            Table table = new Table();
-            table.Border = TableBorder.Rounded;
-            table.AddColumn("[bold]Endpoint[/]");
-            table.AddColumn("[bold]Model[/]");
-            table.AddColumn("[bold]Adapter[/]");
-            table.AddColumn("[bold]Default[/]");
-            table.AddColumn("[bold]URL[/]");
-
-            foreach (EndpointConfig ep in _AllEndpoints)
-            {
-                bool isCurrent = string.Equals(ep.Name, _CurrentEndpoint.Name, StringComparison.OrdinalIgnoreCase);
-                string nameDisplay = isCurrent
-                    ? $"[green]* {Markup.Escape(ep.Name)}[/]"
-                    : $"  {Markup.Escape(ep.Name)}";
-                string modelDisplay = isCurrent
-                    ? $"[green]{Markup.Escape(ep.Model)}[/]"
-                    : Markup.Escape(ep.Model);
-                string adapterDisplay = isCurrent
-                    ? $"[green]{Markup.Escape(ep.AdapterType.ToString())}[/]"
-                    : Markup.Escape(ep.AdapterType.ToString());
-                string defaultDisplay = ep.IsDefault
-                    ? (isCurrent ? "[green]yes[/]" : "[cyan]yes[/]")
-                    : "no";
-                string urlDisplay = isCurrent
-                    ? $"[green]{Markup.Escape(ep.BaseUrl)}[/]"
-                    : Markup.Escape(ep.BaseUrl);
-                table.AddRow(nameDisplay, modelDisplay, adapterDisplay, defaultDisplay, urlDisplay);
-            }
-
             WriteOutputBlock(() =>
             {
+                WriteWorkflowTitle("Endpoints");
+                WriteWorkflowLine($"[dim]Current session:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]([/]{Markup.Escape(_CurrentEndpoint.Model)}[dim])[/]");
+
+                if (_AllEndpoints.Count == 0)
+                {
+                    WriteWorkflowBlankLine();
+                    WriteWorkflowHint("No configured endpoints found in endpoints.json.");
+                    Console.WriteLine();
+                    return;
+                }
+
+                WriteWorkflowLine("[dim]* marks the active session endpoint. [cyan]yes[/] marks the default endpoint for future sessions.[/]");
+                WriteWorkflowBlankLine();
+
+                Table table = new Table();
+                table.Border = TableBorder.Rounded;
+                table.AddColumn("[bold]Endpoint[/]");
+                table.AddColumn("[bold]Model[/]");
+                table.AddColumn("[bold]Adapter[/]");
+                table.AddColumn("[bold]Active[/]");
+                table.AddColumn("[bold]Default[/]");
+                table.AddColumn("[bold]URL[/]");
+
+                foreach (EndpointConfig ep in _AllEndpoints)
+                {
+                    bool isCurrent = string.Equals(ep.Name, _CurrentEndpoint.Name, StringComparison.OrdinalIgnoreCase);
+                    string nameDisplay = isCurrent
+                        ? $"[green]* {Markup.Escape(ep.Name)}[/]"
+                        : $"  {Markup.Escape(ep.Name)}";
+                    string modelDisplay = isCurrent
+                        ? $"[green]{Markup.Escape(ep.Model)}[/]"
+                        : Markup.Escape(ep.Model);
+                    string adapterDisplay = isCurrent
+                        ? $"[green]{Markup.Escape(ep.AdapterType.ToString())}[/]"
+                        : Markup.Escape(ep.AdapterType.ToString());
+                    string activeDisplay = isCurrent
+                        ? "[green]yes[/]"
+                        : "[dim]no[/]";
+                    string defaultDisplay = ep.IsDefault
+                        ? (isCurrent ? "[green]yes[/]" : "[cyan]yes[/]")
+                        : "[dim]no[/]";
+                    string urlDisplay = isCurrent
+                        ? $"[green]{Markup.Escape(ep.BaseUrl)}[/]"
+                        : Markup.Escape(ep.BaseUrl);
+                    table.AddRow(nameDisplay, modelDisplay, adapterDisplay, activeDisplay, defaultDisplay, urlDisplay);
+                }
+
                 AnsiConsole.Write(table);
                 Console.WriteLine();
             }, outputEndsWithPromptSpacer: true);
@@ -2395,16 +2428,31 @@ namespace Mux.Cli.Commands
             {
                 _CurrentEndpoint = found;
                 ResetConversationState();
-                WriteMarkupLine(
-                    $"[green]Switched to endpoint:[/] {Markup.Escape(found.Name)} [dim]([/]{Markup.Escape(found.Model)}[dim])[/] [dim]|[/] [dim]{Markup.Escape(found.AdapterType.ToString())}[/] [dim]|[/] {Markup.Escape(found.BaseUrl)}");
-                WriteMarkupLine("[dim]Conversation history cleared.[/]");
+                WriteOutputBlock(() =>
+                {
+                    WriteWorkflowTitle("Endpoint Switched");
+                    WriteWorkflowSummaryItem("Name", found.Name);
+                    WriteWorkflowSummaryItem("Model", found.Model);
+                    WriteWorkflowSummaryItem("Adapter", found.AdapterType.ToString());
+                    WriteWorkflowSummaryItem("Base URL", found.BaseUrl);
+                    WriteWorkflowBlankLine();
+                    WriteWorkflowHint("Conversation history cleared.");
+                    Console.WriteLine();
+                }, outputEndsWithPromptSpacer: true);
             }
             else
             {
                 _CurrentEndpoint.Model = targetName;
                 ResetConversationState();
-                WriteMarkupLine($"[green]Model changed to:[/] {Markup.Escape(targetName)}");
-                WriteMarkupLine("[dim]Conversation history cleared.[/]");
+                WriteOutputBlock(() =>
+                {
+                    WriteWorkflowTitle("Endpoint Model Override");
+                    WriteWorkflowSummaryItem("Model", targetName);
+                    WriteWorkflowSummaryItem("Endpoint", _CurrentEndpoint.Name);
+                    WriteWorkflowBlankLine();
+                    WriteWorkflowHint("Conversation history cleared.");
+                    Console.WriteLine();
+                }, outputEndsWithPromptSpacer: true);
             }
         }
 
@@ -2429,28 +2477,37 @@ namespace Mux.Cli.Commands
             table.AddRow("Adapter", Markup.Escape(found.AdapterType.ToString()));
             table.AddRow("Base URL", Markup.Escape(found.BaseUrl));
             table.AddRow("Model", Markup.Escape(found.Model));
-            table.AddRow("Default", found.IsDefault ? "yes" : "no");
-            table.AddRow("Active in session", string.Equals(found.Name, _CurrentEndpoint.Name, StringComparison.OrdinalIgnoreCase) ? "yes" : "no");
+            table.AddRow("Default", found.IsDefault ? "[cyan]yes[/]" : "[dim]no[/]");
+            table.AddRow("Active in session", string.Equals(found.Name, _CurrentEndpoint.Name, StringComparison.OrdinalIgnoreCase) ? "[green]yes[/]" : "[dim]no[/]");
             table.AddRow("Max tokens", found.MaxTokens.ToString());
             table.AddRow("Temperature", found.Temperature.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
             table.AddRow("Context window", found.ContextWindow.ToString());
             table.AddRow("Timeout (ms)", found.TimeoutMs.ToString());
+            table.AddRow("Auth", Markup.Escape(DescribeEndpointAuth(found)));
             table.AddRow("Headers", Markup.Escape(FormatEndpointHeaders(found)));
-            table.AddRow("Tool calling", (found.Quirks?.SupportsTools ?? Defaults.QuirksForAdapter(found.AdapterType).SupportsTools) ? "enabled" : "disabled");
+            table.AddRow("Tool calling", (found.Quirks?.SupportsTools ?? Defaults.QuirksForAdapter(found.AdapterType).SupportsTools) ? "[green]enabled[/]" : "[yellow]disabled[/]");
             table.AddRow("Connected", probe.Success ? "[green]yes[/]" : "[red]no[/]");
             table.AddRow("Probe duration", probe.DurationMs.ToString() + "ms");
             table.AddRow("Probe detail", Markup.Escape(probe.Detail));
 
             WriteOutputBlock(() =>
             {
+                WriteWorkflowTitle($"Endpoint Details: {found.Name}");
+                WriteWorkflowHint("A lightweight connectivity probe was run before these details were shown.");
+                WriteWorkflowBlankLine();
                 AnsiConsole.Write(table);
                 Console.WriteLine();
             }, outputEndsWithPromptSpacer: true);
         }
 
-        private void HandleEndpointAddCommand(EndpointConfig endpoint)
+        private void HandleEndpointAddCommand(string? suggestedName)
         {
             if (!EnsureQueueEmptyForStateChange("modify endpoints"))
+            {
+                return;
+            }
+
+            if (!TryRunEndpointWizard(EndpointWizardMode.Add, null, suggestedName, out EndpointConfig endpoint))
             {
                 return;
             }
@@ -2474,10 +2531,131 @@ namespace Mux.Cli.Commands
             SettingsLoader.SaveEndpoints(updatedEndpoints);
             ReloadConfiguredEndpoints();
 
-            string defaultSuffix = endpoint.IsDefault
-                ? " It is now the default endpoint for future sessions."
-                : string.Empty;
-            WriteSuccessLine($"Added endpoint '{endpoint.Name}'.{defaultSuffix}");
+            EndpointConfig savedEndpoint = _AllEndpoints
+                .First(existing => string.Equals(existing.Name, endpoint.Name, StringComparison.OrdinalIgnoreCase));
+
+            WriteOutputBlock(() =>
+            {
+                WriteWorkflowTitle("Endpoint Added");
+                WriteWorkflowSummaryItem("Name", savedEndpoint.Name);
+                WriteWorkflowSummaryItem("Adapter", savedEndpoint.AdapterType.ToString());
+                WriteWorkflowSummaryItem("Model", savedEndpoint.Model);
+                WriteWorkflowSummaryItem("Base URL", savedEndpoint.BaseUrl);
+                WriteWorkflowSummaryItem("Default for new sessions", savedEndpoint.IsDefault ? "yes" : "no");
+                WriteWorkflowSummaryItem("Active in this session", string.Equals(_CurrentEndpoint.Name, savedEndpoint.Name, StringComparison.OrdinalIgnoreCase) ? "yes" : "no");
+                WriteWorkflowBlankLine();
+                if (savedEndpoint.IsDefault && !string.Equals(_CurrentEndpoint.Name, savedEndpoint.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    WriteWorkflowHint($"New mux sessions will start with '{savedEndpoint.Name}'. This interactive session still uses '{_CurrentEndpoint.Name}'.");
+                }
+                else if (savedEndpoint.IsDefault)
+                {
+                    WriteWorkflowHint("This endpoint is the default for new mux sessions.");
+                }
+                else
+                {
+                    WriteWorkflowHint("The endpoint was saved to endpoints.json.");
+                }
+                Console.WriteLine();
+            }, outputEndsWithPromptSpacer: true);
+        }
+
+        private void HandleEndpointEditCommand(string endpointName)
+        {
+            if (!EnsureQueueEmptyForStateChange("modify endpoints"))
+            {
+                return;
+            }
+
+            EndpointConfig? existing = _AllEndpoints
+                .FirstOrDefault((EndpointConfig e) => string.Equals(e.Name, endpointName, StringComparison.OrdinalIgnoreCase));
+
+            if (existing == null)
+            {
+                WriteFailureLine($"No endpoint named '{endpointName}' is configured.");
+                return;
+            }
+
+            if (!TryRunEndpointWizard(EndpointWizardMode.Edit, existing, null, out EndpointConfig updatedEndpoint))
+            {
+                return;
+            }
+
+            List<EndpointConfig> updatedEndpoints = new List<EndpointConfig>();
+            foreach (EndpointConfig endpoint in _AllEndpoints)
+            {
+                if (string.Equals(endpoint.Name, endpointName, StringComparison.OrdinalIgnoreCase))
+                {
+                    updatedEndpoints.Add(updatedEndpoint);
+                }
+                else
+                {
+                    updatedEndpoints.Add(endpoint);
+                }
+            }
+
+            if (updatedEndpoint.IsDefault)
+            {
+                foreach (EndpointConfig endpoint in updatedEndpoints)
+                {
+                    if (!string.Equals(endpoint.Name, updatedEndpoint.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        endpoint.IsDefault = false;
+                    }
+                }
+            }
+
+            SettingsLoader.SaveEndpoints(updatedEndpoints);
+            ReloadConfiguredEndpoints();
+
+            EndpointConfig savedEndpoint = _AllEndpoints
+                .First(endpoint => string.Equals(endpoint.Name, endpointName, StringComparison.OrdinalIgnoreCase));
+            bool activeSessionEndpointUpdated = string.Equals(_CurrentEndpoint.Name, endpointName, StringComparison.OrdinalIgnoreCase);
+
+            if (activeSessionEndpointUpdated)
+            {
+                _CurrentEndpoint = savedEndpoint;
+                ResetConversationState();
+                WriteOutputBlock(() =>
+                {
+                    WriteWorkflowTitle("Endpoint Updated");
+                    WriteWorkflowSummaryItem("Name", savedEndpoint.Name);
+                    WriteWorkflowSummaryItem("Adapter", savedEndpoint.AdapterType.ToString());
+                    WriteWorkflowSummaryItem("Model", savedEndpoint.Model);
+                    WriteWorkflowSummaryItem("Base URL", savedEndpoint.BaseUrl);
+                    WriteWorkflowSummaryItem("Default for new sessions", savedEndpoint.IsDefault ? "yes" : "no");
+                    WriteWorkflowSummaryItem("Active in this session", "yes");
+                    WriteWorkflowBlankLine();
+                    WriteWorkflowHint("Current session history was cleared because the active endpoint changed.");
+                    Console.WriteLine();
+                }, outputEndsWithPromptSpacer: true);
+                return;
+            }
+
+            WriteOutputBlock(() =>
+            {
+                WriteWorkflowTitle("Endpoint Updated");
+                WriteWorkflowSummaryItem("Name", savedEndpoint.Name);
+                WriteWorkflowSummaryItem("Adapter", savedEndpoint.AdapterType.ToString());
+                WriteWorkflowSummaryItem("Model", savedEndpoint.Model);
+                WriteWorkflowSummaryItem("Base URL", savedEndpoint.BaseUrl);
+                WriteWorkflowSummaryItem("Default for new sessions", savedEndpoint.IsDefault ? "yes" : "no");
+                WriteWorkflowSummaryItem("Active in this session", string.Equals(_CurrentEndpoint.Name, savedEndpoint.Name, StringComparison.OrdinalIgnoreCase) ? "yes" : "no");
+                WriteWorkflowBlankLine();
+                if (savedEndpoint.IsDefault && !string.Equals(_CurrentEndpoint.Name, savedEndpoint.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    WriteWorkflowHint($"New mux sessions will start with '{savedEndpoint.Name}'. This interactive session still uses '{_CurrentEndpoint.Name}'.");
+                }
+                else if (savedEndpoint.IsDefault)
+                {
+                    WriteWorkflowHint("This endpoint remains the default for new mux sessions.");
+                }
+                else
+                {
+                    WriteWorkflowHint("The endpoint changes were saved.");
+                }
+                Console.WriteLine();
+            }, outputEndsWithPromptSpacer: true);
         }
 
         private void HandleEndpointRemoveCommand(string endpointName)
@@ -2502,13 +2680,49 @@ namespace Mux.Cli.Commands
                 return;
             }
 
+            bool confirmed = false;
+            bool completed = RunConsoleWizard(() =>
+            {
+                WriteWorkflowTitle($"Endpoint Remove: {existing.Name}");
+                WriteWorkflowHint("This deletes the saved endpoint definition from endpoints.json.");
+                WriteWorkflowHint("Ctrl+C or type cancel to abort.");
+                WriteWorkflowBlankLine();
+
+                if (!TryPromptYesNo("Remove this endpoint", false, out bool removeEndpoint))
+                {
+                    WriteWorkflowLine("[yellow]Endpoint removal cancelled; nothing was deleted.[/]");
+                    return false;
+                }
+
+                if (!removeEndpoint)
+                {
+                    WriteWorkflowLine("[yellow]Endpoint removal cancelled; nothing was deleted.[/]");
+                    return false;
+                }
+
+                confirmed = true;
+                return true;
+            });
+
+            if (!completed || !confirmed)
+            {
+                return;
+            }
+
             List<EndpointConfig> updatedEndpoints = _AllEndpoints
                 .Where((EndpointConfig e) => !string.Equals(e.Name, endpointName, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             SettingsLoader.SaveEndpoints(updatedEndpoints);
             ReloadConfiguredEndpoints();
-            WriteSuccessLine($"Removed endpoint '{endpointName}'.");
+            WriteOutputBlock(() =>
+            {
+                WriteWorkflowTitle("Endpoint Removed");
+                WriteWorkflowSummaryItem("Name", endpointName);
+                WriteWorkflowBlankLine();
+                WriteWorkflowHint("The endpoint definition was removed from endpoints.json.");
+                Console.WriteLine();
+            }, outputEndsWithPromptSpacer: true);
         }
 
         private void ReloadConfiguredEndpoints()
@@ -2565,6 +2779,859 @@ namespace Mux.Cli.Commands
             }
         }
 
+        private bool TryRunEndpointWizard(
+            EndpointWizardMode mode,
+            EndpointConfig? existingEndpoint,
+            string? suggestedName,
+            out EndpointConfig configuredEndpoint)
+        {
+            EndpointConfig workingEndpoint = existingEndpoint != null
+                ? CloneEndpoint(existingEndpoint)
+                : new EndpointConfig
+                {
+                    Headers = new Dictionary<string, string>()
+                };
+
+            bool completed = RunConsoleWizard(() =>
+            {
+                WriteWorkflowTitle(mode == EndpointWizardMode.Add ? "Endpoint Add Wizard" : $"Endpoint Edit Wizard: {existingEndpoint!.Name}");
+                WriteWorkflowHint("Ctrl+C or type cancel at any prompt to abort.");
+                WriteWorkflowHint("Press Enter to accept defaults where shown.");
+                WriteWorkflowBlankLine();
+
+                if (mode == EndpointWizardMode.Add)
+                {
+                    if (!TryPromptEndpointName(suggestedName, out string endpointName))
+                    {
+                        return CancelEndpointWizard();
+                    }
+
+                    workingEndpoint.Name = endpointName;
+                }
+                else
+                {
+                    WriteWorkflowLine($"[dim]Editing endpoint:[/] {Markup.Escape(existingEndpoint!.Name)}");
+                    WriteWorkflowHint("Endpoint name is fixed during edit. Remove and re-add if you need to rename it.");
+                    WriteWorkflowBlankLine();
+                }
+
+                if (!TryPromptEndpointAdapter(workingEndpoint.AdapterType, out AdapterTypeEnum adapterType))
+                {
+                    return CancelEndpointWizard();
+                }
+
+                workingEndpoint.AdapterType = adapterType;
+                workingEndpoint.Quirks = Defaults.QuirksForAdapter(adapterType);
+
+                if (!TryPromptEndpointBaseUrl(workingEndpoint.AdapterType, workingEndpoint.BaseUrl, out string baseUrl))
+                {
+                    return CancelEndpointWizard();
+                }
+
+                workingEndpoint.BaseUrl = baseUrl;
+
+                if (!TryPromptRequiredWizardValue("Model", workingEndpoint.Model, out string model, "Examples: qwen2.5-coder:7b, gpt-4.1, deepseek-coder-v2"))
+                {
+                    return CancelEndpointWizard();
+                }
+
+                workingEndpoint.Model = model;
+
+                if (!TryPromptEndpointAuth(workingEndpoint, existingEndpoint != null, out Dictionary<string, string> headers))
+                {
+                    return CancelEndpointWizard();
+                }
+
+                workingEndpoint.Headers = headers;
+
+                if (!TryPromptYesNo("Set this as the default endpoint", workingEndpoint.IsDefault, out bool isDefault))
+                {
+                    return CancelEndpointWizard();
+                }
+
+                workingEndpoint.IsDefault = isDefault;
+
+                if (!TryPromptYesNo("Review advanced settings", false, out bool reviewAdvanced))
+                {
+                    return CancelEndpointWizard();
+                }
+
+                if (reviewAdvanced)
+                {
+                    if (!TryPromptDouble("Temperature", workingEndpoint.Temperature, out double temperature)
+                        || !TryPromptInt("Max tokens", workingEndpoint.MaxTokens, out int maxTokens)
+                        || !TryPromptInt("Context window", workingEndpoint.ContextWindow, out int contextWindow)
+                        || !TryPromptInt("Timeout (ms)", workingEndpoint.TimeoutMs, out int timeoutMs))
+                    {
+                        return CancelEndpointWizard();
+                    }
+
+                    workingEndpoint.Temperature = temperature;
+                    workingEndpoint.MaxTokens = maxTokens;
+                    workingEndpoint.ContextWindow = contextWindow;
+                    workingEndpoint.TimeoutMs = timeoutMs;
+                }
+
+                WriteWorkflowBlankLine();
+                PrintEndpointWizardSummary(workingEndpoint);
+
+                WriteWorkflowBlankLine();
+                WriteWorkflowSection("Connectivity Probe");
+                WriteWorkflowHint("Sending a lightweight request to validate the endpoint.");
+                EndpointProbeSnapshot probe = ProbeEndpoint(workingEndpoint);
+                WriteWorkflowLine(probe.Success
+                    ? $"[green]Probe succeeded[/] [dim]in {probe.DurationMs}ms[/]: {Markup.Escape(probe.Detail)}"
+                    : $"[red]Probe failed[/] [dim]in {probe.DurationMs}ms[/]: {Markup.Escape(probe.Detail)}");
+
+                bool defaultSaveChoice = probe.Success;
+                string savePrompt = probe.Success
+                    ? "Save this endpoint"
+                    : "Save this endpoint anyway";
+
+                if (!TryPromptYesNo(savePrompt, defaultSaveChoice, out bool saveEndpoint))
+                {
+                    return CancelEndpointWizard();
+                }
+
+                if (!saveEndpoint)
+                {
+                    WriteWorkflowLine("[yellow]Endpoint workflow cancelled; nothing was saved.[/]");
+                    return false;
+                }
+
+                return true;
+            });
+
+            configuredEndpoint = workingEndpoint;
+            return completed;
+        }
+
+        private bool RunConsoleWizard(Func<bool> workflow)
+        {
+            lock (_ConsoleSync)
+            {
+                bool originalTreatControlCAsInput = Console.TreatControlCAsInput;
+
+                BeginOutputWrite();
+
+                try
+                {
+                    Console.TreatControlCAsInput = true;
+                    bool completed = workflow();
+
+                    if (Console.CursorLeft != 0)
+                    {
+                        Console.WriteLine();
+                    }
+
+                    Console.WriteLine();
+                    return completed;
+                }
+                finally
+                {
+                    Console.TreatControlCAsInput = originalTreatControlCAsInput;
+                    _AssistantTextOpen = false;
+                    EndOutputWrite(renderChromeAfterWrite: true, outputEndsWithPromptSpacer: true);
+                }
+            }
+        }
+
+        private void WriteWorkflowTitle(string title)
+        {
+            AnsiConsole.MarkupLine($"  [bold cyan]{Markup.Escape(title)}[/]");
+        }
+
+        private void WriteWorkflowSection(string title)
+        {
+            AnsiConsole.MarkupLine($"  [bold yellow]{Markup.Escape(title)}[/]");
+        }
+
+        private void WriteWorkflowHint(string text)
+        {
+            AnsiConsole.MarkupLine($"  [dim]{Markup.Escape(text)}[/]");
+        }
+
+        private void WriteWorkflowLine(string markup)
+        {
+            AnsiConsole.MarkupLine($"  {markup}");
+        }
+
+        private void WriteWorkflowBlankLine()
+        {
+            AnsiConsole.WriteLine();
+        }
+
+        private void WriteWorkflowOption(string index, string name, string description)
+        {
+            string paddedName = name.PadRight(19, ' ');
+            WriteWorkflowLine($"[dim]{Markup.Escape(index)}.[/] [cyan]{Markup.Escape(paddedName)}[/] {Markup.Escape(description)}");
+        }
+
+        private void WriteWorkflowPrompt(string label, string? defaultValue, string? promptSuffix = null)
+        {
+            AnsiConsole.Markup($"  [dim]>[/] [bold cyan]{Markup.Escape(label)}[/]");
+            if (!string.IsNullOrWhiteSpace(defaultValue))
+            {
+                AnsiConsole.Markup($" [dim][[{Markup.Escape(defaultValue)}]][/]");
+            }
+
+            if (!string.IsNullOrWhiteSpace(promptSuffix))
+            {
+                AnsiConsole.Markup($" [dim]{Markup.Escape(promptSuffix)}[/]");
+            }
+
+            AnsiConsole.Markup(": ");
+        }
+
+        private void WriteWorkflowSummaryItem(string label, string value)
+        {
+            WriteWorkflowLine($"[dim]{Markup.Escape(label)}:[/] {Markup.Escape(value)}");
+        }
+
+        private bool TryPromptEndpointName(string? suggestedName, out string endpointName)
+        {
+            while (true)
+            {
+                if (!TryPromptRequiredWizardValue("Endpoint name", suggestedName, out endpointName, "Short name used with /endpoint <name>."))
+                {
+                    return false;
+                }
+
+                string candidateName = endpointName;
+                if (_AllEndpoints.Any(existing => string.Equals(existing.Name, candidateName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    WriteWorkflowLine($"[red]An endpoint named '{Markup.Escape(candidateName)}' already exists. Choose a different name.[/]");
+                    WriteWorkflowBlankLine();
+                    continue;
+                }
+
+                return true;
+            }
+        }
+
+        private bool TryPromptEndpointAdapter(AdapterTypeEnum currentValue, out AdapterTypeEnum adapterType)
+        {
+            while (true)
+            {
+                WriteWorkflowSection("Adapter");
+                WriteWorkflowOption("1", "ollama", "Ollama OpenAI-compatible endpoint, usually http://localhost:11434/v1");
+                WriteWorkflowOption("2", "openai", "OpenAI API, usually https://api.openai.com/v1");
+                WriteWorkflowOption("3", "openai-compatible", "OpenAI-style compatible APIs, usually ending in /v1");
+                WriteWorkflowOption("4", "vllm", "vLLM OpenAI-compatible server, usually ending in /v1");
+
+                if (!TryPromptWizardValue("Adapter", currentValue.ToString(), out string selection))
+                {
+                    adapterType = currentValue;
+                    return false;
+                }
+
+                if (string.Equals(selection, currentValue.ToString(), StringComparison.Ordinal))
+                {
+                    adapterType = currentValue;
+                    return true;
+                }
+
+                string normalized = selection.Trim().Replace("-", string.Empty, StringComparison.Ordinal).Replace("_", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+                switch (normalized)
+                {
+                    case "1":
+                    case "ollama":
+                        adapterType = AdapterTypeEnum.Ollama;
+                        return true;
+                    case "2":
+                    case "openai":
+                        adapterType = AdapterTypeEnum.OpenAi;
+                        return true;
+                    case "3":
+                    case "openaicompatible":
+                        adapterType = AdapterTypeEnum.OpenAiCompatible;
+                        return true;
+                    case "4":
+                    case "vllm":
+                        adapterType = AdapterTypeEnum.Vllm;
+                        return true;
+                    default:
+                        WriteWorkflowLine("[red]Choose 1-4 or type one of: ollama, openai, openai-compatible, vllm.[/]");
+                        WriteWorkflowBlankLine();
+                        break;
+                }
+            }
+        }
+
+        private bool TryPromptEndpointBaseUrl(AdapterTypeEnum adapterType, string currentValue, out string baseUrl)
+        {
+            string example = GetEndpointBaseUrlExample(adapterType);
+            string guidance = adapterType == AdapterTypeEnum.Ollama
+                ? "Base URL guidance: mux appends /chat/completions. For ollama, enter the OpenAI-compatible API root, usually http://localhost:11434/v1."
+                : $"Base URL guidance: mux appends /chat/completions, so enter the API root. Example for {adapterType}: {example}";
+
+            while (true)
+            {
+                WriteWorkflowSection("Base URL");
+                WriteWorkflowHint(guidance);
+                if (!TryPromptRequiredWizardValue("Base URL", currentValue, out baseUrl, null))
+                {
+                    return false;
+                }
+
+                if (Uri.TryCreate(baseUrl, UriKind.Absolute, out Uri? uri)
+                    && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (adapterType == AdapterTypeEnum.Ollama && string.IsNullOrEmpty(uri.AbsolutePath.Trim('/')))
+                    {
+                        string normalizedBaseUrl = new Uri(uri, "/v1").ToString().TrimEnd('/');
+                        if (!string.Equals(normalizedBaseUrl, baseUrl, StringComparison.Ordinal))
+                        {
+                            WriteWorkflowLine($"[yellow]Adjusted Ollama base URL to[/] {Markup.Escape(normalizedBaseUrl)} [dim]so mux can use Ollama's OpenAI-compatible endpoint.[/]");
+                            baseUrl = normalizedBaseUrl;
+                        }
+                    }
+
+                    return true;
+                }
+
+                WriteWorkflowLine("[red]Enter an absolute http:// or https:// URL.[/]");
+                WriteWorkflowBlankLine();
+            }
+        }
+
+        private bool TryPromptEndpointAuth(EndpointConfig endpoint, bool isEdit, out Dictionary<string, string> headers)
+        {
+            headers = new Dictionary<string, string>();
+            EndpointAuthMode currentAuthMode = ClassifyEndpointAuth(endpoint.Headers);
+
+            if (!TryPromptEndpointAuthMode(currentAuthMode, out EndpointAuthMode selectedAuthMode))
+            {
+                return false;
+            }
+
+            switch (selectedAuthMode)
+            {
+                case EndpointAuthMode.None:
+                    return true;
+
+                case EndpointAuthMode.BearerToken:
+                    if (isEdit
+                        && currentAuthMode == EndpointAuthMode.BearerToken
+                        && TryGetBearerHeaderValue(endpoint.Headers, out string existingBearerHeader))
+                    {
+                        if (!TryPromptYesNo("Keep the existing bearer token configuration", true, out bool keepExistingBearer))
+                        {
+                            return false;
+                        }
+
+                        if (keepExistingBearer)
+                        {
+                            headers["Authorization"] = existingBearerHeader;
+                            return true;
+                        }
+                    }
+
+                    if (!TryPromptBearerHeaderValue(out string bearerHeaderValue))
+                    {
+                        return false;
+                    }
+
+                    headers["Authorization"] = bearerHeaderValue;
+                    return true;
+
+                case EndpointAuthMode.CustomHeaders:
+                    if (isEdit && currentAuthMode == EndpointAuthMode.CustomHeaders && endpoint.Headers.Count > 0)
+                    {
+                        WriteWorkflowLine($"[dim]Current headers:[/] {Markup.Escape(FormatEndpointHeaders(endpoint))}");
+                        if (!TryPromptYesNo("Keep the existing custom headers", true, out bool keepExistingHeaders))
+                        {
+                            return false;
+                        }
+
+                        if (keepExistingHeaders)
+                        {
+                            headers = new Dictionary<string, string>(endpoint.Headers);
+                            return true;
+                        }
+                    }
+
+                    return TryPromptCustomHeaders(out headers);
+
+                default:
+                    return false;
+            }
+        }
+
+        private bool TryPromptEndpointAuthMode(EndpointAuthMode currentMode, out EndpointAuthMode authMode)
+        {
+            while (true)
+            {
+                WriteWorkflowSection("Authentication");
+                WriteWorkflowOption("1", "none", "No auth headers");
+                WriteWorkflowOption("2", "bearer token", "Authorization header with Bearer token");
+                WriteWorkflowOption("3", "custom headers", "One or more arbitrary headers");
+
+                if (!TryPromptWizardValue("Auth mode", DescribeEndpointAuthMode(currentMode), out string selection))
+                {
+                    authMode = currentMode;
+                    return false;
+                }
+
+                string normalized = selection.Trim().Replace(" ", string.Empty, StringComparison.Ordinal).Replace("-", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+                switch (normalized)
+                {
+                    case "1":
+                    case "none":
+                        authMode = EndpointAuthMode.None;
+                        return true;
+                    case "2":
+                    case "bearertoken":
+                    case "bearer":
+                        authMode = EndpointAuthMode.BearerToken;
+                        return true;
+                    case "3":
+                    case "customheaders":
+                    case "custom":
+                        authMode = EndpointAuthMode.CustomHeaders;
+                        return true;
+                    default:
+                        WriteWorkflowLine("[red]Choose 1-3 or type one of: none, bearer token, custom headers.[/]");
+                        WriteWorkflowBlankLine();
+                        break;
+                }
+            }
+        }
+
+        private bool TryPromptBearerHeaderValue(out string headerValue)
+        {
+            headerValue = string.Empty;
+
+            WriteWorkflowSection("Bearer Token");
+            WriteWorkflowOption("1", "stored value", "Store the token directly in endpoints.json");
+            WriteWorkflowOption("2", "environment variable", "Store an environment-variable reference");
+            WriteWorkflowHint("Accepted forms: OPENAI_API_KEY, ${OPENAI_API_KEY}, %OPENAI_API_KEY%, $OPENAI_API_KEY, or $env:OPENAI_API_KEY.");
+
+            if (!TryPromptSecretStorageMode(out SecretStorageMode storageMode))
+            {
+                return false;
+            }
+
+            if (storageMode == SecretStorageMode.StoredValue)
+            {
+                if (!TryPromptSecretValue("Bearer token", out string tokenValue))
+                {
+                    return false;
+                }
+
+                headerValue = "Bearer " + tokenValue;
+                return true;
+            }
+
+            if (!TryPromptEnvironmentReference("Environment variable", out string normalizedReference))
+            {
+                return false;
+            }
+
+            headerValue = "Bearer " + normalizedReference;
+            return true;
+        }
+
+        private bool TryPromptCustomHeaders(out Dictionary<string, string> headers)
+        {
+            headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            WriteWorkflowSection("Custom Headers");
+            WriteWorkflowHint("Enter one or more custom headers.");
+            WriteWorkflowHint("Leave the header name blank after the first header to finish.");
+
+            while (true)
+            {
+                string? defaultHeaderName = headers.Count == 0 ? null : string.Empty;
+                if (!TryPromptWizardValue("Header name", defaultHeaderName, out string headerName))
+                {
+                    return false;
+                }
+
+                headerName = headerName.Trim();
+                if (string.IsNullOrWhiteSpace(headerName))
+                {
+                    if (headers.Count == 0)
+                    {
+                        WriteWorkflowLine("[red]At least one header is required for custom header auth.[/]");
+                        WriteWorkflowBlankLine();
+                        continue;
+                    }
+
+                    return true;
+                }
+
+                if (!TryPromptSecretStorageMode(out SecretStorageMode storageMode))
+                {
+                    return false;
+                }
+
+                if (storageMode == SecretStorageMode.StoredValue)
+                {
+                    if (!TryPromptSecretValue($"Value for {headerName}", out string headerValue))
+                    {
+                        return false;
+                    }
+
+                    headers[headerName] = headerValue;
+                }
+                else
+                {
+                    if (!TryPromptEnvironmentReference($"Environment variable for {headerName}", out string normalizedReference))
+                    {
+                        return false;
+                    }
+
+                    headers[headerName] = normalizedReference;
+                }
+
+                WriteWorkflowBlankLine();
+            }
+        }
+
+        private bool TryPromptSecretStorageMode(out SecretStorageMode storageMode)
+        {
+            while (true)
+            {
+                WriteWorkflowSection("Value Source");
+                WriteWorkflowOption("1", "stored value", "Store a discrete value in endpoints.json");
+                WriteWorkflowOption("2", "environment variable", "Use an environment-variable reference");
+
+                if (!TryPromptWizardValue("Source", "2", out string selection))
+                {
+                    storageMode = SecretStorageMode.StoredValue;
+                    return false;
+                }
+
+                string normalized = selection.Trim().Replace(" ", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+                switch (normalized)
+                {
+                    case "1":
+                    case "stored":
+                    case "value":
+                    case "endpoints.json":
+                        storageMode = SecretStorageMode.StoredValue;
+                        return true;
+                    case "2":
+                    case "env":
+                    case "environment":
+                    case "environmentvariable":
+                        storageMode = SecretStorageMode.EnvironmentVariable;
+                        return true;
+                    default:
+                        WriteWorkflowLine("[red]Choose 1 or 2.[/]");
+                        WriteWorkflowBlankLine();
+                        break;
+                }
+            }
+        }
+
+        private bool TryPromptEnvironmentReference(string label, out string normalizedReference)
+        {
+            while (true)
+            {
+                if (!TryPromptRequiredWizardValue(label, null, out string inputValue, null))
+                {
+                    normalizedReference = string.Empty;
+                    return false;
+                }
+
+                if (SettingsLoader.TryNormalizeEnvironmentVariableReference(inputValue, out normalizedReference))
+                {
+                    return true;
+                }
+
+                WriteWorkflowLine("[red]Enter a bare environment variable name or a supported reference such as ${VAR}, %VAR%, $VAR, or $env:VAR.[/]");
+                WriteWorkflowBlankLine();
+            }
+        }
+
+        private bool TryPromptSecretValue(string label, out string value)
+        {
+            while (true)
+            {
+                WriteWorkflowPrompt(label, null);
+                string? input = ReadWizardLine(secret: true);
+                if (input == null || IsWizardCancelInput(input))
+                {
+                    value = string.Empty;
+                    return false;
+                }
+
+                value = input.Trim();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return true;
+                }
+
+                WriteWorkflowLine("[red]A value is required.[/]");
+                WriteWorkflowBlankLine();
+            }
+        }
+
+        private bool TryPromptRequiredWizardValue(string label, string? defaultValue, out string value, string? guidance)
+        {
+            while (true)
+            {
+                if (!string.IsNullOrWhiteSpace(guidance))
+                {
+                    WriteWorkflowHint(guidance);
+                }
+
+                if (!TryPromptWizardValue(label, defaultValue, out value))
+                {
+                    return false;
+                }
+
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return true;
+                }
+
+                WriteWorkflowLine("[red]A value is required.[/]");
+                WriteWorkflowBlankLine();
+            }
+        }
+
+        private bool TryPromptWizardValue(string label, string? defaultValue, out string value)
+        {
+            WriteWorkflowPrompt(label, defaultValue);
+            string? input = ReadWizardLine(secret: false);
+            if (input == null || IsWizardCancelInput(input))
+            {
+                value = string.Empty;
+                return false;
+            }
+
+            value = string.IsNullOrWhiteSpace(input)
+                ? (defaultValue ?? string.Empty)
+                : input.Trim();
+            return true;
+        }
+
+        private bool TryPromptYesNo(string label, bool defaultValue, out bool value)
+        {
+            while (true)
+            {
+                WriteWorkflowPrompt(label, defaultValue ? "Y/n" : "y/N");
+                string? input = ReadWizardLine(secret: false);
+                if (input == null || IsWizardCancelInput(input))
+                {
+                    value = defaultValue;
+                    return false;
+                }
+
+                string normalized = input.Trim().ToLowerInvariant();
+                if (string.IsNullOrWhiteSpace(normalized))
+                {
+                    value = defaultValue;
+                    return true;
+                }
+
+                if (normalized == "y" || normalized == "yes")
+                {
+                    value = true;
+                    return true;
+                }
+
+                if (normalized == "n" || normalized == "no")
+                {
+                    value = false;
+                    return true;
+                }
+
+                WriteWorkflowLine("[red]Answer yes or no.[/]");
+                WriteWorkflowBlankLine();
+            }
+        }
+
+        private bool TryPromptInt(string label, int defaultValue, out int value)
+        {
+            while (true)
+            {
+                if (!TryPromptWizardValue(label, defaultValue.ToString(), out string input))
+                {
+                    value = defaultValue;
+                    return false;
+                }
+
+                if (int.TryParse(input, out value))
+                {
+                    return true;
+                }
+
+                WriteWorkflowLine("[red]Enter an integer value.[/]");
+                WriteWorkflowBlankLine();
+            }
+        }
+
+        private bool TryPromptDouble(string label, double defaultValue, out double value)
+        {
+            while (true)
+            {
+                string defaultText = defaultValue.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+                if (!TryPromptWizardValue(label, defaultText, out string input))
+                {
+                    value = defaultValue;
+                    return false;
+                }
+
+                if (double.TryParse(input, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value))
+                {
+                    return true;
+                }
+
+                WriteWorkflowLine("[red]Enter a numeric value.[/]");
+                WriteWorkflowBlankLine();
+            }
+        }
+
+        private string? ReadWizardLine(bool secret)
+        {
+            StringBuilder builder = new StringBuilder();
+
+            while (true)
+            {
+                ConsoleKeyInfo keyInfo = Console.ReadKey(intercept: true);
+
+                if (keyInfo.Key == ConsoleKey.C && (keyInfo.Modifiers & ConsoleModifiers.Control) != 0)
+                {
+                    Console.WriteLine();
+                    return null;
+                }
+
+                if (keyInfo.Key == ConsoleKey.Enter)
+                {
+                    Console.WriteLine();
+                    return builder.ToString();
+                }
+
+                if (keyInfo.Key == ConsoleKey.Backspace)
+                {
+                    if (builder.Length > 0)
+                    {
+                        builder.Length--;
+                        Console.Write("\b \b");
+                    }
+
+                    continue;
+                }
+
+                if (keyInfo.KeyChar != '\0' && !char.IsControl(keyInfo.KeyChar))
+                {
+                    builder.Append(keyInfo.KeyChar);
+                    Console.Write(secret ? '*' : keyInfo.KeyChar);
+                }
+            }
+        }
+
+        private static bool IsWizardCancelInput(string input)
+        {
+            return string.Equals(input.Trim(), "cancel", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool CancelEndpointWizard()
+        {
+            WriteWorkflowLine("[yellow]Endpoint workflow cancelled; nothing was saved.[/]");
+            return false;
+        }
+
+        private void PrintEndpointWizardSummary(EndpointConfig endpoint)
+        {
+            WriteWorkflowSection("Endpoint Summary");
+            WriteWorkflowSummaryItem("Name", endpoint.Name);
+            WriteWorkflowSummaryItem("Adapter", endpoint.AdapterType.ToString());
+            WriteWorkflowSummaryItem("Base URL", endpoint.BaseUrl);
+            WriteWorkflowSummaryItem("Model", endpoint.Model);
+            WriteWorkflowSummaryItem("Auth", DescribeEndpointAuth(endpoint));
+            WriteWorkflowSummaryItem("Headers", FormatEndpointHeaders(endpoint));
+            WriteWorkflowSummaryItem("Default", endpoint.IsDefault ? "yes" : "no");
+            WriteWorkflowSummaryItem("Temperature", endpoint.Temperature.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+            WriteWorkflowSummaryItem("Max tokens", endpoint.MaxTokens.ToString());
+            WriteWorkflowSummaryItem("Context window", endpoint.ContextWindow.ToString());
+            WriteWorkflowSummaryItem("Timeout (ms)", endpoint.TimeoutMs.ToString());
+        }
+
+        private static string GetEndpointBaseUrlExample(AdapterTypeEnum adapterType)
+        {
+            return adapterType switch
+            {
+                AdapterTypeEnum.Ollama => "http://localhost:11434/v1",
+                AdapterTypeEnum.OpenAi => "https://api.openai.com/v1",
+                AdapterTypeEnum.Vllm => "http://localhost:8000/v1",
+                AdapterTypeEnum.OpenAiCompatible => "https://example.com/v1",
+                _ => "https://example.com/v1"
+            };
+        }
+
+        private static EndpointAuthMode ClassifyEndpointAuth(IDictionary<string, string> headers)
+        {
+            if (headers == null || headers.Count == 0)
+            {
+                return EndpointAuthMode.None;
+            }
+
+            return headers.Count == 1 && TryGetBearerHeaderValue(headers, out _)
+                ? EndpointAuthMode.BearerToken
+                : EndpointAuthMode.CustomHeaders;
+        }
+
+        private static bool TryGetBearerHeaderValue(IDictionary<string, string> headers, out string bearerHeaderValue)
+        {
+            foreach (KeyValuePair<string, string> header in headers)
+            {
+                if (string.Equals(header.Key, "Authorization", StringComparison.OrdinalIgnoreCase)
+                    && header.Value.TrimStart().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    bearerHeaderValue = header.Value;
+                    return true;
+                }
+            }
+
+            bearerHeaderValue = string.Empty;
+            return false;
+        }
+
+        private static string DescribeEndpointAuthMode(EndpointAuthMode authMode)
+        {
+            return authMode switch
+            {
+                EndpointAuthMode.None => "none",
+                EndpointAuthMode.BearerToken => "bearer token",
+                EndpointAuthMode.CustomHeaders => "custom headers",
+                _ => "none"
+            };
+        }
+
+        private static string DescribeEndpointAuth(EndpointConfig endpoint)
+        {
+            EndpointAuthMode authMode = ClassifyEndpointAuth(endpoint.Headers);
+            return authMode switch
+            {
+                EndpointAuthMode.None => "none",
+                EndpointAuthMode.BearerToken => DescribeBearerAuth(endpoint.Headers),
+                EndpointAuthMode.CustomHeaders => $"{endpoint.Headers.Count} custom header(s)",
+                _ => "none"
+            };
+        }
+
+        private static string DescribeBearerAuth(IDictionary<string, string> headers)
+        {
+            if (!TryGetBearerHeaderValue(headers, out string headerValue))
+            {
+                return "bearer token";
+            }
+
+            string tokenValue = headerValue.Substring(headerValue.IndexOf(' ') + 1).Trim();
+            if (SettingsLoader.TryGetEnvironmentVariableName(tokenValue, out string variableName))
+            {
+                return $"bearer token via env {variableName}";
+            }
+
+            return "bearer token stored in endpoints.json";
+        }
+
         private static string FormatEndpointHeaders(EndpointConfig endpoint)
         {
             if (endpoint.Headers == null || endpoint.Headers.Count == 0)
@@ -2575,7 +3642,30 @@ namespace Mux.Cli.Commands
             List<string> parts = new List<string>();
             foreach (KeyValuePair<string, string> header in endpoint.Headers)
             {
-                parts.Add($"{header.Key}=<configured>");
+                if (string.Equals(header.Key, "Authorization", StringComparison.OrdinalIgnoreCase)
+                    && header.Value.TrimStart().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                {
+                    string tokenValue = header.Value.Substring(header.Value.IndexOf(' ') + 1).Trim();
+                    if (SettingsLoader.TryGetEnvironmentVariableName(tokenValue, out string envVarName))
+                    {
+                        parts.Add($"{header.Key}=Bearer <env:{envVarName}>");
+                    }
+                    else
+                    {
+                        parts.Add($"{header.Key}=Bearer <stored>");
+                    }
+
+                    continue;
+                }
+
+                if (SettingsLoader.TryGetEnvironmentVariableName(header.Value, out string variableName))
+                {
+                    parts.Add($"{header.Key}=<env:{variableName}>");
+                }
+                else
+                {
+                    parts.Add($"{header.Key}=<stored>");
+                }
             }
 
             return string.Join(", ", parts);
@@ -2958,7 +4048,8 @@ namespace Mux.Cli.Commands
             table.AddRow("[cyan]/endpoint[/], [cyan]/endpoint list[/]", "List all configured endpoints with current one highlighted");
             table.AddRow("[cyan]/endpoint[/] [dim]<name>[/]", "Switch to a named endpoint or treat the value as a model override");
             table.AddRow("[cyan]/endpoint show[/] [dim]<name>[/]", "Show endpoint details and probe connectivity");
-            table.AddRow("[cyan]/endpoint add[/] [dim]<name> --adapter <type> --base-url <url> --model <name>[/]", "Add an endpoint to endpoints.json");
+            table.AddRow("[cyan]/endpoint add[/]", "Start the guided endpoint creation wizard");
+            table.AddRow("[cyan]/endpoint edit[/] [dim]<name>[/]", "Start the guided endpoint edit wizard");
             table.AddRow("[cyan]/endpoint remove[/] [dim]<name>[/]", "Remove an endpoint from endpoints.json");
             table.AddRow("[cyan]/tools[/]", "List all available tools with descriptions");
             table.AddRow("[cyan]/status[/]", "Show session metadata, context usage, title, and queue state");
@@ -2983,21 +4074,32 @@ namespace Mux.Cli.Commands
 
             WriteOutputBlock(() =>
             {
+                (string Shortcut, string Description)[] inputShortcuts =
+                {
+                    ("Enter", "Submit input when idle"),
+                    ("Up / Down", "Recall submitted prompts when idle"),
+                    ("Shift+Enter", "Insert newline"),
+                    ("Ctrl+Enter", "Insert newline"),
+                    ("Tab", "Queue the current draft while mux is busy"),
+                    ("Enter on /command", "Run supported slash commands immediately while busy"),
+                    ("Alt+Up", "Edit the newest queued prompt"),
+                    ("Esc", "Cancel active generation"),
+                    ("Ctrl+C", "Cancel active generation / clear idle draft"),
+                    ("Ctrl+C x2", "Exit mux when idle with an empty draft")
+                };
+                int shortcutWidth = inputShortcuts.Max(static item => item.Shortcut.Length);
+
                 Console.WriteLine();
                 AnsiConsole.MarkupLine($"[bold]Session title:[/] {Markup.Escape(_ConversationTitle)} [dim]({(_ConversationTitleSetByUser ? "user" : "model")})[/]");
                 AnsiConsole.Write(table);
                 Console.WriteLine();
                 AnsiConsole.MarkupLine("[bold]Input:[/]");
-                AnsiConsole.MarkupLine("  [dim]Enter[/]           Submit input when idle");
-                AnsiConsole.MarkupLine("  [dim]Up / Down[/]       Recall submitted prompts when idle");
-                AnsiConsole.MarkupLine("  [dim]Shift+Enter[/]     Insert newline");
-                AnsiConsole.MarkupLine("  [dim]Ctrl+Enter[/]      Insert newline");
-                AnsiConsole.MarkupLine("  [dim]Tab[/]             Queue the current draft while mux is busy");
-                AnsiConsole.MarkupLine("  [dim]Enter on /command[/] Run supported slash commands immediately while busy");
-                AnsiConsole.MarkupLine("  [dim]Alt+Up[/]          Edit the newest queued prompt");
-                AnsiConsole.MarkupLine("  [dim]Esc[/]             Cancel active generation");
-                AnsiConsole.MarkupLine("  [dim]Ctrl+C[/]          Cancel active generation / clear idle draft");
-                AnsiConsole.MarkupLine("  [dim]Ctrl+C x2[/]       Exit mux when idle with an empty draft");
+
+                foreach ((string Shortcut, string Description) item in inputShortcuts)
+                {
+                    AnsiConsole.MarkupLine($"  [dim]{Markup.Escape(item.Shortcut.PadRight(shortcutWidth))}[/]  {Markup.Escape(item.Description)}");
+                }
+
                 Console.WriteLine();
             });
         }
@@ -3225,6 +4327,25 @@ namespace Mux.Cli.Commands
             public bool Cancelled { get; set; } = false;
 
             public Exception? Error { get; set; } = null;
+        }
+
+        private enum EndpointWizardMode
+        {
+            Add,
+            Edit
+        }
+
+        private enum EndpointAuthMode
+        {
+            None,
+            BearerToken,
+            CustomHeaders
+        }
+
+        private enum SecretStorageMode
+        {
+            StoredValue,
+            EnvironmentVariable
         }
 
         private sealed class EndpointProbeSnapshot

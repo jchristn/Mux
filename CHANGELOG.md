@@ -6,7 +6,7 @@ All notable changes to mux are documented here.
 
 ### Added
 
-- Interactive endpoint management via `/endpoint list`, `/endpoint show <name>`, `/endpoint add ...`, and `/endpoint remove <name>` so endpoints can be inspected and maintained from within mux itself
+- Interactive endpoint management via `/endpoint list`, `/endpoint show <name>`, guided `/endpoint add` and `/endpoint edit <name>` workflows, and confirmed `/endpoint remove <name>` so endpoints can be inspected and maintained from within mux itself
 - Interactive queued-message support in the REPL so users can keep drafting while mux is busy and queue the next prompt with `Tab`
 - `/queue`, `/queue clear`, `/queue drop-last`, and `/queue resume` interactive commands for queue inspection and control
 - `/status`, `/compact`, and `/title` interactive commands for session inspection, history compaction, and direct title control
@@ -24,6 +24,7 @@ All notable changes to mux are documented here.
 - `Esc` now cancels the active interactive generation without exiting mux
 - Cancelling or failing an interactive run pauses queued-message auto-dispatch until the user resumes it
 - Interactive `/clear` now redraws the screen with the current conversation title at the top
+- Interactive streamed output now keeps the next `mux>` prompt off the response line and preserves exactly one blank spacer line before the prompt, including when output reaches the bottom of the terminal
 - Interactive runs now check the pending prompt against the estimated context budget before starting and automatically compact older history when needed
 - `--compaction-strategy <summary|trim>` now overrides the effective compaction policy for interactive, print, and probe startup
 - Interactive mode now emits a low-noise post-turn context notice only when the session is approaching or over the usable context budget

@@ -131,9 +131,9 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 /endpoint list                    Alias for /endpoint
 /endpoint <name>                  Switch to a named endpoint
 /endpoint show <name>             Show endpoint details and probe connectivity
-/endpoint add <name> --adapter <type> --base-url <url> --model <name>
-                                  Add an endpoint to endpoints.json
-/endpoint remove <name>           Remove an endpoint from endpoints.json
+/endpoint add                     Start the guided endpoint creation wizard
+/endpoint edit <name>             Start the guided endpoint edit wizard
+/endpoint remove <name>           Remove an endpoint from endpoints.json after confirmation
 /tools                            List available tools
 /status                           Show session metadata, title, queue state, and estimated context usage
 /context                          Alias for /status
@@ -159,11 +159,14 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 
 In interactive mode, `Up` and `Down` recall prompts submitted earlier in the current session.
 
-Endpoint management happens directly against `endpoints.json`. `show` performs a lightweight probe of the configured endpoint, and `add` also supports `--default`, `--temperature`, `--max-tokens`, `--context-window`, `--timeout-ms`, and repeated `--header key=value` options.
+Endpoint management happens directly against `endpoints.json`. `show` performs a lightweight probe of the configured endpoint. `add` and `edit` run guided workflows that prompt for the adapter, base URL, model, auth mode (`none`, `bearer token`, or `custom headers`), default status, and optional advanced settings before probing and saving.
+
+For secret values, the wizard lets you either store the value directly in `endpoints.json` or store an environment-variable reference. It accepts a bare variable name plus `${VAR}`, `%VAR%`, `$VAR`, and `$env:VAR`, then stores environment references canonically as `${VAR}`. For `ollama`, mux uses Ollama's OpenAI-compatible API root, so the usual base URL is `http://localhost:11434/v1`. `remove` asks for confirmation and still refuses to delete the endpoint active in the current session.
 
 ### Interactive Input
 
 Interactive mode keeps the prompt live while mux is generating. When mux is busy, paused, or awaiting approval, it renders a status line directly above the prompt.
+Streamed responses preserve exactly one empty line before the next `mux>` prompt, including when output reaches the bottom edge of the terminal and forces a scroll.
 
 Each interactive session also maintains a short conversation title. By default mux asks the current model to revisit that title periodically as the discussion evolves. If you set a title manually with `/title <text>`, mux keeps that title fixed until you change it again.
 

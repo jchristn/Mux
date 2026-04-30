@@ -14,6 +14,7 @@ namespace Test.Xunit.Settings
     /// Tests configuration loading, endpoint resolution, environment variable expansion,
     /// and system prompt fallback behavior.
     /// </summary>
+    [Collection("SettingsLoader")]
     public class SettingsLoaderTests : IDisposable
     {
         #region Private-Members
@@ -349,6 +350,147 @@ namespace Test.Xunit.Settings
             {
                 Environment.SetEnvironmentVariable(varName, null);
             }
+        }
+
+        /// <summary>
+        /// Verifies that Windows-style environment variable references are expanded.
+        /// </summary>
+        [Fact]
+        public void ExpandEnvironmentVariables_WindowsStyle_ReplacesVars()
+        {
+            string varName = "MUX_TEST_WIN_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            Environment.SetEnvironmentVariable(varName, "windows_value");
+
+            try
+            {
+                string result = SettingsLoader.ExpandEnvironmentVariables("prefix_%" + varName + "%_suffix");
+                Assert.Equal("prefix_windows_value_suffix", result);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(varName, null);
+            }
+        }
+
+        /// <summary>
+        /// Verifies that POSIX-style environment variable references are expanded.
+        /// </summary>
+        [Fact]
+        public void ExpandEnvironmentVariables_PosixStyle_ReplacesVars()
+        {
+            string varName = "MUX_TEST_POSIX_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            Environment.SetEnvironmentVariable(varName, "posix_value");
+
+            try
+            {
+                string result = SettingsLoader.ExpandEnvironmentVariables("Bearer $" + varName);
+                Assert.Equal("Bearer posix_value", result);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(varName, null);
+            }
+        }
+
+        /// <summary>
+        /// Verifies that PowerShell-style environment variable references are expanded.
+        /// </summary>
+        [Fact]
+        public void ExpandEnvironmentVariables_PowerShellStyle_ReplacesVars()
+        {
+            string varName = "MUX_TEST_PS_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            Environment.SetEnvironmentVariable(varName, "powershell_value");
+
+            try
+            {
+                string result = SettingsLoader.ExpandEnvironmentVariables("Bearer $env:" + varName);
+                Assert.Equal("Bearer powershell_value", result);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(varName, null);
+            }
+        }
+
+        /// <summary>
+        /// Verifies that multiple supported environment-variable syntaxes may appear in the same value.
+        /// </summary>
+        [Fact]
+        public void ExpandEnvironmentVariables_MixedStyles_ReplacesVars()
+        {
+            string braceVar = "MUX_TEST_BRACE_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            string winVar = "MUX_TEST_MIX_WIN_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            string posixVar = "MUX_TEST_MIX_POSIX_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            string psVar = "MUX_TEST_MIX_PS_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+
+            Environment.SetEnvironmentVariable(braceVar, "brace");
+            Environment.SetEnvironmentVariable(winVar, "windows");
+            Environment.SetEnvironmentVariable(posixVar, "posix");
+            Environment.SetEnvironmentVariable(psVar, "powershell");
+
+            try
+            {
+                string input = "${" + braceVar + "}|%" + winVar + "%|$" + posixVar + "|$env:" + psVar;
+                string result = SettingsLoader.ExpandEnvironmentVariables(input);
+
+                Assert.Equal("brace|windows|posix|powershell", result);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(braceVar, null);
+                Environment.SetEnvironmentVariable(winVar, null);
+                Environment.SetEnvironmentVariable(posixVar, null);
+                Environment.SetEnvironmentVariable(psVar, null);
+            }
+        }
+
+        /// <summary>
+        /// Verifies that user-provided environment references are normalized to the canonical form.
+        /// </summary>
+        [Theory]
+        [InlineData("OPENAI_API_KEY", "${OPENAI_API_KEY}")]
+        [InlineData("${OPENAI_API_KEY}", "${OPENAI_API_KEY}")]
+        [InlineData("%OPENAI_API_KEY%", "${OPENAI_API_KEY}")]
+        [InlineData("$OPENAI_API_KEY", "${OPENAI_API_KEY}")]
+        [InlineData("$env:OPENAI_API_KEY", "${OPENAI_API_KEY}")]
+        public void TryNormalizeEnvironmentVariableReference_NormalizesSupportedForms(string input, string expected)
+        {
+            bool success = SettingsLoader.TryNormalizeEnvironmentVariableReference(input, out string normalized);
+
+            Assert.True(success);
+            Assert.Equal(expected, normalized);
+        }
+
+        /// <summary>
+        /// Verifies that composite or unsupported values are rejected as environment-variable references.
+        /// </summary>
+        [Theory]
+        [InlineData("")]
+        [InlineData("Bearer $OPENAI_API_KEY")]
+        [InlineData("https://example.com/$API_VERSION")]
+        [InlineData("${OPENAI_API_KEY}-suffix")]
+        public void TryNormalizeEnvironmentVariableReference_RejectsUnsupportedValues(string input)
+        {
+            bool success = SettingsLoader.TryNormalizeEnvironmentVariableReference(input, out string normalized);
+
+            Assert.False(success);
+            Assert.Equal(string.Empty, normalized);
+        }
+
+        /// <summary>
+        /// Verifies that explicit stored environment references expose their variable names for diagnostics.
+        /// </summary>
+        [Theory]
+        [InlineData("${OPENAI_API_KEY}", "OPENAI_API_KEY")]
+        [InlineData("%OPENAI_API_KEY%", "OPENAI_API_KEY")]
+        [InlineData("$OPENAI_API_KEY", "OPENAI_API_KEY")]
+        [InlineData("$env:OPENAI_API_KEY", "OPENAI_API_KEY")]
+        public void TryGetEnvironmentVariableName_ExtractsSupportedStoredForms(string input, string expected)
+        {
+            bool success = SettingsLoader.TryGetEnvironmentVariableName(input, out string variableName);
+
+            Assert.True(success);
+            Assert.Equal(expected, variableName);
         }
 
         #endregion
