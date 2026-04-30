@@ -65,6 +65,7 @@ namespace Mux.Cli.Commands
         private bool _Verbose = false;
         private bool _ShouldExit = false;
         private bool _AssistantTextOpen = false;
+        private bool _ApprovalPromptOpen = false;
         private bool _RunHasVisibleOutput = false;
         private int _ChromeTop = 0;
         private int _PromptTop = 0;
@@ -1054,6 +1055,7 @@ namespace Mux.Cli.Commands
 
             ApprovalRequestState pending = _PendingApproval;
             _PendingApproval = null;
+            WriteApprovalResponseSuffix(BuildApprovalResponseDisplay(response));
             pending.CompletionSource.TrySetResult(response);
             SetStatusNotice(BuildApprovalNotice(response, pending.ToolCall.Name), 1500);
         }
@@ -1075,8 +1077,7 @@ namespace Mux.Cli.Commands
             WriteOutputBlock(() =>
             {
                 AnsiConsole.MarkupLine(markup);
-                Console.WriteLine();
-            }, outputEndsWithPromptSpacer: true);
+            });
         }
 
         private void WritePlainLine(string line)
@@ -1091,7 +1092,11 @@ namespace Mux.Cli.Commands
 
         private void WriteApprovalRequestLine(string summary)
         {
-            WriteMarkupLine($"[yellow]Approval required:[/] {Markup.Escape(summary)} [dim](Y / n / always)[/]");
+            WriteOutputBlock(() =>
+            {
+                AnsiConsole.Markup($"[yellow]Approval required:[/] {Markup.Escape(summary)} [dim][[Y/n/always]]?[/]");
+                _ApprovalPromptOpen = true;
+            }, renderChromeAfterWrite: false);
         }
 
         private void WriteSuccessLine(string line)
@@ -1171,7 +1176,10 @@ namespace Mux.Cli.Commands
             }
         }
 
-        private void BeginOutputWrite(bool closeAssistantText = true, bool startAtPrompt = false)
+        private void BeginOutputWrite(
+            bool closeAssistantText = true,
+            bool startAtPrompt = false,
+            bool appendToApprovalPrompt = false)
         {
             ClearInteractiveChrome();
 
@@ -1189,6 +1197,12 @@ namespace Mux.Cli.Commands
                 Console.WriteLine();
                 _AssistantTextOpen = false;
             }
+
+            if (_ApprovalPromptOpen && !appendToApprovalPrompt && !startAtPrompt)
+            {
+                Console.WriteLine();
+                _ApprovalPromptOpen = false;
+            }
         }
 
         private void EndOutputWrite(bool renderChromeAfterWrite = true, bool outputEndsWithPromptSpacer = false)
@@ -1202,6 +1216,22 @@ namespace Mux.Cli.Commands
             if (renderChromeAfterWrite)
             {
                 RenderInteractiveChrome();
+            }
+        }
+
+        private void WriteApprovalResponseSuffix(string responseDisplay)
+        {
+            if (!_ApprovalPromptOpen)
+            {
+                return;
+            }
+
+            lock (_ConsoleSync)
+            {
+                BeginOutputWrite(closeAssistantText: false, appendToApprovalPrompt: true);
+                Console.WriteLine($" {responseDisplay}");
+                _ApprovalPromptOpen = false;
+                EndOutputWrite(renderChromeAfterWrite: false);
             }
         }
 
@@ -1334,7 +1364,7 @@ namespace Mux.Cli.Commands
 
             if (_PendingApproval != null)
             {
-                return $"Approval required | {baseInfo} | Y / n / always";
+                return $"Approval required | {baseInfo} | [Y/n/always]?";
             }
 
             if (_ActiveRun != null)
@@ -1943,6 +1973,17 @@ namespace Mux.Cli.Commands
             };
         }
 
+        private static string BuildApprovalResponseDisplay(string response)
+        {
+            return response.ToLowerInvariant() switch
+            {
+                "y" => "Y",
+                "always" => "a",
+                "n" => "n",
+                _ => response
+            };
+        }
+
         private static string TruncateToConsoleWidth(string value, int maxWidth)
         {
             if (string.IsNullOrEmpty(value) || value.Length <= maxWidth)
@@ -2181,10 +2222,11 @@ namespace Mux.Cli.Commands
         {
             lock (_ConsoleSync)
             {
-                if (_AssistantTextOpen || Console.CursorLeft != 0)
+                if (_AssistantTextOpen || _ApprovalPromptOpen || Console.CursorLeft != 0)
                 {
                     Console.WriteLine();
                     _AssistantTextOpen = false;
+                    _ApprovalPromptOpen = false;
                     _OutputEndsWithPromptSpacer = false;
                 }
 

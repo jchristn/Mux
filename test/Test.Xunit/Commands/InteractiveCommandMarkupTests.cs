@@ -19,6 +19,7 @@ namespace Test.Xunit.Commands
         [InlineData("[cyan]/compact strategy[/] [dim][[summary|trim]][/]")]
         [InlineData("[yellow]Usage: /mcp add <name> <command> [[args...]][/]")]
         [InlineData("  Allow? [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ")]
+        [InlineData("[yellow]Approval required:[/] write_file: sample [dim][[Y/n/always]]?[/]")]
         public void InteractiveHelpMarkup_IsValid(string markup)
         {
             Exception? exception = Record.Exception(() => _ = new Markup(markup));
