@@ -8,6 +8,7 @@ namespace Mux.Core.Settings
     using System.Text.Json.Nodes;
     using System.Text.Json.Serialization;
     using System.Text.RegularExpressions;
+    using System.Threading;
     using Mux.Core.Enums;
     using Mux.Core.Models;
 
@@ -30,6 +31,8 @@ namespace Mux.Core.Settings
             WriteIndented = true
         };
 
+        private static readonly AsyncLocal<string?> _ConfigDirectoryOverride = new AsyncLocal<string?>();
+
         #endregion
 
         #region Public-Methods
@@ -41,14 +44,31 @@ namespace Mux.Core.Settings
         /// <returns>The absolute path to the configuration directory.</returns>
         public static string GetConfigDirectory()
         {
+            if (!string.IsNullOrWhiteSpace(_ConfigDirectoryOverride.Value))
+            {
+                return _ConfigDirectoryOverride.Value!;
+            }
+
             string? envDir = Environment.GetEnvironmentVariable("MUX_CONFIG_DIR");
             if (!string.IsNullOrWhiteSpace(envDir))
             {
-                return envDir;
+                return NormalizeConfigDirectory(envDir)!;
             }
 
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            return Path.Combine(home, ".mux");
+            return Path.GetFullPath(Path.Combine(home, ".mux"));
+        }
+
+        /// <summary>
+        /// Temporarily overrides the active config directory for the current async flow.
+        /// </summary>
+        /// <param name="configDirectory">The directory to use, or null to clear the override.</param>
+        /// <returns>An <see cref="IDisposable"/> that restores the previous override on disposal.</returns>
+        public static IDisposable PushConfigDirectoryOverride(string? configDirectory)
+        {
+            string? previous = _ConfigDirectoryOverride.Value;
+            _ConfigDirectoryOverride.Value = NormalizeConfigDirectory(configDirectory);
+            return new ConfigDirectoryOverrideScope(previous);
         }
 
         /// <summary>
@@ -353,6 +373,39 @@ namespace Mux.Core.Settings
             }, RegexOptions.IgnoreCase);
 
             return expanded;
+        }
+
+        private static string? NormalizeConfigDirectory(string? configDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(configDirectory))
+            {
+                return null;
+            }
+
+            string expanded = Environment.ExpandEnvironmentVariables(configDirectory.Trim());
+            return Path.GetFullPath(expanded);
+        }
+
+        private sealed class ConfigDirectoryOverrideScope : IDisposable
+        {
+            private readonly string? _PreviousConfigDirectory;
+            private bool _Disposed;
+
+            public ConfigDirectoryOverrideScope(string? previousConfigDirectory)
+            {
+                _PreviousConfigDirectory = previousConfigDirectory;
+            }
+
+            public void Dispose()
+            {
+                if (_Disposed)
+                {
+                    return;
+                }
+
+                _ConfigDirectoryOverride.Value = _PreviousConfigDirectory;
+                _Disposed = true;
+            }
         }
 
         /// <summary>

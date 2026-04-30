@@ -2,6 +2,25 @@
 
 All notable changes to mux are documented here.
 
+## Unreleased
+
+### Added
+
+- `mux endpoint list` and `mux endpoint show <name>` as top-level non-interactive commands, including machine-readable `json` output for stored endpoint inspection with redacted secret-like header values
+- `ARMADA.md` as a focused integration guide for orchestrator consumers, plus a tightened `ARMADA_IMPROVEMENTS.md` plan that reflects the current CLI/runtime surface
+
+### Changed
+
+- `mux print` now supports `--output-last-message <path>` to write only the final assistant response text to a file; failed runs leave the file absent
+- `mux print`, `mux probe`, and `mux endpoint` now support `--config-dir <path>` as a first-class config-root override, with precedence over `MUX_CONFIG_DIR`
+- `mux probe --require-tools` now fails when the selected endpoint disables tool calling
+- README and usage documentation now describe Armada-oriented automation flows, isolated config overrides, clean final-response artifacts, and machine-readable endpoint inspection
+
+### Testing
+
+- Added `Test.Xunit` coverage for `--config-dir`, `--output-last-message`, `probe --require-tools`, and `endpoint list/show`
+- Added Armada-style `Test.Automated` contract coverage for isolated config directories and endpoint inspection
+
 ## v0.2.0 - 2026-04-24
 
 ### Added

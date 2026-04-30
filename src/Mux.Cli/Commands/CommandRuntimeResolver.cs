@@ -206,6 +206,7 @@ namespace Mux.Cli.Commands
         {
             List<string> overrides = new List<string>();
 
+            if (!string.IsNullOrWhiteSpace(settings.ConfigDir)) overrides.Add("configDir");
             if (!string.IsNullOrWhiteSpace(settings.Endpoint)) overrides.Add("endpoint");
             if (!string.IsNullOrWhiteSpace(settings.Model)) overrides.Add("model");
             if (!string.IsNullOrWhiteSpace(settings.BaseUrl)) overrides.Add("baseUrl");

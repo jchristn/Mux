@@ -17,6 +17,7 @@ Single-shot:
 ```bash
 mux print --yolo "add error handling to ParseConfig"
 mux print --yolo --endpoint openai-gpt4o "explain the architecture"
+mux print --output-last-message result.txt --yolo --endpoint openai-gpt4o "explain the architecture"
 echo "refactor AuthService" | mux --print --yolo
 ```
 
@@ -32,6 +33,14 @@ Health checks:
 mux probe
 mux probe --output-format json
 mux probe -e vllm-deepseek
+mux probe --output-format json --require-tools -e vllm-deepseek
+```
+
+Endpoint inspection:
+
+```bash
+mux endpoint list --output-format json
+mux endpoint show openai-prod --output-format json
 ```
 
 Interactive endpoint management:
@@ -72,6 +81,8 @@ This matters for command generation. For example, a Windows runtime should use `
 `mux print` supports:
 - `text` (default): assistant text on stdout, progress and errors on stderr
 - `jsonl`: one structured event per stdout line
+
+`mux print --output-last-message <path>` optionally writes only the final assistant response text to a file. If the run fails, mux does not create the file.
 
 `mux probe` supports:
 - `text` (default)
@@ -198,7 +209,7 @@ Notes:
 
 ## Config Isolation
 
-Use `MUX_CONFIG_DIR` when running under automation or when multiple processes need isolated configs.
+Use `--config-dir` or `MUX_CONFIG_DIR` when running under automation or when multiple processes need isolated configs.
 
 ```bash
 # Bash
@@ -208,12 +219,16 @@ mux print --output-format jsonl --yolo "run the task"
 # PowerShell
 $env:MUX_CONFIG_DIR = "C:\\temp\\mux-job-123"
 mux probe --output-format json
+
+# CLI override
+mux print --config-dir /tmp/mux-job-123 --output-format jsonl --yolo "run the task"
 ```
 
-When `MUX_CONFIG_DIR` is set:
+When config isolation is used:
 - config is loaded from that directory
 - first-run seeding happens in that directory
 - `mux` does not fall back to the user-home config directory for those config reads
+- `--config-dir` takes precedence over `MUX_CONFIG_DIR`
 
 ## Backend Examples
 
@@ -348,20 +363,26 @@ Recommended command forms:
 
 ```bash
 mux print --output-format jsonl --yolo "implement the feature described in TASK.md"
+mux print --config-dir /tmp/mux-job-123 --output-format jsonl --output-last-message result.txt --yolo "implement the feature described in TASK.md"
 mux print --output-format jsonl --yolo --endpoint vllm-deepseek --working-directory /tmp/worktree-abc "fix the bug"
 mux print --output-format jsonl --yolo --system-prompt /path/to/persona.md "do the thing"
-mux probe --output-format json --endpoint vllm-deepseek
+mux probe --output-format json --require-tools --endpoint vllm-deepseek
+mux endpoint list --output-format json
+mux endpoint show vllm-deepseek --output-format json
 ```
 
 Recommendations:
-- set `MUX_CONFIG_DIR` per run
+- set `--config-dir` per run when you can; otherwise set `MUX_CONFIG_DIR`
 - prefer `--output-format jsonl` for `print`
 - prefer `--output-format json` for `probe`
+- prefer `--output-last-message` when the caller needs a clean final answer artifact
 - use explicit `--endpoint` in production automation
 - use `--yolo` or `--approval-policy auto` only when automatic tool execution is intended
+- use `--require-tools` when validating captain endpoints
 - rely on `run_started` and `probe` JSON metadata instead of inferring tool/MCP capability from docs alone
 - rely on `contractVersion` for parser compatibility gating
 - treat `print.errorCode`/`print.failureCategory` and `probe.errorCode`/`probe.failureCategory` as the stable failure classification surface
+- treat `mux endpoint list/show --output-format json` as the supported endpoint inspection surface
 
 ## Contract Compatibility
 

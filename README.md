@@ -102,9 +102,10 @@ mux [OPTIONS] [prompt]               Interactive with overrides
 mux --print [OPTIONS] <prompt>       Single-shot mode
 echo "prompt" | mux --print          Read prompt from stdin
 mux probe [OPTIONS]                  Validate config and backend access
+mux endpoint <subcommand> [OPTIONS]  Inspect configured endpoints
 ```
 
-Use `mux print` as the preferred non-interactive entrypoint in scripts and automation. `--print` remains supported and is convenient for stdin piping.
+Use `mux print` as the preferred non-interactive entrypoint in scripts and automation. `--print` remains supported and is convenient for stdin piping. Use `mux endpoint list/show` when automation needs to inspect stored endpoint configuration without entering the REPL.
 
 ### Options
 
@@ -120,8 +121,10 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 | `--temperature <float>` |  | Override temperature |
 | `--max-tokens <int>` |  | Override max output tokens |
 | `--compaction-strategy <mode>` |  | Override compaction strategy: `summary` or `trim` |
+| `--config-dir <path>` |  | Override the active config directory |
 | `--working-directory <path>` | `-w` | Tool execution directory |
 | `--system-prompt <path>` |  | Override system prompt file |
+| `--output-last-message <path>` |  | Write only the final assistant response text to a file |
 | `--yolo` |  | Auto-approve tool calls |
 | `--approval-policy <policy>` |  | interactive: `ask`, `auto`, or `deny`; print/probe: `auto` or `deny` |
 | `--output-format <format>` |  | `text`, `json`, or `jsonl` depending on the command |
@@ -209,6 +212,14 @@ Use `mux print` as the non-interactive entrypoint:
 mux print --output-format jsonl --yolo "implement the feature described in TASK.md"
 ```
 
+If you need a clean final-response artifact for an orchestrator, add:
+
+```bash
+mux print --output-format jsonl --output-last-message result.txt --yolo "implement the feature described in TASK.md"
+```
+
+`result.txt` contains only the final assistant response text. If the run fails, mux does not create the file.
+
 In `jsonl` mode:
 - all structured events are written to `stdout`
 - each line is a complete JSON object
@@ -255,6 +266,7 @@ Examples:
 mux probe
 mux probe --output-format json
 mux probe -e openai-gpt4o
+mux probe --output-format json --require-tools
 ```
 
 `probe` verifies:
@@ -271,6 +283,22 @@ Machine-readable `probe` output also includes:
 
 Probe-specific option:
 - `--probe-prompt <text>` overrides the default confirmation prompt used during backend validation
+- `--require-tools` fails when the selected endpoint disables tool calling
+
+## Endpoint Command
+
+`mux endpoint` exposes stored endpoint configuration through a non-interactive CLI surface.
+
+Examples:
+
+```bash
+mux endpoint list
+mux endpoint list --output-format json
+mux endpoint show openai-gpt4o
+mux endpoint show openai-gpt4o --output-format json
+```
+
+`endpoint list` returns configured endpoint names. `endpoint show` returns one configured endpoint with secret-like header values redacted. Use `--config-dir` when you need to inspect an isolated config directory.
 
 ## Configuration
 
@@ -290,6 +318,14 @@ export MUX_CONFIG_DIR=/tmp/mux-run-1
 $env:MUX_CONFIG_DIR = "C:\\temp\\mux-run-1"
 ```
 
+Or pass a first-class CLI override:
+
+```bash
+mux print --config-dir /tmp/mux-run-1 --output-format jsonl --yolo "run the task"
+```
+
+When both are set, `--config-dir` wins over `MUX_CONFIG_DIR`.
+
 Main files:
 - `endpoints.json`
 - `mcp-servers.json`
@@ -303,6 +339,7 @@ See [CONFIG.md](CONFIG.md) for the full reference.
 - [GETTING_STARTED.md](GETTING_STARTED.md)
 - [USAGE.md](USAGE.md)
 - [CONFIG.md](CONFIG.md)
+- [ARMADA.md](ARMADA.md)
 - [TESTING.md](TESTING.md)
 - [CHANGELOG.md](CHANGELOG.md)
 

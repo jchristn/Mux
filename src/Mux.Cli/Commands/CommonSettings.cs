@@ -11,6 +11,13 @@ namespace Mux.Cli.Commands
         #region Public-Members
 
         /// <summary>
+        /// Override the active config directory used for endpoints, settings, and prompts.
+        /// </summary>
+        [Description("Override the active config directory.")]
+        [CommandOption("--config-dir")]
+        public string? ConfigDir { get; set; }
+
+        /// <summary>
         /// The named endpoint to use from endpoints.json.
         /// </summary>
         [Description("Named endpoint from endpoints.json.")]

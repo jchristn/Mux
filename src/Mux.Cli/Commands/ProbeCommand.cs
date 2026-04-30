@@ -27,6 +27,13 @@ namespace Mux.Cli.Commands
         [CommandOption("--probe-prompt")]
         public string? ProbePrompt { get; set; }
 
+        /// <summary>
+        /// Require that the selected endpoint supports tool calling.
+        /// </summary>
+        [Description("Fail if the selected endpoint does not support tools.")]
+        [CommandOption("--require-tools")]
+        public bool RequireTools { get; set; }
+
         #endregion
     }
 
@@ -128,11 +135,23 @@ namespace Mux.Cli.Commands
                 ToolsEnabled = runtime.Capabilities.ToolsEnabled,
                 McpSupported = runtime.Capabilities.McpSupported,
                 McpConfigured = runtime.Capabilities.McpConfigured,
-                McpServerCount = runtime.Capabilities.McpServerCount
+                McpServerCount = runtime.Capabilities.McpServerCount,
+                RequireTools = settings.RequireTools
             };
 
             try
             {
+                if (settings.RequireTools
+                    && (!runtime.Capabilities.ToolsEnabled || runtime.Capabilities.EffectiveToolCount <= 0))
+                {
+                    stopwatch.Stop();
+                    result.DurationMs = stopwatch.ElapsedMilliseconds;
+                    result.ErrorCode = "tools_required";
+                    result.FailureCategory = "capability";
+                    result.ErrorMessage = "The selected endpoint does not support tool calling required for Armada-style captain work.";
+                    return result;
+                }
+
                 using LlmClient client = new LlmClient(runtime.Endpoint);
                 List<ConversationMessage> messages = new List<ConversationMessage>
                 {
@@ -362,6 +381,11 @@ namespace Mux.Cli.Commands
         /// Number of configured MCP servers.
         /// </summary>
         public int McpServerCount { get; set; }
+
+        /// <summary>
+        /// Whether the caller required tool support for this probe.
+        /// </summary>
+        public bool RequireTools { get; set; }
 
         /// <summary>
         /// Machine-readable error code when the probe fails.

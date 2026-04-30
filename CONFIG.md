@@ -1,6 +1,6 @@
 # mux Configuration Reference
 
-All config lives under `~/.mux/` by default. Set `MUX_CONFIG_DIR` to use a different directory.
+All config lives under `~/.mux/` by default. Use `--config-dir` or `MUX_CONFIG_DIR` to select a different directory.
 
 ## Config Directory
 
@@ -18,9 +18,17 @@ export MUX_CONFIG_DIR=/tmp/mux-config
 
 # PowerShell
 $env:MUX_CONFIG_DIR = "C:\\temp\\mux-config"
+
+# CLI override
+mux print --config-dir /tmp/mux-config --output-format jsonl --yolo "run the task"
 ```
 
-When `MUX_CONFIG_DIR` is set, `mux` uses that directory for:
+Resolution precedence:
+1. `--config-dir <path>`
+2. `MUX_CONFIG_DIR`
+3. `~/.mux/`
+
+When config directory selection is applied, mux uses that directory for:
 - `endpoints.json`
 - `mcp-servers.json`
 - `settings.json`
@@ -99,6 +107,10 @@ Interactive endpoint management:
 - `/endpoint edit <name>` starts a guided endpoint edit wizard
 - `/endpoint show <name>` displays the stored endpoint fields and performs a lightweight connectivity probe
 - `/endpoint remove <name>` asks for confirmation and refuses to remove the endpoint active in the current session
+
+Non-interactive endpoint inspection:
+- `mux endpoint list --output-format json` lists configured endpoints
+- `mux endpoint show <name> --output-format json` returns one configured endpoint with header values redacted
 
 Wizard auth options:
 - `none`
@@ -206,11 +218,12 @@ Resolution priority:
 |---|---|
 | `MUX_CONFIG_DIR` | override the active config directory |
 
-Config values may reference environment variables using `${VAR_NAME}`, `%VAR_NAME%`, `$VAR_NAME`, or `$env:VAR_NAME`. The interactive endpoint wizard accepts the same forms and writes stored references as `${VAR_NAME}`.
+Config values may reference environment variables using `${VAR_NAME}`, `%VAR_NAME%`, `$VAR_NAME`, or `$env:VAR_NAME`. The interactive endpoint wizard accepts the same forms and writes stored references as `${VAR_NAME}`. If both `--config-dir` and `MUX_CONFIG_DIR` are present, the CLI flag wins.
 
 ## CLI Override Notes
 
 Common CLI overrides:
+- `--config-dir`
 - `--endpoint`
 - `--model`
 - `--base-url`

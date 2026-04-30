@@ -3,6 +3,8 @@ namespace Mux.Cli.Commands
     using System;
     using System.Collections.Generic;
     using System.ComponentModel;
+    using System.IO;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Agent;
@@ -31,6 +33,13 @@ namespace Mux.Cli.Commands
         [Description("Run in single-shot print mode.")]
         [CommandOption("-p|--print")]
         public bool Print { get; set; }
+
+        /// <summary>
+        /// Optional file path that receives only the final assistant-visible response text.
+        /// </summary>
+        [Description("Write only the final assistant response text to the specified file.")]
+        [CommandOption("--output-last-message")]
+        public string? OutputLastMessage { get; set; }
 
         #endregion
     }
@@ -82,6 +91,17 @@ namespace Mux.Cli.Commands
                 return 1;
             }
 
+            string? outputLastMessagePath;
+            try
+            {
+                outputLastMessagePath = PrepareOutputLastMessagePath(settings.OutputLastMessage);
+            }
+            catch (Exception ex)
+            {
+                EmitBootstrapError(settings, $"Invalid --output-last-message path: {ex.Message}");
+                return 1;
+            }
+
             AgentLoopOptions loopOptions = new AgentLoopOptions(runtime.Endpoint)
             {
                 SystemPrompt = runtime.SystemPrompt,
@@ -107,6 +127,7 @@ namespace Mux.Cli.Commands
             };
 
             int exitCode = 0;
+            StringBuilder finalAssistantResponse = new StringBuilder();
 
             using (CancellationTokenSource cts = new CancellationTokenSource())
             {
@@ -138,6 +159,7 @@ namespace Mux.Cli.Commands
                         switch (agentEvent)
                         {
                             case AssistantTextEvent textEvent:
+                                finalAssistantResponse.Append(textEvent.Text);
                                 if (outputFormat == OutputFormatEnum.Text)
                                 {
                                     Console.Write(textEvent.Text);
@@ -230,6 +252,11 @@ namespace Mux.Cli.Commands
                     {
                         Console.WriteLine();
                     }
+
+                    if (exitCode == 0 && !string.IsNullOrWhiteSpace(outputLastMessagePath))
+                    {
+                        WriteLastMessageArtifact(outputLastMessagePath!, finalAssistantResponse.ToString());
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -238,7 +265,10 @@ namespace Mux.Cli.Commands
                 }
                 catch (Exception ex)
                 {
-                    EmitRuntimeError(outputFormat, CreateRuntimeError("print_error", ex.Message, runtime));
+                    string errorCode = ex is IOException || ex is UnauthorizedAccessException
+                        ? "artifact_write_error"
+                        : "print_error";
+                    EmitRuntimeError(outputFormat, CreateRuntimeError(errorCode, ex.Message, runtime));
                     exitCode = 1;
                 }
             }
@@ -363,6 +393,7 @@ namespace Mux.Cli.Commands
             List<string> overrides = new List<string>();
 
             if (!string.IsNullOrWhiteSpace(settings.Endpoint)) overrides.Add("endpoint");
+            if (!string.IsNullOrWhiteSpace(settings.ConfigDir)) overrides.Add("configDir");
             if (!string.IsNullOrWhiteSpace(settings.Model)) overrides.Add("model");
             if (!string.IsNullOrWhiteSpace(settings.BaseUrl)) overrides.Add("baseUrl");
             if (!string.IsNullOrWhiteSpace(settings.AdapterType)) overrides.Add("adapterType");
@@ -372,6 +403,7 @@ namespace Mux.Cli.Commands
             if (!string.IsNullOrWhiteSpace(settings.SystemPrompt)) overrides.Add("systemPrompt");
             if (settings.Yolo) overrides.Add("yolo");
             if (!string.IsNullOrWhiteSpace(settings.ApprovalPolicy)) overrides.Add("approvalPolicy");
+            if (!string.IsNullOrWhiteSpace(settings.CompactionStrategy)) overrides.Add("compactionStrategy");
 
             return overrides;
         }
@@ -411,6 +443,7 @@ namespace Mux.Cli.Commands
                 "tool_call_denied" => "approval",
                 "approval_error" => "approval",
                 "tool_execution_error" => "tool",
+                "artifact_write_error" => "filesystem",
                 "llm_connection_error" => "network",
                 "llm_error" => "backend",
                 "llm_stream_error" => "backend",
@@ -419,6 +452,50 @@ namespace Mux.Cli.Commands
                 "print_error" => "unknown",
                 _ => "unknown"
             };
+        }
+
+        private static string? PrepareOutputLastMessagePath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return null;
+            }
+
+            string fullPath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(path.Trim()));
+            if (File.Exists(fullPath))
+            {
+                File.Delete(fullPath);
+            }
+
+            return fullPath;
+        }
+
+        private static void WriteLastMessageArtifact(string path, string content)
+        {
+            string fullPath = Path.GetFullPath(path);
+            string directory = Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
+            Directory.CreateDirectory(directory);
+
+            string tempFile = Path.Combine(directory, Path.GetRandomFileName());
+            try
+            {
+                File.WriteAllText(tempFile, content ?? string.Empty);
+                if (File.Exists(fullPath))
+                {
+                    File.Delete(fullPath);
+                }
+
+                File.Move(tempFile, fullPath);
+            }
+            catch
+            {
+                if (File.Exists(tempFile))
+                {
+                    File.Delete(tempFile);
+                }
+
+                throw;
+            }
         }
 
         #endregion
