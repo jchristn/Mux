@@ -9,11 +9,16 @@ All notable changes to mux are documented here.
 - `mux endpoint list` and `mux endpoint show <name>` as top-level non-interactive commands, including machine-readable `json` output for stored endpoint inspection with redacted secret-like header values
 - `ARMADA.md` as a focused integration guide for orchestrator consumers, plus a tightened `ARMADA_IMPROVEMENTS.md` plan that reflects the current CLI/runtime surface
 
+### Removed
+
+- Interactive queued-message support, `/queue` commands, and `Alt+Up` queued-prompt editing from the current REPL flow
+
 ### Changed
 
 - `mux print` now supports `--output-last-message <path>` to write only the final assistant response text to a file; failed runs leave the file absent
 - `mux print`, `mux probe`, and `mux endpoint` now support `--config-dir <path>` as a first-class config-root override, with precedence over `MUX_CONFIG_DIR`
 - `mux probe --require-tools` now fails when the selected endpoint disables tool calling
+- Interactive REPL prompt entry now uses a simpler blocking one-prompt-at-a-time flow with idle multi-line editing and paste support, inline approvals, `Esc` cancellation, a visible `Generating title...` notice when automatic title refresh runs, and an explicit blank spacer line before the next `mux>` prompt
 - README and usage documentation now describe Armada-oriented automation flows, isolated config overrides, clean final-response artifacts, and machine-readable endpoint inspection
 
 ### Testing

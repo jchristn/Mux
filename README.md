@@ -37,8 +37,7 @@
 - Built-in tools: file edit/read/write/delete, directory management, glob, grep, process execution
 - Shell-aware process execution metadata: `run_process` tells the model which OS and shell it will run under
 - MCP extensible in interactive mode: external tool servers appear beside built-in tools
-- Interactive queueing: keep typing while mux is busy, queue follow-up prompts with `Tab`, and edit the newest queued prompt with `Alt+Up`
-- Inline interactive status: when mux is busy, paused, or awaiting approval, it shows a live status line above the prompt instead of pinning a footer to the bottom of the terminal
+- Simpler interactive REPL: prompt entry supports multi-line editing and paste while idle, blocks while mux is running, has no queued follow-up prompt mode, and supports `Esc` cancellation for the active generation
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
 - Health checks: `mux probe` validates config, backend reachability, auth, and model access
@@ -142,7 +141,7 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 /endpoint edit <name>             Start the guided endpoint edit wizard
 /endpoint remove <name>           Remove an endpoint from endpoints.json after confirmation
 /tools                            List available tools
-/status                           Show session metadata, title, queue state, and estimated context usage
+/status                           Show session metadata, title, and estimated context usage
 /context                          Alias for /status
 /compact                          Compact older conversation history with the configured strategy
 /compact summary                  Compact older conversation history with a one-off summary pass
@@ -150,10 +149,6 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 /compact strategy [summary|trim]  Show or set the session compaction strategy
 /title                            Show the current conversation title
 /title <text>                     Set the conversation title and disable automatic retitling
-/queue                            List queued prompts and whether dispatch is paused
-/queue clear                      Clear all queued prompts
-/queue drop-last                  Remove the newest queued prompt
-/queue resume                     Resume automatic queue dispatch
 /mcp list                         Show MCP server status
 /mcp add <name> <cmd> [args...]   Add an MCP server at runtime
 /mcp remove <name>                Remove an MCP server
@@ -164,29 +159,22 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 /exit                             Quit mux
 ```
 
-In interactive mode, `Up` and `Down` recall prompts submitted earlier in the current session.
-
 Endpoint management happens directly against `endpoints.json`. `show` performs a lightweight probe of the configured endpoint. `add` and `edit` run guided workflows that prompt for the adapter, base URL, model, auth mode (`none`, `bearer token`, or `custom headers`), default status, and optional advanced settings before probing and saving.
 
 For secret values, the wizard lets you either store the value directly in `endpoints.json` or store an environment-variable reference. It accepts a bare variable name plus `${VAR}`, `%VAR%`, `$VAR`, and `$env:VAR`, then stores environment references canonically as `${VAR}`. For `ollama`, mux uses Ollama's OpenAI-compatible API root, so the usual base URL is `http://localhost:11434/v1`. `remove` asks for confirmation and still refuses to delete the endpoint active in the current session.
 
 ### Interactive Input
 
-Interactive mode keeps the prompt live while mux is generating. When mux is busy, paused, or awaiting approval, it renders a status line directly above the prompt.
-Streamed responses preserve exactly one empty line before the next `mux>` prompt, including when output reaches the bottom edge of the terminal and forces a scroll.
+Interactive mode accepts one prompt at a time. Prompt entry supports multi-line editing and paste while idle. After you press `Enter`, prompt entry blocks until the run completes or you cancel it with `Esc`. There is no queued prompt mode and no `/queue` command.
+Streamed responses end cleanly before the next `mux>` prompt is shown.
 
 Each interactive session also maintains a short conversation title. By default mux asks the current model to revisit that title periodically as the discussion evolves. If you set a title manually with `/title <text>`, mux keeps that title fixed until you change it again.
 
-While mux is generating, you can keep drafting the next prompt:
+While idle, `Up` and `Down` recall submitted prompts from the current session. `Shift+Enter` and `Ctrl+Enter` insert a newline so you can compose or paste multi-line prompts before submission.
 
-- `Tab` queues the current draft to run after the active completion
-- `Alt+Up` loads the newest queued prompt back into the editor
-- `Esc` cancels the active generation and pauses automatic queue dispatch
-- `/queue resume` resumes queued execution after a cancellation or failure pause
+During generation, `Esc` cancels the active run. If a tool approval is needed, mux prints the approval request inline and waits for `y`, `n`, `Enter`, or `a` (`always`). When mux runs a post-turn title refresh, it now emits a visible `Generating title...` notice before returning to the next prompt.
 
-Slash commands are session controls and are not queueable.
-
-`/status` reports the active title, model, endpoint, queue state, compaction policy, and estimated context budget; `/context` is an alias. New prompts are checked against that budget before each run. When a prompt would exceed the usable context budget, mux automatically compacts older persisted history before sending the next model call. If an active tool-using run grows too large mid-flight, mux now honors the configured compaction strategy there too: `summary` uses a summary sidecar pass first and trims only if needed, while `trim` stays trim-only. mux also emits a dim post-turn context line when the session is approaching the usable limit, but it does not keep a persistent meter on screen. `/compact` uses the configured compaction strategy, `/compact summary` and `/compact trim` provide one-off overrides, and `/compact strategy [summary|trim]` changes the interactive session policy without touching `settings.json`. `/clear` clears the transcript state and redraws the screen with the current title at the top.
+`/status` reports the active title, model, endpoint, compaction policy, and estimated context budget; `/context` is an alias. New prompts are checked against that budget before each run. When a prompt would exceed the usable context budget, mux automatically compacts older persisted history before sending the next model call. If an active tool-using run grows too large mid-flight, mux now honors the configured compaction strategy there too: `summary` uses a summary sidecar pass first and trims only if needed, while `trim` stays trim-only. mux also emits a dim post-turn context line when the session is approaching the usable limit, but it does not keep a persistent meter on screen. `/compact` uses the configured compaction strategy, `/compact summary` and `/compact trim` provide one-off overrides, and `/compact strategy [summary|trim]` changes the interactive session policy without touching `settings.json`. `/clear` clears the transcript state and redraws the screen with the current title at the top.
 
 ### Interactive Examples
 

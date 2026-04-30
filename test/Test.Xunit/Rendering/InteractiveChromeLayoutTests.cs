@@ -123,5 +123,84 @@ namespace Test.Xunit.Rendering
 
             Assert.Equal(0, lineAdvanceCount);
         }
+
+        [Fact]
+        public void CalculateWindowTopForVisibleRow_TargetAlreadyVisible_KeepsWindowTop()
+        {
+            int windowTop = InteractiveChromeLayout.CalculateWindowTopForVisibleRow(
+                targetRow: 15,
+                currentWindowTop: 10,
+                windowHeight: 10);
+
+            Assert.Equal(10, windowTop);
+        }
+
+        [Fact]
+        public void CalculateWindowTopForVisibleRow_TargetBelowVisibleWindow_ScrollsDown()
+        {
+            int windowTop = InteractiveChromeLayout.CalculateWindowTopForVisibleRow(
+                targetRow: 25,
+                currentWindowTop: 10,
+                windowHeight: 10);
+
+            Assert.Equal(16, windowTop);
+        }
+
+        [Fact]
+        public void CalculateWindowTopForVisibleRow_TargetAboveVisibleWindow_ScrollsUp()
+        {
+            int windowTop = InteractiveChromeLayout.CalculateWindowTopForVisibleRow(
+                targetRow: 4,
+                currentWindowTop: 10,
+                windowHeight: 10);
+
+            Assert.Equal(4, windowTop);
+        }
+
+        [Fact]
+        public void NormalizeConsoleWidth_WhenBufferAndWindowDiffer_UsesVisibleWidth()
+        {
+            int width = InteractiveChromeLayout.NormalizeConsoleWidth(
+                bufferWidth: 240,
+                windowWidth: 80);
+
+            Assert.Equal(80, width);
+        }
+
+        [Fact]
+        public void NormalizeConsoleWidth_WhenWindowWidthUnavailable_UsesBufferWidth()
+        {
+            int width = InteractiveChromeLayout.NormalizeConsoleWidth(
+                bufferWidth: 120,
+                windowWidth: 0);
+
+            Assert.Equal(120, width);
+        }
+
+        [Fact]
+        public void CalculateClearRegion_WhenPromptGrows_ClearsOldAndNewRows()
+        {
+            (int top, int rowCount) = InteractiveChromeLayout.CalculateClearRegion(
+                previousTop: 20,
+                previousRowCount: 1,
+                nextTop: 20,
+                nextRowCount: 2);
+
+            Assert.Equal(20, top);
+            Assert.Equal(2, rowCount);
+        }
+
+        [Fact]
+        public void CalculateClearRegion_WhenPromptMovesUp_ClearsFullUnion()
+        {
+            (int top, int rowCount) = InteractiveChromeLayout.CalculateClearRegion(
+                previousTop: 30,
+                previousRowCount: 2,
+                nextTop: 29,
+                nextRowCount: 2);
+
+            Assert.Equal(29, top);
+            Assert.Equal(3, rowCount);
+        }
     }
 }

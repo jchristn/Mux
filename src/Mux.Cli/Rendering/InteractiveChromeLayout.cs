@@ -84,6 +84,100 @@ namespace Mux.Cli.Rendering
             };
         }
 
+        /// <summary>
+        /// Normalizes the width used for prompt rendering when the terminal buffer and
+        /// visible window disagree about where line wrapping occurs.
+        /// </summary>
+        /// <param name="bufferWidth">The reported console buffer width.</param>
+        /// <param name="windowWidth">The reported visible console window width.</param>
+        /// <returns>The safest width to use for layout and clearing.</returns>
+        public static int NormalizeConsoleWidth(int bufferWidth, int windowWidth)
+        {
+            int safeBufferWidth = Math.Max(0, bufferWidth);
+            int safeWindowWidth = Math.Max(0, windowWidth);
+
+            if (safeBufferWidth == 0 && safeWindowWidth == 0)
+            {
+                return 1;
+            }
+
+            if (safeBufferWidth == 0)
+            {
+                return safeWindowWidth;
+            }
+
+            if (safeWindowWidth == 0)
+            {
+                return safeBufferWidth;
+            }
+
+            return Math.Max(1, Math.Min(safeBufferWidth, safeWindowWidth));
+        }
+
+        /// <summary>
+        /// Calculates the console window top needed to keep the requested row visible.
+        /// </summary>
+        /// <param name="targetRow">The buffer row that should remain visible.</param>
+        /// <param name="currentWindowTop">The current console window top row.</param>
+        /// <param name="windowHeight">The visible console window height.</param>
+        /// <returns>The preferred window top row.</returns>
+        public static int CalculateWindowTopForVisibleRow(int targetRow, int currentWindowTop, int windowHeight)
+        {
+            int safeTargetRow = Math.Max(0, targetRow);
+            int safeWindowTop = Math.Max(0, currentWindowTop);
+            int safeWindowHeight = Math.Max(1, windowHeight);
+            int visibleBottom = safeWindowTop + safeWindowHeight - 1;
+
+            if (safeTargetRow < safeWindowTop)
+            {
+                return safeTargetRow;
+            }
+
+            if (safeTargetRow > visibleBottom)
+            {
+                return safeTargetRow - safeWindowHeight + 1;
+            }
+
+            return safeWindowTop;
+        }
+
+        /// <summary>
+        /// Calculates the full prompt-chrome row range that must be cleared before a redraw.
+        /// </summary>
+        /// <param name="previousTop">The top row used by the previous prompt render.</param>
+        /// <param name="previousRowCount">The number of rows used by the previous prompt render.</param>
+        /// <param name="nextTop">The top row needed for the next prompt render.</param>
+        /// <param name="nextRowCount">The number of rows needed for the next prompt render.</param>
+        /// <returns>The top row and total row count to clear.</returns>
+        public static (int Top, int RowCount) CalculateClearRegion(
+            int previousTop,
+            int previousRowCount,
+            int nextTop,
+            int nextRowCount)
+        {
+            int safePreviousRowCount = Math.Max(0, previousRowCount);
+            int safeNextRowCount = Math.Max(0, nextRowCount);
+            int safePreviousTop = Math.Max(0, previousTop);
+            int safeNextTop = Math.Max(0, nextTop);
+
+            if (safePreviousRowCount == 0)
+            {
+                return (safeNextTop, safeNextRowCount);
+            }
+
+            if (safeNextRowCount == 0)
+            {
+                return (safePreviousTop, safePreviousRowCount);
+            }
+
+            int clearTop = Math.Min(safePreviousTop, safeNextTop);
+            int previousBottom = safePreviousTop + safePreviousRowCount - 1;
+            int nextBottom = safeNextTop + safeNextRowCount - 1;
+            int clearBottom = Math.Max(previousBottom, nextBottom);
+
+            return (clearTop, clearBottom - clearTop + 1);
+        }
+
         #endregion
 
         #region Private-Methods

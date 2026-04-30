@@ -29,7 +29,7 @@ namespace Mux.Cli.Commands
     }
 
     /// <summary>
-    /// Interactive REPL command that supports queued prompts while the current run is still active.
+    /// Interactive REPL command with blocking prompt entry and cancellable active runs.
     /// </summary>
     public class InteractiveCommand : AsyncCommand<InteractiveSettings>
     {
@@ -48,7 +48,6 @@ namespace Mux.Cli.Commands
         private const int PreflightCompactionTargetPercent = 60;
         private const string SyntheticSummaryPrefix = "[mux summary generated automatically; older conversation condensed]";
 
-        private readonly QueuedMessageManager _QueuedMessages = new QueuedMessageManager();
         private readonly object _ConsoleSync = new object();
 
         private CancellationTokenSource? _CurrentCts = null;
@@ -65,7 +64,6 @@ namespace Mux.Cli.Commands
         private string _SystemPrompt = string.Empty;
         private bool _Verbose = false;
         private bool _ShouldExit = false;
-        private bool _QueuePaused = false;
         private bool _AssistantTextOpen = false;
         private bool _RunHasVisibleOutput = false;
         private int _ChromeTop = 0;
@@ -88,6 +86,14 @@ namespace Mux.Cli.Commands
         private LineBuffer _DraftBuffer = new LineBuffer();
         private ApprovalRequestState? _PendingApproval = null;
         private ActiveRunState? _ActiveRun = null;
+
+        #endregion
+
+        #region Private-Properties
+
+        private bool UseLivePromptChrome => _ActiveRun == null
+            && _PendingApproval == null
+            && _CurrentCts == null;
 
         #endregion
 
@@ -206,12 +212,6 @@ namespace Mux.Cli.Commands
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    if (_ActiveRun == null && !_QueuePaused && _QueuedMessages.TryDequeue(out QueuedMessageEntry queuedEntry))
-                    {
-                        StartRun(queuedEntry.Text);
-                        continue;
-                    }
-
                     if (_ActiveRun != null)
                     {
                         await ProcessActiveRunAsync(cancellationToken).ConfigureAwait(false);
@@ -250,18 +250,6 @@ namespace Mux.Cli.Commands
             if (_ActiveRun.CompletionTask.IsCompleted && _ActiveRun.Events.Reader.Completion.IsCompleted)
             {
                 await FinalizeActiveRunAsync().ConfigureAwait(false);
-                return;
-            }
-
-            if (ClearExpiredStatusNotice())
-            {
-                RenderInteractiveChrome();
-                return;
-            }
-
-            if (HasConsoleWidthChanged())
-            {
-                RenderInteractiveChrome();
                 return;
             }
 
@@ -335,6 +323,7 @@ namespace Mux.Cli.Commands
         private async Task<List<ConsoleKeyInfo>> ExpandPotentialPasteBatchAsync(List<ConsoleKeyInfo> keyBatch, CancellationToken cancellationToken)
         {
             if (_PendingApproval != null
+                || _ActiveRun != null
                 || !InteractivePasteHeuristics.ShouldWaitForPasteContinuation(keyBatch))
             {
                 return keyBatch;
@@ -379,6 +368,16 @@ namespace Mux.Cli.Commands
             {
                 return;
             }
+
+             if (_ActiveRun != null)
+             {
+                 foreach (ConsoleKeyInfo keyInfo in keyBatch)
+                 {
+                     HandleBusyKey(keyInfo);
+                 }
+
+                 return;
+             }
 
             if (_PendingApproval == null
                 && InteractivePasteHeuristics.ShouldTreatBatchAsPastedText(
@@ -530,38 +529,10 @@ namespace Mux.Cli.Commands
                 return;
             }
 
-            if (keyInfo.Key == ConsoleKey.Tab)
+            if (keyInfo.Key == ConsoleKey.C
+                && (keyInfo.Modifiers & ConsoleModifiers.Control) != 0)
             {
-                QueueCurrentDraft();
-                return;
-            }
-
-            if (HandleCommonKey(keyInfo, allowPromptHistory: false, busyMode: true))
-            {
-                return;
-            }
-
-            if (keyInfo.Key == ConsoleKey.Enter)
-            {
-                bool isShiftEnter = (keyInfo.Modifiers & ConsoleModifiers.Shift) != 0;
-                bool isCtrlEnter = (keyInfo.Modifiers & ConsoleModifiers.Control) != 0;
-
-                if (isShiftEnter || isCtrlEnter)
-                {
-                    _PromptHistory.ResetNavigation();
-                    _DraftBuffer.InsertNewLine();
-                    RenderInteractiveChrome();
-                }
-                else if (TryExecuteBusySlashCommand())
-                {
-                    return;
-                }
-                else
-                {
-                    QueueCurrentDraft();
-                }
-
-                return;
+                CancelActiveRun("Cancellation requested via Ctrl+C");
             }
         }
 
@@ -571,13 +542,6 @@ namespace Mux.Cli.Commands
                 && (keyInfo.Modifiers & ConsoleModifiers.Control) != 0)
             {
                 HandleCtrlC(busyMode);
-                return true;
-            }
-
-            if (keyInfo.Key == ConsoleKey.UpArrow
-                && (keyInfo.Modifiers & ConsoleModifiers.Alt) != 0)
-            {
-                EditLastQueuedPrompt();
                 return true;
             }
 
@@ -673,7 +637,7 @@ namespace Mux.Cli.Commands
         private void HandleConsoleCancelKeyPress(object? sender, ConsoleCancelEventArgs e)
         {
             e.Cancel = true;
-            HandleUserCancellationRequest(_ActiveRun != null || _PendingApproval != null);
+            HandleUserCancellationRequest(_ActiveRun != null || _PendingApproval != null || _CurrentCts != null);
         }
 
         private void HandleUserCancellationRequest(bool busyMode)
@@ -685,18 +649,27 @@ namespace Mux.Cli.Commands
 
             if (busyMode || _ActiveRun != null)
             {
+                DateTime busyNow = DateTime.UtcNow;
+
                 if (_CurrentCts?.IsCancellationRequested == true)
                 {
+                    if ((busyNow - _LastCtrlCTime).TotalSeconds <= 2.0)
+                    {
+                        _ShouldExit = true;
+                        WriteOutputBlock(() => AnsiConsole.MarkupLine("[dim]Exiting due to user cancellation.[/]"), renderChromeAfterWrite: false);
+                    }
+
+                    _LastCtrlCTime = busyNow;
                     return;
                 }
 
+                _LastCtrlCTime = busyNow;
                 CancelActiveRun("Cancellation requested via Ctrl+C");
                 return;
             }
 
             DateTime now = DateTime.UtcNow;
-            bool draftIsEmpty = string.IsNullOrWhiteSpace(_DraftBuffer.GetText());
-            bool exitRequested = draftIsEmpty && (now - _LastCtrlCTime).TotalSeconds <= 2.0;
+            bool exitRequested = (now - _LastCtrlCTime).TotalSeconds <= 2.0;
 
             if (exitRequested)
             {
@@ -706,14 +679,6 @@ namespace Mux.Cli.Commands
             }
 
             _LastCtrlCTime = now;
-
-            if (!draftIsEmpty)
-            {
-                _DraftBuffer.Clear();
-                _PromptHistory.ResetNavigation();
-                SetStatusNotice("draft cleared; press Ctrl+C again to exit");
-                return;
-            }
 
             SetStatusNotice("press Ctrl+C again to exit");
         }
@@ -746,80 +711,9 @@ namespace Mux.Cli.Commands
             StartRun(trimmed);
         }
 
-        private void QueueCurrentDraft()
-        {
-            string draftText = _DraftBuffer.GetText();
-            string trimmed = draftText.Trim();
-
-            if (string.IsNullOrWhiteSpace(trimmed))
-            {
-                return;
-            }
-
-            if (trimmed.StartsWith("/", StringComparison.Ordinal))
-            {
-                SetStatusNotice("press Enter to run slash commands immediately while mux is busy");
-                return;
-            }
-
-            QueuedMessageEntry entry = _QueuedMessages.Enqueue(trimmed);
-            _DraftBuffer.Clear();
-            _PromptHistory.ResetNavigation();
-            SetStatusNotice($"queued #{entry.SequenceNumber}: {TruncateString(trimmed, 40)}");
-        }
-
-        private bool TryExecuteBusySlashCommand()
-        {
-            string input = _DraftBuffer.GetText();
-            string trimmed = input.Trim();
-
-            if (!trimmed.StartsWith("/", StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            _DraftBuffer.Clear();
-            _PromptHistory.ResetNavigation();
-            WriteSubmittedPrompt(input);
-
-            if (HandleSlashCommand(trimmed, allowBusyCommandsOnly: true))
-            {
-                RenderInteractiveChrome();
-            }
-
-            return true;
-        }
-
-        private void EditLastQueuedPrompt()
-        {
-            if (_QueuedMessages.Count == 0)
-            {
-                SetStatusNotice("no queued prompts to edit");
-                return;
-            }
-
-            string currentDraft = _DraftBuffer.GetText();
-            if (string.IsNullOrWhiteSpace(currentDraft))
-            {
-                if (_QueuedMessages.TryTakeLast(out QueuedMessageEntry last))
-                {
-                    _DraftBuffer.SetText(last.Text);
-                    RenderInteractiveChrome();
-                }
-
-                return;
-            }
-
-            if (_QueuedMessages.TryReplaceLast(currentDraft, out QueuedMessageEntry previous))
-            {
-                _DraftBuffer.SetText(previous.Text);
-                RenderInteractiveChrome();
-            }
-        }
-
         private void CancelActiveRun(string? statusNotice = null)
         {
-            if (_ActiveRun == null)
+            if (_CurrentCts == null)
             {
                 return;
             }
@@ -829,8 +723,9 @@ namespace Mux.Cli.Commands
                 return;
             }
 
-            _QueuePaused = true;
-            _RetryStatusMessage = "Cancelling current run...";
+            _RetryStatusMessage = _ActiveRun != null
+                ? "Cancelling current run..."
+                : "Cancelling background work...";
 
             if (!string.IsNullOrWhiteSpace(statusNotice))
             {
@@ -842,8 +737,6 @@ namespace Mux.Cli.Commands
             {
                 _CurrentCts?.Cancel();
             }
-
-            RenderInteractiveChrome();
         }
 
         private void StartRun(string prompt)
@@ -1000,28 +893,10 @@ namespace Mux.Cli.Commands
             if (result.Error != null && !treatAsCancellation)
             {
                 WriteMarkupLine($"[red]Error: {Markup.Escape(result.Error.Message)}[/]");
-                if (_QueuedMessages.Count > 0)
-                {
-                    _QueuePaused = true;
-                    WriteFailureLine($"Current run failed. Queue paused with {_QueuedMessages.Count} queued messages remaining.");
-                }
-                else
-                {
-                    _QueuePaused = false;
-                }
             }
             else if (treatAsCancellation)
             {
-                if (_QueuedMessages.Count > 0)
-                {
-                    _QueuePaused = true;
-                    WriteNotificationLine($"Current run cancelled by user. Queue paused with {_QueuedMessages.Count} queued messages remaining.");
-                }
-                else
-                {
-                    _QueuePaused = false;
-                    WriteNotificationLine("Current run cancelled by user.");
-                }
+                WriteNotificationLine("Current run cancelled by user.");
             }
             else
             {
@@ -1046,19 +921,38 @@ namespace Mux.Cli.Commands
 
                 _TurnsSinceLastTitleReview++;
 
-                if (!_ConversationTitleSetByUser && _QueuedMessages.Count == 0)
+                if (!_ConversationTitleSetByUser)
                 {
-                    await MaybeRefreshConversationTitleAsync().ConfigureAwait(false);
+                    using CancellationTokenSource titleRefreshCts = new CancellationTokenSource();
+                    _CurrentCts = titleRefreshCts;
+
+                    try
+                    {
+                        await MaybeRefreshConversationTitleAsync(titleRefreshCts.Token).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        if (ReferenceEquals(_CurrentCts, titleRefreshCts))
+                        {
+                            _CurrentCts = null;
+                        }
+                    }
+                }
+
+                if (_ShouldExit)
+                {
+                    return;
                 }
 
                 MaybeWritePostTurnContextNotice();
             }
 
-            if (_QueuedMessages.Count == 0 && _QueuePaused)
+            if (_ShouldExit)
             {
-                _QueuePaused = false;
+                return;
             }
 
+            EnsurePromptStartsOnFreshLine();
             RenderInteractiveChrome();
         }
 
@@ -1232,8 +1126,15 @@ namespace Mux.Cli.Commands
             WriteOutputBlock(() =>
             {
                 AnsiConsole.MarkupLine($"[dim]{ThinkingText}[/]");
-                Console.WriteLine();
-            }, renderChromeAfterWrite: false, outputEndsWithPromptSpacer: true);
+            }, renderChromeAfterWrite: false);
+        }
+
+        private void WriteGeneratingTitleLine()
+        {
+            WriteOutputBlock(() =>
+            {
+                AnsiConsole.MarkupLine("[dim]Generating title...[/]");
+            }, renderChromeAfterWrite: false);
         }
 
         private void RenderWelcomeScreen()
@@ -1252,7 +1153,7 @@ namespace Mux.Cli.Commands
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine($"[dim]Using endpoints defined in: {Markup.Escape(endpointsPath)}[/]");
             AnsiConsole.MarkupLine($"[dim]Endpoint:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]|[/] [dim]Model:[/] {Markup.Escape(_CurrentEndpoint.Model)}");
-            AnsiConsole.MarkupLine("[dim]Type /help for commands, Tab queues while busy, Alt+Up edits the last queued prompt, Esc cancels active generation.[/]");
+            AnsiConsole.MarkupLine("[dim]Type /help for commands. Prompt entry blocks while mux is running. Press Esc to cancel active generation.[/]");
         }
 
         private void WriteOutputBlock(
@@ -1306,6 +1207,11 @@ namespace Mux.Cli.Commands
 
         private void ClearInteractiveChrome()
         {
+            if (!UseLivePromptChrome)
+            {
+                return;
+            }
+
             if (_RenderedPromptRowCount > 0)
             {
                 ClearRows(_ChromeTop, _RenderedPromptRowCount);
@@ -1314,6 +1220,11 @@ namespace Mux.Cli.Commands
 
         private void RenderInteractiveChrome()
         {
+            if (!UseLivePromptChrome)
+            {
+                return;
+            }
+
             lock (_ConsoleSync)
             {
                 bool shouldShowCursor = ShouldShowInteractiveCursor();
@@ -1357,10 +1268,35 @@ namespace Mux.Cli.Commands
                     int promptTop = hasStatusLine
                         ? chromeTop + 1 + PromptSpacingBelowStatusLines
                         : chromeTop;
+                    int renderedPromptRowCount = promptLayout.TotalRows + (hasStatusLine ? 1 + PromptSpacingBelowStatusLines : 0);
+                    int chromeBottom = chromeTop + renderedPromptRowCount - 1;
 
-                    if (_RenderedPromptRowCount > 0)
+                    EnsureBufferHeightForRow(chromeBottom);
+                    if (!EnsureWindowShowsRow(chromeBottom))
                     {
-                        ClearRows(_ChromeTop, _RenderedPromptRowCount);
+                        int rowsScrolledUp = MaterializePromptScrollIfNeeded(chromeBottom);
+                        if (rowsScrolledUp > 0)
+                        {
+                            _OutputCursorTop = Math.Max(0, _OutputCursorTop - rowsScrolledUp);
+                            _ChromeTop = Math.Max(0, _ChromeTop - rowsScrolledUp);
+                            _PromptTop = Math.Max(0, _PromptTop - rowsScrolledUp);
+                            chromeTop = Math.Max(0, chromeTop - rowsScrolledUp);
+                            promptTop = Math.Max(0, promptTop - rowsScrolledUp);
+                            chromeBottom = chromeTop + renderedPromptRowCount - 1;
+                        }
+
+                        EnsureWindowShowsRow(chromeBottom);
+                    }
+
+                    (int clearTop, int clearRowCount) = InteractiveChromeLayout.CalculateClearRegion(
+                        _ChromeTop,
+                        _RenderedPromptRowCount,
+                        chromeTop,
+                        renderedPromptRowCount);
+
+                    if (clearRowCount > 0)
+                    {
+                        ClearRows(clearTop, clearRowCount);
                     }
 
                     _ChromeTop = chromeTop;
@@ -1380,8 +1316,9 @@ namespace Mux.Cli.Commands
                         Console.Write(_DraftBuffer.GetLine(lineIndex));
                     }
 
+                    EnsureWindowShowsRow(_PromptTop + promptLayout.CursorRowOffset);
                     SetCursorPositionSafe(promptLayout.CursorColumn, _PromptTop + promptLayout.CursorRowOffset);
-                    _RenderedPromptRowCount = promptLayout.TotalRows + (hasStatusLine ? 1 + PromptSpacingBelowStatusLines : 0);
+                    _RenderedPromptRowCount = renderedPromptRowCount;
                     CaptureConsoleWidth();
                 }
                 finally
@@ -1413,16 +1350,6 @@ namespace Mux.Cli.Commands
                 }
 
                 return string.Empty;
-            }
-
-            if (_QueuePaused && _QueuedMessages.Count > 0)
-            {
-                if (TryGetStatusNotice(out string pausedNotice))
-                {
-                    return $"Queue paused | {baseInfo} | {pausedNotice}";
-                }
-
-                return $"Queue paused | {baseInfo} | {_QueuedMessages.Count} queued | /queue resume";
             }
 
             if (TryGetStatusNotice(out string readyNotice))
@@ -1745,7 +1672,7 @@ namespace Mux.Cli.Commands
             return changed;
         }
 
-        private async Task MaybeRefreshConversationTitleAsync()
+        private async Task MaybeRefreshConversationTitleAsync(CancellationToken cancellationToken)
         {
             if (_ConversationTitleSetByUser)
             {
@@ -1767,11 +1694,16 @@ namespace Mux.Cli.Commands
 
             try
             {
-                string? generatedTitle = await GenerateConversationTitleAsync().ConfigureAwait(false);
+                WriteGeneratingTitleLine();
+                string? generatedTitle = await GenerateConversationTitleAsync(cancellationToken).ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(generatedTitle))
                 {
                     TryUpdateConversationTitle(generatedTitle, setByUser: false, emitUpdateMessage: true);
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                // Title refresh is best-effort only and should return control quickly when cancelled.
             }
             catch
             {
@@ -1811,7 +1743,7 @@ namespace Mux.Cli.Commands
                 && conversationalCharCount >= MinimumTitleReviewChars;
         }
 
-        private async Task<string?> GenerateConversationTitleAsync()
+        private async Task<string?> GenerateConversationTitleAsync(CancellationToken cancellationToken)
         {
             if (_ConversationHistory.Count == 0)
             {
@@ -1826,7 +1758,7 @@ namespace Mux.Cli.Commands
                 $"Current title: {_ConversationTitle}{Environment.NewLine}{Environment.NewLine}" +
                 $"Conversation:{Environment.NewLine}{conversationDigest}";
 
-            string title = await RunSidecarPromptAsync(systemPrompt, userPrompt, CancellationToken.None).ConfigureAwait(false);
+            string title = await RunSidecarPromptAsync(systemPrompt, userPrompt, cancellationToken).ConfigureAwait(false);
             return SessionTitleHelper.Normalize(title, _ConversationTitle);
         }
 
@@ -1953,6 +1885,14 @@ namespace Mux.Cli.Commands
             _TransientStatusNoticeExpiresUtc = string.IsNullOrWhiteSpace(_TransientStatusNotice)
                 ? DateTime.MinValue
                 : DateTime.UtcNow.AddMilliseconds(Math.Max(1, durationMs));
+
+            if (!UseLivePromptChrome && !string.IsNullOrWhiteSpace(_TransientStatusNotice))
+            {
+                WriteNotificationLine(_TransientStatusNotice);
+                ClearStatusNotice();
+                return;
+            }
+
             RenderInteractiveChrome();
         }
 
@@ -2148,6 +2088,11 @@ namespace Mux.Cli.Commands
         /// </summary>
         private void CaptureConsoleWidth()
         {
+            if (!UseLivePromptChrome)
+            {
+                return;
+            }
+
             _LastBufferWidth = GetBufferWidthSafe();
         }
 
@@ -2157,6 +2102,11 @@ namespace Mux.Cli.Commands
         /// <returns>True when the width changed.</returns>
         private bool HasConsoleWidthChanged()
         {
+            if (!UseLivePromptChrome)
+            {
+                return false;
+            }
+
             return _LastBufferWidth != GetBufferWidthSafe();
         }
 
@@ -2168,7 +2118,9 @@ namespace Mux.Cli.Commands
         {
             try
             {
-                return Math.Max(1, Console.BufferWidth);
+                return InteractiveChromeLayout.NormalizeConsoleWidth(
+                    Console.BufferWidth,
+                    Console.WindowWidth);
             }
             catch
             {
@@ -2225,6 +2177,38 @@ namespace Mux.Cli.Commands
             }
         }
 
+        private void EnsurePromptStartsOnFreshLine()
+        {
+            lock (_ConsoleSync)
+            {
+                if (_AssistantTextOpen || Console.CursorLeft != 0)
+                {
+                    Console.WriteLine();
+                    _AssistantTextOpen = false;
+                    _OutputEndsWithPromptSpacer = false;
+                }
+
+                if (!_OutputEndsWithPromptSpacer)
+                {
+                    Console.WriteLine();
+                    _OutputEndsWithPromptSpacer = true;
+                }
+
+                CaptureOutputCursorPosition(preservePromptSpacer: true);
+            }
+        }
+
+        private void CaptureOutputCursorPosition(bool preservePromptSpacer = false)
+        {
+            _OutputCursorLeft = Console.CursorLeft;
+            _OutputCursorTop = Console.CursorTop;
+
+            if (!preservePromptSpacer)
+            {
+                _OutputEndsWithPromptSpacer = false;
+            }
+        }
+
         /// <summary>
         /// Ensures the console buffer can accommodate the requested row.
         /// </summary>
@@ -2259,6 +2243,103 @@ namespace Mux.Cli.Commands
         }
 
         /// <summary>
+        /// Adjusts the visible console window so the requested row remains on screen.
+        /// </summary>
+        /// <param name="row">The zero-based buffer row that should be visible.</param>
+        private static bool EnsureWindowShowsRow(int row)
+        {
+            if (row < 0 || !OperatingSystem.IsWindows())
+            {
+                return false;
+            }
+
+            try
+            {
+                int windowHeight = Math.Max(1, Console.WindowHeight);
+                int bufferHeight = Math.Max(windowHeight, Console.BufferHeight);
+                int desiredTop = InteractiveChromeLayout.CalculateWindowTopForVisibleRow(
+                    row,
+                    Console.WindowTop,
+                    windowHeight);
+                int maxWindowTop = Math.Max(0, bufferHeight - windowHeight);
+                int safeWindowTop = Math.Clamp(desiredTop, 0, maxWindowTop);
+
+                if (Console.WindowTop != safeWindowTop)
+                {
+                    Console.WindowTop = safeWindowTop;
+                }
+
+                int actualWindowTop = Console.WindowTop;
+                int actualVisibleBottom = actualWindowTop + windowHeight - 1;
+                return row >= actualWindowTop && row <= actualVisibleBottom;
+            }
+            catch
+            {
+                // Best effort only. Some terminals do not expose a mutable viewport.
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Forces the terminal to scroll when the prompt needs rows below the current visible window
+        /// and the host does not honor direct viewport movement.
+        /// </summary>
+        /// <param name="requiredBottomRow">The bottom row the prompt must occupy.</param>
+        private int MaterializePromptScrollIfNeeded(int requiredBottomRow)
+        {
+            if (!TryGetVisibleWindowBottom(out int visibleBottom) || requiredBottomRow <= visibleBottom)
+            {
+                return 0;
+            }
+
+            int overflowRows = requiredBottomRow - visibleBottom;
+            int expectedCursorTop;
+            try
+            {
+                expectedCursorTop = Console.CursorTop;
+            }
+            catch
+            {
+                expectedCursorTop = Math.Max(0, visibleBottom);
+                SetCursorPositionSafe(0, expectedCursorTop);
+            }
+
+            for (int i = 0; i < overflowRows; i++)
+            {
+                Console.WriteLine();
+                expectedCursorTop++;
+            }
+
+            int actualCursorTop;
+            try
+            {
+                actualCursorTop = Console.CursorTop;
+            }
+            catch
+            {
+                actualCursorTop = expectedCursorTop;
+            }
+
+            return Math.Max(0, expectedCursorTop - actualCursorTop);
+        }
+
+        private static bool TryGetVisibleWindowBottom(out int visibleBottom)
+        {
+            try
+            {
+                int windowHeight = Math.Max(1, Console.WindowHeight);
+                int windowTop = Math.Max(0, Console.WindowTop);
+                visibleBottom = windowTop + windowHeight - 1;
+                return true;
+            }
+            catch
+            {
+                visibleBottom = -1;
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Moves the cursor without throwing when the requested row falls on the current buffer edge.
         /// </summary>
         /// <param name="left">The zero-based column.</param>
@@ -2270,7 +2351,7 @@ namespace Mux.Cli.Commands
 
             try
             {
-                int bufferWidth = Math.Max(1, Console.BufferWidth);
+                int bufferWidth = GetBufferWidthSafe();
                 int bufferHeight = Math.Max(1, Console.BufferHeight);
                 int safeLeft = Math.Clamp(left, 0, bufferWidth - 1);
                 safeTop = Math.Clamp(safeTop, 0, bufferHeight - 1);
@@ -2405,7 +2486,7 @@ namespace Mux.Cli.Commands
 
             if (allowBusyCommandsOnly && !CanExecuteSlashCommandWhileBusy(command, argument))
             {
-                WriteNotificationLine("That command can't run while mux is busy. Use /queue, /status, /context, /compact strategy, /help, /title, /tools, /system, /endpoint list, or /mcp list.");
+                WriteNotificationLine("That command can't run while mux is busy. Wait for the current run to finish or press Esc to cancel it.");
                 return true;
             }
 
@@ -2439,10 +2520,6 @@ namespace Mux.Cli.Commands
 
                 case "/title":
                     HandleTitleCommand(argument);
-                    return true;
-
-                case "/queue":
-                    HandleQueueCommand(argument);
                     return true;
 
                 case "/system":
@@ -3860,7 +3937,7 @@ namespace Mux.Cli.Commands
             {
                 AnsiConsole.Write(table);
                 Console.WriteLine();
-            });
+            }, outputEndsWithPromptSpacer: true);
         }
 
         /// <summary>
@@ -3901,8 +3978,6 @@ namespace Mux.Cli.Commands
             table.AddRow("Working directory", Markup.Escape(_WorkingDirectory));
             table.AddRow("Approval policy", Markup.Escape(_ApprovalPolicy.ToString()));
             table.AddRow("Conversation messages", _ConversationHistory.Count.ToString());
-            table.AddRow("Queued prompts", _QueuedMessages.Count.ToString());
-            table.AddRow("Queue paused", _QueuePaused ? "yes" : "no");
             table.AddRow("Auto title updates", _ConversationTitleSetByUser ? "disabled (user title)" : $"enabled ({TitleReviewIntervalTurns} successful turns)");
             table.AddRow("Auto compaction", _MuxSettings.AutoCompactEnabled ? "enabled" : "disabled");
             table.AddRow("Compaction strategy", Markup.Escape(_MuxSettings.CompactionStrategy));
@@ -3927,7 +4002,7 @@ namespace Mux.Cli.Commands
                 AnsiConsole.MarkupLine($"[bold]Session title:[/] {Markup.Escape(_ConversationTitle)} [dim]({Markup.Escape(titleSource)})[/]");
                 AnsiConsole.Write(table);
                 Console.WriteLine();
-            });
+            }, outputEndsWithPromptSpacer: true);
         }
 
         /// <summary>
@@ -4072,91 +4147,6 @@ namespace Mux.Cli.Commands
         }
 
         /// <summary>
-        /// Handles queue management commands.
-        /// </summary>
-        /// <param name="argument">Optional queue subcommand.</param>
-        private void HandleQueueCommand(string argument)
-        {
-            string normalized = string.IsNullOrWhiteSpace(argument)
-                ? "list"
-                : argument.Trim().ToLowerInvariant();
-
-            switch (normalized)
-            {
-                case "list":
-                    if (_QueuedMessages.Count == 0)
-                    {
-                        WriteMarkupLine(_QueuePaused
-                            ? "[dim]No queued prompts. Queue is paused.[/]"
-                            : "[dim]No queued prompts.[/]");
-                        return;
-                    }
-
-                    Table table = new Table();
-                    table.Border = TableBorder.Rounded;
-                    table.AddColumn("[bold]#[/]");
-                    table.AddColumn("[bold]Queued[/]");
-                    table.AddColumn("[bold]Preview[/]");
-
-                    foreach (QueuedMessageEntry entry in _QueuedMessages.Snapshot())
-                    {
-                        table.AddRow(
-                            entry.SequenceNumber.ToString(),
-                            entry.EnqueuedAtUtc.ToLocalTime().ToString("HH:mm:ss"),
-                            Markup.Escape(TruncateString(entry.Text, 80)));
-                    }
-
-                    WriteOutputBlock(() =>
-                    {
-                        AnsiConsole.MarkupLine(_QueuePaused
-                            ? "[yellow]Queue paused[/]"
-                            : "[green]Queue active[/]");
-                        AnsiConsole.Write(table);
-                        Console.WriteLine();
-                    });
-                    return;
-
-                case "clear":
-                    _QueuedMessages.Clear();
-                    _QueuePaused = false;
-                    WriteSuccessLine("Cleared all queued prompts.");
-                    return;
-
-                case "drop-last":
-                    if (_QueuedMessages.TryTakeLast(out QueuedMessageEntry removed))
-                    {
-                        if (_QueuedMessages.Count == 0)
-                        {
-                            _QueuePaused = false;
-                        }
-
-                        WriteSuccessLine($"Removed #{removed.SequenceNumber} \"{TruncateString(removed.Text, 80)}\"");
-                    }
-                    else
-                    {
-                        WriteNotificationLine("No queued prompts to remove.");
-                    }
-                    return;
-
-                case "resume":
-                    if (_QueuedMessages.Count == 0)
-                    {
-                        _QueuePaused = false;
-                        WriteNotificationLine("No queued prompts to resume.");
-                        return;
-                    }
-
-                    _QueuePaused = false;
-                    WriteSuccessLine($"Resumed. {_QueuedMessages.Count} queued prompts remain.");
-                    return;
-
-                default:
-                    WriteMarkupLine("[yellow]Usage: /queue, /queue clear, /queue drop-last, /queue resume[/]");
-                    return;
-            }
-        }
-
-        /// <summary>
         /// Handles the /system command.
         /// </summary>
         /// <param name="argument">The optional new system prompt text.</param>
@@ -4179,7 +4169,7 @@ namespace Mux.Cli.Commands
                     AnsiConsole.MarkupLine($"[dim]System prompt ({_SystemPrompt.Length} chars):[/]");
                     Console.WriteLine(_SystemPrompt);
                     Console.WriteLine();
-                });
+                }, outputEndsWithPromptSpacer: true);
             }
         }
 
@@ -4201,7 +4191,7 @@ namespace Mux.Cli.Commands
             table.AddRow("[cyan]/endpoint edit[/] [dim]<name>[/]", "Start the guided endpoint edit wizard");
             table.AddRow("[cyan]/endpoint remove[/] [dim]<name>[/]", "Remove an endpoint from endpoints.json");
             table.AddRow("[cyan]/tools[/]", "List all available tools with descriptions");
-            table.AddRow("[cyan]/status[/]", "Show session metadata, context usage, title, and queue state");
+            table.AddRow("[cyan]/status[/]", "Show session metadata, context usage, and title");
             table.AddRow("[cyan]/context[/]", "Alias for /status");
             table.AddRow("[cyan]/compact[/]", "Compact older conversation history with the configured strategy");
             table.AddRow("[cyan]/compact summary[/]", "Compact older conversation history with a one-off summary pass");
@@ -4210,10 +4200,6 @@ namespace Mux.Cli.Commands
             table.AddRow("[cyan]/title[/]", "Show the current conversation title");
             table.AddRow("[cyan]/title[/] [dim]<text>[/]", "Set the conversation title and disable automatic retitling");
             table.AddRow("[cyan]/clear[/]", "Clear conversation history");
-            table.AddRow("[cyan]/queue[/]", "List queued prompts and whether dispatch is paused");
-            table.AddRow("[cyan]/queue clear[/]", "Clear all queued prompts");
-            table.AddRow("[cyan]/queue drop-last[/]", "Remove the newest queued prompt");
-            table.AddRow("[cyan]/queue resume[/]", "Resume automatic queue dispatch");
             table.AddRow("[cyan]/system[/]", "Show the full current system prompt");
             table.AddRow("[cyan]/system[/] [dim]<text>[/]", "Replace system prompt for this session");
             table.AddRow("[cyan]/mcp list[/]", "List MCP server connections and status");
@@ -4229,12 +4215,9 @@ namespace Mux.Cli.Commands
                     ("Up / Down", "Recall submitted prompts when idle"),
                     ("Shift+Enter", "Insert newline"),
                     ("Ctrl+Enter", "Insert newline"),
-                    ("Tab", "Queue the current draft while mux is busy"),
-                    ("Enter on /command", "Run supported slash commands immediately while busy"),
-                    ("Alt+Up", "Edit the newest queued prompt"),
                     ("Esc", "Cancel active generation"),
-                    ("Ctrl+C", "Cancel active generation / clear idle draft"),
-                    ("Ctrl+C x2", "Exit mux when idle with an empty draft")
+                    ("Ctrl+C", "Cancel active generation"),
+                    ("Ctrl+C x2", "Exit mux when idle")
                 };
                 int shortcutWidth = inputShortcuts.Max(static item => item.Shortcut.Length);
 
@@ -4250,7 +4233,7 @@ namespace Mux.Cli.Commands
                 }
 
                 Console.WriteLine();
-            });
+            }, outputEndsWithPromptSpacer: true);
         }
 
         private static bool IsCompactStrategyCommand(string argument)
@@ -4267,36 +4250,7 @@ namespace Mux.Cli.Commands
 
         private static bool CanExecuteSlashCommandWhileBusy(string command, string argument)
         {
-            switch (command)
-            {
-                case "/help":
-                case "/?":
-                case "/status":
-                case "/context":
-                case "/tools":
-                case "/queue":
-                case "/title":
-                    return true;
-
-                case "/compact":
-                    return IsCompactStrategyCommand(argument);
-
-                case "/system":
-                    return string.IsNullOrWhiteSpace(argument);
-
-                case "/endpoint":
-                    EndpointCommandParseResult parseResult = EndpointCommandParser.Parse(argument);
-                    return !parseResult.Success
-                        || (parseResult.Request != null && parseResult.Request.Action == EndpointCommandAction.List);
-
-                case "/mcp":
-                    string[] subParts = argument.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    string subCommand = subParts.Length > 0 ? subParts[0].ToLowerInvariant() : "list";
-                    return string.Equals(subCommand, "list", StringComparison.Ordinal);
-
-                default:
-                    return false;
-            }
+            return false;
         }
 
         /// <summary>
@@ -4344,7 +4298,7 @@ namespace Mux.Cli.Commands
                     {
                         AnsiConsole.Write(mcpTable);
                         Console.WriteLine();
-                    });
+                    }, outputEndsWithPromptSpacer: true);
                     break;
 
                 case "add":
@@ -4435,9 +4389,9 @@ namespace Mux.Cli.Commands
 
         private bool EnsureQueueEmptyForStateChange(string action)
         {
-            if (_QueuedMessages.Count > 0)
+            if (_ActiveRun != null || _PendingApproval != null)
             {
-                WriteMarkupLine($"[yellow]Cannot {Markup.Escape(action)} while {_QueuedMessages.Count} queued prompts remain. Use /queue clear or /queue resume first.[/]");
+                WriteMarkupLine($"[yellow]Cannot {Markup.Escape(action)} while mux is busy. Wait for the current run to finish or press Esc to cancel it.[/]");
                 return false;
             }
 
