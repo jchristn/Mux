@@ -6,6 +6,7 @@ namespace Mux.Core.Tools
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Enums;
     using Mux.Core.Models;
     using Mux.Core.Settings;
     using Voltaic;
@@ -19,10 +20,10 @@ namespace Mux.Core.Tools
     {
         #region Private-Members
 
-        private Dictionary<string, McpClient> _Clients = new Dictionary<string, McpClient>(StringComparer.OrdinalIgnoreCase);
-        private Dictionary<string, string> _ToolToServer = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        private Dictionary<string, List<ToolDefinition>> _ServerTools = new Dictionary<string, List<ToolDefinition>>(StringComparer.OrdinalIgnoreCase);
-        private List<McpServerConfig> _Configs;
+        private readonly Dictionary<string, IMcpClientConnection> _Clients = new Dictionary<string, IMcpClientConnection>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _ToolToServer = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, List<ToolDefinition>> _ServerTools = new Dictionary<string, List<ToolDefinition>>(StringComparer.OrdinalIgnoreCase);
+        private readonly List<McpServerConfig> _Configs;
         private bool _Disposed = false;
 
         #endregion
@@ -44,8 +45,7 @@ namespace Mux.Core.Tools
         #region Public-Methods
 
         /// <summary>
-        /// Initializes all configured MCP servers by launching their processes, performing the
-        /// MCP handshake, and discovering available tools.
+        /// Initializes all configured MCP servers and discovers available tools.
         /// </summary>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A task representing the asynchronous initialization operation.</returns>
@@ -57,11 +57,11 @@ namespace Mux.Core.Tools
 
                 try
                 {
-                    await LaunchAndDiscoverAsync(config.Name, config.Command, config.Args, config.Env, cancellationToken).ConfigureAwait(false);
+                    await ConnectAndDiscoverAsync(config, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception)
                 {
-                    // Server failed to launch — skip it and continue with remaining servers.
+                    // Server failed to connect; skip it and continue with remaining servers.
                 }
             }
         }
@@ -86,7 +86,7 @@ namespace Mux.Core.Tools
         /// Executes an MCP tool call by routing it to the appropriate server.
         /// </summary>
         /// <param name="toolCallId">The unique identifier for this tool call.</param>
-        /// <param name="toolName">The prefixed tool name (e.g. "serverName.toolName").</param>
+        /// <param name="toolName">The prefixed tool name (for example "serverName.toolName").</param>
         /// <param name="arguments">The parsed JSON arguments from the LLM.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A <see cref="ToolResult"/> containing the execution output.</returns>
@@ -102,7 +102,7 @@ namespace Mux.Core.Tools
                 };
             }
 
-            if (!_Clients.TryGetValue(serverName, out McpClient? client))
+            if (!_Clients.TryGetValue(serverName, out IMcpClientConnection? client))
             {
                 return new ToolResult
                 {
@@ -112,7 +112,6 @@ namespace Mux.Core.Tools
                 };
             }
 
-            // Strip the server prefix to get the original tool name
             string originalToolName = toolName;
             string prefix = serverName + ".";
             if (toolName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
@@ -154,7 +153,7 @@ namespace Mux.Core.Tools
         }
 
         /// <summary>
-        /// Adds a new MCP server at runtime, launching its process and discovering tools.
+        /// Adds a new stdio MCP server at runtime and discovers its tools.
         /// </summary>
         /// <param name="name">The unique name for the server.</param>
         /// <param name="command">The executable command to launch.</param>
@@ -163,11 +162,20 @@ namespace Mux.Core.Tools
         /// <returns>A task representing the asynchronous operation.</returns>
         public async Task AddServerAsync(string name, string command, List<string> args, CancellationToken cancellationToken = default)
         {
-            await AddServerAsync(name, command, args, new Dictionary<string, string>(), cancellationToken).ConfigureAwait(false);
+            await AddServerAsync(
+                new McpServerConfig
+                {
+                    Name = name,
+                    Transport = McpTransportTypeEnum.Stdio,
+                    Command = command,
+                    Args = new List<string>(args ?? new List<string>()),
+                    Env = new Dictionary<string, string>()
+                },
+                cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
-        /// Adds a new MCP server at runtime, launching its process and discovering tools.
+        /// Adds a new stdio MCP server at runtime and discovers its tools.
         /// </summary>
         /// <param name="name">The unique name for the server.</param>
         /// <param name="command">The executable command to launch.</param>
@@ -182,25 +190,40 @@ namespace Mux.Core.Tools
             Dictionary<string, string> env,
             CancellationToken cancellationToken = default)
         {
-            if (_Clients.ContainsKey(name))
-            {
-                throw new InvalidOperationException($"MCP server '{name}' is already registered.");
-            }
-
-            McpServerConfig config = new McpServerConfig
-            {
-                Name = name,
-                Command = command,
-                Args = new List<string>(args ?? new List<string>()),
-                Env = new Dictionary<string, string>(env ?? new Dictionary<string, string>())
-            };
-
-            await LaunchAndDiscoverAsync(name, command, config.Args, config.Env, cancellationToken).ConfigureAwait(false);
-            _Configs.Add(config);
+            await AddServerAsync(
+                new McpServerConfig
+                {
+                    Name = name,
+                    Transport = McpTransportTypeEnum.Stdio,
+                    Command = command,
+                    Args = new List<string>(args ?? new List<string>()),
+                    Env = new Dictionary<string, string>(env ?? new Dictionary<string, string>())
+                },
+                cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
-        /// Shuts down and removes an MCP server by name.
+        /// Adds a new MCP server at runtime and discovers its tools.
+        /// </summary>
+        /// <param name="config">The server configuration to add.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        public async Task AddServerAsync(McpServerConfig config, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(config);
+
+            if (_Clients.ContainsKey(config.Name))
+            {
+                throw new InvalidOperationException($"MCP server '{config.Name}' is already registered.");
+            }
+
+            McpServerConfig normalized = CloneConfig(config);
+            await ConnectAndDiscoverAsync(normalized, cancellationToken).ConfigureAwait(false);
+            _Configs.Add(normalized);
+        }
+
+        /// <summary>
+        /// Disconnects and removes an MCP server by name.
         /// </summary>
         /// <param name="name">The name of the server to remove.</param>
         /// <returns>A task representing the asynchronous operation.</returns>
@@ -208,17 +231,16 @@ namespace Mux.Core.Tools
         {
             await Task.CompletedTask.ConfigureAwait(false);
 
-            if (_Clients.TryGetValue(name, out McpClient? client))
+            if (_Clients.TryGetValue(name, out IMcpClientConnection? client))
             {
                 client.Shutdown();
                 client.Dispose();
                 _Clients.Remove(name);
             }
 
-            // Remove tool mappings for this server
             List<string> toolsToRemove = _ToolToServer
-                .Where((KeyValuePair<string, string> kvp) => string.Equals(kvp.Value, name, StringComparison.OrdinalIgnoreCase))
-                .Select((KeyValuePair<string, string> kvp) => kvp.Key)
+                .Where(kvp => string.Equals(kvp.Value, name, StringComparison.OrdinalIgnoreCase))
+                .Select(kvp => kvp.Key)
                 .ToList();
 
             foreach (string toolName in toolsToRemove)
@@ -238,7 +260,7 @@ namespace Mux.Core.Tools
         {
             List<(string Name, int ToolCount, bool Connected)> status = new List<(string Name, int ToolCount, bool Connected)>();
 
-            foreach (KeyValuePair<string, McpClient> kvp in _Clients)
+            foreach (KeyValuePair<string, IMcpClientConnection> kvp in _Clients)
             {
                 int toolCount = 0;
                 if (_ServerTools.TryGetValue(kvp.Key, out List<ToolDefinition>? tools))
@@ -276,7 +298,7 @@ namespace Mux.Core.Tools
             {
                 if (disposing)
                 {
-                    foreach (KeyValuePair<string, McpClient> kvp in _Clients)
+                    foreach (KeyValuePair<string, IMcpClientConnection> kvp in _Clients)
                     {
                         try
                         {
@@ -298,38 +320,14 @@ namespace Mux.Core.Tools
             }
         }
 
-        private async Task LaunchAndDiscoverAsync(
-            string name,
-            string command,
-            List<string> args,
-            Dictionary<string, string> env,
-            CancellationToken cancellationToken)
+        private async Task ConnectAndDiscoverAsync(McpServerConfig config, CancellationToken cancellationToken)
         {
-            // Expand environment variables and set them before launching
-            foreach (KeyValuePair<string, string> kvp in env)
-            {
-                string expandedValue = SettingsLoader.ExpandEnvironmentVariables(kvp.Value);
-                Environment.SetEnvironmentVariable(kvp.Key, expandedValue);
-            }
+            IMcpClientConnection client = await ConnectClientAsync(config, cancellationToken).ConfigureAwait(false);
+            _Clients[config.Name] = client;
 
-            McpClient client = new McpClient();
-
-            string[] argsArray = args.ToArray();
-            bool launched = await client.LaunchServerAsync(command, argsArray, cancellationToken).ConfigureAwait(false);
-
-            if (!launched)
-            {
-                client.Dispose();
-                throw new InvalidOperationException($"Failed to launch MCP server '{name}' with command: {command}");
-            }
-
-            _Clients[name] = client;
-
-            // Discover tools via tools/list
             try
             {
                 JsonElement toolsResult = await client.CallAsync<JsonElement>("tools/list", null, 30000, cancellationToken).ConfigureAwait(false);
-
                 List<ToolDefinition> serverToolDefs = new List<ToolDefinition>();
 
                 if (toolsResult.TryGetProperty("tools", out JsonElement toolsArray) && toolsArray.ValueKind == JsonValueKind.Array)
@@ -350,26 +348,163 @@ namespace Mux.Core.Tools
                             inputSchema = schemaElement;
                         }
 
-                        string prefixedName = name + "." + toolName;
-
+                        string prefixedName = config.Name + "." + toolName;
                         ToolDefinition definition = new ToolDefinition
                         {
                             Name = prefixedName,
-                            Description = $"[MCP:{name}] {toolDescription}",
+                            Description = $"[MCP:{config.Name}] {toolDescription}",
                             ParametersSchema = inputSchema
                         };
 
                         serverToolDefs.Add(definition);
-                        _ToolToServer[prefixedName] = name;
+                        _ToolToServer[prefixedName] = config.Name;
                     }
                 }
 
-                _ServerTools[name] = serverToolDefs;
+                _ServerTools[config.Name] = serverToolDefs;
             }
             catch (Exception)
             {
-                // Tool discovery failed — server is connected but has no tools.
-                _ServerTools[name] = new List<ToolDefinition>();
+                _ServerTools[config.Name] = new List<ToolDefinition>();
+            }
+        }
+
+        private async Task<IMcpClientConnection> ConnectClientAsync(McpServerConfig config, CancellationToken cancellationToken)
+        {
+            return config.Transport switch
+            {
+                McpTransportTypeEnum.Http => await ConnectHttpClientAsync(config, cancellationToken).ConfigureAwait(false),
+                _ => await ConnectStdioClientAsync(config, cancellationToken).ConfigureAwait(false)
+            };
+        }
+
+        private async Task<IMcpClientConnection> ConnectStdioClientAsync(McpServerConfig config, CancellationToken cancellationToken)
+        {
+            foreach (KeyValuePair<string, string> kvp in config.Env)
+            {
+                string expandedValue = SettingsLoader.ExpandEnvironmentVariables(kvp.Value);
+                Environment.SetEnvironmentVariable(kvp.Key, expandedValue);
+            }
+
+            McpClient client = new McpClient();
+            bool launched = await client.LaunchServerAsync(config.Command, config.Args.ToArray(), cancellationToken).ConfigureAwait(false);
+            if (!launched)
+            {
+                client.Dispose();
+                throw new InvalidOperationException($"Failed to launch MCP server '{config.Name}' with command: {config.Command}");
+            }
+
+            return new StdioMcpClientConnection(client);
+        }
+
+        private async Task<IMcpClientConnection> ConnectHttpClientAsync(McpServerConfig config, CancellationToken cancellationToken)
+        {
+            if (!Uri.TryCreate(config.Url, UriKind.Absolute, out Uri? uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                throw new InvalidOperationException("HTTP MCP servers require an absolute http:// or https:// URL.");
+            }
+
+            McpHttpClient client = new McpHttpClient();
+            bool connected = await client.ConnectStreamableAsync(config.Url, NormalizeMcpPath(config.McpPath), cancellationToken).ConfigureAwait(false);
+            if (!connected)
+            {
+                client.Dispose();
+                throw new InvalidOperationException($"Failed to connect to HTTP MCP server '{config.Name}' at {config.Url}");
+            }
+
+            return new HttpMcpClientConnection(client);
+        }
+
+        private static McpServerConfig CloneConfig(McpServerConfig source)
+        {
+            return new McpServerConfig
+            {
+                Name = source.Name,
+                Transport = source.Transport,
+                Command = source.Command,
+                Args = new List<string>(source.Args ?? new List<string>()),
+                Env = new Dictionary<string, string>(source.Env ?? new Dictionary<string, string>()),
+                Url = source.Url,
+                McpPath = NormalizeMcpPath(source.McpPath)
+            };
+        }
+
+        private static string NormalizeMcpPath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return "/mcp";
+            }
+
+            string normalized = path.Trim();
+            return normalized.StartsWith("/", StringComparison.Ordinal) ? normalized : "/" + normalized;
+        }
+
+        #endregion
+
+        #region Private-Types
+
+        private interface IMcpClientConnection : IDisposable
+        {
+            bool IsConnected { get; }
+
+            Task<T> CallAsync<T>(string method, object? parameters, int timeoutMs, CancellationToken cancellationToken);
+
+            void Shutdown();
+        }
+
+        private sealed class StdioMcpClientConnection : IMcpClientConnection
+        {
+            private readonly McpClient _Client;
+
+            public StdioMcpClientConnection(McpClient client)
+            {
+                _Client = client;
+            }
+
+            public bool IsConnected => _Client.IsConnected;
+
+            public Task<T> CallAsync<T>(string method, object? parameters, int timeoutMs, CancellationToken cancellationToken)
+            {
+                return _Client.CallAsync<T>(method, parameters, timeoutMs, cancellationToken);
+            }
+
+            public void Shutdown()
+            {
+                _Client.Shutdown();
+            }
+
+            public void Dispose()
+            {
+                _Client.Dispose();
+            }
+        }
+
+        private sealed class HttpMcpClientConnection : IMcpClientConnection
+        {
+            private readonly McpHttpClient _Client;
+
+            public HttpMcpClientConnection(McpHttpClient client)
+            {
+                _Client = client;
+            }
+
+            public bool IsConnected => _Client.IsConnected;
+
+            public Task<T> CallAsync<T>(string method, object? parameters, int timeoutMs, CancellationToken cancellationToken)
+            {
+                return _Client.CallAsync<T>(method, parameters, timeoutMs, cancellationToken);
+            }
+
+            public void Shutdown()
+            {
+                _Client.Disconnect();
+            }
+
+            public void Dispose()
+            {
+                _Client.Dispose();
             }
         }
 

@@ -3,6 +3,7 @@ namespace Mux.Core.Models
     using System;
     using System.Collections.Generic;
     using System.Text.Json.Serialization;
+    using Mux.Core.Enums;
 
     /// <summary>
     /// Defines an MCP (Model Context Protocol) server configuration.
@@ -12,9 +13,12 @@ namespace Mux.Core.Models
         #region Private-Members
 
         private string _Name = string.Empty;
+        private McpTransportTypeEnum _Transport = McpTransportTypeEnum.Stdio;
         private string _Command = string.Empty;
         private List<string> _Args = new List<string>();
         private Dictionary<string, string> _Env = new Dictionary<string, string>();
+        private string _Url = string.Empty;
+        private string _McpPath = "/mcp";
 
         #endregion
 
@@ -39,6 +43,16 @@ namespace Mux.Core.Models
         {
             get => _Name;
             set => _Name = value ?? throw new ArgumentNullException(nameof(Name));
+        }
+
+        /// <summary>
+        /// The transport used to connect to this MCP server.
+        /// </summary>
+        [JsonPropertyName("transport")]
+        public McpTransportTypeEnum Transport
+        {
+            get => _Transport;
+            set => _Transport = value;
         }
 
         /// <summary>
@@ -69,6 +83,26 @@ namespace Mux.Core.Models
         {
             get => _Env;
             set => _Env = value ?? new Dictionary<string, string>();
+        }
+
+        /// <summary>
+        /// The base URL used for HTTP MCP servers.
+        /// </summary>
+        [JsonPropertyName("url")]
+        public string Url
+        {
+            get => _Url;
+            set => _Url = value ?? throw new ArgumentNullException(nameof(Url));
+        }
+
+        /// <summary>
+        /// The HTTP MCP path used for streamable HTTP servers.
+        /// </summary>
+        [JsonPropertyName("mcpPath")]
+        public string McpPath
+        {
+            get => _McpPath;
+            set => _McpPath = string.IsNullOrWhiteSpace(value) ? "/mcp" : value;
         }
 
         #endregion

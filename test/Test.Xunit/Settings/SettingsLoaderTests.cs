@@ -178,6 +178,7 @@ namespace Test.Xunit.Settings
                 new McpServerConfig
                 {
                     Name = "github",
+                    Transport = McpTransportTypeEnum.Stdio,
                     Command = "npx",
                     Args = new List<string> { "-y", "@modelcontextprotocol/server-github" },
                     Env = new Dictionary<string, string>
@@ -191,10 +192,67 @@ namespace Test.Xunit.Settings
 
             Assert.Single(servers);
             Assert.Equal("github", servers[0].Name);
+            Assert.Equal(McpTransportTypeEnum.Stdio, servers[0].Transport);
             Assert.Equal("npx", servers[0].Command);
             Assert.Equal(2, servers[0].Args.Count);
             Assert.Equal("@modelcontextprotocol/server-github", servers[0].Args[1]);
             Assert.Equal("${GITHUB_TOKEN}", servers[0].Env["GITHUB_TOKEN"]);
+        }
+
+        /// <summary>
+        /// Verifies that HTTP MCP server definitions persist and round-trip through mcp-servers.json.
+        /// </summary>
+        [Fact]
+        public void SaveMcpServers_RoundTripsHttpDefinitions()
+        {
+            SettingsLoader.SaveMcpServers(new List<McpServerConfig>
+            {
+                new McpServerConfig
+                {
+                    Name = "remote-http",
+                    Transport = McpTransportTypeEnum.Http,
+                    Url = "https://mcp.example.com",
+                    McpPath = "/mcp"
+                }
+            });
+
+            List<McpServerConfig> servers = SettingsLoader.LoadMcpServers();
+
+            Assert.Single(servers);
+            Assert.Equal("remote-http", servers[0].Name);
+            Assert.Equal(McpTransportTypeEnum.Http, servers[0].Transport);
+            Assert.Equal("https://mcp.example.com", servers[0].Url);
+            Assert.Equal("/mcp", servers[0].McpPath);
+            Assert.Empty(servers[0].Command);
+            Assert.Empty(servers[0].Args);
+        }
+
+        /// <summary>
+        /// Verifies that older MCP server definitions without a transport still default to stdio.
+        /// </summary>
+        [Fact]
+        public void LoadMcpServers_MissingTransport_DefaultsToStdio()
+        {
+            string json = @"{
+                ""servers"": [
+                    {
+                        ""name"": ""legacy"",
+                        ""command"": ""npx"",
+                        ""args"": [""-y"", ""legacy-server""],
+                        ""env"": {}
+                    }
+                ]
+            }";
+
+            File.WriteAllText(Path.Combine(_TempDir, "mcp-servers.json"), json);
+
+            List<McpServerConfig> servers = SettingsLoader.LoadMcpServers();
+
+            Assert.Single(servers);
+            Assert.Equal("legacy", servers[0].Name);
+            Assert.Equal(McpTransportTypeEnum.Stdio, servers[0].Transport);
+            Assert.Equal("npx", servers[0].Command);
+            Assert.Equal("/mcp", servers[0].McpPath);
         }
 
         #endregion

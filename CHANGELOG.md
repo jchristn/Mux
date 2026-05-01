@@ -18,7 +18,7 @@ All notable changes to mux are documented here.
 - `mux print` now supports `--output-last-message <path>` to write only the final assistant response text to a file; failed runs leave the file absent
 - `mux print`, `mux probe`, and `mux endpoint` now support `--config-dir <path>` as a first-class config-root override, with precedence over `MUX_CONFIG_DIR`
 - `mux probe --require-tools` now fails when the selected endpoint disables tool calling
-- `/mcp add` now runs a guided wizard similar to `/endpoint add`, supports optional inline defaults, and saves MCP server definitions to `mcp-servers.json`
+- `/mcp add` now runs a guided wizard similar to `/endpoint add`, supports both `stdio` and HTTP MCP transports, accepts optional inline defaults, and saves MCP server definitions to `mcp-servers.json`
 - Interactive REPL prompt entry now uses a simpler blocking one-prompt-at-a-time flow with idle multi-line editing and paste support, inline approvals, `Esc` cancellation, a visible `Generating title...` notice when automatic title refresh runs, and an explicit blank spacer line before the next `mux>` prompt
 - README and usage documentation now describe Armada-oriented automation flows, isolated config overrides, clean final-response artifacts, and machine-readable endpoint inspection
 

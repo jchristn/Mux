@@ -38,6 +38,7 @@ namespace Mux.Cli.Commands
         private const int PromptWidth = 5;
         private const int InputPollDelayMs = 25;
         private const int PasteLookaheadDelayMs = 40;
+        private const string DefaultMcpHttpPath = "/mcp";
         private const int PasteContinuationWindowMs = 200;
         private const int PromptTopPaddingLines = 1;
         private const int PromptSpacingBelowStatusLines = 1;
@@ -3010,12 +3011,7 @@ namespace Mux.Cli.Commands
                 _McpToolManager = new McpToolManager(new List<McpServerConfig>());
             }
 
-            _McpToolManager.AddServerAsync(
-                    server.Name,
-                    server.Command,
-                    server.Args,
-                    server.Env,
-                    CancellationToken.None)
+            _McpToolManager.AddServerAsync(server, CancellationToken.None)
                 .GetAwaiter()
                 .GetResult();
 
@@ -3057,8 +3053,10 @@ namespace Mux.Cli.Commands
                 ? CloneMcpServerConfig(suggestedConfig)
                 : new McpServerConfig
                 {
+                    Transport = McpTransportTypeEnum.Stdio,
                     Args = new List<string>(),
-                    Env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    Env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    McpPath = DefaultMcpHttpPath
                 };
 
             bool completed = RunConsoleWizard(() =>
@@ -3075,36 +3073,71 @@ namespace Mux.Cli.Commands
 
                 workingServer.Name = serverName;
 
-                if (!TryPromptRequiredWizardValue(
-                        "Command",
-                        workingServer.Command,
-                        out string command,
-                        "Executable used to launch the MCP server, for example npx, uvx, dotnet, or python."))
+                if (!TryPromptMcpTransport(workingServer.Transport, out McpTransportTypeEnum transport))
                 {
                     return CancelMcpWizard();
                 }
 
-                workingServer.Command = command;
+                workingServer.Transport = transport;
 
-                if (!TryPromptMcpArguments(workingServer.Args, out List<string> args))
+                if (workingServer.Transport == McpTransportTypeEnum.Http)
                 {
-                    return CancelMcpWizard();
+                    workingServer.Command = string.Empty;
+                    workingServer.Args = new List<string>();
+                    workingServer.Env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                    if (!TryPromptMcpHttpUrl(workingServer.Url, out string url))
+                    {
+                        return CancelMcpWizard();
+                    }
+
+                    workingServer.Url = url;
+
+                    if (!TryPromptMcpHttpPath(workingServer.McpPath, out string mcpPath))
+                    {
+                        return CancelMcpWizard();
+                    }
+
+                    workingServer.McpPath = mcpPath;
                 }
-
-                workingServer.Args = args;
-
-                if (!TryPromptMcpEnvironmentVariables(workingServer.Env, out Dictionary<string, string> env))
+                else
                 {
-                    return CancelMcpWizard();
-                }
+                    workingServer.Url = string.Empty;
+                    workingServer.McpPath = DefaultMcpHttpPath;
 
-                workingServer.Env = env;
+                    if (!TryPromptRequiredWizardValue(
+                            "Command",
+                            workingServer.Command,
+                            out string command,
+                            "Executable used to launch the MCP server, for example npx, uvx, dotnet, or python."))
+                    {
+                        return CancelMcpWizard();
+                    }
+
+                    workingServer.Command = command;
+
+                    if (!TryPromptMcpArguments(workingServer.Args, out List<string> args))
+                    {
+                        return CancelMcpWizard();
+                    }
+
+                    workingServer.Args = args;
+
+                    if (!TryPromptMcpEnvironmentVariables(workingServer.Env, out Dictionary<string, string> env))
+                    {
+                        return CancelMcpWizard();
+                    }
+
+                    workingServer.Env = env;
+                }
 
                 WriteWorkflowBlankLine();
                 PrintMcpWizardSummary(workingServer);
                 WriteWorkflowBlankLine();
                 WriteWorkflowSection("Connectivity Probe");
-                WriteWorkflowHint("Launching the MCP server and discovering tools.");
+                WriteWorkflowHint(workingServer.Transport == McpTransportTypeEnum.Http
+                    ? "Connecting to the HTTP MCP server and discovering tools."
+                    : "Launching the MCP server and discovering tools.");
                 McpProbeSnapshot probe = ProbeMcpServer(workingServer);
                 WriteWorkflowLine(probe.Success
                     ? $"[green]Probe succeeded[/] [dim]in {probe.DurationMs}ms[/]: {Markup.Escape(probe.Detail)}"
@@ -3141,12 +3174,7 @@ namespace Mux.Cli.Commands
             {
                 using CancellationTokenSource cts = new CancellationTokenSource(15000);
                 using McpToolManager probeManager = new McpToolManager(new List<McpServerConfig>());
-                probeManager.AddServerAsync(
-                        server.Name,
-                        server.Command,
-                        server.Args,
-                        server.Env,
-                        cts.Token)
+                probeManager.AddServerAsync(server, cts.Token)
                     .GetAwaiter()
                     .GetResult();
 
@@ -3467,6 +3495,91 @@ namespace Mux.Cli.Commands
                 }
 
                 return true;
+            }
+        }
+
+        private bool TryPromptMcpTransport(McpTransportTypeEnum currentValue, out McpTransportTypeEnum transport)
+        {
+            while (true)
+            {
+                WriteWorkflowSection("Transport");
+                WriteWorkflowOption("1", "stdio", "Launch a local MCP subprocess over stdin/stdout.");
+                WriteWorkflowOption("2", "http", "Connect to an HTTP MCP server using streamable HTTP.");
+
+                string defaultValue = currentValue == McpTransportTypeEnum.Http ? "http" : "stdio";
+                if (!TryPromptWizardValue("Transport", defaultValue, out string selection))
+                {
+                    transport = currentValue;
+                    return false;
+                }
+
+                string normalized = selection.Trim().Replace(" ", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+                switch (normalized)
+                {
+                    case "1":
+                    case "stdio":
+                    case "process":
+                        transport = McpTransportTypeEnum.Stdio;
+                        return true;
+                    case "2":
+                    case "http":
+                    case "streamablehttp":
+                        transport = McpTransportTypeEnum.Http;
+                        return true;
+                    default:
+                        WriteWorkflowLine("[red]Choose 1 or 2.[/]");
+                        WriteWorkflowBlankLine();
+                        break;
+                }
+            }
+        }
+
+        private bool TryPromptMcpHttpUrl(string? currentUrl, out string url)
+        {
+            while (true)
+            {
+                if (!TryPromptRequiredWizardValue(
+                        "Base URL",
+                        currentUrl,
+                        out url,
+                        "Base URL for the HTTP MCP server, for example http://localhost:7891 or https://mcp.example.com."))
+                {
+                    return false;
+                }
+
+                if (Uri.TryCreate(url, UriKind.Absolute, out Uri? parsedUri) &&
+                    (parsedUri.Scheme == Uri.UriSchemeHttp || parsedUri.Scheme == Uri.UriSchemeHttps))
+                {
+                    url = parsedUri.ToString().TrimEnd('/');
+                    return true;
+                }
+
+                WriteWorkflowLine("[red]Enter an absolute http:// or https:// URL.[/]");
+                WriteWorkflowBlankLine();
+            }
+        }
+
+        private bool TryPromptMcpHttpPath(string? currentPath, out string path)
+        {
+            while (true)
+            {
+                if (!TryPromptRequiredWizardValue(
+                        "MCP path",
+                        string.IsNullOrWhiteSpace(currentPath) ? DefaultMcpHttpPath : NormalizeMcpHttpPath(currentPath),
+                        out path,
+                        "Path for the streamable HTTP MCP endpoint, usually /mcp."))
+                {
+                    return false;
+                }
+
+                path = NormalizeMcpHttpPath(path);
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    return true;
+                }
+
+                WriteWorkflowLine("[red]A path is required.[/]");
+                WriteWorkflowBlankLine();
             }
         }
 
@@ -4144,9 +4257,13 @@ namespace Mux.Cli.Commands
         {
             WriteWorkflowSection("MCP Server Summary");
             WriteWorkflowSummaryItem("Name", server.Name);
-            WriteWorkflowSummaryItem("Command", server.Command);
-            WriteWorkflowSummaryItem("Arguments", FormatMcpArgs(server.Args));
-            WriteWorkflowSummaryItem("Environment", FormatMcpEnvironmentPreview(server.Env));
+            WriteWorkflowSummaryItem("Transport", FormatMcpTransport(server.Transport));
+            WriteWorkflowSummaryItem("Target", FormatMcpTargetPreview(server));
+
+            if (server.Transport == McpTransportTypeEnum.Stdio)
+            {
+                WriteWorkflowSummaryItem("Environment", FormatMcpEnvironmentPreview(server.Env));
+            }
         }
 
         private int CountMcpToolsForServer(string serverName)
@@ -4165,14 +4282,22 @@ namespace Mux.Cli.Commands
             return new McpServerConfig
             {
                 Name = source.Name,
+                Transport = source.Transport,
                 Command = source.Command,
                 Args = new List<string>(source.Args ?? new List<string>()),
-                Env = new Dictionary<string, string>(source.Env ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase)
+                Env = new Dictionary<string, string>(source.Env ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase),
+                Url = source.Url,
+                McpPath = NormalizeMcpHttpPath(source.McpPath)
             };
         }
 
-        private static string FormatMcpCommandPreview(McpServerConfig server)
+        private static string FormatMcpTargetPreview(McpServerConfig server)
         {
+            if (server.Transport == McpTransportTypeEnum.Http)
+            {
+                return FormatMcpHttpTargetPreview(server);
+            }
+
             if (server.Args == null || server.Args.Count == 0)
             {
                 return server.Command;
@@ -4213,6 +4338,41 @@ namespace Mux.Cli.Commands
             }
 
             return string.Join(", ", parts);
+        }
+
+        private static string FormatMcpTransport(McpTransportTypeEnum transport)
+        {
+            return transport == McpTransportTypeEnum.Http ? "http" : "stdio";
+        }
+
+        private static string FormatMcpHttpTargetPreview(McpServerConfig server)
+        {
+            string baseUrl = server.Url?.TrimEnd('/') ?? string.Empty;
+            string path = NormalizeMcpHttpPath(server.McpPath);
+            return string.IsNullOrWhiteSpace(baseUrl)
+                ? path
+                : $"{baseUrl}{path}";
+        }
+
+        private static string NormalizeMcpHttpPath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return DefaultMcpHttpPath;
+            }
+
+            string normalized = path.Trim();
+            return normalized.StartsWith("/", StringComparison.Ordinal) ? normalized : "/" + normalized;
+        }
+
+        private static bool LooksLikeHttpUrl(string value)
+        {
+            if (!Uri.TryCreate(value, UriKind.Absolute, out Uri? uri))
+            {
+                return false;
+            }
+
+            return uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps;
         }
 
         private static string GetEndpointBaseUrlExample(AdapterTypeEnum adapterType)
@@ -4639,7 +4799,7 @@ namespace Mux.Cli.Commands
             table.AddRow("[cyan]/system[/]", "Show the full current system prompt");
             table.AddRow("[cyan]/system[/] [dim]<text>[/]", "Replace system prompt for this session");
             table.AddRow("[cyan]/mcp list[/]", "List MCP server connections and status");
-            table.AddRow("[cyan]/mcp add[/] [dim][[name]] [[command]] [[args...]][/]", "Start the guided MCP server add wizard");
+            table.AddRow("[cyan]/mcp add[/] [dim][[name]] [[command-or-url]] [[args-or-path...]][/]", "Start the guided MCP server add wizard");
             table.AddRow("[cyan]/mcp remove[/] [dim]<name>[/]", "Remove an MCP server");
             table.AddRow("[cyan]/exit[/]", "Exit mux");
 
@@ -4718,7 +4878,8 @@ namespace Mux.Cli.Commands
 
                     Table mcpTable = new Table();
                     mcpTable.AddColumn("Server");
-                    mcpTable.AddColumn("Command");
+                    mcpTable.AddColumn("Transport");
+                    mcpTable.AddColumn("Target");
                     mcpTable.AddColumn("Tools");
                     mcpTable.AddColumn("Status");
 
@@ -4732,7 +4893,8 @@ namespace Mux.Cli.Commands
                             : "[yellow]Not connected[/]";
                         mcpTable.AddRow(
                             Markup.Escape(server.Name),
-                            Markup.Escape(FormatMcpCommandPreview(server)),
+                            Markup.Escape(FormatMcpTransport(server.Transport)),
+                            Markup.Escape(FormatMcpTargetPreview(server)),
                             status.ToolCount.ToString(),
                             statusText);
                     }
@@ -4753,12 +4915,31 @@ namespace Mux.Cli.Commands
                     McpServerConfig suggestedServer = new McpServerConfig
                     {
                         Name = subParts.Length > 1 ? subParts[1] : string.Empty,
-                        Command = subParts.Length > 2 ? subParts[2] : string.Empty,
-                        Args = subParts.Length > 3
-                            ? new List<string>(subParts.Skip(3))
-                            : new List<string>(),
-                        Env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        Transport = McpTransportTypeEnum.Stdio,
+                        Args = new List<string>(),
+                        Env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                        McpPath = DefaultMcpHttpPath
                     };
+
+                    if (subParts.Length > 2)
+                    {
+                        string commandOrUrl = subParts[2];
+                        if (LooksLikeHttpUrl(commandOrUrl))
+                        {
+                            suggestedServer.Transport = McpTransportTypeEnum.Http;
+                            suggestedServer.Url = commandOrUrl;
+                            suggestedServer.McpPath = subParts.Length > 3
+                                ? NormalizeMcpHttpPath(subParts[3])
+                                : DefaultMcpHttpPath;
+                        }
+                        else
+                        {
+                            suggestedServer.Command = commandOrUrl;
+                            suggestedServer.Args = subParts.Length > 3
+                                ? new List<string>(subParts.Skip(3))
+                                : new List<string>();
+                        }
+                    }
 
                     if (!TryRunMcpAddWizard(suggestedServer, out McpServerConfig configuredServer))
                     {
@@ -4772,7 +4953,8 @@ namespace Mux.Cli.Commands
                         {
                             WriteWorkflowTitle("MCP Server Added");
                             WriteWorkflowSummaryItem("Name", configuredServer.Name);
-                            WriteWorkflowSummaryItem("Command", FormatMcpCommandPreview(configuredServer));
+                            WriteWorkflowSummaryItem("Transport", FormatMcpTransport(configuredServer.Transport));
+                            WriteWorkflowSummaryItem("Target", FormatMcpTargetPreview(configuredServer));
                             WriteWorkflowSummaryItem("Tools", CountMcpToolsForServer(configuredServer.Name).ToString());
                             WriteWorkflowBlankLine();
                             WriteWorkflowHint("The MCP server was connected for this session and saved to mcp-servers.json.");
@@ -4814,8 +4996,12 @@ namespace Mux.Cli.Commands
                         WriteWorkflowHint("Ctrl+C or type cancel to abort.");
                         WriteWorkflowBlankLine();
                         WriteWorkflowSummaryItem("Name", existingServer.Name);
-                        WriteWorkflowSummaryItem("Command", FormatMcpCommandPreview(existingServer));
-                        WriteWorkflowSummaryItem("Environment", FormatMcpEnvironmentPreview(existingServer.Env));
+                        WriteWorkflowSummaryItem("Transport", FormatMcpTransport(existingServer.Transport));
+                        WriteWorkflowSummaryItem("Target", FormatMcpTargetPreview(existingServer));
+                        if (existingServer.Transport == McpTransportTypeEnum.Stdio)
+                        {
+                            WriteWorkflowSummaryItem("Environment", FormatMcpEnvironmentPreview(existingServer.Env));
+                        }
                         WriteWorkflowBlankLine();
 
                         if (!TryPromptYesNo($"Remove MCP server '{existingServer.Name}'", false, out bool removeServer))

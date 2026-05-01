@@ -150,7 +150,7 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 /title                            Show the current conversation title
 /title <text>                     Set the conversation title and disable automatic retitling
 /mcp list                         Show MCP server status
-/mcp add [name] [command] [args...] Start the guided MCP server add wizard
+/mcp add [name] [command-or-url] [args-or-path...] Start the guided MCP server add wizard
 /mcp remove <name>                Remove an MCP server
 /system                           Show the full current system prompt
 /system <text>                    Replace the system prompt for this session
@@ -161,7 +161,7 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 
 Endpoint management happens directly against `endpoints.json`. `show` performs a lightweight probe of the configured endpoint. `add` and `edit` run guided workflows that prompt for the adapter, base URL, model, auth mode (`none`, `bearer token`, or `custom headers`), default status, and optional advanced settings before probing and saving.
 
-MCP server management happens directly against `mcp-servers.json`. `/mcp add` runs a guided workflow, with any optional inline `name`, `command`, or `args` values used as defaults. Successful adds are connected for the current session and saved for future sessions.
+MCP server management happens directly against `mcp-servers.json`. `/mcp add` runs a guided workflow that lets you choose `stdio` or HTTP transport. Optional inline values seed the wizard defaults: a `command` plus `args` for `stdio`, or a base URL plus optional MCP path for HTTP. Successful adds are connected for the current session and saved for future sessions.
 
 For secret values, the wizard lets you either store the value directly in `endpoints.json` or store an environment-variable reference. It accepts a bare variable name plus `${VAR}`, `%VAR%`, `$VAR`, and `$env:VAR`, then stores environment references canonically as `${VAR}`. For `ollama`, mux uses Ollama's OpenAI-compatible API root, so the usual base URL is `http://localhost:11434/v1`. `remove` asks for confirmation and still refuses to delete the endpoint active in the current session.
 

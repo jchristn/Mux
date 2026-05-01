@@ -330,9 +330,16 @@ Example `mcp-servers.json`:
   "servers": [
     {
       "name": "github",
+      "transport": "stdio",
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-github"],
       "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+    },
+    {
+      "name": "remote-http",
+      "transport": "http",
+      "url": "https://mcp.example.com",
+      "mcpPath": "/mcp"
     }
   ]
 }
@@ -344,10 +351,11 @@ Runtime management:
 /mcp list
 /mcp add
 /mcp add github npx -y @modelcontextprotocol/server-github
+/mcp add remote-http https://mcp.example.com /mcp
 /mcp remove myserver
 ```
 
-`/mcp add` now runs a guided wizard similar to `/endpoint add`. Optional inline values seed the wizard defaults, and successful adds are saved to `mcp-servers.json` as well as connected for the current session.
+`/mcp add` now runs a guided wizard similar to `/endpoint add`. The wizard lets you choose `stdio` or HTTP transport. Optional inline values seed the wizard defaults, and successful adds are saved to `mcp-servers.json` as well as connected for the current session. HTTP MCP currently uses the streamable HTTP path, usually `/mcp`.
 
 Skip MCP startup:
 

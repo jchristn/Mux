@@ -137,11 +137,18 @@ Example:
   "servers": [
     {
       "name": "github",
+      "transport": "stdio",
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-github"],
       "env": {
         "GITHUB_TOKEN": "${GITHUB_TOKEN}"
       }
+    },
+    {
+      "name": "remote-http",
+      "transport": "http",
+      "url": "https://mcp.example.com",
+      "mcpPath": "/mcp"
     }
   ]
 }
@@ -152,9 +159,16 @@ Fields:
 | Field | Type | Notes |
 |---|---|---|
 | `name` | string | unique server name |
-| `command` | string | executable to launch |
-| `args` | string[] | command arguments |
-| `env` | object | environment variables with `${VAR}` expansion |
+| `transport` | string | `stdio` or `http`; defaults to `stdio` for older configs that omit it |
+| `command` | string | executable to launch for `stdio` servers |
+| `args` | string[] | command arguments for `stdio` servers |
+| `env` | object | environment variables with `${VAR}` expansion for `stdio` servers |
+| `url` | string | base URL for HTTP MCP servers |
+| `mcpPath` | string | streamable HTTP MCP path, usually `/mcp` |
+
+Notes:
+- `stdio` launches a local subprocess and communicates over stdin/stdout
+- HTTP MCP currently uses streamable HTTP and does not currently expose per-server auth/header configuration in mux
 
 ## `settings.json`
 

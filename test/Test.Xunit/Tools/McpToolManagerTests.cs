@@ -2,9 +2,14 @@ namespace Test.Xunit.Tools
 {
     using System;
     using System.Collections.Generic;
+    using System.Text.Json;
+    using System.Threading;
+    using System.Threading.Tasks;
     using global::Xunit;
+    using Mux.Core.Enums;
     using Mux.Core.Models;
     using Mux.Core.Tools;
+    using Test.Shared;
 
     /// <summary>
     /// Unit tests for the <see cref="McpToolManager"/> class.
@@ -61,6 +66,40 @@ namespace Test.Xunit.Tools
             List<(string Name, int ToolCount, bool Connected)> status = _Manager.GetServerStatus();
             Assert.NotNull(status);
             Assert.Empty(status);
+        }
+
+        /// <summary>
+        /// Verifies that HTTP MCP servers can be connected, discovered, and executed.
+        /// </summary>
+        [Fact]
+        public async Task AddServerAsync_HttpServer_DiscoversAndExecutesTool()
+        {
+            using TestMcpHttpServer server = new TestMcpHttpServer();
+            await server.StartAsync();
+
+            McpServerConfig config = new McpServerConfig
+            {
+                Name = "http-test",
+                Transport = McpTransportTypeEnum.Http,
+                Url = server.BaseUrl,
+                McpPath = server.McpPath
+            };
+
+            await _Manager.AddServerAsync(config, CancellationToken.None);
+
+            List<ToolDefinition> definitions = _Manager.GetToolDefinitions();
+            Assert.Contains(definitions, tool => string.Equals(tool.Name, "http-test.echo", StringComparison.Ordinal));
+
+            List<(string Name, int ToolCount, bool Connected)> status = _Manager.GetServerStatus();
+            Assert.Contains(status, serverStatus => string.Equals(serverStatus.Name, "http-test", StringComparison.OrdinalIgnoreCase) &&
+                serverStatus.Connected &&
+                serverStatus.ToolCount >= 1);
+
+            using JsonDocument arguments = JsonDocument.Parse("{\"text\":\"hello over http\"}");
+            ToolResult result = await _Manager.ExecuteAsync("call-1", "http-test.echo", arguments.RootElement, CancellationToken.None);
+
+            Assert.True(result.Success);
+            Assert.Contains("hello over http", result.Content, StringComparison.Ordinal);
         }
 
         /// <summary>
