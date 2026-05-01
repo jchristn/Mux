@@ -2998,6 +2998,178 @@ namespace Mux.Cli.Commands
             _AllEndpoints = SettingsLoader.LoadEndpoints();
         }
 
+        private void ReloadConfiguredMcpServers()
+        {
+            _McpServers = SettingsLoader.LoadMcpServers();
+        }
+
+        private void AddAndPersistMcpServer(McpServerConfig server)
+        {
+            if (_McpToolManager == null)
+            {
+                _McpToolManager = new McpToolManager(new List<McpServerConfig>());
+            }
+
+            _McpToolManager.AddServerAsync(
+                    server.Name,
+                    server.Command,
+                    server.Args,
+                    server.Env,
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+
+            try
+            {
+                List<McpServerConfig> updatedServers = _McpServers
+                    .Where(existing => !string.Equals(existing.Name, server.Name, StringComparison.OrdinalIgnoreCase))
+                    .Select(CloneMcpServerConfig)
+                    .ToList();
+                updatedServers.Add(CloneMcpServerConfig(server));
+                SettingsLoader.SaveMcpServers(updatedServers);
+                ReloadConfiguredMcpServers();
+            }
+            catch
+            {
+                _McpToolManager.RemoveServerAsync(server.Name).GetAwaiter().GetResult();
+                throw;
+            }
+        }
+
+        private void RemoveAndPersistMcpServer(string serverName)
+        {
+            if (_McpToolManager != null)
+            {
+                _McpToolManager.RemoveServerAsync(serverName).GetAwaiter().GetResult();
+            }
+
+            List<McpServerConfig> updatedServers = _McpServers
+                .Where(existing => !string.Equals(existing.Name, serverName, StringComparison.OrdinalIgnoreCase))
+                .Select(CloneMcpServerConfig)
+                .ToList();
+            SettingsLoader.SaveMcpServers(updatedServers);
+            ReloadConfiguredMcpServers();
+        }
+
+        private bool TryRunMcpAddWizard(McpServerConfig? suggestedConfig, out McpServerConfig configuredServer)
+        {
+            McpServerConfig workingServer = suggestedConfig != null
+                ? CloneMcpServerConfig(suggestedConfig)
+                : new McpServerConfig
+                {
+                    Args = new List<string>(),
+                    Env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                };
+
+            bool completed = RunConsoleWizard(() =>
+            {
+                WriteWorkflowTitle("MCP Add Wizard");
+                WriteWorkflowHint("Ctrl+C or type cancel at any prompt to abort.");
+                WriteWorkflowHint("Press Enter to accept defaults where shown.");
+                WriteWorkflowBlankLine();
+
+                if (!TryPromptMcpServerName(workingServer.Name, out string serverName))
+                {
+                    return CancelMcpWizard();
+                }
+
+                workingServer.Name = serverName;
+
+                if (!TryPromptRequiredWizardValue(
+                        "Command",
+                        workingServer.Command,
+                        out string command,
+                        "Executable used to launch the MCP server, for example npx, uvx, dotnet, or python."))
+                {
+                    return CancelMcpWizard();
+                }
+
+                workingServer.Command = command;
+
+                if (!TryPromptMcpArguments(workingServer.Args, out List<string> args))
+                {
+                    return CancelMcpWizard();
+                }
+
+                workingServer.Args = args;
+
+                if (!TryPromptMcpEnvironmentVariables(workingServer.Env, out Dictionary<string, string> env))
+                {
+                    return CancelMcpWizard();
+                }
+
+                workingServer.Env = env;
+
+                WriteWorkflowBlankLine();
+                PrintMcpWizardSummary(workingServer);
+                WriteWorkflowBlankLine();
+                WriteWorkflowSection("Connectivity Probe");
+                WriteWorkflowHint("Launching the MCP server and discovering tools.");
+                McpProbeSnapshot probe = ProbeMcpServer(workingServer);
+                WriteWorkflowLine(probe.Success
+                    ? $"[green]Probe succeeded[/] [dim]in {probe.DurationMs}ms[/]: {Markup.Escape(probe.Detail)}"
+                    : $"[red]Probe failed[/] [dim]in {probe.DurationMs}ms[/]: {Markup.Escape(probe.Detail)}");
+
+                bool defaultSaveChoice = probe.Success;
+                string savePrompt = probe.Success
+                    ? "Save and connect this MCP server"
+                    : "Save this MCP server anyway";
+
+                if (!TryPromptYesNo(savePrompt, defaultSaveChoice, out bool saveServer))
+                {
+                    return CancelMcpWizard();
+                }
+
+                if (!saveServer)
+                {
+                    WriteWorkflowLine("[yellow]MCP workflow cancelled; nothing was saved.[/]");
+                    return false;
+                }
+
+                return true;
+            });
+
+            configuredServer = workingServer;
+            return completed;
+        }
+
+        private McpProbeSnapshot ProbeMcpServer(McpServerConfig server)
+        {
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            try
+            {
+                using CancellationTokenSource cts = new CancellationTokenSource(15000);
+                using McpToolManager probeManager = new McpToolManager(new List<McpServerConfig>());
+                probeManager.AddServerAsync(
+                        server.Name,
+                        server.Command,
+                        server.Args,
+                        server.Env,
+                        cts.Token)
+                    .GetAwaiter()
+                    .GetResult();
+
+                stopwatch.Stop();
+                int toolCount = probeManager.GetToolDefinitions()
+                    .Count(tool => tool.Name.StartsWith(server.Name + ".", StringComparison.OrdinalIgnoreCase));
+                string detail = toolCount == 1
+                    ? "Discovered 1 tool."
+                    : $"Discovered {toolCount} tools.";
+                return new McpProbeSnapshot(true, stopwatch.ElapsedMilliseconds, detail);
+            }
+            catch (OperationCanceledException)
+            {
+                stopwatch.Stop();
+                return new McpProbeSnapshot(false, stopwatch.ElapsedMilliseconds, "Timed out while launching the MCP server.");
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                return new McpProbeSnapshot(false, stopwatch.ElapsedMilliseconds, ex.Message);
+            }
+        }
+
         private EndpointProbeSnapshot ProbeEndpoint(EndpointConfig endpoint)
         {
             EndpointConfig probeEndpoint = CloneEndpoint(endpoint);
@@ -3274,6 +3446,147 @@ namespace Mux.Cli.Commands
                 }
 
                 return true;
+            }
+        }
+
+        private bool TryPromptMcpServerName(string? suggestedName, out string serverName)
+        {
+            while (true)
+            {
+                if (!TryPromptRequiredWizardValue("Server name", suggestedName, out serverName, "Short name used with /mcp remove <name> and as the MCP tool prefix."))
+                {
+                    return false;
+                }
+
+                string candidateName = serverName;
+                if (_McpServers.Any(existing => string.Equals(existing.Name, candidateName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    WriteWorkflowLine($"[red]An MCP server named '{Markup.Escape(candidateName)}' already exists. Choose a different name.[/]");
+                    WriteWorkflowBlankLine();
+                    continue;
+                }
+
+                return true;
+            }
+        }
+
+        private bool TryPromptMcpArguments(List<string> currentArgs, out List<string> args)
+        {
+            args = new List<string>();
+
+            if (currentArgs.Count > 0)
+            {
+                WriteWorkflowSection("Arguments");
+                WriteWorkflowLine($"[dim]Provided arguments:[/] {Markup.Escape(FormatMcpArgs(currentArgs))}");
+                if (!TryPromptYesNo("Keep these arguments", true, out bool keepArgs))
+                {
+                    return false;
+                }
+
+                if (keepArgs)
+                {
+                    args = new List<string>(currentArgs);
+                    return true;
+                }
+            }
+
+            WriteWorkflowSection("Arguments");
+            WriteWorkflowHint("Enter command arguments one at a time.");
+            WriteWorkflowHint("Leave the argument blank to finish. This is optional.");
+
+            while (true)
+            {
+                if (!TryPromptWizardValue("Argument", null, out string argument))
+                {
+                    return false;
+                }
+
+                argument = argument.Trim();
+                if (string.IsNullOrWhiteSpace(argument))
+                {
+                    return true;
+                }
+
+                args.Add(argument);
+            }
+        }
+
+        private bool TryPromptMcpEnvironmentVariables(
+            Dictionary<string, string> currentEnv,
+            out Dictionary<string, string> env)
+        {
+            env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            if (currentEnv.Count > 0)
+            {
+                WriteWorkflowSection("Environment Variables");
+                WriteWorkflowLine($"[dim]Current environment:[/] {Markup.Escape(FormatMcpEnvironmentPreview(currentEnv))}");
+                if (!TryPromptYesNo("Keep these environment variables", true, out bool keepExisting))
+                {
+                    return false;
+                }
+
+                if (keepExisting)
+                {
+                    env = new Dictionary<string, string>(currentEnv, StringComparer.OrdinalIgnoreCase);
+                    return true;
+                }
+            }
+
+            if (!TryPromptYesNo("Configure environment variables", currentEnv.Count > 0, out bool configureEnv))
+            {
+                return false;
+            }
+
+            if (!configureEnv)
+            {
+                return true;
+            }
+
+            WriteWorkflowSection("Environment Variables");
+            WriteWorkflowHint("Enter one or more environment variables for the MCP server process.");
+            WriteWorkflowHint("Leave the variable name blank to finish.");
+            WriteWorkflowHint("Values can be stored directly or can reference an existing environment variable.");
+
+            while (true)
+            {
+                string? defaultVariableName = env.Count == 0 ? null : string.Empty;
+                if (!TryPromptWizardValue("Variable name", defaultVariableName, out string variableName))
+                {
+                    return false;
+                }
+
+                variableName = variableName.Trim();
+                if (string.IsNullOrWhiteSpace(variableName))
+                {
+                    return true;
+                }
+
+                if (!TryPromptSecretStorageMode(out SecretStorageMode storageMode))
+                {
+                    return false;
+                }
+
+                if (storageMode == SecretStorageMode.StoredValue)
+                {
+                    if (!TryPromptSecretValue($"Value for {variableName}", out string storedValue))
+                    {
+                        return false;
+                    }
+
+                    env[variableName] = storedValue;
+                }
+                else
+                {
+                    if (!TryPromptEnvironmentReference($"Environment variable for {variableName}", out string normalizedReference))
+                    {
+                        return false;
+                    }
+
+                    env[variableName] = normalizedReference;
+                }
+
+                WriteWorkflowBlankLine();
             }
         }
 
@@ -3805,6 +4118,12 @@ namespace Mux.Cli.Commands
             return false;
         }
 
+        private bool CancelMcpWizard()
+        {
+            WriteWorkflowLine("[yellow]MCP workflow cancelled; nothing was saved.[/]");
+            return false;
+        }
+
         private void PrintEndpointWizardSummary(EndpointConfig endpoint)
         {
             WriteWorkflowSection("Endpoint Summary");
@@ -3819,6 +4138,81 @@ namespace Mux.Cli.Commands
             WriteWorkflowSummaryItem("Max tokens", endpoint.MaxTokens.ToString());
             WriteWorkflowSummaryItem("Context window", endpoint.ContextWindow.ToString());
             WriteWorkflowSummaryItem("Timeout (ms)", endpoint.TimeoutMs.ToString());
+        }
+
+        private void PrintMcpWizardSummary(McpServerConfig server)
+        {
+            WriteWorkflowSection("MCP Server Summary");
+            WriteWorkflowSummaryItem("Name", server.Name);
+            WriteWorkflowSummaryItem("Command", server.Command);
+            WriteWorkflowSummaryItem("Arguments", FormatMcpArgs(server.Args));
+            WriteWorkflowSummaryItem("Environment", FormatMcpEnvironmentPreview(server.Env));
+        }
+
+        private int CountMcpToolsForServer(string serverName)
+        {
+            if (_McpToolManager == null)
+            {
+                return 0;
+            }
+
+            return _McpToolManager.GetToolDefinitions()
+                .Count(tool => tool.Name.StartsWith(serverName + ".", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static McpServerConfig CloneMcpServerConfig(McpServerConfig source)
+        {
+            return new McpServerConfig
+            {
+                Name = source.Name,
+                Command = source.Command,
+                Args = new List<string>(source.Args ?? new List<string>()),
+                Env = new Dictionary<string, string>(source.Env ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase)
+            };
+        }
+
+        private static string FormatMcpCommandPreview(McpServerConfig server)
+        {
+            if (server.Args == null || server.Args.Count == 0)
+            {
+                return server.Command;
+            }
+
+            return $"{server.Command} {FormatMcpArgs(server.Args)}";
+        }
+
+        private static string FormatMcpArgs(List<string>? args)
+        {
+            if (args == null || args.Count == 0)
+            {
+                return "(none)";
+            }
+
+            return string.Join(" ", args.Select(static arg =>
+                arg.IndexOf(' ') >= 0 ? $"\"{arg}\"" : arg));
+        }
+
+        private static string FormatMcpEnvironmentPreview(Dictionary<string, string>? env)
+        {
+            if (env == null || env.Count == 0)
+            {
+                return "(none)";
+            }
+
+            List<string> parts = new List<string>();
+            foreach (KeyValuePair<string, string> entry in env)
+            {
+                if (SettingsLoader.TryGetEnvironmentVariableName(entry.Value, out string variableName))
+                {
+                    parts.Add($"{entry.Key}=${{{variableName}}}");
+                }
+                else
+                {
+                    parts.Add($"{entry.Key}=<stored>");
+                }
+            }
+
+            return string.Join(", ", parts);
         }
 
         private static string GetEndpointBaseUrlExample(AdapterTypeEnum adapterType)
@@ -4245,7 +4639,7 @@ namespace Mux.Cli.Commands
             table.AddRow("[cyan]/system[/]", "Show the full current system prompt");
             table.AddRow("[cyan]/system[/] [dim]<text>[/]", "Replace system prompt for this session");
             table.AddRow("[cyan]/mcp list[/]", "List MCP server connections and status");
-            table.AddRow("[cyan]/mcp add[/] [dim]<name> <cmd>[/]", "Add an MCP server at runtime");
+            table.AddRow("[cyan]/mcp add[/] [dim][[name]] [[command]] [[args...]][/]", "Start the guided MCP server add wizard");
             table.AddRow("[cyan]/mcp remove[/] [dim]<name>[/]", "Remove an MCP server");
             table.AddRow("[cyan]/exit[/]", "Exit mux");
 
@@ -4307,32 +4701,39 @@ namespace Mux.Cli.Commands
             switch (subCommand)
             {
                 case "list":
-                    if (_McpToolManager == null)
+                    if (_McpServers.Count == 0)
                     {
                         WriteMarkupLine("[dim]No MCP servers configured.[/]");
                         return;
                     }
 
-                    List<(string Name, int ToolCount, bool Connected)> status = _McpToolManager.GetServerStatus();
-                    if (status.Count == 0)
+                    Dictionary<string, (int ToolCount, bool Connected)> serverStatus = new Dictionary<string, (int ToolCount, bool Connected)>(StringComparer.OrdinalIgnoreCase);
+                    if (_McpToolManager != null)
                     {
-                        WriteMarkupLine("[dim]No MCP servers connected.[/]");
-                        return;
+                        foreach ((string Name, int ToolCount, bool Connected) server in _McpToolManager.GetServerStatus())
+                        {
+                            serverStatus[server.Name] = (server.ToolCount, server.Connected);
+                        }
                     }
 
                     Table mcpTable = new Table();
                     mcpTable.AddColumn("Server");
+                    mcpTable.AddColumn("Command");
                     mcpTable.AddColumn("Tools");
                     mcpTable.AddColumn("Status");
 
-                    foreach ((string Name, int ToolCount, bool Connected) server in status)
+                    foreach (McpServerConfig server in _McpServers)
                     {
-                        string statusText = server.Connected
+                        (int ToolCount, bool Connected) status = serverStatus.TryGetValue(server.Name, out (int ToolCount, bool Connected) serverEntry)
+                            ? serverEntry
+                            : (0, false);
+                        string statusText = status.Connected
                             ? "[green]Connected[/]"
-                            : "[red]Disconnected[/]";
+                            : "[yellow]Not connected[/]";
                         mcpTable.AddRow(
                             Markup.Escape(server.Name),
-                            server.ToolCount.ToString(),
+                            Markup.Escape(FormatMcpCommandPreview(server)),
+                            status.ToolCount.ToString(),
                             statusText);
                     }
 
@@ -4349,42 +4750,34 @@ namespace Mux.Cli.Commands
                         return;
                     }
 
-                    if (subParts.Length < 3)
+                    McpServerConfig suggestedServer = new McpServerConfig
                     {
-                        WriteMarkupLine("[yellow]Usage: /mcp add <name> <command> [[args...]][/]");
+                        Name = subParts.Length > 1 ? subParts[1] : string.Empty,
+                        Command = subParts.Length > 2 ? subParts[2] : string.Empty,
+                        Args = subParts.Length > 3
+                            ? new List<string>(subParts.Skip(3))
+                            : new List<string>(),
+                        Env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    };
+
+                    if (!TryRunMcpAddWizard(suggestedServer, out McpServerConfig configuredServer))
+                    {
                         return;
-                    }
-
-                    string addName = subParts[1];
-                    string addCommand = subParts[2];
-                    List<string> addArgs = new List<string>();
-                    for (int i = 3; i < subParts.Length; i++)
-                    {
-                        addArgs.Add(subParts[i]);
-                    }
-
-                    if (_McpToolManager == null)
-                    {
-                        _McpToolManager = new McpToolManager(new List<McpServerConfig>());
                     }
 
                     try
                     {
-                        _McpToolManager.AddServerAsync(addName, addCommand, addArgs, CancellationToken.None)
-                            .GetAwaiter().GetResult();
-                        WriteMarkupLine($"[green]Added MCP server:[/] {Markup.Escape(addName)}");
-
-                        List<ToolDefinition> newTools = _McpToolManager.GetToolDefinitions();
-                        int toolCount = 0;
-                        foreach (ToolDefinition tool in newTools)
+                        AddAndPersistMcpServer(configuredServer);
+                        WriteOutputBlock(() =>
                         {
-                            if (tool.Name.StartsWith(addName + ".", StringComparison.OrdinalIgnoreCase))
-                            {
-                                toolCount++;
-                            }
-                        }
-
-                        WriteMarkupLine($"[dim]Discovered {toolCount} tools[/]");
+                            WriteWorkflowTitle("MCP Server Added");
+                            WriteWorkflowSummaryItem("Name", configuredServer.Name);
+                            WriteWorkflowSummaryItem("Command", FormatMcpCommandPreview(configuredServer));
+                            WriteWorkflowSummaryItem("Tools", CountMcpToolsForServer(configuredServer.Name).ToString());
+                            WriteWorkflowBlankLine();
+                            WriteWorkflowHint("The MCP server was connected for this session and saved to mcp-servers.json.");
+                            Console.WriteLine();
+                        }, outputEndsWithPromptSpacer: true);
                     }
                     catch (Exception ex)
                     {
@@ -4405,17 +4798,57 @@ namespace Mux.Cli.Commands
                     }
 
                     string removeName = subParts[1];
-
-                    if (_McpToolManager == null)
+                    McpServerConfig? existingServer = _McpServers.FirstOrDefault(server =>
+                        string.Equals(server.Name, removeName, StringComparison.OrdinalIgnoreCase));
+                    if (existingServer == null)
                     {
-                        WriteMarkupLine("[dim]No MCP servers configured.[/]");
+                        WriteMarkupLine($"[dim]No MCP server named {Markup.Escape(removeName)} was found.[/]");
+                        return;
+                    }
+
+                    bool confirmed = false;
+                    bool completed = RunConsoleWizard(() =>
+                    {
+                        WriteWorkflowTitle($"MCP Remove: {existingServer.Name}");
+                        WriteWorkflowHint("This deletes the saved MCP server definition from mcp-servers.json.");
+                        WriteWorkflowHint("Ctrl+C or type cancel to abort.");
+                        WriteWorkflowBlankLine();
+                        WriteWorkflowSummaryItem("Name", existingServer.Name);
+                        WriteWorkflowSummaryItem("Command", FormatMcpCommandPreview(existingServer));
+                        WriteWorkflowSummaryItem("Environment", FormatMcpEnvironmentPreview(existingServer.Env));
+                        WriteWorkflowBlankLine();
+
+                        if (!TryPromptYesNo($"Remove MCP server '{existingServer.Name}'", false, out bool removeServer))
+                        {
+                            return false;
+                        }
+
+                        if (!removeServer)
+                        {
+                            WriteWorkflowLine("[yellow]MCP removal cancelled; nothing was deleted.[/]");
+                            return false;
+                        }
+
+                        confirmed = true;
+                        return true;
+                    });
+
+                    if (!completed || !confirmed)
+                    {
                         return;
                     }
 
                     try
                     {
-                        _McpToolManager.RemoveServerAsync(removeName).GetAwaiter().GetResult();
-                        WriteMarkupLine($"[green]Removed MCP server:[/] {Markup.Escape(removeName)}");
+                        RemoveAndPersistMcpServer(existingServer.Name);
+                        WriteOutputBlock(() =>
+                        {
+                            WriteWorkflowTitle("MCP Server Removed");
+                            WriteWorkflowSummaryItem("Name", existingServer.Name);
+                            WriteWorkflowBlankLine();
+                            WriteWorkflowHint("The MCP server definition was removed from mcp-servers.json.");
+                            Console.WriteLine();
+                        }, outputEndsWithPromptSpacer: true);
                     }
                     catch (Exception ex)
                     {
@@ -4496,6 +4929,22 @@ namespace Mux.Cli.Commands
         private sealed class EndpointProbeSnapshot
         {
             public EndpointProbeSnapshot(bool success, long durationMs, string detail)
+            {
+                Success = success;
+                DurationMs = durationMs;
+                Detail = detail ?? string.Empty;
+            }
+
+            public bool Success { get; }
+
+            public long DurationMs { get; }
+
+            public string Detail { get; }
+        }
+
+        private sealed class McpProbeSnapshot
+        {
+            public McpProbeSnapshot(bool success, long durationMs, string detail)
             {
                 Success = success;
                 DurationMs = durationMs;

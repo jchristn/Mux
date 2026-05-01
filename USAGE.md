@@ -342,9 +342,12 @@ Runtime management:
 
 ```text
 /mcp list
-/mcp add myserver dotnet run -- ...
+/mcp add
+/mcp add github npx -y @modelcontextprotocol/server-github
 /mcp remove myserver
 ```
+
+`/mcp add` now runs a guided wizard similar to `/endpoint add`. Optional inline values seed the wizard defaults, and successful adds are saved to `mcp-servers.json` as well as connected for the current session.
 
 Skip MCP startup:
 

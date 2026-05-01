@@ -165,6 +165,40 @@ namespace Test.Xunit.Settings
 
         #endregion
 
+        #region MCP Servers
+
+        /// <summary>
+        /// Verifies that MCP server definitions persist and round-trip through mcp-servers.json.
+        /// </summary>
+        [Fact]
+        public void SaveMcpServers_RoundTripsDefinitions()
+        {
+            SettingsLoader.SaveMcpServers(new List<McpServerConfig>
+            {
+                new McpServerConfig
+                {
+                    Name = "github",
+                    Command = "npx",
+                    Args = new List<string> { "-y", "@modelcontextprotocol/server-github" },
+                    Env = new Dictionary<string, string>
+                    {
+                        ["GITHUB_TOKEN"] = "${GITHUB_TOKEN}"
+                    }
+                }
+            });
+
+            List<McpServerConfig> servers = SettingsLoader.LoadMcpServers();
+
+            Assert.Single(servers);
+            Assert.Equal("github", servers[0].Name);
+            Assert.Equal("npx", servers[0].Command);
+            Assert.Equal(2, servers[0].Args.Count);
+            Assert.Equal("@modelcontextprotocol/server-github", servers[0].Args[1]);
+            Assert.Equal("${GITHUB_TOKEN}", servers[0].Env["GITHUB_TOKEN"]);
+        }
+
+        #endregion
+
         #region LoadSettings
 
         /// <summary>

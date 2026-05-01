@@ -198,6 +198,28 @@ namespace Mux.Core.Settings
         }
 
         /// <summary>
+        /// Saves MCP server configurations to <c>~/.mux/mcp-servers.json</c>.
+        /// </summary>
+        /// <param name="servers">The MCP server configurations to persist.</param>
+        public static void SaveMcpServers(List<McpServerConfig> servers)
+        {
+            if (servers == null)
+            {
+                throw new ArgumentNullException(nameof(servers));
+            }
+
+            EnsureConfigDirectory();
+
+            McpServersFile file = new McpServersFile
+            {
+                Servers = servers
+            };
+
+            string json = JsonSerializer.Serialize(file, _JsonWriteOptions);
+            File.WriteAllText(Path.Combine(GetConfigDirectory(), "mcp-servers.json"), json);
+        }
+
+        /// <summary>
         /// Resolves the system prompt to use, checking sources in priority order:
         /// CLI flag override, settings file path, <c>~/.mux/system-prompt.md</c>, then the built-in default.
         /// </summary>

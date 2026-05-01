@@ -163,13 +163,40 @@ namespace Mux.Core.Tools
         /// <returns>A task representing the asynchronous operation.</returns>
         public async Task AddServerAsync(string name, string command, List<string> args, CancellationToken cancellationToken = default)
         {
+            await AddServerAsync(name, command, args, new Dictionary<string, string>(), cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Adds a new MCP server at runtime, launching its process and discovering tools.
+        /// </summary>
+        /// <param name="name">The unique name for the server.</param>
+        /// <param name="command">The executable command to launch.</param>
+        /// <param name="args">The command-line arguments.</param>
+        /// <param name="env">Environment variables to set for the server process.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        public async Task AddServerAsync(
+            string name,
+            string command,
+            List<string> args,
+            Dictionary<string, string> env,
+            CancellationToken cancellationToken = default)
+        {
             if (_Clients.ContainsKey(name))
             {
                 throw new InvalidOperationException($"MCP server '{name}' is already registered.");
             }
 
-            Dictionary<string, string> env = new Dictionary<string, string>();
-            await LaunchAndDiscoverAsync(name, command, args, env, cancellationToken).ConfigureAwait(false);
+            McpServerConfig config = new McpServerConfig
+            {
+                Name = name,
+                Command = command,
+                Args = new List<string>(args ?? new List<string>()),
+                Env = new Dictionary<string, string>(env ?? new Dictionary<string, string>())
+            };
+
+            await LaunchAndDiscoverAsync(name, command, config.Args, config.Env, cancellationToken).ConfigureAwait(false);
+            _Configs.Add(config);
         }
 
         /// <summary>
@@ -200,6 +227,7 @@ namespace Mux.Core.Tools
             }
 
             _ServerTools.Remove(name);
+            _Configs.RemoveAll(config => string.Equals(config.Name, name, StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>

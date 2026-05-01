@@ -17,7 +17,7 @@ namespace Test.Xunit.Commands
         [InlineData("[yellow]Usage: /compact, /compact [[summary|trim]], or /compact strategy [[summary|trim]][/]")]
         [InlineData("[yellow]Usage: /compact strategy [[summary|trim]][/]")]
         [InlineData("[cyan]/compact strategy[/] [dim][[summary|trim]][/]")]
-        [InlineData("[yellow]Usage: /mcp add <name> <command> [[args...]][/]")]
+        [InlineData("[cyan]/mcp add[/] [dim][[name]] [[command]] [[args...]][/]")]
         [InlineData("  Allow? [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ")]
         [InlineData("[yellow]Approval required:[/] write_file: sample [dim][[Y/n/always]]?[/]")]
         public void InteractiveHelpMarkup_IsValid(string markup)
