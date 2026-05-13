@@ -34,7 +34,8 @@
 ## Highlights
 
 - Backend-agnostic: one CLI for local and remote model runners
-- Built-in tools: file edit/read/write/delete, directory management, glob, grep, process execution
+- Built-in tools: file edit/read/write/delete, directory management, glob, grep, process execution, and rendered web retrieval
+- External web search: optional Tavily and You.com providers expose `web_search` for result discovery
 - Shell-aware process execution metadata: `run_process` tells the model which OS and shell it will run under
 - MCP extensible in interactive mode: external tool servers appear beside built-in tools
 - Simpler interactive REPL: prompt entry supports multi-line editing and paste while idle, blocks while mux is running, has no queued follow-up prompt mode, and supports `Esc` cancellation for the active generation
@@ -140,6 +141,11 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 /endpoint add                     Start the guided endpoint creation wizard
 /endpoint edit <name>             Start the guided endpoint edit wizard
 /endpoint remove <name>           Remove an endpoint from endpoints.json after confirmation
+/search                           List external search providers and global search status
+/search add [name]                Start the guided external search provider add wizard
+/search show <name>               Show external search provider details
+/search edit <name>               Start the guided external search provider edit wizard
+/search remove <name>             Remove an external search provider from settings.json
 /tools                            List available tools
 /status                           Show session metadata, title, and estimated context usage
 /context                          Alias for /status
@@ -160,6 +166,8 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 ```
 
 Endpoint management happens directly against `endpoints.json`. `show` performs a lightweight probe of the configured endpoint. `add` and `edit` run guided workflows that prompt for the adapter, base URL, model, auth mode (`none`, `bearer token`, or `custom headers`), default status, and optional advanced settings before probing and saving.
+
+External search management happens directly against `settings.json`. `/search add` configures Tavily or You.com search providers, stores API keys directly or as environment-variable references, and enables the `web_search` tool when at least one enabled provider is fully configured. `web_search` is for discovering candidate results; fetching the actual contents of a known URL is handled by `web_retrieve`.
 
 MCP server management happens directly against `mcp-servers.json`. `/mcp add` runs a guided workflow that lets you choose `stdio` or HTTP transport. Optional inline values seed the wizard defaults: a `command` plus `args` for `stdio`, or a base URL plus optional MCP path for HTTP. Successful adds are connected for the current session and saved for future sessions.
 
@@ -184,7 +192,18 @@ During generation, `Esc` cancels the active run. If a tool approval is needed, m
 mux> read README.md and suggest improvements
 mux> refactor the UserService class to be async
 mux> run the tests and fix failures
+mux> retrieve https://example.com and summarize the returned text
+mux> search the web for recent mux release notes, then retrieve the most relevant result
 ```
+
+### Web Search And Retrieval
+
+`mux` exposes two separate web tools when tool calling is enabled for the selected endpoint:
+
+- `web_retrieve` fetches a specific HTTP or HTTPS URL with a headless Playwright browser and returns rendered text, title, final URL, status, content type, and optional HTML. It supports Chromium by default and Firefox by request. If the requested Playwright browser is not installed, mux asks Playwright to install it on demand.
+- `web_search` searches the public web through configured external providers and returns structured candidate results with URLs and snippets. Tavily and You.com are supported. The tool is exposed only when external search is enabled and at least one enabled provider is fully configured.
+
+Use `web_search` to discover what exists. Use `web_retrieve` to inspect a selected URL or any URL you already know.
 
 ### Single-Shot Examples
 

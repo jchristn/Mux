@@ -70,12 +70,21 @@ mux> create a file called hello.py that prints "hello world", then read it back 
 
 You should see tool calls such as `write_file` and `read_file`.
 
+Web retrieval test:
+
+```text
+mux> retrieve https://example.com and summarize the returned text
+```
+
+You should see a `web_retrieve` tool call. The first retrieval may download the Playwright browser used for headless page rendering.
+
 ## Useful First Commands
 
 Interactive:
 
 ```text
 /endpoint
+/search
 /tools
 /clear
 /exit
@@ -141,6 +150,22 @@ Use one:
 
 ```bash
 mux --endpoint openai-gpt4o
+```
+
+## Configure Web Search
+
+`web_retrieve` works without provider configuration and fetches known URLs through a headless browser. Public web discovery uses `web_search`, which requires an external provider.
+
+Interactive setup:
+
+```text
+/search add
+```
+
+The wizard supports Tavily and You.com. Store API keys directly or as environment-variable references such as `${TAVILY_API_KEY}` or `${YOU_API_KEY}`. After setup, prompts can combine discovery and retrieval:
+
+```text
+mux> search the web for mux GitHub releases, then retrieve the most relevant result
 ```
 
 ## Next Steps
