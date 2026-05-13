@@ -4510,17 +4510,14 @@ namespace Mux.Cli.Commands
             table.AddColumn("[bold]Description[/]");
             table.AddColumn("[bold]Source[/]");
 
-            table.AddRow("read_file", "Read file contents from disk", "[green]built-in[/]");
-            table.AddRow("write_file", "Write content to a file", "[green]built-in[/]");
-            table.AddRow("edit_file", "Apply a search-and-replace edit to a file", "[green]built-in[/]");
-            table.AddRow("multi_edit", "Apply multiple edits to a file atomically", "[green]built-in[/]");
-            table.AddRow("delete_file", "Delete a file from disk", "[green]built-in[/]");
-            table.AddRow("file_metadata", "Read file/directory metadata (size, timestamps)", "[green]built-in[/]");
-            table.AddRow("list_directory", "List files and directories at a path", "[green]built-in[/]");
-            table.AddRow("manage_directory", "Create, delete, or rename directories", "[green]built-in[/]");
-            table.AddRow("glob", "Find files matching a glob pattern", "[green]built-in[/]");
-            table.AddRow("grep", "Search file contents using regex patterns", "[green]built-in[/]");
-            table.AddRow("run_process", "Execute a shell command", "[green]built-in[/]");
+            BuiltInToolRegistry toolRegistry = new BuiltInToolRegistry(_MuxSettings);
+            foreach (ToolDefinition tool in toolRegistry.GetToolDefinitions())
+            {
+                table.AddRow(
+                    Markup.Escape(tool.Name),
+                    Markup.Escape(tool.Description),
+                    "[green]built-in[/]");
+            }
 
             if (_McpToolManager != null)
             {
