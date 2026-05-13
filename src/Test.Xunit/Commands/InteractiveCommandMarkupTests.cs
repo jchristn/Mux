@@ -17,6 +17,8 @@ namespace Test.Xunit.Commands
         [InlineData("[yellow]Usage: /compact, /compact [[summary|trim]], or /compact strategy [[summary|trim]][/]")]
         [InlineData("[yellow]Usage: /compact strategy [[summary|trim]][/]")]
         [InlineData("[cyan]/compact strategy[/] [dim][[summary|trim]][/]")]
+        [InlineData("[cyan]/help[/], [cyan]/?[/]")]
+        [InlineData("[cyan]/search add[/] [dim][[name]][/]")]
         [InlineData("[cyan]/mcp add[/] [dim][[name]] [[command-or-url]] [[args-or-path...]][/]")]
         [InlineData("  Allow? [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ")]
         [InlineData("[yellow]Approval required:[/] write_file: sample [dim][[Y/n/always]]?[/]")]

@@ -4805,7 +4805,7 @@ namespace Mux.Cli.Commands
             table.AddRow("[cyan]/system[/] [dim]<text>[/]", "Replace system prompt for this session");
             table.AddRow("[cyan]/search[/], [cyan]/search list[/]", "List external search providers and global search status");
             table.AddRow("[cyan]/search show[/] [dim]<name>[/]", "Show external search provider details");
-            table.AddRow("[cyan]/search add[/] [dim][name][/]", "Start the guided external search provider add wizard");
+            table.AddRow("[cyan]/search add[/] [dim][[name]][/]", "Start the guided external search provider add wizard");
             table.AddRow("[cyan]/search edit[/] [dim]<name>[/]", "Start the guided external search provider edit wizard");
             table.AddRow("[cyan]/search remove[/] [dim]<name>[/]", "Remove an external search provider from settings.json");
             table.AddRow("[cyan]/mcp list[/]", "List MCP server connections and status");
