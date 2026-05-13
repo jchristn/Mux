@@ -63,6 +63,8 @@ namespace Mux.Cli.Commands
         private ApprovalPolicyEnum _ApprovalPolicy = ApprovalPolicyEnum.Ask;
         private string _WorkingDirectory = string.Empty;
         private string _SystemPrompt = string.Empty;
+        private string? _ConfiguredSystemPromptPath = null;
+        private bool _SystemPromptOverriddenInSession = false;
         private bool _Verbose = false;
         private bool _ShouldExit = false;
         private bool _AssistantTextOpen = false;
@@ -129,35 +131,8 @@ namespace Mux.Cli.Commands
                 settings.MaxTokens);
 
             _WorkingDirectory = settings.WorkingDirectory ?? Directory.GetCurrentDirectory();
-
-            BuiltInToolRegistry toolRegistry = new BuiltInToolRegistry(_MuxSettings);
-            List<ToolDefinition> builtInTools = toolRegistry.GetToolDefinitions();
-            bool toolsEnabled = _CurrentEndpoint.Quirks?.SupportsTools ?? true;
-
-            StringBuilder toolDescBuilder = new StringBuilder();
-            if (toolsEnabled)
-            {
-                foreach (ToolDefinition tool in builtInTools)
-                {
-                    toolDescBuilder.AppendLine($"- {tool.Name}: {tool.Description}");
-                }
-            }
-
-            _SystemPrompt = SettingsLoader.LoadSystemPrompt(settings.SystemPrompt, _MuxSettings);
-
-            if (!toolsEnabled)
-            {
-                _SystemPrompt = "You are mux, an AI assistant. You help the user by reading, writing, and editing data including documents, code, and other types " +
-                    "in their project.\n\n" +
-                    "Your current working directory is: {WorkingDirectory}\n\n" +
-                    "Guidelines:\n" +
-                    "- Explain your reasoning when making non-trivial suggestions.\n" +
-                    "- If a task is ambiguous, ask for clarification before proceeding.";
-            }
-
-            _SystemPrompt = _SystemPrompt
-                .Replace("{WorkingDirectory}", _WorkingDirectory)
-                .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd());
+            _ConfiguredSystemPromptPath = settings.SystemPrompt;
+            _SystemPrompt = BuildSystemPromptForEndpoint(_CurrentEndpoint, _WorkingDirectory, _MuxSettings, _ConfiguredSystemPromptPath);
 
             _ApprovalPolicy = ResolveApprovalPolicy(settings, _MuxSettings);
             TryClearInteractiveScreen();
@@ -2689,45 +2664,97 @@ namespace Mux.Cli.Commands
 
         private void HandleEndpointSwitchCommand(string targetName)
         {
+            targetName = targetName.Trim();
+            if (!TryResolveEndpointSwitchTarget(_AllEndpoints, targetName, out EndpointConfig? found, out string errorMessage))
+            {
+                WriteFailureLine(errorMessage);
+                return;
+            }
+
             if (!EnsureQueueEmptyForStateChange("switch endpoints"))
             {
                 return;
             }
 
-            targetName = targetName.Trim();
-            EndpointConfig? found = _AllEndpoints
-                .FirstOrDefault((EndpointConfig e) => string.Equals(e.Name, targetName, StringComparison.OrdinalIgnoreCase));
+            _CurrentEndpoint = found!;
+            RefreshEndpointDependentSystemPrompt();
+            ResetConversationState();
+            WriteOutputBlock(() =>
+            {
+                WriteWorkflowTitle("Endpoint Switched");
+                WriteWorkflowSummaryItem("Name", found!.Name);
+                WriteWorkflowSummaryItem("Model", found.Model);
+                WriteWorkflowSummaryItem("Adapter", found.AdapterType.ToString());
+                WriteWorkflowSummaryItem("Base URL", found.BaseUrl);
+                WriteWorkflowBlankLine();
+                WriteWorkflowHint("Conversation history cleared.");
+                Console.WriteLine();
+            }, outputEndsWithPromptSpacer: true);
+        }
 
-            if (found != null)
+        internal static bool TryResolveEndpointSwitchTarget(
+            IEnumerable<EndpointConfig> endpoints,
+            string targetName,
+            out EndpointConfig? endpoint,
+            out string errorMessage)
+        {
+            string normalizedTarget = (targetName ?? string.Empty).Trim();
+            endpoint = endpoints.FirstOrDefault((EndpointConfig e) => string.Equals(e.Name, normalizedTarget, StringComparison.OrdinalIgnoreCase));
+
+            if (endpoint == null)
             {
-                _CurrentEndpoint = found;
-                ResetConversationState();
-                WriteOutputBlock(() =>
-                {
-                    WriteWorkflowTitle("Endpoint Switched");
-                    WriteWorkflowSummaryItem("Name", found.Name);
-                    WriteWorkflowSummaryItem("Model", found.Model);
-                    WriteWorkflowSummaryItem("Adapter", found.AdapterType.ToString());
-                    WriteWorkflowSummaryItem("Base URL", found.BaseUrl);
-                    WriteWorkflowBlankLine();
-                    WriteWorkflowHint("Conversation history cleared.");
-                    Console.WriteLine();
-                }, outputEndsWithPromptSpacer: true);
+                errorMessage = $"No endpoint named '{normalizedTarget}' is configured.";
+                return false;
             }
-            else
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        internal static string BuildSystemPromptForEndpoint(
+            EndpointConfig endpoint,
+            string workingDirectory,
+            MuxSettings muxSettings,
+            string? systemPromptPath)
+        {
+            BuiltInToolRegistry toolRegistry = new BuiltInToolRegistry(muxSettings);
+            List<ToolDefinition> builtInTools = toolRegistry.GetToolDefinitions();
+            bool toolsEnabled = endpoint.Quirks?.SupportsTools ?? true;
+
+            StringBuilder toolDescBuilder = new StringBuilder();
+            if (toolsEnabled)
             {
-                _CurrentEndpoint.Model = targetName;
-                ResetConversationState();
-                WriteOutputBlock(() =>
+                foreach (ToolDefinition tool in builtInTools)
                 {
-                    WriteWorkflowTitle("Endpoint Model Override");
-                    WriteWorkflowSummaryItem("Model", targetName);
-                    WriteWorkflowSummaryItem("Endpoint", _CurrentEndpoint.Name);
-                    WriteWorkflowBlankLine();
-                    WriteWorkflowHint("Conversation history cleared.");
-                    Console.WriteLine();
-                }, outputEndsWithPromptSpacer: true);
+                    toolDescBuilder.AppendLine($"- {tool.Name}: {tool.Description}");
+                }
             }
+
+            string systemPrompt = SettingsLoader.LoadSystemPrompt(systemPromptPath, muxSettings);
+
+            if (!toolsEnabled)
+            {
+                systemPrompt = "You are mux, an AI assistant. You help the user by reading, writing, and editing data including documents, code, and other types " +
+                    "in their project.\n\n" +
+                    "Your current working directory is: {WorkingDirectory}\n\n" +
+                    "Guidelines:\n" +
+                    "- Explain your reasoning when making non-trivial suggestions.\n" +
+                    "- If a task is ambiguous, ask for clarification before proceeding.";
+            }
+
+            return systemPrompt
+                .Replace("{WorkingDirectory}", workingDirectory)
+                .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd());
+        }
+
+        private void RefreshEndpointDependentSystemPrompt()
+        {
+            if (_SystemPromptOverriddenInSession)
+            {
+                return;
+            }
+
+            _SystemPrompt = BuildSystemPromptForEndpoint(_CurrentEndpoint, _WorkingDirectory, _MuxSettings, _ConfiguredSystemPromptPath);
         }
 
         private void HandleEndpointShowCommand(string endpointName)
@@ -4758,6 +4785,7 @@ namespace Mux.Cli.Commands
                 }
 
                 _SystemPrompt = argument;
+                _SystemPromptOverriddenInSession = true;
                 WriteMarkupLine("[green]System prompt updated for this session.[/]");
             }
             else
@@ -4783,7 +4811,7 @@ namespace Mux.Cli.Commands
 
             table.AddRow("[cyan]/help[/], [cyan]/?[/]", "Show this help message");
             table.AddRow("[cyan]/endpoint[/], [cyan]/endpoint list[/]", "List all configured endpoints with current one highlighted");
-            table.AddRow("[cyan]/endpoint[/] [dim]<name>[/]", "Switch to a named endpoint or treat the value as a model override");
+            table.AddRow("[cyan]/endpoint[/] [dim]<name>[/]", "Switch to a named endpoint");
             table.AddRow("[cyan]/endpoint show[/] [dim]<name>[/]", "Show endpoint details and probe connectivity");
             table.AddRow("[cyan]/endpoint add[/]", "Start the guided endpoint creation wizard");
             table.AddRow("[cyan]/endpoint edit[/] [dim]<name>[/]", "Start the guided endpoint edit wizard");

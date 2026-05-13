@@ -19,7 +19,9 @@ namespace Test.Xunit.Tools
             BuiltInToolRegistry registry = new BuiltInToolRegistry();
 
             Assert.False(registry.HasTool("web_search"));
+            Assert.True(registry.HasTool("web_retrieve"));
             Assert.DoesNotContain(registry.GetToolDefinitions(), tool => tool.Name == "web_search");
+            Assert.Contains(registry.GetToolDefinitions(), tool => tool.Name == "web_retrieve");
         }
 
         /// <summary>

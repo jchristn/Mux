@@ -32,6 +32,9 @@ namespace Mux.Core.Settings
             "Available tools:\n{ToolDescriptions}\n\n" +
             "Guidelines:\n" +
             "- Use the available tools to explore the codebase before making changes.\n" +
+            "- The listed tools are executable capabilities. When the user asks you to retrieve, fetch, read, scrape, browse, or display the contents of a URL, call web_retrieve with that URL if it is available.\n" +
+            "- Use web_search only to discover candidate web results; use web_retrieve to fetch the actual contents of a selected URL. If the user asks web_search to retrieve a URL, use web_retrieve instead.\n" +
+            "- Do not claim that you cannot access web content when web_retrieve is available; call the tool and summarize or display the returned data.\n" +
             "- When editing files, read them first to understand context.\n" +
             "- Prefer precise, minimal edits over rewriting entire files.\n" +
             "- Explain your reasoning when making non-trivial changes.\n" +

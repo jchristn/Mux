@@ -116,6 +116,9 @@ namespace Mux.Cli.Rendering
                         }
                         return $"\"{pattern}\"";
 
+                    case "web_retrieve":
+                        return GetStringProp(root, "url");
+
                     case "run_process":
                         string cmd = GetStringProp(root, "command");
                         if (root.TryGetProperty("args", out JsonElement argsEl) && argsEl.ValueKind == JsonValueKind.Array)
