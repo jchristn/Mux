@@ -310,6 +310,10 @@ namespace Test.Xunit.Settings
             Assert.Equal("summary", settings.CompactionStrategy);
             Assert.Equal(3, settings.CompactionPreserveTurns);
             Assert.Equal(25, settings.MaxAgentIterations);
+            Assert.NotNull(settings.ExternalSearch);
+            Assert.False(settings.ExternalSearch.Enabled);
+            Assert.True(settings.ExternalSearch.AllowFallback);
+            Assert.Empty(settings.ExternalSearch.Providers);
         }
 
         /// <summary>
@@ -331,6 +335,80 @@ namespace Test.Xunit.Settings
             Assert.Equal(50, settings.ContextWarningThresholdPercent);
             Assert.Equal("summary", settings.CompactionStrategy);
             Assert.Equal(10, settings.CompactionPreserveTurns);
+        }
+
+        /// <summary>
+        /// Verifies that external search settings round-trip through settings.json and normalize default providers.
+        /// </summary>
+        [Fact]
+        public void SaveSettings_ExternalSearch_RoundTripsAndNormalizes()
+        {
+            MuxSettings settings = new MuxSettings
+            {
+                ExternalSearch = new ExternalSearchSettings
+                {
+                    Enabled = true,
+                    AllowFallback = false,
+                    Providers = new List<ExternalSearchProviderConfig>
+                    {
+                        new ExternalSearchProviderConfig
+                        {
+                            Name = "primary-tavily",
+                            ProviderType = "tavily",
+                            Endpoint = "https://api.tavily.com/search",
+                            ApiKey = "${TAVILY_API_KEY}",
+                            Enabled = true,
+                            IsDefault = true,
+                            TimeoutMs = 45000
+                        },
+                        new ExternalSearchProviderConfig
+                        {
+                            Name = "backup-you",
+                            ProviderType = "you",
+                            Endpoint = "https://ydc-index.io/v1/search",
+                            ApiKey = "${YOU_API_KEY}",
+                            Enabled = true,
+                            IsDefault = true,
+                            TimeoutMs = 30000
+                        }
+                    }
+                }
+            };
+
+            SettingsLoader.SaveSettings(settings);
+            MuxSettings loaded = SettingsLoader.LoadSettings();
+
+            Assert.True(loaded.ExternalSearch.Enabled);
+            Assert.False(loaded.ExternalSearch.AllowFallback);
+            Assert.Equal(2, loaded.ExternalSearch.Providers.Count);
+            Assert.Equal("primary-tavily", loaded.ExternalSearch.Providers[0].Name);
+            Assert.True(loaded.ExternalSearch.Providers[0].IsDefault);
+            Assert.False(loaded.ExternalSearch.Providers[1].IsDefault);
+            Assert.Equal("${TAVILY_API_KEY}", loaded.ExternalSearch.Providers[0].ApiKey);
+            Assert.Equal(45000, loaded.ExternalSearch.Providers[0].TimeoutMs);
+        }
+
+        /// <summary>
+        /// Verifies that settings files missing the externalSearch node still hydrate defaults.
+        /// </summary>
+        [Fact]
+        public void LoadSettings_MissingExternalSearch_UsesDefaults()
+        {
+            string json = @"{
+                ""defaultApprovalPolicy"": ""auto"",
+                ""maxAgentIterations"": 40
+            }";
+
+            File.WriteAllText(Path.Combine(_TempDir, "settings.json"), json);
+
+            MuxSettings settings = SettingsLoader.LoadSettings();
+
+            Assert.Equal("auto", settings.DefaultApprovalPolicy);
+            Assert.Equal(40, settings.MaxAgentIterations);
+            Assert.NotNull(settings.ExternalSearch);
+            Assert.False(settings.ExternalSearch.Enabled);
+            Assert.True(settings.ExternalSearch.AllowFallback);
+            Assert.Empty(settings.ExternalSearch.Providers);
         }
 
         #endregion

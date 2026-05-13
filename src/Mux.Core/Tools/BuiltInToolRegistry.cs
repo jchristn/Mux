@@ -7,6 +7,7 @@ namespace Mux.Core.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Search;
     using Mux.Core.Tools.Tools;
 
     /// <summary>
@@ -27,7 +28,7 @@ namespace Mux.Core.Tools
         /// Initializes a new instance of the <see cref="BuiltInToolRegistry"/> class,
         /// registering all built-in tool implementations.
         /// </summary>
-        public BuiltInToolRegistry()
+        public BuiltInToolRegistry(MuxSettings? muxSettings = null)
         {
             RegisterTool(new ReadFileTool());
             RegisterTool(new WriteFileTool());
@@ -40,6 +41,11 @@ namespace Mux.Core.Tools
             RegisterTool(new GlobTool());
             RegisterTool(new GrepTool());
             RegisterTool(new RunProcessTool());
+
+            if (WebSearchServiceFactory.Create(muxSettings) is { } searchService)
+            {
+                RegisterTool(new WebSearchTool(searchService));
+            }
         }
 
         #endregion

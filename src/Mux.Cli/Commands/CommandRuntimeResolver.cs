@@ -80,7 +80,7 @@ namespace Mux.Cli.Commands
             List<string> cliOverrides = GetCliOverrides(settings);
             string endpointSelectionSource = GetEndpointSelectionSource(endpoints, settings.Endpoint);
 
-            BuiltInToolRegistry toolRegistry = new BuiltInToolRegistry();
+            BuiltInToolRegistry toolRegistry = new BuiltInToolRegistry(muxSettings);
             List<ToolDefinition> builtInTools = toolRegistry.GetToolDefinitions();
             bool toolsEnabled = endpoint.Quirks?.SupportsTools ?? true;
             int builtInToolCount = builtInTools.Count;

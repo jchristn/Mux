@@ -31,7 +31,7 @@ namespace Mux.Cli.Commands
     /// <summary>
     /// Interactive REPL command with blocking prompt entry and cancellable active runs.
     /// </summary>
-    public class InteractiveCommand : AsyncCommand<InteractiveSettings>
+    public partial class InteractiveCommand : AsyncCommand<InteractiveSettings>
     {
         #region Private-Members
 
@@ -130,7 +130,7 @@ namespace Mux.Cli.Commands
 
             _WorkingDirectory = settings.WorkingDirectory ?? Directory.GetCurrentDirectory();
 
-            BuiltInToolRegistry toolRegistry = new BuiltInToolRegistry();
+            BuiltInToolRegistry toolRegistry = new BuiltInToolRegistry(_MuxSettings);
             List<ToolDefinition> builtInTools = toolRegistry.GetToolDefinitions();
             bool toolsEnabled = _CurrentEndpoint.Quirks?.SupportsTools ?? true;
 
@@ -760,6 +760,7 @@ namespace Mux.Cli.Commands
             AgentLoopOptions loopOptions = new AgentLoopOptions(runEndpoint)
             {
                 ConversationHistory = _ConversationHistory,
+                MuxSettings = _MuxSettings,
                 SystemPrompt = _SystemPrompt,
                 ApprovalPolicy = _ApprovalPolicy,
                 WorkingDirectory = _WorkingDirectory,
@@ -1624,7 +1625,7 @@ namespace Mux.Cli.Commands
                 return new List<ToolDefinition>();
             }
 
-            BuiltInToolRegistry toolRegistry = new BuiltInToolRegistry();
+            BuiltInToolRegistry toolRegistry = new BuiltInToolRegistry(_MuxSettings);
             List<ToolDefinition> tools = toolRegistry.GetToolDefinitions();
 
             if (_McpToolManager != null)
@@ -2571,6 +2572,10 @@ namespace Mux.Cli.Commands
 
                 case "/mcp":
                     HandleMcpCommand(argument);
+                    return true;
+
+                case "/search":
+                    HandleSearchCommand(argument);
                     return true;
 
                 case "/help":
@@ -4798,6 +4803,11 @@ namespace Mux.Cli.Commands
             table.AddRow("[cyan]/clear[/]", "Clear conversation history");
             table.AddRow("[cyan]/system[/]", "Show the full current system prompt");
             table.AddRow("[cyan]/system[/] [dim]<text>[/]", "Replace system prompt for this session");
+            table.AddRow("[cyan]/search[/], [cyan]/search list[/]", "List external search providers and global search status");
+            table.AddRow("[cyan]/search show[/] [dim]<name>[/]", "Show external search provider details");
+            table.AddRow("[cyan]/search add[/] [dim][name][/]", "Start the guided external search provider add wizard");
+            table.AddRow("[cyan]/search edit[/] [dim]<name>[/]", "Start the guided external search provider edit wizard");
+            table.AddRow("[cyan]/search remove[/] [dim]<name>[/]", "Remove an external search provider from settings.json");
             table.AddRow("[cyan]/mcp list[/]", "List MCP server connections and status");
             table.AddRow("[cyan]/mcp add[/] [dim][[name]] [[command-or-url]] [[args-or-path...]][/]", "Start the guided MCP server add wizard");
             table.AddRow("[cyan]/mcp remove[/] [dim]<name>[/]", "Remove an MCP server");

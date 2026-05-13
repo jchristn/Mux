@@ -10,4 +10,8 @@
     <PackageReference Include="Voltaic" Version="0.1.11" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Mux.Search\Mux.Search.csproj" />
+  </ItemGroup>
+
 </Project>

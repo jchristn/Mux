@@ -42,6 +42,7 @@ namespace Mux.Core.Agent
         private Func<ToolCall, Task<string>>? _PromptUserFunc = null;
         private Func<string, JsonElement, string, CancellationToken, Task<ToolResult>>? _ExternalToolExecutor = null;
         private Action<int, int, string>? _OnRetry = null;
+        private MuxSettings _MuxSettings = new MuxSettings();
 
         #endregion
 
@@ -307,6 +308,15 @@ namespace Mux.Core.Agent
         {
             get => _OnRetry;
             set => _OnRetry = value;
+        }
+
+        /// <summary>
+        /// Effective mux settings for this run, including optional external-search configuration.
+        /// </summary>
+        public MuxSettings MuxSettings
+        {
+            get => _MuxSettings;
+            set => _MuxSettings = value ?? new MuxSettings();
         }
 
         #endregion

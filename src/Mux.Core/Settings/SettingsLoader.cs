@@ -176,6 +176,23 @@ namespace Mux.Core.Settings
         }
 
         /// <summary>
+        /// Saves the global mux settings to <c>~/.mux/settings.json</c>.
+        /// </summary>
+        /// <param name="settings">The mux settings to persist.</param>
+        public static void SaveSettings(MuxSettings settings)
+        {
+            if (settings == null)
+            {
+                throw new ArgumentNullException(nameof(settings));
+            }
+
+            EnsureConfigDirectory();
+            MuxSettings normalized = NormalizeSettingsForPersistence(settings);
+            string json = JsonSerializer.Serialize(normalized, _JsonWriteOptions);
+            File.WriteAllText(Path.Combine(GetConfigDirectory(), "settings.json"), json);
+        }
+
+        /// <summary>
         /// Loads the list of MCP server configurations from <c>~/.mux/mcp-servers.json</c>.
         /// </summary>
         /// <returns>A list of <see cref="McpServerConfig"/> instances, or an empty list if the file does not exist.</returns>
@@ -562,6 +579,77 @@ namespace Mux.Core.Settings
                 normalized[0].IsDefault = true;
             }
 
+            return normalized;
+        }
+
+        private static MuxSettings NormalizeSettingsForPersistence(MuxSettings settings)
+        {
+            MuxSettings normalized = new MuxSettings
+            {
+                SystemPromptPath = settings.SystemPromptPath,
+                DefaultApprovalPolicy = settings.DefaultApprovalPolicy,
+                ToolTimeoutMs = settings.ToolTimeoutMs,
+                ProcessTimeoutMs = settings.ProcessTimeoutMs,
+                ContextWindowSafetyMarginPercent = settings.ContextWindowSafetyMarginPercent,
+                TokenEstimationRatio = settings.TokenEstimationRatio,
+                AutoCompactEnabled = settings.AutoCompactEnabled,
+                ContextWarningThresholdPercent = settings.ContextWarningThresholdPercent,
+                CompactionStrategy = settings.CompactionStrategy,
+                CompactionPreserveTurns = settings.CompactionPreserveTurns,
+                MaxAgentIterations = settings.MaxAgentIterations,
+                ExternalSearch = NormalizeExternalSearchSettings(settings.ExternalSearch)
+            };
+
+            return normalized;
+        }
+
+        private static ExternalSearchSettings NormalizeExternalSearchSettings(ExternalSearchSettings settings)
+        {
+            ExternalSearchSettings normalized = new ExternalSearchSettings
+            {
+                Enabled = settings?.Enabled ?? false,
+                AllowFallback = settings?.AllowFallback ?? true
+            };
+
+            List<ExternalSearchProviderConfig> providers = new List<ExternalSearchProviderConfig>();
+            bool defaultAssigned = false;
+
+            foreach (ExternalSearchProviderConfig provider in settings?.Providers ?? new List<ExternalSearchProviderConfig>())
+            {
+                if (provider == null)
+                {
+                    continue;
+                }
+
+                ExternalSearchProviderConfig copy = new ExternalSearchProviderConfig
+                {
+                    Name = provider.Name,
+                    ProviderType = provider.ProviderType,
+                    Endpoint = provider.Endpoint,
+                    ApiKey = provider.ApiKey,
+                    Enabled = provider.Enabled,
+                    IsDefault = provider.Enabled && provider.IsDefault && !defaultAssigned,
+                    TimeoutMs = provider.TimeoutMs
+                };
+
+                if (copy.IsDefault)
+                {
+                    defaultAssigned = true;
+                }
+
+                providers.Add(copy);
+            }
+
+            if (!defaultAssigned)
+            {
+                ExternalSearchProviderConfig? firstEnabled = providers.FirstOrDefault(provider => provider.Enabled);
+                if (firstEnabled != null)
+                {
+                    firstEnabled.IsDefault = true;
+                }
+            }
+
+            normalized.Providers = providers;
             return normalized;
         }
 

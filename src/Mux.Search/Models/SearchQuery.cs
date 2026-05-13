@@ -76,7 +76,7 @@ namespace Mux.Search.Models
         /// </summary>
         /// <param name="values">Input values.</param>
         /// <returns>A normalized list.</returns>
-        protected static List<string> NormalizeValues(IEnumerable<string>? values)
+        public static List<string> NormalizeValues(IEnumerable<string>? values)
         {
             return values is null
                 ? new List<string>()
