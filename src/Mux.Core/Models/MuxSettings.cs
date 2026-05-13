@@ -21,6 +21,7 @@ namespace Mux.Core.Models
         private string _CompactionStrategy = "summary";
         private int _CompactionPreserveTurns = 3;
         private int _MaxAgentIterations = 25;
+        private ExternalSearchSettings _ExternalSearch = new ExternalSearchSettings();
 
         #endregion
 
@@ -159,6 +160,16 @@ namespace Mux.Core.Models
         {
             get => _MaxAgentIterations;
             set => _MaxAgentIterations = Math.Clamp(value, 1, 100);
+        }
+
+        /// <summary>
+        /// External web-search provider configuration.
+        /// </summary>
+        [JsonPropertyName("externalSearch")]
+        public ExternalSearchSettings ExternalSearch
+        {
+            get => _ExternalSearch;
+            set => _ExternalSearch = value ?? new ExternalSearchSettings();
         }
 
         #endregion

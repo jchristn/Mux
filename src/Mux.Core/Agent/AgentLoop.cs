@@ -46,7 +46,7 @@ namespace Mux.Core.Agent
             _Options = options ?? throw new ArgumentNullException(nameof(options));
             _LlmClient = new LlmClient(options.Endpoint);
             _LlmClient.OnRetry = options.OnRetry;
-            _ToolRegistry = new BuiltInToolRegistry();
+            _ToolRegistry = new BuiltInToolRegistry(options.MuxSettings);
             _ApprovalHandler = new ApprovalHandler(options.ApprovalPolicy);
         }
 

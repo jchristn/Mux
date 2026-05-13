@@ -6,12 +6,15 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- Built-in `web_retrieve` tool for fetching rendered URL content through headless Playwright Chromium or Firefox, with browser installation handled on demand
+- External web search integration through the `web_search` tool, configurable with Tavily and You.com providers from `settings.json` or the interactive `/search` wizard
 - `mux endpoint list` and `mux endpoint show <name>` as top-level non-interactive commands, including machine-readable `json` output for stored endpoint inspection with redacted secret-like header values
 - `ARMADA.md` as a focused integration guide for orchestrator consumers, plus a tightened `ARMADA_IMPROVEMENTS.md` plan that reflects the current CLI/runtime surface
 
 ### Removed
 
 - Interactive queued-message support, `/queue` commands, and `Alt+Up` queued-prompt editing from the current REPL flow
+- Interactive `/endpoint <name>` model-override fallback; unknown endpoint names now produce an error and leave the selected endpoint unchanged
 
 ### Changed
 
@@ -19,12 +22,14 @@ All notable changes to mux are documented here.
 - `mux print`, `mux probe`, and `mux endpoint` now support `--config-dir <path>` as a first-class config-root override, with precedence over `MUX_CONFIG_DIR`
 - `mux probe --require-tools` now fails when the selected endpoint disables tool calling
 - `/mcp add` now runs a guided wizard similar to `/endpoint add`, supports both `stdio` and HTTP MCP transports, accepts optional inline defaults, and saves MCP server definitions to `mcp-servers.json`
+- `/endpoint <name>` now switches only to configured endpoint names and refreshes endpoint-dependent tool guidance after a successful switch
 - Interactive REPL prompt entry now uses a simpler blocking one-prompt-at-a-time flow with idle multi-line editing and paste support, inline approvals, `Esc` cancellation, a visible `Generating title...` notice when automatic title refresh runs, and an explicit blank spacer line before the next `mux>` prompt
 - README and usage documentation now describe Armada-oriented automation flows, isolated config overrides, clean final-response artifacts, and machine-readable endpoint inspection
 
 ### Testing
 
 - Added `Test.Xunit` coverage for `--config-dir`, `--output-last-message`, `probe --require-tools`, and `endpoint list/show`
+- Added `Test.Xunit` coverage for `web_retrieve`, external-search tool registration, endpoint-switch no-fallback behavior, and web retrieval prompt guidance
 - Added Armada-style `Test.Automated` contract coverage for isolated config directories and endpoint inspection
 
 ## v0.2.0 - 2026-04-24

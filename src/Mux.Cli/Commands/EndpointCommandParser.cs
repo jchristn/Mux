@@ -15,7 +15,7 @@ namespace Mux.Cli.Commands
         List,
 
         /// <summary>
-        /// Switch the current interactive session to a named endpoint or model.
+        /// Switch the current interactive session to a named endpoint.
         /// </summary>
         Switch,
 

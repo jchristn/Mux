@@ -53,6 +53,16 @@ Interactive endpoint management:
 /endpoint remove old-endpoint
 ```
 
+External search management:
+
+```bash
+/search
+/search add
+/search show tavily-primary
+/search edit tavily-primary
+/search remove tavily-primary
+```
+
 Notes:
 - `/endpoint` and `/endpoint list` show the configured endpoints and highlight the active session endpoint
 - `/endpoint show <name>` runs a lightweight connectivity probe and reports whether the endpoint is reachable
@@ -61,6 +71,9 @@ Notes:
 - Auth modes are `none`, `bearer token`, and `custom headers`; for auth values you can store either a discrete value in `endpoints.json` or an environment-variable reference
 - The wizard accepts bare environment variable names plus `${VAR}`, `%VAR%`, `$VAR`, and `$env:VAR`, then stores environment references canonically as `${VAR}`
 - `/endpoint remove <name>` asks for confirmation and refuses to remove the endpoint currently active in the session; switch first if you need to delete it
+- `/search` and `/search list` show global external-search status and configured providers
+- `/search add [name]` configures Tavily or You.com and enables `web_search` when the provider is usable
+- `/search show`, `/search edit`, and `/search remove` inspect and maintain stored search providers
 
 ## Built-In Process Execution
 
@@ -75,6 +88,26 @@ The built-in `run_process` tool executes commands using the host shell for the c
 - the shell invocation form
 
 This matters for command generation. For example, a Windows runtime should use `dir`/`type`/`copy` style commands, while a Unix runtime should use `ls`/`cat`/`cp`.
+
+## Web Search And Retrieval
+
+Mux has two distinct web-facing tools:
+
+| Tool | Purpose | Configuration |
+|---|---|---|
+| `web_retrieve` | Fetch a known HTTP or HTTPS URL and return rendered page data | Always available when built-in tools are enabled for the selected endpoint |
+| `web_search` | Discover public web results and return URLs/snippets | Requires external search to be enabled with a configured Tavily or You.com provider |
+
+`web_retrieve` runs in a headless Playwright browser. Chromium is the default browser and Firefox is also supported. If the requested browser binary is missing at runtime, mux invokes Playwright's installer on demand.
+
+`web_search` is provider-backed discovery. It does not fetch arbitrary local URLs such as `http://localhost:11434`; use `web_retrieve` when you already have a URL and want its contents.
+
+Example prompts:
+
+```text
+mux> retrieve https://example.com and display the returned title and text
+mux> search the web for mux GitHub releases, then retrieve the most relevant result
+```
 
 ## Output Formats
 
@@ -320,6 +353,56 @@ mux --base-url http://localhost:8000/v1 --model deepseek-coder-v2 --adapter-type
 ```
 
 CLI overrides always win over endpoint config values.
+
+## External Search Configuration
+
+External search providers are stored in `settings.json` under `externalSearch`. Supported provider types are `tavily` and `you`.
+
+Tavily example:
+
+```json
+{
+  "externalSearch": {
+    "enabled": true,
+    "allowFallback": true,
+    "providers": [
+      {
+        "name": "tavily-primary",
+        "providerType": "tavily",
+        "endpoint": "https://api.tavily.com/search",
+        "apiKey": "${TAVILY_API_KEY}",
+        "enabled": true,
+        "isDefault": true,
+        "timeoutMs": 60000
+      }
+    ]
+  }
+}
+```
+
+You.com example:
+
+```json
+{
+  "externalSearch": {
+    "enabled": true,
+    "allowFallback": true,
+    "providers": [
+      {
+        "name": "you-primary",
+        "providerType": "you",
+        "endpoint": "https://ydc-index.io/v1/search",
+        "apiKey": "${YOU_API_KEY}",
+        "enabled": true,
+        "isDefault": true,
+        "timeoutMs": 60000
+      }
+    ]
+  }
+}
+```
+
+The interactive `/search add` wizard writes the same structure for you.
 
 ## MCP Tool Servers
 

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Version>0.2.0</Version>
+    <Description>Interactive Tavily console harness for Mux.Search</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mux.Search\Mux.Search.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\SearchConsoleShared\*.cs" LinkBase="SearchConsoleShared" />
+  </ItemGroup>
+
+</Project>

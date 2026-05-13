@@ -104,6 +104,7 @@ namespace Mux.Cli.Commands
 
             AgentLoopOptions loopOptions = new AgentLoopOptions(runtime.Endpoint)
             {
+                MuxSettings = runtime.MuxSettings,
                 SystemPrompt = runtime.SystemPrompt,
                 ApprovalPolicy = runtime.ApprovalPolicy,
                 WorkingDirectory = runtime.WorkingDirectory,

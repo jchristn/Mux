@@ -8,6 +8,7 @@
     <ToolCommandName>mux</ToolCommandName>
     <PackageId>Mux.Cli</PackageId>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <NoWarn>$(NoWarn);NU5111</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

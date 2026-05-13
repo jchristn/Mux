@@ -188,7 +188,12 @@ Example:
   "contextWarningThresholdPercent": 80,
   "compactionStrategy": "summary",
   "compactionPreserveTurns": 3,
-  "maxAgentIterations": 25
+  "maxAgentIterations": 25,
+  "externalSearch": {
+    "enabled": false,
+    "allowFallback": true,
+    "providers": []
+  }
 }
 ```
 
@@ -207,12 +212,80 @@ Fields:
 | `compactionStrategy` | string | `summary` or `trim`; controls `/compact`, interactive preflight auto-compaction, and in-run active-conversation compaction |
 | `compactionPreserveTurns` | int | number of recent user-led turns to preserve during compaction; clamped to `1-10` |
 | `maxAgentIterations` | int | loop guard for tool-using runs |
+| `externalSearch` | object | optional Tavily/You.com provider configuration for the `web_search` tool |
 
 Notes:
 - `mux print` still defaults to deny semantics unless `--yolo` or `--approval-policy` overrides it
 - CLI flags override settings file values
 - `mux print` and `mux probe` reject `--approval-policy ask`
 - `mux print` and `mux probe` do not load MCP servers, even if `mcp-servers.json` exists
+
+### `externalSearch`
+
+`externalSearch` controls exposure of the built-in `web_search` tool. `web_search` is exposed only when `enabled` is `true` and at least one enabled provider has a name, provider type, endpoint, and API key. Supported provider types are:
+
+- `tavily`
+- `you`
+
+Example with Tavily:
+
+```json
+{
+  "externalSearch": {
+    "enabled": true,
+    "allowFallback": true,
+    "providers": [
+      {
+        "name": "tavily-primary",
+        "providerType": "tavily",
+        "endpoint": "https://api.tavily.com/search",
+        "apiKey": "${TAVILY_API_KEY}",
+        "enabled": true,
+        "isDefault": true,
+        "timeoutMs": 60000
+      }
+    ]
+  }
+}
+```
+
+Example with You.com:
+
+```json
+{
+  "externalSearch": {
+    "enabled": true,
+    "allowFallback": true,
+    "providers": [
+      {
+        "name": "you-primary",
+        "providerType": "you",
+        "endpoint": "https://ydc-index.io/v1/search",
+        "apiKey": "${YOU_API_KEY}",
+        "enabled": true,
+        "isDefault": true,
+        "timeoutMs": 60000
+      }
+    ]
+  }
+}
+```
+
+Provider fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | unique provider name; usable as a `web_search` provider override |
+| `providerType` | string | `tavily` or `you` |
+| `endpoint` | string | provider API endpoint |
+| `apiKey` | string | provider API key or environment-variable reference |
+| `enabled` | bool | whether this provider may be selected |
+| `isDefault` | bool | preferred provider when no override is supplied |
+| `timeoutMs` | int | request timeout; clamped to `1000-300000` |
+
+Use `/search add`, `/search edit`, `/search show`, and `/search remove` in interactive mode to maintain this configuration without editing JSON by hand.
+
+`web_search` discovers candidate web results. `web_retrieve` fetches a known HTTP or HTTPS URL and does not require external-search configuration.
 
 ## `system-prompt.md`
 
