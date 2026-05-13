@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Version>0.2.0</Version>
+    <Description>Search abstractions and provider clients for mux</Description>
+    <PackageId>Mux.Search</PackageId>
+  </PropertyGroup>
+
+</Project>

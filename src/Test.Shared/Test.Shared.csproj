@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Mux.Core\Mux.Core.csproj" />
+    <ProjectReference Include="..\Mux.Core\Mux.Core.csproj" />
   </ItemGroup>
 
 </Project>
