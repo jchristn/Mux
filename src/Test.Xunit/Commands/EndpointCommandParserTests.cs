@@ -116,5 +116,17 @@ namespace Test.Xunit.Commands
             Assert.False(result.Success);
             Assert.Contains("Usage: /endpoint add", result.ErrorMessage);
         }
+
+        /// <summary>
+        /// Verifies that alias-specific parse errors use the invoked command name.
+        /// </summary>
+        [Fact]
+        public void Parse_AddCommand_WithUnexpectedArguments_ForModelAlias_ReturnsAliasSpecificError()
+        {
+            EndpointCommandParseResult result = EndpointCommandParser.Parse("add one two", "/model");
+
+            Assert.False(result.Success);
+            Assert.Contains("Usage: /model add", result.ErrorMessage);
+        }
     }
 }

@@ -78,10 +78,16 @@ namespace Mux.Cli.Commands
     }
 
     /// <summary>
-    /// Parses interactive <c>/endpoint</c> commands.
+    /// Parses interactive <c>/endpoint</c> and <c>/model</c> commands.
     /// </summary>
     public static class EndpointCommandParser
     {
+        /// <summary>
+        /// Canonical interactive endpoint command name.
+        /// </summary>
+        public const string CanonicalCommand =
+            "/endpoint";
+
         /// <summary>
         /// Usage for interactive endpoint commands.
         /// </summary>
@@ -89,13 +95,16 @@ namespace Mux.Cli.Commands
             "Usage: /endpoint, /endpoint list, /endpoint <name>, /endpoint show <name>, /endpoint add, /endpoint edit <name>, or /endpoint remove <name>";
 
         /// <summary>
-        /// Parses the argument text that follows <c>/endpoint</c>.
+        /// Parses the argument text that follows <c>/endpoint</c> or <c>/model</c>.
         /// </summary>
         /// <param name="argument">The argument text to parse.</param>
+        /// <param name="commandName">The command name to use in user-facing usage text.</param>
         /// <returns>The parse result.</returns>
-        public static EndpointCommandParseResult Parse(string argument)
+        public static EndpointCommandParseResult Parse(string argument, string commandName = CanonicalCommand)
         {
-            if (!TryTokenize(argument ?? string.Empty, out List<string> tokens, out string errorMessage))
+            string normalizedCommandName = NormalizeCommandName(commandName);
+
+            if (!TryTokenize(argument ?? string.Empty, normalizedCommandName, out List<string> tokens, out string errorMessage))
             {
                 return Error(errorMessage);
             }
@@ -114,7 +123,7 @@ namespace Mux.Cli.Commands
                 case "list":
                     if (tokens.Count != 1)
                     {
-                        return Error(BasicUsage);
+                        return Error(GetBasicUsage(normalizedCommandName));
                     }
 
                     return Success(new EndpointCommandRequest
@@ -125,7 +134,7 @@ namespace Mux.Cli.Commands
                 case "show":
                     if (tokens.Count != 2)
                     {
-                        return Error("Usage: /endpoint show <name>");
+                        return Error($"Usage: {normalizedCommandName} show <name>");
                     }
 
                     return Success(new EndpointCommandRequest
@@ -137,7 +146,7 @@ namespace Mux.Cli.Commands
                 case "add":
                     if (tokens.Count > 2)
                     {
-                        return Error("Usage: /endpoint add");
+                        return Error($"Usage: {normalizedCommandName} add");
                     }
 
                     return Success(new EndpointCommandRequest
@@ -149,7 +158,7 @@ namespace Mux.Cli.Commands
                 case "edit":
                     if (tokens.Count != 2)
                     {
-                        return Error("Usage: /endpoint edit <name>");
+                        return Error($"Usage: {normalizedCommandName} edit <name>");
                     }
 
                     return Success(new EndpointCommandRequest
@@ -161,7 +170,7 @@ namespace Mux.Cli.Commands
                 case "remove":
                     if (tokens.Count != 2)
                     {
-                        return Error("Usage: /endpoint remove <name>");
+                        return Error($"Usage: {normalizedCommandName} remove <name>");
                     }
 
                     return Success(new EndpointCommandRequest
@@ -173,7 +182,7 @@ namespace Mux.Cli.Commands
                 default:
                     if (tokens.Count != 1)
                     {
-                        return Error(BasicUsage);
+                        return Error(GetBasicUsage(normalizedCommandName));
                     }
 
                     return Success(new EndpointCommandRequest
@@ -184,7 +193,21 @@ namespace Mux.Cli.Commands
             }
         }
 
-        private static bool TryTokenize(string input, out List<string> tokens, out string errorMessage)
+        private static string GetBasicUsage(string commandName)
+        {
+            return string.Equals(commandName, CanonicalCommand, StringComparison.Ordinal)
+                ? BasicUsage
+                : $"Usage: {commandName}, {commandName} list, {commandName} <name>, {commandName} show <name>, {commandName} add, {commandName} edit <name>, or {commandName} remove <name>";
+        }
+
+        private static string NormalizeCommandName(string commandName)
+        {
+            return string.IsNullOrWhiteSpace(commandName)
+                ? CanonicalCommand
+                : commandName.Trim();
+        }
+
+        private static bool TryTokenize(string input, string commandName, out List<string> tokens, out string errorMessage)
         {
             tokens = new List<string>();
             errorMessage = string.Empty;
@@ -242,7 +265,7 @@ namespace Mux.Cli.Commands
 
             if (quote != '\0')
             {
-                errorMessage = "Unterminated quote in /endpoint command.";
+                errorMessage = $"Unterminated quote in {commandName} command.";
                 return false;
             }
 

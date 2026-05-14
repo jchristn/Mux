@@ -102,7 +102,8 @@ Header values support environment expansion:
 ```
 
 Interactive endpoint management:
-- `/endpoint` or `/endpoint list` shows saved endpoints and highlights the current session endpoint
+- `/endpoint`, `/endpoint list`, `/model`, or `/model list` shows saved endpoints and highlights the current session endpoint
+- `/model` is an alias for `/endpoint` and supports the same `<name>`, `show`, `add`, `edit`, and `remove` forms
 - `/endpoint add` starts a guided endpoint creation wizard
 - `/endpoint edit <name>` starts a guided endpoint edit wizard
 - `/endpoint show <name>` displays the stored endpoint fields and performs a lightweight connectivity probe

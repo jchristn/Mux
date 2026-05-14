@@ -47,10 +47,15 @@ Interactive endpoint management:
 
 ```bash
 /endpoint
+/model
 /endpoint show openai-prod
+/model show openai-prod
 /endpoint add
+/model add
 /endpoint edit openai-prod
+/model edit openai-prod
 /endpoint remove old-endpoint
+/model remove old-endpoint
 ```
 
 External search management:
@@ -64,7 +69,8 @@ External search management:
 ```
 
 Notes:
-- `/endpoint` and `/endpoint list` show the configured endpoints and highlight the active session endpoint
+- `/endpoint`, `/endpoint list`, `/model`, and `/model list` show the configured endpoints and highlight the active session endpoint
+- `/model` is an alias for `/endpoint` and supports the same `<name>`, `show`, `add`, `edit`, and `remove` forms
 - `/endpoint show <name>` runs a lightweight connectivity probe and reports whether the endpoint is reachable
 - `/endpoint add` launches a guided creation wizard that prompts for the adapter, base URL, model, auth mode, default status, and optional advanced settings before probing and saving
 - `/endpoint edit <name>` launches the same guided workflow for an existing endpoint; editing the active endpoint clears the current conversation state after the update is saved

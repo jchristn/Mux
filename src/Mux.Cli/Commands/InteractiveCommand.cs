@@ -2517,7 +2517,8 @@ namespace Mux.Cli.Commands
                     return true;
 
                 case "/endpoint":
-                    HandleEndpointCommand(argument);
+                case "/model":
+                    HandleEndpointCommand(argument, command);
                     return true;
 
                 case "/tools":
@@ -2565,12 +2566,13 @@ namespace Mux.Cli.Commands
         }
 
         /// <summary>
-        /// Handles the /endpoint command.
+        /// Handles the /endpoint and /model commands.
         /// </summary>
-        /// <param name="argument">The optional endpoint name to switch to.</param>
-        private void HandleEndpointCommand(string argument)
+        /// <param name="argument">The optional endpoint subcommand or name.</param>
+        /// <param name="commandName">The slash command invoked by the user.</param>
+        private void HandleEndpointCommand(string argument, string commandName = EndpointCommandParser.CanonicalCommand)
         {
-            EndpointCommandParseResult parseResult = EndpointCommandParser.Parse(argument);
+            EndpointCommandParseResult parseResult = EndpointCommandParser.Parse(argument, commandName);
             if (!parseResult.Success)
             {
                 WriteMarkupLine($"[yellow]{Markup.Escape(parseResult.ErrorMessage)}[/]");
@@ -3495,7 +3497,7 @@ namespace Mux.Cli.Commands
         {
             while (true)
             {
-                if (!TryPromptRequiredWizardValue("Endpoint name", suggestedName, out endpointName, "Short name used with /endpoint <name>."))
+                if (!TryPromptRequiredWizardValue("Endpoint name", suggestedName, out endpointName, "Short name used with /endpoint or /model <name>."))
                 {
                     return false;
                 }
@@ -4813,12 +4815,12 @@ namespace Mux.Cli.Commands
             table.AddColumn("[bold]Description[/]");
 
             table.AddRow("[cyan]/help[/], [cyan]/?[/]", "Show this help message");
-            table.AddRow("[cyan]/endpoint[/], [cyan]/endpoint list[/]", "List all configured endpoints with current one highlighted");
-            table.AddRow("[cyan]/endpoint[/] [dim]<name>[/]", "Switch to a named endpoint");
-            table.AddRow("[cyan]/endpoint show[/] [dim]<name>[/]", "Show endpoint details and probe connectivity");
-            table.AddRow("[cyan]/endpoint add[/]", "Start the guided endpoint creation wizard");
-            table.AddRow("[cyan]/endpoint edit[/] [dim]<name>[/]", "Start the guided endpoint edit wizard");
-            table.AddRow("[cyan]/endpoint remove[/] [dim]<name>[/]", "Remove an endpoint from endpoints.json");
+            table.AddRow("[cyan]/endpoint[/], [cyan]/endpoint list[/], [cyan]/model[/], [cyan]/model list[/]", "List all configured endpoints with current one highlighted");
+            table.AddRow("[cyan]/endpoint[/] [dim]<name>[/], [cyan]/model[/] [dim]<name>[/]", "Switch to a named endpoint");
+            table.AddRow("[cyan]/endpoint show[/] [dim]<name>[/], [cyan]/model show[/] [dim]<name>[/]", "Show endpoint details and probe connectivity");
+            table.AddRow("[cyan]/endpoint add[/], [cyan]/model add[/]", "Start the guided endpoint creation wizard");
+            table.AddRow("[cyan]/endpoint edit[/] [dim]<name>[/], [cyan]/model edit[/] [dim]<name>[/]", "Start the guided endpoint edit wizard");
+            table.AddRow("[cyan]/endpoint remove[/] [dim]<name>[/], [cyan]/model remove[/] [dim]<name>[/]", "Remove an endpoint from endpoints.json");
             table.AddRow("[cyan]/tools[/]", "List all available tools with descriptions");
             table.AddRow("[cyan]/status[/]", "Show session metadata, context usage, and title");
             table.AddRow("[cyan]/context[/]", "Alias for /status");

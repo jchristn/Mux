@@ -18,6 +18,8 @@ namespace Test.Xunit.Commands
         [InlineData("[yellow]Usage: /compact strategy [[summary|trim]][/]")]
         [InlineData("[cyan]/compact strategy[/] [dim][[summary|trim]][/]")]
         [InlineData("[cyan]/help[/], [cyan]/?[/]")]
+        [InlineData("[cyan]/endpoint[/], [cyan]/endpoint list[/], [cyan]/model[/], [cyan]/model list[/]")]
+        [InlineData("[cyan]/endpoint show[/] [dim]<name>[/], [cyan]/model show[/] [dim]<name>[/]")]
         [InlineData("[cyan]/search add[/] [dim][[name]][/]")]
         [InlineData("[cyan]/mcp add[/] [dim][[name]] [[command-or-url]] [[args-or-path...]][/]")]
         [InlineData("  Allow? [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ")]

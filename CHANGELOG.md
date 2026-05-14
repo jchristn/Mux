@@ -18,6 +18,7 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- Interactive `/model` now aliases `/endpoint`, including `list`, `<name>`, `show`, `add`, `edit`, and `remove` forms
 - `mux print` now supports `--output-last-message <path>` to write only the final assistant response text to a file; failed runs leave the file absent
 - `mux print`, `mux probe`, and `mux endpoint` now support `--config-dir <path>` as a first-class config-root override, with precedence over `MUX_CONFIG_DIR`
 - `mux probe --require-tools` now fails when the selected endpoint disables tool calling

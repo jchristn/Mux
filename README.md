@@ -134,13 +134,16 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 ### Interactive Commands
 
 ```text
-/endpoint                         List configured endpoints
-/endpoint list                    Alias for /endpoint
-/endpoint <name>                  Switch to a named endpoint
+/endpoint, /model                 List configured endpoints
+/endpoint list, /model list       Alias for /endpoint
+/endpoint <name>, /model <name>   Switch to a named endpoint
 /endpoint show <name>             Show endpoint details and probe connectivity
-/endpoint add                     Start the guided endpoint creation wizard
+/model show <name>                Alias for /endpoint show <name>
+/endpoint add, /model add         Start the guided endpoint creation wizard
 /endpoint edit <name>             Start the guided endpoint edit wizard
+/model edit <name>                Alias for /endpoint edit <name>
 /endpoint remove <name>           Remove an endpoint from endpoints.json after confirmation
+/model remove <name>              Alias for /endpoint remove <name>
 /search                           List external search providers and global search status
 /search add [name]                Start the guided external search provider add wizard
 /search show <name>               Show external search provider details

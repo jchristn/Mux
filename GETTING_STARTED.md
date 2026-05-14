@@ -84,6 +84,7 @@ Interactive:
 
 ```text
 /endpoint
+/model
 /search
 /tools
 /clear
