@@ -3,6 +3,7 @@ namespace Test.Xunit.Commands
     using System.Collections.Generic;
     using global::Xunit;
     using Mux.Cli.Commands;
+    using Mux.Core.Enums;
     using Mux.Core.Models;
 
     /// <summary>
@@ -55,6 +56,27 @@ namespace Test.Xunit.Commands
             Assert.Null(found);
             Assert.Equal("No endpoint named 'functiongemma:270,m' is configured.", errorMessage);
             Assert.Equal("gemma3:270m", current.Model);
+        }
+
+        /// <summary>
+        /// Verifies that endpoint switching uses the condensed notification sentence.
+        /// </summary>
+        [Fact]
+        public void BuildEndpointSwitchedNotification_ReturnsCondensedSummary()
+        {
+            EndpointConfig endpoint = new EndpointConfig
+            {
+                Name = "ollama-local",
+                Model = "qwen2.5-coder:7b",
+                AdapterType = AdapterTypeEnum.Ollama,
+                BaseUrl = "http://localhost:11434/v1"
+            };
+
+            string notification = InteractiveCommand.BuildEndpointSwitchedNotification(endpoint);
+
+            Assert.Equal(
+                "Endpoint switched to ollama-local, model qwen2.5-coder:7b, Ollama adapter on base URL http://localhost:11434/v1",
+                notification);
         }
 
         /// <summary>

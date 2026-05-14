@@ -2681,13 +2681,9 @@ namespace Mux.Cli.Commands
             ResetConversationState();
             WriteOutputBlock(() =>
             {
-                WriteWorkflowTitle("Endpoint Switched");
-                WriteWorkflowSummaryItem("Name", found!.Name);
-                WriteWorkflowSummaryItem("Model", found.Model);
-                WriteWorkflowSummaryItem("Adapter", found.AdapterType.ToString());
-                WriteWorkflowSummaryItem("Base URL", found.BaseUrl);
-                WriteWorkflowBlankLine();
-                WriteWorkflowHint("Conversation history cleared.");
+                AnsiConsole.MarkupLine($"[dim]{Markup.Escape(BuildEndpointSwitchedNotification(found!))}[/]");
+                Console.WriteLine();
+                AnsiConsole.MarkupLine("[dim]Conversation history cleared.[/]");
                 Console.WriteLine();
             }, outputEndsWithPromptSpacer: true);
         }
@@ -2709,6 +2705,13 @@ namespace Mux.Cli.Commands
 
             errorMessage = string.Empty;
             return true;
+        }
+
+        internal static string BuildEndpointSwitchedNotification(EndpointConfig endpoint)
+        {
+            ArgumentNullException.ThrowIfNull(endpoint);
+
+            return $"Endpoint switched to {endpoint.Name}, model {endpoint.Model}, {endpoint.AdapterType} adapter on base URL {endpoint.BaseUrl}";
         }
 
         internal static string BuildSystemPromptForEndpoint(
