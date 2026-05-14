@@ -72,8 +72,9 @@ Notes:
 - `/endpoint`, `/endpoint list`, `/model`, and `/model list` show the configured endpoints and highlight the active session endpoint
 - `/model` is an alias for `/endpoint` and supports the same `<name>`, `show`, `add`, `edit`, and `remove` forms
 - `/endpoint show <name>` runs a lightweight connectivity probe and reports whether the endpoint is reachable
-- `/endpoint add` launches a guided creation wizard that prompts for the adapter, base URL, model, auth mode, default status, and optional advanced settings before probing and saving
+- `/endpoint add` launches a guided creation wizard that prompts for the adapter, base URL, model, auth mode, default status, endpoint-scoped tool auto-approval, and optional advanced settings before probing and saving
 - `/endpoint edit <name>` launches the same guided workflow for an existing endpoint; editing the active endpoint clears the current conversation state after the update is saved
+- Endpoint configs can persist `autoApproveTools: true` so tool calls auto-approve whenever that endpoint is active unless CLI approval flags override it
 - Auth modes are `none`, `bearer token`, and `custom headers`; for auth values you can store either a discrete value in `endpoints.json` or an environment-variable reference
 - The wizard accepts bare environment variable names plus `${VAR}`, `%VAR%`, `$VAR`, and `$env:VAR`, then stores environment references canonically as `${VAR}`
 - `/endpoint remove <name>` asks for confirmation and refuses to remove the endpoint currently active in the session; switch first if you need to delete it
@@ -242,8 +243,9 @@ Policies:
 | `--approval-policy deny` | deny all tool calls |
 
 Notes:
-- `mux print` defaults to `deny` unless `--yolo` or `--approval-policy` overrides it
+- `mux print` defaults to `deny` unless `--yolo`, `--approval-policy`, or the selected endpoint's `autoApproveTools` setting overrides it
 - interactive mode typically uses ask semantics
+- interactive mode also honors endpoint-scoped `autoApproveTools` unless CLI approval flags override it
 - `mux print` and `mux probe` reject `--approval-policy ask`
 
 ## Config Isolation
@@ -439,12 +441,10 @@ Runtime management:
 ```text
 /mcp list
 /mcp add
-/mcp add github npx -y @modelcontextprotocol/server-github
-/mcp add remote-http https://mcp.example.com /mcp
 /mcp remove myserver
 ```
 
-`/mcp add` now runs a guided wizard similar to `/endpoint add`. The wizard lets you choose `stdio` or HTTP transport. Optional inline values seed the wizard defaults, and successful adds are saved to `mcp-servers.json` as well as connected for the current session. HTTP MCP currently uses the streamable HTTP path, usually `/mcp`.
+`/mcp add` now runs a guided wizard similar to `/endpoint add`. The wizard lets you choose `stdio` or HTTP transport, and successful adds are saved to `mcp-servers.json` as well as connected for the current session. HTTP MCP currently uses the streamable HTTP path, usually `/mcp`.
 
 Skip MCP startup:
 

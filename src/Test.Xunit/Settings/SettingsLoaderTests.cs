@@ -80,7 +80,8 @@ namespace Test.Xunit.Settings
                         ""model"": ""llama3"",
                         ""isDefault"": true,
                         ""maxTokens"": 4096,
-                        ""temperature"": 0.5
+                        ""temperature"": 0.5,
+                        ""autoApproveTools"": true
                     },
                     {
                         ""name"": ""test-openai"",
@@ -106,12 +107,14 @@ namespace Test.Xunit.Settings
             Assert.True(first.IsDefault);
             Assert.Equal(4096, first.MaxTokens);
             Assert.Equal(0.5, first.Temperature);
+            Assert.True(first.AutoApproveTools);
 
             EndpointConfig second = endpoints[1];
             Assert.Equal("test-openai", second.Name);
             Assert.Equal(AdapterTypeEnum.OpenAi, second.AdapterType);
             Assert.Equal("gpt-4o", second.Model);
             Assert.Equal("Bearer sk-test", second.Headers["Authorization"]);
+            Assert.False(second.AutoApproveTools);
         }
 
         /// <summary>

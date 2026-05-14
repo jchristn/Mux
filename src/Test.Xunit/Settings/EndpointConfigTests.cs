@@ -31,6 +31,7 @@ namespace Test.Xunit.Settings
                 MaxTokens = 16384,
                 Temperature = 0.7,
                 ContextWindow = 128000,
+                AutoApproveTools = true,
                 Headers = new Dictionary<string, string> { { "Authorization", "Bearer sk-test-key" } },
                 Quirks = new BackendQuirks
                 {
@@ -51,6 +52,7 @@ namespace Test.Xunit.Settings
             Assert.Equal(original.MaxTokens, deserialized.MaxTokens);
             Assert.Equal(original.Temperature, deserialized.Temperature);
             Assert.Equal(original.ContextWindow, deserialized.ContextWindow);
+            Assert.Equal(original.AutoApproveTools, deserialized.AutoApproveTools);
             Assert.Equal(original.Headers["Authorization"], deserialized.Headers["Authorization"]);
             Assert.NotNull(deserialized.Quirks);
             Assert.True(deserialized.Quirks!.SupportsParallelToolCalls);

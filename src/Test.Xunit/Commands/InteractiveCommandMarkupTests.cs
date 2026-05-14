@@ -21,7 +21,7 @@ namespace Test.Xunit.Commands
         [InlineData("[cyan]/endpoint[/], [cyan]/endpoint list[/], [cyan]/model[/], [cyan]/model list[/]")]
         [InlineData("[cyan]/endpoint show[/] [dim]<name>[/], [cyan]/model show[/] [dim]<name>[/]")]
         [InlineData("[cyan]/search add[/] [dim][[name]][/]")]
-        [InlineData("[cyan]/mcp add[/] [dim][[name]] [[command-or-url]] [[args-or-path...]][/]")]
+        [InlineData("[cyan]/mcp add[/]")]
         [InlineData("  Allow? [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ")]
         [InlineData("[yellow]Approval required:[/] write_file: sample [dim][[Y/n/always]]?[/]")]
         public void InteractiveHelpMarkup_IsValid(string markup)

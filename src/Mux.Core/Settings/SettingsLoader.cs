@@ -98,6 +98,7 @@ namespace Mux.Core.Settings
                     ["contextWindow"] = 32768,
                     ["timeoutMs"] = 120000,
                     ["headers"] = new JsonObject(),
+                    ["autoApproveTools"] = false,
                     ["quirks"] = (JsonNode?)null
                 };
 
@@ -667,6 +668,7 @@ namespace Mux.Core.Settings
                 ContextWindow = source.ContextWindow,
                 TimeoutMs = source.TimeoutMs,
                 Headers = new Dictionary<string, string>(source.Headers ?? new Dictionary<string, string>()),
+                AutoApproveTools = source.AutoApproveTools,
                 Quirks = source.Quirks == null
                     ? null
                     : new BackendQuirks

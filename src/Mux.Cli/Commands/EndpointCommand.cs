@@ -113,6 +113,7 @@ namespace Mux.Cli.Commands
                 table.AddColumn("Model");
                 table.AddColumn("Base URL");
                 table.AddColumn("Default");
+                table.AddColumn("Approval");
                 table.AddColumn("Tools");
 
                 foreach (EndpointInspectionRecord endpoint in inspected)
@@ -123,6 +124,7 @@ namespace Mux.Cli.Commands
                         endpoint.Model,
                         endpoint.BaseUrl,
                         endpoint.IsDefault ? "[green]yes[/]" : "no",
+                        endpoint.AutoApproveTools ? "[green]auto[/]" : "ask",
                         endpoint.ToolsEnabled ? "[green]enabled[/]" : "[yellow]disabled[/]");
                 }
 
@@ -185,6 +187,7 @@ namespace Mux.Cli.Commands
                 Temperature = endpoint.Temperature,
                 ContextWindow = endpoint.ContextWindow,
                 TimeoutMs = endpoint.TimeoutMs,
+                AutoApproveTools = endpoint.AutoApproveTools,
                 ToolsEnabled = quirks.SupportsTools,
                 HeaderNames = headers.Keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToList(),
                 Headers = headers.ToDictionary(
@@ -204,6 +207,7 @@ namespace Mux.Cli.Commands
             AnsiConsole.MarkupLine($"[bold]Temperature:[/] {endpoint.Temperature}");
             AnsiConsole.MarkupLine($"[bold]Context Window:[/] {endpoint.ContextWindow}");
             AnsiConsole.MarkupLine($"[bold]Timeout:[/] {endpoint.TimeoutMs}ms");
+            AnsiConsole.MarkupLine($"[bold]Tool Approval:[/] {(endpoint.AutoApproveTools ? "[green]auto[/]" : "ask")}");
             AnsiConsole.MarkupLine($"[bold]Tool Calling:[/] {(endpoint.ToolsEnabled ? "[green]enabled[/]" : "[yellow]disabled[/]")}");
             if (endpoint.HeaderNames.Count > 0)
             {
@@ -331,6 +335,11 @@ namespace Mux.Cli.Commands
         /// Timeout in milliseconds.
         /// </summary>
         public int TimeoutMs { get; set; }
+
+        /// <summary>
+        /// Whether this endpoint auto-approves tool calls.
+        /// </summary>
+        public bool AutoApproveTools { get; set; }
 
         /// <summary>
         /// Whether tool calling is enabled.

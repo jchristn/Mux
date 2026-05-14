@@ -630,6 +630,7 @@ namespace Test.Xunit.Commands
                     ["baseUrl"] = "http://localhost:1234/v1",
                     ["model"] = "model-a",
                     ["isDefault"] = true,
+                    ["autoApproveTools"] = true,
                     ["headers"] = new Dictionary<string, string>
                     {
                         ["Authorization"] = "Bearer super-secret"
@@ -658,6 +659,7 @@ namespace Test.Xunit.Commands
                 JsonDocument json = JsonDocument.Parse(stdout);
                 JsonElement endpoint = json.RootElement.GetProperty("endpoint");
                 Assert.Equal("chat-only", endpoint.GetProperty("name").GetString());
+                Assert.True(endpoint.GetProperty("autoApproveTools").GetBoolean());
                 Assert.False(endpoint.GetProperty("toolsEnabled").GetBoolean());
                 Assert.Equal("[redacted]", endpoint.GetProperty("headers").GetProperty("Authorization").GetString());
             }

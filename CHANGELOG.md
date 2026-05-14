@@ -18,11 +18,12 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- Endpoint configs can now persist `autoApproveTools`, and interactive `always` approval responses now save endpoint-scoped auto-approval for future sessions
 - Interactive `/model` now aliases `/endpoint`, including `list`, `<name>`, `show`, `add`, `edit`, and `remove` forms
 - `mux print` now supports `--output-last-message <path>` to write only the final assistant response text to a file; failed runs leave the file absent
 - `mux print`, `mux probe`, and `mux endpoint` now support `--config-dir <path>` as a first-class config-root override, with precedence over `MUX_CONFIG_DIR`
 - `mux probe --require-tools` now fails when the selected endpoint disables tool calling
-- `/mcp add` now runs a guided wizard similar to `/endpoint add`, supports both `stdio` and HTTP MCP transports, accepts optional inline defaults, and saves MCP server definitions to `mcp-servers.json`
+- `/mcp add` now runs a wizard-driven workflow similar to `/endpoint add`, supports both `stdio` and HTTP MCP transports, and saves MCP server definitions to `mcp-servers.json`
 - `/endpoint <name>` now switches only to configured endpoint names and refreshes endpoint-dependent tool guidance after a successful switch
 - Interactive REPL prompt entry now uses a simpler blocking one-prompt-at-a-time flow with idle multi-line editing and paste support, inline approvals, `Esc` cancellation, a visible `Generating title...` notice when automatic title refresh runs, and an explicit blank spacer line before the next `mux>` prompt
 - README and usage documentation now describe Armada-oriented automation flows, isolated config overrides, clean final-response artifacts, and machine-readable endpoint inspection

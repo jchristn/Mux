@@ -22,6 +22,7 @@ namespace Mux.Core.Models
         private int _ContextWindow = 32768;
         private int _TimeoutMs = 120000;
         private Dictionary<string, string> _Headers = new Dictionary<string, string>();
+        private bool _AutoApproveTools = false;
         private BackendQuirks? _Quirks = null;
 
         #endregion
@@ -143,6 +144,16 @@ namespace Mux.Core.Models
         {
             get => _Headers;
             set => _Headers = value ?? new Dictionary<string, string>();
+        }
+
+        /// <summary>
+        /// Whether tool calls should be auto-approved when this endpoint is active.
+        /// </summary>
+        [JsonPropertyName("autoApproveTools")]
+        public bool AutoApproveTools
+        {
+            get => _AutoApproveTools;
+            set => _AutoApproveTools = value;
         }
 
         /// <summary>

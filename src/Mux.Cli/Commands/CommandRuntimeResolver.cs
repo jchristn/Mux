@@ -110,22 +110,7 @@ namespace Mux.Cli.Commands
                 .Replace("{WorkingDirectory}", workingDirectory)
                 .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd());
 
-            ApprovalPolicyEnum approvalPolicy = settings.Yolo
-                ? ApprovalPolicyEnum.AutoApprove
-                : ApprovalPolicyEnum.Deny;
-
-            if (!string.IsNullOrWhiteSpace(settings.ApprovalPolicy))
-            {
-                string normalizedPolicy = settings.ApprovalPolicy.Trim().ToLowerInvariant();
-                approvalPolicy = normalizedPolicy switch
-                {
-                    "ask" => ApprovalPolicyEnum.Ask,
-                    "deny" => ApprovalPolicyEnum.Deny,
-                    "auto" => ApprovalPolicyEnum.AutoApprove,
-                    "autoapprove" => ApprovalPolicyEnum.AutoApprove,
-                    _ => throw new InvalidOperationException($"Unsupported approval policy '{settings.ApprovalPolicy}'. Supported values: ask, auto, deny.")
-                };
-            }
+            ApprovalPolicyEnum approvalPolicy = ResolveApprovalPolicy(settings, endpoint);
 
             if (!allowAskApproval && approvalPolicy == ApprovalPolicyEnum.Ask)
             {
@@ -160,6 +145,34 @@ namespace Mux.Cli.Commands
                     McpServerCount = mcpServers.Count
                 }
             };
+        }
+
+        internal static ApprovalPolicyEnum ResolveApprovalPolicy(CommonSettings settings, EndpointConfig endpoint)
+        {
+            if (settings.Yolo)
+            {
+                return ApprovalPolicyEnum.AutoApprove;
+            }
+
+            if (!string.IsNullOrWhiteSpace(settings.ApprovalPolicy))
+            {
+                string normalizedPolicy = settings.ApprovalPolicy.Trim().ToLowerInvariant();
+                return normalizedPolicy switch
+                {
+                    "ask" => ApprovalPolicyEnum.Ask,
+                    "deny" => ApprovalPolicyEnum.Deny,
+                    "auto" => ApprovalPolicyEnum.AutoApprove,
+                    "autoapprove" => ApprovalPolicyEnum.AutoApprove,
+                    _ => throw new InvalidOperationException($"Unsupported approval policy '{settings.ApprovalPolicy}'. Supported values: ask, auto, deny.")
+                };
+            }
+
+            if (endpoint.AutoApproveTools)
+            {
+                return ApprovalPolicyEnum.AutoApprove;
+            }
+
+            return ApprovalPolicyEnum.Deny;
         }
 
         private static void ValidateCommandSettings(

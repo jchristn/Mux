@@ -48,5 +48,18 @@ namespace Test.Xunit.Commands
 
             Assert.Equal(ApprovalPolicyEnum.AutoApprove, result);
         }
+
+        [Fact]
+        public void ResolveApprovalPolicy_EndpointAutoApprove_ReturnsAutoApprove()
+        {
+            EndpointConfig endpoint = new EndpointConfig
+            {
+                AutoApproveTools = true
+            };
+
+            ApprovalPolicyEnum result = InteractiveCommand.ResolveApprovalPolicy(new InteractiveSettings(), new MuxSettings(), endpoint);
+
+            Assert.Equal(ApprovalPolicyEnum.AutoApprove, result);
+        }
     }
 }

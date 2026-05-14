@@ -61,6 +61,8 @@ namespace Mux.Cli.Commands
         private EndpointConfig _CurrentEndpoint = new EndpointConfig();
         private MuxSettings _MuxSettings = new MuxSettings();
         private ApprovalPolicyEnum _ApprovalPolicy = ApprovalPolicyEnum.Ask;
+        private bool _StartupYolo = false;
+        private string? _StartupApprovalPolicyOverride = null;
         private string _WorkingDirectory = string.Empty;
         private string _SystemPrompt = string.Empty;
         private string? _ConfiguredSystemPromptPath = null;
@@ -120,6 +122,8 @@ namespace Mux.Cli.Commands
                 ? new List<McpServerConfig>()
                 : SettingsLoader.LoadMcpServers();
             _Verbose = settings.Verbose;
+            _StartupYolo = settings.Yolo;
+            _StartupApprovalPolicyOverride = settings.ApprovalPolicy;
 
             _CurrentEndpoint = SettingsLoader.ResolveEndpoint(
                 _AllEndpoints,
@@ -132,9 +136,7 @@ namespace Mux.Cli.Commands
 
             _WorkingDirectory = settings.WorkingDirectory ?? Directory.GetCurrentDirectory();
             _ConfiguredSystemPromptPath = settings.SystemPrompt;
-            _SystemPrompt = BuildSystemPromptForEndpoint(_CurrentEndpoint, _WorkingDirectory, _MuxSettings, _ConfiguredSystemPromptPath);
-
-            _ApprovalPolicy = ResolveApprovalPolicy(settings, _MuxSettings);
+            RefreshEndpointDependentSessionState();
             TryClearInteractiveScreen();
             RenderWelcomeScreen();
 
@@ -168,7 +170,7 @@ namespace Mux.Cli.Commands
 
             if (_ApprovalPolicy == ApprovalPolicyEnum.AutoApprove)
             {
-                AnsiConsole.MarkupLine("[yellow]notice: all tool calls will be auto-approved (--yolo)[/]");
+                AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(BuildAutoApproveNotice())}[/]");
             }
 
             bool originalTreatControlCAsInput = Console.TreatControlCAsInput;
@@ -1034,7 +1036,28 @@ namespace Mux.Cli.Commands
             _PendingApproval = null;
             WriteApprovalResponseSuffix(BuildApprovalResponseDisplay(response));
             pending.CompletionSource.TrySetResult(response);
-            SetStatusNotice(BuildApprovalNotice(response, pending.ToolCall.Name), 1500);
+
+            string statusNotice = BuildApprovalNotice(response, pending.ToolCall.Name);
+            if (string.Equals(response, "always", StringComparison.OrdinalIgnoreCase))
+            {
+                _ApprovalPolicy = ApprovalPolicyEnum.AutoApprove;
+                _CurrentEndpoint.AutoApproveTools = true;
+
+                foreach (EndpointConfig endpoint in _AllEndpoints)
+                {
+                    if (string.Equals(endpoint.Name, _CurrentEndpoint.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        endpoint.AutoApproveTools = true;
+                        break;
+                    }
+                }
+
+                statusNotice = TryPersistEndpointAutoApprovePreference(_CurrentEndpoint.Name, out string persistenceMessage)
+                    ? $"{statusNotice} | {persistenceMessage}"
+                    : $"{statusNotice} | session only";
+            }
+
+            SetStatusNotice(statusNotice, 3000);
         }
 
         private void WriteAssistantTextChunk(string text)
@@ -2420,6 +2443,7 @@ namespace Mux.Cli.Commands
                 ContextWindow = endpoint.ContextWindow,
                 TimeoutMs = endpoint.TimeoutMs,
                 Headers = new Dictionary<string, string>(endpoint.Headers),
+                AutoApproveTools = endpoint.AutoApproveTools,
                 Quirks = CloneBackendQuirks(endpoint.Quirks)
             };
         }
@@ -2448,10 +2472,12 @@ namespace Mux.Cli.Commands
         /// </summary>
         /// <param name="settings">The interactive command settings.</param>
         /// <param name="muxSettings">The global mux settings.</param>
+        /// <param name="endpoint">The active endpoint whose persisted approval preference may apply.</param>
         /// <returns>The resolved approval policy.</returns>
         internal static ApprovalPolicyEnum ResolveApprovalPolicy(
             InteractiveSettings settings,
-            MuxSettings muxSettings)
+            MuxSettings muxSettings,
+            EndpointConfig? endpoint = null)
         {
             if (settings.Yolo)
             {
@@ -2470,6 +2496,11 @@ namespace Mux.Cli.Commands
                 {
                     return parsed;
                 }
+            }
+
+            if (endpoint?.AutoApproveTools == true)
+            {
+                return ApprovalPolicyEnum.AutoApprove;
             }
 
             if (string.Equals(muxSettings.DefaultApprovalPolicy, "auto_approve", StringComparison.OrdinalIgnoreCase)
@@ -2633,6 +2664,7 @@ namespace Mux.Cli.Commands
                 table.AddColumn("[bold]Adapter[/]");
                 table.AddColumn("[bold]Active[/]");
                 table.AddColumn("[bold]Default[/]");
+                table.AddColumn("[bold]Approval[/]");
                 table.AddColumn("[bold]URL[/]");
 
                 foreach (EndpointConfig ep in _AllEndpoints)
@@ -2653,10 +2685,13 @@ namespace Mux.Cli.Commands
                     string defaultDisplay = ep.IsDefault
                         ? (isCurrent ? "[green]yes[/]" : "[cyan]yes[/]")
                         : "[dim]no[/]";
+                    string approvalDisplay = ep.AutoApproveTools
+                        ? (isCurrent ? "[green]auto[/]" : "[cyan]auto[/]")
+                        : "[dim]ask[/]";
                     string urlDisplay = isCurrent
                         ? $"[green]{Markup.Escape(ep.BaseUrl)}[/]"
                         : Markup.Escape(ep.BaseUrl);
-                    table.AddRow(nameDisplay, modelDisplay, adapterDisplay, activeDisplay, defaultDisplay, urlDisplay);
+                    table.AddRow(nameDisplay, modelDisplay, adapterDisplay, activeDisplay, defaultDisplay, approvalDisplay, urlDisplay);
                 }
 
                 AnsiConsole.Write(table);
@@ -2679,7 +2714,7 @@ namespace Mux.Cli.Commands
             }
 
             _CurrentEndpoint = found!;
-            RefreshEndpointDependentSystemPrompt();
+            RefreshEndpointDependentSessionState();
             ResetConversationState();
             WriteOutputBlock(() =>
             {
@@ -2762,6 +2797,70 @@ namespace Mux.Cli.Commands
             _SystemPrompt = BuildSystemPromptForEndpoint(_CurrentEndpoint, _WorkingDirectory, _MuxSettings, _ConfiguredSystemPromptPath);
         }
 
+        private void RefreshEndpointDependentSessionState()
+        {
+            RefreshEndpointDependentSystemPrompt();
+            _ApprovalPolicy = ResolveApprovalPolicy(
+                new InteractiveSettings
+                {
+                    Yolo = _StartupYolo,
+                    ApprovalPolicy = _StartupApprovalPolicyOverride
+                },
+                _MuxSettings,
+                _CurrentEndpoint);
+        }
+
+        private string BuildAutoApproveNotice()
+        {
+            if (_StartupYolo)
+            {
+                return "notice: all tool calls will be auto-approved (--yolo)";
+            }
+
+            string normalizedOverride = (_StartupApprovalPolicyOverride ?? string.Empty).Trim().ToLowerInvariant();
+            if (normalizedOverride == "auto" || normalizedOverride == "autoapprove")
+            {
+                return "notice: all tool calls will be auto-approved (--approval-policy auto)";
+            }
+
+            if (_CurrentEndpoint.AutoApproveTools)
+            {
+                return $"notice: tool calls will be auto-approved for endpoint '{_CurrentEndpoint.Name}'";
+            }
+
+            return "notice: all tool calls will be auto-approved (settings.json)";
+        }
+
+        private bool TryPersistEndpointAutoApprovePreference(string endpointName, out string message)
+        {
+            message = string.Empty;
+
+            try
+            {
+                List<EndpointConfig> persistedEndpoints = SettingsLoader.LoadEndpoints();
+                EndpointConfig? persistedEndpoint = persistedEndpoints
+                    .FirstOrDefault(endpoint => string.Equals(endpoint.Name, endpointName, StringComparison.OrdinalIgnoreCase));
+
+                if (persistedEndpoint == null)
+                {
+                    return false;
+                }
+
+                if (!persistedEndpoint.AutoApproveTools)
+                {
+                    persistedEndpoint.AutoApproveTools = true;
+                    SettingsLoader.SaveEndpoints(persistedEndpoints);
+                }
+
+                message = "saved for future sessions";
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private void HandleEndpointShowCommand(string endpointName)
         {
             EndpointConfig? found = _AllEndpoints
@@ -2785,6 +2884,7 @@ namespace Mux.Cli.Commands
             table.AddRow("Model", Markup.Escape(found.Model));
             table.AddRow("Default", found.IsDefault ? "[cyan]yes[/]" : "[dim]no[/]");
             table.AddRow("Active in session", string.Equals(found.Name, _CurrentEndpoint.Name, StringComparison.OrdinalIgnoreCase) ? "[green]yes[/]" : "[dim]no[/]");
+            table.AddRow("Tool approval", found.AutoApproveTools ? "[green]auto[/]" : "[dim]ask[/]");
             table.AddRow("Max tokens", found.MaxTokens.ToString());
             table.AddRow("Temperature", found.Temperature.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
             table.AddRow("Context window", found.ContextWindow.ToString());
@@ -2848,6 +2948,7 @@ namespace Mux.Cli.Commands
                 WriteWorkflowSummaryItem("Model", savedEndpoint.Model);
                 WriteWorkflowSummaryItem("Base URL", savedEndpoint.BaseUrl);
                 WriteWorkflowSummaryItem("Default for new sessions", savedEndpoint.IsDefault ? "yes" : "no");
+                WriteWorkflowSummaryItem("Tool approval", savedEndpoint.AutoApproveTools ? "auto" : "ask");
                 WriteWorkflowSummaryItem("Active in this session", string.Equals(_CurrentEndpoint.Name, savedEndpoint.Name, StringComparison.OrdinalIgnoreCase) ? "yes" : "no");
                 WriteWorkflowBlankLine();
                 if (savedEndpoint.IsDefault && !string.Equals(_CurrentEndpoint.Name, savedEndpoint.Name, StringComparison.OrdinalIgnoreCase))
@@ -2921,6 +3022,7 @@ namespace Mux.Cli.Commands
             if (activeSessionEndpointUpdated)
             {
                 _CurrentEndpoint = savedEndpoint;
+                RefreshEndpointDependentSessionState();
                 ResetConversationState();
                 WriteOutputBlock(() =>
                 {
@@ -2930,6 +3032,7 @@ namespace Mux.Cli.Commands
                     WriteWorkflowSummaryItem("Model", savedEndpoint.Model);
                     WriteWorkflowSummaryItem("Base URL", savedEndpoint.BaseUrl);
                     WriteWorkflowSummaryItem("Default for new sessions", savedEndpoint.IsDefault ? "yes" : "no");
+                    WriteWorkflowSummaryItem("Tool approval", savedEndpoint.AutoApproveTools ? "auto" : "ask");
                     WriteWorkflowSummaryItem("Active in this session", "yes");
                     WriteWorkflowBlankLine();
                     WriteWorkflowHint("Current session history was cleared because the active endpoint changed.");
@@ -2946,6 +3049,7 @@ namespace Mux.Cli.Commands
                 WriteWorkflowSummaryItem("Model", savedEndpoint.Model);
                 WriteWorkflowSummaryItem("Base URL", savedEndpoint.BaseUrl);
                 WriteWorkflowSummaryItem("Default for new sessions", savedEndpoint.IsDefault ? "yes" : "no");
+                WriteWorkflowSummaryItem("Tool approval", savedEndpoint.AutoApproveTools ? "auto" : "ask");
                 WriteWorkflowSummaryItem("Active in this session", string.Equals(_CurrentEndpoint.Name, savedEndpoint.Name, StringComparison.OrdinalIgnoreCase) ? "yes" : "no");
                 WriteWorkflowBlankLine();
                 if (savedEndpoint.IsDefault && !string.Equals(_CurrentEndpoint.Name, savedEndpoint.Name, StringComparison.OrdinalIgnoreCase))
@@ -3355,6 +3459,13 @@ namespace Mux.Cli.Commands
                 }
 
                 workingEndpoint.IsDefault = isDefault;
+
+                if (!TryPromptYesNo("Auto-approve tool calls for this endpoint", workingEndpoint.AutoApproveTools, out bool autoApproveTools))
+                {
+                    return CancelEndpointWizard();
+                }
+
+                workingEndpoint.AutoApproveTools = autoApproveTools;
 
                 if (!TryPromptYesNo("Review advanced settings", false, out bool reviewAdvanced))
                 {
@@ -4284,6 +4395,7 @@ namespace Mux.Cli.Commands
             WriteWorkflowSummaryItem("Auth", DescribeEndpointAuth(endpoint));
             WriteWorkflowSummaryItem("Headers", FormatEndpointHeaders(endpoint));
             WriteWorkflowSummaryItem("Default", endpoint.IsDefault ? "yes" : "no");
+            WriteWorkflowSummaryItem("Tool approval", endpoint.AutoApproveTools ? "auto" : "ask");
             WriteWorkflowSummaryItem("Temperature", endpoint.Temperature.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
             WriteWorkflowSummaryItem("Max tokens", endpoint.MaxTokens.ToString());
             WriteWorkflowSummaryItem("Context window", endpoint.ContextWindow.ToString());
@@ -4839,7 +4951,7 @@ namespace Mux.Cli.Commands
             table.AddRow("[cyan]/search edit[/] [dim]<name>[/]", "Start the guided external search provider edit wizard");
             table.AddRow("[cyan]/search remove[/] [dim]<name>[/]", "Remove an external search provider from settings.json");
             table.AddRow("[cyan]/mcp list[/]", "List MCP server connections and status");
-            table.AddRow("[cyan]/mcp add[/] [dim][[name]] [[command-or-url]] [[args-or-path...]][/]", "Start the guided MCP server add wizard");
+            table.AddRow("[cyan]/mcp add[/]", "Start the guided MCP server add wizard");
             table.AddRow("[cyan]/mcp remove[/] [dim]<name>[/]", "Remove an MCP server");
             table.AddRow("[cyan]/exit[/]", "Exit mux");
 
@@ -4952,34 +5064,20 @@ namespace Mux.Cli.Commands
                         return;
                     }
 
+                    if (subParts.Length != 1)
+                    {
+                        WriteMarkupLine("[yellow]Usage: /mcp add[/]");
+                        return;
+                    }
+
                     McpServerConfig suggestedServer = new McpServerConfig
                     {
-                        Name = subParts.Length > 1 ? subParts[1] : string.Empty,
+                        Name = string.Empty,
                         Transport = McpTransportTypeEnum.Stdio,
                         Args = new List<string>(),
                         Env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
                         McpPath = DefaultMcpHttpPath
                     };
-
-                    if (subParts.Length > 2)
-                    {
-                        string commandOrUrl = subParts[2];
-                        if (LooksLikeHttpUrl(commandOrUrl))
-                        {
-                            suggestedServer.Transport = McpTransportTypeEnum.Http;
-                            suggestedServer.Url = commandOrUrl;
-                            suggestedServer.McpPath = subParts.Length > 3
-                                ? NormalizeMcpHttpPath(subParts[3])
-                                : DefaultMcpHttpPath;
-                        }
-                        else
-                        {
-                            suggestedServer.Command = commandOrUrl;
-                            suggestedServer.Args = subParts.Length > 3
-                                ? new List<string>(subParts.Skip(3))
-                                : new List<string>();
-                        }
-                    }
 
                     if (!TryRunMcpAddWizard(suggestedServer, out McpServerConfig configuredServer))
                     {
