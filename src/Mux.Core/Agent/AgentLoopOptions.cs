@@ -21,7 +21,7 @@ namespace Mux.Core.Agent
         private string _SystemPrompt = string.Empty;
         private ApprovalPolicyEnum _ApprovalPolicy = ApprovalPolicyEnum.Ask;
         private string _WorkingDirectory = Directory.GetCurrentDirectory();
-        private int _MaxIterations = 25;
+        private int _MaxIterations = 50;
         private bool _Verbose = false;
         private double _TokenEstimationRatio = 3.5;
         private int _ContextWindowSafetyMarginPercent = 15;
@@ -108,7 +108,7 @@ namespace Mux.Core.Agent
         }
 
         /// <summary>
-        /// The maximum number of loop iterations before stopping. Clamped to the range 1-100. Defaults to 25.
+        /// The maximum number of loop iterations before stopping. Clamped to the range 1-100. Defaults to 50.
         /// </summary>
         public int MaxIterations
         {

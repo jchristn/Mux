@@ -133,6 +133,7 @@ namespace Mux.Cli.Commands
                 BuiltInToolCount = runtime.Capabilities.BuiltInToolCount,
                 EffectiveToolCount = runtime.Capabilities.EffectiveToolCount,
                 ToolsEnabled = runtime.Capabilities.ToolsEnabled,
+                MaxAgentIterations = runtime.MaxAgentIterations,
                 McpSupported = runtime.Capabilities.McpSupported,
                 McpConfigured = runtime.Capabilities.McpConfigured,
                 McpServerCount = runtime.Capabilities.McpServerCount,
@@ -356,6 +357,11 @@ namespace Mux.Cli.Commands
         /// Whether built-in tool calling is enabled for the selected endpoint.
         /// </summary>
         public bool ToolsEnabled { get; set; }
+
+        /// <summary>
+        /// Effective maximum agent iterations for this selected endpoint.
+        /// </summary>
+        public int MaxAgentIterations { get; set; }
 
         /// <summary>
         /// Number of built-in tools compiled into mux.

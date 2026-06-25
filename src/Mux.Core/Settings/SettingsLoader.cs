@@ -99,6 +99,7 @@ namespace Mux.Core.Settings
                     ["timeoutMs"] = 120000,
                     ["headers"] = new JsonObject(),
                     ["autoApproveTools"] = false,
+                    ["maxAgentIterations"] = null,
                     ["quirks"] = (JsonNode?)null
                 };
 
@@ -669,6 +670,7 @@ namespace Mux.Core.Settings
                 TimeoutMs = source.TimeoutMs,
                 Headers = new Dictionary<string, string>(source.Headers ?? new Dictionary<string, string>()),
                 AutoApproveTools = source.AutoApproveTools,
+                MaxAgentIterations = source.MaxAgentIterations,
                 Quirks = source.Quirks == null
                     ? null
                     : new BackendQuirks

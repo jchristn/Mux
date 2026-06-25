@@ -31,6 +31,7 @@ namespace Test.Xunit.Settings
                 MaxTokens = 16384,
                 Temperature = 0.7,
                 ContextWindow = 128000,
+                MaxAgentIterations = 75,
                 AutoApproveTools = true,
                 Headers = new Dictionary<string, string> { { "Authorization", "Bearer sk-test-key" } },
                 Quirks = new BackendQuirks
@@ -52,6 +53,7 @@ namespace Test.Xunit.Settings
             Assert.Equal(original.MaxTokens, deserialized.MaxTokens);
             Assert.Equal(original.Temperature, deserialized.Temperature);
             Assert.Equal(original.ContextWindow, deserialized.ContextWindow);
+            Assert.Equal(original.MaxAgentIterations, deserialized.MaxAgentIterations);
             Assert.Equal(original.AutoApproveTools, deserialized.AutoApproveTools);
             Assert.Equal(original.Headers["Authorization"], deserialized.Headers["Authorization"]);
             Assert.NotNull(deserialized.Quirks);
@@ -97,6 +99,29 @@ namespace Test.Xunit.Settings
 
             config.Temperature = 1.5;
             Assert.Equal(1.5, config.Temperature);
+        }
+
+        /// <summary>
+        /// Verifies that MaxAgentIterations is nullable and clamps to the global range when set.
+        /// </summary>
+        [Fact]
+        public void MaxAgentIterations_NullableAndClamped_ToRange()
+        {
+            EndpointConfig config = new EndpointConfig();
+
+            Assert.Null(config.MaxAgentIterations);
+
+            config.MaxAgentIterations = 0;
+            Assert.Equal(1, config.MaxAgentIterations);
+
+            config.MaxAgentIterations = 200;
+            Assert.Equal(100, config.MaxAgentIterations);
+
+            config.MaxAgentIterations = 60;
+            Assert.Equal(60, config.MaxAgentIterations);
+
+            config.MaxAgentIterations = null;
+            Assert.Null(config.MaxAgentIterations);
         }
 
         #endregion

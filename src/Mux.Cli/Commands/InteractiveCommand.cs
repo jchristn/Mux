@@ -741,7 +741,7 @@ namespace Mux.Cli.Commands
                 SystemPrompt = _SystemPrompt,
                 ApprovalPolicy = _ApprovalPolicy,
                 WorkingDirectory = _WorkingDirectory,
-                MaxIterations = _MuxSettings.MaxAgentIterations,
+                MaxIterations = _MuxSettings.GetEffectiveMaxAgentIterations(runEndpoint),
                 Verbose = _Verbose,
                 TokenEstimationRatio = _MuxSettings.TokenEstimationRatio,
                 ContextWindowSafetyMarginPercent = _MuxSettings.ContextWindowSafetyMarginPercent,
@@ -2444,6 +2444,7 @@ namespace Mux.Cli.Commands
                 TimeoutMs = endpoint.TimeoutMs,
                 Headers = new Dictionary<string, string>(endpoint.Headers),
                 AutoApproveTools = endpoint.AutoApproveTools,
+                MaxAgentIterations = endpoint.MaxAgentIterations,
                 Quirks = CloneBackendQuirks(endpoint.Quirks)
             };
         }
@@ -2665,6 +2666,7 @@ namespace Mux.Cli.Commands
                 table.AddColumn("[bold]Active[/]");
                 table.AddColumn("[bold]Default[/]");
                 table.AddColumn("[bold]Approval[/]");
+                table.AddColumn("[bold]Iterations[/]");
                 table.AddColumn("[bold]URL[/]");
 
                 foreach (EndpointConfig ep in _AllEndpoints)
@@ -2688,10 +2690,11 @@ namespace Mux.Cli.Commands
                     string approvalDisplay = ep.AutoApproveTools
                         ? (isCurrent ? "[green]auto[/]" : "[cyan]auto[/]")
                         : "[dim]ask[/]";
+                    string iterationsDisplay = FormatEndpointIterationsForTable(ep, isCurrent);
                     string urlDisplay = isCurrent
                         ? $"[green]{Markup.Escape(ep.BaseUrl)}[/]"
                         : Markup.Escape(ep.BaseUrl);
-                    table.AddRow(nameDisplay, modelDisplay, adapterDisplay, activeDisplay, defaultDisplay, approvalDisplay, urlDisplay);
+                    table.AddRow(nameDisplay, modelDisplay, adapterDisplay, activeDisplay, defaultDisplay, approvalDisplay, iterationsDisplay, urlDisplay);
                 }
 
                 AnsiConsole.Write(table);
@@ -2749,6 +2752,29 @@ namespace Mux.Cli.Commands
             ArgumentNullException.ThrowIfNull(endpoint);
 
             return $"Endpoint switched to {endpoint.Name}, model {endpoint.Model}, {endpoint.AdapterType} adapter on base URL {endpoint.BaseUrl}";
+        }
+
+        private string FormatEndpointIterationsForTable(EndpointConfig endpoint, bool isCurrent)
+        {
+            int effectiveMaxIterations = _MuxSettings.GetEffectiveMaxAgentIterations(endpoint);
+            if (endpoint.MaxAgentIterations.HasValue)
+            {
+                string display = effectiveMaxIterations.ToString();
+                return isCurrent ? $"[green]{display}[/]" : Markup.Escape(display);
+            }
+
+            string inheritedDisplay = $"{effectiveMaxIterations} global";
+            return isCurrent
+                ? $"[green]{Markup.Escape(inheritedDisplay)}[/]"
+                : $"[dim]{Markup.Escape(inheritedDisplay)}[/]";
+        }
+
+        private string FormatEndpointIterationsForText(EndpointConfig endpoint)
+        {
+            int effectiveMaxIterations = _MuxSettings.GetEffectiveMaxAgentIterations(endpoint);
+            return endpoint.MaxAgentIterations.HasValue
+                ? effectiveMaxIterations.ToString()
+                : $"inherit global ({effectiveMaxIterations})";
         }
 
         internal static string BuildSystemPromptForEndpoint(
@@ -2885,6 +2911,7 @@ namespace Mux.Cli.Commands
             table.AddRow("Default", found.IsDefault ? "[cyan]yes[/]" : "[dim]no[/]");
             table.AddRow("Active in session", string.Equals(found.Name, _CurrentEndpoint.Name, StringComparison.OrdinalIgnoreCase) ? "[green]yes[/]" : "[dim]no[/]");
             table.AddRow("Tool approval", found.AutoApproveTools ? "[green]auto[/]" : "[dim]ask[/]");
+            table.AddRow("Max agent iterations", Markup.Escape(FormatEndpointIterationsForText(found)));
             table.AddRow("Max tokens", found.MaxTokens.ToString());
             table.AddRow("Temperature", found.Temperature.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
             table.AddRow("Context window", found.ContextWindow.ToString());
@@ -2949,6 +2976,7 @@ namespace Mux.Cli.Commands
                 WriteWorkflowSummaryItem("Base URL", savedEndpoint.BaseUrl);
                 WriteWorkflowSummaryItem("Default for new sessions", savedEndpoint.IsDefault ? "yes" : "no");
                 WriteWorkflowSummaryItem("Tool approval", savedEndpoint.AutoApproveTools ? "auto" : "ask");
+                WriteWorkflowSummaryItem("Max agent iterations", FormatEndpointIterationsForText(savedEndpoint));
                 WriteWorkflowSummaryItem("Active in this session", string.Equals(_CurrentEndpoint.Name, savedEndpoint.Name, StringComparison.OrdinalIgnoreCase) ? "yes" : "no");
                 WriteWorkflowBlankLine();
                 if (savedEndpoint.IsDefault && !string.Equals(_CurrentEndpoint.Name, savedEndpoint.Name, StringComparison.OrdinalIgnoreCase))
@@ -3033,6 +3061,7 @@ namespace Mux.Cli.Commands
                     WriteWorkflowSummaryItem("Base URL", savedEndpoint.BaseUrl);
                     WriteWorkflowSummaryItem("Default for new sessions", savedEndpoint.IsDefault ? "yes" : "no");
                     WriteWorkflowSummaryItem("Tool approval", savedEndpoint.AutoApproveTools ? "auto" : "ask");
+                    WriteWorkflowSummaryItem("Max agent iterations", FormatEndpointIterationsForText(savedEndpoint));
                     WriteWorkflowSummaryItem("Active in this session", "yes");
                     WriteWorkflowBlankLine();
                     WriteWorkflowHint("Current session history was cleared because the active endpoint changed.");
@@ -3050,6 +3079,7 @@ namespace Mux.Cli.Commands
                 WriteWorkflowSummaryItem("Base URL", savedEndpoint.BaseUrl);
                 WriteWorkflowSummaryItem("Default for new sessions", savedEndpoint.IsDefault ? "yes" : "no");
                 WriteWorkflowSummaryItem("Tool approval", savedEndpoint.AutoApproveTools ? "auto" : "ask");
+                WriteWorkflowSummaryItem("Max agent iterations", FormatEndpointIterationsForText(savedEndpoint));
                 WriteWorkflowSummaryItem("Active in this session", string.Equals(_CurrentEndpoint.Name, savedEndpoint.Name, StringComparison.OrdinalIgnoreCase) ? "yes" : "no");
                 WriteWorkflowBlankLine();
                 if (savedEndpoint.IsDefault && !string.Equals(_CurrentEndpoint.Name, savedEndpoint.Name, StringComparison.OrdinalIgnoreCase))
@@ -3474,10 +3504,12 @@ namespace Mux.Cli.Commands
 
                 if (reviewAdvanced)
                 {
+                    WriteWorkflowHint("For max agent iterations, press Enter to keep the shown value or type inherit/global/default/none/null to use settings.json.");
                     if (!TryPromptDouble("Temperature", workingEndpoint.Temperature, out double temperature)
                         || !TryPromptInt("Max tokens", workingEndpoint.MaxTokens, out int maxTokens)
                         || !TryPromptInt("Context window", workingEndpoint.ContextWindow, out int contextWindow)
-                        || !TryPromptInt("Timeout (ms)", workingEndpoint.TimeoutMs, out int timeoutMs))
+                        || !TryPromptInt("Timeout (ms)", workingEndpoint.TimeoutMs, out int timeoutMs)
+                        || !TryPromptNullableInt("Max agent iterations", workingEndpoint.MaxAgentIterations, out int? maxAgentIterations))
                     {
                         return CancelEndpointWizard();
                     }
@@ -3486,6 +3518,7 @@ namespace Mux.Cli.Commands
                     workingEndpoint.MaxTokens = maxTokens;
                     workingEndpoint.ContextWindow = contextWindow;
                     workingEndpoint.TimeoutMs = timeoutMs;
+                    workingEndpoint.MaxAgentIterations = maxAgentIterations;
                 }
 
                 WriteWorkflowBlankLine();
@@ -4308,6 +4341,47 @@ namespace Mux.Cli.Commands
             }
         }
 
+        private bool TryPromptNullableInt(string label, int? defaultValue, out int? value)
+        {
+            while (true)
+            {
+                string defaultText = defaultValue.HasValue ? defaultValue.Value.ToString() : "inherit";
+                WriteWorkflowPrompt(label, defaultText);
+                string? input = ReadWizardLine(secret: false);
+                if (input == null || IsWizardCancelInput(input))
+                {
+                    value = defaultValue;
+                    return false;
+                }
+
+                string normalized = input.Trim().ToLowerInvariant();
+                if (string.IsNullOrWhiteSpace(normalized))
+                {
+                    value = defaultValue;
+                    return true;
+                }
+
+                if (normalized == "inherit"
+                    || normalized == "global"
+                    || normalized == "default"
+                    || normalized == "none"
+                    || normalized == "null")
+                {
+                    value = null;
+                    return true;
+                }
+
+                if (int.TryParse(normalized, out int parsed))
+                {
+                    value = parsed;
+                    return true;
+                }
+
+                WriteWorkflowLine("[red]Enter an integer value, or type inherit to use settings.json.[/]");
+                WriteWorkflowBlankLine();
+            }
+        }
+
         private bool TryPromptDouble(string label, double defaultValue, out double value)
         {
             while (true)
@@ -4396,6 +4470,7 @@ namespace Mux.Cli.Commands
             WriteWorkflowSummaryItem("Headers", FormatEndpointHeaders(endpoint));
             WriteWorkflowSummaryItem("Default", endpoint.IsDefault ? "yes" : "no");
             WriteWorkflowSummaryItem("Tool approval", endpoint.AutoApproveTools ? "auto" : "ask");
+            WriteWorkflowSummaryItem("Max agent iterations", FormatEndpointIterationsForText(endpoint));
             WriteWorkflowSummaryItem("Temperature", endpoint.Temperature.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
             WriteWorkflowSummaryItem("Max tokens", endpoint.MaxTokens.ToString());
             WriteWorkflowSummaryItem("Context window", endpoint.ContextWindow.ToString());
@@ -4719,6 +4794,7 @@ namespace Mux.Cli.Commands
             table.AddRow("Base URL", Markup.Escape(_CurrentEndpoint.BaseUrl));
             table.AddRow("Working directory", Markup.Escape(_WorkingDirectory));
             table.AddRow("Approval policy", Markup.Escape(_ApprovalPolicy.ToString()));
+            table.AddRow("Max agent iterations", Markup.Escape(FormatEndpointIterationsForText(_CurrentEndpoint)));
             table.AddRow("Conversation messages", _ConversationHistory.Count.ToString());
             table.AddRow("Auto title updates", _ConversationTitleSetByUser ? "disabled (user title)" : $"enabled ({TitleReviewIntervalTurns} successful turns)");
             table.AddRow("Auto compaction", _MuxSettings.AutoCompactEnabled ? "enabled" : "disabled");

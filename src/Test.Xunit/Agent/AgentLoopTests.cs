@@ -46,7 +46,7 @@ namespace Test.Xunit.Agent
             Assert.Empty(options.ConversationHistory);
             Assert.Equal(string.Empty, options.SystemPrompt);
             Assert.Equal(ApprovalPolicyEnum.Ask, options.ApprovalPolicy);
-            Assert.Equal(25, options.MaxIterations);
+            Assert.Equal(50, options.MaxIterations);
             Assert.False(options.Verbose);
             Assert.Equal(3.5, options.TokenEstimationRatio);
             Assert.Equal(15, options.ContextWindowSafetyMarginPercent);

@@ -10,6 +10,7 @@ All notable changes to mux are documented here.
 - External web search integration through the `web_search` tool, configurable with Tavily and You.com providers from `settings.json` or the interactive `/search` wizard
 - `mux endpoint list` and `mux endpoint show <name>` as top-level non-interactive commands, including machine-readable `json` output for stored endpoint inspection with redacted secret-like header values
 - `ARMADA.md` as a focused integration guide for orchestrator consumers, plus a tightened `ARMADA_IMPROVEMENTS.md` plan that reflects the current CLI/runtime surface
+- Nullable endpoint-scoped `maxAgentIterations` overrides, with inherited global defaults and additive endpoint inspection metadata
 
 ### Removed
 
@@ -19,6 +20,7 @@ All notable changes to mux are documented here.
 ### Changed
 
 - Endpoint configs can now persist `autoApproveTools`, and interactive `always` approval responses now save endpoint-scoped auto-approval for future sessions
+- Agent loop iteration limits now default to `50` and resolve from endpoint `maxAgentIterations` when set, otherwise from `settings.json.maxAgentIterations`, with the same `1-100` clamp in both places
 - Interactive `/model` now aliases `/endpoint`, including `list`, `<name>`, `show`, `add`, `edit`, and `remove` forms
 - `mux print` now supports `--output-last-message <path>` to write only the final assistant response text to a file; failed runs leave the file absent
 - `mux print`, `mux probe`, and `mux endpoint` now support `--config-dir <path>` as a first-class config-root override, with precedence over `MUX_CONFIG_DIR`
@@ -31,6 +33,7 @@ All notable changes to mux are documented here.
 ### Testing
 
 - Added `Test.Xunit` coverage for `--config-dir`, `--output-last-message`, `probe --require-tools`, and `endpoint list/show`
+- Added `Test.Xunit` coverage for endpoint-scoped max iteration persistence, clamping, JSONL runtime metadata, and endpoint inspection output
 - Added `Test.Xunit` coverage for `web_retrieve`, external-search tool registration, endpoint-switch no-fallback behavior, and web retrieval prompt guidance
 - Added Armada-style `Test.Automated` contract coverage for isolated config directories and endpoint inspection
 

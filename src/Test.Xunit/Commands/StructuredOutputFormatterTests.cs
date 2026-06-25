@@ -65,6 +65,7 @@ namespace Test.Xunit.Commands
             Assert.Equal("run_started", startedJson.RootElement.GetProperty("eventType").GetString());
             Assert.Equal("local", startedJson.RootElement.GetProperty("endpointName").GetString());
             Assert.Equal("print", startedJson.RootElement.GetProperty("commandName").GetString());
+            Assert.Equal(10, startedJson.RootElement.GetProperty("maxIterations").GetInt32());
             Assert.Equal(32768, startedJson.RootElement.GetProperty("contextWindow").GetInt32());
             Assert.Equal(4096, startedJson.RootElement.GetProperty("reservedOutputTokens").GetInt32());
             Assert.Equal(23756, startedJson.RootElement.GetProperty("usableInputLimit").GetInt32());

@@ -92,6 +92,62 @@ namespace Test.Xunit.Commands
         }
 
         /// <summary>
+        /// Verifies that endpoint-scoped max agent iterations override the global setting in print mode.
+        /// </summary>
+        [Fact]
+        public void PrintCommand_Jsonl_EndpointMaxAgentIterationsOverride_IsApplied()
+        {
+            using MockHttpServer server = new MockHttpServer();
+            string sseChunk = "{\"choices\":[{\"delta\":{\"content\":\"Endpoint iteration override works.\"},\"finish_reason\":\"stop\"}]}";
+            server.RegisterStreamingResponse("endpoint iteration override test", new System.Collections.Generic.List<string> { sseChunk });
+            server.Start();
+
+            string configDir = CreateTempConfigDirectory(
+                new[]
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["name"] = "iteration-endpoint",
+                        ["adapterType"] = "openai-compatible",
+                        ["baseUrl"] = server.BaseUrl,
+                        ["model"] = "test-model",
+                        ["isDefault"] = true,
+                        ["maxAgentIterations"] = 7
+                    }
+                },
+                settingsJson: "{\"maxAgentIterations\":50}");
+
+            try
+            {
+                (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+                {
+                    "print",
+                    "--config-dir", configDir,
+                    "--output-format", "jsonl",
+                    "--yolo",
+                    "--endpoint", "iteration-endpoint",
+                    "endpoint iteration override test"
+                });
+
+                Assert.Equal(0, exitCode);
+                Assert.Equal(string.Empty, stderr.Trim());
+
+                string[] lines = stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+                JsonDocument started = JsonDocument.Parse(lines[0]);
+
+                Assert.Equal("run_started", started.RootElement.GetProperty("eventType").GetString());
+                Assert.Equal(7, started.RootElement.GetProperty("maxIterations").GetInt32());
+            }
+            finally
+            {
+                if (Directory.Exists(configDir))
+                {
+                    Directory.Delete(configDir, true);
+                }
+            }
+        }
+
+        /// <summary>
         /// Verifies that print mode rejects ask approval in non-interactive mode with a structured error code.
         /// </summary>
         [Fact]
@@ -634,6 +690,7 @@ namespace Test.Xunit.Commands
                     ["model"] = "model-a",
                     ["isDefault"] = true,
                     ["autoApproveTools"] = true,
+                    ["maxAgentIterations"] = 44,
                     ["headers"] = new Dictionary<string, string>
                     {
                         ["Authorization"] = "Bearer super-secret"
@@ -663,6 +720,9 @@ namespace Test.Xunit.Commands
                 JsonElement endpoint = json.RootElement.GetProperty("endpoint");
                 Assert.Equal("chat-only", endpoint.GetProperty("name").GetString());
                 Assert.True(endpoint.GetProperty("autoApproveTools").GetBoolean());
+                Assert.Equal(44, endpoint.GetProperty("maxAgentIterations").GetInt32());
+                Assert.Equal(44, endpoint.GetProperty("effectiveMaxAgentIterations").GetInt32());
+                Assert.Equal("endpoint", endpoint.GetProperty("maxAgentIterationsSource").GetString());
                 Assert.False(endpoint.GetProperty("toolsEnabled").GetBoolean());
                 Assert.Equal("[redacted]", endpoint.GetProperty("headers").GetProperty("Authorization").GetString());
             }

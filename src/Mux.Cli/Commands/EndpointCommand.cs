@@ -71,15 +71,16 @@ namespace Mux.Cli.Commands
                 SettingsLoader.EnsureConfigDirectory();
                 string configDirectory = SettingsLoader.GetConfigDirectory();
                 List<EndpointConfig> endpoints = SettingsLoader.LoadEndpoints();
+                MuxSettings muxSettings = SettingsLoader.LoadSettings();
                 string action = (settings.Action ?? string.Empty).Trim().ToLowerInvariant();
 
                 switch (action)
                 {
                     case "list":
                     case "ls":
-                        return Task.FromResult(HandleList(outputFormat, configDirectory, endpoints));
+                        return Task.FromResult(HandleList(outputFormat, configDirectory, endpoints, muxSettings));
                     case "show":
-                        return Task.FromResult(HandleShow(outputFormat, configDirectory, endpoints, settings.Name));
+                        return Task.FromResult(HandleShow(outputFormat, configDirectory, endpoints, settings.Name, muxSettings));
                     default:
                         EmitError(outputFormat, "invalid_argument", "Usage: mux endpoint list|ls [--output-format json] or mux endpoint show <name> [--output-format json].", configDirectory);
                         return Task.FromResult(1);
@@ -92,9 +93,9 @@ namespace Mux.Cli.Commands
             }
         }
 
-        private static int HandleList(OutputFormatEnum outputFormat, string configDirectory, List<EndpointConfig> endpoints)
+        private static int HandleList(OutputFormatEnum outputFormat, string configDirectory, List<EndpointConfig> endpoints, MuxSettings muxSettings)
         {
-            List<EndpointInspectionRecord> inspected = endpoints.Select(ToInspectionRecord).ToList();
+            List<EndpointInspectionRecord> inspected = endpoints.Select(endpoint => ToInspectionRecord(endpoint, muxSettings)).ToList();
             EndpointListResult result = new EndpointListResult
             {
                 Success = true,
@@ -115,6 +116,7 @@ namespace Mux.Cli.Commands
                 table.AddColumn("Base URL");
                 table.AddColumn("Default");
                 table.AddColumn("Approval");
+                table.AddColumn("Iterations");
                 table.AddColumn("Tools");
 
                 foreach (EndpointInspectionRecord endpoint in inspected)
@@ -126,6 +128,7 @@ namespace Mux.Cli.Commands
                         endpoint.BaseUrl,
                         endpoint.IsDefault ? "[green]yes[/]" : "no",
                         endpoint.AutoApproveTools ? "[green]auto[/]" : "ask",
+                        FormatEndpointIterationsForTable(endpoint),
                         endpoint.ToolsEnabled ? "[green]enabled[/]" : "[yellow]disabled[/]");
                 }
 
@@ -135,7 +138,7 @@ namespace Mux.Cli.Commands
             return 0;
         }
 
-        private static int HandleShow(OutputFormatEnum outputFormat, string configDirectory, List<EndpointConfig> endpoints, string? endpointName)
+        private static int HandleShow(OutputFormatEnum outputFormat, string configDirectory, List<EndpointConfig> endpoints, string? endpointName, MuxSettings muxSettings)
         {
             if (string.IsNullOrWhiteSpace(endpointName))
             {
@@ -152,7 +155,7 @@ namespace Mux.Cli.Commands
                 return 1;
             }
 
-            EndpointInspectionRecord inspected = ToInspectionRecord(found);
+            EndpointInspectionRecord inspected = ToInspectionRecord(found, muxSettings);
             EndpointShowResult result = new EndpointShowResult
             {
                 Success = true,
@@ -172,10 +175,11 @@ namespace Mux.Cli.Commands
             return 0;
         }
 
-        private static EndpointInspectionRecord ToInspectionRecord(EndpointConfig endpoint)
+        private static EndpointInspectionRecord ToInspectionRecord(EndpointConfig endpoint, MuxSettings muxSettings)
         {
             BackendQuirks quirks = endpoint.Quirks ?? Defaults.QuirksForAdapter(endpoint.AdapterType);
             Dictionary<string, string> headers = endpoint.Headers ?? new Dictionary<string, string>();
+            bool hasEndpointIterationOverride = endpoint.MaxAgentIterations.HasValue;
 
             return new EndpointInspectionRecord
             {
@@ -189,6 +193,9 @@ namespace Mux.Cli.Commands
                 ContextWindow = endpoint.ContextWindow,
                 TimeoutMs = endpoint.TimeoutMs,
                 AutoApproveTools = endpoint.AutoApproveTools,
+                MaxAgentIterations = endpoint.MaxAgentIterations,
+                EffectiveMaxAgentIterations = muxSettings.GetEffectiveMaxAgentIterations(endpoint),
+                MaxAgentIterationsSource = hasEndpointIterationOverride ? "endpoint" : "settings",
                 ToolsEnabled = quirks.SupportsTools,
                 HeaderNames = headers.Keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToList(),
                 Headers = headers.ToDictionary(
@@ -209,6 +216,7 @@ namespace Mux.Cli.Commands
             AnsiConsole.MarkupLine($"[bold]Context Window:[/] {endpoint.ContextWindow}");
             AnsiConsole.MarkupLine($"[bold]Timeout:[/] {endpoint.TimeoutMs}ms");
             AnsiConsole.MarkupLine($"[bold]Tool Approval:[/] {(endpoint.AutoApproveTools ? "[green]auto[/]" : "ask")}");
+            AnsiConsole.MarkupLine($"[bold]Max Agent Iterations:[/] {Markup.Escape(FormatEndpointIterationsForText(endpoint))}");
             AnsiConsole.MarkupLine($"[bold]Tool Calling:[/] {(endpoint.ToolsEnabled ? "[green]enabled[/]" : "[yellow]disabled[/]")}");
             if (endpoint.HeaderNames.Count > 0)
             {
@@ -218,6 +226,20 @@ namespace Mux.Cli.Commands
             {
                 AnsiConsole.MarkupLine("[bold]Headers:[/] none");
             }
+        }
+
+        private static string FormatEndpointIterationsForTable(EndpointInspectionRecord endpoint)
+        {
+            return endpoint.MaxAgentIterations.HasValue
+                ? endpoint.EffectiveMaxAgentIterations.ToString()
+                : $"[dim]{endpoint.EffectiveMaxAgentIterations} global[/]";
+        }
+
+        private static string FormatEndpointIterationsForText(EndpointInspectionRecord endpoint)
+        {
+            return endpoint.MaxAgentIterations.HasValue
+                ? endpoint.EffectiveMaxAgentIterations.ToString()
+                : $"inherit global ({endpoint.EffectiveMaxAgentIterations})";
         }
 
         private static void EmitError(OutputFormatEnum outputFormat, string errorCode, string message, string configDirectory)
@@ -341,6 +363,21 @@ namespace Mux.Cli.Commands
         /// Whether this endpoint auto-approves tool calls.
         /// </summary>
         public bool AutoApproveTools { get; set; }
+
+        /// <summary>
+        /// Endpoint-scoped maximum agent iterations, or null to inherit the global setting.
+        /// </summary>
+        public int? MaxAgentIterations { get; set; }
+
+        /// <summary>
+        /// Effective maximum agent iterations after applying the endpoint override, if any.
+        /// </summary>
+        public int EffectiveMaxAgentIterations { get; set; }
+
+        /// <summary>
+        /// Source of the effective maximum agent iterations value: endpoint or settings.
+        /// </summary>
+        public string MaxAgentIterationsSource { get; set; } = string.Empty;
 
         /// <summary>
         /// Whether tool calling is enabled.

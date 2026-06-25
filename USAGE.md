@@ -85,6 +85,7 @@ Notes:
 - `/endpoint add` launches a guided creation wizard that prompts for the adapter, base URL, model, auth mode, default status, endpoint-scoped tool auto-approval, and optional advanced settings before probing and saving
 - `/endpoint edit <name>` launches the same guided workflow for an existing endpoint; editing the active endpoint clears the current conversation state after the update is saved
 - Endpoint configs can persist `autoApproveTools: true` so tool calls auto-approve whenever that endpoint is active unless CLI approval flags override it
+- Endpoint configs can set nullable `maxAgentIterations`; when set it overrides `settings.json.maxAgentIterations` for that endpoint, and when omitted or `null` it inherits the global default
 - Auth modes are `none`, `bearer token`, and `custom headers`; for auth values you can store either a discrete value in `endpoints.json` or an environment-variable reference
 - The wizard accepts bare environment variable names plus `${VAR}`, `%VAR%`, `$VAR`, and `$env:VAR`, then stores environment references canonically as `${VAR}`
 - `/endpoint remove <name>`, `/endpoint delete <name>`, and `/endpoint rm <name>` ask for confirmation and refuse to remove the endpoint currently active in the session; switch first if you need to delete it
@@ -168,6 +169,7 @@ Depending on the event, additional fields may include:
 - `message`
 - `status`
 - `durationMs`
+- `maxIterations`
 - `contextWindow`
 - `reservedOutputTokens`
 - `usableInputLimit`
@@ -215,7 +217,7 @@ mux print --output-format jsonl --yolo "read README.md"
 Example JSONL lines:
 
 ```json
-{"contractVersion":1,"eventType":"run_started","timestampUtc":"2026-03-31T20:00:00Z","runId":"...","endpointName":"ollama-local","model":"qwen2.5-coder:7b"}
+{"contractVersion":1,"eventType":"run_started","timestampUtc":"2026-03-31T20:00:00Z","runId":"...","endpointName":"ollama-local","model":"qwen2.5-coder:7b","maxIterations":50}
 {"contractVersion":1,"eventType":"assistant_text","timestampUtc":"2026-03-31T20:00:01Z","text":"Here is the summary..."}
 {"contractVersion":1,"eventType":"run_completed","timestampUtc":"2026-03-31T20:00:02Z","runId":"...","status":"completed","durationMs":1042}
 ```
@@ -225,7 +227,7 @@ Notes:
 - secret-like values in structured payloads are redacted on a best-effort basis
 - default text mode is unchanged
 - `run_started.mcp.supported` is always `false` in `print` mode today because non-interactive mode does not load MCP servers
-- `run_started` now includes context-budget metadata, and `run_completed` includes `finalEstimatedTokens` plus `compactionCount`
+- `run_started` now includes `maxIterations` and context-budget metadata, and `run_completed` includes `finalEstimatedTokens` plus `compactionCount`
 - `context_status` and `context_compacted` are additive event types within `contractVersion = 1`; consumers should ignore unknown event types in a known contract version
 - `error` events retain `code` for backward compatibility and also expose `errorCode` plus `failureCategory`
 - `contractVersion` is shared across `print` JSONL events and `probe` JSON payloads
@@ -302,7 +304,8 @@ Mux's `ollama` adapter uses Ollama's OpenAI-compatible API surface, so the base 
       "name": "ollama-qwen32",
       "adapterType": "ollama",
       "baseUrl": "http://localhost:11434/v1",
-      "model": "qwen2.5-coder:32b"
+      "model": "qwen2.5-coder:32b",
+      "maxAgentIterations": 60
     }
   ]
 }
@@ -324,6 +327,7 @@ mux print --yolo --endpoint ollama-qwen32 "refactor UserService"
       "adapterType": "openai-compatible",
       "baseUrl": "http://localhost:8000/v1",
       "model": "deepseek-ai/DeepSeek-Coder-V2-Instruct",
+      "maxAgentIterations": 80,
       "headers": { "Authorization": "Bearer sk-local-dev" },
       "quirks": {
         "assembleToolCallDeltas": true,
@@ -351,6 +355,7 @@ mux probe -e vllm-deepseek --output-format json
       "adapterType": "openai",
       "baseUrl": "https://api.openai.com/v1",
       "model": "gpt-4o",
+      "maxAgentIterations": null,
       "headers": { "Authorization": "Bearer ${OPENAI_API_KEY}" }
     }
   ]

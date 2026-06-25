@@ -764,6 +764,7 @@ namespace Mux.Core.Agent
                 TimeoutMs = endpoint.TimeoutMs,
                 Headers = new Dictionary<string, string>(endpoint.Headers),
                 AutoApproveTools = endpoint.AutoApproveTools,
+                MaxAgentIterations = endpoint.MaxAgentIterations,
                 Quirks = CloneBackendQuirks(endpoint.Quirks)
             };
         }
