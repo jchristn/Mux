@@ -19,7 +19,7 @@ namespace Mux.Cli.Commands
         /// <summary>
         /// The endpoint inspection action to perform.
         /// </summary>
-        [Description("Endpoint action: list or show.")]
+        [Description("Endpoint action: list, ls, or show.")]
         [CommandArgument(0, "<action>")]
         public string Action { get; set; } = string.Empty;
 
@@ -76,11 +76,12 @@ namespace Mux.Cli.Commands
                 switch (action)
                 {
                     case "list":
+                    case "ls":
                         return Task.FromResult(HandleList(outputFormat, configDirectory, endpoints));
                     case "show":
                         return Task.FromResult(HandleShow(outputFormat, configDirectory, endpoints, settings.Name));
                     default:
-                        EmitError(outputFormat, "invalid_argument", "Usage: mux endpoint list [--output-format json] or mux endpoint show <name> [--output-format json].", configDirectory);
+                        EmitError(outputFormat, "invalid_argument", "Usage: mux endpoint list|ls [--output-format json] or mux endpoint show <name> [--output-format json].", configDirectory);
                         return Task.FromResult(1);
                 }
             }

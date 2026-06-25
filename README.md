@@ -105,7 +105,7 @@ mux probe [OPTIONS]                  Validate config and backend access
 mux endpoint <subcommand> [OPTIONS]  Inspect configured endpoints
 ```
 
-Use `mux print` as the preferred non-interactive entrypoint in scripts and automation. `--print` remains supported and is convenient for stdin piping. Use `mux endpoint list/show` when automation needs to inspect stored endpoint configuration without entering the REPL.
+Use `mux print` as the preferred non-interactive entrypoint in scripts and automation. `--print` remains supported and is convenient for stdin piping. Use `mux endpoint list`/`ls`/`show` when automation needs to inspect stored endpoint configuration without entering the REPL.
 
 ### Options
 
@@ -135,20 +135,20 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 
 ```text
 /endpoint, /model                 List configured endpoints
-/endpoint list, /model list       Alias for /endpoint
+/endpoint list|ls, /model list|ls Alias for /endpoint
 /endpoint <name>, /model <name>   Switch to a named endpoint
 /endpoint show <name>             Show endpoint details and probe connectivity
 /model show <name>                Alias for /endpoint show <name>
 /endpoint add, /model add         Start the guided endpoint creation wizard
 /endpoint edit <name>             Start the guided endpoint edit wizard
 /model edit <name>                Alias for /endpoint edit <name>
-/endpoint remove <name>           Remove an endpoint from endpoints.json after confirmation
-/model remove <name>              Alias for /endpoint remove <name>
-/search                           List external search providers and global search status
+/endpoint remove|delete|rm <name> Remove an endpoint from endpoints.json after confirmation
+/model remove|delete|rm <name>    Alias for /endpoint remove|delete|rm <name>
+/search, /search list|ls          List external search providers and global search status
 /search add [name]                Start the guided external search provider add wizard
 /search show <name>               Show external search provider details
 /search edit <name>               Start the guided external search provider edit wizard
-/search remove <name>             Remove an external search provider from settings.json
+/search remove|delete|rm <name>   Remove an external search provider from settings.json
 /tools                            List available tools
 /status                           Show session metadata, title, and estimated context usage
 /context                          Alias for /status
@@ -158,9 +158,9 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 /compact strategy [summary|trim]  Show or set the session compaction strategy
 /title                            Show the current conversation title
 /title <text>                     Set the conversation title and disable automatic retitling
-/mcp list                         Show MCP server status
+/mcp list|ls                      Show MCP server status
 /mcp add                          Start the guided MCP server add wizard
-/mcp remove <name>                Remove an MCP server
+/mcp remove|delete|rm <name>      Remove an MCP server
 /system                           Show the full current system prompt
 /system <text>                    Replace the system prompt for this session
 /clear                            Clear conversation history
@@ -305,12 +305,14 @@ Examples:
 
 ```bash
 mux endpoint list
+mux endpoint ls
 mux endpoint list --output-format json
+mux endpoint ls --output-format json
 mux endpoint show openai-gpt4o
 mux endpoint show openai-gpt4o --output-format json
 ```
 
-`endpoint list` returns configured endpoint names. `endpoint show` returns one configured endpoint with secret-like header values redacted, tool-calling capability, and persisted tool-approval mode. Use `--config-dir` when you need to inspect an isolated config directory.
+`endpoint list` and `endpoint ls` return configured endpoint names. `endpoint show` returns one configured endpoint with secret-like header values redacted, tool-calling capability, and persisted tool-approval mode. Use `--config-dir` when you need to inspect an isolated config directory.
 
 ## Configuration
 

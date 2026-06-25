@@ -18,7 +18,9 @@ namespace Mux.Cli.Commands
         private void HandleSearchCommand(string argument)
         {
             string trimmed = (argument ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(trimmed) || string.Equals(trimmed, "list", StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(trimmed)
+                || string.Equals(trimmed, "list", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(trimmed, "ls", StringComparison.OrdinalIgnoreCase))
             {
                 HandleSearchListCommand();
                 return;
@@ -55,9 +57,11 @@ namespace Mux.Cli.Commands
                     return;
 
                 case "remove":
+                case "delete":
+                case "rm":
                     if (string.IsNullOrWhiteSpace(value))
                     {
-                        WriteFailureLine("Usage: /search remove <name>");
+                        WriteFailureLine("Usage: /search remove|delete|rm <name>");
                         return;
                     }
 
@@ -65,7 +69,7 @@ namespace Mux.Cli.Commands
                     return;
 
                 default:
-                    WriteFailureLine("Unknown /search command. Use /search, /search add [name], /search show <name>, /search edit <name>, or /search remove <name>.");
+                    WriteFailureLine("Unknown /search command. Use /search, /search list|ls, /search add [name], /search show <name>, /search edit <name>, or /search remove|delete|rm <name>.");
                     return;
             }
         }
@@ -504,7 +508,7 @@ namespace Mux.Cli.Commands
                     "Provider name",
                     suggestedName,
                     out providerName,
-                    "Short name used with /search show, /search edit, /search remove, and the web_search tool's provider override."))
+                    "Short name used with /search show, /search edit, /search remove/delete/rm, and the web_search tool's provider override."))
                 {
                     return false;
                 }

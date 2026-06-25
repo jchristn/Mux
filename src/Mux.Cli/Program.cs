@@ -98,7 +98,7 @@ USAGE:
     mux --print [OPTIONS] <prompt>       Single-shot mode
     echo ""prompt"" | mux --print          Read prompt from stdin
     mux probe [OPTIONS]                  Validate config and backend access
-    mux endpoint <list|show> [OPTIONS]   Inspect configured endpoints
+    mux endpoint <list|ls|show> [OPTIONS] Inspect configured endpoints
 
 OPTIONS:
     -h, --help, /?                       Show this help message and exit
@@ -134,6 +134,7 @@ PROBE:
 
 ENDPOINTS:
     mux endpoint list --output-format json
+    mux endpoint ls --output-format json
     mux endpoint show openai-prod --output-format json
 
 EXAMPLES:
@@ -145,6 +146,7 @@ EXAMPLES:
     mux -p -e openai-gpt4 ""explain x""   Single-shot with OpenAI
     mux probe --output-format json
     mux endpoint list --output-format json
+    mux endpoint ls --output-format json
     mux --base-url http://localhost:11434/v1 --model llama3.1:70b
                                          Ad-hoc endpoint, no config needed
 

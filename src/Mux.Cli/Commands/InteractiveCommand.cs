@@ -3629,7 +3629,7 @@ namespace Mux.Cli.Commands
         {
             while (true)
             {
-                if (!TryPromptRequiredWizardValue("Server name", suggestedName, out serverName, "Short name used with /mcp remove <name> and as the MCP tool prefix."))
+                if (!TryPromptRequiredWizardValue("Server name", suggestedName, out serverName, "Short name used with /mcp remove/delete/rm <name> and as the MCP tool prefix."))
                 {
                     return false;
                 }
@@ -4927,12 +4927,12 @@ namespace Mux.Cli.Commands
             table.AddColumn("[bold]Description[/]");
 
             table.AddRow("[cyan]/help[/], [cyan]/?[/]", "Show this help message");
-            table.AddRow("[cyan]/endpoint[/], [cyan]/endpoint list[/], [cyan]/model[/], [cyan]/model list[/]", "List all configured endpoints with current one highlighted");
+            table.AddRow("[cyan]/endpoint[/], [cyan]/endpoint list|ls[/], [cyan]/model[/], [cyan]/model list|ls[/]", "List all configured endpoints with current one highlighted");
             table.AddRow("[cyan]/endpoint[/] [dim]<name>[/], [cyan]/model[/] [dim]<name>[/]", "Switch to a named endpoint");
             table.AddRow("[cyan]/endpoint show[/] [dim]<name>[/], [cyan]/model show[/] [dim]<name>[/]", "Show endpoint details and probe connectivity");
             table.AddRow("[cyan]/endpoint add[/], [cyan]/model add[/]", "Start the guided endpoint creation wizard");
             table.AddRow("[cyan]/endpoint edit[/] [dim]<name>[/], [cyan]/model edit[/] [dim]<name>[/]", "Start the guided endpoint edit wizard");
-            table.AddRow("[cyan]/endpoint remove[/] [dim]<name>[/], [cyan]/model remove[/] [dim]<name>[/]", "Remove an endpoint from endpoints.json");
+            table.AddRow("[cyan]/endpoint remove|delete|rm[/] [dim]<name>[/], [cyan]/model remove|delete|rm[/] [dim]<name>[/]", "Remove an endpoint from endpoints.json");
             table.AddRow("[cyan]/tools[/]", "List all available tools with descriptions");
             table.AddRow("[cyan]/status[/]", "Show session metadata, context usage, and title");
             table.AddRow("[cyan]/context[/]", "Alias for /status");
@@ -4945,14 +4945,14 @@ namespace Mux.Cli.Commands
             table.AddRow("[cyan]/clear[/]", "Clear conversation history");
             table.AddRow("[cyan]/system[/]", "Show the full current system prompt");
             table.AddRow("[cyan]/system[/] [dim]<text>[/]", "Replace system prompt for this session");
-            table.AddRow("[cyan]/search[/], [cyan]/search list[/]", "List external search providers and global search status");
+            table.AddRow("[cyan]/search[/], [cyan]/search list|ls[/]", "List external search providers and global search status");
             table.AddRow("[cyan]/search show[/] [dim]<name>[/]", "Show external search provider details");
             table.AddRow("[cyan]/search add[/] [dim][[name]][/]", "Start the guided external search provider add wizard");
             table.AddRow("[cyan]/search edit[/] [dim]<name>[/]", "Start the guided external search provider edit wizard");
-            table.AddRow("[cyan]/search remove[/] [dim]<name>[/]", "Remove an external search provider from settings.json");
-            table.AddRow("[cyan]/mcp list[/]", "List MCP server connections and status");
+            table.AddRow("[cyan]/search remove|delete|rm[/] [dim]<name>[/]", "Remove an external search provider from settings.json");
+            table.AddRow("[cyan]/mcp list|ls[/]", "List MCP server connections and status");
             table.AddRow("[cyan]/mcp add[/]", "Start the guided MCP server add wizard");
-            table.AddRow("[cyan]/mcp remove[/] [dim]<name>[/]", "Remove an MCP server");
+            table.AddRow("[cyan]/mcp remove|delete|rm[/] [dim]<name>[/]", "Remove an MCP server");
             table.AddRow("[cyan]/exit[/]", "Exit mux");
 
             WriteOutputBlock(() =>
@@ -5002,7 +5002,7 @@ namespace Mux.Cli.Commands
         }
 
         /// <summary>
-        /// Handles /mcp subcommands: list, add, remove.
+        /// Handles /mcp subcommands: list/ls, add, remove/delete/rm.
         /// </summary>
         /// <param name="argument">The argument string after /mcp.</param>
         private void HandleMcpCommand(string argument)
@@ -5013,6 +5013,7 @@ namespace Mux.Cli.Commands
             switch (subCommand)
             {
                 case "list":
+                case "ls":
                     if (_McpServers.Count == 0)
                     {
                         WriteMarkupLine("[dim]No MCP servers configured.[/]");
@@ -5106,6 +5107,8 @@ namespace Mux.Cli.Commands
                     break;
 
                 case "remove":
+                case "delete":
+                case "rm":
                     if (!EnsureQueueEmptyForStateChange("modify MCP servers"))
                     {
                         return;
@@ -5113,7 +5116,7 @@ namespace Mux.Cli.Commands
 
                     if (subParts.Length < 2)
                     {
-                        WriteMarkupLine("[yellow]Usage: /mcp remove <name>[/]");
+                        WriteMarkupLine("[yellow]Usage: /mcp remove|delete|rm <name>[/]");
                         return;
                     }
 

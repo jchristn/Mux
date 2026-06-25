@@ -40,6 +40,7 @@ Endpoint inspection:
 
 ```bash
 mux endpoint list --output-format json
+mux endpoint ls --output-format json
 mux endpoint show openai-prod --output-format json
 ```
 
@@ -48,6 +49,8 @@ Interactive endpoint management:
 ```bash
 /endpoint
 /model
+/endpoint ls
+/model ls
 /endpoint show openai-prod
 /model show openai-prod
 /endpoint add
@@ -55,32 +58,40 @@ Interactive endpoint management:
 /endpoint edit openai-prod
 /model edit openai-prod
 /endpoint remove old-endpoint
+/endpoint delete old-endpoint
+/endpoint rm old-endpoint
 /model remove old-endpoint
+/model delete old-endpoint
+/model rm old-endpoint
 ```
 
 External search management:
 
 ```bash
 /search
+/search ls
 /search add
 /search show tavily-primary
 /search edit tavily-primary
 /search remove tavily-primary
+/search delete tavily-primary
+/search rm tavily-primary
 ```
 
 Notes:
-- `/endpoint`, `/endpoint list`, `/model`, and `/model list` show the configured endpoints and highlight the active session endpoint
-- `/model` is an alias for `/endpoint` and supports the same `<name>`, `show`, `add`, `edit`, and `remove` forms
+- `/endpoint`, `/endpoint list`, `/endpoint ls`, `/model`, `/model list`, and `/model ls` show the configured endpoints and highlight the active session endpoint
+- `/model` is an alias for `/endpoint` and supports the same `<name>`, `show`, `add`, `edit`, and `remove`/`delete`/`rm` forms
 - `/endpoint show <name>` runs a lightweight connectivity probe and reports whether the endpoint is reachable
 - `/endpoint add` launches a guided creation wizard that prompts for the adapter, base URL, model, auth mode, default status, endpoint-scoped tool auto-approval, and optional advanced settings before probing and saving
 - `/endpoint edit <name>` launches the same guided workflow for an existing endpoint; editing the active endpoint clears the current conversation state after the update is saved
 - Endpoint configs can persist `autoApproveTools: true` so tool calls auto-approve whenever that endpoint is active unless CLI approval flags override it
 - Auth modes are `none`, `bearer token`, and `custom headers`; for auth values you can store either a discrete value in `endpoints.json` or an environment-variable reference
 - The wizard accepts bare environment variable names plus `${VAR}`, `%VAR%`, `$VAR`, and `$env:VAR`, then stores environment references canonically as `${VAR}`
-- `/endpoint remove <name>` asks for confirmation and refuses to remove the endpoint currently active in the session; switch first if you need to delete it
+- `/endpoint remove <name>`, `/endpoint delete <name>`, and `/endpoint rm <name>` ask for confirmation and refuse to remove the endpoint currently active in the session; switch first if you need to delete it
 - `/search` and `/search list` show global external-search status and configured providers
+- `/search ls` is an alias for `/search list`
 - `/search add [name]` configures Tavily or You.com and enables `web_search` when the provider is usable
-- `/search show`, `/search edit`, and `/search remove` inspect and maintain stored search providers
+- `/search show`, `/search edit`, and `/search remove`/`delete`/`rm` inspect and maintain stored search providers
 
 ## Built-In Process Execution
 
@@ -440,8 +451,11 @@ Runtime management:
 
 ```text
 /mcp list
+/mcp ls
 /mcp add
 /mcp remove myserver
+/mcp delete myserver
+/mcp rm myserver
 ```
 
 `/mcp add` now runs a guided wizard similar to `/endpoint add`. The wizard lets you choose `stdio` or HTTP transport, and successful adds are saved to `mcp-servers.json` as well as connected for the current session. HTTP MCP currently uses the streamable HTTP path, usually `/mcp`.
@@ -468,6 +482,7 @@ mux print --output-format jsonl --yolo --endpoint vllm-deepseek --working-direct
 mux print --output-format jsonl --yolo --system-prompt /path/to/persona.md "do the thing"
 mux probe --output-format json --require-tools --endpoint vllm-deepseek
 mux endpoint list --output-format json
+mux endpoint ls --output-format json
 mux endpoint show vllm-deepseek --output-format json
 ```
 
@@ -482,7 +497,7 @@ Recommendations:
 - rely on `run_started` and `probe` JSON metadata instead of inferring tool/MCP capability from docs alone
 - rely on `contractVersion` for parser compatibility gating
 - treat `print.errorCode`/`print.failureCategory` and `probe.errorCode`/`probe.failureCategory` as the stable failure classification surface
-- treat `mux endpoint list/show --output-format json` as the supported endpoint inspection surface
+- treat `mux endpoint list`, `mux endpoint ls`, and `mux endpoint show <name>` with `--output-format json` as the supported endpoint inspection surface
 
 ## Contract Compatibility
 

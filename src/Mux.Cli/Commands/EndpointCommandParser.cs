@@ -92,7 +92,7 @@ namespace Mux.Cli.Commands
         /// Usage for interactive endpoint commands.
         /// </summary>
         public const string BasicUsage =
-            "Usage: /endpoint, /endpoint list, /endpoint <name>, /endpoint show <name>, /endpoint add, /endpoint edit <name>, or /endpoint remove <name>";
+            "Usage: /endpoint, /endpoint list|ls, /endpoint <name>, /endpoint show <name>, /endpoint add, /endpoint edit <name>, or /endpoint remove|delete|rm <name>";
 
         /// <summary>
         /// Parses the argument text that follows <c>/endpoint</c> or <c>/model</c>.
@@ -121,6 +121,7 @@ namespace Mux.Cli.Commands
             switch (action)
             {
                 case "list":
+                case "ls":
                     if (tokens.Count != 1)
                     {
                         return Error(GetBasicUsage(normalizedCommandName));
@@ -168,9 +169,11 @@ namespace Mux.Cli.Commands
                     });
 
                 case "remove":
+                case "delete":
+                case "rm":
                     if (tokens.Count != 2)
                     {
-                        return Error($"Usage: {normalizedCommandName} remove <name>");
+                        return Error($"Usage: {normalizedCommandName} remove|delete|rm <name>");
                     }
 
                     return Success(new EndpointCommandRequest
@@ -197,7 +200,7 @@ namespace Mux.Cli.Commands
         {
             return string.Equals(commandName, CanonicalCommand, StringComparison.Ordinal)
                 ? BasicUsage
-                : $"Usage: {commandName}, {commandName} list, {commandName} <name>, {commandName} show <name>, {commandName} add, {commandName} edit <name>, or {commandName} remove <name>";
+                : $"Usage: {commandName}, {commandName} list|ls, {commandName} <name>, {commandName} show <name>, {commandName} add, {commandName} edit <name>, or {commandName} remove|delete|rm <name>";
         }
 
         private static string NormalizeCommandName(string commandName)

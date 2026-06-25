@@ -104,16 +104,17 @@ Header values support environment expansion:
 ```
 
 Interactive endpoint management:
-- `/endpoint`, `/endpoint list`, `/model`, or `/model list` shows saved endpoints and highlights the current session endpoint
-- `/model` is an alias for `/endpoint` and supports the same `<name>`, `show`, `add`, `edit`, and `remove` forms
+- `/endpoint`, `/endpoint list`, `/endpoint ls`, `/model`, `/model list`, or `/model ls` show saved endpoints and highlight the current session endpoint
+- `/model` is an alias for `/endpoint` and supports the same `<name>`, `show`, `add`, `edit`, and `remove`/`delete`/`rm` forms
 - `/endpoint add` starts a guided endpoint creation wizard
 - `/endpoint edit <name>` starts a guided endpoint edit wizard
 - `/endpoint show <name>` displays the stored endpoint fields and performs a lightweight connectivity probe
-- `/endpoint remove <name>` asks for confirmation and refuses to remove the endpoint active in the current session
+- `/endpoint remove <name>`, `/endpoint delete <name>`, and `/endpoint rm <name>` ask for confirmation and refuse to remove the endpoint active in the current session
 - typing `a` or `always` at an approval prompt auto-approves the rest of the current run and saves `autoApproveTools: true` for the active endpoint
 
 Non-interactive endpoint inspection:
 - `mux endpoint list --output-format json` lists configured endpoints
+- `mux endpoint ls --output-format json` is an alias for `mux endpoint list --output-format json`
 - `mux endpoint show <name> --output-format json` returns one configured endpoint with header values redacted
 
 Wizard auth options:
@@ -287,7 +288,7 @@ Provider fields:
 | `isDefault` | bool | preferred provider when no override is supplied |
 | `timeoutMs` | int | request timeout; clamped to `1000-300000` |
 
-Use `/search add`, `/search edit`, `/search show`, and `/search remove` in interactive mode to maintain this configuration without editing JSON by hand.
+Use `/search add`, `/search edit`, `/search show`, and `/search remove`/`delete`/`rm` in interactive mode to maintain this configuration without editing JSON by hand.
 
 `web_search` discovers candidate web results. `web_retrieve` fetches a known HTTP or HTTPS URL and does not require external-search configuration.
 

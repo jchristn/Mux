@@ -9,12 +9,16 @@ namespace Test.Xunit.Commands
     public class EndpointCommandParserTests
     {
         /// <summary>
-        /// Verifies that an empty endpoint argument lists configured endpoints.
+        /// Verifies that list aliases list configured endpoints.
         /// </summary>
-        [Fact]
-        public void Parse_EmptyArgument_ReturnsListAction()
+        /// <param name="argument">The list action alias.</param>
+        [Theory]
+        [InlineData("")]
+        [InlineData("list")]
+        [InlineData("ls")]
+        public void Parse_ListCommandAliases_ReturnListAction(string argument)
         {
-            EndpointCommandParseResult result = EndpointCommandParser.Parse(string.Empty);
+            EndpointCommandParseResult result = EndpointCommandParser.Parse(argument);
 
             Assert.True(result.Success);
             Assert.NotNull(result.Request);
@@ -92,17 +96,33 @@ namespace Test.Xunit.Commands
         }
 
         /// <summary>
-        /// Verifies that remove targets a configured endpoint name.
+        /// Verifies that remove aliases target a configured endpoint name.
         /// </summary>
-        [Fact]
-        public void Parse_RemoveCommand_ReturnsRemoveAction()
+        /// <param name="action">The remove action alias.</param>
+        [Theory]
+        [InlineData("remove")]
+        [InlineData("delete")]
+        [InlineData("rm")]
+        public void Parse_RemoveCommandAliases_ReturnRemoveAction(string action)
         {
-            EndpointCommandParseResult result = EndpointCommandParser.Parse("remove stale-endpoint");
+            EndpointCommandParseResult result = EndpointCommandParser.Parse($"{action} stale-endpoint");
 
             Assert.True(result.Success);
             Assert.NotNull(result.Request);
             Assert.Equal(EndpointCommandAction.Remove, result.Request!.Action);
             Assert.Equal("stale-endpoint", result.Request.Name);
+        }
+
+        /// <summary>
+        /// Verifies that remove aliases use the invoked endpoint command name in errors.
+        /// </summary>
+        [Fact]
+        public void Parse_RemoveCommandAlias_WithMissingName_ForModelAlias_ReturnsAliasSpecificError()
+        {
+            EndpointCommandParseResult result = EndpointCommandParser.Parse("delete", "/model");
+
+            Assert.False(result.Success);
+            Assert.Contains("Usage: /model remove|delete|rm <name>", result.ErrorMessage);
         }
 
         /// <summary>

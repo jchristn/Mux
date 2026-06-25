@@ -563,10 +563,13 @@ namespace Test.Xunit.Commands
         }
 
         /// <summary>
-        /// Verifies that endpoint list returns configured endpoints in machine-readable JSON.
+        /// Verifies that endpoint list aliases return configured endpoints in machine-readable JSON.
         /// </summary>
-        [Fact]
-        public void EndpointCommand_ListJson_ReturnsConfiguredEndpoints()
+        /// <param name="action">The list action alias.</param>
+        [Theory]
+        [InlineData("list")]
+        [InlineData("ls")]
+        public void EndpointCommand_ListAliasesJson_ReturnConfiguredEndpoints(string action)
         {
             string configDir = CreateTempConfigDirectory(new[]
             {
@@ -593,7 +596,7 @@ namespace Test.Xunit.Commands
                 (int exitCode, string stdout, string stderr) = InvokeCli(new[]
                 {
                     "endpoint",
-                    "list",
+                    action,
                     "--config-dir", configDir,
                     "--output-format", "json"
                 });
