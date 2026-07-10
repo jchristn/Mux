@@ -180,27 +180,27 @@ namespace Test.Xunit.Rendering
         [Fact]
         public void CalculateClearRegion_WhenPromptGrows_ClearsOldAndNewRows()
         {
-            (int top, int rowCount) = InteractiveChromeLayout.CalculateClearRegion(
+            ConsoleClearRegion clearRegion = InteractiveChromeLayout.CalculateClearRegion(
                 previousTop: 20,
                 previousRowCount: 1,
                 nextTop: 20,
                 nextRowCount: 2);
 
-            Assert.Equal(20, top);
-            Assert.Equal(2, rowCount);
+            Assert.Equal(20, clearRegion.Top);
+            Assert.Equal(2, clearRegion.RowCount);
         }
 
         [Fact]
         public void CalculateClearRegion_WhenPromptMovesUp_ClearsFullUnion()
         {
-            (int top, int rowCount) = InteractiveChromeLayout.CalculateClearRegion(
+            ConsoleClearRegion clearRegion = InteractiveChromeLayout.CalculateClearRegion(
                 previousTop: 30,
                 previousRowCount: 2,
                 nextTop: 29,
                 nextRowCount: 2);
 
-            Assert.Equal(29, top);
-            Assert.Equal(3, rowCount);
+            Assert.Equal(29, clearRegion.Top);
+            Assert.Equal(3, clearRegion.RowCount);
         }
     }
 }

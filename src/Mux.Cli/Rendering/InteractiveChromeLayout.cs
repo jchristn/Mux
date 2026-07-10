@@ -67,9 +67,9 @@ namespace Mux.Cli.Rendering
 
                 if (lineIndex == buffer.CurrentLineIndex)
                 {
-                    (int rowOffset, int column) = GetCellPosition(promptWidth + buffer.CursorColumn, safeWidth);
-                    cursorRowOffset = lineRowOffsets[lineIndex] + rowOffset;
-                    cursorColumn = column;
+                    ConsoleCellPosition cellPosition = GetCellPosition(promptWidth + buffer.CursorColumn, safeWidth);
+                    cursorRowOffset = lineRowOffsets[lineIndex] + cellPosition.RowOffset;
+                    cursorColumn = cellPosition.Column;
                 }
             }
 
@@ -149,7 +149,7 @@ namespace Mux.Cli.Rendering
         /// <param name="nextTop">The top row needed for the next prompt render.</param>
         /// <param name="nextRowCount">The number of rows needed for the next prompt render.</param>
         /// <returns>The top row and total row count to clear.</returns>
-        public static (int Top, int RowCount) CalculateClearRegion(
+        public static ConsoleClearRegion CalculateClearRegion(
             int previousTop,
             int previousRowCount,
             int nextTop,
@@ -162,12 +162,20 @@ namespace Mux.Cli.Rendering
 
             if (safePreviousRowCount == 0)
             {
-                return (safeNextTop, safeNextRowCount);
+                return new ConsoleClearRegion
+                {
+                    Top = safeNextTop,
+                    RowCount = safeNextRowCount
+                };
             }
 
             if (safeNextRowCount == 0)
             {
-                return (safePreviousTop, safePreviousRowCount);
+                return new ConsoleClearRegion
+                {
+                    Top = safePreviousTop,
+                    RowCount = safePreviousRowCount
+                };
             }
 
             int clearTop = Math.Min(safePreviousTop, safeNextTop);
@@ -175,7 +183,11 @@ namespace Mux.Cli.Rendering
             int nextBottom = safeNextTop + safeNextRowCount - 1;
             int clearBottom = Math.Max(previousBottom, nextBottom);
 
-            return (clearTop, clearBottom - clearTop + 1);
+            return new ConsoleClearRegion
+            {
+                Top = clearTop,
+                RowCount = clearBottom - clearTop + 1
+            };
         }
 
         #endregion
@@ -188,38 +200,16 @@ namespace Mux.Cli.Rendering
             return ((safeCells - 1) / bufferWidth) + 1;
         }
 
-        private static (int RowOffset, int Column) GetCellPosition(int cellOffset, int bufferWidth)
+        private static ConsoleCellPosition GetCellPosition(int cellOffset, int bufferWidth)
         {
             int safeOffset = Math.Max(0, cellOffset);
-            return (safeOffset / bufferWidth, safeOffset % bufferWidth);
+            return new ConsoleCellPosition
+            {
+                RowOffset = safeOffset / bufferWidth,
+                Column = safeOffset % bufferWidth
+            };
         }
 
         #endregion
-    }
-
-    /// <summary>
-    /// Physical prompt-block layout derived from the draft buffer and console width.
-    /// </summary>
-    public class PromptLayout
-    {
-        /// <summary>
-        /// Total physical rows occupied by the prompt block, including any trailing wrapped cursor row.
-        /// </summary>
-        public int TotalRows { get; set; }
-
-        /// <summary>
-        /// The cursor row offset within the prompt block.
-        /// </summary>
-        public int CursorRowOffset { get; set; }
-
-        /// <summary>
-        /// The cursor column within the cursor row.
-        /// </summary>
-        public int CursorColumn { get; set; }
-
-        /// <summary>
-        /// The top-row offset for each logical draft line within the prompt block.
-        /// </summary>
-        public int[] LineRowOffsets { get; set; } = Array.Empty<int>();
     }
 }

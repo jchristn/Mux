@@ -104,7 +104,7 @@ namespace Test.Automated.Suites
             server.RegisterStreamingResponse("cli jsonl test", new List<string> { sseChunk });
             server.Start();
 
-            (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+            CliInvocationResult invocationResult1 = InvokeCli(new[]
             {
                 "print",
                 "--output-format", "jsonl",
@@ -114,6 +114,9 @@ namespace Test.Automated.Suites
                 "--adapter-type", "openai-compatible",
                 "cli jsonl test"
             });
+            int exitCode = invocationResult1.ExitCode;
+            string stdout = invocationResult1.StdOut;
+            string stderr = invocationResult1.StdErr;
 
             AssertEqual(0, exitCode);
             AssertEqual(string.Empty, stderr.Trim());
@@ -141,7 +144,7 @@ namespace Test.Automated.Suites
             server.RegisterResponse("Respond with OK", responseJson);
             server.Start();
 
-            (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+            CliInvocationResult invocationResult2 = InvokeCli(new[]
             {
                 "probe",
                 "--output-format", "json",
@@ -149,6 +152,9 @@ namespace Test.Automated.Suites
                 "--model", "test-model",
                 "--adapter-type", "openai-compatible"
             });
+            int exitCode = invocationResult2.ExitCode;
+            string stdout = invocationResult2.StdOut;
+            string stderr = invocationResult2.StdErr;
 
             AssertEqual(0, exitCode);
             AssertEqual(string.Empty, stderr.Trim());
@@ -186,7 +192,7 @@ namespace Test.Automated.Suites
 
             try
             {
-                (int printExitCode, string printStdout, string printStderr) = InvokeCli(new[]
+                CliInvocationResult invocationResult3 = InvokeCli(new[]
                 {
                     "print",
                     "--config-dir", configDir,
@@ -196,6 +202,9 @@ namespace Test.Automated.Suites
                     "--yolo",
                     "armada launch test"
                 });
+                int printExitCode = invocationResult3.ExitCode;
+                string printStdout = invocationResult3.StdOut;
+                string printStderr = invocationResult3.StdErr;
 
                 AssertEqual(0, printExitCode);
                 AssertEqual(string.Empty, printStderr.Trim());
@@ -207,7 +216,7 @@ namespace Test.Automated.Suites
                 AssertEqual(configDir, started.RootElement.GetProperty("configDirectory").GetString());
                 AssertEqual("armada-endpoint", started.RootElement.GetProperty("endpointName").GetString());
 
-                (int probeExitCode, string probeStdout, string probeStderr) = InvokeCli(new[]
+                CliInvocationResult invocationResult4 = InvokeCli(new[]
                 {
                     "probe",
                     "--config-dir", configDir,
@@ -215,6 +224,9 @@ namespace Test.Automated.Suites
                     "--require-tools",
                     "--endpoint", "armada-endpoint"
                 });
+                int probeExitCode = invocationResult4.ExitCode;
+                string probeStdout = invocationResult4.StdOut;
+                string probeStderr = invocationResult4.StdErr;
 
                 AssertEqual(0, probeExitCode);
                 AssertEqual(string.Empty, probeStderr.Trim());
@@ -235,7 +247,7 @@ namespace Test.Automated.Suites
             return Task.CompletedTask;
         }
 
-        private static (int ExitCode, string StdOut, string StdErr) InvokeCli(string[] args)
+        private static CliInvocationResult InvokeCli(string[] args)
         {
             TextWriter originalOut = Console.Out;
             TextWriter originalErr = Console.Error;
@@ -247,7 +259,7 @@ namespace Test.Automated.Suites
                 Console.SetOut(stdout);
                 Console.SetError(stderr);
                 int exitCode = Mux.Cli.Program.Main(args);
-                return (exitCode, stdout.ToString(), stderr.ToString());
+                return new CliInvocationResult(exitCode, stdout.ToString(), stderr.ToString());
             }
             finally
             {

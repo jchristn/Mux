@@ -1,9 +1,11 @@
 namespace Test.TavilyConsole
 {
     using System;
+    using System.Collections.Generic;
     using System.Linq;
     using System.Threading.Tasks;
     using Mux.Search.Exceptions;
+    using Mux.Search.Models;
     using Mux.Search.Providers.Tavily;
     using SearchConsoleShared;
 
@@ -236,11 +238,11 @@ namespace Test.TavilyConsole
                 Console.WriteLine("Answer     : " + response.Answer);
             }
 
-            foreach (var section in response.Sections)
+            foreach (KeyValuePair<string, List<SearchResultItem>> section in response.Sections)
             {
                 Console.WriteLine($"Section    : {section.Key} ({section.Value.Count} results)");
 
-                foreach (var result in section.Value.Take(3))
+                foreach (SearchResultItem result in section.Value.Take(3))
                 {
                     Console.WriteLine("  - " + result.Title);
                     Console.WriteLine("    " + result.Url);

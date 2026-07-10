@@ -24,7 +24,7 @@ namespace Test.Xunit.Commands
             server.RegisterStreamingResponse("jsonl print test", new System.Collections.Generic.List<string> { sseChunk });
             server.Start();
 
-            (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+            CliInvocationResult invocationResult1 = InvokeCli(new[]
             {
                 "print",
                 "--output-format", "jsonl",
@@ -34,6 +34,9 @@ namespace Test.Xunit.Commands
                 "--adapter-type", "openai-compatible",
                 "jsonl print test"
             });
+            int exitCode = invocationResult1.ExitCode;
+            string stdout = invocationResult1.StdOut;
+            string stderr = invocationResult1.StdErr;
 
             Assert.Equal(0, exitCode);
             Assert.Equal(string.Empty, stderr.Trim());
@@ -66,7 +69,7 @@ namespace Test.Xunit.Commands
             server.RegisterStreamingResponse("strategy override test", new System.Collections.Generic.List<string> { sseChunk });
             server.Start();
 
-            (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+            CliInvocationResult invocationResult2 = InvokeCli(new[]
             {
                 "print",
                 "--output-format", "jsonl",
@@ -77,6 +80,9 @@ namespace Test.Xunit.Commands
                 "--compaction-strategy", "trim",
                 "strategy override test"
             });
+            int exitCode = invocationResult2.ExitCode;
+            string stdout = invocationResult2.StdOut;
+            string stderr = invocationResult2.StdErr;
 
             Assert.Equal(0, exitCode);
             Assert.Equal(string.Empty, stderr.Trim());
@@ -97,7 +103,7 @@ namespace Test.Xunit.Commands
         [Fact]
         public void PrintCommand_AskApproval_ReturnsUnsupportedOption()
         {
-            (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+            CliInvocationResult invocationResult3 = InvokeCli(new[]
             {
                 "print",
                 "--output-format", "jsonl",
@@ -107,6 +113,9 @@ namespace Test.Xunit.Commands
                 "--adapter-type", "openai-compatible",
                 "jsonl print test"
             });
+            int exitCode = invocationResult3.ExitCode;
+            string stdout = invocationResult3.StdOut;
+            string stderr = invocationResult3.StdErr;
 
             Assert.Equal(1, exitCode);
             Assert.Equal(string.Empty, stderr.Trim());
@@ -127,7 +136,7 @@ namespace Test.Xunit.Commands
         [Fact]
         public void PrintCommand_NoMcp_ReturnsUnsupportedOption()
         {
-            (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+            CliInvocationResult invocationResult4 = InvokeCli(new[]
             {
                 "print",
                 "--output-format", "jsonl",
@@ -137,6 +146,9 @@ namespace Test.Xunit.Commands
                 "--adapter-type", "openai-compatible",
                 "jsonl print test"
             });
+            int exitCode = invocationResult4.ExitCode;
+            string stdout = invocationResult4.StdOut;
+            string stderr = invocationResult4.StdErr;
 
             Assert.Equal(1, exitCode);
             Assert.Equal(string.Empty, stderr.Trim());
@@ -155,7 +167,7 @@ namespace Test.Xunit.Commands
         [Fact]
         public void PrintCommand_RuntimeFailure_ReturnsStructuredClassification()
         {
-            (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+            CliInvocationResult invocationResult5 = InvokeCli(new[]
             {
                 "print",
                 "--output-format", "jsonl",
@@ -165,6 +177,9 @@ namespace Test.Xunit.Commands
                 "--adapter-type", "openai-compatible",
                 "jsonl print test"
             });
+            int exitCode = invocationResult5.ExitCode;
+            string stdout = invocationResult5.StdOut;
+            string stderr = invocationResult5.StdErr;
 
             Assert.Equal(1, exitCode);
             Assert.Contains("Retry", stderr, StringComparison.OrdinalIgnoreCase);
@@ -228,7 +243,7 @@ namespace Test.Xunit.Commands
             {
                 Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", configDir);
 
-                (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+                CliInvocationResult invocationResult6 = InvokeCli(new[]
                 {
                     "print",
                     "--output-format", "jsonl",
@@ -236,6 +251,9 @@ namespace Test.Xunit.Commands
                     "--endpoint", "compact-endpoint",
                     "context stress test"
                 });
+                int exitCode = invocationResult6.ExitCode;
+                string stdout = invocationResult6.StdOut;
+                string stderr = invocationResult6.StdErr;
 
                 Assert.Equal(1, exitCode);
                 Assert.Equal(string.Empty, stderr.Trim());
@@ -300,7 +318,7 @@ namespace Test.Xunit.Commands
             {
                 Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", configDir);
 
-                (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+                CliInvocationResult invocationResult7 = InvokeCli(new[]
                 {
                     "print",
                     "--output-format", "text",
@@ -308,6 +326,9 @@ namespace Test.Xunit.Commands
                     "--endpoint", "compact-endpoint",
                     "context stderr test"
                 });
+                int exitCode = invocationResult7.ExitCode;
+                string stdout = invocationResult7.StdOut;
+                string stderr = invocationResult7.StdErr;
 
                 Assert.Equal(1, exitCode);
                 Assert.Contains("Context usage:", stderr, StringComparison.Ordinal);
@@ -349,12 +370,15 @@ namespace Test.Xunit.Commands
             try
             {
                 Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", tempDir);
-                (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+                CliInvocationResult invocationResult8 = InvokeCli(new[]
                 {
                     "probe",
                     "--output-format", "json",
                     "--endpoint", "missing-endpoint"
                 });
+                int exitCode = invocationResult8.ExitCode;
+                string stdout = invocationResult8.StdOut;
+                string stderr = invocationResult8.StdErr;
 
                 Assert.Equal(1, exitCode);
                 Assert.Equal(string.Empty, stderr.Trim());
@@ -383,7 +407,7 @@ namespace Test.Xunit.Commands
             server.RegisterResponse("Respond with OK", responseJson);
             server.Start();
 
-            (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+            CliInvocationResult invocationResult9 = InvokeCli(new[]
             {
                 "probe",
                 "--output-format", "json",
@@ -391,6 +415,9 @@ namespace Test.Xunit.Commands
                 "--model", "test-model",
                 "--adapter-type", "openai-compatible"
             });
+            int exitCode = invocationResult9.ExitCode;
+            string stdout = invocationResult9.StdOut;
+            string stderr = invocationResult9.StdErr;
 
             Assert.Equal(0, exitCode);
             Assert.Equal(string.Empty, stderr.Trim());
@@ -419,7 +446,7 @@ namespace Test.Xunit.Commands
 
             try
             {
-                (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+                CliInvocationResult invocationResult10 = InvokeCli(new[]
                 {
                     "print",
                     "--yolo",
@@ -429,6 +456,9 @@ namespace Test.Xunit.Commands
                     "--adapter-type", "openai-compatible",
                     "artifact success test"
                 });
+                int exitCode = invocationResult10.ExitCode;
+                string stdout = invocationResult10.StdOut;
+                string stderr = invocationResult10.StdErr;
 
                 Assert.Equal(0, exitCode);
                 Assert.Equal(string.Empty, stderr.Trim());
@@ -464,7 +494,7 @@ namespace Test.Xunit.Commands
             {
                 File.WriteAllText(artifactPath, "stale");
 
-                (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+                CliInvocationResult invocationResult11 = InvokeCli(new[]
                 {
                     "print",
                     "--output-last-message", artifactPath,
@@ -473,6 +503,9 @@ namespace Test.Xunit.Commands
                     "--adapter-type", "openai-compatible",
                     "artifact failure test"
                 });
+                int exitCode = invocationResult11.ExitCode;
+                string stdout = invocationResult11.StdOut;
+                string stderr = invocationResult11.StdErr;
 
                 Assert.NotEqual(0, exitCode);
                 Assert.NotNull(stdout);
@@ -528,7 +561,7 @@ namespace Test.Xunit.Commands
             {
                 Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", configDirB);
 
-                (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+                CliInvocationResult invocationResult12 = InvokeCli(new[]
                 {
                     "print",
                     "--config-dir", configDirA,
@@ -537,6 +570,9 @@ namespace Test.Xunit.Commands
                     "--endpoint", "config-endpoint",
                     "config dir override test"
                 });
+                int exitCode = invocationResult12.ExitCode;
+                string stdout = invocationResult12.StdOut;
+                string stderr = invocationResult12.StdErr;
 
                 Assert.Equal(0, exitCode);
                 Assert.Equal(string.Empty, stderr.Trim());
@@ -593,13 +629,16 @@ namespace Test.Xunit.Commands
 
             try
             {
-                (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+                CliInvocationResult invocationResult13 = InvokeCli(new[]
                 {
                     "endpoint",
                     action,
                     "--config-dir", configDir,
                     "--output-format", "json"
                 });
+                int exitCode = invocationResult13.ExitCode;
+                string stdout = invocationResult13.StdOut;
+                string stderr = invocationResult13.StdErr;
 
                 Assert.Equal(0, exitCode);
                 Assert.Equal(string.Empty, stderr.Trim());
@@ -647,7 +686,7 @@ namespace Test.Xunit.Commands
 
             try
             {
-                (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+                CliInvocationResult invocationResult14 = InvokeCli(new[]
                 {
                     "endpoint",
                     "show",
@@ -655,6 +694,9 @@ namespace Test.Xunit.Commands
                     "--config-dir", configDir,
                     "--output-format", "json"
                 });
+                int exitCode = invocationResult14.ExitCode;
+                string stdout = invocationResult14.StdOut;
+                string stderr = invocationResult14.StdErr;
 
                 Assert.Equal(0, exitCode);
                 Assert.Equal(string.Empty, stderr.Trim());
@@ -699,7 +741,7 @@ namespace Test.Xunit.Commands
 
             try
             {
-                (int exitCode, string stdout, string stderr) = InvokeCli(new[]
+                CliInvocationResult invocationResult15 = InvokeCli(new[]
                 {
                     "probe",
                     "--config-dir", configDir,
@@ -707,6 +749,9 @@ namespace Test.Xunit.Commands
                     "--require-tools",
                     "--endpoint", "chat-only"
                 });
+                int exitCode = invocationResult15.ExitCode;
+                string stdout = invocationResult15.StdOut;
+                string stderr = invocationResult15.StdErr;
 
                 Assert.Equal(1, exitCode);
                 Assert.Equal(string.Empty, stderr.Trim());
@@ -727,7 +772,7 @@ namespace Test.Xunit.Commands
             }
         }
 
-        private static (int ExitCode, string StdOut, string StdErr) InvokeCli(string[] args)
+        private static CliInvocationResult InvokeCli(string[] args)
         {
             TextWriter originalOut = Console.Out;
             TextWriter originalErr = Console.Error;
@@ -739,7 +784,7 @@ namespace Test.Xunit.Commands
                 Console.SetOut(stdout);
                 Console.SetError(stderr);
                 int exitCode = Mux.Cli.Program.Main(args);
-                return (exitCode, stdout.ToString(), stderr.ToString());
+                return new CliInvocationResult(exitCode, stdout.ToString(), stderr.ToString());
             }
             finally
             {

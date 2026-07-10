@@ -1,9 +1,11 @@
 namespace Test.YouConsole
 {
     using System;
+    using System.Collections.Generic;
     using System.Linq;
     using System.Threading.Tasks;
     using Mux.Search.Exceptions;
+    using Mux.Search.Models;
     using Mux.Search.Providers.You;
     using SearchConsoleShared;
 
@@ -239,11 +241,11 @@ namespace Test.YouConsole
                 Console.WriteLine("Latency    : " + response.LatencySeconds.Value.ToString("0.000") + " sec");
             }
 
-            foreach (var section in response.Sections.Where(section => section.Value.Count > 0))
+            foreach (KeyValuePair<string, List<SearchResultItem>> section in response.Sections.Where(section => section.Value.Count > 0))
             {
                 Console.WriteLine($"Section    : {section.Key} ({section.Value.Count} results)");
 
-                foreach (var result in section.Value.Take(3))
+                foreach (SearchResultItem result in section.Value.Take(3))
                 {
                     Console.WriteLine("  - " + result.Title);
                     Console.WriteLine("    " + result.Url);

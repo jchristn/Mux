@@ -65,17 +65,17 @@ namespace Mux.Search.Providers.You
                 boost_domains = query.BoostDomains.Count > 0 ? query.BoostDomains : null,
                 crawl_timeout = query.CrawlTimeoutSeconds
             });
-            (JsonDocument document, string rawJson) =
+            SearchProviderResponse providerResponse =
                 await SendAsync(request, cancellationToken).ConfigureAwait(false);
 
-            using (document)
+            using (providerResponse)
             {
-                JsonElement root = document.RootElement;
+                JsonElement root = providerResponse.Document.RootElement;
                 YouSearchResponse response = new YouSearchResponse
                 {
                     ProviderName = ProviderName,
                     Query = query.Query,
-                    RawJson = rawJson
+                    RawJson = providerResponse.RawJson
                 };
 
                 JsonElement? resultsRoot = root.GetPropertyOrNull("results");

@@ -63,7 +63,7 @@ namespace Test.Xunit.Tools
         [Fact]
         public void GetServerStatus_EmptyManager_ReturnsEmpty()
         {
-            List<(string Name, int ToolCount, bool Connected)> status = _Manager.GetServerStatus();
+            List<McpServerStatus> status = _Manager.GetServerStatus();
             Assert.NotNull(status);
             Assert.Empty(status);
         }
@@ -90,7 +90,7 @@ namespace Test.Xunit.Tools
             List<ToolDefinition> definitions = _Manager.GetToolDefinitions();
             Assert.Contains(definitions, tool => string.Equals(tool.Name, "http-test.echo", StringComparison.Ordinal));
 
-            List<(string Name, int ToolCount, bool Connected)> status = _Manager.GetServerStatus();
+            List<McpServerStatus> status = _Manager.GetServerStatus();
             Assert.Contains(status, serverStatus => string.Equals(serverStatus.Name, "http-test", StringComparison.OrdinalIgnoreCase) &&
                 serverStatus.Connected &&
                 serverStatus.ToolCount >= 1);

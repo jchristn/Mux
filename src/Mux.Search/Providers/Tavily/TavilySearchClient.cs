@@ -71,12 +71,12 @@ namespace Mux.Search.Providers.Tavily
                 safe_search = query.SafeSearch
             });
 
-            (JsonDocument document, string rawJson) =
+            SearchProviderResponse providerResponse =
                 await SendAsync(request, cancellationToken).ConfigureAwait(false);
 
-            using (document)
+            using (providerResponse)
             {
-                JsonElement root = document.RootElement;
+                JsonElement root = providerResponse.Document.RootElement;
                 TavilySearchResponse response = new TavilySearchResponse
                 {
                     ProviderName = ProviderName,
@@ -85,7 +85,7 @@ namespace Mux.Search.Providers.Tavily
                     RequestId = root.GetStringOrNull("request_id"),
                     LatencySeconds = root.GetDoubleOrNull("response_time"),
                     Images = ParseImages(root.GetPropertyOrNull("images")),
-                    RawJson = rawJson
+                    RawJson = providerResponse.RawJson
                 };
 
                 response.SetSection("web", ParseResults(root.GetPropertyOrNull("results")));

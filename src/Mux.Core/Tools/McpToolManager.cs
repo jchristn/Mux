@@ -255,10 +255,10 @@ namespace Mux.Core.Tools
         /// <summary>
         /// Returns the status of all managed MCP servers.
         /// </summary>
-        /// <returns>A list of tuples containing server name, tool count, and connection status.</returns>
-        public List<(string Name, int ToolCount, bool Connected)> GetServerStatus()
+        /// <returns>A list containing server name, tool count, and connection status.</returns>
+        public List<McpServerStatus> GetServerStatus()
         {
-            List<(string Name, int ToolCount, bool Connected)> status = new List<(string Name, int ToolCount, bool Connected)>();
+            List<McpServerStatus> status = new List<McpServerStatus>();
 
             foreach (KeyValuePair<string, IMcpClientConnection> kvp in _Clients)
             {
@@ -268,7 +268,12 @@ namespace Mux.Core.Tools
                     toolCount = tools.Count;
                 }
 
-                status.Add((kvp.Key, toolCount, kvp.Value.IsConnected));
+                status.Add(new McpServerStatus
+                {
+                    Name = kvp.Key,
+                    ToolCount = toolCount,
+                    Connected = kvp.Value.IsConnected
+                });
             }
 
             return status;

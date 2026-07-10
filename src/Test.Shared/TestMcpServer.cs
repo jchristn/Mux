@@ -174,7 +174,7 @@ while (true)
 
         if (method == ""tools/list"")
         {
-            var result = new
+            object result = new
             {
                 jsonrpc = ""2.0"",
                 id = id,
@@ -198,30 +198,30 @@ while (true)
             if (toolName == ""echo"")
             {
                 string text = paramsEl.GetProperty(""arguments"").GetProperty(""text"").GetString() ?? """";
-                var result = new { jsonrpc = ""2.0"", id = id, result = new { content = new object[] { new { type = ""text"", text = text } } } };
+                object result = new { jsonrpc = ""2.0"", id = id, result = new { content = new object[] { new { type = ""text"", text = text } } } };
                 Console.WriteLine(JsonSerializer.Serialize(result));
             }
             else if (toolName == ""add"")
             {
                 double a = paramsEl.GetProperty(""arguments"").GetProperty(""a"").GetDouble();
                 double b = paramsEl.GetProperty(""arguments"").GetProperty(""b"").GetDouble();
-                var result = new { jsonrpc = ""2.0"", id = id, result = new { content = new object[] { new { type = ""text"", text = (a + b).ToString() } } } };
+                object result = new { jsonrpc = ""2.0"", id = id, result = new { content = new object[] { new { type = ""text"", text = (a + b).ToString() } } } };
                 Console.WriteLine(JsonSerializer.Serialize(result));
             }
             else if (toolName == ""fail"")
             {
-                var result = new { jsonrpc = ""2.0"", id = id, error = new { code = -1, message = ""Intentional test failure"" } };
+                object result = new { jsonrpc = ""2.0"", id = id, error = new { code = -1, message = ""Intentional test failure"" } };
                 Console.WriteLine(JsonSerializer.Serialize(result));
             }
             else
             {
-                var result = new { jsonrpc = ""2.0"", id = id, error = new { code = -32601, message = $""Unknown tool: {toolName}"" } };
+                object result = new { jsonrpc = ""2.0"", id = id, error = new { code = -32601, message = $""Unknown tool: {toolName}"" } };
                 Console.WriteLine(JsonSerializer.Serialize(result));
             }
         }
         else
         {
-            var result = new { jsonrpc = ""2.0"", id = id, error = new { code = -32601, message = $""Unknown method: {method}"" } };
+            object result = new { jsonrpc = ""2.0"", id = id, error = new { code = -32601, message = $""Unknown method: {method}"" } };
             Console.WriteLine(JsonSerializer.Serialize(result));
         }
 

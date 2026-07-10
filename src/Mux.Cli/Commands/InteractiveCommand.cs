@@ -158,10 +158,10 @@ namespace Mux.Cli.Commands
                     {
                         await _McpToolManager.AddServerAsync(serverConfig, cancellationToken).ConfigureAwait(false);
 
-                        (string Name, int ToolCount, bool Connected) status = _McpToolManager
+                        McpServerStatus? status = _McpToolManager
                             .GetServerStatus()
                             .FirstOrDefault(entry => string.Equals(entry.Name, serverConfig.Name, StringComparison.OrdinalIgnoreCase));
-                        int toolCount = status.Connected ? status.ToolCount : 0;
+                        int toolCount = status?.Connected == true ? status.ToolCount : 0;
 
                         AnsiConsole.MarkupLine($"{childPrefix}[green]Connected:[/] {Markup.Escape(serverConfig.Name)} ({toolCount} tools)");
                     }
@@ -352,15 +352,15 @@ namespace Mux.Cli.Commands
                 return;
             }
 
-             if (_ActiveRun != null)
-             {
-                 foreach (ConsoleKeyInfo keyInfo in keyBatch)
-                 {
-                     HandleBusyKey(keyInfo);
-                 }
+            if (_ActiveRun != null)
+            {
+                foreach (ConsoleKeyInfo keyInfo in keyBatch)
+                {
+                    HandleBusyKey(keyInfo);
+                }
 
-                 return;
-             }
+                return;
+            }
 
             if (_PendingApproval == null
                 && InteractivePasteHeuristics.ShouldTreatBatchAsPastedText(
@@ -1323,15 +1323,15 @@ namespace Mux.Cli.Commands
                         EnsureWindowShowsRow(chromeBottom);
                     }
 
-                    (int clearTop, int clearRowCount) = InteractiveChromeLayout.CalculateClearRegion(
+                    ConsoleClearRegion clearRegion = InteractiveChromeLayout.CalculateClearRegion(
                         _ChromeTop,
                         _RenderedPromptRowCount,
                         chromeTop,
                         renderedPromptRowCount);
 
-                    if (clearRowCount > 0)
+                    if (clearRegion.RowCount > 0)
                     {
-                        ClearRows(clearTop, clearRowCount);
+                        ClearRows(clearRegion.Top, clearRegion.RowCount);
                     }
 
                     _ChromeTop = chromeTop;
@@ -4962,15 +4962,15 @@ namespace Mux.Cli.Commands
 
             WriteOutputBlock(() =>
             {
-                (string Shortcut, string Description)[] inputShortcuts =
+                InputShortcut[] inputShortcuts =
                 {
-                    ("Enter", "Submit input when idle"),
-                    ("Up / Down", "Recall submitted prompts when idle"),
-                    ("Shift+Enter", "Insert newline"),
-                    ("Ctrl+Enter", "Insert newline"),
-                    ("Esc", "Cancel active generation"),
-                    ("Ctrl+C", "Cancel active generation"),
-                    ("Ctrl+C x2", "Exit mux when idle")
+                    new InputShortcut("Enter", "Submit input when idle"),
+                    new InputShortcut("Up / Down", "Recall submitted prompts when idle"),
+                    new InputShortcut("Shift+Enter", "Insert newline"),
+                    new InputShortcut("Ctrl+Enter", "Insert newline"),
+                    new InputShortcut("Esc", "Cancel active generation"),
+                    new InputShortcut("Ctrl+C", "Cancel active generation"),
+                    new InputShortcut("Ctrl+C x2", "Exit mux when idle")
                 };
                 int shortcutWidth = inputShortcuts.Max(static item => item.Shortcut.Length);
 
@@ -4980,7 +4980,7 @@ namespace Mux.Cli.Commands
                 Console.WriteLine();
                 AnsiConsole.MarkupLine("[bold]Input:[/]");
 
-                foreach ((string Shortcut, string Description) item in inputShortcuts)
+                foreach (InputShortcut item in inputShortcuts)
                 {
                     AnsiConsole.MarkupLine($"  [dim]{Markup.Escape(item.Shortcut.PadRight(shortcutWidth))}[/]  {Markup.Escape(item.Description)}");
                 }
@@ -5025,12 +5025,12 @@ namespace Mux.Cli.Commands
                         return;
                     }
 
-                    Dictionary<string, (int ToolCount, bool Connected)> serverStatus = new Dictionary<string, (int ToolCount, bool Connected)>(StringComparer.OrdinalIgnoreCase);
+                    Dictionary<string, McpServerStatus> serverStatus = new Dictionary<string, McpServerStatus>(StringComparer.OrdinalIgnoreCase);
                     if (_McpToolManager != null)
                     {
-                        foreach ((string Name, int ToolCount, bool Connected) server in _McpToolManager.GetServerStatus())
+                        foreach (McpServerStatus server in _McpToolManager.GetServerStatus())
                         {
-                            serverStatus[server.Name] = (server.ToolCount, server.Connected);
+                            serverStatus[server.Name] = server;
                         }
                     }
 
@@ -5043,17 +5043,17 @@ namespace Mux.Cli.Commands
 
                     foreach (McpServerConfig server in _McpServers)
                     {
-                        (int ToolCount, bool Connected) status = serverStatus.TryGetValue(server.Name, out (int ToolCount, bool Connected) serverEntry)
+                        McpServerStatus? status = serverStatus.TryGetValue(server.Name, out McpServerStatus? serverEntry)
                             ? serverEntry
-                            : (0, false);
-                        string statusText = status.Connected
+                            : null;
+                        string statusText = status?.Connected == true
                             ? "[green]Connected[/]"
                             : "[yellow]Not connected[/]";
                         mcpTable.AddRow(
                             Markup.Escape(server.Name),
                             Markup.Escape(FormatMcpTransport(server.Transport)),
                             Markup.Escape(FormatMcpTargetPreview(server)),
-                            status.ToolCount.ToString(),
+                            status?.Connected == true ? status.ToolCount.ToString() : "0",
                             statusText);
                     }
 

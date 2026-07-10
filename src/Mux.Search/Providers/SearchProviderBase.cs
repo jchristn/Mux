@@ -103,8 +103,8 @@ namespace Mux.Search.Providers
         /// </summary>
         /// <param name="request">The request.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>A JSON document and raw body.</returns>
-        protected async Task<(JsonDocument Document, string RawJson)> SendAsync(
+        /// <returns>The parsed JSON document and raw body.</returns>
+        protected async Task<SearchProviderResponse> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
@@ -129,7 +129,7 @@ namespace Mux.Search.Providers
 
             try
             {
-                return (JsonDocument.Parse(rawJson), rawJson);
+                return new SearchProviderResponse(JsonDocument.Parse(rawJson), rawJson);
             }
             catch (JsonException ex)
             {
