@@ -164,13 +164,15 @@ namespace Mux.Cli.Rendering
 
             if (completedEvent.Result.Success)
             {
+                string line = ToolCallRenderer.FormatToolExecutionLine(name, summary, "ok", elapsed);
                 AnsiConsole.MarkupLine(
-                    $"[green]Tool {Markup.Escape(name)}: {Markup.Escape(summary)} ok {elapsed}ms[/]");
+                    $"[green]{Markup.Escape(line)}[/]");
             }
             else
             {
+                string line = ToolCallRenderer.FormatToolExecutionLine(name, summary, "failed", elapsed);
                 AnsiConsole.MarkupLine(
-                    $"[red]Tool {Markup.Escape(name)}: {Markup.Escape(summary)} failed {elapsed}ms[/]");
+                    $"[red]{Markup.Escape(line)}[/]");
             }
         }
 

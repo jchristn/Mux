@@ -7,6 +7,7 @@ namespace Mux.Cli.Commands
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Cli.Rendering;
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Spectre.Console.Cli;
@@ -218,7 +219,11 @@ namespace Mux.Cli.Commands
                                     Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Working... (step {stepCount})"));
                                     if (settings.Verbose)
                                     {
-                                        Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Tool call: {proposedEvent.ToolCall.Name}"));
+                                        string summary = ToolCallRenderer.FormatToolSummary(
+                                            proposedEvent.ToolCall.Name,
+                                            proposedEvent.ToolCall.Arguments);
+                                        Console.Error.WriteLine(
+                                            ConsoleMessageStyler.Notification(ToolCallRenderer.FormatToolCallLine(summary)));
                                     }
                                 }
                                 if (runtime.ApprovalPolicy == ApprovalPolicyEnum.Deny)
@@ -226,7 +231,10 @@ namespace Mux.Cli.Commands
                                     if (outputFormat == OutputFormatEnum.Text)
                                     {
                                         Console.Error.WriteLine(
-                                            ConsoleMessageStyler.Failure($"Tool call denied in non-interactive mode: {proposedEvent.ToolCall.Name}"));
+                                            ConsoleMessageStyler.Failure(
+                                                ToolCallRenderer.FormatToolLogLine(
+                                                    $"Tool call denied in non-interactive mode: {proposedEvent.ToolCall.Name}",
+                                                    isTerminal: true)));
                                     }
                                     if (exitCode == 0) exitCode = 2;
                                 }
@@ -235,12 +243,18 @@ namespace Mux.Cli.Commands
                             case ToolCallCompletedEvent completedEvent:
                                 if (outputFormat == OutputFormatEnum.Text && settings.Verbose)
                                 {
-                                    string resultPreview = completedEvent.Result?.Content ?? "(no content)";
+                                    string resultPreview = completedEvent.Result.Content ?? "(no content)";
                                     if (resultPreview.Length > 200)
                                     {
                                         resultPreview = resultPreview.Substring(0, 200) + "...";
                                     }
-                                    Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Tool result ({completedEvent.ToolCallId}): {resultPreview}"));
+                                    string status = completedEvent.Result.Success ? "ok" : "failed";
+                                    string line = ToolCallRenderer.FormatToolExecutionLine(
+                                        completedEvent.ToolName,
+                                        resultPreview,
+                                        status,
+                                        completedEvent.ElapsedMs);
+                                    Console.Error.WriteLine(ConsoleMessageStyler.Notification(line));
                                 }
                                 break;
 

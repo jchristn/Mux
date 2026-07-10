@@ -27,8 +27,8 @@ namespace Test.Xunit.Commands
         [InlineData("[cyan]/mcp list|ls[/]")]
         [InlineData("[cyan]/mcp add[/]")]
         [InlineData("[cyan]/mcp remove|delete|rm[/] [dim]<name>[/]")]
-        [InlineData("  Allow? [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ")]
-        [InlineData("[yellow]Approval required:[/] write_file: sample [dim][[Y/n/always]]?[/]")]
+        [InlineData("  \u2514 Allow? [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ")]
+        [InlineData("[yellow]  \u251C Approval required: write_file: sample [[Y/n/always]]?[/]")]
         public void InteractiveHelpMarkup_IsValid(string markup)
         {
             Exception? exception = Record.Exception(() => _ = new Markup(markup));

@@ -12,6 +12,20 @@ namespace Mux.Cli.Rendering
     /// </summary>
     public static class ToolCallRenderer
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Prefix used for non-terminal human-facing tool lifecycle log lines.
+        /// </summary>
+        public const string ToolLogBranchPrefix = "  \u251C ";
+
+        /// <summary>
+        /// Prefix used for terminal human-facing tool lifecycle log lines.
+        /// </summary>
+        public const string ToolLogLeafPrefix = "  \u2514 ";
+
+        #endregion
+
         #region Public-Methods
 
         /// <summary>
@@ -22,12 +36,46 @@ namespace Mux.Cli.Rendering
         public static async Task<string> PromptApprovalAsync(ToolCall toolCall)
         {
             string summary = FormatToolSummary(toolCall.Name, toolCall.Arguments);
-            AnsiConsole.MarkupLine($"[dim]Tool call: {Markup.Escape(summary)}[/]");
-            AnsiConsole.Markup("  Allow? [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ");
+            AnsiConsole.MarkupLine($"[dim]{Markup.Escape(FormatToolCallLine(summary))}[/]");
+            AnsiConsole.Markup($"{ToolLogLeafPrefix}Allow? [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ");
 
             string? response = await Task.Run(() => Console.ReadLine());
 
             return response?.Trim() ?? "n";
+        }
+
+        /// <summary>
+        /// Formats a tool call notification line with the standard tool log prefix.
+        /// </summary>
+        /// <param name="summary">The already formatted tool summary.</param>
+        /// <returns>The prefixed notification line.</returns>
+        public static string FormatToolCallLine(string summary)
+        {
+            return $"{ToolLogBranchPrefix}Tool call: {summary}";
+        }
+
+        /// <summary>
+        /// Formats a tool execution result line with the standard tool log prefix.
+        /// </summary>
+        /// <param name="toolName">The executed tool name.</param>
+        /// <param name="summary">A concise result summary.</param>
+        /// <param name="status">The execution status text.</param>
+        /// <param name="elapsedMs">The elapsed execution time in milliseconds.</param>
+        /// <returns>The prefixed result line.</returns>
+        public static string FormatToolExecutionLine(string toolName, string summary, string status, long elapsedMs)
+        {
+            return $"{ToolLogLeafPrefix}Tool {toolName}: {summary} {status} {elapsedMs}ms";
+        }
+
+        /// <summary>
+        /// Formats an arbitrary tool lifecycle line with the standard tool log prefix.
+        /// </summary>
+        /// <param name="line">The unprefixed line.</param>
+        /// <param name="isTerminal">Whether this line is the terminal entry in a tool lifecycle group.</param>
+        /// <returns>The prefixed line.</returns>
+        public static string FormatToolLogLine(string line, bool isTerminal = false)
+        {
+            return $"{(isTerminal ? ToolLogLeafPrefix : ToolLogBranchPrefix)}{line}";
         }
 
         #endregion

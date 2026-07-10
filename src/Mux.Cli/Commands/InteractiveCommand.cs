@@ -952,7 +952,7 @@ namespace Mux.Cli.Commands
                         proposedEvent.ToolCall.Arguments);
                     if (_ApprovalPolicy != ApprovalPolicyEnum.Ask)
                     {
-                        WriteNotificationLine($"Tool call: {proposedSummary}");
+                        WriteNotificationLine(ToolCallRenderer.FormatToolCallLine(proposedSummary));
                     }
                     break;
 
@@ -963,8 +963,8 @@ namespace Mux.Cli.Commands
                     _RunHasVisibleOutput = true;
                     string summary = SummarizeToolResult(completedEvent.Result.Content);
                     string line = completedEvent.Result.Success
-                        ? $"Tool {completedEvent.ToolName}: {summary} ok {completedEvent.ElapsedMs}ms"
-                        : $"Tool {completedEvent.ToolName}: {summary} failed {completedEvent.ElapsedMs}ms";
+                        ? ToolCallRenderer.FormatToolExecutionLine(completedEvent.ToolName, summary, "ok", completedEvent.ElapsedMs)
+                        : ToolCallRenderer.FormatToolExecutionLine(completedEvent.ToolName, summary, "failed", completedEvent.ElapsedMs);
                     if (completedEvent.Result.Success)
                     {
                         WriteSuccessLine(line);
@@ -1094,7 +1094,8 @@ namespace Mux.Cli.Commands
         {
             WriteOutputBlock(() =>
             {
-                AnsiConsole.Markup($"[yellow]Approval required:[/] {Markup.Escape(summary)} [dim][[Y/n/always]]?[/]");
+                string line = ToolCallRenderer.FormatToolLogLine($"Approval required: {summary} [Y/n/always]?");
+                AnsiConsole.Markup($"[yellow]{Markup.Escape(line)}[/]");
                 _ApprovalPromptOpen = true;
             }, renderChromeAfterWrite: false);
         }
