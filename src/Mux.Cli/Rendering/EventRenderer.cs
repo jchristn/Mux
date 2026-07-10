@@ -92,7 +92,7 @@ namespace Mux.Cli.Rendering
                         case HeartbeatEvent heartbeatEvent:
                             if (verbose)
                             {
-                                Console.Error.WriteLine(ConsoleMessageStyler.Notification($"  Step {heartbeatEvent.StepNumber}"));
+                                Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Step {heartbeatEvent.StepNumber}"));
                             }
                             break;
 

@@ -150,15 +150,18 @@ namespace Mux.Cli.Commands
                     await _McpToolManager.InitializeAsync(cancellationToken).ConfigureAwait(false);
 
                     List<(string Name, int ToolCount, bool Connected)> serverStatus = _McpToolManager.GetServerStatus();
-                    foreach ((string Name, int ToolCount, bool Connected) server in serverStatus)
+                    for (int i = 0; i < serverStatus.Count; i++)
                     {
+                        (string Name, int ToolCount, bool Connected) server = serverStatus[i];
+                        string prefix = i == serverStatus.Count - 1 ? "  \u2514 " : "  \u251C ";
+
                         if (server.Connected)
                         {
-                            AnsiConsole.MarkupLine($"  [green]Connected:[/] {Markup.Escape(server.Name)} ({server.ToolCount} tools)");
+                            AnsiConsole.MarkupLine($"{prefix}[green]Connected:[/] {Markup.Escape(server.Name)} ({server.ToolCount} tools)");
                         }
                         else
                         {
-                            AnsiConsole.MarkupLine($"  [yellow]Failed:[/] {Markup.Escape(server.Name)}");
+                            AnsiConsole.MarkupLine($"{prefix}[yellow]Failed:[/] {Markup.Escape(server.Name)}");
                         }
                     }
                 }
