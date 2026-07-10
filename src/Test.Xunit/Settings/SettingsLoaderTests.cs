@@ -716,6 +716,45 @@ namespace Test.Xunit.Settings
             Assert.Equal(existingJson, finalJson);
         }
 
+        /// <summary>
+        /// Verifies that EnsureConfigDirectory creates a default settings file when it is missing.
+        /// </summary>
+        [Fact]
+        public void EnsureConfigDirectory_CreatesDefaultSettings()
+        {
+            string settingsPath = Path.Combine(_TempDir, "settings.json");
+
+            SettingsLoader.EnsureConfigDirectory();
+
+            Assert.True(File.Exists(settingsPath));
+
+            string json = File.ReadAllText(settingsPath);
+            MuxSettings? settings = JsonSerializer.Deserialize<MuxSettings>(json);
+            MuxSettings defaults = new MuxSettings();
+
+            Assert.NotNull(settings);
+            Assert.Equal(defaults.DefaultApprovalPolicy, settings!.DefaultApprovalPolicy);
+            Assert.Equal(defaults.MaxAgentIterations, settings.MaxAgentIterations);
+            Assert.Equal(defaults.CompactionStrategy, settings.CompactionStrategy);
+            Assert.NotNull(settings.ExternalSearch);
+        }
+
+        /// <summary>
+        /// Verifies that EnsureConfigDirectory does not overwrite an existing settings file.
+        /// </summary>
+        [Fact]
+        public void EnsureConfigDirectory_DoesNotOverwriteExistingSettings()
+        {
+            string settingsPath = Path.Combine(_TempDir, "settings.json");
+            string existingJson = @"{ ""maxAgentIterations"": 80, ""defaultApprovalPolicy"": ""auto"" }";
+            File.WriteAllText(settingsPath, existingJson);
+
+            SettingsLoader.EnsureConfigDirectory();
+
+            string finalJson = File.ReadAllText(settingsPath);
+            Assert.Equal(existingJson, finalJson);
+        }
+
         #endregion
     }
 }

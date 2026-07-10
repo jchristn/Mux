@@ -34,7 +34,7 @@ When config directory selection is applied, mux uses that directory for:
 - `settings.json`
 - `system-prompt.md`
 
-If the directory does not exist, `mux` creates it. If `endpoints.json` is missing, `mux` seeds a default Ollama endpoint there. Existing files are not overwritten.
+If the directory does not exist, `mux` creates it. If `endpoints.json` is missing, `mux` seeds a default Ollama endpoint there. If `settings.json` is missing, `mux` writes editable default settings. Existing files are not overwritten.
 
 ## Files
 

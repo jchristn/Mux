@@ -112,6 +112,14 @@ namespace Mux.Core.Settings
 
                 File.WriteAllText(endpointsPath, defaultEndpoints);
             }
+
+            string settingsPath = Path.Combine(configDir, "settings.json");
+            if (!File.Exists(settingsPath))
+            {
+                MuxSettings defaultSettings = NormalizeSettingsForPersistence(new MuxSettings());
+                string defaultSettingsJson = JsonSerializer.Serialize(defaultSettings, _JsonWriteOptions);
+                File.WriteAllText(settingsPath, defaultSettingsJson);
+            }
         }
 
         /// <summary>

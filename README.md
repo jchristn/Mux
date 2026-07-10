@@ -80,7 +80,7 @@ Run it:
 mux
 ```
 
-On first run, `mux` creates `~/.mux/endpoints.json` with a default local Ollama endpoint. If you want an isolated config instead, set `MUX_CONFIG_DIR` before first launch.
+On first run, `mux` creates `~/.mux/endpoints.json` with a default local Ollama endpoint and `~/.mux/settings.json` with editable defaults. If you want an isolated config instead, set `MUX_CONFIG_DIR` before first launch.
 
 See [GETTING_STARTED.md](GETTING_STARTED.md) for the full walkthrough.
 
