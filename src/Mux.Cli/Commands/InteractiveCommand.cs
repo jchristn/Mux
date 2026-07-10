@@ -1185,6 +1185,7 @@ namespace Mux.Cli.Commands
             AnsiConsole.MarkupLine($"[dim]Using settings file defined in: {Markup.Escape(settingsPath)}[/]");
             AnsiConsole.MarkupLine($"[dim]Using endpoints defined in: {Markup.Escape(endpointsPath)}[/]");
             AnsiConsole.MarkupLine($"[dim]Endpoint:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]|[/] [dim]Model:[/] {Markup.Escape(_CurrentEndpoint.Model)}");
+            AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[dim]Type /help for commands. Prompt entry blocks while mux is running. Press Esc to cancel active generation.[/]");
         }
 
