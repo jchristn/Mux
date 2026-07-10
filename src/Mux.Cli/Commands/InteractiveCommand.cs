@@ -142,32 +142,33 @@ namespace Mux.Cli.Commands
 
             if (_McpServers.Count > 0)
             {
-                _McpToolManager = new McpToolManager(_McpServers);
+                _McpToolManager = new McpToolManager(new List<McpServerConfig>());
 
-                try
+                AnsiConsole.MarkupLine("[dim]Connecting to MCP servers...[/]");
+                for (int i = 0; i < _McpServers.Count; i++)
                 {
-                    AnsiConsole.MarkupLine("[dim]Connecting to MCP servers...[/]");
-                    await _McpToolManager.InitializeAsync(cancellationToken).ConfigureAwait(false);
+                    McpServerConfig serverConfig = _McpServers[i];
+                    bool isLast = i == _McpServers.Count - 1;
+                    string parentPrefix = isLast ? "  \u2514 " : "  \u251C ";
+                    string childPrefix = isLast ? "    \u2514 " : "  \u2502 \u2514 ";
 
-                    List<(string Name, int ToolCount, bool Connected)> serverStatus = _McpToolManager.GetServerStatus();
-                    for (int i = 0; i < serverStatus.Count; i++)
+                    AnsiConsole.MarkupLine($"{parentPrefix}[dim]Connecting to:[/] {Markup.Escape(serverConfig.Name)}");
+
+                    try
                     {
-                        (string Name, int ToolCount, bool Connected) server = serverStatus[i];
-                        string prefix = i == serverStatus.Count - 1 ? "  \u2514 " : "  \u251C ";
+                        await _McpToolManager.AddServerAsync(serverConfig, cancellationToken).ConfigureAwait(false);
 
-                        if (server.Connected)
-                        {
-                            AnsiConsole.MarkupLine($"{prefix}[green]Connected:[/] {Markup.Escape(server.Name)} ({server.ToolCount} tools)");
-                        }
-                        else
-                        {
-                            AnsiConsole.MarkupLine($"{prefix}[yellow]Failed:[/] {Markup.Escape(server.Name)}");
-                        }
+                        (string Name, int ToolCount, bool Connected) status = _McpToolManager
+                            .GetServerStatus()
+                            .FirstOrDefault(entry => string.Equals(entry.Name, serverConfig.Name, StringComparison.OrdinalIgnoreCase));
+                        int toolCount = status.Connected ? status.ToolCount : 0;
+
+                        AnsiConsole.MarkupLine($"{childPrefix}[green]Connected:[/] {Markup.Escape(serverConfig.Name)} ({toolCount} tools)");
                     }
-                }
-                catch (Exception ex)
-                {
-                    AnsiConsole.MarkupLine($"[yellow]MCP initialization error: {Markup.Escape(ex.Message)}[/]");
+                    catch (Exception ex)
+                    {
+                        AnsiConsole.MarkupLine($"{childPrefix}[yellow]Failed:[/] {Markup.Escape(serverConfig.Name)} [dim]({Markup.Escape(ex.Message)})[/]");
+                    }
                 }
             }
 
