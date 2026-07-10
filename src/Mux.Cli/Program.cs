@@ -53,7 +53,9 @@ namespace Mux.Cli
                     $"[bold cyan]{Defaults.ProductName}[/] [dim]v{Defaults.ProductVersion}[/] [dim]-[/] [dim]AI agent for local and remote LLMs[/]");
 
                 string configDir = SettingsLoader.GetConfigDirectory();
+                string settingsPath = System.IO.Path.Combine(configDir, "settings.json");
                 string endpointsPath = System.IO.Path.Combine(configDir, "endpoints.json");
+                AnsiConsole.MarkupLine($"[dim]Using settings file defined in: {Markup.Escape(settingsPath)}[/]");
                 AnsiConsole.MarkupLine($"[dim]Using endpoints defined in: {Markup.Escape(endpointsPath)}[/]");
                 AnsiConsole.WriteLine();
             }

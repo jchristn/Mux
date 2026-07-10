@@ -1170,6 +1170,7 @@ namespace Mux.Cli.Commands
         private void RenderWelcomeScreen()
         {
             string configDir = SettingsLoader.GetConfigDirectory();
+            string settingsPath = Path.Combine(configDir, "settings.json");
             string endpointsPath = Path.Combine(configDir, "endpoints.json");
             const string logo = @" _____ _ _ _ _
 |     | | |_'_|
@@ -1181,6 +1182,7 @@ namespace Mux.Cli.Commands
             AnsiConsole.MarkupLine($"[bold cyan]{Defaults.ProductName}[/] [dim]v{Defaults.ProductVersion}[/] [dim]|[/] [dim]AI agent for local and remote LLMs[/]");
             AnsiConsole.MarkupLine($"[bold]Title:[/] {Markup.Escape(_ConversationTitle)}");
             AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine($"[dim]Using settings file defined in: {Markup.Escape(settingsPath)}[/]");
             AnsiConsole.MarkupLine($"[dim]Using endpoints defined in: {Markup.Escape(endpointsPath)}[/]");
             AnsiConsole.MarkupLine($"[dim]Endpoint:[/] {Markup.Escape(_CurrentEndpoint.Name)} [dim]|[/] [dim]Model:[/] {Markup.Escape(_CurrentEndpoint.Model)}");
             AnsiConsole.MarkupLine("[dim]Type /help for commands. Prompt entry blocks while mux is running. Press Esc to cancel active generation.[/]");
