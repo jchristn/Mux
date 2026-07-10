@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -e
 
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PACKAGE_SOURCE="$ROOT_DIR/artifacts/tool-packages"
+cd "$ROOT_DIR"
+
 resolve_framework() {
     local framework="${1:-}"
 
@@ -36,8 +40,10 @@ resolve_framework "${1:-}"
 
 echo "Removing mux..."
 dotnet tool uninstall -g Mux.Cli 2>/dev/null || true
+rm -rf "$PACKAGE_SOURCE"
+mkdir -p "$PACKAGE_SOURCE"
 echo "Building mux for $FRAMEWORK..."
-dotnet pack src/Mux.Cli/Mux.Cli.csproj --configuration Release -p:TargetFrameworks="$FRAMEWORK"
+dotnet pack src/Mux.Cli/Mux.Cli.csproj --configuration Release -p:TargetFrameworks="$FRAMEWORK" --output "$PACKAGE_SOURCE"
 echo "Installing mux..."
-dotnet tool install -g --add-source src/Mux.Cli/bin/Release Mux.Cli
+dotnet tool install -g --source "$PACKAGE_SOURCE" --framework "$FRAMEWORK" --disable-parallel Mux.Cli
 mux -v
