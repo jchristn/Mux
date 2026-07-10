@@ -320,6 +320,40 @@ namespace Test.Xunit.Settings
         }
 
         /// <summary>
+        /// Verifies that loading a partial settings file rewrites it with normalized defaults.
+        /// </summary>
+        [Fact]
+        public void LoadSettings_PartialFile_RewritesWithDefaults()
+        {
+            string settingsPath = Path.Combine(_TempDir, "settings.json");
+            string json = @"{ ""maxAgentIterations"": 80 }";
+            File.WriteAllText(settingsPath, json);
+
+            MuxSettings settings = SettingsLoader.LoadSettings();
+
+            Assert.Equal(80, settings.MaxAgentIterations);
+            Assert.Equal("ask", settings.DefaultApprovalPolicy);
+            Assert.Equal("summary", settings.CompactionStrategy);
+            Assert.NotNull(settings.ExternalSearch);
+
+            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(settingsPath));
+            JsonElement root = document.RootElement;
+
+            Assert.Equal(80, root.GetProperty("maxAgentIterations").GetInt32());
+            Assert.True(root.TryGetProperty("systemPromptPath", out _));
+            Assert.True(root.TryGetProperty("defaultApprovalPolicy", out _));
+            Assert.True(root.TryGetProperty("toolTimeoutMs", out _));
+            Assert.True(root.TryGetProperty("processTimeoutMs", out _));
+            Assert.True(root.TryGetProperty("contextWindowSafetyMarginPercent", out _));
+            Assert.True(root.TryGetProperty("tokenEstimationRatio", out _));
+            Assert.True(root.TryGetProperty("autoCompactEnabled", out _));
+            Assert.True(root.TryGetProperty("contextWarningThresholdPercent", out _));
+            Assert.True(root.TryGetProperty("compactionStrategy", out _));
+            Assert.True(root.TryGetProperty("compactionPreserveTurns", out _));
+            Assert.True(root.TryGetProperty("externalSearch", out _));
+        }
+
+        /// <summary>
         /// Verifies that new compaction-related settings are clamped and normalized.
         /// </summary>
         [Fact]

@@ -181,7 +181,13 @@ namespace Mux.Core.Settings
 
             string json = File.ReadAllText(filePath);
             MuxSettings? settings = JsonSerializer.Deserialize<MuxSettings>(json, _JsonOptions);
-            return settings ?? new MuxSettings();
+            settings ??= new MuxSettings();
+
+            MuxSettings normalized = NormalizeSettingsForPersistence(settings);
+            string normalizedJson = JsonSerializer.Serialize(normalized, _JsonWriteOptions);
+            File.WriteAllText(filePath, normalizedJson);
+
+            return normalized;
         }
 
         /// <summary>

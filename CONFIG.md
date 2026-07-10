@@ -222,6 +222,7 @@ Fields:
 Notes:
 - `mux print` still defaults to deny semantics unless `--yolo`, `--approval-policy`, or the selected endpoint's `autoApproveTools` setting overrides it
 - CLI flags override settings file values
+- When `settings.json` is loaded, mux rewrites it with normalized values so newly added settings are visible with defaults
 - `mux print` and `mux probe` reject `--approval-policy ask`
 - `mux print` and `mux probe` do not load MCP servers, even if `mcp-servers.json` exists
 
