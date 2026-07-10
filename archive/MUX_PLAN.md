@@ -583,7 +583,7 @@ mux --print --yolo --system-prompt /path/to/persona.md "do the thing"
 | `--model` | `-m` | string | null | Override model name |
 | `--base-url` | | string | null | Override base URL |
 | `--adapter-type` | | string | null | Override adapter type (`ollama`, `openai`, `vllm`, `openai-compatible`) |
-| `--api-key` | | string | null | Override API key (or use env var `MUX_API_KEY`) |
+| `--api-key` | | string | null | Override API key (or use environment variable `MUX_API_KEY`) |
 | `--temperature` | | float | null | Override temperature |
 | `--max-tokens` | | int | null | Override max tokens |
 | `--working-directory` | `-w` | string | cwd | Set working directory for tool execution |
@@ -665,7 +665,7 @@ mux --print --yolo --system-prompt /path/to/persona.md "do the thing"
   - [ ] Handle Ollama's tool-call assembly quirks (single-chunk tool calls vs deltas)
   - [ ] Map Ollama-specific finish reasons to MUX-native values
 - [ ] **Test.Xunit**: `GenericOpenAiAdapterTests` — request shape validation, response parsing, streaming chunk assembly
-- [ ] **Test.Xunit**: `OpenAiAdapterTests` — auth header injection, env var expansion, parallel tool calls
+- [ ] **Test.Xunit**: `OpenAiAdapterTests` — auth header injection, environment variable expansion, parallel tool calls
 - [ ] **Test.Xunit**: `OllamaAdapterTests` — field stripping, quirks handling, tool-call assembly
 
 ### Task 1.6: LLM Client
@@ -1049,7 +1049,7 @@ OPTIONS:
     -m, --model <name>                   Override model name
         --base-url <url>                 Override base URL
         --adapter-type <type>            Adapter: ollama, openai, vllm, openai-compatible
-        --api-key <key>                  Override API key (or set MUX_API_KEY env var)
+        --api-key <key>                  Override API key (or set MUX_API_KEY environment variable)
         --temperature <float>            Override temperature (0.0 - 2.0)
         --max-tokens <int>               Override max output tokens
 
@@ -1114,7 +1114,7 @@ CONFIG:
 
 Per MUX.md and established patterns in the ecosystem:
 
-- **No `var`** — explicit types everywhere
+- **Explicit local types** — no inferred local type declarations
 - **No tuples** — use named types
 - **`using` statements** (not declarations), inside namespace blocks
 - **XML documentation** on all public members
