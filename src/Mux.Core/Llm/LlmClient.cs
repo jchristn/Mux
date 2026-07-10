@@ -158,8 +158,10 @@ namespace Mux.Core.Llm
                         (System.Net.HttpStatusCode)(int)response.StatusCode);
                 }
 
-                JsonDocument document = JsonDocument.Parse(responseBody);
-                return _Adapter.NormalizeFinalResponse(document.RootElement);
+                OpenAiChatCompletionResponse? document =
+                    JsonSerializer.Deserialize<OpenAiChatCompletionResponse>(responseBody);
+                document ??= new OpenAiChatCompletionResponse();
+                return _Adapter.NormalizeFinalResponse(document);
             }, maxRetries: 3, cancellationToken: cancellationToken, onRetry: _OnRetry).ConfigureAwait(false);
         }
 

@@ -1,16 +1,14 @@
 namespace Mux.Search.Providers
 {
-    using System;
-    using System.Text.Json;
-
     /// <summary>
-    /// Raw and parsed HTTP response returned from a search provider.
+    /// Raw and typed HTTP response returned from a search provider.
     /// </summary>
-    public class SearchProviderResponse : IDisposable
+    /// <typeparam name="TBody">The typed response body.</typeparam>
+    public class SearchProviderResponse<TBody>
     {
         #region Private-Members
 
-        private JsonDocument _Document;
+        private TBody _Body;
         private string _RawJson = string.Empty;
 
         #endregion
@@ -18,14 +16,13 @@ namespace Mux.Search.Providers
         #region Constructors-and-Factories
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="SearchProviderResponse"/> class.
+        /// Initializes a new instance of the <see cref="SearchProviderResponse{TBody}"/> class.
         /// </summary>
-        /// <param name="document">The parsed JSON response body.</param>
+        /// <param name="body">The typed response body.</param>
         /// <param name="rawJson">The raw JSON response body.</param>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="document"/> is null.</exception>
-        public SearchProviderResponse(JsonDocument document, string rawJson)
+        public SearchProviderResponse(TBody body, string rawJson)
         {
-            _Document = document ?? throw new ArgumentNullException(nameof(document));
+            _Body = body;
             _RawJson = rawJson ?? string.Empty;
         }
 
@@ -34,12 +31,12 @@ namespace Mux.Search.Providers
         #region Public-Members
 
         /// <summary>
-        /// The parsed JSON response body.
+        /// The typed response body.
         /// </summary>
-        public JsonDocument Document
+        public TBody Body
         {
-            get => _Document;
-            set => _Document = value ?? throw new ArgumentNullException(nameof(value));
+            get => _Body;
+            set => _Body = value;
         }
 
         /// <summary>
@@ -53,16 +50,5 @@ namespace Mux.Search.Providers
 
         #endregion
 
-        #region Public-Methods
-
-        /// <summary>
-        /// Releases the parsed JSON document.
-        /// </summary>
-        public void Dispose()
-        {
-            _Document.Dispose();
-        }
-
-        #endregion
     }
 }

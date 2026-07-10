@@ -3,7 +3,6 @@ namespace Mux.Core.Llm
     using System.Collections.Generic;
     using System.IO;
     using System.Net.Http;
-    using System.Text.Json;
     using System.Threading;
     using Mux.Core.Agent;
     using Mux.Core.Models;
@@ -42,8 +41,8 @@ namespace Mux.Core.Llm
         /// <summary>
         /// Normalizes a non-streaming JSON response body into a <see cref="ConversationMessage"/>.
         /// </summary>
-        /// <param name="responseBody">The parsed JSON element from the response.</param>
+        /// <param name="responseBody">The deserialized response body.</param>
         /// <returns>A normalized <see cref="ConversationMessage"/>.</returns>
-        ConversationMessage NormalizeFinalResponse(JsonElement responseBody);
+        ConversationMessage NormalizeFinalResponse(OpenAiChatCompletionResponse responseBody);
     }
 }

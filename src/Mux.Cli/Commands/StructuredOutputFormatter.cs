@@ -2,8 +2,8 @@ namespace Mux.Cli.Commands
 {
     using System;
     using System.Collections.Generic;
+    using System.Reflection;
     using System.Text.Json;
-    using System.Text.Json.Nodes;
     using System.Text.RegularExpressions;
     using Mux.Core.Agent;
     using Mux.Core.Enums;
@@ -160,9 +160,9 @@ namespace Mux.Cli.Commands
         /// </summary>
         public static string FormatObject(object value)
         {
-            JsonObject payload = JsonSerializer.SerializeToNode(value, _JsonOptions)?.AsObject() ?? new JsonObject();
+            Dictionary<string, object?> payload = ObjectToDictionary(value);
             payload["contractVersion"] = StructuredOutputContractVersion;
-            return payload.ToJsonString(_JsonOptions);
+            return JsonSerializer.Serialize(payload, _JsonOptions);
         }
 
         /// <summary>
@@ -218,14 +218,15 @@ namespace Mux.Cli.Commands
 
             try
             {
-                JsonNode? node = JsonNode.Parse(value);
-                if (node == null)
+                Dictionary<string, object?>? result =
+                    JsonSerializer.Deserialize<Dictionary<string, object?>>(value, _JsonOptions);
+                if (result == null)
                 {
                     return null;
                 }
 
-                RedactNode(node, parentPropertyName: null);
-                return JsonSerializer.Deserialize<object>(node.ToJsonString(), _JsonOptions);
+                RedactDictionary(result);
+                return result;
             }
             catch
             {
@@ -233,100 +234,43 @@ namespace Mux.Cli.Commands
             }
         }
 
-        private static void RedactNode(JsonNode node, string? parentPropertyName)
+        private static void RedactDictionary(Dictionary<string, object?> dictionary)
         {
-            if (node is JsonObject obj)
+            List<string> keys = new List<string>(dictionary.Keys);
+            foreach (string key in keys)
             {
-                List<string> propertyNames = new List<string>();
-                foreach (KeyValuePair<string, JsonNode?> pair in obj)
+                if (IsSensitiveKey(key))
                 {
-                    propertyNames.Add(pair.Key);
-                }
-
-                foreach (string propertyName in propertyNames)
-                {
-                    JsonNode? childNode = obj[propertyName];
-                    if (childNode == null)
-                    {
-                        continue;
-                    }
-
-                    if (IsSensitiveKey(propertyName))
-                    {
-                        obj[propertyName] = "***REDACTED***";
-                        continue;
-                    }
-
-                    RedactNode(childNode, propertyName);
-                }
-
-                return;
-            }
-
-            if (node is JsonArray array)
-            {
-                foreach (JsonNode? child in array)
-                {
-                    if (child != null)
-                    {
-                        RedactNode(child, parentPropertyName);
-                    }
-                }
-
-                return;
-            }
-
-            if (node is JsonValue jsonValue)
-            {
-                string? stringValue = jsonValue.TryGetValue<string>(out string? directValue)
-                    ? directValue
-                    : null;
-
-                if (stringValue != null)
-                {
-                    if (IsSensitiveKey(parentPropertyName))
-                    {
-                        ReplaceJsonValue(node, "***REDACTED***");
-                    }
-                    else
-                    {
-                        ReplaceJsonValue(node, RedactString(stringValue));
-                    }
+                    dictionary[key] = "***REDACTED***";
                 }
             }
         }
 
-        private static void ReplaceJsonValue(JsonNode node, string value)
+        private static Dictionary<string, object?> ObjectToDictionary(object value)
         {
-            JsonNode? parent = node.Parent;
-            if (parent is JsonArray parentArray)
+            Dictionary<string, object?> result = new Dictionary<string, object?>();
+            if (value is IDictionary<string, object?> dictionary)
             {
-                for (int i = 0; i < parentArray.Count; i++)
+                foreach (KeyValuePair<string, object?> pair in dictionary)
                 {
-                    if (ReferenceEquals(parentArray[i], node))
-                    {
-                        parentArray[i] = value;
-                        break;
-                    }
-                }
-            }
-            else if (parent is JsonObject parentObject)
-            {
-                List<string> propertyNames = new List<string>();
-                foreach (KeyValuePair<string, JsonNode?> pair in parentObject)
-                {
-                    propertyNames.Add(pair.Key);
+                    result[pair.Key] = pair.Value;
                 }
 
-                foreach (string propertyName in propertyNames)
-                {
-                    if (ReferenceEquals(parentObject[propertyName], node))
-                    {
-                        parentObject[propertyName] = value;
-                        break;
-                    }
-                }
+                return result;
             }
+
+            foreach (PropertyInfo property in value.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
+            {
+                if (!property.CanRead)
+                {
+                    continue;
+                }
+
+                string propertyName = _JsonOptions.PropertyNamingPolicy?.ConvertName(property.Name) ?? property.Name;
+                result[propertyName] = property.GetValue(value);
+            }
+
+            return result;
         }
 
         private static string RedactString(string? value)

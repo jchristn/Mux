@@ -301,12 +301,12 @@ namespace Test.Xunit.Llm
                 };
             }
 
-            public ConversationMessage NormalizeFinalResponse(System.Text.Json.JsonElement responseBody)
+            public ConversationMessage NormalizeFinalResponse(OpenAiChatCompletionResponse responseBody)
             {
                 return new ConversationMessage
                 {
                     Role = RoleEnum.Assistant,
-                    Content = responseBody.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()
+                    Content = responseBody.Choices[0].Message?.Content
                 };
             }
 

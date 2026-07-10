@@ -3,7 +3,6 @@ namespace Mux.Core.Llm
     using System;
     using System.Collections.Generic;
     using System.Net.Http;
-    using System.Text.Json.Nodes;
     using Mux.Core.Models;
 
     /// <summary>
@@ -48,27 +47,25 @@ namespace Mux.Core.Llm
                     "OpenAI adapter requires an Authorization header. Add an 'Authorization' entry to the endpoint's headers dictionary.");
             }
 
-            HttpRequestMessage request = base.BuildRequest(messages, tools, endpoint, stream);
+            return base.BuildRequest(messages, tools, endpoint, stream);
+        }
 
-            // Ensure parallel_tool_calls is set in the request body if tools are provided
-            if (tools != null && tools.Count > 0 && request.Content != null)
+        #endregion
+
+        #region Private-Methods
+
+        /// <inheritdoc />
+        protected override void CustomizeRequestBody(
+            OpenAiChatRequest requestBody,
+            List<ConversationMessage> messages,
+            List<ToolDefinition> tools,
+            EndpointConfig endpoint,
+            bool stream)
+        {
+            if (tools != null && tools.Count > 0)
             {
-                string bodyJson = request.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                JsonNode? bodyNode = JsonNode.Parse(bodyJson);
-
-                if (bodyNode is JsonObject bodyObject)
-                {
-                    bodyObject["parallel_tool_calls"] = true;
-
-                    string updatedJson = bodyObject.ToJsonString();
-                    request.Content = new StringContent(
-                        updatedJson,
-                        System.Text.Encoding.UTF8,
-                        "application/json");
-                }
+                requestBody.ParallelToolCalls = true;
             }
-
-            return request;
         }
 
         #endregion

@@ -5,7 +5,6 @@ namespace Mux.Core.Settings
     using System.IO;
     using System.Linq;
     using System.Text.Json;
-    using System.Text.Json.Nodes;
     using System.Text.Json.Serialization;
     using System.Text.RegularExpressions;
     using System.Threading;
@@ -86,30 +85,28 @@ namespace Mux.Core.Settings
             string endpointsPath = Path.Combine(configDir, "endpoints.json");
             if (!File.Exists(endpointsPath))
             {
-                JsonObject defaultEndpoint = new JsonObject
+                EndpointConfig defaultEndpoint = new EndpointConfig
                 {
-                    ["name"] = "ollama-local",
-                    ["adapterType"] = "ollama",
-                    ["baseUrl"] = "http://localhost:11434/v1",
-                    ["model"] = "qwen2.5-coder:7b",
-                    ["isDefault"] = true,
-                    ["maxTokens"] = 8192,
-                    ["temperature"] = 0.1,
-                    ["contextWindow"] = 32768,
-                    ["timeoutMs"] = 120000,
-                    ["headers"] = new JsonObject(),
-                    ["autoApproveTools"] = false,
-                    ["quirks"] = (JsonNode?)null
+                    Name = "ollama-local",
+                    AdapterType = AdapterTypeEnum.Ollama,
+                    BaseUrl = "http://localhost:11434/v1",
+                    Model = "qwen2.5-coder:7b",
+                    IsDefault = true,
+                    MaxTokens = 8192,
+                    Temperature = 0.1,
+                    ContextWindow = 32768,
+                    TimeoutMs = 120000,
+                    Headers = new Dictionary<string, string>(),
+                    AutoApproveTools = false,
+                    Quirks = null
                 };
 
-                JsonObject root = new JsonObject
+                EndpointsFile root = new EndpointsFile
                 {
-                    ["endpoints"] = new JsonArray(defaultEndpoint)
+                    Endpoints = new List<EndpointConfig> { defaultEndpoint }
                 };
 
-                string defaultEndpoints = root.ToJsonString(
-                    new JsonSerializerOptions { WriteIndented = true });
-
+                string defaultEndpoints = JsonSerializer.Serialize(root, _JsonWriteOptions);
                 File.WriteAllText(endpointsPath, defaultEndpoints);
             }
 

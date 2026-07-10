@@ -5,10 +5,8 @@ namespace Mux.Search.Providers.You
     using System.Linq;
     using System.Net.Http;
     using System.Net.Http.Headers;
-    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
-    using Mux.Search.Internal;
     using Mux.Search.Models;
 
     /// <summary>
@@ -65,50 +63,45 @@ namespace Mux.Search.Providers.You
                 boost_domains = query.BoostDomains.Count > 0 ? query.BoostDomains : null,
                 crawl_timeout = query.CrawlTimeoutSeconds
             });
-            SearchProviderResponse providerResponse =
-                await SendAsync(request, cancellationToken).ConfigureAwait(false);
+            SearchProviderResponse<YouApiResponse> providerResponse =
+                await SendAsync<YouApiResponse>(request, cancellationToken).ConfigureAwait(false);
 
-            using (providerResponse)
+            YouApiResponse body = providerResponse.Body;
+            YouSearchResponse response = new YouSearchResponse
             {
-                JsonElement root = providerResponse.Document.RootElement;
-                YouSearchResponse response = new YouSearchResponse
-                {
-                    ProviderName = ProviderName,
-                    Query = query.Query,
-                    RawJson = providerResponse.RawJson
-                };
+                ProviderName = ProviderName,
+                Query = query.Query,
+                RawJson = providerResponse.RawJson
+            };
 
-                JsonElement? resultsRoot = root.GetPropertyOrNull("results");
-                if (resultsRoot.HasValue && resultsRoot.Value.ValueKind == JsonValueKind.Object)
-                {
-                    response.SetSection("web", ParseSection(resultsRoot.Value.GetPropertyOrNull("web"), "web"));
-                    response.SetSection("news", ParseSection(resultsRoot.Value.GetPropertyOrNull("news"), "news"));
-                }
-
-                JsonElement? metadata = root.GetPropertyOrNull("metadata");
-                if (metadata.HasValue && metadata.Value.ValueKind == JsonValueKind.Object)
-                {
-                    response.SearchUuid = metadata.Value.GetStringOrNull("search_uuid");
-                    response.RequestId = response.SearchUuid;
-                    response.LatencySeconds = metadata.Value.GetDoubleOrNull("latency");
-                }
-
-                return response;
+            if (body.Results != null)
+            {
+                response.SetSection("web", ConvertSection(body.Results.Web, "web"));
+                response.SetSection("news", ConvertSection(body.Results.News, "news"));
             }
+
+            if (body.Metadata != null)
+            {
+                response.SearchUuid = body.Metadata.SearchUuid;
+                response.RequestId = response.SearchUuid;
+                response.LatencySeconds = body.Metadata.Latency;
+            }
+
+            return response;
         }
 
-        private static List<SearchResultItem> ParseSection(JsonElement? resultsElement, string sectionName)
+        private static List<SearchResultItem> ConvertSection(List<YouApiResult>? apiResults, string sectionName)
         {
             List<SearchResultItem> results = new List<SearchResultItem>();
-            if (!resultsElement.HasValue || resultsElement.Value.ValueKind != JsonValueKind.Array)
+            if (apiResults == null)
             {
                 return results;
             }
 
-            foreach (JsonElement item in resultsElement.Value.EnumerateArray())
+            foreach (YouApiResult item in apiResults)
             {
-                List<string> snippets = item.GetStringListOrEmpty("snippets");
-                string? description = item.GetStringOrNull("description");
+                List<string> snippets = item.Snippets ?? new List<string>();
+                string? description = item.Description;
 
                 if (!string.IsNullOrWhiteSpace(description) && !snippets.Contains(description))
                 {
@@ -118,16 +111,16 @@ namespace Mux.Search.Providers.You
                 results.Add(new SearchResultItem
                 {
                     Section = sectionName,
-                    Title = item.GetStringOrNull("title") ?? string.Empty,
-                    Url = item.GetStringOrNull("url") ?? string.Empty,
+                    Title = item.Title ?? string.Empty,
+                    Url = item.Url ?? string.Empty,
                     Description = description,
                     Snippets = snippets,
-                    FaviconUrl = item.GetStringOrNull("favicon_url"),
-                    ThumbnailUrl = item.GetStringOrNull("thumbnail_url"),
-                    RawContent = item.GetStringOrNull("content")
-                        ?? item.GetStringOrNull("markdown")
-                        ?? item.GetStringOrNull("html"),
-                    PublishedAt = item.GetDateTimeOffsetOrNull("page_age")
+                    FaviconUrl = item.FaviconUrl,
+                    ThumbnailUrl = item.ThumbnailUrl,
+                    RawContent = item.Content
+                        ?? item.Markdown
+                        ?? item.Html,
+                    PublishedAt = item.PageAge
                 });
             }
 

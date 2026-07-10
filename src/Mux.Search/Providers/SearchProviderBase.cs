@@ -103,8 +103,8 @@ namespace Mux.Search.Providers
         /// </summary>
         /// <param name="request">The request.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        /// <returns>The parsed JSON document and raw body.</returns>
-        protected async Task<SearchProviderResponse> SendAsync(
+        /// <returns>The typed response body and raw body.</returns>
+        protected async Task<SearchProviderResponse<TBody>> SendAsync<TBody>(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
@@ -129,7 +129,13 @@ namespace Mux.Search.Providers
 
             try
             {
-                return new SearchProviderResponse(JsonDocument.Parse(rawJson), rawJson);
+                TBody? body = JsonSerializer.Deserialize<TBody>(rawJson, SerializerOptions);
+                if (body == null)
+                {
+                    throw new JsonException("The response body was empty.");
+                }
+
+                return new SearchProviderResponse<TBody>(body, rawJson);
             }
             catch (JsonException ex)
             {

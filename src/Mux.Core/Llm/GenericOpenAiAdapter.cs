@@ -7,7 +7,6 @@ namespace Mux.Core.Llm
     using System.Runtime.CompilerServices;
     using System.Text;
     using System.Text.Json;
-    using System.Text.Json.Nodes;
     using System.Threading;
     using Mux.Core.Agent;
     using Mux.Core.Enums;
@@ -50,32 +49,34 @@ namespace Mux.Core.Llm
             if (tools == null) throw new ArgumentNullException(nameof(tools));
             if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
 
-            JsonObject body = new JsonObject();
-            body["model"] = endpoint.Model;
-            body["messages"] = ConvertMessages(messages);
-            body["temperature"] = endpoint.Temperature;
-            body["max_tokens"] = endpoint.MaxTokens;
-            body["stream"] = stream;
-
             BackendQuirks quirks = endpoint.Quirks ?? new BackendQuirks();
+            OpenAiChatRequest body = new OpenAiChatRequest
+            {
+                Model = endpoint.Model,
+                Messages = ConvertMessages(messages),
+                Temperature = endpoint.Temperature,
+                MaxTokens = endpoint.MaxTokens,
+                Stream = stream
+            };
 
             if (tools.Count > 0 && quirks.SupportsTools)
             {
-                body["tools"] = ConvertTools(tools);
+                body.Tools = ConvertTools(tools);
 
                 if (quirks.SupportsParallelToolCalls)
                 {
-                    body["parallel_tool_calls"] = true;
+                    body.ParallelToolCalls = true;
                 }
             }
 
-            // Strip fields specified in quirks
             foreach (string field in quirks.StripRequestFields)
             {
-                body.Remove(field);
+                StripRequestField(body, field);
             }
 
-            string json = body.ToJsonString(new JsonSerializerOptions
+            CustomizeRequestBody(body, messages, tools, endpoint, stream);
+
+            string json = JsonSerializer.Serialize(body, new JsonSerializerOptions
             {
                 WriteIndented = false
             });
@@ -178,58 +179,37 @@ namespace Mux.Core.Llm
                         yield break;
                     }
 
-                    JsonElement chunk;
+                    OpenAiChatCompletionChunk? chunk;
                     try
                     {
-                        chunk = JsonDocument.Parse(data).RootElement;
+                        chunk = JsonSerializer.Deserialize<OpenAiChatCompletionChunk>(data);
                     }
                     catch (JsonException)
                     {
                         continue;
                     }
 
-                    // Extract the delta from choices[0].delta
-                    if (!chunk.TryGetProperty("choices", out JsonElement choices))
+                    if (chunk == null || chunk.Choices.Count == 0)
                         continue;
 
-                    if (choices.GetArrayLength() == 0)
-                        continue;
+                    OpenAiStreamingChoice firstChoice = chunk.Choices[0];
 
-                    JsonElement firstChoice = choices[0];
+                    string? finishReason = firstChoice.FinishReason;
+                    OpenAiStreamingDelta? delta = firstChoice.Delta;
 
-                    // Check for finish_reason
-                    string? finishReason = null;
-                    if (firstChoice.TryGetProperty("finish_reason", out JsonElement finishReasonElement)
-                        && finishReasonElement.ValueKind == JsonValueKind.String)
+                    if (delta != null)
                     {
-                        finishReason = finishReasonElement.GetString();
-                    }
-
-                    if (firstChoice.TryGetProperty("delta", out JsonElement delta))
-                    {
-                        // Text content delta
-                        if (delta.TryGetProperty("content", out JsonElement contentElement)
-                            && contentElement.ValueKind == JsonValueKind.String)
+                        if (!string.IsNullOrEmpty(delta.Content))
                         {
-                            string? text = contentElement.GetString();
-                            if (!string.IsNullOrEmpty(text))
-                            {
-                                assistantTextBuilder.Append(text);
-                                yield return new AssistantTextEvent { Text = text! };
-                            }
+                            assistantTextBuilder.Append(delta.Content);
+                            yield return new AssistantTextEvent { Text = delta.Content };
                         }
 
-                        // Tool call deltas
-                        if (delta.TryGetProperty("tool_calls", out JsonElement toolCallsElement)
-                            && toolCallsElement.ValueKind == JsonValueKind.Array)
+                        if (delta.ToolCalls != null)
                         {
-                            foreach (JsonElement toolCallDelta in toolCallsElement.EnumerateArray())
+                            foreach (OpenAiStreamingToolCall toolCallDelta in delta.ToolCalls)
                             {
-                                int index = 0;
-                                if (toolCallDelta.TryGetProperty("index", out JsonElement indexElement))
-                                {
-                                    index = indexElement.GetInt32();
-                                }
+                                int index = toolCallDelta.Index ?? 0;
 
                                 if (!toolCallAccumulators.ContainsKey(index))
                                 {
@@ -238,36 +218,21 @@ namespace Mux.Core.Llm
 
                                 ToolCallAccumulator accumulator = toolCallAccumulators[index];
 
-                                if (toolCallDelta.TryGetProperty("id", out JsonElement idElement)
-                                    && idElement.ValueKind == JsonValueKind.String)
+                                if (!string.IsNullOrEmpty(toolCallDelta.Id))
                                 {
-                                    string? id = idElement.GetString();
-                                    if (!string.IsNullOrEmpty(id))
-                                    {
-                                        accumulator.Id = id!;
-                                    }
+                                    accumulator.Id = toolCallDelta.Id!;
                                 }
 
-                                if (toolCallDelta.TryGetProperty("function", out JsonElement functionElement))
+                                if (toolCallDelta.Function != null)
                                 {
-                                    if (functionElement.TryGetProperty("name", out JsonElement nameElement)
-                                        && nameElement.ValueKind == JsonValueKind.String)
+                                    if (!string.IsNullOrEmpty(toolCallDelta.Function.Name))
                                     {
-                                        string? name = nameElement.GetString();
-                                        if (!string.IsNullOrEmpty(name))
-                                        {
-                                            accumulator.Name = name!;
-                                        }
+                                        accumulator.Name = toolCallDelta.Function.Name;
                                     }
 
-                                    if (functionElement.TryGetProperty("arguments", out JsonElement argsElement)
-                                        && argsElement.ValueKind == JsonValueKind.String)
+                                    if (toolCallDelta.Function.Arguments != null)
                                     {
-                                        string? argChunk = argsElement.GetString();
-                                        if (argChunk != null)
-                                        {
-                                            accumulator.ArgumentsBuilder.Append(argChunk);
-                                        }
+                                        accumulator.ArgumentsBuilder.Append(toolCallDelta.Function.Arguments);
                                     }
                                 }
                             }
@@ -313,61 +278,40 @@ namespace Mux.Core.Llm
         /// <summary>
         /// Normalizes a non-streaming JSON response into a <see cref="ConversationMessage"/>.
         /// </summary>
-        /// <param name="responseBody">The parsed JSON element from the response.</param>
+        /// <param name="responseBody">The deserialized response body.</param>
         /// <returns>A normalized <see cref="ConversationMessage"/>.</returns>
-        public virtual ConversationMessage NormalizeFinalResponse(JsonElement responseBody)
+        public virtual ConversationMessage NormalizeFinalResponse(OpenAiChatCompletionResponse responseBody)
         {
             ConversationMessage message = new ConversationMessage();
             message.Role = RoleEnum.Assistant;
 
-            if (!responseBody.TryGetProperty("choices", out JsonElement choices)
-                || choices.GetArrayLength() == 0)
+            if (responseBody.Choices.Count == 0)
             {
                 return message;
             }
 
-            JsonElement firstChoice = choices[0];
+            OpenAiChatChoice firstChoice = responseBody.Choices[0];
+            OpenAiChatMessage? messageElement = firstChoice.Message;
 
-            if (!firstChoice.TryGetProperty("message", out JsonElement messageElement))
+            if (messageElement == null)
             {
                 return message;
             }
 
-            if (messageElement.TryGetProperty("content", out JsonElement contentElement)
-                && contentElement.ValueKind == JsonValueKind.String)
-            {
-                message.Content = contentElement.GetString();
-            }
+            message.Content = messageElement.Content;
 
-            if (messageElement.TryGetProperty("tool_calls", out JsonElement toolCallsElement)
-                && toolCallsElement.ValueKind == JsonValueKind.Array)
+            if (messageElement.ToolCalls != null)
             {
                 List<ToolCall> toolCalls = new List<ToolCall>();
 
-                foreach (JsonElement tc in toolCallsElement.EnumerateArray())
+                foreach (OpenAiToolCall tc in messageElement.ToolCalls)
                 {
-                    ToolCall toolCall = new ToolCall();
-
-                    if (tc.TryGetProperty("id", out JsonElement idElement)
-                        && idElement.ValueKind == JsonValueKind.String)
+                    ToolCall toolCall = new ToolCall
                     {
-                        toolCall.Id = idElement.GetString()!;
-                    }
-
-                    if (tc.TryGetProperty("function", out JsonElement funcElement))
-                    {
-                        if (funcElement.TryGetProperty("name", out JsonElement nameElement)
-                            && nameElement.ValueKind == JsonValueKind.String)
-                        {
-                            toolCall.Name = nameElement.GetString()!;
-                        }
-
-                        if (funcElement.TryGetProperty("arguments", out JsonElement argsElement)
-                            && argsElement.ValueKind == JsonValueKind.String)
-                        {
-                            toolCall.Arguments = argsElement.GetString()!;
-                        }
-                    }
+                        Id = tc.Id,
+                        Name = tc.Function.Name,
+                        Arguments = tc.Function.Arguments
+                    };
 
                     toolCalls.Add(toolCall);
                 }
@@ -388,14 +332,49 @@ namespace Mux.Core.Llm
         /// <summary>
         /// Converts a list of <see cref="ConversationMessage"/> instances to an OpenAI-format JSON array.
         /// </summary>
-        private JsonArray ConvertMessages(List<ConversationMessage> messages)
+        protected virtual void CustomizeRequestBody(
+            OpenAiChatRequest requestBody,
+            List<ConversationMessage> messages,
+            List<ToolDefinition> tools,
+            EndpointConfig endpoint,
+            bool stream)
         {
-            JsonArray array = new JsonArray();
+        }
+
+        private static void StripRequestField(OpenAiChatRequest body, string field)
+        {
+            if (string.IsNullOrWhiteSpace(field))
+            {
+                return;
+            }
+
+            string normalized = field.Replace("-", "_", StringComparison.OrdinalIgnoreCase);
+            switch (normalized)
+            {
+                case "temperature":
+                    body.Temperature = null;
+                    break;
+                case "max_tokens":
+                    body.MaxTokens = null;
+                    break;
+                case "stream":
+                    body.Stream = null;
+                    break;
+                case "tools":
+                    body.Tools = null;
+                    break;
+                case "parallel_tool_calls":
+                    body.ParallelToolCalls = null;
+                    break;
+            }
+        }
+
+        private List<OpenAiChatMessage> ConvertMessages(List<ConversationMessage> messages)
+        {
+            List<OpenAiChatMessage> converted = new List<OpenAiChatMessage>();
 
             foreach (ConversationMessage msg in messages)
             {
-                JsonObject obj = new JsonObject();
-
                 string role = msg.Role switch
                 {
                     RoleEnum.System => "system",
@@ -404,76 +383,67 @@ namespace Mux.Core.Llm
                     RoleEnum.Tool => "tool",
                     _ => "user"
                 };
-                obj["role"] = role;
 
-                if (msg.Content != null)
+                OpenAiChatMessage convertedMessage = new OpenAiChatMessage
                 {
-                    obj["content"] = msg.Content;
-                }
-                else if (msg.Role != RoleEnum.Assistant)
-                {
-                    // OpenAI requires content field for non-assistant messages
-                    obj["content"] = (string?)null;
-                }
+                    Role = role,
+                    Content = msg.Content
+                };
 
                 if (msg.ToolCalls != null && msg.ToolCalls.Count > 0)
                 {
-                    JsonArray toolCallsArray = new JsonArray();
+                    List<OpenAiToolCall> toolCalls = new List<OpenAiToolCall>();
 
                     foreach (ToolCall tc in msg.ToolCalls)
                     {
-                        JsonObject toolCallObj = new JsonObject();
-                        toolCallObj["id"] = tc.Id;
-                        toolCallObj["type"] = "function";
-
-                        JsonObject functionObj = new JsonObject();
-                        functionObj["name"] = tc.Name;
-                        functionObj["arguments"] = tc.Arguments;
-
-                        toolCallObj["function"] = functionObj;
-                        toolCallsArray.Add(toolCallObj);
+                        toolCalls.Add(new OpenAiToolCall
+                        {
+                            Id = tc.Id,
+                            Type = "function",
+                            Function = new OpenAiFunctionCall
+                            {
+                                Name = tc.Name,
+                                Arguments = tc.Arguments
+                            }
+                        });
                     }
 
-                    obj["tool_calls"] = toolCallsArray;
+                    convertedMessage.ToolCalls = toolCalls;
                 }
 
                 if (msg.ToolCallId != null)
                 {
-                    obj["tool_call_id"] = msg.ToolCallId;
+                    convertedMessage.ToolCallId = msg.ToolCallId;
                 }
 
-                array.Add(obj);
+                converted.Add(convertedMessage);
             }
 
-            return array;
+            return converted;
         }
 
         /// <summary>
         /// Converts a list of <see cref="ToolDefinition"/> instances to an OpenAI-format tools JSON array.
         /// </summary>
-        private JsonArray ConvertTools(List<ToolDefinition> tools)
+        private List<OpenAiToolDefinition> ConvertTools(List<ToolDefinition> tools)
         {
-            JsonArray array = new JsonArray();
+            List<OpenAiToolDefinition> converted = new List<OpenAiToolDefinition>();
 
             foreach (ToolDefinition tool in tools)
             {
-                JsonObject obj = new JsonObject();
-                obj["type"] = "function";
-
-                JsonObject functionObj = new JsonObject();
-                functionObj["name"] = tool.Name;
-                functionObj["description"] = tool.Description;
-
-                // ParametersSchema is an object; serialize and re-parse to get a JsonNode
-                string schemaJson = JsonSerializer.Serialize(tool.ParametersSchema);
-                JsonNode? schemaNode = JsonNode.Parse(schemaJson);
-                functionObj["parameters"] = schemaNode;
-
-                obj["function"] = functionObj;
-                array.Add(obj);
+                converted.Add(new OpenAiToolDefinition
+                {
+                    Type = "function",
+                    Function = new OpenAiFunctionDefinition
+                    {
+                        Name = tool.Name,
+                        Description = tool.Description,
+                        Parameters = tool.ParametersSchema
+                    }
+                });
             }
 
-            return array;
+            return converted;
         }
 
         /// <summary>

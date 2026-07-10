@@ -5,7 +5,6 @@ namespace Mux.Core.Llm
     using System.IO;
     using System.Net.Http;
     using System.Runtime.CompilerServices;
-    using System.Text.Json.Nodes;
     using System.Threading;
     using Mux.Core.Agent;
     using Mux.Core.Models;
@@ -46,28 +45,7 @@ namespace Mux.Core.Llm
         {
             if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
 
-            HttpRequestMessage request = base.BuildRequest(messages, tools, endpoint, stream);
-
-            // Strip parallel_tool_calls and stream_options — Ollama does not support them
-            if (request.Content != null)
-            {
-                string bodyJson = request.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                JsonNode? bodyNode = JsonNode.Parse(bodyJson);
-
-                if (bodyNode is JsonObject bodyObject)
-                {
-                    bodyObject.Remove("parallel_tool_calls");
-                    bodyObject.Remove("stream_options");
-
-                    string updatedJson = bodyObject.ToJsonString();
-                    request.Content = new StringContent(
-                        updatedJson,
-                        System.Text.Encoding.UTF8,
-                        "application/json");
-                }
-            }
-
-            return request;
+            return base.BuildRequest(messages, tools, endpoint, stream);
         }
 
         /// <summary>

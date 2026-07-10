@@ -4,10 +4,8 @@ namespace Mux.Search.Providers.Tavily
     using System.Collections.Generic;
     using System.Net.Http;
     using System.Net.Http.Headers;
-    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
-    using Mux.Search.Internal;
     using Mux.Search.Models;
 
     /// <summary>
@@ -71,47 +69,41 @@ namespace Mux.Search.Providers.Tavily
                 safe_search = query.SafeSearch
             });
 
-            SearchProviderResponse providerResponse =
-                await SendAsync(request, cancellationToken).ConfigureAwait(false);
+            SearchProviderResponse<TavilyApiResponse> providerResponse =
+                await SendAsync<TavilyApiResponse>(request, cancellationToken).ConfigureAwait(false);
 
-            using (providerResponse)
+            TavilyApiResponse body = providerResponse.Body;
+            TavilySearchResponse response = new TavilySearchResponse
             {
-                JsonElement root = providerResponse.Document.RootElement;
-                TavilySearchResponse response = new TavilySearchResponse
+                ProviderName = ProviderName,
+                Query = body.Query ?? query.Query,
+                Answer = body.Answer,
+                RequestId = body.RequestId,
+                LatencySeconds = body.ResponseTime,
+                Images = ConvertImages(body.Images),
+                RawJson = providerResponse.RawJson
+            };
+
+            response.SetSection("web", ConvertResults(body.Results));
+
+            if (body.AutoParameters != null)
+            {
+                response.AutoParameters = new TavilyAutoParameters
                 {
-                    ProviderName = ProviderName,
-                    Query = root.GetStringOrNull("query") ?? query.Query,
-                    Answer = root.GetStringOrNull("answer"),
-                    RequestId = root.GetStringOrNull("request_id"),
-                    LatencySeconds = root.GetDoubleOrNull("response_time"),
-                    Images = ParseImages(root.GetPropertyOrNull("images")),
-                    RawJson = providerResponse.RawJson
+                    Topic = body.AutoParameters.Topic,
+                    SearchDepth = body.AutoParameters.SearchDepth
                 };
-
-                response.SetSection("web", ParseResults(root.GetPropertyOrNull("results")));
-
-                JsonElement? autoParameters = root.GetPropertyOrNull("auto_parameters");
-                if (autoParameters.HasValue && autoParameters.Value.ValueKind == JsonValueKind.Object)
-                {
-                    response.AutoParameters = new TavilyAutoParameters
-                    {
-                        Topic = autoParameters.Value.GetStringOrNull("topic"),
-                        SearchDepth = autoParameters.Value.GetStringOrNull("search_depth")
-                    };
-                }
-
-                JsonElement? usage = root.GetPropertyOrNull("usage");
-                if (usage.HasValue && usage.Value.ValueKind == JsonValueKind.Object)
-                {
-                    response.Usage = new TavilyUsage
-                    {
-                        CreditsUsed = usage.Value.GetInt32OrNull("credits_used")
-                            ?? usage.Value.GetInt32OrNull("credits")
-                    };
-                }
-
-                return response;
             }
+
+            if (body.Usage != null)
+            {
+                response.Usage = new TavilyUsage
+                {
+                    CreditsUsed = body.Usage.CreditsUsed ?? body.Usage.Credits
+                };
+            }
+
+            return response;
         }
 
         private static object NormalizeOptionalMode(string? value)
@@ -129,17 +121,17 @@ namespace Mux.Search.Providers.Tavily
             return value.Trim();
         }
 
-        private static List<SearchResultItem> ParseResults(JsonElement? resultsElement)
+        private static List<SearchResultItem> ConvertResults(List<TavilyApiResult>? apiResults)
         {
             List<SearchResultItem> results = new List<SearchResultItem>();
-            if (!resultsElement.HasValue || resultsElement.Value.ValueKind != JsonValueKind.Array)
+            if (apiResults == null)
             {
                 return results;
             }
 
-            foreach (JsonElement item in resultsElement.Value.EnumerateArray())
+            foreach (TavilyApiResult item in apiResults)
             {
-                string? content = item.GetStringOrNull("content");
+                string? content = item.Content;
                 List<string> snippets = new List<string>();
 
                 if (!string.IsNullOrWhiteSpace(content))
@@ -150,56 +142,39 @@ namespace Mux.Search.Providers.Tavily
                 results.Add(new SearchResultItem
                 {
                     Section = "web",
-                    Title = item.GetStringOrNull("title") ?? string.Empty,
-                    Url = item.GetStringOrNull("url") ?? string.Empty,
+                    Title = item.Title ?? string.Empty,
+                    Url = item.Url ?? string.Empty,
                     Description = content,
                     Snippets = snippets,
-                    Score = item.GetDoubleOrNull("score"),
-                    RawContent = item.GetStringOrNull("raw_content"),
-                    FaviconUrl = item.GetStringOrNull("favicon"),
-                    PublishedAt = item.GetDateTimeOffsetOrNull("published_date"),
-                    Images = ParseImages(item.GetPropertyOrNull("images"))
+                    Score = item.Score,
+                    RawContent = item.RawContent,
+                    FaviconUrl = item.Favicon,
+                    PublishedAt = item.PublishedDate,
+                    Images = ConvertImages(item.Images)
                 });
             }
 
             return results;
         }
 
-        private static List<SearchImage> ParseImages(JsonElement? imagesElement)
+        private static List<SearchImage> ConvertImages(List<TavilyApiImage>? apiImages)
         {
             List<SearchImage> images = new List<SearchImage>();
-            if (!imagesElement.HasValue || imagesElement.Value.ValueKind != JsonValueKind.Array)
+            if (apiImages == null)
             {
                 return images;
             }
 
-            foreach (JsonElement image in imagesElement.Value.EnumerateArray())
+            foreach (TavilyApiImage image in apiImages)
             {
-                if (image.ValueKind == JsonValueKind.String)
+                string? url = image.Url ?? image.ImageUrl;
+                if (!string.IsNullOrWhiteSpace(url))
                 {
-                    string? url = image.GetString();
-                    if (!string.IsNullOrWhiteSpace(url))
+                    images.Add(new SearchImage
                     {
-                        images.Add(new SearchImage { Url = url.Trim() });
-                    }
-
-                    continue;
-                }
-
-                if (image.ValueKind == JsonValueKind.Object)
-                {
-                    string? url = image.GetStringOrNull("url")
-                        ?? image.GetStringOrNull("image_url");
-
-                    if (!string.IsNullOrWhiteSpace(url))
-                    {
-                        images.Add(new SearchImage
-                        {
-                            Url = url.Trim(),
-                            Description = image.GetStringOrNull("description")
-                                ?? image.GetStringOrNull("alt")
-                        });
-                    }
+                        Url = url.Trim(),
+                        Description = image.Description ?? image.Alt
+                    });
                 }
             }
 

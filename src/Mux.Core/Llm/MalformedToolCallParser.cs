@@ -25,6 +25,10 @@ namespace Mux.Core.Llm
             @"\{\s*""name""\s*:\s*""([^""]+)""\s*,\s*""arguments""\s*:\s*(\{[\s\S]*?\})\s*\}",
             RegexOptions.Compiled);
 
+        private static readonly Regex _NameStringArgumentsRegex = new Regex(
+            @"\{\s*""name""\s*:\s*""([^""]+)""\s*,\s*""arguments""\s*:\s*""((?:\\""|[^""])*)""\s*\}",
+            RegexOptions.Compiled);
+
         #endregion
 
         #region Public-Methods
@@ -72,37 +76,16 @@ namespace Mux.Core.Llm
             {
                 string jsonContent = match.Groups[1].Value.Trim();
 
-                try
+                List<ToolCall>? objectArgumentCalls = TryExtractFromNameArgumentsPattern(jsonContent);
+                if (objectArgumentCalls != null)
                 {
-                    JsonDocument doc = JsonDocument.Parse(jsonContent);
-                    JsonElement root = doc.RootElement;
-
-                    if (root.ValueKind == JsonValueKind.Object)
-                    {
-                        ToolCall? toolCall = TryParseToolCallFromJson(root);
-                        if (toolCall != null)
-                        {
-                            toolCalls.Add(toolCall);
-                        }
-                    }
-                    else if (root.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (JsonElement element in root.EnumerateArray())
-                        {
-                            if (element.ValueKind == JsonValueKind.Object)
-                            {
-                                ToolCall? toolCall = TryParseToolCallFromJson(element);
-                                if (toolCall != null)
-                                {
-                                    toolCalls.Add(toolCall);
-                                }
-                            }
-                        }
-                    }
+                    toolCalls.AddRange(objectArgumentCalls);
                 }
-                catch (JsonException)
+
+                List<ToolCall>? stringArgumentCalls = TryExtractFromNameStringArgumentsPattern(jsonContent);
+                if (stringArgumentCalls != null)
                 {
-                    // Not valid JSON, skip
+                    toolCalls.AddRange(stringArgumentCalls);
                 }
             }
 
@@ -121,8 +104,7 @@ namespace Mux.Core.Llm
 
                 try
                 {
-                    // Validate it is valid JSON
-                    JsonDocument.Parse(argsJson);
+                    JsonSerializer.Deserialize<Dictionary<string, object?>>(argsJson);
 
                     ToolCall toolCall = new ToolCall
                     {
@@ -154,8 +136,7 @@ namespace Mux.Core.Llm
 
                 try
                 {
-                    // Validate it is valid JSON
-                    JsonDocument.Parse(argsJson);
+                    JsonSerializer.Deserialize<Dictionary<string, object?>>(argsJson);
 
                     ToolCall toolCall = new ToolCall
                     {
@@ -175,38 +156,38 @@ namespace Mux.Core.Llm
             return toolCalls.Count > 0 ? toolCalls : null;
         }
 
-        private static ToolCall? TryParseToolCallFromJson(JsonElement element)
+        private static List<ToolCall>? TryExtractFromNameStringArgumentsPattern(string text)
         {
-            string? name = null;
-            string? arguments = null;
+            MatchCollection matches = _NameStringArgumentsRegex.Matches(text);
+            List<ToolCall> toolCalls = new List<ToolCall>();
 
-            if (element.TryGetProperty("name", out JsonElement nameElement)
-                && nameElement.ValueKind == JsonValueKind.String)
+            foreach (Match match in matches)
             {
-                name = nameElement.GetString();
+                string name = match.Groups[1].Value;
+                string escapedArguments = match.Groups[2].Value;
+                string argsJson;
+
+                try
+                {
+                    argsJson = JsonSerializer.Deserialize<string>("\"" + escapedArguments + "\"") ?? "{}";
+                    JsonSerializer.Deserialize<Dictionary<string, object?>>(argsJson);
+                }
+                catch (JsonException)
+                {
+                    continue;
+                }
+
+                ToolCall toolCall = new ToolCall
+                {
+                    Id = "malformed_" + Guid.NewGuid().ToString("N").Substring(0, 12),
+                    Name = name,
+                    Arguments = argsJson
+                };
+
+                toolCalls.Add(toolCall);
             }
 
-            if (element.TryGetProperty("arguments", out JsonElement argsElement))
-            {
-                if (argsElement.ValueKind == JsonValueKind.String)
-                {
-                    arguments = argsElement.GetString();
-                }
-                else if (argsElement.ValueKind == JsonValueKind.Object)
-                {
-                    arguments = argsElement.GetRawText();
-                }
-            }
-
-            if (string.IsNullOrEmpty(name))
-                return null;
-
-            return new ToolCall
-            {
-                Id = "malformed_" + Guid.NewGuid().ToString("N").Substring(0, 12),
-                Name = name!,
-                Arguments = arguments ?? "{}"
-            };
+            return toolCalls.Count > 0 ? toolCalls : null;
         }
 
         #endregion

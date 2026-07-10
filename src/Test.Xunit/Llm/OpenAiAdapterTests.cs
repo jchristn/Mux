@@ -3,7 +3,7 @@ namespace Test.Xunit.Llm
     using System;
     using System.Collections.Generic;
     using System.Net.Http;
-    using System.Text.Json.Nodes;
+    using System.Text.Json;
     using System.Threading.Tasks;
     using global::Xunit;
     using Mux.Core.Enums;
@@ -81,9 +81,9 @@ namespace Test.Xunit.Llm
             HttpRequestMessage request = _Adapter.BuildRequest(messages, tools, endpoint);
 
             string body = await request.Content!.ReadAsStringAsync();
-            JsonNode? parsed = JsonNode.Parse(body);
+            OpenAiChatRequest? parsed = JsonSerializer.Deserialize<OpenAiChatRequest>(body);
 
-            Assert.True(parsed!["parallel_tool_calls"]!.GetValue<bool>());
+            Assert.True(parsed!.ParallelToolCalls);
         }
 
         #endregion

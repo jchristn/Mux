@@ -110,42 +110,45 @@ namespace Mux.Cli.Rendering
 
             try
             {
-                JsonDocument doc = JsonDocument.Parse(arguments);
-                JsonElement root = doc.RootElement;
+                ToolArgumentSummary? root = JsonSerializer.Deserialize<ToolArgumentSummary>(arguments);
+                if (root == null)
+                {
+                    return string.Empty;
+                }
 
                 switch (toolName)
                 {
                     case "read_file":
-                        return GetShortPath(GetStringProp(root, "file_path"));
+                        return GetShortPath(root.FilePath ?? string.Empty);
 
                     case "write_file":
-                        string writePath = GetShortPath(GetStringProp(root, "file_path"));
+                        string writePath = GetShortPath(root.FilePath ?? string.Empty);
                         return writePath;
 
                     case "edit_file":
-                        return GetShortPath(GetStringProp(root, "file_path"));
+                        return GetShortPath(root.FilePath ?? string.Empty);
 
                     case "multi_edit":
-                        string editPath = GetShortPath(GetStringProp(root, "file_path"));
-                        if (root.TryGetProperty("edits", out JsonElement editsEl) && editsEl.ValueKind == JsonValueKind.Array)
+                        string editPath = GetShortPath(root.FilePath ?? string.Empty);
+                        if (root.Edits != null)
                         {
-                            return $"{editPath} ({editsEl.GetArrayLength()} edits)";
+                            return $"{editPath} ({root.Edits.Count} edits)";
                         }
                         return editPath;
 
                     case "delete_file":
-                        return GetShortPath(GetStringProp(root, "file_path"));
+                        return GetShortPath(root.FilePath ?? string.Empty);
 
                     case "file_metadata":
-                        return GetShortPath(GetStringProp(root, "path"));
+                        return GetShortPath(root.Path ?? string.Empty);
 
                     case "list_directory":
-                        return GetShortPath(GetStringProp(root, "path"));
+                        return GetShortPath(root.Path ?? string.Empty);
 
                     case "manage_directory":
-                        string action = GetStringProp(root, "action");
-                        string dirPath = GetShortPath(GetStringProp(root, "path"));
-                        string newDirPath = GetStringProp(root, "new_path");
+                        string action = root.Action ?? string.Empty;
+                        string dirPath = GetShortPath(root.Path ?? string.Empty);
+                        string newDirPath = root.NewPath ?? string.Empty;
                         if (action == "rename" && !string.IsNullOrEmpty(newDirPath))
                         {
                             return $"{action} {dirPath} -> {GetShortPath(newDirPath)}";
@@ -153,11 +156,11 @@ namespace Mux.Cli.Rendering
                         return $"{action} {dirPath}";
 
                     case "glob":
-                        return GetStringProp(root, "pattern");
+                        return root.Pattern ?? string.Empty;
 
                     case "grep":
-                        string pattern = GetStringProp(root, "pattern");
-                        string grepPath = GetStringProp(root, "path");
+                        string pattern = root.Pattern ?? string.Empty;
+                        string grepPath = root.Path ?? string.Empty;
                         if (!string.IsNullOrEmpty(grepPath))
                         {
                             return $"\"{pattern}\" in {GetShortPath(grepPath)}";
@@ -165,20 +168,17 @@ namespace Mux.Cli.Rendering
                         return $"\"{pattern}\"";
 
                     case "web_retrieve":
-                        return GetStringProp(root, "url");
+                        return root.Url ?? string.Empty;
 
                     case "run_process":
-                        string cmd = GetStringProp(root, "command");
-                        if (root.TryGetProperty("args", out JsonElement argsEl) && argsEl.ValueKind == JsonValueKind.Array)
+                        string cmd = root.Command ?? string.Empty;
+                        if (root.Args != null)
                         {
                             System.Text.StringBuilder sb = new System.Text.StringBuilder(cmd);
-                            foreach (JsonElement arg in argsEl.EnumerateArray())
+                            foreach (string arg in root.Args)
                             {
-                                if (arg.ValueKind == JsonValueKind.String)
-                                {
-                                    sb.Append(' ');
-                                    sb.Append(arg.GetString());
-                                }
+                                sb.Append(' ');
+                                sb.Append(arg);
                             }
                             string full = sb.ToString();
                             return full.Length > 80 ? full.Substring(0, 77) + "..." : full;
@@ -186,27 +186,13 @@ namespace Mux.Cli.Rendering
                         return cmd;
 
                     default:
-                        // For unknown/MCP tools, show compact JSON
-                        string compact = JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = false });
-                        return compact.Length > 80 ? compact.Substring(0, 77) + "..." : compact;
+                        return arguments.Length > 80 ? arguments.Substring(0, 77) + "..." : arguments;
                 }
             }
             catch
             {
                 return arguments.Length > 80 ? arguments.Substring(0, 77) + "..." : arguments;
             }
-        }
-
-        /// <summary>
-        /// Gets a string property from a JSON element, or empty string if not found.
-        /// </summary>
-        private static string GetStringProp(JsonElement root, string name)
-        {
-            if (root.TryGetProperty(name, out JsonElement el) && el.ValueKind == JsonValueKind.String)
-            {
-                return el.GetString() ?? string.Empty;
-            }
-            return string.Empty;
         }
 
         /// <summary>

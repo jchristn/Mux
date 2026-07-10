@@ -227,40 +227,39 @@ namespace Mux.Cli.Rendering
 
             try
             {
-                JsonDocument doc = JsonDocument.Parse(content);
-                JsonElement root = doc.RootElement;
+                ToolResultSummary? root = JsonSerializer.Deserialize<ToolResultSummary>(content);
 
-                if (root.TryGetProperty("success", out JsonElement successEl) && successEl.GetBoolean())
+                if (root?.Success == true)
                 {
-                    if (root.TryGetProperty("file_path", out JsonElement pathEl))
+                    if (!string.IsNullOrWhiteSpace(root.FilePath))
                     {
-                        string path = pathEl.GetString() ?? "";
+                        string path = root.FilePath;
                         string fileName = System.IO.Path.GetFileName(path);
-                        if (root.TryGetProperty("line_count", out JsonElement lcEl))
+                        if (root.LineCount.HasValue)
                         {
-                            return $"{fileName} ({lcEl.GetInt32()} lines)";
+                            return $"{fileName} ({root.LineCount.Value} lines)";
                         }
-                        if (root.TryGetProperty("edits_applied", out JsonElement eaEl))
+                        if (root.EditsApplied.HasValue)
                         {
-                            return $"{fileName} ({eaEl.GetInt32()} edits)";
+                            return $"{fileName} ({root.EditsApplied.Value} edits)";
                         }
                         return fileName;
                     }
-                    if (root.TryGetProperty("path", out JsonElement dirPathEl))
+                    if (!string.IsNullOrWhiteSpace(root.Path))
                     {
-                        return System.IO.Path.GetFileName(dirPathEl.GetString() ?? "") + "/";
+                        return System.IO.Path.GetFileName(root.Path) + "/";
                     }
                 }
 
-                if (root.TryGetProperty("success", out JsonElement failEl) && !failEl.GetBoolean())
+                if (root?.Success == false)
                 {
-                    if (root.TryGetProperty("error", out JsonElement errEl))
+                    if (!string.IsNullOrWhiteSpace(root.Error))
                     {
-                        return errEl.GetString() ?? "error";
+                        return root.Error;
                     }
-                    if (root.TryGetProperty("message", out JsonElement msgEl))
+                    if (!string.IsNullOrWhiteSpace(root.Message))
                     {
-                        return TruncateString(msgEl.GetString() ?? "", _MaxResultPreview);
+                        return TruncateString(root.Message, _MaxResultPreview);
                     }
                 }
             }

@@ -6,7 +6,6 @@ namespace Test.Xunit.Llm
     using System.Net.Http;
     using System.Text;
     using System.Text.Json;
-    using System.Text.Json.Nodes;
     using System.Threading;
     using System.Threading.Tasks;
     using global::Xunit;
@@ -61,16 +60,13 @@ namespace Test.Xunit.Llm
             HttpRequestMessage request = _Adapter.BuildRequest(messages, tools, endpoint);
 
             string body = await request.Content!.ReadAsStringAsync();
-            JsonNode? parsed = JsonNode.Parse(body);
+            OpenAiChatRequest? parsed = JsonSerializer.Deserialize<OpenAiChatRequest>(body);
 
             Assert.NotNull(parsed);
-            Assert.Equal("test-model", parsed!["model"]!.GetValue<string>());
-
-            JsonArray? messagesArray = parsed["messages"]?.AsArray();
-            Assert.NotNull(messagesArray);
-            Assert.Single(messagesArray!);
-            Assert.Equal("user", messagesArray[0]!["role"]!.GetValue<string>());
-            Assert.Equal("Hello", messagesArray[0]!["content"]!.GetValue<string>());
+            Assert.Equal("test-model", parsed!.Model);
+            Assert.Single(parsed.Messages);
+            Assert.Equal("user", parsed.Messages[0].Role);
+            Assert.Equal("Hello", parsed.Messages[0].Content);
         }
 
         /// <summary>
@@ -105,13 +101,12 @@ namespace Test.Xunit.Llm
             HttpRequestMessage request = _Adapter.BuildRequest(messages, tools, endpoint);
 
             string body = await request.Content!.ReadAsStringAsync();
-            JsonNode? parsed = JsonNode.Parse(body);
+            OpenAiChatRequest? parsed = JsonSerializer.Deserialize<OpenAiChatRequest>(body);
 
-            JsonArray? toolsArray = parsed!["tools"]?.AsArray();
-            Assert.NotNull(toolsArray);
-            Assert.Single(toolsArray!);
-            Assert.Equal("function", toolsArray[0]!["type"]!.GetValue<string>());
-            Assert.Equal("read_file", toolsArray[0]!["function"]!["name"]!.GetValue<string>());
+            Assert.NotNull(parsed?.Tools);
+            Assert.Single(parsed!.Tools!);
+            Assert.Equal("function", parsed.Tools![0].Type);
+            Assert.Equal("read_file", parsed.Tools[0].Function.Name);
         }
 
         /// <summary>
@@ -138,9 +133,9 @@ namespace Test.Xunit.Llm
             HttpRequestMessage request = _Adapter.BuildRequest(messages, tools, endpoint);
 
             string body = await request.Content!.ReadAsStringAsync();
-            JsonNode? parsed = JsonNode.Parse(body);
+            OpenAiChatRequest? parsed = JsonSerializer.Deserialize<OpenAiChatRequest>(body);
 
-            Assert.Null(parsed!["tools"]);
+            Assert.Null(parsed!.Tools);
         }
 
         /// <summary>
@@ -165,10 +160,10 @@ namespace Test.Xunit.Llm
             HttpRequestMessage request = _Adapter.BuildRequest(messages, new List<ToolDefinition>(), endpoint, stream: false);
 
             string body = await request.Content!.ReadAsStringAsync();
-            JsonNode? parsed = JsonNode.Parse(body);
+            OpenAiChatRequest? parsed = JsonSerializer.Deserialize<OpenAiChatRequest>(body);
 
             Assert.NotNull(parsed);
-            Assert.False(parsed!["stream"]!.GetValue<bool>());
+            Assert.False(parsed!.Stream);
         }
 
         /// <summary>
@@ -232,11 +227,11 @@ namespace Test.Xunit.Llm
             HttpRequestMessage request = _Adapter.BuildRequest(messages, tools, endpoint);
 
             string body = await request.Content!.ReadAsStringAsync();
-            JsonNode? parsed = JsonNode.Parse(body);
+            OpenAiChatRequest? parsed = JsonSerializer.Deserialize<OpenAiChatRequest>(body);
 
-            Assert.Null(parsed!["temperature"]);
-            Assert.Null(parsed!["max_tokens"]);
-            Assert.NotNull(parsed!["model"]);
+            Assert.Null(parsed!.Temperature);
+            Assert.Null(parsed.MaxTokens);
+            Assert.Equal("test-model", parsed.Model);
         }
 
         #endregion
@@ -258,9 +253,9 @@ namespace Test.Xunit.Llm
                 }]
             }";
 
-            JsonElement element = JsonDocument.Parse(json).RootElement;
+            OpenAiChatCompletionResponse? element = JsonSerializer.Deserialize<OpenAiChatCompletionResponse>(json);
 
-            ConversationMessage result = _Adapter.NormalizeFinalResponse(element);
+            ConversationMessage result = _Adapter.NormalizeFinalResponse(element!);
 
             Assert.Equal(RoleEnum.Assistant, result.Role);
             Assert.Equal("Hello, world!", result.Content);
@@ -279,9 +274,9 @@ namespace Test.Xunit.Llm
                 "\"function\":{\"name\":\"read_file\"," +
                 "\"arguments\":\"{\\\"path\\\":\\\"test.txt\\\"}\"}}]}}]}";
 
-            JsonElement element = JsonDocument.Parse(json).RootElement;
+            OpenAiChatCompletionResponse? element = JsonSerializer.Deserialize<OpenAiChatCompletionResponse>(json);
 
-            ConversationMessage result = _Adapter.NormalizeFinalResponse(element);
+            ConversationMessage result = _Adapter.NormalizeFinalResponse(element!);
 
             Assert.Equal(RoleEnum.Assistant, result.Role);
             Assert.NotNull(result.ToolCalls);
