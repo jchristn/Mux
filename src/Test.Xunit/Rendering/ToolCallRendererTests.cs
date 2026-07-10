@@ -43,6 +43,17 @@ namespace Test.Xunit.Rendering
             Assert.Equal("  \u2514 Tool write_file: Program.cs ok 42ms", line);
         }
 
+        /// <summary>
+        /// Verifies that approval prompt markup colors the box-drawing prefix with its connected prompt text.
+        /// </summary>
+        [Fact]
+        public void FormatApprovalPromptMarkup_ColorsPromptStem()
+        {
+            string markup = ToolCallRenderer.FormatApprovalPromptMarkup();
+
+            Assert.Equal("[yellow]  \u2514 Allow?[/] [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ", markup);
+        }
+
         #endregion
     }
 }

@@ -254,7 +254,10 @@ namespace Mux.Cli.Commands
                                         resultPreview,
                                         status,
                                         completedEvent.ElapsedMs);
-                                    Console.Error.WriteLine(ConsoleMessageStyler.Notification(line));
+                                    string styledLine = completedEvent.Result.Success
+                                        ? ConsoleMessageStyler.Success(line)
+                                        : ConsoleMessageStyler.Failure(line);
+                                    Console.Error.WriteLine(styledLine);
                                     Console.Error.WriteLine();
                                 }
                                 break;

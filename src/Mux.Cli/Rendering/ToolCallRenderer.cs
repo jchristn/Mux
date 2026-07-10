@@ -37,11 +37,20 @@ namespace Mux.Cli.Rendering
         {
             string summary = FormatToolSummary(toolCall.Name, toolCall.Arguments);
             AnsiConsole.MarkupLine($"[dim]{Markup.Escape(FormatToolCallLine(summary))}[/]");
-            AnsiConsole.Markup($"{ToolLogLeafPrefix}Allow? [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ");
+            AnsiConsole.Markup(FormatApprovalPromptMarkup());
 
             string? response = await Task.Run(() => Console.ReadLine());
 
             return response?.Trim() ?? "n";
+        }
+
+        /// <summary>
+        /// Formats the approval prompt markup with a consistent colored box-drawing prefix.
+        /// </summary>
+        /// <returns>The approval prompt markup.</returns>
+        public static string FormatApprovalPromptMarkup()
+        {
+            return $"[yellow]{Markup.Escape(ToolLogLeafPrefix)}Allow?[/] [[[green]Y[/]/[red]n[/]/[blue]always[/]]] ";
         }
 
         /// <summary>

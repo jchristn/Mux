@@ -153,7 +153,7 @@ namespace Mux.Cli.Commands
                     string parentPrefix = isLast ? "  \u2514 " : "  \u251C ";
                     string childPrefix = isLast ? "    \u2514 " : "  \u2502 \u2514 ";
 
-                    AnsiConsole.MarkupLine($"{parentPrefix}[dim]Connecting to:[/] {Markup.Escape(serverConfig.Name)}");
+                    AnsiConsole.MarkupLine($"[dim]{Markup.Escape(parentPrefix)}Connecting to: {Markup.Escape(serverConfig.Name)}[/]");
 
                     try
                     {
@@ -164,11 +164,11 @@ namespace Mux.Cli.Commands
                             .FirstOrDefault(entry => string.Equals(entry.Name, serverConfig.Name, StringComparison.OrdinalIgnoreCase));
                         int toolCount = status?.Connected == true ? status.ToolCount : 0;
 
-                        AnsiConsole.MarkupLine($"{childPrefix}[green]Connected:[/] {Markup.Escape(serverConfig.Name)} ({toolCount} tools)");
+                        AnsiConsole.MarkupLine($"[green]{Markup.Escape(childPrefix)}Connected: {Markup.Escape(serverConfig.Name)} ({toolCount} tools)[/]");
                     }
                     catch (Exception ex)
                     {
-                        AnsiConsole.MarkupLine($"{childPrefix}[yellow]Failed:[/] {Markup.Escape(serverConfig.Name)} [dim]({Markup.Escape(ex.Message)})[/]");
+                        AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(childPrefix)}Failed: {Markup.Escape(serverConfig.Name)} ({Markup.Escape(ex.Message)})[/]");
                     }
                 }
             }
