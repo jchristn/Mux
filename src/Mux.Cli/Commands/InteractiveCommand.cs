@@ -175,6 +175,7 @@ namespace Mux.Cli.Commands
 
             if (_ApprovalPolicy == ApprovalPolicyEnum.AutoApprove)
             {
+                Console.WriteLine();
                 AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(BuildAutoApproveNotice())}[/]");
             }
 
@@ -2837,21 +2838,21 @@ namespace Mux.Cli.Commands
         {
             if (_StartupYolo)
             {
-                return "notice: all tool calls will be auto-approved (--yolo)";
+                return "Notice: all tool calls will be auto-approved (--yolo)";
             }
 
             string normalizedOverride = (_StartupApprovalPolicyOverride ?? string.Empty).Trim().ToLowerInvariant();
             if (normalizedOverride == "auto" || normalizedOverride == "autoapprove")
             {
-                return "notice: all tool calls will be auto-approved (--approval-policy auto)";
+                return "Notice: all tool calls will be auto-approved (--approval-policy auto)";
             }
 
             if (_CurrentEndpoint.AutoApproveTools)
             {
-                return $"notice: tool calls will be auto-approved for endpoint '{_CurrentEndpoint.Name}'";
+                return $"Notice: tool calls will be auto-approved for endpoint '{_CurrentEndpoint.Name}'";
             }
 
-            return "notice: all tool calls will be auto-approved (settings.json)";
+            return "Notice: all tool calls will be auto-approved (settings.json)";
         }
 
         private bool TryPersistEndpointAutoApprovePreference(string endpointName, out string message)
