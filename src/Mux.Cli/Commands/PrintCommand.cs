@@ -255,6 +255,7 @@ namespace Mux.Cli.Commands
                                         status,
                                         completedEvent.ElapsedMs);
                                     Console.Error.WriteLine(ConsoleMessageStyler.Notification(line));
+                                    Console.Error.WriteLine();
                                 }
                                 break;
 

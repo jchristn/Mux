@@ -167,12 +167,14 @@ namespace Mux.Cli.Rendering
                 string line = ToolCallRenderer.FormatToolExecutionLine(name, summary, "ok", elapsed);
                 AnsiConsole.MarkupLine(
                     $"[green]{Markup.Escape(line)}[/]");
+                Console.WriteLine();
             }
             else
             {
                 string line = ToolCallRenderer.FormatToolExecutionLine(name, summary, "failed", elapsed);
                 AnsiConsole.MarkupLine(
                     $"[red]{Markup.Escape(line)}[/]");
+                Console.WriteLine();
             }
         }
 

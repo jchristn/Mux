@@ -144,6 +144,7 @@ namespace Mux.Cli.Commands
             {
                 _McpToolManager = new McpToolManager(new List<McpServerConfig>());
 
+                Console.WriteLine();
                 AnsiConsole.MarkupLine("[dim]Connecting to MCP servers...[/]");
                 for (int i = 0; i < _McpServers.Count; i++)
                 {
@@ -971,11 +972,11 @@ namespace Mux.Cli.Commands
                         : ToolCallRenderer.FormatToolExecutionLine(completedEvent.ToolName, summary, "failed", completedEvent.ElapsedMs);
                     if (completedEvent.Result.Success)
                     {
-                        WriteSuccessLine(line);
+                        WriteSuccessLineWithTrailingBlank(line);
                     }
                     else
                     {
-                        WriteFailureLine(line);
+                        WriteFailureLineWithTrailingBlank(line);
                     }
                     break;
 
@@ -1109,9 +1110,27 @@ namespace Mux.Cli.Commands
             WriteMarkupLine($"[green]{Markup.Escape(line)}[/]");
         }
 
+        private void WriteSuccessLineWithTrailingBlank(string line)
+        {
+            WriteOutputBlock(() =>
+            {
+                AnsiConsole.MarkupLine($"[green]{Markup.Escape(line)}[/]");
+                Console.WriteLine();
+            });
+        }
+
         private void WriteFailureLine(string line)
         {
             WriteMarkupLine($"[red]{Markup.Escape(line)}[/]");
+        }
+
+        private void WriteFailureLineWithTrailingBlank(string line)
+        {
+            WriteOutputBlock(() =>
+            {
+                AnsiConsole.MarkupLine($"[red]{Markup.Escape(line)}[/]");
+                Console.WriteLine();
+            });
         }
 
         private void WriteSubmittedPrompt(string input)
