@@ -2,11 +2,32 @@
 setlocal
 
 set "ROOT_DIR=%~dp0"
-set "PACKAGE_SOURCE=%ROOT_DIR%artifacts\tool-packages"
+set "PACKAGE_ROOT=%ROOT_DIR%artifacts\tool-packages"
+set "FRAMEWORK_ARGUMENT=%~1"
 
-call :resolve_framework "%~1"
+if /I "%FRAMEWORK_ARGUMENT%"=="--framework" (
+    if "%~2"=="" (
+        echo Missing framework value after --framework.
+        call :usage
+        exit /b 1
+    )
+    set "FRAMEWORK_ARGUMENT=%~2"
+)
+
+if /I "%FRAMEWORK_ARGUMENT%"=="-f" (
+    if "%~2"=="" (
+        echo Missing framework value after -f.
+        call :usage
+        exit /b 1
+    )
+    set "FRAMEWORK_ARGUMENT=%~2"
+)
+
+call :resolve_framework "%FRAMEWORK_ARGUMENT%"
 if %errorlevel% equ 2 exit /b 0
 if %errorlevel% neq 0 exit /b %errorlevel%
+
+set "PACKAGE_SOURCE=%PACKAGE_ROOT%\%FRAMEWORK%"
 
 tasklist /FI "IMAGENAME eq mux.exe" | find /I "mux.exe" >nul
 if %errorlevel% equ 0 (
@@ -15,11 +36,16 @@ if %errorlevel% equ 0 (
     exit /b 1
 )
 
-echo Removing mux...
-dotnet tool uninstall -g Mux.Cli
-if %errorlevel% neq 0 (
-    echo Failed to uninstall mux. Ensure no mux processes are running and rerun this script.
-    exit /b %errorlevel%
+dotnet tool list -g | findstr /B /I /C:"mux.cli " >nul
+if not errorlevel 1 (
+    echo Removing mux...
+    dotnet tool uninstall -g Mux.Cli
+    if errorlevel 1 (
+        echo Failed to uninstall mux. Ensure no mux processes are running and rerun this script.
+        exit /b 1
+    )
+) else (
+    echo mux is not installed; continuing...
 )
 
 if exist "%PACKAGE_SOURCE%" rmdir /s /q "%PACKAGE_SOURCE%"
@@ -55,10 +81,10 @@ if /I "%FRAMEWORK%"=="--help" (
 
 if "%FRAMEWORK%"=="" (
     dotnet --list-sdks | findstr /B /C:"10." >nul
-    if %errorlevel% equ 0 (
-        set "FRAMEWORK=net10.0"
-    ) else (
+    if errorlevel 1 (
         set "FRAMEWORK=net8.0"
+    ) else (
+        set "FRAMEWORK=net10.0"
     )
     exit /b 0
 )
@@ -75,5 +101,6 @@ exit /b 1
 
 :usage
 echo Usage: %~nx0 [net8.0^|net10.0]
+echo        %~nx0 --framework ^<net8.0^|net10.0^>
 echo Defaults to net10.0 when a .NET 10 SDK is installed, otherwise net8.0.
 exit /b 0
