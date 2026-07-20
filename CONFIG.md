@@ -194,6 +194,7 @@ Example:
   "compactionStrategy": "summary",
   "compactionPreserveTurns": 3,
   "maxAgentIterations": 25,
+  "ignoreCertErrors": false,
   "externalSearch": {
     "enabled": false,
     "allowFallback": true,
@@ -217,11 +218,13 @@ Fields:
 | `compactionStrategy` | string | `summary` or `trim`; controls `/compact`, interactive preflight auto-compaction, and in-run active-conversation compaction |
 | `compactionPreserveTurns` | int | number of recent user-led turns to preserve during compaction; clamped to `1-10` |
 | `maxAgentIterations` | int | loop guard for tool-using runs |
+| `ignoreCertErrors` | bool | disable TLS certificate validation for mux-owned network requests; default `false` |
 | `externalSearch` | object | optional Tavily/You.com provider configuration for the `web_search` tool |
 
 Notes:
 - `mux print` still defaults to deny semantics unless `--yolo`, `--approval-policy`, or the selected endpoint's `autoApproveTools` setting overrides it
 - CLI flags override settings file values
+- `--ignore-cert-errors`, `--insecure`, or `MUX_IGNORE_CERT_ERRORS=1` can enable certificate-error bypass for runs behind enterprise TLS inspection
 - When `settings.json` is loaded, mux rewrites it with normalized values so newly added settings are visible with defaults
 - `mux print` and `mux probe` reject `--approval-policy ask`
 - `mux print` and `mux probe` do not load MCP servers, even if `mcp-servers.json` exists
@@ -310,8 +313,11 @@ Resolution priority:
 | Variable | Description |
 |---|---|
 | `MUX_CONFIG_DIR` | override the active config directory |
+| `MUX_IGNORE_CERT_ERRORS` | set to `1`, `true`, `yes`, or `on` to disable TLS certificate validation for mux-owned network requests; set to `0`, `false`, `no`, or `off` to force it off |
 
 Config values may reference environment variables using `${VAR_NAME}`, `%VAR_NAME%`, `$VAR_NAME`, or `$env:VAR_NAME`. The interactive endpoint wizard accepts the same forms and writes stored references as `${VAR_NAME}`. If both `--config-dir` and `MUX_CONFIG_DIR` are present, the CLI flag wins.
+
+Certificate-error bypass applies to mux-created LLM HTTP clients, external-search provider HTTP clients, `web_retrieve` browser navigation, and Playwright browser installation. It does not change TLS behavior for shell commands launched with `run_process` or for external MCP server processes.
 
 ## CLI Override Notes
 
@@ -324,6 +330,8 @@ Common CLI overrides:
 - `--temperature`
 - `--max-tokens`
 - `--compaction-strategy`
+- `--ignore-cert-errors`
+- `--insecure`
 - `--approval-policy`
 - `--system-prompt`
 - `--working-directory`

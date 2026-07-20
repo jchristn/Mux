@@ -35,6 +35,7 @@ namespace Mux.Core.Agent
         private int _WarningThresholdTokens = 0;
         private double _TokenEstimationRatio = 0;
         private string _CompactionStrategy = "summary";
+        private bool _IgnoreCertErrors = false;
 
         #endregion
 
@@ -266,6 +267,15 @@ namespace Mux.Core.Agent
         {
             get => _CompactionStrategy;
             set => _CompactionStrategy = value ?? "summary";
+        }
+
+        /// <summary>
+        /// Whether TLS certificate validation is disabled for mux-owned network requests.
+        /// </summary>
+        public bool IgnoreCertErrors
+        {
+            get => _IgnoreCertErrors;
+            set => _IgnoreCertErrors = value;
         }
 
         #endregion

@@ -131,6 +131,7 @@ namespace Mux.Cli.Commands
                     ConfigDirectory = configDirectory,
                     EndpointSelectionSource = endpointSelectionSource,
                     CliOverridesApplied = cliOverrides,
+                    IgnoreCertErrors = muxSettings.IgnoreCertErrors,
                     EndpointsFilePresent = File.Exists(Path.Combine(configDirectory, "endpoints.json")),
                     SettingsFilePresent = File.Exists(Path.Combine(configDirectory, "settings.json")),
                     McpServersFilePresent = File.Exists(Path.Combine(configDirectory, "mcp-servers.json"))
@@ -231,6 +232,7 @@ namespace Mux.Cli.Commands
             if (settings.Yolo) overrides.Add("yolo");
             if (!string.IsNullOrWhiteSpace(settings.ApprovalPolicy)) overrides.Add("approvalPolicy");
             if (!string.IsNullOrWhiteSpace(settings.CompactionStrategy)) overrides.Add("compactionStrategy");
+            if (settings.IgnoreCertErrors) overrides.Add("ignoreCertErrors");
 
             return overrides;
         }
@@ -254,6 +256,11 @@ namespace Mux.Cli.Commands
                 }
 
                 muxSettings.CompactionStrategy = normalizedStrategy;
+            }
+
+            if (settings.IgnoreCertErrors)
+            {
+                muxSettings.IgnoreCertErrors = true;
             }
         }
     }
@@ -359,6 +366,11 @@ namespace Mux.Cli.Commands
         /// The CLI override categories applied to the resolved runtime.
         /// </summary>
         public List<string> CliOverridesApplied { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Whether TLS certificate validation is disabled for mux-owned network requests.
+        /// </summary>
+        public bool IgnoreCertErrors { get; set; }
 
         /// <summary>
         /// Whether endpoints.json exists in the active config directory.

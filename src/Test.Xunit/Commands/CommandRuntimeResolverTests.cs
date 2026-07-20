@@ -40,5 +40,19 @@ namespace Test.Xunit.Commands
 
             Assert.Equal(ApprovalPolicyEnum.Deny, result);
         }
+
+        [Fact]
+        public void ApplyMuxSettingsOverrides_IgnoreCertErrors_EnablesSetting()
+        {
+            PrintSettings settings = new PrintSettings
+            {
+                IgnoreCertErrors = true
+            };
+            MuxSettings muxSettings = new MuxSettings();
+
+            CommandRuntimeResolver.ApplyMuxSettingsOverrides(settings, muxSettings);
+
+            Assert.True(muxSettings.IgnoreCertErrors);
+        }
     }
 }

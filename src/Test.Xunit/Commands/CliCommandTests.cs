@@ -98,6 +98,49 @@ namespace Test.Xunit.Commands
         }
 
         /// <summary>
+        /// Verifies that certificate-error bypass flags are reflected in runtime metadata.
+        /// </summary>
+        /// <param name="flag">The CLI flag to test.</param>
+        [Theory]
+        [InlineData("--ignore-cert-errors")]
+        [InlineData("--insecure")]
+        public void PrintCommand_Jsonl_IgnoreCertErrorsOverride_IsApplied(string flag)
+        {
+            using MockHttpServer server = new MockHttpServer();
+            string prompt = "ignore cert errors test " + flag;
+            string sseChunk = "{\"choices\":[{\"delta\":{\"content\":\"Certificate override works.\"},\"finish_reason\":\"stop\"}]}";
+            server.RegisterStreamingResponse(prompt, new System.Collections.Generic.List<string> { sseChunk });
+            server.Start();
+
+            CliInvocationResult invocationResult = InvokeCli(new[]
+            {
+                "print",
+                "--output-format", "jsonl",
+                "--yolo",
+                flag,
+                "--base-url", server.BaseUrl,
+                "--model", "test-model",
+                "--adapter-type", "openai-compatible",
+                prompt
+            });
+            int exitCode = invocationResult.ExitCode;
+            string stdout = invocationResult.StdOut;
+            string stderr = invocationResult.StdErr;
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains("TLS certificate validation is disabled", stderr);
+
+            string[] lines = stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            JsonDocument started = JsonDocument.Parse(lines[0]);
+
+            Assert.Equal("run_started", started.RootElement.GetProperty("eventType").GetString());
+            Assert.True(started.RootElement.GetProperty("ignoreCertErrors").GetBoolean());
+            Assert.Contains(
+                started.RootElement.GetProperty("cliOverridesApplied").EnumerateArray().Select(static item => item.GetString()),
+                value => string.Equals(value, "ignoreCertErrors", StringComparison.Ordinal));
+        }
+
+        /// <summary>
         /// Verifies that print mode rejects ask approval in non-interactive mode with a structured error code.
         /// </summary>
         [Fact]

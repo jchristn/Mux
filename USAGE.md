@@ -25,6 +25,7 @@ Structured automation:
 
 ```bash
 mux print --output-format jsonl --yolo "implement the feature described in TASK.md"
+mux print --ignore-cert-errors --output-format jsonl --yolo "run behind enterprise TLS inspection"
 ```
 
 Health checks:
@@ -118,6 +119,8 @@ Mux has two distinct web-facing tools:
 
 `web_retrieve` runs in a headless Playwright browser. Chromium is the default browser and Firefox is also supported. If the requested browser binary is missing at runtime, mux invokes Playwright's installer on demand.
 
+If enterprise TLS inspection causes certificate failures such as `SELF_SIGNED_CERT_IN_CHAIN`, run mux with `--ignore-cert-errors` or the shorter `--insecure` alias. This disables TLS certificate validation for mux-owned network requests, including LLM HTTP calls, external-search provider calls, `web_retrieve` browser navigation, and the Playwright browser installer. The same behavior can be enabled with `ignoreCertErrors: true` in `settings.json` or `MUX_IGNORE_CERT_ERRORS=1`. mux emits a warning when this mode is active.
+
 `web_search` is provider-backed discovery. It does not fetch arbitrary local URLs such as `http://localhost:11434`; use `web_retrieve` when you already have a URL and want its contents.
 
 Example prompts:
@@ -192,6 +195,7 @@ Depending on the event, additional fields may include:
 - `compactionCount`
 - `builtInToolCount`
 - `effectiveToolCount`
+- `ignoreCertErrors`
 - `mcp`
 
 Current event types:
@@ -225,7 +229,7 @@ Notes:
 - secret-like values in structured payloads are redacted on a best-effort basis
 - default text mode is unchanged
 - `run_started.mcp.supported` is always `false` in `print` mode today because non-interactive mode does not load MCP servers
-- `run_started` now includes context-budget metadata, and `run_completed` includes `finalEstimatedTokens` plus `compactionCount`
+- `run_started` now includes context-budget metadata and `ignoreCertErrors`, and `run_completed` includes `finalEstimatedTokens` plus `compactionCount`
 - `context_status` and `context_compacted` are additive event types within `contractVersion = 1`; consumers should ignore unknown event types in a known contract version
 - `error` events retain `code` for backward compatibility and also expose `errorCode` plus `failureCategory`
 - `contractVersion` is shared across `print` JSONL events and `probe` JSON payloads
@@ -266,10 +270,12 @@ Use `--config-dir` or `MUX_CONFIG_DIR` when running under automation or when mul
 ```bash
 # Bash
 export MUX_CONFIG_DIR=/tmp/mux-job-123
+export MUX_IGNORE_CERT_ERRORS=1
 mux print --output-format jsonl --yolo "run the task"
 
 # PowerShell
 $env:MUX_CONFIG_DIR = "C:\\temp\\mux-job-123"
+$env:MUX_IGNORE_CERT_ERRORS = "1"
 mux probe --output-format json
 
 # CLI override
@@ -281,6 +287,7 @@ When config isolation is used:
 - first-run seeding happens in that directory
 - `mux` does not fall back to the user-home config directory for those config reads
 - `--config-dir` takes precedence over `MUX_CONFIG_DIR`
+- `--ignore-cert-errors` takes precedence over `settings.json` for the current run; `MUX_IGNORE_CERT_ERRORS` can also enable or disable the loaded setting for automation
 
 ## Backend Examples
 

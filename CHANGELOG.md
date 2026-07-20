@@ -10,6 +10,7 @@ All notable changes to mux are documented here.
 - External web search integration through the `web_search` tool, configurable with Tavily and You.com providers from `settings.json` or the interactive `/search` wizard
 - `mux endpoint list` and `mux endpoint show <name>` as top-level non-interactive commands, including machine-readable `json` output for stored endpoint inspection with redacted secret-like header values
 - `ARMADA.md` as a focused integration guide for orchestrator consumers, plus a tightened `ARMADA_IMPROVEMENTS.md` plan that reflects the current CLI/runtime surface
+- `--ignore-cert-errors` with `--insecure` alias, `settings.json` field `ignoreCertErrors`, and `MUX_IGNORE_CERT_ERRORS` for bypassing TLS certificate validation in mux-owned network requests behind enterprise TLS inspection
 
 ### Removed
 

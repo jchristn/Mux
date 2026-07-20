@@ -78,6 +78,8 @@ mux> retrieve https://example.com and summarize the returned text
 
 You should see a `web_retrieve` tool call. The first retrieval may download the Playwright browser used for headless page rendering.
 
+If your enterprise network intercepts TLS and mux reports `SELF_SIGNED_CERT_IN_CHAIN`, retry with `mux --ignore-cert-errors` or `mux --insecure`. This disables certificate validation for mux-owned network requests and prints a warning while active.
+
 ## Useful First Commands
 
 Interactive:

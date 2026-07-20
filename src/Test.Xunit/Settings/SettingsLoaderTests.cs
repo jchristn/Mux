@@ -21,6 +21,7 @@ namespace Test.Xunit.Settings
 
         private readonly string _TempDir;
         private readonly string? _OriginalConfigDir;
+        private readonly string? _OriginalIgnoreCertErrors;
 
         #endregion
 
@@ -34,7 +35,9 @@ namespace Test.Xunit.Settings
             _TempDir = Path.Combine(Path.GetTempPath(), "mux_test_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_TempDir);
             _OriginalConfigDir = Environment.GetEnvironmentVariable("MUX_CONFIG_DIR");
+            _OriginalIgnoreCertErrors = Environment.GetEnvironmentVariable("MUX_IGNORE_CERT_ERRORS");
             Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", _TempDir);
+            Environment.SetEnvironmentVariable("MUX_IGNORE_CERT_ERRORS", null);
         }
 
         #endregion
@@ -47,6 +50,7 @@ namespace Test.Xunit.Settings
         public void Dispose()
         {
             Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", _OriginalConfigDir);
+            Environment.SetEnvironmentVariable("MUX_IGNORE_CERT_ERRORS", _OriginalIgnoreCertErrors);
 
             try
             {
@@ -277,7 +281,8 @@ namespace Test.Xunit.Settings
                 ""contextWarningThresholdPercent"": 85,
                 ""compactionStrategy"": ""trim"",
                 ""compactionPreserveTurns"": 4,
-                ""maxAgentIterations"": 50
+                ""maxAgentIterations"": 50,
+                ""ignoreCertErrors"": true
             }";
 
             File.WriteAllText(Path.Combine(_TempDir, "settings.json"), json);
@@ -293,6 +298,7 @@ namespace Test.Xunit.Settings
             Assert.Equal("trim", settings.CompactionStrategy);
             Assert.Equal(4, settings.CompactionPreserveTurns);
             Assert.Equal(50, settings.MaxAgentIterations);
+            Assert.True(settings.IgnoreCertErrors);
         }
 
         /// <summary>
@@ -313,10 +319,24 @@ namespace Test.Xunit.Settings
             Assert.Equal("summary", settings.CompactionStrategy);
             Assert.Equal(3, settings.CompactionPreserveTurns);
             Assert.Equal(25, settings.MaxAgentIterations);
+            Assert.False(settings.IgnoreCertErrors);
             Assert.NotNull(settings.ExternalSearch);
             Assert.False(settings.ExternalSearch.Enabled);
             Assert.True(settings.ExternalSearch.AllowFallback);
             Assert.Empty(settings.ExternalSearch.Providers);
+        }
+
+        /// <summary>
+        /// Verifies that the environment certificate override applies even without a settings.json file.
+        /// </summary>
+        [Fact]
+        public void LoadSettings_MissingFile_AppliesIgnoreCertErrorsEnvironmentOverride()
+        {
+            Environment.SetEnvironmentVariable("MUX_IGNORE_CERT_ERRORS", "true");
+
+            MuxSettings settings = SettingsLoader.LoadSettings();
+
+            Assert.True(settings.IgnoreCertErrors);
         }
 
         /// <summary>
@@ -350,7 +370,26 @@ namespace Test.Xunit.Settings
             Assert.True(root.TryGetProperty("contextWarningThresholdPercent", out _));
             Assert.True(root.TryGetProperty("compactionStrategy", out _));
             Assert.True(root.TryGetProperty("compactionPreserveTurns", out _));
+            Assert.True(root.TryGetProperty("ignoreCertErrors", out _));
             Assert.True(root.TryGetProperty("externalSearch", out _));
+        }
+
+        /// <summary>
+        /// Verifies that the environment override affects the loaded runtime setting without persisting it.
+        /// </summary>
+        [Fact]
+        public void LoadSettings_IgnoreCertErrorsEnvironmentOverride_AppliesWithoutPersisting()
+        {
+            string settingsPath = Path.Combine(_TempDir, "settings.json");
+            File.WriteAllText(settingsPath, @"{ ""ignoreCertErrors"": false }");
+            Environment.SetEnvironmentVariable("MUX_IGNORE_CERT_ERRORS", "1");
+
+            MuxSettings settings = SettingsLoader.LoadSettings();
+
+            Assert.True(settings.IgnoreCertErrors);
+
+            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(settingsPath));
+            Assert.False(document.RootElement.GetProperty("ignoreCertErrors").GetBoolean());
         }
 
         /// <summary>

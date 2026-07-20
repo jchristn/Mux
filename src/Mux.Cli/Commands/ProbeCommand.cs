@@ -61,6 +61,12 @@ namespace Mux.Cli.Commands
             try
             {
                 ResolvedRuntime runtime = CommandRuntimeResolver.ResolveRuntime(settings, "probe", supportsMcp: false, allowAskApproval: false);
+                if (runtime.MuxSettings.IgnoreCertErrors)
+                {
+                    Console.Error.WriteLine(ConsoleMessageStyler.Notification(
+                        "Warning: TLS certificate validation is disabled for mux-owned network requests."));
+                }
+
                 ProbeResult result = await RunProbeAsync(runtime, settings, cancellationToken).ConfigureAwait(false);
 
                 if (outputFormat == OutputFormatEnum.Json)
@@ -136,6 +142,7 @@ namespace Mux.Cli.Commands
                 McpSupported = runtime.Capabilities.McpSupported,
                 McpConfigured = runtime.Capabilities.McpConfigured,
                 McpServerCount = runtime.Capabilities.McpServerCount,
+                IgnoreCertErrors = runtime.MuxSettings.IgnoreCertErrors,
                 RequireTools = settings.RequireTools
             };
 
@@ -152,7 +159,7 @@ namespace Mux.Cli.Commands
                     return result;
                 }
 
-                using LlmClient client = new LlmClient(runtime.Endpoint);
+                using LlmClient client = new LlmClient(runtime.Endpoint, runtime.MuxSettings.IgnoreCertErrors);
                 List<ConversationMessage> messages = new List<ConversationMessage>
                 {
                     new ConversationMessage
@@ -386,6 +393,11 @@ namespace Mux.Cli.Commands
         /// Whether the caller required tool support for this probe.
         /// </summary>
         public bool RequireTools { get; set; }
+
+        /// <summary>
+        /// Whether TLS certificate validation is disabled for mux-owned network requests.
+        /// </summary>
+        public bool IgnoreCertErrors { get; set; }
 
         /// <summary>
         /// Machine-readable error code when the probe fails.

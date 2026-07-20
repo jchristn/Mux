@@ -64,6 +64,7 @@ namespace Mux.Cli.Commands
                     payload["warningThresholdTokens"] = startedEvent.WarningThresholdTokens;
                     payload["tokenEstimationRatio"] = startedEvent.TokenEstimationRatio;
                     payload["compactionStrategy"] = startedEvent.CompactionStrategy;
+                    payload["ignoreCertErrors"] = startedEvent.IgnoreCertErrors;
                     payload["mcp"] = new Dictionary<string, object?>
                     {
                         ["supported"] = startedEvent.McpSupported,

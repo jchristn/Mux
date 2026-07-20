@@ -106,6 +106,7 @@ namespace Mux.Cli.Commands
             AgentLoopOptions loopOptions = new AgentLoopOptions(runtime.Endpoint)
             {
                 MuxSettings = runtime.MuxSettings,
+                IgnoreCertErrors = runtime.MuxSettings.IgnoreCertErrors,
                 SystemPrompt = runtime.SystemPrompt,
                 ApprovalPolicy = runtime.ApprovalPolicy,
                 WorkingDirectory = runtime.WorkingDirectory,
@@ -130,6 +131,12 @@ namespace Mux.Cli.Commands
 
             int exitCode = 0;
             StringBuilder finalAssistantResponse = new StringBuilder();
+
+            if (runtime.MuxSettings.IgnoreCertErrors)
+            {
+                Console.Error.WriteLine(ConsoleMessageStyler.Notification(
+                    "Warning: TLS certificate validation is disabled for mux-owned network requests."));
+            }
 
             using (CancellationTokenSource cts = new CancellationTokenSource())
             {
@@ -423,6 +430,7 @@ namespace Mux.Cli.Commands
             if (settings.Yolo) overrides.Add("yolo");
             if (!string.IsNullOrWhiteSpace(settings.ApprovalPolicy)) overrides.Add("approvalPolicy");
             if (!string.IsNullOrWhiteSpace(settings.CompactionStrategy)) overrides.Add("compactionStrategy");
+            if (settings.IgnoreCertErrors) overrides.Add("ignoreCertErrors");
 
             return overrides;
         }

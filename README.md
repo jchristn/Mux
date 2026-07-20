@@ -129,6 +129,7 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 | `--approval-policy <policy>` |  | interactive: `ask`, `auto`, or `deny`; print/probe: `auto` or `deny` |
 | `--output-format <format>` |  | `text`, `json`, or `jsonl` depending on the command |
 | `--no-mcp` |  | Interactive only: skip MCP server initialization |
+| `--ignore-cert-errors` | `--insecure` | Disable TLS certificate validation for mux-owned network requests |
 | `--verbose` | `-v` | Extra progress to stderr in text mode |
 
 ### Interactive Commands
@@ -208,6 +209,8 @@ mux> search the web for recent mux release notes, then retrieve the most relevan
 
 Use `web_search` to discover what exists. Use `web_retrieve` to inspect a selected URL or any URL you already know.
 
+Enterprise TLS inspection can cause errors such as `SELF_SIGNED_CERT_IN_CHAIN` while mux connects to LLM endpoints, calls external search providers, retrieves web pages, or downloads Playwright browsers. Use `--ignore-cert-errors` or its `--insecure` alias to disable TLS certificate validation for mux-owned network requests for that run. The same behavior can be enabled with `settings.json` field `ignoreCertErrors: true` or environment variable `MUX_IGNORE_CERT_ERRORS=1`. mux prints a warning when this mode is active. This does not change TLS behavior for commands launched through `run_process` or for external processes started by MCP servers.
+
 ### Single-Shot Examples
 
 ```bash
@@ -239,6 +242,7 @@ In `jsonl` mode:
 - every event includes `contractVersion`
 - `run_started` includes effective non-interactive capability metadata such as `commandName`, `endpointSelectionSource`, `cliOverridesApplied`, built-in tool counts, and MCP support/config status
 - `run_started` also includes context metadata such as `contextWindow`, `reservedOutputTokens`, `usableInputLimit`, `warningThresholdTokens`, `tokenEstimationRatio`, and `compactionStrategy`
+- `run_started` includes `ignoreCertErrors` so consumers can detect whether certificate validation was disabled for mux-owned network requests
 - `run_completed` also includes `finalEstimatedTokens` and `compactionCount`
 - `error` events keep `code` and also expose `errorCode`, `failureCategory`, and resolved runtime metadata when known
 
@@ -327,15 +331,18 @@ Override it for isolated or concurrent runs:
 ```bash
 # Bash
 export MUX_CONFIG_DIR=/tmp/mux-run-1
+export MUX_IGNORE_CERT_ERRORS=1
 
 # PowerShell
 $env:MUX_CONFIG_DIR = "C:\\temp\\mux-run-1"
+$env:MUX_IGNORE_CERT_ERRORS = "1"
 ```
 
 Or pass a first-class CLI override:
 
 ```bash
 mux print --config-dir /tmp/mux-run-1 --output-format jsonl --yolo "run the task"
+mux print --ignore-cert-errors --output-format jsonl --yolo "run behind enterprise TLS inspection"
 ```
 
 When both are set, `--config-dir` wins over `MUX_CONFIG_DIR`.

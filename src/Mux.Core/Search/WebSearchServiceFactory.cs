@@ -5,6 +5,7 @@ namespace Mux.Core.Search
     using System.Linq;
     using Mux.Core.Models;
     using Mux.Core.Settings;
+    using Mux.Core.Utility;
     using Mux.Search.Models;
     using Mux.Search.Services;
 
@@ -31,7 +32,9 @@ namespace Mux.Core.Search
                 return null;
             }
 
-            return new WebSearchService(options);
+            return new WebSearchService(
+                options,
+                _ => MuxHttpClientFactory.Create(settings.IgnoreCertErrors));
         }
 
         /// <summary>

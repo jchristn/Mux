@@ -12,6 +12,7 @@ namespace Mux.Core.Llm
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Utility;
 
     /// <summary>
     /// Orchestrates LLM calls by delegating request building and response parsing to an <see cref="IBackendAdapter"/>.
@@ -36,7 +37,18 @@ namespace Mux.Core.Llm
         /// <param name="endpoint">The endpoint configuration to use for LLM requests.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is null.</exception>
         public LlmClient(EndpointConfig endpoint)
-            : this(endpoint, null, null)
+            : this(endpoint, null, null, false)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LlmClient"/> class.
+        /// </summary>
+        /// <param name="endpoint">The endpoint configuration to use for LLM requests.</param>
+        /// <param name="ignoreCertErrors">True to bypass TLS certificate validation.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is null.</exception>
+        public LlmClient(EndpointConfig endpoint, bool ignoreCertErrors)
+            : this(endpoint, null, null, ignoreCertErrors)
         {
         }
 
@@ -48,9 +60,22 @@ namespace Mux.Core.Llm
         /// <param name="adapter">An optional backend adapter override, primarily for tests.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is null.</exception>
         public LlmClient(EndpointConfig endpoint, HttpClient? httpClient, IBackendAdapter? adapter = null)
+            : this(endpoint, httpClient, adapter, false)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LlmClient"/> class with optional transport overrides.
+        /// </summary>
+        /// <param name="endpoint">The endpoint configuration to use for LLM requests.</param>
+        /// <param name="httpClient">An optional HTTP client override, primarily for tests.</param>
+        /// <param name="adapter">An optional backend adapter override, primarily for tests.</param>
+        /// <param name="ignoreCertErrors">True to bypass TLS certificate validation when mux creates the HTTP client.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is null.</exception>
+        public LlmClient(EndpointConfig endpoint, HttpClient? httpClient, IBackendAdapter? adapter, bool ignoreCertErrors)
         {
             _Endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
-            _HttpClient = httpClient ?? new HttpClient();
+            _HttpClient = httpClient ?? MuxHttpClientFactory.Create(ignoreCertErrors);
 
             // Streaming chat responses can remain open for minutes. Per-request timeouts are
             // applied explicitly where needed instead of letting HttpClient cancel the whole stream.

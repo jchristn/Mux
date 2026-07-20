@@ -17,7 +17,22 @@ namespace Mux.Core.Tools.Tools
         private const int DefaultTimeoutMs = 30_000;
         private const int DefaultMaxContentChars = 60_000;
         private const int MaxContentCharsLimit = 500_000;
+        private const string NodeTlsRejectUnauthorized = "NODE_TLS_REJECT_UNAUTHORIZED";
         private static readonly SemaphoreSlim BrowserInstallLock = new SemaphoreSlim(1, 1);
+        private readonly bool _IgnoreCertErrors;
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="WebRetrieveTool"/> class.
+        /// </summary>
+        /// <param name="ignoreCertErrors">True to bypass TLS certificate validation.</param>
+        public WebRetrieveTool(bool ignoreCertErrors = false)
+        {
+            _IgnoreCertErrors = ignoreCertErrors;
+        }
 
         #endregion
 
@@ -92,6 +107,7 @@ namespace Mux.Core.Tools.Tools
                     timeoutMs,
                     maxContentChars,
                     includeHtml,
+                    _IgnoreCertErrors,
                     cancellationToken).ConfigureAwait(false);
 
                 return new ToolResult
@@ -127,16 +143,17 @@ namespace Mux.Core.Tools.Tools
             int timeoutMs,
             int maxContentChars,
             bool includeHtml,
+            bool ignoreCertErrors,
             CancellationToken cancellationToken)
         {
             try
             {
-                return await RetrieveAsync(uri, browserName, waitUntil, timeoutMs, maxContentChars, includeHtml, cancellationToken).ConfigureAwait(false);
+                return await RetrieveAsync(uri, browserName, waitUntil, timeoutMs, maxContentChars, includeHtml, ignoreCertErrors, cancellationToken).ConfigureAwait(false);
             }
             catch (PlaywrightException ex) when (IsMissingBrowserError(ex))
             {
-                await InstallBrowserAsync(browserName, cancellationToken).ConfigureAwait(false);
-                return await RetrieveAsync(uri, browserName, waitUntil, timeoutMs, maxContentChars, includeHtml, cancellationToken).ConfigureAwait(false);
+                await InstallBrowserAsync(browserName, ignoreCertErrors, cancellationToken).ConfigureAwait(false);
+                return await RetrieveAsync(uri, browserName, waitUntil, timeoutMs, maxContentChars, includeHtml, ignoreCertErrors, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -147,6 +164,7 @@ namespace Mux.Core.Tools.Tools
             int timeoutMs,
             int maxContentChars,
             bool includeHtml,
+            bool ignoreCertErrors,
             CancellationToken cancellationToken)
         {
             using IPlaywright playwright = await Playwright.CreateAsync().ConfigureAwait(false);
@@ -162,7 +180,7 @@ namespace Mux.Core.Tools.Tools
 
             await using IBrowserContext context = await browser.NewContextAsync(new BrowserNewContextOptions
             {
-                IgnoreHTTPSErrors = false,
+                IgnoreHTTPSErrors = ignoreCertErrors,
                 UserAgent = "mux-web-retrieve/1.0"
             }).ConfigureAwait(false);
 
@@ -199,17 +217,33 @@ namespace Mux.Core.Tools.Tools
             };
         }
 
-        private static async Task InstallBrowserAsync(string browserName, CancellationToken cancellationToken)
+        private static async Task InstallBrowserAsync(string browserName, bool ignoreCertErrors, CancellationToken cancellationToken)
         {
             await BrowserInstallLock.WaitAsync(cancellationToken).ConfigureAwait(false);
 
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                int exitCode = Microsoft.Playwright.Program.Main(new[] { "install", browserName });
-                if (exitCode != 0)
+                string? previousNodeTlsValue = Environment.GetEnvironmentVariable(NodeTlsRejectUnauthorized);
+                try
                 {
-                    throw new InvalidOperationException($"Playwright browser install failed with exit code {exitCode}.");
+                    if (ignoreCertErrors)
+                    {
+                        Environment.SetEnvironmentVariable(NodeTlsRejectUnauthorized, "0");
+                    }
+
+                    int exitCode = Microsoft.Playwright.Program.Main(new[] { "install", browserName });
+                    if (exitCode != 0)
+                    {
+                        throw new InvalidOperationException($"Playwright browser install failed with exit code {exitCode}.");
+                    }
+                }
+                finally
+                {
+                    if (ignoreCertErrors)
+                    {
+                        Environment.SetEnvironmentVariable(NodeTlsRejectUnauthorized, previousNodeTlsValue);
+                    }
                 }
             }
             finally

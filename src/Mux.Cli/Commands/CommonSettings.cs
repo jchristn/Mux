@@ -115,6 +115,13 @@ namespace Mux.Cli.Commands
         [CommandOption("--compaction-strategy")]
         public string? CompactionStrategy { get; set; }
 
+        /// <summary>
+        /// Disable TLS certificate validation for mux-owned network requests.
+        /// </summary>
+        [Description("Disable TLS certificate validation for mux-owned network requests.")]
+        [CommandOption("--ignore-cert-errors|--insecure")]
+        public bool IgnoreCertErrors { get; set; }
+
         #endregion
     }
 }

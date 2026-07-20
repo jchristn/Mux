@@ -140,6 +140,12 @@ namespace Mux.Cli.Commands
             TryClearInteractiveScreen();
             RenderWelcomeScreen();
 
+            if (_MuxSettings.IgnoreCertErrors)
+            {
+                Console.WriteLine();
+                AnsiConsole.MarkupLine("[yellow]Warning: TLS certificate validation is disabled for mux-owned network requests.[/]");
+            }
+
             if (_McpServers.Count > 0)
             {
                 _McpToolManager = new McpToolManager(new List<McpServerConfig>());
@@ -744,6 +750,7 @@ namespace Mux.Cli.Commands
             {
                 ConversationHistory = _ConversationHistory,
                 MuxSettings = _MuxSettings,
+                IgnoreCertErrors = _MuxSettings.IgnoreCertErrors,
                 SystemPrompt = _SystemPrompt,
                 ApprovalPolicy = _ApprovalPolicy,
                 WorkingDirectory = _WorkingDirectory,
@@ -1840,7 +1847,7 @@ namespace Mux.Cli.Commands
         private async Task<string> RunSidecarPromptAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken)
         {
             EndpointConfig sidecarEndpoint = CreateSidecarEndpoint();
-            using LlmClient client = new LlmClient(sidecarEndpoint);
+            using LlmClient client = new LlmClient(sidecarEndpoint, _MuxSettings.IgnoreCertErrors);
 
             ConversationMessage response = await client.SendAsync(
                 new List<ConversationMessage>
@@ -3383,7 +3390,7 @@ namespace Mux.Cli.Commands
 
             try
             {
-                using LlmClient client = new LlmClient(probeEndpoint);
+                using LlmClient client = new LlmClient(probeEndpoint, _MuxSettings.IgnoreCertErrors);
                 using CancellationTokenSource cts = new CancellationTokenSource(probeEndpoint.TimeoutMs);
                 ConversationMessage response = client.SendAsync(
                     new List<ConversationMessage>

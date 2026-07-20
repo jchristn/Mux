@@ -173,7 +173,9 @@ namespace Mux.Core.Settings
             string filePath = Path.Combine(GetConfigDirectory(), "settings.json");
             if (!File.Exists(filePath))
             {
-                return new MuxSettings();
+                MuxSettings defaultSettings = new MuxSettings();
+                ApplyEnvironmentOverrides(defaultSettings);
+                return defaultSettings;
             }
 
             string json = File.ReadAllText(filePath);
@@ -184,6 +186,7 @@ namespace Mux.Core.Settings
             string normalizedJson = JsonSerializer.Serialize(normalized, _JsonWriteOptions);
             File.WriteAllText(filePath, normalizedJson);
 
+            ApplyEnvironmentOverrides(normalized);
             return normalized;
         }
 
@@ -609,10 +612,50 @@ namespace Mux.Core.Settings
                 CompactionStrategy = settings.CompactionStrategy,
                 CompactionPreserveTurns = settings.CompactionPreserveTurns,
                 MaxAgentIterations = settings.MaxAgentIterations,
+                IgnoreCertErrors = settings.IgnoreCertErrors,
                 ExternalSearch = NormalizeExternalSearchSettings(settings.ExternalSearch)
             };
 
             return normalized;
+        }
+
+        private static void ApplyEnvironmentOverrides(MuxSettings settings)
+        {
+            string? ignoreCertErrorsValue = Environment.GetEnvironmentVariable("MUX_IGNORE_CERT_ERRORS");
+            if (TryParseBooleanEnvironmentValue(ignoreCertErrorsValue, out bool ignoreCertErrors))
+            {
+                settings.IgnoreCertErrors = ignoreCertErrors;
+            }
+        }
+
+        private static bool TryParseBooleanEnvironmentValue(string? value, out bool result)
+        {
+            result = false;
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            switch (value.Trim().ToLowerInvariant())
+            {
+                case "1":
+                case "true":
+                case "yes":
+                case "y":
+                case "on":
+                    result = true;
+                    return true;
+                case "0":
+                case "false":
+                case "no":
+                case "n":
+                case "off":
+                    result = false;
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         private static ExternalSearchSettings NormalizeExternalSearchSettings(ExternalSearchSettings settings)

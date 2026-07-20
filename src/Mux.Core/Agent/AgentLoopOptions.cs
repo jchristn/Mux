@@ -43,6 +43,7 @@ namespace Mux.Core.Agent
         private Func<string, JsonElement, string, CancellationToken, Task<ToolResult>>? _ExternalToolExecutor = null;
         private Action<int, int, string>? _OnRetry = null;
         private MuxSettings _MuxSettings = new MuxSettings();
+        private bool _IgnoreCertErrors = false;
 
         #endregion
 
@@ -316,7 +317,19 @@ namespace Mux.Core.Agent
         public MuxSettings MuxSettings
         {
             get => _MuxSettings;
-            set => _MuxSettings = value ?? new MuxSettings();
+            set
+            {
+                _MuxSettings = value ?? new MuxSettings();
+            }
+        }
+
+        /// <summary>
+        /// Whether TLS certificate validation is disabled for mux-owned network requests.
+        /// </summary>
+        public bool IgnoreCertErrors
+        {
+            get => _IgnoreCertErrors || _MuxSettings.IgnoreCertErrors;
+            set => _IgnoreCertErrors = value;
         }
 
         #endregion

@@ -119,6 +119,7 @@ OPTIONS:
         --system-prompt <path>           Path to system prompt file
         --output-last-message <path>     Write only the final assistant response text to a file
         --no-mcp                         Interactive only: skip MCP server initialization
+        --ignore-cert-errors, --insecure Disable TLS certificate validation for mux-owned network requests
     -v, --verbose                        Emit detailed progress to stderr
 
 PROBE:

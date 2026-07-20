@@ -21,6 +21,7 @@ namespace Mux.Core.Models
         private string _CompactionStrategy = "summary";
         private int _CompactionPreserveTurns = 3;
         private int _MaxAgentIterations = 25;
+        private bool _IgnoreCertErrors = false;
         private ExternalSearchSettings _ExternalSearch = new ExternalSearchSettings();
 
         #endregion
@@ -160,6 +161,17 @@ namespace Mux.Core.Models
         {
             get => _MaxAgentIterations;
             set => _MaxAgentIterations = Math.Clamp(value, 1, 100);
+        }
+
+        /// <summary>
+        /// Whether mux-owned network requests should bypass TLS certificate validation.
+        /// Intended for enterprise networks that intercept TLS with private certificates.
+        /// </summary>
+        [JsonPropertyName("ignoreCertErrors")]
+        public bool IgnoreCertErrors
+        {
+            get => _IgnoreCertErrors;
+            set => _IgnoreCertErrors = value;
         }
 
         /// <summary>

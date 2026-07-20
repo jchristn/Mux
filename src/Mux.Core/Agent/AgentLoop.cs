@@ -44,7 +44,7 @@ namespace Mux.Core.Agent
         public AgentLoop(AgentLoopOptions options)
         {
             _Options = options ?? throw new ArgumentNullException(nameof(options));
-            _LlmClient = new LlmClient(options.Endpoint);
+            _LlmClient = new LlmClient(options.Endpoint, options.IgnoreCertErrors);
             _LlmClient.OnRetry = options.OnRetry;
             _ToolRegistry = new BuiltInToolRegistry(options.MuxSettings);
             _ApprovalHandler = new ApprovalHandler(options.ApprovalPolicy);
@@ -108,7 +108,8 @@ namespace Mux.Core.Agent
                 UsableInputLimit = initialSnapshot.UsableInputLimit,
                 WarningThresholdTokens = initialSnapshot.WarningThresholdTokens,
                 TokenEstimationRatio = _Options.TokenEstimationRatio,
-                CompactionStrategy = _Options.CompactionStrategy
+                CompactionStrategy = _Options.CompactionStrategy,
+                IgnoreCertErrors = _Options.IgnoreCertErrors
             };
 
             // 3. Enter loop
@@ -715,7 +716,7 @@ namespace Mux.Core.Agent
         private async Task<string> RunSidecarPromptAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken)
         {
             EndpointConfig sidecarEndpoint = CreateSidecarEndpoint();
-            using LlmClient client = new LlmClient(sidecarEndpoint);
+            using LlmClient client = new LlmClient(sidecarEndpoint, _Options.IgnoreCertErrors);
             client.OnRetry = _Options.OnRetry;
 
             ConversationMessage response = await client.SendAsync(
