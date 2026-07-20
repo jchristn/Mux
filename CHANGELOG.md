@@ -26,6 +26,7 @@ All notable changes to mux are documented here.
 - `mux print` now supports `--output-last-message <path>` to write only the final assistant response text to a file; failed runs leave the file absent
 - `mux print`, `mux probe`, and `mux endpoint` now support `--config-dir <path>` as a first-class config-root override, with precedence over `MUX_CONFIG_DIR`
 - `mux probe --require-tools` now fails when the selected endpoint disables tool calling
+- Human-readable `print`, `probe`, and interactive errors now suggest `--insecure` when a self-signed certificate-chain failure is encountered while certificate validation is enabled
 - `/mcp add` now runs a wizard-driven workflow similar to `/endpoint add`, supports both `stdio` and HTTP MCP transports, and saves MCP server definitions to `mcp-servers.json`
 - `/endpoint <name>` now switches only to configured endpoint names and refreshes endpoint-dependent tool guidance after a successful switch
 - Interactive REPL prompt entry now uses a simpler blocking one-prompt-at-a-time flow with idle multi-line editing and paste support, inline approvals, `Esc` cancellation, a visible `Generating title...` notice when automatic title refresh runs, and an explicit blank spacer line before the next `mux>` prompt
@@ -35,6 +36,7 @@ All notable changes to mux are documented here.
 
 - Added `Test.Xunit` coverage for `--config-dir`, `--output-last-message`, `probe --require-tools`, and `endpoint list/show`
 - Added `Test.Xunit` coverage for endpoint-scoped max iteration persistence, clamping, JSONL runtime metadata, and endpoint inspection output
+- Added `Test.Xunit` coverage for self-signed certificate-chain hint detection and suppression when certificate validation is already bypassed
 - Added `Test.Xunit` coverage for `web_retrieve`, external-search tool registration, endpoint-switch no-fallback behavior, and web retrieval prompt guidance
 - Added Armada-style `Test.Automated` contract coverage for isolated config directories and endpoint inspection
 

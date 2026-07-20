@@ -212,6 +212,10 @@ namespace Mux.Cli.Commands
                                 if (outputFormat == OutputFormatEnum.Text)
                                 {
                                     Console.Error.WriteLine(ConsoleMessageStyler.Failure($"Error: {errorEvent.Code}: {errorEvent.Message}"));
+                                    CertificateWarningHint.WriteIfNeeded(
+                                        errorEvent.Code,
+                                        errorEvent.Message,
+                                        runtime.MuxSettings.IgnoreCertErrors);
                                 }
                                 if (exitCode == 0 || errorEvent.Code != "tool_call_denied")
                                 {
@@ -248,24 +252,41 @@ namespace Mux.Cli.Commands
                                 break;
 
                             case ToolCallCompletedEvent completedEvent:
-                                if (outputFormat == OutputFormatEnum.Text && settings.Verbose)
+                                if (outputFormat == OutputFormatEnum.Text)
                                 {
-                                    string resultPreview = completedEvent.Result.Content ?? "(no content)";
-                                    if (resultPreview.Length > 200)
+                                    if (settings.Verbose)
                                     {
-                                        resultPreview = resultPreview.Substring(0, 200) + "...";
+                                        string resultPreview = completedEvent.Result.Content ?? "(no content)";
+                                        if (resultPreview.Length > 200)
+                                        {
+                                            resultPreview = resultPreview.Substring(0, 200) + "...";
+                                        }
+                                        string status = completedEvent.Result.Success ? "ok" : "failed";
+                                        string line = ToolCallRenderer.FormatToolExecutionLine(
+                                            completedEvent.ToolName,
+                                            resultPreview,
+                                            status,
+                                            completedEvent.ElapsedMs);
+                                        string styledLine = completedEvent.Result.Success
+                                            ? ConsoleMessageStyler.Success(line)
+                                            : ConsoleMessageStyler.Failure(line);
+                                        Console.Error.WriteLine(styledLine);
+                                        if (!completedEvent.Result.Success)
+                                        {
+                                            CertificateWarningHint.WriteIfNeeded(
+                                                null,
+                                                completedEvent.Result.Content,
+                                                runtime.MuxSettings.IgnoreCertErrors);
+                                        }
+                                        Console.Error.WriteLine();
                                     }
-                                    string status = completedEvent.Result.Success ? "ok" : "failed";
-                                    string line = ToolCallRenderer.FormatToolExecutionLine(
-                                        completedEvent.ToolName,
-                                        resultPreview,
-                                        status,
-                                        completedEvent.ElapsedMs);
-                                    string styledLine = completedEvent.Result.Success
-                                        ? ConsoleMessageStyler.Success(line)
-                                        : ConsoleMessageStyler.Failure(line);
-                                    Console.Error.WriteLine(styledLine);
-                                    Console.Error.WriteLine();
+                                    else if (!completedEvent.Result.Success)
+                                    {
+                                        CertificateWarningHint.WriteIfNeeded(
+                                            null,
+                                            completedEvent.Result.Content,
+                                            runtime.MuxSettings.IgnoreCertErrors);
+                                    }
                                 }
                                 break;
 
@@ -286,7 +307,10 @@ namespace Mux.Cli.Commands
                 }
                 catch (OperationCanceledException)
                 {
-                    EmitRuntimeError(outputFormat, CreateRuntimeError("cancelled", "Operation was cancelled.", runtime));
+                    EmitRuntimeError(
+                        outputFormat,
+                        CreateRuntimeError("cancelled", "Operation was cancelled.", runtime),
+                        runtime.MuxSettings.IgnoreCertErrors);
                     exitCode = 1;
                 }
                 catch (Exception ex)
@@ -294,7 +318,10 @@ namespace Mux.Cli.Commands
                     string errorCode = ex is IOException || ex is UnauthorizedAccessException
                         ? "artifact_write_error"
                         : "print_error";
-                    EmitRuntimeError(outputFormat, CreateRuntimeError(errorCode, ex.Message, runtime));
+                    EmitRuntimeError(
+                        outputFormat,
+                        CreateRuntimeError(errorCode, ex.Message, runtime),
+                        runtime.MuxSettings.IgnoreCertErrors);
                     exitCode = 1;
                 }
             }
@@ -338,10 +365,10 @@ namespace Mux.Cli.Commands
 
             TryPopulateBootstrapMetadata(errorEvent, settings);
 
-            EmitRuntimeError(format, errorEvent);
+            EmitRuntimeError(format, errorEvent, settings.IgnoreCertErrors);
         }
 
-        private static void EmitRuntimeError(OutputFormatEnum outputFormat, ErrorEvent errorEvent)
+        private static void EmitRuntimeError(OutputFormatEnum outputFormat, ErrorEvent errorEvent, bool ignoreCertErrors)
         {
             if (outputFormat == OutputFormatEnum.Jsonl)
             {
@@ -350,6 +377,7 @@ namespace Mux.Cli.Commands
             else
             {
                 Console.Error.WriteLine(ConsoleMessageStyler.Failure($"Error: {errorEvent.Message}"));
+                CertificateWarningHint.WriteIfNeeded(errorEvent.Code, errorEvent.Message, ignoreCertErrors);
             }
         }
 

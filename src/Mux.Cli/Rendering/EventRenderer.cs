@@ -27,8 +27,9 @@ namespace Mux.Cli.Rendering
         /// </summary>
         /// <param name="events">The async stream of agent events to render.</param>
         /// <param name="verbose">Whether to render verbose diagnostic output.</param>
+        /// <param name="ignoreCertErrors">True when mux is already bypassing certificate validation.</param>
         /// <returns>A task representing the async rendering operation.</returns>
-        public static async Task RenderAsync(IAsyncEnumerable<AgentEvent> events, bool verbose)
+        public static async Task RenderAsync(IAsyncEnumerable<AgentEvent> events, bool verbose, bool ignoreCertErrors = false)
         {
             bool wasStreaming = false;
             bool wasToolCall = false;
@@ -80,12 +81,12 @@ namespace Mux.Cli.Rendering
                             break;
 
                         case ToolCallCompletedEvent completedEvent:
-                            RenderToolResult(completedEvent);
+                            RenderToolResult(completedEvent, ignoreCertErrors);
                             wasToolCall = true;
                             break;
 
                         case ErrorEvent errorEvent:
-                            RenderError(errorEvent);
+                            RenderError(errorEvent, ignoreCertErrors);
                             wasToolCall = false;
                             break;
 
@@ -156,7 +157,8 @@ namespace Mux.Cli.Rendering
         /// Renders a completed tool call as a single line.
         /// </summary>
         /// <param name="completedEvent">The tool call completed event.</param>
-        private static void RenderToolResult(ToolCallCompletedEvent completedEvent)
+        /// <param name="ignoreCertErrors">True when mux is already bypassing certificate validation.</param>
+        private static void RenderToolResult(ToolCallCompletedEvent completedEvent, bool ignoreCertErrors)
         {
             string name = completedEvent.ToolName;
             string summary = SummarizeResult(completedEvent.Result.Content);
@@ -174,6 +176,7 @@ namespace Mux.Cli.Rendering
                 string line = ToolCallRenderer.FormatToolExecutionLine(name, summary, "failed", elapsed);
                 AnsiConsole.MarkupLine(
                     $"[red]{Markup.Escape(line)}[/]");
+                RenderCertificateWarningHintIfNeeded(null, completedEvent.Result.Content, ignoreCertErrors);
                 Console.WriteLine();
             }
         }
@@ -182,9 +185,11 @@ namespace Mux.Cli.Rendering
         /// Renders an error event.
         /// </summary>
         /// <param name="errorEvent">The error event.</param>
-        private static void RenderError(ErrorEvent errorEvent)
+        /// <param name="ignoreCertErrors">True when mux is already bypassing certificate validation.</param>
+        private static void RenderError(ErrorEvent errorEvent, bool ignoreCertErrors)
         {
             AnsiConsole.MarkupLine($"[red]Error: {Markup.Escape(errorEvent.Code)}: {Markup.Escape(errorEvent.Message)}[/]");
+            RenderCertificateWarningHintIfNeeded(errorEvent.Code, errorEvent.Message, ignoreCertErrors);
         }
 
         /// <summary>
@@ -298,6 +303,14 @@ namespace Mux.Cli.Rendering
             }
 
             return value.Substring(0, maxLength) + "...";
+        }
+
+        private static void RenderCertificateWarningHintIfNeeded(string? errorCode, string? message, bool ignoreCertErrors)
+        {
+            if (CertificateWarningHint.ShouldDisplay(errorCode, message, ignoreCertErrors))
+            {
+                AnsiConsole.MarkupLine($"[dim]{Markup.Escape(CertificateWarningHint.Message)}[/]");
+            }
         }
 
         /// <summary>

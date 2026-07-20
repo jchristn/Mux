@@ -886,6 +886,7 @@ namespace Mux.Cli.Commands
             if (result.Error != null && !treatAsCancellation)
             {
                 WriteMarkupLine($"[red]Error: {Markup.Escape(result.Error.Message)}[/]");
+                WriteCertificateWarningHintIfNeeded(null, result.Error.Message);
             }
             else if (treatAsCancellation)
             {
@@ -985,12 +986,14 @@ namespace Mux.Cli.Commands
                     else
                     {
                         WriteFailureLineWithTrailingBlank(line);
+                        WriteCertificateWarningHintIfNeeded(null, completedEvent.Result.Content);
                     }
                     break;
 
                 case ErrorEvent errorEvent:
                     _RunHasVisibleOutput = true;
                     WriteFailureLine($"Error: {errorEvent.Code}: {errorEvent.Message}");
+                    WriteCertificateWarningHintIfNeeded(errorEvent.Code, errorEvent.Message);
                     break;
 
                 case ContextStatusEvent contextStatusEvent:
@@ -1139,6 +1142,14 @@ namespace Mux.Cli.Commands
                 AnsiConsole.MarkupLine($"[red]{Markup.Escape(line)}[/]");
                 Console.WriteLine();
             });
+        }
+
+        private void WriteCertificateWarningHintIfNeeded(string? errorCode, string? message)
+        {
+            if (CertificateWarningHint.ShouldDisplay(errorCode, message, _MuxSettings.IgnoreCertErrors))
+            {
+                WriteNotificationLine(CertificateWarningHint.Message);
+            }
         }
 
         private void WriteSubmittedPrompt(string input)

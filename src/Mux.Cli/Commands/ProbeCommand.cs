@@ -8,6 +8,7 @@ namespace Mux.Cli.Commands
     using System.Net.Http;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Cli.Rendering;
     using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Utility;
@@ -58,9 +59,10 @@ namespace Mux.Cli.Commands
                 return 1;
             }
 
+            ResolvedRuntime? runtime = null;
             try
             {
-                ResolvedRuntime runtime = CommandRuntimeResolver.ResolveRuntime(settings, "probe", supportsMcp: false, allowAskApproval: false);
+                runtime = CommandRuntimeResolver.ResolveRuntime(settings, "probe", supportsMcp: false, allowAskApproval: false);
                 if (runtime.MuxSettings.IgnoreCertErrors)
                 {
                     Console.Error.WriteLine(ConsoleMessageStyler.Notification(
@@ -88,6 +90,10 @@ namespace Mux.Cli.Commands
                     else
                     {
                         Console.Error.WriteLine(ConsoleMessageStyler.Failure($"Probe failed for endpoint '{result.EndpointName}': {result.ErrorMessage}"));
+                        CertificateWarningHint.WriteIfNeeded(
+                            result.ErrorCode,
+                            result.ErrorMessage,
+                            runtime.MuxSettings.IgnoreCertErrors);
                     }
                 }
 
@@ -109,6 +115,10 @@ namespace Mux.Cli.Commands
                 else
                 {
                     Console.Error.WriteLine(ConsoleMessageStyler.Failure($"Error: {ex.Message}"));
+                    CertificateWarningHint.WriteIfNeeded(
+                        null,
+                        ex.Message,
+                        runtime?.MuxSettings.IgnoreCertErrors ?? settings.IgnoreCertErrors);
                 }
 
                 return 1;
