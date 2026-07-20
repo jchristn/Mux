@@ -122,6 +122,7 @@ namespace Mux.Cli.Commands
             {
                 Endpoint = endpoint,
                 MuxSettings = muxSettings,
+                MaxAgentIterations = muxSettings.GetEffectiveMaxAgentIterations(endpoint),
                 WorkingDirectory = workingDirectory,
                 SystemPrompt = systemPrompt,
                 ApprovalPolicy = approvalPolicy,
@@ -279,6 +280,11 @@ namespace Mux.Cli.Commands
         /// Loaded mux settings.
         /// </summary>
         public MuxSettings MuxSettings { get; set; } = new MuxSettings();
+
+        /// <summary>
+        /// Effective maximum agent iterations after endpoint overrides and global settings are resolved.
+        /// </summary>
+        public int MaxAgentIterations { get; set; } = 50;
 
         /// <summary>
         /// Effective working directory.

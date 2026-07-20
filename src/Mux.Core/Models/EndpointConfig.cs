@@ -23,6 +23,7 @@ namespace Mux.Core.Models
         private int _TimeoutMs = 120000;
         private Dictionary<string, string> _Headers = new Dictionary<string, string>();
         private bool _AutoApproveTools = false;
+        private int? _MaxAgentIterations = null;
         private BackendQuirks? _Quirks = null;
 
         #endregion
@@ -154,6 +155,20 @@ namespace Mux.Core.Models
         {
             get => _AutoApproveTools;
             set => _AutoApproveTools = value;
+        }
+
+        /// <summary>
+        /// Optional endpoint-scoped maximum number of agent loop iterations before forcing a stop.
+        /// When null, the global <see cref="MuxSettings.MaxAgentIterations"/> value is used.
+        /// Clamped to the range 1-100 when set.
+        /// </summary>
+        [JsonPropertyName("maxAgentIterations")]
+        public int? MaxAgentIterations
+        {
+            get => _MaxAgentIterations;
+            set => _MaxAgentIterations = value.HasValue
+                ? Math.Clamp(value.Value, 1, 100)
+                : null;
         }
 
         /// <summary>

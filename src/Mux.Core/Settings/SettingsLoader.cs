@@ -98,6 +98,7 @@ namespace Mux.Core.Settings
                     TimeoutMs = 120000,
                     Headers = new Dictionary<string, string>(),
                     AutoApproveTools = false,
+                    MaxAgentIterations = null,
                     Quirks = null
                 };
 
@@ -723,6 +724,7 @@ namespace Mux.Core.Settings
                 TimeoutMs = source.TimeoutMs,
                 Headers = new Dictionary<string, string>(source.Headers ?? new Dictionary<string, string>()),
                 AutoApproveTools = source.AutoApproveTools,
+                MaxAgentIterations = source.MaxAgentIterations,
                 Quirks = source.Quirks == null
                     ? null
                     : new BackendQuirks

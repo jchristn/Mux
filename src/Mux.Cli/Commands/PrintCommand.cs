@@ -110,7 +110,7 @@ namespace Mux.Cli.Commands
                 SystemPrompt = runtime.SystemPrompt,
                 ApprovalPolicy = runtime.ApprovalPolicy,
                 WorkingDirectory = runtime.WorkingDirectory,
-                MaxIterations = runtime.MuxSettings.MaxAgentIterations,
+                MaxIterations = runtime.MaxAgentIterations,
                 TokenEstimationRatio = runtime.MuxSettings.TokenEstimationRatio,
                 ContextWindowSafetyMarginPercent = runtime.MuxSettings.ContextWindowSafetyMarginPercent,
                 AutoCompactEnabled = runtime.MuxSettings.AutoCompactEnabled,

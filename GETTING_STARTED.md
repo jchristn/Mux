@@ -141,6 +141,7 @@ Example:
       "adapterType": "openai",
       "baseUrl": "https://api.openai.com/v1",
       "model": "gpt-4o",
+      "maxAgentIterations": null,
       "headers": {
         "Authorization": "Bearer ${OPENAI_API_KEY}"
       }

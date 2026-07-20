@@ -85,6 +85,7 @@ namespace Test.Xunit.Settings
                         ""isDefault"": true,
                         ""maxTokens"": 4096,
                         ""temperature"": 0.5,
+                        ""maxAgentIterations"": 40,
                         ""autoApproveTools"": true
                     },
                     {
@@ -111,6 +112,7 @@ namespace Test.Xunit.Settings
             Assert.True(first.IsDefault);
             Assert.Equal(4096, first.MaxTokens);
             Assert.Equal(0.5, first.Temperature);
+            Assert.Equal(40, first.MaxAgentIterations);
             Assert.True(first.AutoApproveTools);
 
             EndpointConfig second = endpoints[1];
@@ -118,6 +120,7 @@ namespace Test.Xunit.Settings
             Assert.Equal(AdapterTypeEnum.OpenAi, second.AdapterType);
             Assert.Equal("gpt-4o", second.Model);
             Assert.Equal("Bearer sk-test", second.Headers["Authorization"]);
+            Assert.Null(second.MaxAgentIterations);
             Assert.False(second.AutoApproveTools);
         }
 
@@ -168,6 +171,39 @@ namespace Test.Xunit.Settings
             Assert.Equal(2, endpoints.Count);
             Assert.True(endpoints[0].IsDefault);
             Assert.False(endpoints[1].IsDefault);
+        }
+
+        /// <summary>
+        /// Verifies that endpoint-scoped max iteration overrides round-trip through endpoints.json.
+        /// </summary>
+        [Fact]
+        public void SaveEndpoints_MaxAgentIterations_RoundTrips()
+        {
+            SettingsLoader.SaveEndpoints(new List<EndpointConfig>
+            {
+                new EndpointConfig
+                {
+                    Name = "alpha",
+                    AdapterType = AdapterTypeEnum.OpenAiCompatible,
+                    BaseUrl = "http://alpha",
+                    Model = "model-a",
+                    MaxAgentIterations = 65
+                },
+                new EndpointConfig
+                {
+                    Name = "beta",
+                    AdapterType = AdapterTypeEnum.OpenAiCompatible,
+                    BaseUrl = "http://beta",
+                    Model = "model-b",
+                    MaxAgentIterations = null
+                }
+            });
+
+            List<EndpointConfig> endpoints = SettingsLoader.LoadEndpoints();
+
+            Assert.Equal(2, endpoints.Count);
+            Assert.Equal(65, endpoints[0].MaxAgentIterations);
+            Assert.Null(endpoints[1].MaxAgentIterations);
         }
 
         #endregion
@@ -318,7 +354,7 @@ namespace Test.Xunit.Settings
             Assert.Equal(80, settings.ContextWarningThresholdPercent);
             Assert.Equal("summary", settings.CompactionStrategy);
             Assert.Equal(3, settings.CompactionPreserveTurns);
-            Assert.Equal(25, settings.MaxAgentIterations);
+            Assert.Equal(50, settings.MaxAgentIterations);
             Assert.False(settings.IgnoreCertErrors);
             Assert.NotNull(settings.ExternalSearch);
             Assert.False(settings.ExternalSearch.Enabled);
@@ -485,6 +521,31 @@ namespace Test.Xunit.Settings
             Assert.False(settings.ExternalSearch.Enabled);
             Assert.True(settings.ExternalSearch.AllowFallback);
             Assert.Empty(settings.ExternalSearch.Providers);
+        }
+
+        /// <summary>
+        /// Verifies that endpoint-scoped max iteration values override the global default when set.
+        /// </summary>
+        [Fact]
+        public void GetEffectiveMaxAgentIterations_EndpointOverrideWins()
+        {
+            MuxSettings settings = new MuxSettings
+            {
+                MaxAgentIterations = 55
+            };
+
+            EndpointConfig inherited = new EndpointConfig
+            {
+                MaxAgentIterations = null
+            };
+
+            EndpointConfig overridden = new EndpointConfig
+            {
+                MaxAgentIterations = 12
+            };
+
+            Assert.Equal(55, settings.GetEffectiveMaxAgentIterations(inherited));
+            Assert.Equal(12, settings.GetEffectiveMaxAgentIterations(overridden));
         }
 
         #endregion

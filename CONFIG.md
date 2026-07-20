@@ -70,6 +70,7 @@ Example:
       "timeoutMs": 120000,
       "headers": {},
       "autoApproveTools": false,
+      "maxAgentIterations": null,
       "quirks": null
     }
   ]
@@ -91,6 +92,7 @@ Fields:
 | `timeoutMs` | int | HTTP timeout |
 | `headers` | object | auth or custom headers; values may be stored directly or sourced from environment-variable references |
 | `autoApproveTools` | bool | auto-approve tool calls whenever this endpoint is active unless CLI approval flags override it |
+| `maxAgentIterations` | int or null | optional endpoint override for the agent loop guard; `null` inherits `settings.json` |
 | `quirks` | object or null | backend behavior flags |
 
 Header values support environment expansion:
@@ -115,7 +117,7 @@ Interactive endpoint management:
 Non-interactive endpoint inspection:
 - `mux endpoint list --output-format json` lists configured endpoints
 - `mux endpoint ls --output-format json` is an alias for `mux endpoint list --output-format json`
-- `mux endpoint show <name> --output-format json` returns one configured endpoint with header values redacted
+- `mux endpoint show <name> --output-format json` returns one configured endpoint with header values redacted, including `maxAgentIterations`, `effectiveMaxAgentIterations`, and `maxAgentIterationsSource`
 
 Wizard auth options:
 - `none`
@@ -193,7 +195,7 @@ Example:
   "contextWarningThresholdPercent": 80,
   "compactionStrategy": "summary",
   "compactionPreserveTurns": 3,
-  "maxAgentIterations": 25,
+  "maxAgentIterations": 50,
   "ignoreCertErrors": false,
   "externalSearch": {
     "enabled": false,
@@ -217,7 +219,7 @@ Fields:
 | `contextWarningThresholdPercent` | int | warning threshold for estimated context usage; clamped to `50-95` |
 | `compactionStrategy` | string | `summary` or `trim`; controls `/compact`, interactive preflight auto-compaction, and in-run active-conversation compaction |
 | `compactionPreserveTurns` | int | number of recent user-led turns to preserve during compaction; clamped to `1-10` |
-| `maxAgentIterations` | int | loop guard for tool-using runs |
+| `maxAgentIterations` | int | default loop guard for tool-using runs; clamped to `1-100` and overridden by endpoint `maxAgentIterations` when that value is set |
 | `ignoreCertErrors` | bool | disable TLS certificate validation for mux-owned network requests; default `false` |
 | `externalSearch` | object | optional Tavily/You.com provider configuration for the `web_search` tool |
 
@@ -227,6 +229,7 @@ Notes:
 - `--ignore-cert-errors`, `--insecure`, or `MUX_IGNORE_CERT_ERRORS=1` can enable certificate-error bypass for runs behind enterprise TLS inspection
 - When `settings.json` is loaded, mux rewrites it with normalized values so newly added settings are visible with defaults
 - `mux print` and `mux probe` reject `--approval-policy ask`
+- endpoint `maxAgentIterations` is nullable; leave it unset or set it to `null` to inherit the global `settings.json` default
 - `mux print` and `mux probe` do not load MCP servers, even if `mcp-servers.json` exists
 
 ### `externalSearch`

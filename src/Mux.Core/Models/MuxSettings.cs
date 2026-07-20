@@ -20,7 +20,7 @@ namespace Mux.Core.Models
         private int _ContextWarningThresholdPercent = 80;
         private string _CompactionStrategy = "summary";
         private int _CompactionPreserveTurns = 3;
-        private int _MaxAgentIterations = 25;
+        private int _MaxAgentIterations = 50;
         private bool _IgnoreCertErrors = false;
         private ExternalSearchSettings _ExternalSearch = new ExternalSearchSettings();
 
@@ -187,6 +187,17 @@ namespace Mux.Core.Models
         #endregion
 
         #region Public-Methods
+
+        /// <summary>
+        /// Resolves the effective maximum agent iteration count for an endpoint.
+        /// Endpoint-scoped values override the global default when set.
+        /// </summary>
+        /// <param name="endpoint">The endpoint whose override should be considered.</param>
+        /// <returns>The effective clamped maximum agent iteration count.</returns>
+        public int GetEffectiveMaxAgentIterations(EndpointConfig? endpoint)
+        {
+            return endpoint?.MaxAgentIterations ?? MaxAgentIterations;
+        }
 
         /// <summary>
         /// Normalizes a compaction strategy string.
