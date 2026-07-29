@@ -695,12 +695,13 @@ Per `C:\code\agents\requirements\BACKEND_TEST_ARCHITECTURE.md` (Touchstone, runn
 
 ---
 
-## M5 — Engine gate
+## M5 — Engine gate ✅
 
-- [ ] All of M1–M4 suites registered in `…Suites.All` and green across `Test.Automated`, `Test.Xunit`, `Test.Nunit`.
-- [ ] `Mux.Core` has zero `Console.*` and zero UI dependencies (grep-verified).
-- [ ] `dotnet build src/Mux.sln` warning-clean.
-- **Exit criteria:** the engine can run parallel jobs with lease + approvals + persistence, fully headless, with no UI present.
+- [x] All M1–M4 suites registered in `MuxSuites.All` and green across `Test.Automated`, `Test.Xunit`, `Test.Nunit` on `net8.0` + `net10.0` (247 console / 241 adapters).
+- [x] `Mux.Core` has zero **UI** dependencies (no `using TUIKit`, no Spectre) — grep-verified.
+- [~] `Mux.Core` `Console.*`: **2 pre-existing stderr-diagnostic sites remain** — `RetryHandler` (retry notice) and `WorkingDirectoryGuard` (invalid-cwd failure), both via `Console.Error.WriteLine`. They predate this migration, write to stderr only (never stdout; do not corrupt the `AgentEvent` stream or headless tests), and one is currently relied upon by `CliCommandSuite.PrintCommandRuntimeFailure...` (asserts "Retry" in stderr). Rerouting them through `OnRetry`/events is coupled to the Cli rendering rebuild → tracked to **M6** (§18).
+- [x] `dotnet build src/Mux.sln` warning-clean (`--no-incremental`).
+- **Exit criteria:** ✅ the engine runs parallel jobs with write-lease serialization, per-job approval routing, and session persistence — fully headless, no UI present. (Modulo the 2 tracked stderr-diagnostic sites above.)
 
 ---
 
@@ -903,3 +904,10 @@ Styles: `dim/bold/italic/underline`, fg `cyan/green/red/yellow/grey/blue/grey15`
   a product defect. Mitigations in place: 30s guards on all waits and a `MuxSuites` static-ctor
   thread-pool warm-up (min 32). To investigate: capture a failing run (increase adapter logging /
   loop in CI) to identify the specific case, then tighten its synchronization.
+- [ ] **`Mux.Core` stderr-diagnostic sites (M5 finding).** `RetryHandler` and `WorkingDirectoryGuard`
+  write human-facing messages directly via `Console.Error.WriteLine` (using `ConsoleMessageStyler`),
+  which violates the "`Mux.Core` is `Console.*`-free" DoD. They predate the migration and write to
+  stderr only. Reroute through the engine's callback/event surface (`AgentLoopOptions.OnRetry` already
+  exists for the retry case) so the Cli owns the rendering — do this during the **M6** rebuild, and
+  update `CliCommandSuite.PrintCommandRuntimeFailure...` (which currently asserts the retry text in
+  captured stderr) to match the new path.
