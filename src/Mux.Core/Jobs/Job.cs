@@ -409,6 +409,34 @@ namespace Mux.Core.Jobs
             }
         }
 
+        internal bool TrySetAwaitingWriteLease()
+        {
+            lock (_SyncRoot)
+            {
+                if (_State == JobState.Running)
+                {
+                    _State = JobState.AwaitingWriteLease;
+                    return true;
+                }
+
+                return false;
+            }
+        }
+
+        internal bool TryResumeRunningFromLeaseWait()
+        {
+            lock (_SyncRoot)
+            {
+                if (_State == JobState.AwaitingWriteLease)
+                {
+                    _State = JobState.Running;
+                    return true;
+                }
+
+                return false;
+            }
+        }
+
         internal void AddFollowUp(string prompt)
         {
             if (string.IsNullOrWhiteSpace(prompt))

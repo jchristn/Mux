@@ -649,17 +649,17 @@ Per `C:\code\agents\requirements\BACKEND_TEST_ARCHITECTURE.md` (Touchstone, runn
 
 ## M2 — Engine: Write lease + tool classification (`Mux.Core/Jobs/`, `Mux.Core/Tools/`)
 
-Implements "parallel reads, single writer."
+**✅ COMPLETE** (commits `e62caad` part 1, part 2 the integration). Implements "parallel reads, single writer."
 
-- [ ] `ToolMutationKind.cs` — enum: `ReadOnly`, `Mutating`.
-- [ ] Add a `MutationKind` classification to tool metadata in `BuiltInToolRegistry`: `read_file`, `glob`, `grep`, `web_retrieve`, `web_search`, `file_metadata`, and `list_directory` = `ReadOnly`; `write_file`, `edit_file`, `multi_edit`, `delete_file`, `manage_directory`, and `run_process` = `Mutating`.
-- [ ] External/MCP tools default to `Mutating` unless explicit metadata marks them `ReadOnly`; `run_process` is always `Mutating`.
-- [ ] `WriteLeaseHandle.cs` — `IDisposable`/`IAsyncDisposable` token that releases the lease on dispose; documents the owning job.
-- [ ] `WriteLease.cs` — fair async single-writer lease (`SemaphoreSlim(1,1)` + FIFO waiter queue), `AcquireAsync(jobId, ct)` → `WriteLeaseHandle`; exposes current holder + waiter list for the UI; configurable acquisition timeout (public member, sensible default, documented).
-- [ ] Inject the lease into the tool-execution path so mutating tools `AcquireAsync` before running and release after; reads bypass it. Job enters `AwaitingWriteLease` while blocked.
-- [ ] Emit lease acquire/wait/release into the job's event/telemetry so sidebar + jobs modal can show `🔒`/`⧗`.
-- [ ] **Tests** (`Test.Shared/Suites/WriteLeaseSuite.cs`): two jobs, both read-only → run concurrently; two mutating → serialized (second blocks until first releases); FIFO fairness; timeout path throws the documented exception; handle dispose releases even on exception; cancellation while waiting transitions cleanly.
-- **Exit criteria:** concurrent read-only jobs overlap; mutating jobs never overlap; suite green in all runners.
+- [x] `ToolMutationKind.cs` — enum: `ReadOnly`, `Mutating`.
+- [x] `MutationKind` classification in `BuiltInToolRegistry` (`GetMutationKind`): `read_file`, `glob`, `grep`, `web_retrieve`, `web_search`, `file_metadata`, `list_directory` = `ReadOnly`; `write_file`, `edit_file`, `multi_edit`, `delete_file`, `manage_directory`, `run_process` = `Mutating`.
+- [x] Unknown/external (MCP) tools default to `Mutating` (safe) via `GetMutationKind`'s fallback.
+- [x] `WriteLeaseHandle.cs` — idempotent `IDisposable`/`IAsyncDisposable` release token.
+- [x] `WriteLease.cs` — fair FIFO single-writer lease (custom queue for true FIFO + waiter identity, not a bare `SemaphoreSlim`), `AcquireAsync(jobId, ct)` → handle; exposes `CurrentHolderJobId` + `WaitingJobIds`; `AcquisitionTimeoutMs` (default infinite, documented); cancellation-safe. (+ `WriteLeaseWaiter`, `WriteLeaseTimeoutException`.)
+- [x] Lease injected at the tool-execution chokepoint (`AgentLoop.ExecuteToolCallAsync`): mutating tools acquire/release around execution; reads bypass. `AgentLoopOptions` gains `WriteLease`/`JobId`/`OnWriteLeaseWaitChanged`; `JobManager` owns a shared lease and wires each job (race-safe `Job.TrySetAwaitingWriteLease`/`TryResumeRunningFromLeaseWait`).
+- [~] Lease wait/acquire/release is observable via `Job.State` (`AwaitingWriteLease`) + `WriteLease.CurrentHolderJobId`/`WaitingJobIds`; publishing dedicated telemetry events for the sidebar (`🔒`/`⧗`) is deferred to M8 (the transitions are queryable now).
+- [x] **Tests**: `WriteLeaseSuite` (7 unit cases: serialize+handoff, FIFO, timeout, cancellation recovery, dispose-on-exception, idempotent dispose) **and** `WriteLeaseIntegrationSuite` (2 cases through the real `AgentLoop`: mutating tool blocks on a held lease then executes; read-only tool bypasses a held lease).
+- **Exit criteria:** ✅ read-only tools run without the lease; mutating tools serialize; green across console/xUnit/NUnit on `net8.0` + `net10.0` (225 each).
 
 ---
 

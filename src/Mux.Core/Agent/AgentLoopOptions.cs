@@ -7,6 +7,7 @@ namespace Mux.Core.Agent
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Enums;
+    using Mux.Core.Jobs;
     using Mux.Core.Models;
 
     /// <summary>
@@ -44,6 +45,9 @@ namespace Mux.Core.Agent
         private Action<int, int, string>? _OnRetry = null;
         private MuxSettings _MuxSettings = new MuxSettings();
         private bool _IgnoreCertErrors = false;
+        private WriteLease? _WriteLease = null;
+        private string _JobId = "primary";
+        private Action<bool>? _OnWriteLeaseWaitChanged = null;
 
         #endregion
 
@@ -330,6 +334,40 @@ namespace Mux.Core.Agent
         {
             get => _IgnoreCertErrors || _MuxSettings.IgnoreCertErrors;
             set => _IgnoreCertErrors = value;
+        }
+
+        /// <summary>
+        /// Optional workspace write lease shared across concurrent jobs. When set, mutating tools
+        /// (per <see cref="Mux.Core.Tools.ToolMutationKind"/>) acquire it before executing so only one
+        /// job mutates the workspace at a time; read-only tools bypass it and run concurrently. Null
+        /// (the default) disables leasing — the single-run behavior used by non-interactive commands.
+        /// </summary>
+        public WriteLease? WriteLease
+        {
+            get => _WriteLease;
+            set => _WriteLease = value;
+        }
+
+        /// <summary>
+        /// The identifier used when this loop acquires the <see cref="WriteLease"/>, surfaced as the
+        /// lease holder/waiter. Defaults to "primary"; the job manager sets it to the owning job id.
+        /// Null or empty values reset to "primary".
+        /// </summary>
+        public string JobId
+        {
+            get => _JobId;
+            set => _JobId = string.IsNullOrEmpty(value) ? "primary" : value;
+        }
+
+        /// <summary>
+        /// Optional callback invoked with <c>true</c> when the loop begins waiting for a contended
+        /// write lease and <c>false</c> once it is acquired. Used by the job manager to reflect the
+        /// <c>AwaitingWriteLease</c> state. Not invoked when the lease is uncontended.
+        /// </summary>
+        public Action<bool>? OnWriteLeaseWaitChanged
+        {
+            get => _OnWriteLeaseWaitChanged;
+            set => _OnWriteLeaseWaitChanged = value;
         }
 
         #endregion

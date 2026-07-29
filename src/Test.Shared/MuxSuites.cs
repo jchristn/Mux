@@ -39,6 +39,7 @@ namespace Test.Shared
                     AgentLoopOptionsSuite.Create(),
                     JobManagerSuite.Create(),
                     WriteLeaseSuite.Create(),
+                    WriteLeaseIntegrationSuite.Create(),
 
                     // Mux.Core / Tools unit suites (ported from Test.Xunit/Tools).
                     BuiltInToolRegistrySuite.Create(),

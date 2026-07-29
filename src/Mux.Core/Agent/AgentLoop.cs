@@ -9,6 +9,7 @@ namespace Mux.Core.Agent
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Enums;
+    using Mux.Core.Jobs;
     using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Settings;
@@ -920,6 +921,43 @@ namespace Mux.Core.Agent
         {
             JsonElement arguments = ParseToolArguments(toolCall.Arguments);
 
+            // Classify the tool: unknown/external (MCP) tools are treated as mutating (the safe default).
+            ToolMutationKind mutationKind = _ToolRegistry.HasTool(toolCall.Name)
+                ? _ToolRegistry.GetMutationKind(toolCall.Name)
+                : ToolMutationKind.Mutating;
+
+            // Mutating tools serialize through the shared workspace write lease when one is configured;
+            // read-only tools bypass it and run concurrently across jobs.
+            if (_Options.WriteLease != null && mutationKind == ToolMutationKind.Mutating)
+            {
+                Task<WriteLeaseHandle> acquire = _Options.WriteLease.AcquireAsync(_Options.JobId, cancellationToken);
+                bool waited = !acquire.IsCompleted;
+                if (waited)
+                {
+                    _Options.OnWriteLeaseWaitChanged?.Invoke(true);
+                }
+
+                WriteLeaseHandle handle = await acquire.ConfigureAwait(false);
+                try
+                {
+                    if (waited)
+                    {
+                        _Options.OnWriteLeaseWaitChanged?.Invoke(false);
+                    }
+
+                    return await ExecuteToolCallCoreAsync(toolCall, arguments, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    handle.Dispose();
+                }
+            }
+
+            return await ExecuteToolCallCoreAsync(toolCall, arguments, cancellationToken).ConfigureAwait(false);
+        }
+
+        private async Task<ToolResult> ExecuteToolCallCoreAsync(ToolCall toolCall, JsonElement arguments, CancellationToken cancellationToken)
+        {
             // Check if it is a built-in tool
             if (_ToolRegistry.HasTool(toolCall.Name))
             {

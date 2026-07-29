@@ -22,6 +22,7 @@ namespace Mux.Core.Jobs
         private readonly List<Job> _Jobs = new List<Job>();
         private readonly Dictionary<string, Task> _Workers = new Dictionary<string, Task>();
         private readonly JobScheduler _Scheduler = new JobScheduler();
+        private readonly WriteLease _WriteLease;
         private readonly Channel<JobManagerEvent> _EventChannel = Channel.CreateUnbounded<JobManagerEvent>();
         private readonly CancellationTokenSource _ShutdownTokenSource = new CancellationTokenSource();
         private readonly Func<Job, string, CancellationToken, IAsyncEnumerable<AgentEvent>> _AgentRunner;
@@ -41,15 +42,18 @@ namespace Mux.Core.Jobs
         /// <param name="agentRunner">The function that executes one agent turn for a job and prompt.</param>
         /// <param name="maxConcurrency">The maximum number of active jobs. Values below one are treated as one.</param>
         /// <param name="sessionId">Optional owning session id. A new id is generated when omitted.</param>
+        /// <param name="writeLease">Optional shared workspace write lease. A new lease is created when omitted.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="agentRunner"/> is null.</exception>
         public JobManager(
             Func<Job, string, CancellationToken, IAsyncEnumerable<AgentEvent>> agentRunner,
             int maxConcurrency = 3,
-            string? sessionId = null)
+            string? sessionId = null,
+            WriteLease? writeLease = null)
         {
             _AgentRunner = agentRunner ?? throw new ArgumentNullException(nameof(agentRunner));
             _MaxConcurrency = Math.Max(1, maxConcurrency);
             _SessionId = string.IsNullOrWhiteSpace(sessionId) ? Guid.NewGuid().ToString("N") : sessionId;
+            _WriteLease = writeLease ?? new WriteLease();
         }
 
         /// <summary>
@@ -67,14 +71,19 @@ namespace Mux.Core.Jobs
         {
             if (templateOptions is null) throw new ArgumentNullException(nameof(templateOptions));
 
+            WriteLease lease = new WriteLease();
             return new JobManager(
                 (Job job, string prompt, CancellationToken cancellationToken) =>
                 {
                     AgentLoopOptions options = CloneOptionsForJob(templateOptions, job);
+                    options.WriteLease = lease;
+                    options.JobId = job.Id;
+                    options.OnWriteLeaseWaitChanged = (bool waiting) => ApplyLeaseWaitState(job, waiting);
                     return RunAgentLoopAsync(options, prompt, cancellationToken);
                 },
                 maxConcurrency,
-                sessionId);
+                sessionId,
+                lease);
         }
 
         #endregion
@@ -125,6 +134,15 @@ namespace Mux.Core.Jobs
                     return _SessionId;
                 }
             }
+        }
+
+        /// <summary>
+        /// The shared workspace write lease that serializes mutating tools across this manager's jobs
+        /// while letting read-only tools run concurrently.
+        /// </summary>
+        public WriteLease WriteLease
+        {
+            get => _WriteLease;
         }
 
         /// <summary>
@@ -730,6 +748,21 @@ namespace Mux.Core.Jobs
                 FinalState = finalState,
                 ErrorMessage = errorMessage
             };
+        }
+
+        private static void ApplyLeaseWaitState(Job job, bool waiting)
+        {
+            // Conditional transitions so a lease-wait flip can never clobber a concurrent
+            // cancellation/terminal state. Not published as a manager event; the transition is
+            // observable via Job.State and the lease's holder/waiter lists.
+            if (waiting)
+            {
+                job.TrySetAwaitingWriteLease();
+            }
+            else
+            {
+                job.TryResumeRunningFromLeaseWait();
+            }
         }
 
         private static string CreateTitle(string prompt)
