@@ -1,39 +1,35 @@
 namespace Test.Automated
 {
-    using System;
-    using System.Linq;
+    using System.Threading;
     using System.Threading.Tasks;
-    using Test.Automated.Suites;
     using Test.Shared;
+    using Touchstone.Cli;
 
     /// <summary>
-    /// Entry point for the automated integration test runner.
+    /// Entry point for the automated Touchstone console runner. Executes every registered MUX suite
+    /// and returns a process exit code of 0 when all cases pass, non-zero otherwise.
     /// </summary>
-    public class Program
+    public static class Program
     {
         /// <summary>
-        /// Main entry point. Parses flags and runs all registered test suites.
+        /// Runs all MUX Touchstone suites through the console runner.
         /// </summary>
-        /// <param name="args">Command-line arguments. Pass <c>--live</c> to run against a live endpoint instead of mock.</param>
-        /// <returns>0 if all tests passed, 1 if any test failed.</returns>
+        /// <param name="args">Command-line arguments. Pass <c>--results &lt;path&gt;</c> to export JSON results.</param>
+        /// <returns>0 if all tests pass; a non-zero value if any test fails.</returns>
         public static async Task<int> Main(string[] args)
         {
-            bool liveMode = args.Contains("--live", StringComparer.OrdinalIgnoreCase);
+            string? resultsPath = null;
 
-            string modeLabel = liveMode ? "LIVE" : "MOCK";
-            TestRunner runner = new TestRunner($"MUX Automated Tests ({modeLabel})");
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i] == "--results" && i + 1 < args.Length)
+                {
+                    resultsPath = args[i + 1];
+                    break;
+                }
+            }
 
-            runner.AddSuite(new SingleTurnTests(liveMode));
-            runner.AddSuite(new ToolUseTests(liveMode));
-            runner.AddSuite(new PrintModeTests(liveMode));
-            runner.AddSuite(new CliContractTests(liveMode));
-            runner.AddSuite(new ApprovalPolicyTests(liveMode));
-            runner.AddSuite(new EndpointSwitchingTests(liveMode));
-            runner.AddSuite(new MultiEditTests(liveMode));
-            runner.AddSuite(new LineBufferTests());
-
-            int exitCode = await runner.RunAllAsync().ConfigureAwait(false);
-            return exitCode;
+            return await ConsoleRunner.RunAsync(MuxSuites.All, resultsPath: resultsPath, cancellationToken: CancellationToken.None).ConfigureAwait(false);
         }
     }
 }

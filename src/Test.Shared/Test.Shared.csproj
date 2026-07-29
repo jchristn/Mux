@@ -1,13 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>0.2.0</Version>
-    <Description>Shared test infrastructure for MUX</Description>
+    <Version>0.3.0-alpha</Version>
+    <Description>Shared test infrastructure and Touchstone suite descriptors for MUX</Description>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Touchstone.Core" Version="0.1.12" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Mux.Core\Mux.Core.csproj" />
+    <ProjectReference Include="..\Mux.Cli\Mux.Cli.csproj" />
+    <ProjectReference Include="..\Mux.Search\Mux.Search.csproj" />
   </ItemGroup>
 
 </Project>

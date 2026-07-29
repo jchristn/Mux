@@ -2,14 +2,17 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <Version>0.2.0</Version>
-    <Description>Automated integration tests for MUX</Description>
+    <Version>0.3.0-alpha</Version>
+    <Description>Automated Touchstone console runner for MUX</Description>
+    <ImplicitUsings>disable</ImplicitUsings>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Mux.Core\Mux.Core.csproj" />
-    <ProjectReference Include="..\Mux.Cli\Mux.Cli.csproj" />
+    <PackageReference Include="Touchstone.Cli" Version="0.1.12" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Test.Shared\Test.Shared.csproj" />
   </ItemGroup>
 
