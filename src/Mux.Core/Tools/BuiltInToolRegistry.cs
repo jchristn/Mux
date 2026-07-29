@@ -19,6 +19,7 @@ namespace Mux.Core.Tools
         #region Private-Members
 
         private Dictionary<string, IToolExecutor> _Tools = new Dictionary<string, IToolExecutor>(StringComparer.OrdinalIgnoreCase);
+        private Dictionary<string, ToolMutationKind> _MutationKinds = new Dictionary<string, ToolMutationKind>(StringComparer.OrdinalIgnoreCase);
 
         #endregion
 
@@ -30,22 +31,22 @@ namespace Mux.Core.Tools
         /// </summary>
         public BuiltInToolRegistry(MuxSettings? muxSettings = null)
         {
-            RegisterTool(new ReadFileTool());
-            RegisterTool(new WriteFileTool());
-            RegisterTool(new EditFileTool());
-            RegisterTool(new MultiEditTool());
-            RegisterTool(new DeleteFileTool());
-            RegisterTool(new FileMetadataTool());
-            RegisterTool(new ListDirectoryTool());
-            RegisterTool(new ManageDirectoryTool());
-            RegisterTool(new GlobTool());
-            RegisterTool(new GrepTool());
-            RegisterTool(new RunProcessTool());
-            RegisterTool(new WebRetrieveTool(muxSettings?.IgnoreCertErrors ?? false));
+            RegisterTool(new ReadFileTool(), ToolMutationKind.ReadOnly);
+            RegisterTool(new WriteFileTool(), ToolMutationKind.Mutating);
+            RegisterTool(new EditFileTool(), ToolMutationKind.Mutating);
+            RegisterTool(new MultiEditTool(), ToolMutationKind.Mutating);
+            RegisterTool(new DeleteFileTool(), ToolMutationKind.Mutating);
+            RegisterTool(new FileMetadataTool(), ToolMutationKind.ReadOnly);
+            RegisterTool(new ListDirectoryTool(), ToolMutationKind.ReadOnly);
+            RegisterTool(new ManageDirectoryTool(), ToolMutationKind.Mutating);
+            RegisterTool(new GlobTool(), ToolMutationKind.ReadOnly);
+            RegisterTool(new GrepTool(), ToolMutationKind.ReadOnly);
+            RegisterTool(new RunProcessTool(), ToolMutationKind.Mutating);
+            RegisterTool(new WebRetrieveTool(muxSettings?.IgnoreCertErrors ?? false), ToolMutationKind.ReadOnly);
 
             if (WebSearchServiceFactory.Create(muxSettings) is { } searchService)
             {
-                RegisterTool(new WebSearchTool(searchService));
+                RegisterTool(new WebSearchTool(searchService), ToolMutationKind.ReadOnly);
             }
         }
 
@@ -111,13 +112,31 @@ namespace Mux.Core.Tools
             return _Tools.ContainsKey(name);
         }
 
+        /// <summary>
+        /// Gets the mutation classification for a tool. Returns <see cref="ToolMutationKind.Mutating"/>
+        /// for any tool that is not a registered read-only built-in — the safe default, so unknown or
+        /// external (for example MCP) tools serialize through the workspace write lease.
+        /// </summary>
+        /// <param name="toolName">The tool name to classify. Null or unknown names are treated as mutating.</param>
+        /// <returns>The tool's <see cref="ToolMutationKind"/>.</returns>
+        public ToolMutationKind GetMutationKind(string toolName)
+        {
+            if (toolName != null && _MutationKinds.TryGetValue(toolName, out ToolMutationKind kind))
+            {
+                return kind;
+            }
+
+            return ToolMutationKind.Mutating;
+        }
+
         #endregion
 
         #region Private-Methods
 
-        private void RegisterTool(IToolExecutor tool)
+        private void RegisterTool(IToolExecutor tool, ToolMutationKind mutationKind)
         {
             _Tools[tool.Name] = tool;
+            _MutationKinds[tool.Name] = mutationKind;
         }
 
         #endregion
