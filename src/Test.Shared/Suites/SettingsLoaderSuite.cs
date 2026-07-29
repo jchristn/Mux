@@ -154,7 +154,7 @@ namespace Test.Shared.Suites
 
                 Case("LoadSettingsValidJsonParsesCorrectly", "A valid settings.json is parsed correctly", (string dir, CancellationToken ct) =>
                 {
-                    string json = "{\"systemPromptPath\":\"/tmp/prompt.md\",\"defaultApprovalPolicy\":\"auto\",\"toolTimeoutMs\":60000,\"processTimeoutMs\":240000,\"autoCompactEnabled\":false,\"contextWarningThresholdPercent\":85,\"compactionStrategy\":\"trim\",\"compactionPreserveTurns\":4,\"maxAgentIterations\":50,\"ignoreCertErrors\":true}";
+                    string json = "{\"systemPromptPath\":\"/tmp/prompt.md\",\"defaultApprovalPolicy\":\"auto\",\"toolTimeoutMs\":60000,\"processTimeoutMs\":240000,\"autoCompactEnabled\":false,\"contextWarningThresholdPercent\":85,\"compactionStrategy\":\"trim\",\"compactionPreserveTurns\":4,\"maxAgentIterations\":50,\"maxConcurrency\":5,\"defaultEnqueueBehavior\":\"queue-after\",\"ignoreCertErrors\":true}";
                     File.WriteAllText(Path.Combine(dir, "settings.json"), json);
                     MuxSettings settings = SettingsLoader.LoadSettings();
                     MuxAssert.AreEqual("/tmp/prompt.md", settings.SystemPromptPath, "systemPromptPath");
@@ -166,6 +166,8 @@ namespace Test.Shared.Suites
                     MuxAssert.AreEqual("trim", settings.CompactionStrategy, "compactionStrategy");
                     MuxAssert.AreEqual(4, settings.CompactionPreserveTurns, "preserveTurns");
                     MuxAssert.AreEqual(50, settings.MaxAgentIterations, "maxAgentIterations");
+                    MuxAssert.AreEqual(5, settings.MaxConcurrency, "maxConcurrency");
+                    MuxAssert.AreEqual("queue_after", settings.DefaultEnqueueBehavior, "enqueueBehavior");
                     MuxAssert.IsTrue(settings.IgnoreCertErrors, "ignoreCertErrors");
                     return Task.CompletedTask;
                 }),
@@ -183,6 +185,8 @@ namespace Test.Shared.Suites
                     MuxAssert.AreEqual("summary", settings.CompactionStrategy, "compactionStrategy");
                     MuxAssert.AreEqual(3, settings.CompactionPreserveTurns, "preserveTurns");
                     MuxAssert.AreEqual(50, settings.MaxAgentIterations, "maxAgentIterations");
+                    MuxAssert.AreEqual(3, settings.MaxConcurrency, "maxConcurrency");
+                    MuxAssert.AreEqual("ask", settings.DefaultEnqueueBehavior, "enqueueBehavior");
                     MuxAssert.IsFalse(settings.IgnoreCertErrors, "ignoreCertErrors");
                     MuxAssert.IsNotNull(settings.ExternalSearch, "externalSearch");
                     MuxAssert.IsFalse(settings.ExternalSearch.Enabled, "search enabled");
@@ -211,7 +215,7 @@ namespace Test.Shared.Suites
                     using JsonDocument document = JsonDocument.Parse(File.ReadAllText(settingsPath));
                     JsonElement root = document.RootElement;
                     MuxAssert.AreEqual(80, root.GetProperty("maxAgentIterations").GetInt32(), "persisted maxAgentIterations");
-                    foreach (string field in new[] { "systemPromptPath", "defaultApprovalPolicy", "toolTimeoutMs", "processTimeoutMs", "contextWindowSafetyMarginPercent", "tokenEstimationRatio", "autoCompactEnabled", "contextWarningThresholdPercent", "compactionStrategy", "compactionPreserveTurns", "ignoreCertErrors", "externalSearch" })
+                    foreach (string field in new[] { "systemPromptPath", "defaultApprovalPolicy", "toolTimeoutMs", "processTimeoutMs", "contextWindowSafetyMarginPercent", "tokenEstimationRatio", "autoCompactEnabled", "contextWarningThresholdPercent", "compactionStrategy", "compactionPreserveTurns", "maxConcurrency", "defaultEnqueueBehavior", "ignoreCertErrors", "externalSearch" })
                     {
                         MuxAssert.IsTrue(root.TryGetProperty(field, out _), "has " + field);
                     }
@@ -238,6 +242,16 @@ namespace Test.Shared.Suites
                     MuxAssert.AreEqual(50, settings.ContextWarningThresholdPercent, "warningThreshold clamped");
                     MuxAssert.AreEqual("summary", settings.CompactionStrategy, "strategy normalized");
                     MuxAssert.AreEqual(10, settings.CompactionPreserveTurns, "preserveTurns clamped");
+                    return Task.CompletedTask;
+                }),
+
+                Case("LoadSettingsJobFieldsClampedAndNormalized", "Job-related settings are clamped and normalized", (string dir, CancellationToken ct) =>
+                {
+                    string json = "{\"maxConcurrency\":0,\"defaultEnqueueBehavior\":\"add-to-focused\"}";
+                    File.WriteAllText(Path.Combine(dir, "settings.json"), json);
+                    MuxSettings settings = SettingsLoader.LoadSettings();
+                    MuxAssert.AreEqual(1, settings.MaxConcurrency, "maxConcurrency clamped");
+                    MuxAssert.AreEqual("add_to_focused", settings.DefaultEnqueueBehavior, "enqueueBehavior normalized");
                     return Task.CompletedTask;
                 }),
 

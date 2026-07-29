@@ -21,6 +21,8 @@ namespace Mux.Core.Models
         private string _CompactionStrategy = "summary";
         private int _CompactionPreserveTurns = 3;
         private int _MaxAgentIterations = 50;
+        private int _MaxConcurrency = 3;
+        private string _DefaultEnqueueBehavior = "ask";
         private bool _IgnoreCertErrors = false;
         private ExternalSearchSettings _ExternalSearch = new ExternalSearchSettings();
 
@@ -164,6 +166,33 @@ namespace Mux.Core.Models
         }
 
         /// <summary>
+        /// The maximum number of jobs that may run concurrently.
+        /// Clamped to the range 1-32. Defaults to 3.
+        /// </summary>
+        [JsonPropertyName("maxConcurrency")]
+        public int MaxConcurrency
+        {
+            get => _MaxConcurrency;
+            set => _MaxConcurrency = Math.Clamp(value, 1, 32);
+        }
+
+        /// <summary>
+        /// The default behavior when submitting while another job is active.
+        /// Supported values are "ask", "run_now", "queue_after", and "add_to_focused".
+        /// </summary>
+        [JsonPropertyName("defaultEnqueueBehavior")]
+        public string DefaultEnqueueBehavior
+        {
+            get => _DefaultEnqueueBehavior;
+            set
+            {
+                _DefaultEnqueueBehavior = TryNormalizeDefaultEnqueueBehavior(value, out string normalized)
+                    ? normalized
+                    : "ask";
+            }
+        }
+
+        /// <summary>
         /// Whether mux-owned network requests should bypass TLS certificate validation.
         /// Intended for enterprise networks that intercept TLS with private certificates.
         /// </summary>
@@ -219,6 +248,42 @@ namespace Mux.Core.Models
                     return true;
                 default:
                     normalized = "summary";
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Normalizes a default enqueue behavior string.
+        /// </summary>
+        /// <param name="value">The raw behavior value.</param>
+        /// <param name="normalized">The normalized value when successful.</param>
+        /// <returns>True if the input matched a supported behavior; otherwise false.</returns>
+        public static bool TryNormalizeDefaultEnqueueBehavior(string? value, out string normalized)
+        {
+            string candidate = (value ?? string.Empty).Trim().ToLowerInvariant().Replace("-", "_");
+
+            switch (candidate)
+            {
+                case "ask":
+                    normalized = "ask";
+                    return true;
+                case "run_now":
+                case "runnow":
+                case "parallel":
+                    normalized = "run_now";
+                    return true;
+                case "queue_after":
+                case "queueafter":
+                case "queue":
+                    normalized = "queue_after";
+                    return true;
+                case "add_to_focused":
+                case "addtofocused":
+                case "focused":
+                    normalized = "add_to_focused";
+                    return true;
+                default:
+                    normalized = "ask";
                     return false;
             }
         }

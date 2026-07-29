@@ -37,6 +37,7 @@ namespace Test.Shared
                     ConversationCompactionPlannerSuite.Create(),
                     ConversationTrimCompactorSuite.Create(),
                     AgentLoopOptionsSuite.Create(),
+                    JobManagerSuite.Create(),
 
                     // Mux.Core / Tools unit suites (ported from Test.Xunit/Tools).
                     BuiltInToolRegistrySuite.Create(),
