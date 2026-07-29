@@ -594,12 +594,12 @@ Per `C:\code\agents\requirements\BACKEND_TEST_ARCHITECTURE.md` (Touchstone, runn
 - [x] Delete the legacy `TestSuite`/`TestRunner`/`TestResult` framework once all suites are ported.
 - [x] Confirm `Test.Automated`, `Test.Xunit`, `Test.Nunit` all green on the ported suites. — **213 total / 206 pass / 7 skip** (console); Nunit + Xunit 207 each; green on `net8.0` and `net10.0`, warning-clean.
 
-**B. Dependency swap + Spectre removal (intentional build break)**
-- [ ] Bump `Mux.Cli.csproj` `<Version>` `0.2.0` → `0.3.0-alpha`; add `<PackageReleaseNotes>` noting the TUIKit rewrite is alpha.
-- [ ] Add `<PackageReference Include="TUIKit" Version="0.1.0" />` to `Mux.Cli.csproj` (pinned, exact); confirm it restores for `net8.0` and `net10.0`.
-- [ ] Remove `<PackageReference Include="Spectre.Console" ... />` from `Mux.Cli.csproj`; **keep** `Spectre.Console.Cli`. Tear down the legacy renderer (`InteractiveCommand`, `InteractiveChromeLayout`, cursor bookkeeping) — build break expected until ~M6.
-- [ ] Add a top-of-`README.md` alpha banner for 0.3.0 and a `CHANGELOG.md` `## v0.3.0-alpha (Unreleased)` heading (fill as you go).
-- **Exit criteria:** Touchstone pipeline green across all runners *before* the swap; after the swap, `Mux.Core` + test projects still build, TUIKit restores, and only the legacy-Cli teardown surface is intentionally broken pending M6.
+**B. Dependency swap (TUIKit in; Spectre removal deferred — see note)**
+- [x] Bump `Mux.Cli.csproj` `<Version>` `0.2.0` → `0.3.0-alpha`; add `<PackageReleaseNotes>` noting the TUIKit rewrite is alpha.
+- [x] Add `<PackageReference Include="TUIKit" Version="0.1.0" />` to `Mux.Cli.csproj` (pinned, exact); confirm it restores for `net8.0` and `net10.0`. — restores clean on both TFMs.
+- [-] Remove `<PackageReference Include="Spectre.Console" ... />` now / intentional build break. — **dropped: not achievable at the package level.** `Spectre.Console.Cli` (kept for arg parsing) depends on `Spectre.Console` **transitively**, so dropping the direct reference is a no-op — the 6 renderer files still compile and the build stays green. Genuine removal is inseparable from rewriting those files on TUIKit, so **Spectre.Console is retained (as a direct reference, since the code directly uses it) and removed in M6** when the legacy renderer is gone. Net effect: **the "intentional break" does not occur; M0 stays green throughout** — strictly better (no non-building commit, fully bisectable).
+- [x] Add a top-of-`README.md` alpha banner for 0.3.0 and a `CHANGELOG.md` `## v0.3.0-alpha (Unreleased)` heading.
+- **Exit criteria (revised):** Touchstone pipeline green across all runners; `Mux.Core`, `Mux.Cli`, and all test projects build warning-clean on `net8.0` + `net10.0` with **TUIKit referenced**; Spectre.Console retained pending the M6 renderer rewrite. The legacy renderer teardown (`InteractiveCommand`, `InteractiveChromeLayout`, `LineBuffer`, `EventRenderer`, `MarkdownRenderer`, `ToolCallRenderer`, and the Spectre.Console reference) moves to **M6**, executed as each piece is replaced on TUIKit.
 
 ---
 

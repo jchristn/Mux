@@ -2,6 +2,30 @@
 
 All notable changes to mux are documented here.
 
+## v0.3.0-alpha (Unreleased)
+
+> **Alpha / in progress.** This pre-release begins the migration of the mux front-end onto
+> [TUIKit](https://www.nuget.org/packages/TUIKit). The interactive UI is being rebuilt; see
+> `TUIKIT_MIGRATION.md` for the plan and progress.
+
+### Added
+
+- Pinned `TUIKit` `0.1.0` package reference to `Mux.Cli` — the rendering library for the rebuilt
+  interactive UI.
+
+### Changed
+
+- Migrated the entire test suite from the bespoke `TestSuite`/`TestRunner` framework to
+  [Touchstone](https://www.nuget.org/packages/Touchstone.Core) runner-agnostic descriptors, executed
+  through a console runner (`Test.Automated`), xUnit (`Test.Xunit`), and NUnit (`Test.Nunit`).
+- Bumped `Mux.Cli` to `0.3.0-alpha`.
+
+### Notes
+
+- `Spectre.Console` (markup/live-display) is **retained for now**: it is still directly used by the
+  legacy interactive renderer being replaced. It will be removed once those files are rebuilt on
+  TUIKit. `Spectre.Console.Cli` (argument parsing) is kept.
+
 ## Unreleased
 
 ### Added
