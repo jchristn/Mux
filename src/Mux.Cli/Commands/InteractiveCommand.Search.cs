@@ -3,10 +3,10 @@ namespace Mux.Cli.Commands
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using Mux.Cli.Rendering;
     using Mux.Core.Models;
     using Mux.Core.Settings;
     using Mux.Core.Tools;
-    using Spectre.Console;
 
     public partial class InteractiveCommand
     {

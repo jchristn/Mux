@@ -4,10 +4,9 @@ namespace Mux.Cli.Rendering
     using System.Collections.Generic;
     using System.Text;
     using System.Text.RegularExpressions;
-    using Spectre.Console;
 
     /// <summary>
-    /// Converts markdown text to Spectre.Console ANSI markup for rich terminal display.
+    /// Converts markdown text to TUIKit ANSI markup for rich terminal display.
     /// Handles headers, code blocks, inline formatting, lists, and blockquotes.
     /// </summary>
     public static class MarkdownRenderer
@@ -15,11 +14,11 @@ namespace Mux.Cli.Rendering
         #region Public-Methods
 
         /// <summary>
-        /// Converts a markdown string to Spectre.Console ANSI markup suitable for terminal display.
+        /// Converts a markdown string to TUIKit ANSI markup suitable for terminal display.
         /// Processes line by line, tracking code block state to avoid formatting inside fenced blocks.
         /// </summary>
         /// <param name="markdown">The markdown source text.</param>
-        /// <returns>The rendered string containing Spectre.Console markup tags.</returns>
+        /// <returns>The rendered string containing TUIKit markup tags.</returns>
         public static string RenderToAnsi(string markdown)
         {
             if (string.IsNullOrEmpty(markdown))
@@ -124,7 +123,7 @@ namespace Mux.Cli.Rendering
         #region Private-Methods
 
         /// <summary>
-        /// Renders a single non-code-block line of markdown to Spectre.Console markup.
+        /// Renders a single non-code-block line of markdown to TUIKit markup.
         /// </summary>
         /// <param name="line">The raw markdown line.</param>
         /// <returns>The rendered markup string.</returns>
@@ -248,10 +247,10 @@ namespace Mux.Cli.Rendering
         }
 
         /// <summary>
-        /// Escapes Spectre.Console markup characters ([ and ]) in plain text.
+        /// Escapes TUIKit markup characters ([ and ]) in plain text.
         /// </summary>
         /// <param name="text">The text to escape.</param>
-        /// <returns>The escaped text safe for use in Spectre.Console markup.</returns>
+        /// <returns>The escaped text safe for use in TUIKit markup.</returns>
         private static string EscapeMarkup(string text)
         {
             return Markup.Escape(text);

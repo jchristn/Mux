@@ -18,8 +18,6 @@ namespace Mux.Cli.Commands
     using Mux.Core.Settings;
     using Mux.Core.Tools;
     using RoleEnum = Mux.Core.Enums.RoleEnum;
-    using Spectre.Console;
-    using Spectre.Console.Cli;
 
     /// <summary>
     /// Settings specific to the interactive REPL command.
@@ -108,7 +106,7 @@ namespace Mux.Cli.Commands
         /// <summary>
         /// Executes the interactive REPL loop.
         /// </summary>
-        /// <param name="context">The command context provided by Spectre.Console.Cli.</param>
+        /// <param name="context">The command context.</param>
         /// <param name="settings">The resolved command settings.</param>
         /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
         /// <returns>The process exit code.</returns>

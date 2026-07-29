@@ -6,10 +6,9 @@ namespace Mux.Cli.Commands
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Cli.Rendering;
     using Mux.Core.Models;
     using Mux.Core.Settings;
-    using Spectre.Console;
-    using Spectre.Console.Cli;
 
     /// <summary>
     /// Settings for non-interactive endpoint inspection commands.

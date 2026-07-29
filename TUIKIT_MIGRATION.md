@@ -8,10 +8,10 @@ we do it right the first time. Target: branch **`feature/v0.3.0`**, shipped as *
 **What this is not:** a merge of the two codebases. `Mux.Core` (the engine) stays a UI-free
 library. TUIKit is consumed as a NuGet dependency by a rebuilt `Mux.Cli` presentation layer.
 
-**TUIKit availability:** TUIKit **v0.1.0 is published to NuGet** (`PackageId: TUIKit`). `Mux.Cli`
+**TUIKit availability:** TUIKit **v0.2.0 is published to NuGet** (`PackageId: TUIKit`). `Mux.Cli`
 consumes it as a normal package reference — no project reference, no submodule. Because TUIKit is
 itself alpha ("API subject to change; pin your version"), **pin the exact version**
-(`Version="0.1.0"`) rather than a floating range, and treat any TUIKit upgrade as a deliberate,
+(`Version="0.2.0"`) rather than a floating range, and treat any TUIKit upgrade as a deliberate,
 tested step. TUIKit multi-targets `netstandard2.0;net8.0;net10.0`, so it satisfies Mux's
 `net8.0;net10.0` targets directly.
 
@@ -102,16 +102,13 @@ the write lease, persistence) and belong in `Mux.Core` so they stay testable wit
 
 ```xml
 <ItemGroup>
-  <!-- REMOVE: Spectre.Console (markup/rendering) — TUIKit owns rendering now -->
-  <!-- KEEP:   Spectre.Console.Cli — still used for top-level arg parsing / subcommands -->
-  <PackageReference Include="Spectre.Console.Cli" Version="0.53.1" />
-  <PackageReference Include="TUIKit" Version="0.1.0" />
+  <PackageReference Include="TUIKit" Version="0.2.0" />
 </ItemGroup>
 ```
 
-> `Spectre.Console.Cli` (the command/argument framework behind `mux print`, `mux probe`,
-> `mux endpoint`, …) is orthogonal to rendering and stays. Only `Spectre.Console` (the
-> markup/live-display library the old interactive renderer leaned on) is removed.
+> `Spectre.Console` and `Spectre.Console.Cli` are both removed. The transitional line-mode renderer
+> uses TUIKit-backed mux shims, and top-level command dispatch uses mux's local parser until/unless
+> a broader command-host migration is justified.
 
 ---
 
@@ -467,21 +464,35 @@ Keep it simple and forward-compatible: a versioned JSON schema, tolerant of unkn
 
 ---
 
-## 14. Open questions to resolve during build
+## 14. Resolved implementation decisions
 
-1. **Max concurrency default** — 1 (opt-in parallelism) or a small N like 3? Leaning N=3 with a
-   setting, since parallel jobs is the explicit goal.
-2. **Follow-ups vs. new jobs** — when the user submits mid-run and picks "add to focused job,"
-   does that interrupt the current turn or append after it? Proposal: append after the current
-   turn completes; offer a separate "interrupt & redirect" action.
-3. **Write-lease granularity** — one lease per workspace (simple) vs. per-path/per-file (more
-   parallelism, more complexity). Start with one-per-workspace; revisit if it bottlenecks.
-4. **Per-job vs. shared context budget** — each job has its own conversation slice; do parallel
-   jobs share the session history or fork it? Proposal: a job forks a snapshot of session history
-   at spawn; results can be merged back into the session on completion (user choice).
-5. **Resume of interrupted mutating jobs** — always re-run manually vs. offer auto-resume for
-   read-only jobs. Proposal: auto-offer resume for read-only; require explicit re-run for mutating.
-6. **Sidebar width / responsive breakpoints** — exact collapse threshold.
+These decisions are owner-approved and should be treated as build inputs, not open design space.
+
+1. **Max concurrency default** — `MaxConcurrency` defaults to `3`; `1` remains supported as the
+   explicit single-job compatibility setting.
+2. **Follow-ups vs. new jobs** — when the user submits mid-run and chooses "add to focused job,"
+   append that follow-up after the current turn completes. A separate explicit "interrupt and
+   redirect" action may be added later.
+3. **Session history for new jobs** — a new job forks a snapshot of the focused job's history at
+   spawn time.
+4. **Completed background job history** — persist every job transcript. Completed background jobs do
+   not merge into the focused/current history automatically; merge is an explicit user action.
+5. **Default context for a new prompt** — new prompts use the focused job's history unless the user
+   explicitly chooses another context in the enqueue/focus flow.
+6. **Write-lease granularity** — use one write lease per workspace for v0.3.0; revisit per-path or
+   per-file leases only if the workspace lease becomes a real bottleneck.
+7. **Built-in tool classification** — `read_file`, `glob`, `grep`, `web_retrieve`, `web_search`,
+   `file_metadata`, and `list_directory` are `ReadOnly`; `write_file`, `edit_file`, `multi_edit`,
+   `delete_file`, `manage_directory`, and `run_process` are `Mutating`.
+8. **Unknown/external tool classification** — MCP and other external tools default to `Mutating`
+   unless explicit metadata marks them `ReadOnly`.
+9. **Interrupted-job resume** — read-only interrupted jobs are auto-offered for resume; mutating
+   interrupted jobs require an explicit user re-run and are never silently resumed.
+10. **Approval policy naming** — `AutoSafe` is the canonical v0.3 policy name. `AutoApprove` may
+    remain as a legacy/config alias during migration.
+11. **Sidebar breakpoint** — the sidebar auto-collapses below `100` terminal columns.
+12. **Local CLI parser** — the mux-owned parser/dispatcher is the v0.3 plan unless it becomes
+    painful enough to justify a deliberate command-host replacement.
 
 ---
 
@@ -516,20 +527,32 @@ This is the actionable checklist. Work happens on branch **`feature/v0.3.0`** an
 
 ### 16.0 Execution decisions log (recorded during implementation)
 
-Reality diverged from the draft in two places; both were resolved with the owner:
+Reality diverged from the draft in four places; all were resolved with the owner:
 
 1. **Testing framework — Touchstone migration confirmed (full).** Mux currently uses a bespoke
    `TestSuite`/`TestRunner`/`TestResult` framework (suites in `Test.Automated/Suites`) plus plain
    xUnit — **no Touchstone**. Decision: **migrate to Touchstone now**, port existing suites to
    descriptors, add `Test.Nunit`, and write all new v0.3.0 tests as descriptors. Touchstone
    `0.1.12` confirmed available on nuget.org (`Touchstone.Core/.Cli/.XunitAdapter/.NunitAdapter`).
-2. **Spectre.Console removal — remove now / break build, accepted.** `InteractiveCommand`
-   (~5,411 lines) depends on `Spectre.Console`, so removing it makes `mux` non-functional until
-   the TUIKit UI lands (~M6+). Decision: **remove now and tear down the legacy renderer**, accept
-   the intentional build break. Sequencing (implementer's call): **migrate tests to Touchstone and
-   validate green first**, commit, **then** remove Spectre — so history stays bisectable and the
-   Touchstone pipeline is proven before the Cli is intentionally broken. During the test migration
-   the legacy framework may coexist to keep each step green; it is deleted once porting completes.
+2. **Spectre.Console removal — keep the build green.** Initial draft expected removing
+   `Spectre.Console` to require tearing down the legacy interactive renderer immediately. Decision:
+   remove the dependency now without breaking the build by replacing the small line-mode
+   Spectre surface (`Markup.Escape`, `AnsiConsole.*`, and `Table`) with mux-owned compatibility
+   shims over TUIKit `0.2.0`. The full-screen legacy renderer is still replaced later by M6; it no
+   longer depends on Spectre while it waits for that rewrite.
+3. **Command host — local parser, no replacement package.** Complete package removal requires
+   eliminating `Spectre.Console.Cli` because it brings `Spectre.Console` transitively. Decision:
+   replace the command host with a narrow mux-owned dispatcher/parser for the documented command
+   surface (`print`, `--print`, `probe`, `endpoint`, and default interactive startup) rather than
+   introducing another argument-parser dependency. `dotnet list package --include-transitive` must
+   show no `Spectre.Console`.
+4. **v0.3 behavior defaults — implementation questions locked.** Owner confirmed the §14
+   recommendations: `MaxConcurrency=3`; focused-job follow-ups append after the current turn;
+   new jobs fork focused history at spawn; completed background transcripts persist but merge only
+   by explicit action; new prompts default to focused history; one write lease per workspace;
+   `run_process` and unknown external/MCP tools are mutating by default; `AutoSafe` is canonical
+   with `AutoApprove` as a legacy/config alias if needed; sidebar auto-collapses below `100`
+   columns; the local CLI parser remains the v0.3 plan unless it proves painful.
 
 ### 16.1 How to use this checklist
 
@@ -594,30 +617,33 @@ Per `C:\code\agents\requirements\BACKEND_TEST_ARCHITECTURE.md` (Touchstone, runn
 - [x] Delete the legacy `TestSuite`/`TestRunner`/`TestResult` framework once all suites are ported.
 - [x] Confirm `Test.Automated`, `Test.Xunit`, `Test.Nunit` all green on the ported suites. — **213 total / 206 pass / 7 skip** (console); Nunit + Xunit 207 each; green on `net8.0` and `net10.0`, warning-clean.
 
-**B. Dependency swap (TUIKit in; Spectre removal deferred — see note)**
+**B. Dependency swap (TUIKit in; Spectre removed, TUI rewrite still pending)**
 - [x] Bump `Mux.Cli.csproj` `<Version>` `0.2.0` → `0.3.0-alpha`; add `<PackageReleaseNotes>` noting the TUIKit rewrite is alpha.
-- [x] Add `<PackageReference Include="TUIKit" Version="0.1.0" />` to `Mux.Cli.csproj` (pinned, exact); confirm it restores for `net8.0` and `net10.0`. — restores clean on both TFMs.
-- [-] Remove `<PackageReference Include="Spectre.Console" ... />` now / intentional build break. — **dropped: not achievable at the package level.** `Spectre.Console.Cli` (kept for arg parsing) depends on `Spectre.Console` **transitively**, so dropping the direct reference is a no-op — the 6 renderer files still compile and the build stays green. Genuine removal is inseparable from rewriting those files on TUIKit, so **Spectre.Console is retained (as a direct reference, since the code directly uses it) and removed in M6** when the legacy renderer is gone. Net effect: **the "intentional break" does not occur; M0 stays green throughout** — strictly better (no non-building commit, fully bisectable).
+- [x] Add `<PackageReference Include="TUIKit" Version="0.2.0" />` to `Mux.Cli.csproj` (pinned, exact); confirm it restores for `net8.0` and `net10.0`. — restores clean on both TFMs.
+- [x] Remove direct `<PackageReference Include="Spectre.Console" ... />` and replace the line-mode rendering usage with mux-owned shims backed by TUIKit `StyledConsole`, `Markup`, and `Table`.
+- [x] Remove `Spectre.Console.Cli` and replace the command host with a narrow local parser/dispatcher. — decision recorded in §16.0; this is required for complete transitive package removal.
 - [x] Add a top-of-`README.md` alpha banner for 0.3.0 and a `CHANGELOG.md` `## v0.3.0-alpha (Unreleased)` heading.
-- **Exit criteria (revised):** Touchstone pipeline green across all runners; `Mux.Core`, `Mux.Cli`, and all test projects build warning-clean on `net8.0` + `net10.0` with **TUIKit referenced**; Spectre.Console retained pending the M6 renderer rewrite. The legacy renderer teardown (`InteractiveCommand`, `InteractiveChromeLayout`, `LineBuffer`, `EventRenderer`, `MarkdownRenderer`, `ToolCallRenderer`, and the Spectre.Console reference) moves to **M6**, executed as each piece is replaced on TUIKit.
+- **Exit criteria (revised):** Touchstone pipeline green across all runners; `Mux.Core`, `Mux.Cli`, and all test projects build warning-clean on `net8.0` + `net10.0` with **TUIKit referenced**; `dotnet list package --include-transitive` for `Mux.Cli` shows no `Spectre.Console`. The full-screen legacy renderer teardown (`InteractiveCommand`, `InteractiveChromeLayout`, `LineBuffer`, etc.) still moves to **M6**, but it no longer carries a Spectre dependency while it waits for the TUIKit rewrite.
 
 ---
 
 ## M1 — Engine: Jobs subsystem (`Mux.Core/Jobs/`)
 
-Replaces the `_ActiveRun`/single-`Channel`/single-`Cts` singleton with a multi-job manager. One
-class/enum per file.
+**✅ COMPLETE** (landed by the concurrent agent; reviewed + verified green). Replaces the
+`_ActiveRun`/single-`Channel`/single-`Cts` singleton with a multi-job manager. One class/enum per file.
 
-- [ ] `JobState.cs` — enum: `Queued`, `Running`, `AwaitingApproval`, `AwaitingWriteLease`, `Paused`, `Completed`, `Failed`, `Cancelled`.
-- [ ] `Job.cs` — job aggregate: `Id`, `SessionId`, `Title`, `Prompt`, `State`, per-job `Channel<AgentEvent>`, per-job `CancellationTokenSource`, `ApprovalPolicy`, conversation slice, timing/usage, `LastContextStatus`. Thread-safety documented; state transitions guarded.
-- [ ] `JobManagerEvent.cs` — abstract base for manager notifications.
-- [ ] `JobAddedEvent.cs`, `JobStateChangedEvent.cs`, `JobCompletedEvent.cs` — concrete events (one per file).
-- [ ] `JobScheduler.cs` — decides when a `Queued` job may start given `MaxConcurrency`; pure/testable (no threads of its own).
-- [ ] `JobManager.cs` — owns the job set, the scheduler, per-job worker `Task`s that pump `AgentLoop.RunAsync(...)` into each job's channel; exposes `SubmitAsync`, `EnqueueAsync`, `AddFollowUpAsync`, `CancelAsync`, `CancelAllAsync`, `PauseAsync`, `ResumeAsync`, `ReorderAsync`, `Focus`, and a `JobManagerEvent` stream (async-enumerable + observable). Implements `IAsyncDisposable`.
-- [ ] Add `MaxConcurrency` (default `3`, min `1`) and `DefaultEnqueueBehavior` to `MuxSettings` with documented ranges.
-- [ ] Wire `AgentLoop` invocation per job (unchanged loop; now one instance per job).
-- [ ] **Tests** (`Test.Shared/Suites/JobManagerSuite.cs`): submit → runs; concurrency cap enforced (N+1th job stays `Queued` until a slot frees); cancel transitions to `Cancelled` and frees a slot; reorder changes queue order; follow-up appends to focused job; dispose cancels all. Register in `…Suites.All`.
-- **Exit criteria:** `JobManager` drives ≥ `MaxConcurrency` concurrent fake-agent jobs headlessly; suite green in all runners; no `Console.*` in `Mux.Core`.
+- [x] `JobState.cs` — enum: `Queued`, `Running`, `AwaitingApproval`, `AwaitingWriteLease`, `Paused`, `Completed`, `Failed`, `Cancelled`.
+- [x] `Job.cs` — per-job `Channel<AgentEvent>`, per-job `CancellationTokenSource`, deep-forked `ConversationHistory`, `Transcript`, follow-up queue, timing/usage stats, `LastContextStatus`; thread-safe (`_SyncRoot`), state transitions guarded via internal `SetState`.
+- [x] `JobManagerEvent.cs` — abstract base for manager notifications.
+- [x] `JobAddedEvent.cs`, `JobStateChangedEvent.cs`, `JobCompletedEvent.cs` — concrete events (one per file).
+- [x] `JobScheduler.cs` — pure `SelectStartableJobs`/`CountActiveJobs`; treats `Running`/`AwaitingApproval`/`AwaitingWriteLease` as slot-consuming (ready for M2/M3).
+- [x] `JobManager.cs` — owns the job set, scheduler, per-job worker `Task`s pumping the agent runner into each job's channel; `SubmitAsync`/`EnqueueAsync`/`AddFollowUpAsync`/`CancelAsync`/`CancelAllAsync`/`PauseAsync`/`ResumeAsync`/`ReorderAsync`/`Focus`/`GetJob`; `JobManagerEvent` stream (async-enumerable `ReadEventsAsync` + `EventPublished`). `IAsyncDisposable`. `CreateForAgentLoop` factory clones `AgentLoopOptions` per job.
+- [x] Add `MaxConcurrency` (default `3`, clamped `1–32`) and `DefaultEnqueueBehavior` (`ask`/`run_now`/`queue_after`/`add_to_focused`) to `MuxSettings`; `SettingsLoader` parse/clamp/normalize + `SettingsLoaderSuite` coverage.
+- [x] New jobs fork a deep copy of the focused job's history at spawn; follow-ups append after the current turn.
+- [~] Completed background job transcripts retained per-job (`Job.Transcript`); explicit **merge** into focused history is a UI concern deferred to M8.
+- [x] Per-job agent invocation (fresh `AgentLoop` per turn via the injected runner).
+- [x] **Tests** (`Test.Shared/Suites/JobManagerSuite.cs`, 9 cases): submit→completion; concurrency cap queues overflow; 3-concurrent + 4th queued; cancel frees a slot; reorder changes run order; forked focused history (copy-safety); follow-up appends after current turn; dispose cancels all. Registered in `MuxSuites.All`.
+- **Exit criteria:** ✅ `JobManager` drives 3 concurrent fake-agent jobs headlessly; suite green across console/xUnit/NUnit on `net8.0` + `net10.0`; `Mux.Core` stays `Console.*`-free. (Concurrency-test safety timeouts raised 5s→30s to remove net8 thread-pool-timing flakiness.)
 
 ---
 
@@ -626,7 +652,8 @@ class/enum per file.
 Implements "parallel reads, single writer."
 
 - [ ] `ToolMutationKind.cs` — enum: `ReadOnly`, `Mutating`.
-- [ ] Add a `MutationKind` classification to tool metadata in `BuiltInToolRegistry` (declarative per tool: `Read`/`Glob`/`Grep`/`WebRetrieve`/`WebSearch` = `ReadOnly`; `Write`/`Edit`/`RunProcess` = `Mutating`).
+- [ ] Add a `MutationKind` classification to tool metadata in `BuiltInToolRegistry`: `read_file`, `glob`, `grep`, `web_retrieve`, `web_search`, `file_metadata`, and `list_directory` = `ReadOnly`; `write_file`, `edit_file`, `multi_edit`, `delete_file`, `manage_directory`, and `run_process` = `Mutating`.
+- [ ] External/MCP tools default to `Mutating` unless explicit metadata marks them `ReadOnly`; `run_process` is always `Mutating`.
 - [ ] `WriteLeaseHandle.cs` — `IDisposable`/`IAsyncDisposable` token that releases the lease on dispose; documents the owning job.
 - [ ] `WriteLease.cs` — fair async single-writer lease (`SemaphoreSlim(1,1)` + FIFO waiter queue), `AcquireAsync(jobId, ct)` → `WriteLeaseHandle`; exposes current holder + waiter list for the UI; configurable acquisition timeout (public member, sensible default, documented).
 - [ ] Inject the lease into the tool-execution path so mutating tools `AcquireAsync` before running and release after; reads bypass it. Job enters `AwaitingWriteLease` while blocked.
@@ -640,25 +667,26 @@ Implements "parallel reads, single writer."
 
 Per-job policy with modal-escalation callback; replaces the single `_ApprovalPolicy` field.
 
-- [ ] `ApprovalPolicy.cs` — enum: `Ask`, `AutoSafe`, `Deny` (map/replace the existing `ApprovalPolicyEnum`; migrate references).
+- [ ] `ApprovalPolicy.cs` — enum: `Ask`, `AutoSafe`, `Deny` (map/replace the existing `ApprovalPolicyEnum`; migrate references; keep `AutoApprove` as a legacy/config alias if needed).
 - [ ] `ApprovalDecision.cs` — enum: `Approved`, `Denied`, `AlwaysThisSession`, `AlwaysThisTool`.
 - [ ] `ApprovalRequest.cs` — DTO: job id, tool name, arg summary, optional diff, mutation kind.
 - [ ] `IApprovalRouter.cs` — abstraction the engine calls; resolves via policy, else escalates via an injected UI callback (keeps today's `TaskCompletionSource` handoff, now per job).
 - [ ] `ApprovalRouter.cs` — implementation: `AutoSafe` auto-approves `ReadOnly` tools + a configurable per-tool allowlist; escalates the rest; `Deny` blocks; `Ask` always escalates. Concurrent requests from parallel jobs are independently awaitable.
 - [ ] Thread the per-job `ApprovalPolicy` and router through `AgentLoop`'s tool loop.
-- [ ] **Tests** (`Test.Shared/Suites/ApprovalRoutingSuite.cs`): `AutoSafe` auto-approves reads and prompts for mutations; `Deny` blocks; `AlwaysThisTool`/`AlwaysThisSession` remembered and honored; two jobs escalate independently without deadlock; a fake router simulates the UI callback.
+- [ ] **Tests** (`Test.Shared/Suites/ApprovalRoutingSuite.cs`): `AutoSafe` auto-approves reads and prompts for mutations; legacy/config `AutoApprove` maps to `AutoSafe` if retained; `Deny` blocks; `AlwaysThisTool`/`AlwaysThisSession` remembered and honored; two jobs escalate independently without deadlock; a fake router simulates the UI callback.
 - **Exit criteria:** policy matrix correct; concurrent escalations don't block each other; suite green.
 
 ---
 
 ## M4 — Engine: Sessions & persistence (`Mux.Core/Sessions/`)
 
-- [ ] `SessionSnapshot.cs` — versioned serializable DTO: schema version, id, title (+ pinned), created/updated, active endpoint + model, settings snapshot, `ConversationMessage[]`, compaction count, queued-prompt/job metadata, persisted prompt history. Forward-tolerant of unknown fields.
+- [ ] `SessionSnapshot.cs` — versioned serializable DTO: schema version, id, title (+ pinned), created/updated, active endpoint + model, settings snapshot, focused `ConversationMessage[]`, persisted per-job transcripts, compaction count, queued-prompt/job metadata, persisted prompt history. Forward-tolerant of unknown fields.
 - [ ] `SessionStore.cs` — CRUD over `~/.mux/sessions/<id>.json` (configurable root as a public member); `SaveAsync`, `LoadAsync`, `ListAsync` (+ async `IEnumerable` variant per style rule), `DeleteAsync`, `DuplicateAsync`; atomic write (temp-file + move); tolerant JSON options.
 - [ ] `SessionResumeService.cs` — rehydrates a snapshot into live session state; running-at-exit jobs are restored as `Interrupted` (re-run required for mutating; auto-offer for read-only per §14 decision).
+- [ ] `SessionMergeService.cs` — explicit-only merge of a completed background job transcript into the focused/current history; no automatic merge on completion.
 - [ ] Autosave hook on each turn boundary (append/replace), throttled/configurable.
 - [ ] Replace the in-memory `PromptHistory` with per-session persisted history (read from/write to the snapshot).
-- [ ] **Tests** (`Test.Shared/Suites/SessionStoreSuite.cs`): round-trip save/load fidelity; list/delete/duplicate; atomic write survives simulated mid-write failure (temp file only); unknown-field tolerance; resume rehydrates history + queue; special-character titles. Use a temp directory, clean up.
+- [ ] **Tests** (`Test.Shared/Suites/SessionStoreSuite.cs`): round-trip save/load fidelity; list/delete/duplicate; atomic write survives simulated mid-write failure (temp file only); unknown-field tolerance; resume rehydrates history + queue; background job transcripts persist; merge requires explicit action; special-character titles. Use a temp directory, clean up.
 - **Exit criteria:** full round-trip + resume verified headlessly; suite green in all runners.
 
 ---
@@ -704,7 +732,7 @@ Per-job policy with modal-escalation callback; replaces the single `_ApprovalPol
 - [ ] `Regions/JobsListWidget.cs` — one row per job with state glyph, id, title, live tokens/elapsed; focusable; Enter focuses that job's transcript.
 - [ ] Bind sidebar fields to `Observable<T>` fed by `JobManagerEvent`s and focused-job `ContextStatusEvent`.
 - [ ] Focus switching: sidebar select + `Ctrl+J` cycle + `Alt+<n>` jump; swap transcript pane binding.
-- [ ] Sidebar collapse toggle (`Ctrl+B`) + responsive auto-collapse.
+- [ ] Sidebar collapse toggle (`Ctrl+B`) + responsive auto-collapse below `100` columns.
 - [ ] **Tests** (`Test.Shared/Suites/SidebarSuite.cs`, headless): jobs list reflects manager state; switching focus swaps the rendered transcript; collapse reclaims width; context gauge reflects focused job.
 - **Exit criteria:** ambient info + switcher verified headlessly across ≥ 2 concurrent jobs.
 
@@ -741,7 +769,7 @@ All via `ModalStack`; concurrent approval requests queue.
 - [ ] `Modals/ModelModal.cs` — searchable picker + detail; actions: set active, pull/download (progress), remove, bind-to-endpoint.
 - [ ] `Modals/SettingsModal.cs` — grouped `Form` (General/Model/Tools/Approvals/Jobs/Appearance), live apply → `MuxSettings` + settings file.
 - [ ] `Modals/McpEndpointModal.cs` — endpoints (list/add/edit/test/set-active) + MCP servers (add/remove/inspect tools via `DataTable`, enable/disable).
-- [ ] `Modals/JobsModal.cs` — `DataTable<Job>` queue manager: focus, pause/resume, cancel, reorder, retry, open transcript, view diff; opened from the footer job counter.
+- [ ] `Modals/JobsModal.cs` — `DataTable<Job>` queue manager: focus, pause/resume, cancel, reorder, retry, open transcript, merge transcript, view diff; opened from the footer job counter.
 - [ ] `Modals/ApprovalModal.cs` — the policy-escalation prompt (Yes/No/Always-tool/Always-session, with diff); titled with the requesting job id; multiple queue in `ModalStack`.
 - [ ] `Modals/HelpModal.cs` — keybindings/commands reference generated from the catalog (never drifts).
 - [ ] `Modals/SessionBrowserModal.cs` — list persisted sessions; resume/delete/duplicate/export.
@@ -754,9 +782,9 @@ All via `ModalStack`; concurrent approval requests queue.
 
 - [ ] Autosave wired to turn boundaries via `SessionStore`; status reflected in footer.
 - [ ] Launch flow: offer resume (last session or browser); `--resume`/`--new` CLI flags honored.
-- [ ] Interrupted-job presentation on resume (re-run for mutating; auto-offer for read-only).
+- [ ] Interrupted-job presentation on resume (explicit re-run for mutating; auto-offer for read-only; no silent mutating resume).
 - [ ] `Ctrl+S` / menu "Save session"; session rename/title persists.
-- [ ] **Tests** (`Test.Shared/Suites/PersistenceUxSuite.cs`, headless): run → exit → relaunch → resume restores transcript + queue metadata; interrupted mutating job is presented as re-run-required; prompt history survives restart.
+- [ ] **Tests** (`Test.Shared/Suites/PersistenceUxSuite.cs`, headless): run → exit → relaunch → resume restores transcript + queue metadata; interrupted mutating job is presented as re-run-required; interrupted read-only job is auto-offered; explicit background-transcript merge updates focused history; prompt history survives restart.
 - **Exit criteria:** a session survives a restart end-to-end (engine + UI), verified headlessly.
 
 ---
@@ -800,7 +828,60 @@ All via `ModalStack`; concurrent approval requests queue.
 
 - [ ] Legacy interactive renderer (`InteractiveChromeLayout`, cursor bookkeeping, poll-loop input, paste heuristics, `_ActiveRun` singleton) **deleted**, not dormant.
 - [ ] `Mux.Core` remains UI-free (no `Console.*`, no TUIKit reference); jobs/lease/approvals/sessions live there and are headless-tested.
-- [ ] `Mux.Cli` renders exclusively via TUIKit (`Spectre.Console` gone; `Spectre.Console.Cli` retained only for arg parsing).
-- [ ] All four §14 open questions that block implementation have a recorded decision (esp. #4: fork-vs-share session history).
+- [ ] `Mux.Cli` renders exclusively via TUIKit (`Spectre.Console` and `Spectre.Console.Cli` gone; local parser retained unless replaced deliberately).
+- [x] All §14 implementation decisions are recorded and owner-approved, including forked job history, explicit transcript merge, tool classification defaults, resume behavior, `AutoSafe`, and the sidebar breakpoint.
 - [ ] Every code file conforms to §16.2; every feature has Touchstone coverage passing in all runners (§16.3).
 - [ ] Build warning-clean on `net8.0` + `net10.0`; `0.3.0-alpha` marked alpha throughout.
+
+---
+
+# 17. Spectre.Console removal — prerequisites
+
+`Spectre.Console` and `Spectre.Console.Cli` have been removed from `Mux.Cli`. This checklist records
+the completed prerequisite work: TUIKit capability coverage, the mux-side rendering swap, and the
+transitive command-host gate.
+
+Original verified `mux` Spectre footprint: `Markup.Escape` ×122; `AnsiConsole.MarkupLine`/`Markup` ×63;
+`new Table()` + `AnsiConsole.Write(table)` ×~18 (`TableBorder.Rounded`); `AnsiConsole.WriteLine` ×4.
+Styles: `dim/bold/italic/underline`, fg `cyan/green/red/yellow/grey/blue/grey15`, bg `on grey15`. No
+`Live`/`Status`/`Progress`/prompt usage.
+
+### Track A — TUIKit capabilities (see archived `C:\Code\TUIKit\archive\TUIKIT_GAPS.md`)
+
+> **✅ Done in TUIKit v0.2.0** (built warning-clean on `netstandard2.0;net8.0;net10.0`; 264 console /
+> 265 xUnit / 265 NUnit Touchstone cases green on net8.0 and net10.0). The capabilities were
+> implemented in the TUIKit source tree, versioned to **0.2.0**, published to NuGet, and consumed
+> by mux as a pinned `<PackageReference Include="TUIKit" Version="0.2.0" />`.
+
+- [x] **G1** `Markup.Escape` — **satisfied by** `TUIKit.Markup.Escape(string)` (escapes `[`→`[[`, `]`→`]]`; round-trips via `Parse`). Replaces mux's `Markup.Escape` (×122).
+- [x] **G2** `StyledText`/markup → ANSI string — **satisfied by** `TUIKit.Terminal.AnsiText.Render(StyledText, TerminalColorDepth)` and a `Render(string markup, …)` overload; additive SGR only, no cursor moves, plain when depth is `None`.
+- [x] **G3** `CellBuffer` → colored inline ANSI lines — **satisfied by** `TUIKit.Rendering.InlineRenderer.ToAnsiLines(CellBuffer, TerminalColorDepth)`; coalesced SGR runs, trailing-blank trim, equals `Snapshot.ToText` when plain.
+- [x] **G4** capability resolution — **satisfied by** `NO_COLOR` handling folded into `CapabilityDetector.Detect(getEnv, interactive)` plus `CapabilityDetector.ResolveOutputColorDepth(TextWriter)` (None when redirected / `NO_COLOR` / `TERM=dumb`).
+- [x] **G5** `StyledConsole` inline writer — **satisfied by** `TUIKit.StyledConsole` (`ForStandardOutput()`/`ForStandardError()`/explicit ctor; `Write`/`WriteLine`/`Markup`/`MarkupLine`/`Write(IWidget)`). Replaces `AnsiConsole.Markup/MarkupLine/WriteLine/Write`; writes only to the injected `TextWriter`, degrades to plain when redirected.
+- [x] **G6** `Table` parity — **satisfied by** the extended `TUIKit.Widgets.Table`: `TableBorder` (None/Square/**Rounded**), `AddRow(params StyledText[])`/`AddMarkupRow`, `ColumnSizing.FitContent`, per-column `CellAlignment` (`SetAlignment`); the original even-column, borderless `Table(headers)`+`AddRow(string[])` behavior is preserved.
+- [x] **G7** — **decided: Option A** (mux rewrites `grey15`/`on grey15` mux-side to `#262626`; no TUIKit change). Recorded in Track B.
+
+### Track B — mux rendering swap (after Track A ships)
+- [x] Bump the pinned `TUIKit` reference in `Mux.Cli.csproj` to the release containing G1–G6. — pinned to `0.2.0`.
+- [x] Replace `Markup.Escape(...)` → TUIKit-backed escaping. — done through a mux-owned compatibility shim so call sites can be retired incrementally during M6.
+- [x] Replace `AnsiConsole.MarkupLine/Markup/WriteLine(...)` → TUIKit `StyledConsole`. — done through a mux-owned compatibility shim over `Console.Out`.
+- [x] Replace `new Table()` + `AnsiConsole.Write(table)` → TUIKit `Table` rendered via `StyledConsole.Write(table)`.
+- [x] Rewrite `grey15` / `on grey15` markup → `#262626` mux-side.
+- [x] Interactive-renderer Spectre usage removed before M6. — the legacy renderer still exists, but its styled output path is TUIKit-backed.
+- [x] Confirm redirection parity: the non-interactive commands' captured stdout/stderr stay **plain** so the existing `CliContract`/`CliCommand` Touchstone suites still pass.
+- [x] Remove the direct `<PackageReference Include="Spectre.Console" ... />` from `Mux.Cli.csproj`.
+
+### Track C — transitive package gate (required for *complete* package removal)
+- [x] Removing the **package** entirely additionally requires replacing **`Spectre.Console.Cli`** (the
+  command/arg-parsing host in `Program.cs`), because it depends on `Spectre.Console` transitively.
+  TUIKit does **not** cover this (not an arg parser). Decision: replace `Spectre.Console.Cli` with a
+  narrow mux-owned parser/dispatcher rather than introducing a new parser package.
+
+### Exit criteria (complete removal)
+- [x] `dotnet list package --include-transitive` for `Mux.Cli` shows **no** `Spectre.Console` (direct
+  or transitive) — achievable only once Track C is also done.
+- [x] All Touchstone suites green on `net8.0` + `net10.0` across console/xUnit/NUnit runners
+  (222 console / 216 xUnit / 216 NUnit; 7 skips) — verified after the swap. Redirection parity holds
+  (captured CLI stdout/stderr stay plain, so `CliContract`/`CliCommand` suites pass).
+- [ ] Manual smoke: confirm `mux print/probe/endpoint` output visually matches the pre-removal styling
+  in a real (non-redirected) terminal — pending an on-terminal check (not headless-verifiable).

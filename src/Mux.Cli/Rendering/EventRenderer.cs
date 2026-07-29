@@ -6,7 +6,6 @@ namespace Mux.Cli.Rendering
     using System.Threading.Tasks;
     using Mux.Core.Agent;
     using Mux.Core.Utility;
-    using Spectre.Console;
 
     /// <summary>
     /// Renders agent events to the terminal.

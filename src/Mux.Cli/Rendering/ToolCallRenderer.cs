@@ -5,7 +5,6 @@ namespace Mux.Cli.Rendering
     using System.Text.Json;
     using System.Threading.Tasks;
     using Mux.Core.Models;
-    using Spectre.Console;
 
     /// <summary>
     /// Renders tool call approval prompts in a compact Claude Code-inspired style.

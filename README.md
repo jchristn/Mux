@@ -18,7 +18,7 @@
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.3.0%20ALPHA-orange.svg" alt="v0.3.0 ALPHA"></a>
 </p>
 
-> **v0.2.0 ALPHA**
+> **v0.3.0 ALPHA**
 > This is an early alpha. APIs, interfaces, configuration formats, tool schemas, and CLI behavior are all subject to change. Feedback is welcome via [issues](https://github.com/jchristn/Mux/issues) and [discussions](https://github.com/jchristn/Mux/discussions).
 
 ## What is mux?

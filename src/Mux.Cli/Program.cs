@@ -2,9 +2,9 @@ namespace Mux.Cli
 {
     using System;
     using System.Linq;
+    using System.Threading;
     using Mux.Cli.Commands;
     using Mux.Core.Settings;
-    using Spectre.Console.Cli;
 
     /// <summary>
     /// Entry point for the mux CLI application.
@@ -14,7 +14,7 @@ namespace Mux.Cli
         #region Public-Methods
 
         /// <summary>
-        /// Application entry point. Configures and runs the Spectre.Console.Cli command pipeline.
+        /// Application entry point. Dispatches the mux command pipeline.
         /// </summary>
         /// <param name="args">Command-line arguments.</param>
         /// <returns>The process exit code.</returns>
@@ -52,26 +52,7 @@ namespace Mux.Cli
                 Console.WriteLine("Initializing...");
             }
 
-            CommandApp app = new CommandApp();
-
-            app.Configure((IConfigurator config) =>
-            {
-                config.SetApplicationName("mux");
-                config.SetApplicationVersion(Defaults.ProductVersion);
-
-                config.AddCommand<PrintCommand>("print")
-                    .WithDescription("Run a single prompt and print the result to stdout.");
-
-                config.AddCommand<ProbeCommand>("probe")
-                    .WithDescription("Validate config, backend reachability, auth, and model access.");
-
-                config.AddCommand<EndpointCommand>("endpoint")
-                    .WithDescription("Inspect configured endpoints non-interactively.");
-            });
-
-            app.SetDefaultCommand<InteractiveCommand>();
-
-            return app.Run(args);
+            return Dispatch(args);
         }
 
         #endregion
@@ -173,6 +154,64 @@ CONFIG:
             }
 
             return null;
+        }
+
+        private static int Dispatch(string[] args)
+        {
+            try
+            {
+                if (args.Length > 0 && string.Equals(args[0], "print", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] commandArgs = args.Skip(1).ToArray();
+                    PrintSettings settings = CliArgumentParser.ParsePrint(commandArgs);
+                    return new PrintCommand()
+                        .ExecuteAsync(new CommandContext("print", args), settings, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+
+                if (args.Any(a => string.Equals(a, "--print", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(a, "-p", StringComparison.OrdinalIgnoreCase)))
+                {
+                    PrintSettings settings = CliArgumentParser.ParsePrint(args);
+                    settings.Print = true;
+                    return new PrintCommand()
+                        .ExecuteAsync(new CommandContext("print", args), settings, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+
+                if (args.Length > 0 && string.Equals(args[0], "probe", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] commandArgs = args.Skip(1).ToArray();
+                    ProbeSettings settings = CliArgumentParser.ParseProbe(commandArgs);
+                    return new ProbeCommand()
+                        .ExecuteAsync(new CommandContext("probe", args), settings, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+
+                if (args.Length > 0 && string.Equals(args[0], "endpoint", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] commandArgs = args.Skip(1).ToArray();
+                    EndpointSettings settings = CliArgumentParser.ParseEndpoint(commandArgs);
+                    return new EndpointCommand()
+                        .ExecuteAsync(new CommandContext("endpoint", args), settings, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+
+                InteractiveSettings interactiveSettings = CliArgumentParser.ParseInteractive(args);
+                return new InteractiveCommand()
+                    .ExecuteAsync(new CommandContext("interactive", args), interactiveSettings, CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return 1;
+            }
         }
 
         #endregion

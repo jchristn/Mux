@@ -8,20 +8,14 @@
     <ToolCommandName>mux</ToolCommandName>
     <PackageId>Mux.Cli</PackageId>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>0.3.0-alpha (alpha): begin the TUIKit front-end rewrite. Test suite migrated to Touchstone; TUIKit added as the rendering dependency. The interactive UI is being rebuilt on TUIKit; Spectre.Console is retained until the legacy renderer is replaced.</PackageReleaseNotes>
+    <PackageReleaseNotes>0.3.0-alpha (alpha): begin the TUIKit front-end rewrite. Test suite migrated to Touchstone; TUIKit 0.2.0 added as the rendering dependency. The legacy Spectre.Console rendering and command-host dependencies have been removed.</PackageReleaseNotes>
     <NoWarn>$(NoWarn);NU5111</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- TUIKit (pinned, exact) will drive the rebuilt interactive UI. Source lives at C:\Code\TUIKit
          for reference only; always consume the published package, never a project reference. -->
-    <PackageReference Include="TUIKit" Version="0.1.0" />
-    <!-- Spectre.Console (markup/live-display) is still directly used by the legacy interactive renderer
-         (InteractiveCommand, EventRenderer, MarkdownRenderer, ToolCallRenderer, EndpointCommand). It is
-         retained until those are rebuilt on TUIKit, then removed. Spectre.Console.Cli (arg parsing) is
-         kept regardless and also supplies Spectre.Console transitively. -->
-    <PackageReference Include="Spectre.Console" Version="0.54.0" />
-    <PackageReference Include="Spectre.Console.Cli" Version="0.53.1" />
+    <PackageReference Include="TUIKit" Version="0.2.0" />
   </ItemGroup>
 
   <ItemGroup>

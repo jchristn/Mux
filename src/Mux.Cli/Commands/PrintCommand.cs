@@ -10,7 +10,6 @@ namespace Mux.Cli.Commands
     using Mux.Cli.Rendering;
     using Mux.Core.Agent;
     using Mux.Core.Enums;
-    using Spectre.Console.Cli;
     using Mux.Core.Settings;
     using Mux.Core.Utility;
 
@@ -56,7 +55,7 @@ namespace Mux.Cli.Commands
         /// <summary>
         /// Executes the single-shot print command.
         /// </summary>
-        /// <param name="context">The command context provided by Spectre.Console.Cli.</param>
+        /// <param name="context">The command context.</param>
         /// <param name="settings">The resolved command settings.</param>
         /// <param name="cancellationToken">A token to observe for cancellation requests.</param>
         /// <returns>Exit code: 0 success, 1 error, 2 tool denied.</returns>

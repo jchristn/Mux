@@ -1,7 +1,6 @@
 namespace Mux.Cli.Commands
 {
     using System.ComponentModel;
-    using Spectre.Console.Cli;
 
     /// <summary>
     /// Shared CLI settings inherited by all mux commands.

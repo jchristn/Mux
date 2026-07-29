@@ -10,21 +10,22 @@ All notable changes to mux are documented here.
 
 ### Added
 
-- Pinned `TUIKit` `0.1.0` package reference to `Mux.Cli` — the rendering library for the rebuilt
+- Pinned `TUIKit` `0.2.0` package reference to `Mux.Cli` — the rendering library for the rebuilt
   interactive UI.
+- Added a narrow mux-owned command dispatcher/parser to replace `Spectre.Console.Cli`.
 
 ### Changed
 
 - Migrated the entire test suite from the bespoke `TestSuite`/`TestRunner` framework to
   [Touchstone](https://www.nuget.org/packages/Touchstone.Core) runner-agnostic descriptors, executed
   through a console runner (`Test.Automated`), xUnit (`Test.Xunit`), and NUnit (`Test.Nunit`).
+- Replaced legacy Spectre.Console line-mode markup/table rendering with TUIKit-backed shims.
 - Bumped `Mux.Cli` to `0.3.0-alpha`.
 
-### Notes
+### Removed
 
-- `Spectre.Console` (markup/live-display) is **retained for now**: it is still directly used by the
-  legacy interactive renderer being replaced. It will be removed once those files are rebuilt on
-  TUIKit. `Spectre.Console.Cli` (argument parsing) is kept.
+- Removed direct and transitive `Spectre.Console` usage from `Mux.Cli`, including
+  `Spectre.Console.Cli`.
 
 ## Unreleased
 

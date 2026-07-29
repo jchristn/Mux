@@ -12,7 +12,6 @@ namespace Mux.Cli.Commands
     using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Utility;
-    using Spectre.Console.Cli;
 
     /// <summary>
     /// Settings specific to the probe command.
