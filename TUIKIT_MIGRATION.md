@@ -8,12 +8,17 @@ we do it right the first time. Target: branch **`feature/v0.3.0`**, shipped as *
 **What this is not:** a merge of the two codebases. `Mux.Core` (the engine) stays a UI-free
 library. TUIKit is consumed as a NuGet dependency by a rebuilt `Mux.Cli` presentation layer.
 
-**TUIKit availability:** TUIKit **v0.2.0 is published to NuGet** (`PackageId: TUIKit`). `Mux.Cli`
-consumes it as a normal package reference — no project reference, no submodule. Because TUIKit is
-itself alpha ("API subject to change; pin your version"), **pin the exact version**
-(`Version="0.2.0"`) rather than a floating range, and treat any TUIKit upgrade as a deliberate,
-tested step. TUIKit multi-targets `netstandard2.0;net8.0;net10.0`, so it satisfies Mux's
-`net8.0;net10.0` targets directly.
+**TUIKit availability & required version:** mux targets **TUIKit v0.3.1** (`PackageId: TUIKit`) — the
+cross-platform-validated release (tested on **Windows, Linux, and macOS**), an improvement over 0.2.0.
+`Mux.Cli` consumes it as a normal package reference — no project reference, no submodule. Because
+TUIKit is alpha ("API subject to change; pin your version"), **pin the exact version**
+(`Version="0.3.1"`) rather than a floating range, and treat any upgrade as a deliberate, tested step.
+TUIKit multi-targets `netstandard2.0;net8.0;net10.0`, so it satisfies Mux's `net8.0;net10.0` targets.
+
+> **Current pin state:** 0.3.1 is not yet on nuget.org (latest published is 0.2.0), so the live
+> `Mux.Cli` pin remains `0.2.0` to keep restore/build green through the teardown. **Bump the pin to
+> `0.3.1` the moment it publishes** — tracked in §18. Historical entries below that say "0.2.0" record
+> what was actually consumed at the time; 0.3.1 is the going-forward target.
 
 **TUIKit source, for reference only:** the TUIKit source tree lives locally at `C:\Code\TUIKit`.
 It is **not** added to `Mux.sln` and **not** referenced as a project — always consume the NuGet
@@ -904,6 +909,10 @@ Styles: `dim/bold/italic/underline`, fg `cyan/green/red/yellow/grey/blue/grey15`
   a product defect. Mitigations in place: 30s guards on all waits and a `MuxSuites` static-ctor
   thread-pool warm-up (min 32). To investigate: capture a failing run (increase adapter logging /
   loop in CI) to identify the specific case, then tighten its synchronization.
+- [ ] **Bump the TUIKit pin `0.2.0` → `0.3.1` once published.** 0.3.1 is the required, cross-platform-
+  validated (Windows/Linux/macOS) target, but it is not yet on nuget.org (latest is 0.2.0). The live
+  `Mux.Cli` pin stays at 0.2.0 until 0.3.1 publishes to avoid a broken restore; then bump the
+  `<PackageReference Include="TUIKit" Version="…"/>` and re-run the full test matrix on both TFMs.
 - [ ] **`Mux.Core` stderr-diagnostic sites (M5 finding).** `RetryHandler` and `WorkingDirectoryGuard`
   write human-facing messages directly via `Console.Error.WriteLine` (using `ConsoleMessageStyler`),
   which violates the "`Mux.Core` is `Console.*`-free" DoD. They predate the migration and write to

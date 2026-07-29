@@ -8,13 +8,16 @@
     <ToolCommandName>mux</ToolCommandName>
     <PackageId>Mux.Cli</PackageId>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>0.3.0-alpha (alpha): begin the TUIKit front-end rewrite. Test suite migrated to Touchstone; TUIKit 0.2.0 added as the rendering dependency. The legacy Spectre.Console rendering and command-host dependencies have been removed.</PackageReleaseNotes>
+    <PackageReleaseNotes>0.3.0-alpha (alpha): begin the TUIKit front-end rewrite. Test suite migrated to Touchstone; TUIKit added as the rendering dependency (pinned to 0.2.0, bumping to the cross-platform-validated 0.3.1 once published). The legacy Spectre.Console rendering and command-host dependencies have been removed.</PackageReleaseNotes>
     <NoWarn>$(NoWarn);NU5111</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- TUIKit (pinned, exact) will drive the rebuilt interactive UI. Source lives at C:\Code\TUIKit
-         for reference only; always consume the published package, never a project reference. -->
+    <!-- TUIKit (pinned, exact) will drive the rebuilt interactive UI. TARGET: 0.3.1 (validated on
+         Windows, Linux, and macOS) — bump this pin the moment 0.3.1 is published to NuGet; it is not
+         on the feed yet (latest is 0.2.0), and pinning a missing package breaks restore. Source lives
+         at C:\Code\TUIKit for reference only; always consume the published package, never a project
+         reference. -->
     <PackageReference Include="TUIKit" Version="0.2.0" />
   </ItemGroup>
 
