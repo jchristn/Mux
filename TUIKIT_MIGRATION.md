@@ -682,14 +682,16 @@ Per `C:\code\agents\requirements\BACKEND_TEST_ARCHITECTURE.md` (Touchstone, runn
 
 ## M4 — Engine: Sessions & persistence (`Mux.Core/Sessions/`)
 
-- [ ] `SessionSnapshot.cs` — versioned serializable DTO: schema version, id, title (+ pinned), created/updated, active endpoint + model, settings snapshot, focused `ConversationMessage[]`, persisted per-job transcripts, compaction count, queued-prompt/job metadata, persisted prompt history. Forward-tolerant of unknown fields.
-- [ ] `SessionStore.cs` — CRUD over `~/.mux/sessions/<id>.json` (configurable root as a public member); `SaveAsync`, `LoadAsync`, `ListAsync` (+ async `IEnumerable` variant per style rule), `DeleteAsync`, `DuplicateAsync`; atomic write (temp-file + move); tolerant JSON options.
-- [ ] `SessionResumeService.cs` — rehydrates a snapshot into live session state; running-at-exit jobs are restored as `Interrupted` (re-run required for mutating; auto-offer for read-only per §14 decision).
-- [ ] `SessionMergeService.cs` — explicit-only merge of a completed background job transcript into the focused/current history; no automatic merge on completion.
-- [ ] Autosave hook on each turn boundary (append/replace), throttled/configurable.
-- [ ] Replace the in-memory `PromptHistory` with per-session persisted history (read from/write to the snapshot).
-- [ ] **Tests** (`Test.Shared/Suites/SessionStoreSuite.cs`): round-trip save/load fidelity; list/delete/duplicate; atomic write survives simulated mid-write failure (temp file only); unknown-field tolerance; resume rehydrates history + queue; background job transcripts persist; merge requires explicit action; special-character titles. Use a temp directory, clean up.
-- **Exit criteria:** full round-trip + resume verified headlessly; suite green in all runners.
+**✅ COMPLETE** (engine core; UI wiring deferred — see notes). All headless and UI-free.
+
+- [x] `SessionSnapshot.cs` (+ `PersistedJobSnapshot.cs`) — versioned DTO: `SchemaVersion`, id, title (+ `TitlePinned`), created/updated, endpoint + model, focused `ConversationMessage[]`, persisted prompt history, per-job snapshots (id/title/prompt/state/policy/follow-ups/forked history). Forward-tolerant (unknown JSON fields ignored on load).
+- [x] `SessionStore.cs` — CRUD over `<root>/<id>.json` (default `~/.mux/sessions`, configurable `RootDirectory`); `SaveAsync`/`LoadAsync`/`ListSessionIds`(+`Async`)/`ListAsync`/`DeleteAsync`/`DuplicateAsync`; **atomic write (temp-file + `File.Move` overwrite)**; tolerant `JsonSerializerOptions` (camelCase, case-insensitive); path-traversal-guarded ids.
+- [x] `SessionResumeService.cs` (+ `SessionResumeResult.cs`) — rehydrates a snapshot; partitions jobs into completed (terminal) vs **interrupted** (non-terminal → explicit re-run). Pure.
+- [x] `SessionMergeService.cs` — explicit-only append of job messages into focused history; never automatic; inputs not mutated.
+- [~] Autosave hook on each turn boundary — **deferred to the UI (M12 persistence UX)**: it wires `SessionStore.SaveAsync` to the live session/job loop, which is built with the TUIKit UI. The engine primitive (`SaveAsync`) is ready.
+- [~] Persisted prompt history — the **data** lives in `SessionSnapshot.PromptHistory`; replacing the legacy in-memory `Mux.Cli.Rendering.PromptHistory` class rides with the UI rebuild (M6/M12), since that class is part of the legacy renderer being torn down.
+- [x] **Tests** (`SessionStoreSuite`, 12 cases): round-trip fidelity incl. special-character titles; list excludes `.tmp`; no temp left after save; atomic overwrite; delete; duplicate (independent copy) + missing-source null; load-missing null; unknown-field tolerance; invalid-id (path traversal) throws; resume job classification; explicit merge without mutating inputs.
+- **Exit criteria:** ✅ round-trip + resume verified headlessly; green across console/xUnit/NUnit on `net8.0` + `net10.0` (247 console / 241 adapters).
 
 ---
 

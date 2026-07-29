@@ -81,7 +81,10 @@ namespace Test.Shared
                     CliCommandSuite.Create(),
 
                     // Mux.Search unit suite (ported from Test.Xunit/Search).
-                    WebSearchServiceSuite.Create()
+                    WebSearchServiceSuite.Create(),
+
+                    // Mux.Core / Sessions persistence suite (M4).
+                    SessionStoreSuite.Create()
                 };
             }
         }
