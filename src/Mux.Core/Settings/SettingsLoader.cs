@@ -613,6 +613,8 @@ namespace Mux.Core.Settings
                 CompactionStrategy = settings.CompactionStrategy,
                 CompactionPreserveTurns = settings.CompactionPreserveTurns,
                 MaxAgentIterations = settings.MaxAgentIterations,
+                MaxConcurrency = settings.MaxConcurrency,
+                DefaultEnqueueBehavior = settings.DefaultEnqueueBehavior,
                 IgnoreCertErrors = settings.IgnoreCertErrors,
                 ExternalSearch = NormalizeExternalSearchSettings(settings.ExternalSearch)
             };
