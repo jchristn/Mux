@@ -8,6 +8,7 @@ namespace Mux.Core.Agent
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Approvals;
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Mux.Core.Llm;
@@ -30,7 +31,7 @@ namespace Mux.Core.Agent
         private AgentLoopOptions _Options;
         private LlmClient _LlmClient;
         private BuiltInToolRegistry _ToolRegistry;
-        private ApprovalHandler _ApprovalHandler;
+        private IApprovalRouter _ApprovalRouter;
         private bool _Disposed = false;
 
         #endregion
@@ -48,7 +49,7 @@ namespace Mux.Core.Agent
             _LlmClient = new LlmClient(options.Endpoint, options.IgnoreCertErrors);
             _LlmClient.OnRetry = options.OnRetry;
             _ToolRegistry = new BuiltInToolRegistry(options.MuxSettings);
-            _ApprovalHandler = new ApprovalHandler(options.ApprovalPolicy);
+            _ApprovalRouter = new ApprovalRouter(options.ApprovalPolicy, options.AutoSafeApprovalAllowlist);
         }
 
         #endregion
@@ -207,11 +208,25 @@ namespace Mux.Core.Agent
 
                     try
                     {
-                        Func<ToolCall, Task<string>> promptFunc = _Options.PromptUserFunc
-                            ?? DefaultPromptUserFunc;
+                        ApprovalRequest approvalRequest = new ApprovalRequest
+                        {
+                            JobId = _Options.JobId,
+                            ToolCallId = toolCall.Id,
+                            ToolName = toolCall.Name,
+                            ArgumentsSummary = toolCall.Arguments,
+                            MutationKind = ClassifyTool(toolCall.Name)
+                        };
 
-                        approved = await _ApprovalHandler
-                            .RequestApprovalAsync(toolCall, promptFunc)
+                        approved = await _ApprovalRouter
+                            .RequestApprovalAsync(
+                                approvalRequest,
+                                async (ApprovalRequest request, CancellationToken escalationToken) =>
+                                {
+                                    Func<ToolCall, Task<string>> promptFunc = _Options.PromptUserFunc ?? DefaultPromptUserFunc;
+                                    string response = await promptFunc(toolCall).ConfigureAwait(false);
+                                    return MapPromptResponseToDecision(response);
+                                },
+                                cancellationToken)
                             .ConfigureAwait(false);
                     }
                     catch (Exception ex)
@@ -922,9 +937,7 @@ namespace Mux.Core.Agent
             JsonElement arguments = ParseToolArguments(toolCall.Arguments);
 
             // Classify the tool: unknown/external (MCP) tools are treated as mutating (the safe default).
-            ToolMutationKind mutationKind = _ToolRegistry.HasTool(toolCall.Name)
-                ? _ToolRegistry.GetMutationKind(toolCall.Name)
-                : ToolMutationKind.Mutating;
+            ToolMutationKind mutationKind = ClassifyTool(toolCall.Name);
 
             // Mutating tools serialize through the shared workspace write lease when one is configured;
             // read-only tools bypass it and run concurrently across jobs.
@@ -981,6 +994,33 @@ namespace Mux.Core.Agent
                 Success = false,
                 Content = JsonSerializer.Serialize(new { error = "unknown_tool", message = $"Tool '{toolCall.Name}' is not registered and no external executor is configured." })
             };
+        }
+
+        private ToolMutationKind ClassifyTool(string toolName)
+        {
+            // Unknown/external (MCP) tools are treated as mutating — the safe default.
+            return _ToolRegistry.HasTool(toolName)
+                ? _ToolRegistry.GetMutationKind(toolName)
+                : ToolMutationKind.Mutating;
+        }
+
+        private static ApprovalDecision MapPromptResponseToDecision(string response)
+        {
+            string trimmed = (response ?? string.Empty).Trim();
+
+            if (string.Equals(trimmed, "always", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApprovalDecision.AlwaysThisSession;
+            }
+
+            if (string.Equals(trimmed, "n", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(trimmed, "no", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApprovalDecision.Denied;
+            }
+
+            // "y", "yes", or empty all approve this call.
+            return ApprovalDecision.Approved;
         }
 
         private static Task<string> DefaultPromptUserFunc(ToolCall toolCall)

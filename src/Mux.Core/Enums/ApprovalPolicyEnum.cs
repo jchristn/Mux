@@ -25,6 +25,13 @@ namespace Mux.Core.Enums
         /// Deny execution unconditionally.
         /// </summary>
         [EnumMember(Value = "deny")]
-        Deny = 2
+        Deny = 2,
+
+        /// <summary>
+        /// Automatically approve read-only tools (and any per-tool allowlist), and prompt for approval
+        /// on mutating or otherwise unclassified tools. Intended for the concurrent multi-job UI.
+        /// </summary>
+        [EnumMember(Value = "auto_safe")]
+        AutoSafe = 3
     }
 }

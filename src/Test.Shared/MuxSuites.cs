@@ -1,6 +1,8 @@
 namespace Test.Shared
 {
+    using System;
     using System.Collections.Generic;
+    using System.Threading;
     using Test.Shared.Suites;
     using Touchstone.Core;
 
@@ -11,6 +13,16 @@ namespace Test.Shared
     /// </summary>
     public static class MuxSuites
     {
+        static MuxSuites()
+        {
+            // Warm the thread pool once before any runner executes suites. The concurrency and
+            // agent-loop integration suites spin up many Task workers and async continuations; a cold
+            // pool can delay their scheduling enough to intermittently trip timing-sensitive assertions
+            // under some runners on net8. Runs before the first access to All on every runner.
+            ThreadPool.GetMinThreads(out int workerThreads, out int completionPortThreads);
+            ThreadPool.SetMinThreads(Math.Max(workerThreads, 32), Math.Max(completionPortThreads, 32));
+        }
+
         /// <summary>
         /// Gets all registered MUX test suites. The list is rebuilt on each access so callers
         /// always receive fresh descriptor instances.
@@ -33,7 +45,7 @@ namespace Test.Shared
 
                     // Mux.Core / Agent unit suites (ported from Test.Xunit/Agent).
                     ContextWindowManagerSuite.Create(),
-                    ApprovalHandlerSuite.Create(),
+                    ApprovalRoutingSuite.Create(),
                     ConversationCompactionPlannerSuite.Create(),
                     ConversationTrimCompactorSuite.Create(),
                     AgentLoopOptionsSuite.Create(),

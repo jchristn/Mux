@@ -48,6 +48,7 @@ namespace Mux.Core.Agent
         private WriteLease? _WriteLease = null;
         private string _JobId = "primary";
         private Action<bool>? _OnWriteLeaseWaitChanged = null;
+        private List<string>? _AutoSafeApprovalAllowlist = null;
 
         #endregion
 
@@ -368,6 +369,16 @@ namespace Mux.Core.Agent
         {
             get => _OnWriteLeaseWaitChanged;
             set => _OnWriteLeaseWaitChanged = value;
+        }
+
+        /// <summary>
+        /// Optional tool names that the <c>AutoSafe</c> approval policy auto-approves in addition to
+        /// read-only tools. Ignored under other policies. Null (the default) means read-only tools only.
+        /// </summary>
+        public List<string>? AutoSafeApprovalAllowlist
+        {
+            get => _AutoSafeApprovalAllowlist;
+            set => _AutoSafeApprovalAllowlist = value;
         }
 
         #endregion
