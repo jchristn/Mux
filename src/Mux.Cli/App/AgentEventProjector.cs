@@ -22,11 +22,7 @@ namespace Mux.Cli.App
     {
         #region Private-Members
 
-        private static readonly byte[] MarkerPalette = { 12, 13, 14, 10, 11, 9 };
-
         private readonly Pane _Pane;
-        private readonly int _TurnNumber;
-        private readonly Func<bool>? _Attribute;
         private readonly StringBuilder _AssistantText = new StringBuilder();
         private readonly StringBuilder _RunAssistantText = new StringBuilder();
         private readonly Dictionary<string, PaneLineHandle> _ToolLines = new Dictionary<string, PaneLineHandle>(StringComparer.Ordinal);
@@ -45,27 +41,8 @@ namespace Mux.Cli.App
         /// <param name="pane">The transcript pane to write to. Must not be null.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="pane"/> is null.</exception>
         public AgentEventProjector(Pane pane)
-            : this(pane, 0, null)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="AgentEventProjector"/> class that attributes its
-        /// output to a turn. When several turns stream into one shared pane, a compact colored
-        /// <c>#N</c> marker prefixes each line this projector writes so interleaved output stays readable.
-        /// </summary>
-        /// <param name="pane">The transcript pane to write to. Must not be null.</param>
-        /// <param name="turnNumber">The turn's display number; when zero, no marker is ever shown.</param>
-        /// <param name="attribute">
-        /// A predicate evaluated at each write; the marker is shown only when it returns true (typically
-        /// "more than one turn is in flight"), so a lone turn renders exactly as it did before.
-        /// </param>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="pane"/> is null.</exception>
-        public AgentEventProjector(Pane pane, int turnNumber, Func<bool>? attribute)
         {
             _Pane = pane ?? throw new ArgumentNullException(nameof(pane));
-            _TurnNumber = turnNumber;
-            _Attribute = attribute;
         }
 
         #endregion
@@ -134,7 +111,7 @@ namespace Mux.Cli.App
             catch (OperationCanceledException)
             {
                 FinalizeAssistantBlock();
-                _Pane.WriteLine(Tag(Text.From("(cancelled)").Dim()));
+                _Pane.WriteLine(Text.From("(cancelled)").Dim());
             }
         }
 
@@ -155,7 +132,7 @@ namespace Mux.Cli.App
                 case ToolCallProposedEvent proposedEvent:
                     FinalizeAssistantBlock();
                     string toolName = proposedEvent.ToolCall.Name;
-                    PaneLineHandle line = _Pane.WriteLine(Tag(Text.From("⏵ " + toolName + " running…").Yellow()));
+                    PaneLineHandle line = _Pane.WriteLine(Text.From("⏵ " + toolName + " running…").Yellow());
                     if (!string.IsNullOrEmpty(proposedEvent.ToolCall.Id))
                     {
                         _ToolLines[proposedEvent.ToolCall.Id] = line;
@@ -170,7 +147,7 @@ namespace Mux.Cli.App
 
                 case ErrorEvent errorEvent:
                     FinalizeAssistantBlock();
-                    _Pane.WriteLine(Tag(Text.From($"Error [{errorEvent.Code}]: {errorEvent.Message}").Red()));
+                    _Pane.WriteLine(Text.From($"Error [{errorEvent.Code}]: {errorEvent.Message}").Red());
                     break;
 
                 case RunCompletedEvent runCompleted:
@@ -216,7 +193,7 @@ namespace Mux.Cli.App
             string[] lines = _AssistantText.ToString().Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
             for (int i = 0; i < lines.Length; i++)
             {
-                StyledText styled = Tag(Text.From(lines[i]));
+                StyledText styled = Text.From(lines[i]);
                 if (i < _AssistantLines.Count)
                 {
                     if (!_AssistantLines[i].Update(styled))
@@ -246,11 +223,11 @@ namespace Mux.Cli.App
             {
                 if (i < _AssistantLines.Count)
                 {
-                    _AssistantLines[i].Update(Tag(rendered[i]));
+                    _AssistantLines[i].Update(rendered[i]);
                 }
                 else
                 {
-                    _AssistantLines.Add(_Pane.WriteLine(Tag(rendered[i])));
+                    _AssistantLines.Add(_Pane.WriteLine(rendered[i]));
                 }
             }
 
@@ -280,36 +257,7 @@ namespace Mux.Cli.App
                 return;
             }
 
-            _Pane.WriteLine(Tag(styled));
-        }
-
-        // Prefixes a line with the turn's colored "#N " marker when attribution is active. A lone turn
-        // (attribute predicate false, or turn number zero) renders unchanged.
-        private StyledText Tag(StyledText body)
-        {
-            if (_TurnNumber <= 0 || _Attribute == null || !_Attribute())
-            {
-                return body;
-            }
-
-            return Marker(_TurnNumber).Append(body);
-        }
-
-        #endregion
-
-        #region Public-Statics
-
-        /// <summary>
-        /// Builds the compact colored <c>#N </c> turn marker used to attribute a line to a turn. The color
-        /// is stable per turn number so the shell's own lines (the echoed prompt, the thinking indicator)
-        /// match the marker this projector prefixes onto the turn's output.
-        /// </summary>
-        /// <param name="turnNumber">The turn's display number.</param>
-        /// <returns>The styled marker, including the trailing space.</returns>
-        public static StyledText Marker(int turnNumber)
-        {
-            Color color = Color.FromPalette(MarkerPalette[Math.Max(0, turnNumber - 1) % MarkerPalette.Length]);
-            return Text.From("#" + turnNumber + " ").Foreground(color);
+            _Pane.WriteLine(styled);
         }
 
         #endregion

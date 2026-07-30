@@ -11,10 +11,7 @@ namespace Mux.Cli.App
         /// <summary>Whether a turn is currently running.</summary>
         public bool Busy { get; set; }
 
-        /// <summary>The number of turns currently running concurrently.</summary>
-        public int InFlight { get; set; }
-
-        /// <summary>The number of prompts queued for a free concurrency slot.</summary>
+        /// <summary>The number of prompts queued behind the running turn.</summary>
         public int Queued { get; set; }
 
         /// <summary>The number of completed turns this session.</summary>

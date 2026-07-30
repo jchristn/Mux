@@ -60,9 +60,7 @@ namespace Mux.Cli.App
 
                 _Pane.WriteLine(Text.From(string.Empty));
 
-                string status = stats.InFlight > 1
-                    ? $"{stats.InFlight} running"
-                    : (stats.Busy ? "running" : "idle");
+                string status = stats.Busy ? "running" : "idle";
                 if (stats.Queued > 0)
                 {
                     status += $" · {stats.Queued} queued";

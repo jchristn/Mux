@@ -13,8 +13,8 @@ namespace Test.Shared.Suites
     using TUIKit.Terminal;
 
     /// <summary>
-    /// Touchstone suite for the composer, prompt history, and concurrent-turn submission. Covers
-    /// <see cref="PromptHistory"/> in isolation plus the shell's newline / submit / concurrency /
+    /// Touchstone suite for the composer, prompt history, and the enqueue-while-busy submit chooser.
+    /// Covers <see cref="PromptHistory"/> in isolation plus the shell's newline / submit / chooser /
     /// history / slash-routing gestures driven through the real input path.
     /// </summary>
     public static class ComposerSuite
@@ -169,8 +169,8 @@ namespace Test.Shared.Suites
                         }
                     }),
 
-                    // ---- Concurrent turns ----
-                    Case("SecondPromptRunsConcurrently", "A prompt entered while a turn runs starts its own concurrent turn", async (CancellationToken ct) =>
+                    // ---- Single conversation queue ----
+                    Case("SecondPromptQueuesWhileBusy", "A prompt entered while a turn runs is queued, not started immediately", async (CancellationToken ct) =>
                     {
                         TaskCompletionSource<bool> release = NewSignal();
                         await using (JobManager manager = new JobManager(Gated(release), maxConcurrency: 2))
@@ -178,26 +178,22 @@ namespace Test.Shared.Suites
                         {
                             Feed(backend, app, "first" + "\r");
                             await WaitForActiveAsync(manager, ct).ConfigureAwait(false);
-                            MuxAssert.AreEqual(1, app.InFlightCount, "first turn running");
+                            MuxAssert.AreEqual(1, app.JobIds.Count, "first turn running");
+                            MuxAssert.IsTrue(app.IsBusy, "busy");
 
                             Feed(backend, app, "second" + "\r");
-                            MuxAssert.AreEqual(2, app.JobIds.Count, "second started its own turn");
-                            MuxAssert.AreEqual(2, app.InFlightCount, "two turns run concurrently");
-                            MuxAssert.AreEqual(0, app.QueuedCount, "nothing queued below the concurrency limit");
-
-                            string transcript = Join(app.TranscriptSnapshot());
-                            MuxAssert.Contains("first", transcript, "first echoed");
-                            MuxAssert.Contains("second", transcript, "second echoed");
-                            // The second prompt is concurrent with the first, so its echo carries the #2 marker.
-                            MuxAssert.Contains("#2", transcript, "concurrent turn attributed");
+                            MuxAssert.AreEqual(1, app.JobIds.Count, "second is queued, no new turn yet");
+                            MuxAssert.AreEqual(1, app.QueuedCount, "one queued");
+                            // Both prompts are echoed to the single transcript immediately on Enter.
+                            MuxAssert.Contains("first", Join(app.TranscriptSnapshot()), "first echoed");
+                            MuxAssert.Contains("second", Join(app.TranscriptSnapshot()), "second echoed");
 
                             release.TrySetResult(true);
                             await app.DrainProjectorsAsync().ConfigureAwait(false);
-                            MuxAssert.IsFalse(app.IsBusy, "idle after both turns");
                         }
                     }),
 
-                    Case("PromptsBeyondConcurrencyLimitQueueThenRun", "Prompts past the concurrency limit queue and run as slots free", async (CancellationToken ct) =>
+                    Case("QueuedPromptRunsAfterActiveCompletes", "The queued prompt runs as the next turn once the active turn finishes", async (CancellationToken ct) =>
                     {
                         TaskCompletionSource<bool> release = NewSignal();
                         await using (JobManager manager = new JobManager(Gated(release), maxConcurrency: 2))
@@ -206,18 +202,13 @@ namespace Test.Shared.Suites
                             Feed(backend, app, "first" + "\r");
                             await WaitForActiveAsync(manager, ct).ConfigureAwait(false);
                             Feed(backend, app, "second" + "\r");
-                            Feed(backend, app, "third" + "\r");
-
-                            // Two run concurrently (the limit); the third waits for a free slot.
-                            MuxAssert.AreEqual(2, app.InFlightCount, "two running at the limit");
-                            MuxAssert.AreEqual(1, app.QueuedCount, "third queued");
 
                             release.TrySetResult(true);
                             await app.DrainProjectorsAsync().ConfigureAwait(false);
 
-                            MuxAssert.AreEqual(3, app.JobIds.Count, "all three ran");
+                            MuxAssert.AreEqual(2, app.JobIds.Count, "queued prompt ran as a second turn");
                             MuxAssert.AreEqual(0, app.QueuedCount, "queue drained");
-                            MuxAssert.IsFalse(app.IsBusy, "idle after all turns");
+                            MuxAssert.IsFalse(app.IsBusy, "idle after both turns");
                         }
                     }),
 
