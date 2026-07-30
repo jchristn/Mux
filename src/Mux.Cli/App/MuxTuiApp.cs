@@ -3,6 +3,7 @@ namespace Mux.Cli.App
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Runtime.InteropServices;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Enums;
@@ -41,7 +42,6 @@ namespace Mux.Cli.App
         private const string PromptText = "mux> ";
         private const int SidebarWidth = 28;
         private const int CollapseThreshold = 100;
-        private const string FooterHint = "^Q quit · ^L clear · F1 menu · Shift+Enter newline · Enter send · Esc cancel";
 
         private readonly ITerminalBackend _Backend;
         private readonly TuiApplication _App;
@@ -170,6 +170,12 @@ namespace Mux.Cli.App
             // they could reach us, so we intercept here — dispatching submits, chords, and edits ourselves —
             // and forward the remaining keys to the composer. Modals and the Ctrl+C policy still run first.
             _App.KeyFilter = OnKeyFilter;
+
+            // Bracketed paste delivers pasted content as one event rather than a stream of key presses, so
+            // a multi-line paste (its embedded newlines and all) lands in the composer as a single block and
+            // is sent as one prompt. InsertText normalizes CRLF/CR to LF. Without this, the paste event is
+            // dropped and the text never appears.
+            _App.PasteReceived += OnPaste;
 
             WriteHeader();
             RefreshSidebar();
@@ -901,6 +907,10 @@ namespace Mux.Cli.App
 
                 switch (char.ToLowerInvariant((char)key.Rune))
                 {
+                    // Ctrl+J is the terminal-independent "insert newline" chord: it arrives as line feed
+                    // (0x0A), distinct from Enter's carriage return, so it works even where the terminal
+                    // cannot report Shift+Enter (Windows Terminal, macOS Terminal.app, legacy xterm).
+                    case 'j': _Composer.InsertNewline(); return true;
                     case 'q': RequestQuit(); return true;
                     case 'l': ClearTranscript(); return true;
                     case 'b': ToggleSidebar(); return true;
@@ -932,6 +942,18 @@ namespace Mux.Cli.App
             // focus routing does not handle it a second time.
             _Composer.HandleKey(key);
             return true;
+        }
+
+        private void OnPaste(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return;
+            }
+
+            // Insert verbatim at the caret; newlines are preserved so a pasted block stays one unit. Enter
+            // still submits the whole composer, so a multi-line paste is sent to the model as a single prompt.
+            _Composer.InsertText(text);
         }
 
         private void OnEnter()
@@ -1666,7 +1688,28 @@ namespace Mux.Cli.App
 
         private void RefreshFooter()
         {
-            SetFooterHint(FooterHint);
+            SetFooterHint(BuildFooterHint());
+        }
+
+        private static string BuildFooterHint()
+        {
+            // The chords are terminal-independent (Ctrl/F1/Esc work everywhere), so the hint is stable
+            // across platforms; only the modifier labels adapt (e.g. Alt renders as OPTION on macOS).
+            string ctrl = ModifierLabel(KeyModifiers.Ctrl);
+            return $"Type a prompt and press ENTER to send | {ctrl}+J/newline | F1/help | Esc/cancel | {ctrl}-Q/quit";
+        }
+
+        private static string ModifierLabel(KeyModifiers modifier)
+        {
+            bool isMac = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+            switch (modifier)
+            {
+                case KeyModifiers.Ctrl: return "CTRL";
+                case KeyModifiers.Alt: return isMac ? "OPTION" : "ALT";
+                case KeyModifiers.Super: return isMac ? "CMD" : "SUPER";
+                case KeyModifiers.Shift: return "SHIFT";
+                default: return string.Empty;
+            }
         }
 
         private void RefreshSidebar()
@@ -1704,7 +1747,6 @@ namespace Mux.Cli.App
         private void WriteHeader()
         {
             _Conversation.WriteLine(Text.From("mux · " + _Title).Cyan().Bold());
-            _Conversation.WriteLine(Text.From("Type a prompt and press Enter. Shift+Enter for a newline.").Dim());
         }
 
         #endregion

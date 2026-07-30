@@ -45,8 +45,9 @@ namespace Test.Shared.Suites
 
                             MuxAssert.Contains("mux", transcript, "header brand");
                             MuxAssert.Contains("demo", transcript, "header title");
-                            MuxAssert.Contains("Type a prompt", transcript, "header hint");
-                            MuxAssert.Contains("^Q", footer, "footer quit hint");
+                            // The prompt/newline/quit guidance renders in the footer, not the transcript header.
+                            MuxAssert.Contains("Type a prompt", footer, "footer prompt hint");
+                            MuxAssert.Contains("CTRL-Q/quit", footer, "footer quit hint");
                         }
                     }),
 

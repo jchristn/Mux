@@ -41,7 +41,8 @@ namespace Test.Shared.Suites
                             await Task.CompletedTask.ConfigureAwait(false);
                             string frame = app.RenderRegion("transcript", 80, 10);
                             MuxAssert.Contains("mux", frame, "header brand rendered");
-                            MuxAssert.Contains("Type a prompt", frame, "hint rendered");
+                            // The prompt guidance lives in the footer hint, not the transcript header.
+                            MuxAssert.Contains("Type a prompt", app.RenderRegion("footer", 120, 1), "footer hint rendered");
                         }
                     }),
 
@@ -51,7 +52,9 @@ namespace Test.Shared.Suites
                         using (MuxTuiApp app = NewApp(out _, manager))
                         {
                             await Task.CompletedTask.ConfigureAwait(false);
-                            MuxAssert.Contains("^Q", app.RenderRegion("footer", 120, 1), "footer hint rendered");
+                            string footer = app.RenderRegion("footer", 120, 1);
+                            MuxAssert.Contains("CTRL+J/newline", footer, "newline hint rendered");
+                            MuxAssert.Contains("CTRL-Q/quit", footer, "quit hint rendered");
                         }
                     }),
 

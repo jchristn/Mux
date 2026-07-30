@@ -117,6 +117,58 @@ namespace Test.Shared.Suites
                         }
                     }),
 
+                    Case("CtrlJInsertsNewlineNotSubmit", "Ctrl+J inserts a newline instead of submitting", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            // Ctrl+J via the enhanced-keyboard CSI-u encoding (codepoint 106='j', modifier 5=Ctrl).
+                            // On terminals without the enhanced protocol it arrives as a raw line feed (0x0A);
+                            // both decode to Char('j', Ctrl), so this exercises the same mux binding.
+                            Feed(backend, app, "a" + Esc + "[106;5u" + "b");
+                            MuxAssert.AreEqual("a\nb", app.ComposerText, "two-line composer");
+                            MuxAssert.AreEqual(0, manager.Jobs.Count, "not submitted");
+                        }
+                    }),
+
+                    Case("RawLineFeedInsertsNewlineNotSubmit", "A raw line feed (Ctrl+J on terminals without the enhanced protocol) inserts a newline", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            // The bare 0x0A byte is exactly what Windows Terminal / macOS Terminal.app send
+                            // for Ctrl+J. Enter is carriage return (0x0D) and still submits.
+                            Feed(backend, app, "a" + "\n" + "b");
+                            MuxAssert.AreEqual("a\nb", app.ComposerText, "raw LF inserts a newline");
+                            MuxAssert.AreEqual(0, manager.Jobs.Count, "raw LF does not submit");
+                        }
+                    }),
+
+                    // ---- Multi-line paste ----
+                    Case("PastedMultiLineStaysOneUnitAndSubmitsAsOnePrompt", "A bracketed paste keeps its newlines and submits as a single prompt", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            string pasted = "first paragraph\nsecond paragraph\nthird paragraph";
+
+                            // Bracketed paste: the terminal wraps pasted content in CSI 200~ ... CSI 201~, so
+                            // the embedded newlines never trigger a submit and the block lands intact.
+                            Feed(backend, app, Esc + "[200~" + pasted + Esc + "[201~");
+                            MuxAssert.AreEqual(pasted, app.ComposerText, "paste preserved as one multi-line unit");
+                            MuxAssert.AreEqual(0, manager.Jobs.Count, "paste alone does not submit");
+
+                            // A single Enter then sends the whole pasted block as one prompt.
+                            Feed(backend, app, "\r");
+                            MuxAssert.AreEqual(1, manager.Jobs.Count, "one job for the whole paste");
+                            MuxAssert.AreEqual(pasted, manager.Jobs[0].Prompt, "prompt is the full pasted block");
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+                        }
+                    }),
+
                     // ---- Single conversation queue ----
                     Case("SecondPromptQueuesWhileBusy", "A prompt entered while a turn runs is queued, not started immediately", async (CancellationToken ct) =>
                     {
