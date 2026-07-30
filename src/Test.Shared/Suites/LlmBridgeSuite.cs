@@ -36,6 +36,7 @@ namespace Test.Shared.Suites
                     Case("OpenAiCompatibleBridge", "openai-compatible adapter maps streaming, tools, usage, and errors", ct => RunAdapterScenariosAsync(AdapterTypeEnum.OpenAiCompatible, ct)),
                     Case("VllmBridge", "vLLM adapter maps streaming, tools, usage, and errors", ct => RunAdapterScenariosAsync(AdapterTypeEnum.Vllm, ct)),
                     Case("OllamaBridge", "Ollama adapter maps streaming, tools, usage, and errors", ct => RunAdapterScenariosAsync(AdapterTypeEnum.Ollama, ct)),
+                    Case("OllamaBridgeToleratesV1BaseUrl", "Ollama adapter strips a trailing /v1 and reaches the native /api/chat", RunOllamaV1BaseUrlAsync),
                     Case("ConnectionFailureRetriesAndClassifies", "A connection failure retries and surfaces llm_connection_error", RunConnectionFailureAsync),
                 });
         }
@@ -84,6 +85,21 @@ namespace Test.Shared.Suites
 
             // 6. Per-endpoint headers reach the backend.
             MuxAssert.AreEqual("marker", server.HeaderValue("X-Mux-Test"), $"{adapterType}: endpoint headers are applied");
+        }
+
+        private static async Task RunOllamaV1BaseUrlAsync(CancellationToken ct)
+        {
+            // mux's own defaults, docs, and add-endpoint form historically appended /v1 to ollama base
+            // URLs. The native Ollama API lives at the server root (/api/chat), so a /v1 suffix yields a
+            // "404 page not found". The Ollama adapter must strip it and still succeed.
+            using LocalLlmTestServer server = LocalLlmTestServer.Start();
+            EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.Ollama, server.Endpoint + "/v1");
+
+            using LlmClient client = new LlmClient(endpoint);
+
+            List<AgentEvent> text = await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
+            MuxAssert.IsNull(FirstError(text), "Ollama with a /v1 base URL does not 404");
+            MuxAssert.AreEqual("hello world", AssistantText(text), "Ollama with a /v1 base URL still reaches /api/chat");
         }
 
         private static async Task RunConnectionFailureAsync(CancellationToken ct)

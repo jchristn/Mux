@@ -349,7 +349,7 @@ namespace Test.Shared.Suites
                     EndpointConfig resolved = SettingsLoader.ResolveEndpoint(new List<EndpointConfig>(), null, null, null, null, null, null);
                     MuxAssert.AreEqual("ollama-local", resolved.Name, "name");
                     MuxAssert.AreEqual(AdapterTypeEnum.Ollama, resolved.AdapterType, "adapter");
-                    MuxAssert.AreEqual("http://localhost:11434/v1", resolved.BaseUrl, "baseUrl");
+                    MuxAssert.AreEqual("http://localhost:11434", resolved.BaseUrl, "baseUrl");
                     MuxAssert.AreEqual("qwen2.5-coder:7b", resolved.Model, "model");
                     return Task.CompletedTask;
                 }),

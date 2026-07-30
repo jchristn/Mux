@@ -22,6 +22,11 @@ namespace Mux.Cli.App
         private const int PadY = 1;
         private const int ContentWidth = 46;
 
+        // The local-inference default host. The native Ollama API lives at the root; every other adapter
+        // speaks the OpenAI-compatible surface under /v1. These seed the Base URL prefill per adapter.
+        private const string OllamaDefaultBaseUrl = "http://localhost:11434";
+        private const string OpenAiDefaultBaseUrl = "http://localhost:11434/v1";
+
         private static readonly string[] _Adapters = { "openai-compatible", "ollama", "openai", "vllm" };
 
         private readonly string _Title;
@@ -70,7 +75,7 @@ namespace Mux.Cli.App
             }
             else
             {
-                _BaseUrl.Value = "http://localhost:11434/v1";
+                _BaseUrl.Value = DefaultBaseUrlFor(ParseAdapter(_Adapter.SelectedOption));
             }
 
             _Form = new Form();
@@ -100,7 +105,18 @@ namespace Mux.Cli.App
                 return true;
             }
 
-            return _Form.HandleKey(key);
+            // Track the adapter selection across the key so that changing it can re-seed the Base URL
+            // prefill. This only rewrites a value that still matches a known default, so a URL the user
+            // has typed or edited is never clobbered.
+            int adapterBefore = _Adapter.SelectedIndex;
+            bool handled = _Form.HandleKey(key);
+
+            if (_Adapter.SelectedIndex != adapterBefore && IsDefaultBaseUrl(_BaseUrl.Value))
+            {
+                _BaseUrl.Value = DefaultBaseUrlFor(ParseAdapter(_Adapter.SelectedOption));
+            }
+
+            return handled;
         }
 
         /// <inheritdoc/>
@@ -168,11 +184,13 @@ namespace Mux.Cli.App
                 return;
             }
 
+            AdapterTypeEnum adapterType = ParseAdapter(_Adapter.SelectedOption);
+
             EndpointConfig endpoint = new EndpointConfig
             {
                 Name = _Name.Value.Trim(),
-                AdapterType = ParseAdapter(_Adapter.SelectedOption),
-                BaseUrl = _BaseUrl.Value.Trim(),
+                AdapterType = adapterType,
+                BaseUrl = NormalizeBaseUrl(adapterType, _BaseUrl.Value.Trim()),
                 Model = _Model.Value.Trim()
             };
 
@@ -217,6 +235,34 @@ namespace Mux.Cli.App
                 case "vllm": return AdapterTypeEnum.Vllm;
                 default: return AdapterTypeEnum.OpenAiCompatible;
             }
+        }
+
+        private static string DefaultBaseUrlFor(AdapterTypeEnum adapterType)
+        {
+            return adapterType == AdapterTypeEnum.Ollama ? OllamaDefaultBaseUrl : OpenAiDefaultBaseUrl;
+        }
+
+        private static bool IsDefaultBaseUrl(string? value)
+        {
+            string trimmed = (value ?? string.Empty).Trim().TrimEnd('/');
+            return string.Equals(trimmed, OllamaDefaultBaseUrl, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(trimmed, OpenAiDefaultBaseUrl, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeBaseUrl(AdapterTypeEnum adapterType, string baseUrl)
+        {
+            // The Ollama adapter speaks Ollama's native API at the server root; a trailing /v1 targets the
+            // separate OpenAI-compatible surface and 404s. Drop it so a stray /v1 is never persisted.
+            if (adapterType == AdapterTypeEnum.Ollama)
+            {
+                string trimmed = baseUrl.TrimEnd('/');
+                if (trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
+                {
+                    return trimmed.Substring(0, trimmed.Length - "/v1".Length);
+                }
+            }
+
+            return baseUrl;
         }
 
         private static string Trim(string text, int width)

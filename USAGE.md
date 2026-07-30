@@ -362,7 +362,7 @@ When config isolation is used:
 
 ### Ollama
 
-Mux's `ollama` adapter uses Ollama's OpenAI-compatible API surface, so the base URL is typically `http://localhost:11434/v1`.
+Mux's `ollama` adapter speaks Ollama's **native** API (`/api/chat`), which lives at the server root, so the base URL is just `http://localhost:11434` — no `/v1`. (A trailing `/v1` targets Ollama's separate OpenAI-compatible surface and is tolerated — mux strips it for this adapter — but the canonical form omits it. If you specifically want Ollama's OpenAI-compatible surface, use `adapterType: "openai-compatible"` with `http://localhost:11434/v1`.)
 
 ```json
 {
@@ -370,14 +370,14 @@ Mux's `ollama` adapter uses Ollama's OpenAI-compatible API surface, so the base 
     {
       "name": "ollama-gemma",
       "adapterType": "ollama",
-      "baseUrl": "http://localhost:11434/v1",
+      "baseUrl": "http://localhost:11434",
       "model": "gemma3:4b",
       "isDefault": true
     },
     {
       "name": "ollama-qwen32",
       "adapterType": "ollama",
-      "baseUrl": "http://localhost:11434/v1",
+      "baseUrl": "http://localhost:11434",
       "model": "qwen2.5-coder:32b",
       "maxAgentIterations": 60
     }
@@ -445,7 +445,7 @@ mux probe -e openai-gpt4o
 ### Ad-Hoc CLI-Only Usage
 
 ```bash
-mux --base-url http://localhost:11434/v1 --model gemma3:4b --adapter-type ollama
+mux --base-url http://localhost:11434 --model gemma3:4b --adapter-type ollama
 mux --base-url https://api.openai.com/v1 --model gpt-4o --adapter-type openai
 mux --base-url http://localhost:8000/v1 --model deepseek-coder-v2 --adapter-type openai-compatible
 ```

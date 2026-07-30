@@ -132,7 +132,7 @@ Example:
     {
       "name": "ollama-local",
       "adapterType": "ollama",
-      "baseUrl": "http://localhost:11434/v1",
+      "baseUrl": "http://localhost:11434",
       "model": "qwen2.5-coder:7b",
       "isDefault": true
     },

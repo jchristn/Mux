@@ -89,7 +89,7 @@ namespace Mux.Core.Settings
                 {
                     Name = "ollama-local",
                     AdapterType = AdapterTypeEnum.Ollama,
-                    BaseUrl = "http://localhost:11434/v1",
+                    BaseUrl = "http://localhost:11434",
                     Model = "qwen2.5-coder:7b",
                     IsDefault = true,
                     MaxTokens = 8192,
@@ -398,7 +398,7 @@ namespace Mux.Core.Settings
                 {
                     Name = "ollama-local",
                     AdapterType = AdapterTypeEnum.Ollama,
-                    BaseUrl = "http://localhost:11434/v1",
+                    BaseUrl = "http://localhost:11434",
                     Model = "qwen2.5-coder:7b",
                     Headers = new Dictionary<string, string>()
                 };

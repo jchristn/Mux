@@ -536,7 +536,12 @@ namespace Mux.Core.Llm
             switch (endpoint.AdapterType)
             {
                 case AdapterTypeEnum.Ollama:
-                    client = new OllamaClient(endpoint.BaseUrl, apiKey: null, logging: SilentLogging, httpClient: httpClient);
+                    // The Ollama adapter speaks Ollama's native API (/api/chat), which lives at the server
+                    // root, not under /v1. A base URL carrying a trailing /v1 targets Ollama's separate
+                    // OpenAI-compatible surface and yields "404 page not found" against /v1/api/chat. mux's
+                    // own defaults and docs historically appended /v1 to ollama base URLs, so tolerate it
+                    // here the way OpenAiClient tolerates a base URL that already ends in /v1.
+                    client = new OllamaClient(NormalizeOllamaBaseUrl(endpoint.BaseUrl), apiKey: null, logging: SilentLogging, httpClient: httpClient);
                     break;
                 case AdapterTypeEnum.OpenAi:
                 case AdapterTypeEnum.Vllm:
@@ -553,6 +558,22 @@ namespace Mux.Core.Llm
 
             client.TimeoutMs = endpoint.TimeoutMs > 0 ? endpoint.TimeoutMs : 120000;
             return client;
+        }
+
+        private static string NormalizeOllamaBaseUrl(string? baseUrl)
+        {
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                return baseUrl ?? string.Empty;
+            }
+
+            string trimmed = baseUrl.TrimEnd('/');
+            if (trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
+            {
+                trimmed = trimmed.Substring(0, trimmed.Length - "/v1".Length);
+            }
+
+            return trimmed;
         }
 
         private static LoggingModule CreateSilentLogging()

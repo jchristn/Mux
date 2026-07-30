@@ -62,7 +62,7 @@ Example:
     {
       "name": "ollama-local",
       "adapterType": "ollama",
-      "baseUrl": "http://localhost:11434/v1",
+      "baseUrl": "http://localhost:11434",
       "model": "qwen2.5-coder:7b",
       "isDefault": true,
       "maxTokens": 8192,
@@ -84,7 +84,7 @@ Fields:
 |---|---|---|
 | `name` | string | unique endpoint name |
 | `adapterType` | string | `ollama`, `openai`, `vllm`, or `openai-compatible` |
-| `baseUrl` | string | API root URL; mux appends `/chat/completions`. For `ollama`, mux uses Ollama's OpenAI-compatible API root, usually `http://localhost:11434/v1` |
+| `baseUrl` | string | API root URL. For `openai`/`openai-compatible`/`vllm`, mux appends `/v1/chat/completions` (a base already ending in `/v1` is fine). For `ollama`, mux uses Ollama's native API root, usually `http://localhost:11434` — a trailing `/v1` is stripped for this adapter |
 | `model` | string | model identifier sent to the backend |
 | `isDefault` | bool | preferred default endpoint |
 | `maxTokens` | int | max output tokens |
