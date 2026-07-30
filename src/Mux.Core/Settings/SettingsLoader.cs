@@ -416,7 +416,7 @@ namespace Mux.Core.Settings
 
             if (!string.IsNullOrWhiteSpace(cliAdapterType))
             {
-                if (Enum.TryParse<AdapterTypeEnum>(cliAdapterType, true, out AdapterTypeEnum parsedAdapter))
+                if (AdapterTypeEnumConverter.TryParse(cliAdapterType, out AdapterTypeEnum parsedAdapter))
                 {
                     selected.AdapterType = parsedAdapter;
                 }

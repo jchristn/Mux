@@ -22,21 +22,50 @@ namespace Mux.Core.Enums
                 return AdapterTypeEnum.Ollama;
             }
 
+            if (!TryParse(value, out AdapterTypeEnum result))
+            {
+                throw new JsonException($"Unknown adapter type: '{value}'. Expected: ollama, openai, vllm, openai-compatible.");
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Parses an adapter-type string accepting enum member names ("OpenAiCompatible"), snake_case
+        /// ("openai_compatible"), kebab-case ("openai-compatible"), and lowercase ("openaicompatible").
+        /// Use this anywhere an adapter-type string is accepted (JSON, CLI flags) so every surface parses
+        /// the same forms.
+        /// </summary>
+        /// <param name="value">The adapter-type string.</param>
+        /// <param name="result">The parsed value when the method returns true.</param>
+        /// <returns>True when the value was recognized; otherwise false.</returns>
+        public static bool TryParse(string? value, out AdapterTypeEnum result)
+        {
+            result = AdapterTypeEnum.Ollama;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
             // Normalize: lowercase, strip hyphens and underscores
             string normalized = value.Replace("-", "").Replace("_", "").ToLowerInvariant();
 
             switch (normalized)
             {
                 case "ollama":
-                    return AdapterTypeEnum.Ollama;
+                    result = AdapterTypeEnum.Ollama;
+                    return true;
                 case "openai":
-                    return AdapterTypeEnum.OpenAi;
+                    result = AdapterTypeEnum.OpenAi;
+                    return true;
                 case "vllm":
-                    return AdapterTypeEnum.Vllm;
+                    result = AdapterTypeEnum.Vllm;
+                    return true;
                 case "openaicompatible":
-                    return AdapterTypeEnum.OpenAiCompatible;
+                    result = AdapterTypeEnum.OpenAiCompatible;
+                    return true;
                 default:
-                    throw new JsonException($"Unknown adapter type: '{value}'. Expected: ollama, openai, vllm, openai-compatible.");
+                    return false;
             }
         }
 
