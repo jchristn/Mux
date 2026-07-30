@@ -881,6 +881,15 @@ namespace Mux.Cli.App
                 return true;
             }
 
+            // Ctrl+Backspace deletes the previous word. In the enhanced keyboard protocol it arrives as a
+            // dedicated Backspace key carrying the Ctrl modifier; the Ctrl'd control-character form
+            // (0x08/0x7F) is handled in the Character branch below for terminals without that protocol.
+            if (key.Code == KeyCode.Backspace && (key.Modifiers & KeyModifiers.Ctrl) != 0)
+            {
+                DeletePreviousWord();
+                return true;
+            }
+
             if (key.Code == KeyCode.Character && (key.Modifiers & KeyModifiers.Ctrl) != 0)
             {
                 // Ctrl+Backspace deletes the previous word (0x7F/0x08 carrying the Ctrl modifier).
