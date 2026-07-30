@@ -712,6 +712,17 @@ Per `C:\code\agents\requirements\BACKEND_TEST_ARCHITECTURE.md` (Touchstone, runn
 
 ## M6 — Cli shell: `MuxTuiApp` host + layout + command catalog (single job end-to-end)
 
+**Teardown (done — "teardown first" per owner).** The legacy interactive renderer is deleted:
+`InteractiveCommand(.Search)`, `InteractivePasteHeuristics`, `InputShortcut`, and the cursor/chrome
+rendering (`InteractiveChromeLayout`, `LineBuffer`, `PromptHistory`, `PromptLayout`,
+`ConsoleCellPosition`, `ConsoleClearRegion`, `MarkdownRenderer`) — 11 files. `InteractiveSettings`
+extracted to its own file (survives for M6). `Program.cs` default (interactive) path now stubs with an
+"under reconstruction, use `mux print`" notice (exit 2). Non-interactive commands (`print`/`probe`/
+`endpoint`) and their TUIKit-backed styled output (`StyledConsoleCompat`, `EventRenderer`,
+`ToolCallRenderer`, `Tool*Summary`, `CertificateWarningHint`, `ThinkingAnimation`) are **kept and
+green**. Doomed `LineBufferSuite` removed. Build warning-clean; console runner green both TFMs.
+
+**Remaining M6 (the TUIKit rebuild):**
 - [ ] `App/MuxTuiApp.cs` — owns `ConsoleBackend` + `TuiApplication`, builds the `Layout` (regions from §4.1: `menu`, `sidebar`, `transcript`, `composer`, `footer`), binds panes/widgets, registers keybindings, runs `RunAsync`. Implements `IAsyncDisposable`.
 - [ ] `Commands/CommandDescriptor.cs` — `{ Id, Title, Category, KeyBinding?, SlashAlias?, RunAsync }`.
 - [ ] `Commands/CommandCatalog.cs` — the single source of truth; palette, menu bar, function keys, and slash parser all resolve against it.
@@ -836,7 +847,7 @@ All via `ModalStack`; concurrent approval requests queue.
 
 ### 16.4 Global definition of done (v0.3.0-alpha)
 
-- [ ] Legacy interactive renderer (`InteractiveChromeLayout`, cursor bookkeeping, poll-loop input, paste heuristics, `_ActiveRun` singleton) **deleted**, not dormant.
+- [x] Legacy interactive renderer (`InteractiveChromeLayout`, cursor bookkeeping, poll-loop input, paste heuristics, `_ActiveRun` singleton) **deleted**, not dormant. — done in the M6 teardown (11 files removed; interactive stubbed pending the TUIKit shell).
 - [ ] `Mux.Core` remains UI-free (no `Console.*`, no TUIKit reference); jobs/lease/approvals/sessions live there and are headless-tested.
 - [ ] `Mux.Cli` renders exclusively via TUIKit (`Spectre.Console` and `Spectre.Console.Cli` gone; local parser retained unless replaced deliberately).
 - [x] All §14 implementation decisions are recorded and owner-approved, including forked job history, explicit transcript merge, tool classification defaults, resume behavior, `AutoSafe`, and the sidebar breakpoint.

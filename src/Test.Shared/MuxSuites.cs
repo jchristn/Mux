@@ -33,7 +33,6 @@ namespace Test.Shared
             {
                 return new List<TestSuiteDescriptor>
                 {
-                    LineBufferSuite.Create(),
                     SingleTurnSuite.Create(),
                     ToolUseSuite.Create(),
                     PrintModeSuite.Create(),

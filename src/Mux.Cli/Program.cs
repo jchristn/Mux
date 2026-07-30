@@ -201,11 +201,15 @@ CONFIG:
                         .GetResult();
                 }
 
-                InteractiveSettings interactiveSettings = CliArgumentParser.ParseInteractive(args);
-                return new InteractiveCommand()
-                    .ExecuteAsync(new CommandContext("interactive", args), interactiveSettings, CancellationToken.None)
-                    .GetAwaiter()
-                    .GetResult();
+                // Interactive REPL is being rebuilt on TUIKit (M6). The legacy renderer has been torn
+                // down; the new interactive shell is not yet available in this pre-release. Parse the
+                // args (so unknown options still error consistently), then report unavailability.
+                CliArgumentParser.ParseInteractive(args);
+                Console.Error.WriteLine(
+                    $"mux interactive mode is being rebuilt on TUIKit and is temporarily unavailable in this "
+                    + $"pre-release (v{Defaults.ProductVersion}). Use 'mux print <prompt>' for non-interactive "
+                    + "runs, or 'mux probe' / 'mux endpoint' for diagnostics and configuration.");
+                return 2;
             }
             catch (Exception ex)
             {

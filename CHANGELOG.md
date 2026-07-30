@@ -26,6 +26,10 @@ All notable changes to mux are documented here.
 
 - Removed direct and transitive `Spectre.Console` usage from `Mux.Cli`, including
   `Spectre.Console.Cli`.
+- Tore down the legacy hand-rolled interactive renderer (`InteractiveCommand`, cursor/chrome layout,
+  `LineBuffer`, prompt history, paste heuristics — 11 files) ahead of the TUIKit-based interactive UI.
+  Interactive `mux` is temporarily unavailable in this pre-release (prints a notice and exits);
+  `mux print`, `mux probe`, and `mux endpoint` are unaffected.
 
 ## Unreleased
 
