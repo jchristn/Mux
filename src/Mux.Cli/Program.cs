@@ -10,6 +10,7 @@ namespace Mux.Cli
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Mux.Core.Models;
+    using Mux.Core.Sessions;
     using Mux.Core.Settings;
     using TUIKit.Terminal;
 
@@ -247,7 +248,15 @@ CONFIG:
                     ? runtime.Endpoint.Name
                     : $"{runtime.Endpoint.Name} · {runtime.Endpoint.Model}";
 
-                using MuxTuiApp app = new MuxTuiApp(new ConsoleBackend(), jobManager, title, effectivePolicy);
+                SessionStore sessionStore = new SessionStore();
+                using MuxTuiApp app = new MuxTuiApp(
+                    new ConsoleBackend(),
+                    jobManager,
+                    title,
+                    effectivePolicy,
+                    sessionStore,
+                    runtime.Endpoint.Name,
+                    runtime.Endpoint.Model);
                 app.DefaultEnqueueBehavior = MapEnqueueBehavior(runtime.MuxSettings.DefaultEnqueueBehavior);
 
                 // Route escalated tool approvals to the shell's modal. The template is captured by

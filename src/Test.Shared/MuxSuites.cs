@@ -101,7 +101,10 @@ namespace Test.Shared
                     CommandSurfacesSuite.Create(),
 
                     // Mux.Cli modals: approval + jobs (M11).
-                    ModalsSuite.Create()
+                    ModalsSuite.Create(),
+
+                    // Mux.Cli persistence UX: snapshot/save/load/restore/browser (M12).
+                    PersistenceUxSuite.Create()
                 };
             }
         }

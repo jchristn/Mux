@@ -40,6 +40,11 @@ All notable changes to mux are documented here.
   tools now prompt with an approval modal (Approve once / Deny / Always this session) instead of being
   refused — replacing the earlier placeholder that denied all writes. A jobs modal (`F2` / `/jobs`)
   lists jobs and focuses the one you pick. Covered by `ModalsSuite` (9 cases).
+- Session persistence: the session autosaves at each turn boundary and can be saved with `Ctrl+S` /
+  `/save`; `/sessions` browses and resumes saved sessions. Restored sessions render completed
+  conversations read-only and mark interrupted jobs as re-run-required (never auto-running them), and
+  prompt history survives a restart. Backed by a reusable `Mux.Core` snapshot builder and covered by
+  `PersistenceUxSuite` (11 cases).
 - Interim interactive approval behavior pending the M11 approval modal: the default `ask` policy runs
   read-only tools automatically (`AutoSafe`) and denies mutating tools with a visible notice; pass
   `--yolo` / `--approval-policy auto` to auto-approve, or `deny` to block all tools.

@@ -96,6 +96,38 @@ namespace Mux.Cli.App
             _Cursor = _Entries.Count;
         }
 
+        /// <summary>
+        /// Returns the stored entries oldest-first, for persistence.
+        /// </summary>
+        /// <returns>A copy of the entries.</returns>
+        public IReadOnlyList<string> Snapshot()
+        {
+            return new List<string>(_Entries);
+        }
+
+        /// <summary>
+        /// Replaces the stored entries (e.g. when resuming a session) and resets the cursor. Blanks are
+        /// skipped; the existing coalescing rules are preserved.
+        /// </summary>
+        /// <param name="entries">The entries to load, oldest-first. Null is treated as empty.</param>
+        public void Restore(IEnumerable<string>? entries)
+        {
+            _Entries.Clear();
+            if (entries != null)
+            {
+                foreach (string entry in entries)
+                {
+                    if (!string.IsNullOrWhiteSpace(entry)
+                        && (_Entries.Count == 0 || !string.Equals(_Entries[_Entries.Count - 1], entry, StringComparison.Ordinal)))
+                    {
+                        _Entries.Add(entry);
+                    }
+                }
+            }
+
+            _Cursor = _Entries.Count;
+        }
+
         #endregion
     }
 }

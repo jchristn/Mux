@@ -7,6 +7,7 @@ namespace Mux.Cli.App
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Mux.Core.Models;
+    using Mux.Core.Sessions;
     using TUIKit;
     using TUIKit.Content;
     using TUIKit.Hosting;
@@ -40,6 +41,9 @@ namespace Mux.Cli.App
         private readonly TuiApplication _App;
         private readonly JobManager _JobManager;
         private readonly ApprovalPolicyEnum _ApprovalPolicy;
+        private readonly SessionStore? _Store;
+        private readonly string _EndpointName;
+        private readonly string _Model;
         private readonly string _Title;
         private readonly Pane _HomePane;
         private readonly Pane _SidebarPane;
@@ -53,6 +57,7 @@ namespace Mux.Cli.App
         private readonly List<string> _JobOrder = new List<string>();
         private readonly List<Task> _ProjectorTasks = new List<Task>();
         private readonly object _Sync = new object();
+        private readonly SemaphoreSlim _SaveGate = new SemaphoreSlim(1, 1);
         private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
         private readonly EventHandler<JobManagerEvent> _JobEventHandler;
         private readonly PromptHistory _History = new PromptHistory();
@@ -82,16 +87,25 @@ namespace Mux.Cli.App
         /// <param name="jobManager">The job manager that runs submitted prompts. Must not be null.</param>
         /// <param name="title">A short session title shown in the transcript header and sidebar.</param>
         /// <param name="approvalPolicy">The approval policy applied to submitted jobs.</param>
+        /// <param name="sessionStore">Optional session store; when supplied, the session autosaves at turn boundaries and can be saved/browsed. Null disables persistence.</param>
+        /// <param name="endpointName">The effective endpoint name recorded in saved sessions.</param>
+        /// <param name="model">The effective model recorded in saved sessions.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
             ITerminalBackend backend,
             JobManager jobManager,
             string title,
-            ApprovalPolicyEnum approvalPolicy)
+            ApprovalPolicyEnum approvalPolicy,
+            SessionStore? sessionStore = null,
+            string endpointName = "",
+            string model = "")
         {
             _Backend = backend ?? throw new ArgumentNullException(nameof(backend));
             _JobManager = jobManager ?? throw new ArgumentNullException(nameof(jobManager));
             _ApprovalPolicy = approvalPolicy;
+            _Store = sessionStore;
+            _EndpointName = endpointName ?? string.Empty;
+            _Model = model ?? string.Empty;
             _Title = string.IsNullOrWhiteSpace(title) ? "mux" : title;
 
             _App = new TuiApplication(backend);
@@ -132,6 +146,8 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.sidebar.toggle", "Toggle sidebar", "ctrl+b", ToggleSidebar, "View", new[] { "sidebar" }));
             _Catalog.Add(new CommandDescriptor("mux.palette", "Command palette", "ctrl+k", OpenPalette, "Session", new[] { "commands", "palette" }));
             _Catalog.Add(new CommandDescriptor("mux.jobs", "Jobs", "f2", OpenJobsModal, "Jobs", new[] { "jobs" }));
+            _Catalog.Add(new CommandDescriptor("mux.save", "Save session", "ctrl+s", SaveSession, "Session", new[] { "save" }));
+            _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.help", "Help", "f1", ShowHelp, "Help", new[] { "help", "?" }));
             _Catalog.ApplyTo(_App);
             _MenuBar = MenuBarBuilder.Build(_Catalog);
@@ -142,6 +158,10 @@ namespace Mux.Cli.App
             {
                 RefreshSidebar();
                 RefreshFooter();
+                if (e is JobCompletedEvent)
+                {
+                    AutoSave();
+                }
             };
             _JobManager.EventPublished += _JobEventHandler;
 
@@ -518,6 +538,95 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
+        /// Builds a snapshot of the current session (jobs, histories, prompt history, metadata).
+        /// </summary>
+        /// <returns>The session snapshot.</returns>
+        public SessionSnapshot BuildSnapshot()
+        {
+            return SessionSnapshotBuilder.Build(
+                _JobManager,
+                _JobManager.SessionId,
+                _Title,
+                _EndpointName,
+                _Model,
+                _History.Snapshot(),
+                DateTime.UtcNow);
+        }
+
+        /// <summary>
+        /// Saves the current session to the injected store. No-op when no store was supplied.
+        /// </summary>
+        /// <returns>A task that completes when the save finishes.</returns>
+        public async Task SaveSessionAsync()
+        {
+            if (_Store == null)
+            {
+                return;
+            }
+
+            SessionSnapshot snapshot = BuildSnapshot();
+
+            // Serialize writes so a background autosave and an explicit/manual save never race on the
+            // same session file (each SaveAsync is an atomic temp+move; two at once can collide).
+            await _SaveGate.WaitAsync(_Cts.Token).ConfigureAwait(false);
+            try
+            {
+                await _Store.SaveAsync(snapshot, _Cts.Token).ConfigureAwait(false);
+            }
+            finally
+            {
+                _SaveGate.Release();
+            }
+        }
+
+        /// <summary>
+        /// Rebuilds transcript panes and prompt history from a resumed session. Completed jobs render
+        /// read-only; interrupted jobs render with a re-run notice (nothing is auto-run). Replaces the
+        /// current transcript view.
+        /// </summary>
+        /// <param name="resume">The resumed session state. Must not be null.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="resume"/> is null.</exception>
+        public void RestoreSession(SessionResumeResult resume)
+        {
+            if (resume is null) throw new ArgumentNullException(nameof(resume));
+
+            lock (_Sync)
+            {
+                _JobPanes.Clear();
+                _JobOrder.Clear();
+                _FocusedJobId = null;
+                _CurrentPane = _HomePane;
+            }
+
+            _App.BindPane(TranscriptRegion, _HomePane);
+            _History.Restore(resume.PromptHistory);
+
+            foreach (PersistedJobSnapshot job in resume.CompletedJobs)
+            {
+                RestoreJobPane(job, interrupted: false);
+            }
+
+            foreach (PersistedJobSnapshot job in resume.InterruptedJobs)
+            {
+                RestoreJobPane(job, interrupted: true);
+            }
+
+            string? last;
+            lock (_Sync)
+            {
+                last = _JobOrder.Count > 0 ? _JobOrder[_JobOrder.Count - 1] : null;
+            }
+
+            if (last != null)
+            {
+                FocusJob(last);
+            }
+
+            RefreshSidebar();
+            RefreshFooter();
+        }
+
+        /// <summary>
         /// Awaits all in-flight job projections. Test helper that makes projected transcript content
         /// deterministic before asserting.
         /// </summary>
@@ -598,6 +707,7 @@ namespace Mux.Cli.App
             _App.Stop();
             _App.Dispose();
             _Cts.Dispose();
+            _SaveGate.Dispose();
         }
 
         #endregion
@@ -981,6 +1091,127 @@ namespace Mux.Cli.App
             }
 
             SetFooterHint($"jobs:{jobCount} focused:{focused} · {FooterHint}");
+        }
+
+        private void AutoSave()
+        {
+            if (_Store == null)
+            {
+                return;
+            }
+
+            _ = SaveQuietlyAsync();
+        }
+
+        private async Task SaveQuietlyAsync()
+        {
+            try
+            {
+                await SaveSessionAsync().ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // Autosave is best-effort; a failed background save must never disrupt the UI.
+            }
+        }
+
+        private void SaveSession()
+        {
+            if (_Store == null)
+            {
+                WriteNotice("Session persistence is disabled.");
+                return;
+            }
+
+            _ = SaveWithNoticeAsync();
+        }
+
+        private async Task SaveWithNoticeAsync()
+        {
+            try
+            {
+                await SaveSessionAsync().ConfigureAwait(false);
+                WriteNotice("✓ Session saved.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Save failed: " + ex.Message);
+            }
+        }
+
+        private void OpenSessionBrowser()
+        {
+            if (_Store == null)
+            {
+                _App.Modals.Push(new MessageModal("Sessions", "Session persistence is disabled.", new List<string> { "OK" }));
+                return;
+            }
+
+            IReadOnlyList<SessionSnapshot> sessions = _Store.ListAsync(_Cts.Token).GetAwaiter().GetResult();
+            if (sessions.Count == 0)
+            {
+                _App.Modals.Push(new MessageModal("Sessions", "No saved sessions.", new List<string> { "OK" }));
+                return;
+            }
+
+            List<string> labels = new List<string>();
+            foreach (SessionSnapshot session in sessions)
+            {
+                string title = string.IsNullOrWhiteSpace(session.Title) ? session.Id : session.Title;
+                labels.Add($"{title}  ({session.Id})");
+            }
+
+            SelectModal modal = new SelectModal("Sessions — select to resume", labels);
+            _App.Modals.Push(modal);
+            _ = ResolveSessionBrowserAsync(modal, sessions);
+        }
+
+        private async Task ResolveSessionBrowserAsync(SelectModal modal, IReadOnlyList<SessionSnapshot> sessions)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            int index = result is int value ? value : -1;
+            if (index >= 0 && index < sessions.Count)
+            {
+                RestoreSession(SessionResumeService.Resume(sessions[index]));
+            }
+        }
+
+        private void RestoreJobPane(PersistedJobSnapshot job, bool interrupted)
+        {
+            Pane pane = new Pane("job:" + job.Id);
+            string label = string.IsNullOrWhiteSpace(job.Title) ? job.Prompt : job.Title;
+            pane.WriteLine(Text.From($"« resumed: {label} »").Dim());
+
+            foreach (ConversationMessage message in job.ConversationHistory)
+            {
+                if (message.Role == RoleEnum.User && !string.IsNullOrEmpty(message.Content))
+                {
+                    pane.WriteLine(Text.From("› " + message.Content).Cyan());
+                }
+                else if (message.Role == RoleEnum.Assistant && !string.IsNullOrEmpty(message.Content))
+                {
+                    pane.WriteLine(Text.From(message.Content));
+                }
+            }
+
+            if (interrupted)
+            {
+                pane.WriteLine(Text.From("⚠ interrupted — re-run required").Yellow());
+            }
+
+            lock (_Sync)
+            {
+                _JobPanes[job.Id] = pane;
+                _JobOrder.Add(job.Id);
+            }
+        }
+
+        private void WriteNotice(string text)
+        {
+            lock (_Sync)
+            {
+                _CurrentPane.WriteLine(Text.From(text).Dim());
+            }
         }
 
         private void OpenJobsModal()

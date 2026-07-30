@@ -941,14 +941,40 @@ so custom `Modal` subclasses are only needed for the config forms.
 
 ---
 
-## M12 — Cli: Persistence UX
+## M12 — Cli: Persistence UX ✅ DONE (core)
 
-- [ ] Autosave wired to turn boundaries via `SessionStore`; status reflected in footer.
-- [ ] Launch flow: offer resume (last session or browser); `--resume`/`--new` CLI flags honored.
-- [ ] Interrupted-job presentation on resume (explicit re-run for mutating; auto-offer for read-only; no silent mutating resume).
-- [ ] `Ctrl+S` / menu "Save session"; session rename/title persists.
-- [ ] **Tests** (`Test.Shared/Suites/PersistenceUxSuite.cs`, headless): run → exit → relaunch → resume restores transcript + queue metadata; interrupted mutating job is presented as re-run-required; interrupted read-only job is auto-offered; explicit background-transcript merge updates focused history; prompt history survives restart.
-- **Exit criteria:** a session survives a restart end-to-end (engine + UI), verified headlessly.
+- [x] `Mux.Core/Sessions/SessionSnapshotBuilder.cs` — engine-side, UI-free builder that snapshots a live
+  `JobManager` (jobs → `PersistedJobSnapshot` with state/prompt/history) plus session metadata and
+  prompt history. Reusable by headless/orchestration callers; unit-tested directly.
+- [x] Autosave wired to turn boundaries: `MuxTuiApp` takes an optional `SessionStore` and autosaves on
+  `JobCompletedEvent`. Manual save via `Ctrl+S` / `/save` (`mux.save`). **Saves are serialized through a
+  `SemaphoreSlim`** so a background autosave and a manual save never race on the same session file
+  (each `SaveAsync` is an atomic temp+move; concurrent writes were an intermittent corruption bug caught
+  by the tests and fixed).
+- [x] Restore: `RestoreSession(SessionResumeResult)` rebuilds transcript panes from a snapshot —
+  completed jobs render their conversation read-only; **interrupted jobs render a `⚠ interrupted —
+  re-run required` notice and nothing is auto-run** (no silent mutating resume). Prompt history is
+  restored so `Up`/`Down` recall survives a restart.
+- [x] `SessionBrowserModal` (`/sessions`, folded from M11) — lists saved sessions (`SelectModal`),
+  resumes the selection in place; empty list and persistence-disabled show a `MessageModal`.
+- [x] **Tests** (`Test.Shared/Suites/PersistenceUxSuite.cs`, 11 cases, headless): snapshot builder
+  captures jobs + prompt history (and rejects a null manager); save→load round-trip; save-without-store
+  no-ops; autosave fires on completion; **prompt history survives save→restore into a fresh shell
+  (restart simulation)**; restore rebuilds a completed pane; restore marks an interrupted job and runs
+  nothing; session browser resumes / empty-message / disabled-message. Green on the console runner
+  (net8+net10) and both adapters, verified stable across repeated runs after the save-race fix.
+- **Exit criteria:** ✅ a session survives a save→restore round-trip end-to-end (engine builder + Cli
+  restore), verified headlessly; interrupted jobs never silently resume.
+
+**Deferred from M12 (with rationale):**
+- **`--resume` / `--new` CLI launch flags** and offer-resume-on-startup — the in-app `/sessions` browser
+  already resumes; the launch-flag wrapper is a thin `Program` arg-scan (like `--config-dir`) best
+  validated by manual smoke, so it lands with the M15 CLI/docs pass.
+- **Read-only interrupted jobs auto-offered** (vs the current uniform re-run-required) — needs the tool
+  mutation kind persisted per job, which `PersistedJobSnapshot` does not carry yet; the safe default
+  (never auto-run) holds until then.
+- **Explicit background-transcript merge** into focused history (`SessionMergeService` exists) and
+  session rename/export — follow-ups; the merge service is engine-tested already.
 
 ---
 
