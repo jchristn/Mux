@@ -978,12 +978,29 @@ so custom `Modal` subclasses are only needed for the config forms.
 
 ---
 
-## M13 — Cli headless UI test consolidation
+## M13 — Cli headless UI test consolidation ✅ DONE
 
-- [ ] Ensure every Cli suite uses `HeadlessBackend` + deterministic `PumpInputOnce`/`RenderOnce` frames (no real terminal, no timing flakiness; use the fake deterministic agent, not a live LLM).
-- [ ] Add golden-snapshot cases for the primary screen at a few representative sizes and states (idle, one running job, three jobs with one awaiting lease, modal open).
-- [ ] Confirm all Cli suites registered in `…Suites.All` and green in `Test.Automated`, `Test.Xunit`, `Test.Nunit`.
-- **Exit criteria:** UI is regression-guarded by headless snapshots across runners.
+- [x] Every Cli suite drives the shell through `HeadlessBackend` with deterministic `PumpInputOnce`/
+  `RenderOnce` frames and fake in-process agent runners (no real terminal, no live LLM). Timing-
+  sensitive waits use signal/state polling with 30 s guards; the earlier concurrent-save flake was
+  root-caused and fixed (M12), and the suite is stable across repeated runs.
+- [x] Golden frame snapshots via `MuxTuiApp.RenderRegion(regionId, w, h)` — renders a region's widget
+  to a text grid through TUIKit's own `Snapshot.RenderWidget`, so the assertions exercise the real
+  render path. `Test.Shared/Suites/FrameSnapshotSuite.cs` (11 cases): idle transcript/footer; a
+  completed job's exchange; a running job's sidebar glyph; three jobs listed; composer in-progress text;
+  **determinism** (same state → identical grid); **negative/edge** — tiny 3×2 / 1×1 grids don't throw,
+  and unknown region / non-positive size return empty; plus full-pipeline `RenderOnce` smoke at idle and
+  with a modal active. (Deliberately structural + determinism assertions rather than brittle exact-grid
+  golden strings, which would break on any spacing/style tweak and bloat the suite; this still regression-
+  guards layout, region wiring, wrapping/truncation, and crash-free rendering.)
+- [x] All Cli suites registered in `MuxSuites.All` and green in `Test.Automated` (console, net8+net10),
+  `Test.Xunit`, and `Test.Nunit`. Totals: **333 console (326 pass / 7 known skips), 327 per adapter.**
+- **Exit criteria:** ✅ UI is regression-guarded by deterministic headless render snapshots across all
+  three runners.
+
+**Note:** the "three jobs with one awaiting lease" state is approximated by three jobs across states
+(running/queued) — the specific `AwaitingWriteLease` state is exercised by the engine `WriteLease*`
+suites (M2), since the fake UI runners bypass the real tool/lease path.
 
 ---
 

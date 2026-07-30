@@ -15,6 +15,7 @@ namespace Mux.Cli.App
     using TUIKit.Layout;
     using TUIKit.Modals;
     using TUIKit.Terminal;
+    using TUIKit.Testing;
     using TUIKit.Widgets;
 
     /// <summary>
@@ -685,6 +686,38 @@ namespace Mux.Cli.App
         public IReadOnlyList<string> FooterSnapshot()
         {
             return _Footer.SnapshotPlainLines();
+        }
+
+        /// <summary>
+        /// Renders a single region's widget into a fresh cell buffer of the given size and returns its
+        /// text grid (via TUIKit's own render path). Deterministic golden-snapshot helper for tests.
+        /// Unknown region ids or non-positive dimensions return an empty string.
+        /// </summary>
+        /// <param name="regionId">One of the shell region ids (transcript/sidebar/composer/footer).</param>
+        /// <param name="width">The capture width in cells.</param>
+        /// <param name="height">The capture height in cells.</param>
+        /// <returns>The rendered grid as newline-separated rows.</returns>
+        public string RenderRegion(string regionId, int width, int height)
+        {
+            if (width <= 0 || height <= 0)
+            {
+                return string.Empty;
+            }
+
+            IWidget? widget;
+            lock (_Sync)
+            {
+                widget = regionId switch
+                {
+                    TranscriptRegion => _CurrentPane,
+                    SidebarRegion => _SidebarPane,
+                    FooterRegion => _Footer,
+                    ComposerRegion => _Composer,
+                    _ => (IWidget?)null
+                };
+            }
+
+            return widget == null ? string.Empty : Snapshot.RenderWidget(widget, width, height);
         }
 
         /// <inheritdoc/>

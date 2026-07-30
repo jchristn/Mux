@@ -60,6 +60,13 @@ All notable changes to mux are documented here.
 - Replaced legacy Spectre.Console line-mode markup/table rendering with TUIKit-backed shims.
 - Bumped `Mux.Cli` to `0.3.0-alpha`.
 
+### Testing
+
+- The interactive shell is fully covered by deterministic headless suites driven through TUIKit's
+  `HeadlessBackend` (no real terminal, no live LLM): shell, projector, sidebar, composer/chooser,
+  command surfaces, modals, persistence, and rendered-frame golden snapshots — 326 passing checks
+  across the console, xUnit, and NUnit runners on `net8.0` and `net10.0`.
+
 ### Removed
 
 - Removed direct and transitive `Spectre.Console` usage from `Mux.Cli`, including

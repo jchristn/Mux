@@ -104,7 +104,10 @@ namespace Test.Shared
                     ModalsSuite.Create(),
 
                     // Mux.Cli persistence UX: snapshot/save/load/restore/browser (M12).
-                    PersistenceUxSuite.Create()
+                    PersistenceUxSuite.Create(),
+
+                    // Mux.Cli headless frame rendering + golden snapshots (M13).
+                    FrameSnapshotSuite.Create()
                 };
             }
         }
