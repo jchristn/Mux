@@ -97,8 +97,10 @@ Notes:
 
 ## Interactive UI (TUIKit)
 
-> **Alpha.** Running `mux` with no non-interactive command launches the TUIKit shell. The interactive
-> experience is being built out on `feature/v0.3.0`; see `TUIKIT_MIGRATION.md`.
+Running `mux` with no non-interactive command launches the TUIKit shell (new in v0.3.0).
+
+> **Note:** MCP tool execution inside the TUIKit shell is not yet wired in v0.3.0 — built-in tools work
+> in interactive; MCP servers remain configurable in `mcp-servers.json` for a future release.
 
 The screen has a transcript (per job), a sidebar listing all jobs with a state glyph and focus marker,
 a multi-line composer, and a footer with live `jobs/focused` status and key hints. Each job runs

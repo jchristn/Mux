@@ -2,119 +2,113 @@
 
 All notable changes to mux are documented here.
 
-## v0.3.0-alpha (Unreleased)
+## v0.3.0 - 2026-07-29
 
-> **Alpha / in progress.** This pre-release begins the migration of the mux front-end onto
-> [TUIKit](https://www.nuget.org/packages/TUIKit). The interactive UI is being rebuilt; see
-> `TUIKIT_MIGRATION.md` for the plan and progress.
+This release rebuilds the mux interactive front-end on
+[TUIKit](https://www.nuget.org/packages/TUIKit), introduces a concurrent background-job model, and
+migrates the test suite to [Touchstone](https://www.nuget.org/packages/Touchstone.Core).
+`Spectre.Console` has been removed entirely. `mux print`, `mux probe`, and `mux endpoint` are
+unaffected.
 
 ### Added
 
-- Rebuilt the interactive UI on TUIKit: `mux` with no non-interactive command now launches the
-  `MuxTuiApp` shell — a transcript / composer / footer layout with a streaming `AgentEvent` projector,
-  a command catalog (`Ctrl+Q` quit, `Ctrl+L` clear, `Ctrl+N` next job), `Esc` to cancel the focused
-  job, and double-tap-`Ctrl+C` to exit. Prompts submit to the concurrent `JobManager`; the terminal
-  backend is injected so the shell is driven headlessly in tests.
-- Each job renders into its **own** transcript pane; only the focused job's pane is shown, so
-  concurrent jobs never write over one another (`FocusJob`/`Ctrl+N` switch between them). The
-  `AgentEventProjector` renders assistant text as markdown at block boundaries (via TUIKit
-  `MarkdownRenderer`) and collapses each tool call to a single line updated in place from
-  `running…` to `✓/✗ name (N ms)`. Covered by `ProjectorSuite` (12 cases) and expanded `TuiShellSuite`
-  (per-job isolation, focus swap, focus cycling).
-- Added a sidebar listing all jobs with a state glyph and a focus marker, kept live from
-  `JobManager` events. Focus by number (`Alt+1`–`Alt+9`), toggle the sidebar with `Ctrl+B`, and the
-  sidebar auto-collapses below 100 columns (a manual toggle overrides the width rule). Covered by
-  `SidebarSuite` (7 cases).
-- Multi-line composer and enqueue-while-busy: `Alt+Enter`/`Shift+Enter` insert a newline, `Enter`
-  submits, and while a job is active `Enter` opens an inline chooser to start a new job (`1`) or append
-  to the focused job (`2`), with `r` to remember the choice and `Ctrl+Enter` to bypass. Prompt history
-  recalls with `Up`/`Down`, and a leading `/` routes to the slash handler. Covered by
-  `ComposerSuite` (15 cases). The enqueue default is read from `settings.json`
-  (`defaultEnqueueBehavior`).
-- Command surfaces over a single catalog: a `/`-slash router (aliases like `/clear`, `/help`, `/quit`),
-  a `Ctrl+K` fuzzy command palette, key bindings (`^Q/^L/^N/^B`, `F1`), and a catalog-derived menu —
-  all resolving to the same command handlers. `/help` lists commands and their keys, and the footer
-  shows live `jobs/focused` status. Covered by `CommandSurfacesSuite` (11 cases, including four-surface
-  convergence).
-- Interactive tool approval: under the default policy, read-only tools run automatically and mutating
-  tools now prompt with an approval modal (Approve once / Deny / Always this session) instead of being
-  refused — replacing the earlier placeholder that denied all writes. A jobs modal (`F2` / `/jobs`)
-  lists jobs and focuses the one you pick. Covered by `ModalsSuite` (9 cases).
+- Concurrent job engine in `Mux.Core` (UI-free, headless-tested): a `JobManager` + scheduler runs
+  multiple prompts as background jobs, a fair single-writer `WriteLease` allows parallel reads while
+  serializing file-mutating tools ("parallel reads, single writer"), per-job approval routing, and
+  atomic session persistence.
+- Rebuilt the interactive UI on TUIKit: `mux` with no non-interactive command launches the `MuxTuiApp`
+  shell — a sidebar / transcript / composer / footer layout with a streaming `AgentEvent` projector.
+  `Ctrl+Q` quits, `Ctrl+L` clears, `Ctrl+N` cycles jobs, `Esc` cancels the focused job, double-tap
+  `Ctrl+C` exits. The terminal backend is injected so the shell is driven headlessly in tests.
+- Each job renders into its **own** transcript pane; only the focused pane is shown, so concurrent jobs
+  never write over one another. The projector renders assistant text as markdown at block boundaries
+  and collapses each tool call to a single line updated in place from `running…` to `✓/✗ name (N ms)`.
+- A sidebar lists all jobs with a state glyph and focus marker, kept live from `JobManager` events;
+  focus by number (`Alt+1`–`Alt+9`) or `Ctrl+N`, toggle with `Ctrl+B`, and it auto-collapses below 100
+  columns.
+- Multi-line composer with prompt history (`Up`/`Down`) and an enqueue-while-busy chooser: `Enter`
+  submits (opening the chooser when a job is active — start a new job, append to the focused job, or
+  remember the choice), `Alt+Enter`/`Shift+Enter` insert a newline, `Ctrl+Enter` bypasses the chooser.
+  The default is read from `settings.json` (`defaultEnqueueBehavior`).
+- Command surfaces over a single catalog — a `/`-slash router, a `Ctrl+K` fuzzy palette, key bindings,
+  and a catalog-derived menu — all resolving to the same handlers; `/help` lists commands and keys, and
+  the footer shows live `jobs/focused` status.
+- Interactive tool approval: read-only tools run automatically and mutating tools prompt with an
+  approval modal (Approve once / Deny / Always this session). A jobs modal (`F2` / `/jobs`) lists jobs
+  and focuses the one you pick.
 - Session persistence: the session autosaves at each turn boundary and can be saved with `Ctrl+S` /
   `/save`; `/sessions` browses and resumes saved sessions. Restored sessions render completed
   conversations read-only and mark interrupted jobs as re-run-required (never auto-running them), and
-  prompt history survives a restart. Backed by a reusable `Mux.Core` snapshot builder and covered by
-  `PersistenceUxSuite` (11 cases).
-- Appearance and input polish: cycle the theme (`/theme`, Dark/Light/HighContrast), toggle compact
-  density (`/density`), and toggle mouse capture (`F12` / `/mouse`); the layout repaints across the
-  responsive sidebar breakpoint on resize. Covered by `PolishSuite` (9 cases).
-- Interim interactive approval behavior pending the M11 approval modal: the default `ask` policy runs
-  read-only tools automatically (`AutoSafe`) and denies mutating tools with a visible notice; pass
-  `--yolo` / `--approval-policy auto` to auto-approve, or `deny` to block all tools.
-- Pinned `TUIKit` `0.2.0` package reference to `Mux.Cli` — the rendering library for the rebuilt
-  interactive UI.
-- Added a narrow mux-owned command dispatcher/parser to replace `Spectre.Console.Cli`.
+  prompt history survives a restart.
+- Appearance and input: cycle the theme (`/theme`), toggle compact density (`/density`), and toggle
+  mouse capture (`F12` / `/mouse`).
+- Built-in `web_retrieve` tool for fetching rendered URL content through headless Playwright Chromium or
+  Firefox, with browser installation handled on demand.
+- External web search through the `web_search` tool, configurable with Tavily and You.com providers from
+  `settings.json` or the interactive `/search` wizard.
+- `mux endpoint list` and `mux endpoint show <name>` as top-level non-interactive commands, including
+  machine-readable `json` output with redacted secret-like header values.
+- `--ignore-cert-errors` (with `--insecure` alias), `settings.json` field `ignoreCertErrors`, and
+  `MUX_IGNORE_CERT_ERRORS` for bypassing TLS certificate validation behind enterprise TLS inspection.
+- Nullable endpoint-scoped `maxAgentIterations` overrides, with inherited global defaults and additive
+  endpoint inspection metadata.
+- `settings.json` fields `maxConcurrency` (1–32) and `defaultEnqueueBehavior`
+  (`ask`/`run_now`/`queue_after`/`add_to_focused`) for the interactive job model.
+- `ARMADA.md` integration guide for orchestrator consumers, plus a tightened `ARMADA_IMPROVEMENTS.md`.
+- A narrow mux-owned command dispatcher/parser replacing `Spectre.Console.Cli`.
+- `TUIKit` `0.2.0` as the rendering dependency for `Mux.Cli`.
 
 ### Changed
 
-- Migrated the entire test suite from the bespoke `TestSuite`/`TestRunner` framework to
-  [Touchstone](https://www.nuget.org/packages/Touchstone.Core) runner-agnostic descriptors, executed
-  through a console runner (`Test.Automated`), xUnit (`Test.Xunit`), and NUnit (`Test.Nunit`).
-- Replaced legacy Spectre.Console line-mode markup/table rendering with TUIKit-backed shims.
-- Bumped `Mux.Cli` to `0.3.0-alpha`.
+- Migrated the entire test suite from the bespoke `TestSuite`/`TestRunner` framework to Touchstone
+  runner-agnostic descriptors, executed through a console runner (`Test.Automated`), xUnit
+  (`Test.Xunit`), and NUnit (`Test.Nunit`), all on `net8.0` and `net10.0`.
+- Endpoint configs can persist `autoApproveTools`, and interactive `always` approvals save
+  endpoint-scoped auto-approval for future sessions.
+- Agent-loop iteration limits default to `50` and resolve from endpoint `maxAgentIterations` when set,
+  otherwise from `settings.json.maxAgentIterations`, with a `1-100` clamp in both places.
+- Interactive `/model` aliases `/endpoint` (`list`, `<name>`, `show`, `add`, `edit`, `remove`).
+- `mux print` supports `--output-last-message <path>` to write only the final assistant response text;
+  failed runs leave the file absent.
+- `mux print`, `mux probe`, and `mux endpoint` support `--config-dir <path>` as a first-class
+  config-root override, with precedence over `MUX_CONFIG_DIR`.
+- `mux probe --require-tools` fails when the selected endpoint disables tool calling.
+- Human-readable `print`, `probe`, and interactive errors suggest `--insecure` on a self-signed
+  certificate-chain failure while certificate validation is enabled.
+- `/mcp add` runs a wizard-driven workflow supporting both `stdio` and HTTP MCP transports, saving to
+  `mcp-servers.json`.
+- `/endpoint <name>` switches only to configured endpoint names and refreshes endpoint-dependent tool
+  guidance after a successful switch.
+- README, `USAGE.md`, `CONFIG.md`, and `TESTING.md` updated for the TUIKit UI, the concurrent job/queue
+  model, sessions, the new settings, and the three-runner headless test architecture.
+
+### Removed
+
+- Removed direct and transitive `Spectre.Console` usage from `Mux.Cli`, including `Spectre.Console.Cli`.
+- Tore down the legacy hand-rolled interactive renderer (`InteractiveCommand`, cursor/chrome layout,
+  `LineBuffer`, prompt history, paste heuristics — 11 files) and replaced it with the TUIKit-based
+  `MuxTuiApp` shell.
+- Removed the previous REPL's queued-message support, `/queue` commands, and `Alt+Up` queued-prompt
+  editing (superseded by the concurrent job model and enqueue chooser).
+- Removed the interactive `/endpoint <name>` model-override fallback; unknown endpoint names now produce
+  an error and leave the selected endpoint unchanged.
 
 ### Testing
 
 - The interactive shell is fully covered by deterministic headless suites driven through TUIKit's
   `HeadlessBackend` (no real terminal, no live LLM): shell, projector, sidebar, composer/chooser,
-  command surfaces, modals, persistence, and rendered-frame golden snapshots — 326 passing checks
-  across the console, xUnit, and NUnit runners on `net8.0` and `net10.0`.
-
-### Removed
-
-- Removed direct and transitive `Spectre.Console` usage from `Mux.Cli`, including
-  `Spectre.Console.Cli`.
-- Tore down the legacy hand-rolled interactive renderer (`InteractiveCommand`, cursor/chrome layout,
-  `LineBuffer`, prompt history, paste heuristics — 11 files) and replaced it with the TUIKit-based
-  `MuxTuiApp` shell (see Added). `mux print`, `mux probe`, and `mux endpoint` are unaffected.
-
-## Unreleased
-
-### Added
-
-- Built-in `web_retrieve` tool for fetching rendered URL content through headless Playwright Chromium or Firefox, with browser installation handled on demand
-- External web search integration through the `web_search` tool, configurable with Tavily and You.com providers from `settings.json` or the interactive `/search` wizard
-- `mux endpoint list` and `mux endpoint show <name>` as top-level non-interactive commands, including machine-readable `json` output for stored endpoint inspection with redacted secret-like header values
-- `ARMADA.md` as a focused integration guide for orchestrator consumers, plus a tightened `ARMADA_IMPROVEMENTS.md` plan that reflects the current CLI/runtime surface
-- `--ignore-cert-errors` with `--insecure` alias, `settings.json` field `ignoreCertErrors`, and `MUX_IGNORE_CERT_ERRORS` for bypassing TLS certificate validation in mux-owned network requests behind enterprise TLS inspection
-- Nullable endpoint-scoped `maxAgentIterations` overrides, with inherited global defaults and additive endpoint inspection metadata
-
-### Removed
-
-- Interactive queued-message support, `/queue` commands, and `Alt+Up` queued-prompt editing from the current REPL flow
-- Interactive `/endpoint <name>` model-override fallback; unknown endpoint names now produce an error and leave the selected endpoint unchanged
-
-### Changed
-
-- Endpoint configs can now persist `autoApproveTools`, and interactive `always` approval responses now save endpoint-scoped auto-approval for future sessions
-- Agent loop iteration limits now default to `50` and resolve from endpoint `maxAgentIterations` when set, otherwise from `settings.json.maxAgentIterations`, with the same `1-100` clamp in both places
-- Interactive `/model` now aliases `/endpoint`, including `list`, `<name>`, `show`, `add`, `edit`, and `remove` forms
-- `mux print` now supports `--output-last-message <path>` to write only the final assistant response text to a file; failed runs leave the file absent
-- `mux print`, `mux probe`, and `mux endpoint` now support `--config-dir <path>` as a first-class config-root override, with precedence over `MUX_CONFIG_DIR`
-- `mux probe --require-tools` now fails when the selected endpoint disables tool calling
-- Human-readable `print`, `probe`, and interactive errors now suggest `--insecure` when a self-signed certificate-chain failure is encountered while certificate validation is enabled
-- `/mcp add` now runs a wizard-driven workflow similar to `/endpoint add`, supports both `stdio` and HTTP MCP transports, and saves MCP server definitions to `mcp-servers.json`
-- `/endpoint <name>` now switches only to configured endpoint names and refreshes endpoint-dependent tool guidance after a successful switch
-- Interactive REPL prompt entry now uses a simpler blocking one-prompt-at-a-time flow with idle multi-line editing and paste support, inline approvals, `Esc` cancellation, a visible `Generating title...` notice when automatic title refresh runs, and an explicit blank spacer line before the next `mux>` prompt
-- README and usage documentation now describe Armada-oriented automation flows, isolated config overrides, clean final-response artifacts, and machine-readable endpoint inspection
-
-### Testing
-
-- Added `Test.Xunit` coverage for `--config-dir`, `--output-last-message`, `probe --require-tools`, and `endpoint list/show`
-- Added `Test.Xunit` coverage for endpoint-scoped max iteration persistence, clamping, JSONL runtime metadata, and endpoint inspection output
-- Added `Test.Xunit` coverage for self-signed certificate-chain hint detection and suppression when certificate validation is already bypassed
-- Added `Test.Xunit` coverage for `web_retrieve`, external-search tool registration, endpoint-switch no-fallback behavior, and web retrieval prompt guidance
-- Added Armada-style `Test.Automated` contract coverage for isolated config directories and endpoint inspection
+  command surfaces, modals, persistence, rendered-frame golden snapshots, and polish — 335 passing
+  checks (plus 7 documented skips) across the console, xUnit, and NUnit runners on `net8.0` and
+  `net10.0`, with positive and negative cases throughout.
+- Added engine coverage for the job manager/scheduler, the write lease, approval routing, and session
+  save/load/resume.
+- Added `Test.Xunit` coverage for `--config-dir`, `--output-last-message`, `probe --require-tools`,
+  `endpoint list/show`, endpoint-scoped max-iteration persistence/clamping, self-signed certificate-chain
+  hint detection, `web_retrieve`, external-search registration, and endpoint-switch no-fallback behavior.
+- Added Armada-style `Test.Automated` contract coverage for isolated config directories and endpoint
+  inspection.
+- Added a GitHub Actions workflow that builds `src/Mux.sln` and runs all three test runners on Linux and
+  Windows.
 
 ## v0.2.0 - 2026-04-24
 

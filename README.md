@@ -15,11 +15,12 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.3.0%20ALPHA-orange.svg" alt="v0.3.0 ALPHA"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.3.0-blue.svg" alt="v0.3.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha"></a>
 </p>
 
-> **v0.3.0 ALPHA**
-> This is an early alpha. APIs, interfaces, configuration formats, tool schemas, and CLI behavior are all subject to change. Feedback is welcome via [issues](https://github.com/jchristn/Mux/issues) and [discussions](https://github.com/jchristn/Mux/discussions).
+> **Alpha software**
+> mux is in alpha. APIs, interfaces, configuration formats, tool schemas, and CLI behavior are all subject to change. Feedback is welcome via [issues](https://github.com/jchristn/Mux/issues) and [discussions](https://github.com/jchristn/Mux/discussions).
 
 ## What is mux?
 
@@ -37,8 +38,8 @@
 - Built-in tools: file edit/read/write/delete, directory management, glob, grep, process execution, and rendered web retrieval
 - External web search: optional Tavily and You.com providers expose `web_search` for result discovery
 - Shell-aware process execution metadata: `run_process` tells the model which OS and shell it will run under
-- MCP extensible in interactive mode: external tool servers appear beside built-in tools
-- TUIKit interactive UI (alpha, `v0.3.0`): a full-screen shell with per-job transcripts, a job sidebar, a multi-line composer, a command palette / slash commands / menu over one command catalog, an interactive tool-approval modal, and autosaved resumable sessions. Multiple prompts run as concurrent background jobs (a single-writer lease serializes file edits); enqueue-while-busy lets you start a new job or append to the focused one. See `USAGE.md`.
+- MCP tool servers: define `stdio`/HTTP servers in `mcp-servers.json` (execution inside the new TUIKit interactive UI is not yet wired in v0.3.0 — see CHANGELOG)
+- TUIKit interactive UI (`v0.3.0`): a full-screen shell with per-job transcripts, a job sidebar, a multi-line composer, a command palette / slash commands / menu over one command catalog, an interactive tool-approval modal, and autosaved resumable sessions. Multiple prompts run as concurrent background jobs (a single-writer lease serializes file edits); enqueue-while-busy lets you start a new job or append to the focused one. See `USAGE.md`.
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
 - Health checks: `mux probe` validates config, backend reachability, auth, and model access

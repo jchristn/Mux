@@ -19,7 +19,7 @@ namespace Mux.Core.Settings
         /// <summary>
         /// The product version.
         /// </summary>
-        public static readonly string ProductVersion = "0.3.0-alpha";
+        public static readonly string ProductVersion = "0.3.0";
 
         /// <summary>
         /// The default system prompt used when no custom prompt is configured.

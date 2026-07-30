@@ -3,7 +3,7 @@
 **Status:** Draft design (**alpha**). Mux is alpha, single-user. This document assumes we rebuild
 the Mux front-end on top of [TUIKit](../TUIKit) as a display/control library and are free to
 delete legacy code rather than preserve it. There is no strangler/parity-gating requirement —
-we do it right the first time. Target: branch **`feature/v0.3.0`**, shipped as **`0.3.0-alpha`**.
+we do it right the first time. Target: branch **`feature/v0.3.0`**, shipped as **`0.3.0`**.
 
 **What this is not:** a merge of the two codebases. `Mux.Core` (the engine) stays a UI-free
 library. TUIKit is consumed as a NuGet dependency by a rebuilt `Mux.Cli` presentation layer.
@@ -528,7 +528,7 @@ Not a phasing gate — just a sane dependency order:
 # 16. Execution plan (feature/v0.3.0, alpha)
 
 This is the actionable checklist. Work happens on branch **`feature/v0.3.0`** and ships as
-**`0.3.0-alpha`**. Annotate each item in place as you go.
+**`0.3.0`**. Annotate each item in place as you go.
 
 ### 16.0 Execution decisions log (recorded during implementation)
 
@@ -623,11 +623,11 @@ Per `C:\code\agents\requirements\BACKEND_TEST_ARCHITECTURE.md` (Touchstone, runn
 - [x] Confirm `Test.Automated`, `Test.Xunit`, `Test.Nunit` all green on the ported suites. — **213 total / 206 pass / 7 skip** (console); Nunit + Xunit 207 each; green on `net8.0` and `net10.0`, warning-clean.
 
 **B. Dependency swap (TUIKit in; Spectre removed, TUI rewrite still pending)**
-- [x] Bump `Mux.Cli.csproj` `<Version>` `0.2.0` → `0.3.0-alpha`; add `<PackageReleaseNotes>` noting the TUIKit rewrite is alpha.
+- [x] Bump `Mux.Cli.csproj` `<Version>` `0.2.0` → `0.3.0`; add `<PackageReleaseNotes>` noting the TUIKit rewrite is alpha.
 - [x] Add `<PackageReference Include="TUIKit" Version="0.2.0" />` to `Mux.Cli.csproj` (pinned, exact); confirm it restores for `net8.0` and `net10.0`. — restores clean on both TFMs.
 - [x] Remove direct `<PackageReference Include="Spectre.Console" ... />` and replace the line-mode rendering usage with mux-owned shims backed by TUIKit `StyledConsole`, `Markup`, and `Table`.
 - [x] Remove `Spectre.Console.Cli` and replace the command host with a narrow local parser/dispatcher. — decision recorded in §16.0; this is required for complete transitive package removal.
-- [x] Add a top-of-`README.md` alpha banner for 0.3.0 and a `CHANGELOG.md` `## v0.3.0-alpha (Unreleased)` heading.
+- [x] Add a top-of-`README.md` alpha banner for 0.3.0 and a `CHANGELOG.md` `## v0.3.0 (Unreleased)` heading.
 - **Exit criteria (revised):** Touchstone pipeline green across all runners; `Mux.Core`, `Mux.Cli`, and all test projects build warning-clean on `net8.0` + `net10.0` with **TUIKit referenced**; `dotnet list package --include-transitive` for `Mux.Cli` shows no `Spectre.Console`. The full-screen legacy renderer teardown (`InteractiveCommand`, `InteractiveChromeLayout`, `LineBuffer`, etc.) still moves to **M6**, but it no longer carries a Spectre dependency while it waits for the TUIKit rewrite.
 
 ---
@@ -1042,7 +1042,7 @@ suites (M2), since the fake UI runners bypass the real tool/lease path.
   `defaultEnqueueBehavior`) and the `sessions/` store.
 - [x] `TESTING.md` rewritten for the current architecture (three runners × two TFMs, `src/` paths,
   headless coverage, `--results`).
-- [x] `CHANGELOG.md` `## v0.3.0-alpha` maintained across the migration (Added/Changed/Removed/Testing —
+- [x] `CHANGELOG.md` `## v0.3.0` maintained across the migration (Added/Changed/Removed/Testing —
   Spectre removal + the concurrency/approval/session model called out).
 - [x] Repository requirements confirmed: `.gitignore`, `README.md`, `CHANGELOG.md`, `LICENSE.md` present;
   all source under `src/`.
@@ -1057,21 +1057,21 @@ suites (M2), since the fake UI runners bypass the real tool/lease path.
 - [ ] **Open PR from `feature/v0.3.0`** (owner) — not opened automatically; branch is committed and ready.
 - [ ] `CLAUDE.md` — no repo-convention changes needed this pass; revisit at PR time.
 - **Exit criteria:** docs accurate ✅, CI defined for both TFMs across all runners ✅; remaining: a
-  manual terminal smoke pass and opening the PR (owner actions), then tag `0.3.0-alpha`.
+  manual terminal smoke pass and opening the PR (owner actions), then tag `0.3.0`.
 
 > **Note on `--version`/pin:** the live pin is `TUIKit 0.2.0`; bump to the cross-platform-validated
 > `0.3.1` when it publishes (tracked in §18) and re-run the matrix before tagging.
 
 ---
 
-### 16.4 Global definition of done (v0.3.0-alpha)
+### 16.4 Global definition of done (v0.3.0)
 
 - [x] Legacy interactive renderer (`InteractiveChromeLayout`, cursor bookkeeping, poll-loop input, paste heuristics, `_ActiveRun` singleton) **deleted**, not dormant. — done in the M6 teardown (11 files removed; interactive stubbed pending the TUIKit shell).
 - [x] `Mux.Core` remains UI-free (no `Console.*`, no TUIKit reference); jobs/lease/approvals/sessions live there and are headless-tested. — the two stray `Console.Error` sites were rerouted; `Mux.Core` references no TUIKit.
 - [x] `Mux.Cli` renders exclusively via TUIKit (`Spectre.Console` and `Spectre.Console.Cli` gone; mux-owned command parser retained deliberately).
 - [x] All §14 implementation decisions are recorded and owner-approved, including forked job history, explicit transcript merge, tool classification defaults, resume behavior, `AutoSafe`, and the sidebar breakpoint.
 - [x] Every shipped feature has Touchstone coverage passing in all runners (§16.3) — 335 passing checks (7 documented skips) across console/xUnit/NUnit on both TFMs. (Remaining code all lives behind the explicitly-tracked deferrals in §18 / follow-up tasks.)
-- [x] Build warning-clean on `net8.0` + `net10.0`; `0.3.0-alpha` marked alpha throughout.
+- [x] Build warning-clean on `net8.0` + `net10.0`; version `0.3.0` (alpha status noted in the README).
 
 ---
 

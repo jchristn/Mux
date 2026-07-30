@@ -2,13 +2,13 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <Version>0.3.0-alpha</Version>
+    <Version>0.3.0</Version>
     <Description>CLI interface for mux AI agent</Description>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mux</ToolCommandName>
     <PackageId>Mux.Cli</PackageId>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>0.3.0-alpha (alpha): begin the TUIKit front-end rewrite. Test suite migrated to Touchstone; TUIKit added as the rendering dependency (pinned to 0.2.0, bumping to the cross-platform-validated 0.3.1 once published). The legacy Spectre.Console rendering and command-host dependencies have been removed.</PackageReleaseNotes>
+    <PackageReleaseNotes>0.3.0: TUIKit front-end. The interactive UI is rebuilt on TUIKit (per-job transcripts, sidebar, command palette/slash/menu, tool-approval modal, resumable sessions, concurrent jobs with a single-writer lease). Test suite migrated to Touchstone. TUIKit is the rendering dependency (pinned to 0.2.0). The legacy Spectre.Console rendering and command-host dependencies have been removed.</PackageReleaseNotes>
     <NoWarn>$(NoWarn);NU5111</NoWarn>
   </PropertyGroup>
 
