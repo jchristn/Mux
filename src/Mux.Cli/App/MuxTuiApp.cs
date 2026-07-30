@@ -1221,10 +1221,11 @@ namespace Mux.Cli.App
 
         private void EchoPrompt(string prompt)
         {
-            // "mux> <prompt>" with a leading and trailing blank line; "mux>" in green, the prompt in grey.
+            // "mux> <prompt>" with a leading blank line; "mux>" in green, the prompt in grey. The thinking
+            // indicator is shown directly beneath the prompt (no blank between), and once it is dismissed
+            // the blanked line becomes the trailing separator before the response.
             _Conversation.WriteLine(Text.From(string.Empty));
             _Conversation.WriteLine(Text.From(PromptText).Green().Bold().Append(Text.From(prompt ?? string.Empty)));
-            _Conversation.WriteLine(Text.From(string.Empty));
         }
 
         private void AutoSave()
