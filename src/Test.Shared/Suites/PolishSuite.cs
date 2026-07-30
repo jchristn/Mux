@@ -38,11 +38,12 @@ namespace Test.Shared.Suites
                         using (MuxTuiApp app = NewApp(out _, manager))
                         {
                             await Task.CompletedTask.ConfigureAwait(false);
-                            string start = app.ThemeName;
+                            string start = app.ThemeName; // "mux" default
                             app.CycleTheme();
                             MuxAssert.IsFalse(string.Equals(start, app.ThemeName, StringComparison.Ordinal), "theme changed");
                             app.CycleTheme();
-                            app.CycleTheme(); // three presets -> back to start
+                            app.CycleTheme();
+                            app.CycleTheme(); // four presets (mux + three built-ins) -> back to start
                             MuxAssert.AreEqual(start, app.ThemeName, "wrapped to start");
                         }
                     }),

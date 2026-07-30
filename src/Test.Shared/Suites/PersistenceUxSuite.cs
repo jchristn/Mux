@@ -174,7 +174,7 @@ namespace Test.Shared.Suites
                             SessionSnapshot snapshot = SnapshotWithJob("j1", "Completed", "do it", "did it");
                             app.RestoreSession(SessionResumeService.Resume(snapshot));
 
-                            string transcript = Join(app.JobTranscriptSnapshot("j1"));
+                            string transcript = Join(app.TranscriptSnapshot());
                             MuxAssert.Contains("resumed", transcript, "resume header");
                             MuxAssert.Contains("do it", transcript, "user message restored");
                             MuxAssert.Contains("did it", transcript, "assistant message restored");
@@ -191,7 +191,7 @@ namespace Test.Shared.Suites
                             SessionSnapshot snapshot = SnapshotWithJob("j9", "Running", "long task", null);
                             app.RestoreSession(SessionResumeService.Resume(snapshot));
 
-                            MuxAssert.Contains("re-run required", Join(app.JobTranscriptSnapshot("j9")), "interrupted marked");
+                            MuxAssert.Contains("re-run required", Join(app.TranscriptSnapshot()), "interrupted marked");
                             MuxAssert.AreEqual(0, manager.Jobs.Count, "no job auto-run on restore");
                         }
                     }),
@@ -212,8 +212,8 @@ namespace Test.Shared.Suites
                                 MuxAssert.IsTrue(app.IsModalActive, "browser open");
                                 Feed(backend, app, "\r"); // select first
 
-                                await WaitUntilAsync(() => app.JobIds.Count == 1, ct).ConfigureAwait(false);
-                                MuxAssert.Contains("hi there", Join(app.JobTranscriptSnapshot("jx")), "resumed transcript");
+                                await WaitUntilAsync(() => Join(app.TranscriptSnapshot()).Contains("hi there", StringComparison.Ordinal), ct).ConfigureAwait(false);
+                                MuxAssert.Contains("hi there", Join(app.TranscriptSnapshot()), "resumed transcript");
                             }
                         }
                         finally
@@ -269,7 +269,6 @@ namespace Test.Shared.Suites
         {
             backend = new HeadlessBackend(100, 24);
             MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove, store, "ep", "model");
-            app.DefaultEnqueueBehavior = EnqueueBehavior.NewJob;
             return app;
         }
 

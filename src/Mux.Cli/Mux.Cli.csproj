@@ -13,12 +13,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- TUIKit (pinned, exact) will drive the rebuilt interactive UI. TARGET: 0.3.1 (validated on
-         Windows, Linux, and macOS) — bump this pin the moment 0.3.1 is published to NuGet; it is not
-         on the feed yet (latest is 0.2.0), and pinning a missing package breaks restore. Source lives
-         at C:\Code\TUIKit for reference only; always consume the published package, never a project
-         reference. -->
-    <PackageReference Include="TUIKit" Version="0.2.0" />
+    <!-- TUIKit (pinned, exact) drives the interactive UI. Source lives at C:\Code\TUIKit for reference
+         only; always consume the published NuGet package, never a project reference. -->
+    <PackageReference Include="TUIKit" Version="0.4.0" />
   </ItemGroup>
 
   <ItemGroup>

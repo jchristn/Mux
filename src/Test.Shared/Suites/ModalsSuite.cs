@@ -113,62 +113,6 @@ namespace Test.Shared.Suites
                         }
                     }),
 
-                    // ---- Jobs modal ----
-                    Case("JobsModalFocusesSelected", "Selecting a job in the jobs modal focuses it", async (CancellationToken ct) =>
-                    {
-                        await using (JobManager manager = new JobManager(EchoRunner, maxConcurrency: 2))
-                        using (MuxTuiApp app = NewAppNewJob(out HeadlessBackend backend, manager))
-                        {
-                            Feed(backend, app, "alpha" + "\r");
-                            Feed(backend, app, "beta" + "\r");
-                            await app.DrainProjectorsAsync().ConfigureAwait(false);
-                            string firstId = app.JobIds[0];
-                            MuxAssert.AreEqual(app.JobIds[1], app.FocusedJobId, "newest focused initially");
-
-                            Feed(backend, app, "/jobs" + "\r"); // open jobs modal
-                            MuxAssert.IsTrue(app.IsModalActive, "jobs modal open");
-                            Feed(backend, app, "\r"); // Enter on option 0 (first job)
-
-                            await WaitUntilAsync(() => app.FocusedJobId == firstId, ct).ConfigureAwait(false);
-                            MuxAssert.AreEqual(firstId, app.FocusedJobId, "focused the selected job");
-                        }
-                    }),
-
-                    Case("JobsModalEmptyShowsMessage", "Opening the jobs modal with no jobs shows a message", async (CancellationToken ct) =>
-                    {
-                        await using (JobManager manager = NewManager())
-                        using (MuxTuiApp app = NewAppNewJob(out HeadlessBackend backend, manager))
-                        {
-                            await Task.CompletedTask.ConfigureAwait(false);
-                            Feed(backend, app, "/jobs" + "\r");
-                            MuxAssert.IsTrue(app.IsModalActive, "message modal shown");
-                            MuxAssert.AreEqual(0, app.JobIds.Count, "no jobs");
-
-                            Feed(backend, app, "\r"); // dismiss OK
-                            MuxAssert.IsFalse(app.IsModalActive, "message dismissed");
-                        }
-                    }),
-
-                    Case("JobsModalEscapeKeepsFocus", "Escaping the jobs modal leaves focus unchanged", async (CancellationToken ct) =>
-                    {
-                        await using (JobManager manager = new JobManager(EchoRunner, maxConcurrency: 2))
-                        using (MuxTuiApp app = NewAppNewJob(out HeadlessBackend backend, manager))
-                        {
-                            Feed(backend, app, "alpha" + "\r");
-                            Feed(backend, app, "beta" + "\r");
-                            await app.DrainProjectorsAsync().ConfigureAwait(false);
-                            string focusedBefore = app.FocusedJobId!;
-
-                            Feed(backend, app, "/jobs" + "\r");
-                            backend.FeedInput(new byte[] { 0x1b }); // Escape
-                            app.PumpInputOnce();
-                            app.PumpInputOnce();
-
-                            MuxAssert.IsFalse(app.IsModalActive, "modal closed");
-                            MuxAssert.AreEqual(focusedBefore, app.FocusedJobId, "focus unchanged");
-                        }
-                    }),
-
                     // ---- Quit confirmation + startup splash ----
                     Case("QuitOpensConfirmationModal", "Quitting opens a confirmation modal that Escape dismisses", async (CancellationToken ct) =>
                     {
@@ -228,7 +172,6 @@ namespace Test.Shared.Suites
         private static MuxTuiApp NewAppNewJob(out HeadlessBackend backend, JobManager manager)
         {
             MuxTuiApp app = NewApp(out backend, manager);
-            app.DefaultEnqueueBehavior = EnqueueBehavior.NewJob;
             return app;
         }
 

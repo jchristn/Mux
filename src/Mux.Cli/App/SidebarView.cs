@@ -1,17 +1,15 @@
 namespace Mux.Cli.App
 {
     using System;
-    using System.Collections.Generic;
-    using Mux.Core.Jobs;
     using TUIKit;
     using TUIKit.Content;
 
     /// <summary>
-    /// Renders the ambient sidebar into a <see cref="Pane"/>: a session header followed by one row per
-    /// job (state glyph, short id, title, and a marker on the focused job). <see cref="Refresh"/> is
-    /// idempotent — it clears and rewrites the pane from a snapshot of job state — so it is safe to call
-    /// on every <c>JobManager</c> event and on focus changes. Calls are serialized internally so
-    /// concurrent refreshes from manager worker threads do not interleave.
+    /// Renders the ambient sidebar into a <see cref="Pane"/>: a session header (title + active endpoint
+    /// name) followed by conversation telemetry — current status, this-turn timing/tokens, and
+    /// session-wide totals. <see cref="Refresh"/> is idempotent (it clears and rewrites the pane from a
+    /// snapshot) so it is safe to call on every turn boundary and streaming tick. Calls are serialized
+    /// internally so concurrent refreshes do not interleave.
     /// </summary>
     public sealed class SidebarView
     {
@@ -41,17 +39,15 @@ namespace Mux.Cli.App
         #region Public-Methods
 
         /// <summary>
-        /// Rewrites the sidebar from the given job snapshot.
+        /// Rewrites the sidebar from the given header and telemetry snapshot.
         /// </summary>
-        /// <param name="jobs">The jobs to list, in display order. Must not be null.</param>
-        /// <param name="focusedJobId">The id of the focused job, or null.</param>
         /// <param name="title">The session title shown in the header.</param>
         /// <param name="endpointName">The active endpoint name shown in the header.</param>
-        /// <param name="model">The active model shown in the header.</param>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="jobs"/> is null.</exception>
-        public void Refresh(IReadOnlyList<Job> jobs, string? focusedJobId, string title, string endpointName, string model)
+        /// <param name="stats">The conversation telemetry to display. Must not be null.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="stats"/> is null.</exception>
+        public void Refresh(string title, string endpointName, ConversationStats stats)
         {
-            if (jobs is null) throw new ArgumentNullException(nameof(jobs));
+            if (stats is null) throw new ArgumentNullException(nameof(stats));
 
             lock (_Sync)
             {
@@ -62,31 +58,31 @@ namespace Mux.Cli.App
                     _Pane.WriteLine(Text.From(Fit(endpointName)).Dim());
                 }
 
-                if (!string.IsNullOrWhiteSpace(model))
+                _Pane.WriteLine(Text.From(string.Empty));
+
+                string status = stats.Busy ? "running" : "idle";
+                if (stats.Queued > 0)
                 {
-                    _Pane.WriteLine(Text.From(Fit(model)).Dim());
+                    status += $" · {stats.Queued} queued";
                 }
+
+                _Pane.WriteLine(Text.From(Fit("STATUS")).Bold());
+                _Pane.WriteLine(Text.From(Fit(" " + status)).Dim());
 
                 _Pane.WriteLine(Text.From(string.Empty));
-                _Pane.WriteLine(Text.From(Fit($"JOBS ({jobs.Count})")).Bold());
+                _Pane.WriteLine(Text.From(Fit("THIS TURN")).Bold());
+                _Pane.WriteLine(Text.From(Fit(Row("TTFT", FormatMs(stats.LastTtftMs)))));
+                _Pane.WriteLine(Text.From(Fit(Row("Stream", FormatMs(stats.LastStreamMs)))));
+                _Pane.WriteLine(Text.From(Fit(Row("Context", FormatTokens(stats.LastContextTokens)))));
 
-                if (jobs.Count == 0)
-                {
-                    _Pane.WriteLine(Text.From(Fit("(no jobs)")).Dim());
-                    return;
-                }
-
-                for (int i = 0; i < jobs.Count; i++)
-                {
-                    Job job = jobs[i];
-                    bool focused = string.Equals(job.Id, focusedJobId, StringComparison.Ordinal);
-                    string marker = focused ? "▸" : " ";
-                    string index = i < 9 ? (i + 1).ToString() : "·";
-                    string label = string.IsNullOrWhiteSpace(job.Title) ? job.Prompt : job.Title;
-                    string row = $"{marker}{index} {StateGlyph(job.State)} {label}";
-                    StyledText styled = Text.From(Fit(row));
-                    _Pane.WriteLine(focused ? styled.Bold() : styled);
-                }
+                _Pane.WriteLine(Text.From(string.Empty));
+                _Pane.WriteLine(Text.From(Fit("SESSION")).Bold());
+                _Pane.WriteLine(Text.From(Fit(Row("Turns", stats.Turns.ToString()))));
+                _Pane.WriteLine(Text.From(Fit(Row("TTFT avg", FormatMs(AverageTtft(stats))))));
+                _Pane.WriteLine(Text.From(Fit(Row("Stream", FormatMs(stats.SessionStreamMs)))));
+                _Pane.WriteLine(Text.From(Fit(Row("In tok", FormatTokens(stats.InputTokens)))));
+                _Pane.WriteLine(Text.From(Fit(Row("Out tok", FormatTokens(stats.OutputTokens)))));
+                _Pane.WriteLine(Text.From(Fit(Row("Cached", FormatTokens(stats.CachedTokens)))));
             }
         }
 
@@ -94,20 +90,44 @@ namespace Mux.Cli.App
 
         #region Private-Methods
 
-        private static string StateGlyph(JobState state)
+        private static long AverageTtft(ConversationStats stats)
         {
-            switch (state)
+            return stats.TtftSamples > 0 ? stats.SessionTtftMs / stats.TtftSamples : -1;
+        }
+
+        private static string Row(string label, string value)
+        {
+            return $" {label,-9}{value}";
+        }
+
+        private static string FormatMs(long ms)
+        {
+            if (ms < 0)
             {
-                case JobState.Queued: return "•";
-                case JobState.Running: return "↻";
-                case JobState.AwaitingApproval: return "?";
-                case JobState.AwaitingWriteLease: return "⧗";
-                case JobState.Paused: return "⏸";
-                case JobState.Completed: return "✓";
-                case JobState.Failed: return "✗";
-                case JobState.Cancelled: return "⊘";
-                default: return "·";
+                return "—";
             }
+
+            if (ms < 1000)
+            {
+                return ms + " ms";
+            }
+
+            return (ms / 1000.0).ToString("0.0") + " s";
+        }
+
+        private static string FormatTokens(long tokens)
+        {
+            if (tokens <= 0)
+            {
+                return "—";
+            }
+
+            if (tokens < 1000)
+            {
+                return tokens.ToString();
+            }
+
+            return (tokens / 1000.0).ToString("0.0") + "k";
         }
 
         private static string Fit(string text)

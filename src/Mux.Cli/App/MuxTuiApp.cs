@@ -2,6 +2,7 @@ namespace Mux.Cli.App
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Enums;
@@ -21,12 +22,12 @@ namespace Mux.Cli.App
     using TUIKit.Widgets;
 
     /// <summary>
-    /// The TUIKit-hosted interactive shell for mux. Lays out a sidebar, a transcript region, a composer
-    /// editor, and a footer hint line. Each job owns its own transcript <see cref="Pane"/>; only the
-    /// focused job's pane is bound to the transcript region, so concurrent jobs never write over one
-    /// another. The sidebar lists all jobs and tracks focus. Below a width threshold (or via a manual
-    /// toggle) the sidebar collapses and the transcript reclaims the width. The terminal backend is
-    /// injected so the shell can be driven headlessly in tests.
+    /// The TUIKit-hosted interactive shell for mux. Presents a single continuous conversation: the user
+    /// types a prompt and it runs; typing another prompt while a turn is running queues it to run when the
+    /// current turn finishes (like a chat client). One transcript <see cref="Pane"/> holds the whole
+    /// conversation; a sidebar shows the active endpoint and per-turn / session telemetry; the bottom row
+    /// is a green <c>mux&gt;</c> prompt and the composer. The terminal backend is injected so the shell can
+    /// be driven headlessly in tests.
     /// </summary>
     public sealed class MuxTuiApp : IDisposable
     {
@@ -35,10 +36,12 @@ namespace Mux.Cli.App
         private const string TranscriptRegion = "transcript";
         private const string SidebarRegion = "sidebar";
         private const string ComposerRegion = "composer";
+        private const string PromptLabelRegion = "promptlabel";
         private const string FooterRegion = "footer";
+        private const string PromptText = "mux> ";
         private const int SidebarWidth = 28;
         private const int CollapseThreshold = 100;
-        private const string FooterHint = "^Q quit · ^L clear · ^N next · ^B sidebar · Alt+# focus · Enter send · Esc cancel";
+        private const string FooterHint = "^Q quit · ^L clear · ^K palette · F1 menu · Shift+Enter newline · Enter send · Esc cancel";
 
         private readonly ITerminalBackend _Backend;
         private readonly TuiApplication _App;
@@ -49,40 +52,38 @@ namespace Mux.Cli.App
         private string _EndpointName;
         private string _Model;
         private readonly string _Title;
-        private readonly Pane _HomePane;
+        private readonly Pane _Conversation;
         private readonly Pane _SidebarPane;
+        private readonly Pane _PromptLabel;
         private readonly Pane _Footer;
         private readonly TextEditor _Composer;
         private readonly SidebarView _Sidebar;
         private readonly MuxCommandCatalog _Catalog;
         private Layout _ExpandedLayout = null!;
         private Layout _CollapsedLayout = null!;
-        private readonly Dictionary<string, Pane> _JobPanes = new Dictionary<string, Pane>(StringComparer.Ordinal);
-        private readonly List<string> _JobOrder = new List<string>();
+        private readonly List<ConversationMessage> _ConversationHistory = new List<ConversationMessage>();
+        private readonly Queue<string> _PendingPrompts = new Queue<string>();
+        private readonly List<string> _TurnJobIds = new List<string>();
         private readonly List<Task> _ProjectorTasks = new List<Task>();
+        private readonly ConversationStats _Stats = new ConversationStats();
         private readonly object _Sync = new object();
         private readonly SemaphoreSlim _SaveGate = new SemaphoreSlim(1, 1);
         private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
-        private readonly EventHandler<JobManagerEvent> _JobEventHandler;
-        private readonly PromptHistory _History = new PromptHistory();
+        private readonly PromptHistory _PromptHistory = new PromptHistory();
         private readonly MenuBar _MenuBar;
-        private Pane _CurrentPane;
         private CommandPalette? _Palette;
         private bool _PaletteActive;
-        private string? _FocusedJobId;
-        private EnqueueBehavior _DefaultEnqueueBehavior = EnqueueBehavior.Ask;
-        private EnqueueBehavior? _SessionEnqueueDefault;
+        private Job? _ActiveJob;
+        private bool _TurnInFlight;
         private Func<string, bool>? _SlashHandler;
-        private bool _ChooserActive;
-        private bool _RememberChoice;
-        private string? _PendingPrompt;
         private bool _ManualCollapsed;
         private bool _CollapsedApplied;
         private bool _Compact;
         private int _ThemeIndex;
         private bool _Disposed;
 
-        private static readonly Theme[] _Themes = { Theme.Dark, Theme.Light, Theme.HighContrast };
+        private static readonly Theme MuxTheme = CreateTheme();
+        private static readonly Theme[] _Themes = { MuxTheme, Theme.Dark, Theme.Light, Theme.HighContrast };
 
         #endregion
 
@@ -93,12 +94,12 @@ namespace Mux.Cli.App
         /// </summary>
         /// <param name="backend">The terminal backend (console for production, headless for tests). Must not be null.</param>
         /// <param name="jobManager">The job manager that runs submitted prompts. Must not be null.</param>
-        /// <param name="title">A short session title shown in the transcript header and sidebar.</param>
-        /// <param name="approvalPolicy">The approval policy applied to submitted jobs.</param>
+        /// <param name="title">A short session title shown in the sidebar.</param>
+        /// <param name="approvalPolicy">The approval policy applied to runs.</param>
         /// <param name="sessionStore">Optional session store; when supplied, the session autosaves at turn boundaries and can be saved/browsed. Null disables persistence.</param>
         /// <param name="endpointName">The effective endpoint name (shown in the sidebar, recorded in sessions).</param>
-        /// <param name="model">The effective model (shown in the sidebar, recorded in sessions).</param>
-        /// <param name="onEndpointSelected">Optional callback invoked when the user switches endpoints, so the caller can apply it to future jobs. Null disables live switching.</param>
+        /// <param name="model">The effective model (recorded in sessions).</param>
+        /// <param name="onEndpointSelected">Optional callback invoked when the user switches endpoints, so the caller can apply it to future runs. Null disables live switching.</param>
         /// <param name="showSplash">When true, opens the startup splash modal.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
@@ -123,18 +124,22 @@ namespace Mux.Cli.App
 
             _App = new TuiApplication(backend);
             _App.CtrlCPolicy = CtrlCPolicy.DoubleTapToExit;
+            _App.Theme = MuxTheme; // no background color; the terminal's own background shows through
 
-            BuildLayouts(4);
+            BuildLayouts(1);
 
-            _HomePane = new Pane("home");
+            _Conversation = new Pane(TranscriptRegion);
             _SidebarPane = new Pane(SidebarRegion);
+            _PromptLabel = new Pane(PromptLabelRegion);
             _Footer = new Pane(FooterRegion);
             _Composer = new TextEditor { IsFocused = true };
-            _CurrentPane = _HomePane;
             _Sidebar = new SidebarView(_SidebarPane);
 
-            _App.BindPane(TranscriptRegion, _HomePane);
+            _PromptLabel.WriteLine(Text.From(PromptText).Green().Bold());
+
+            _App.BindPane(TranscriptRegion, _Conversation);
             _App.BindPane(SidebarRegion, _SidebarPane);
+            _App.BindPane(PromptLabelRegion, _PromptLabel);
             _App.BindPane(FooterRegion, _Footer);
             _App.Bind(ComposerRegion, _Composer);
 
@@ -142,13 +147,8 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.quit", "Quit", "ctrl+q", RequestQuit, "Session", new[] { "quit", "exit", "q" }));
             _Catalog.Add(new CommandDescriptor("mux.endpoint", "Endpoints / models", null, OpenEndpointModal, "Model", new[] { "endpoint", "endpoints", "model", "models" }));
             _Catalog.Add(new CommandDescriptor("mux.clear", "Clear transcript", "ctrl+l", ClearTranscript, "View", new[] { "clear" }));
-            // Focus-next is bound to Ctrl+N rather than the conventional Ctrl+J: Ctrl+J is byte 0x0A (LF),
-            // which terminals and the input parser deliver as Enter, so it cannot be distinguished from a
-            // submit in legacy keyboard mode. Revisit when the enhanced-keyboard keymap lands.
-            _Catalog.Add(new CommandDescriptor("mux.focus.next", "Focus next job", "ctrl+n", FocusNext, "Jobs", new[] { "next" }));
             _Catalog.Add(new CommandDescriptor("mux.sidebar.toggle", "Toggle sidebar", "ctrl+b", ToggleSidebar, "View", new[] { "sidebar" }));
             _Catalog.Add(new CommandDescriptor("mux.palette", "Command palette", "ctrl+k", OpenPalette, "Session", new[] { "commands", "palette" }));
-            _Catalog.Add(new CommandDescriptor("mux.jobs", "Jobs", "f2", OpenJobsModal, "Jobs", new[] { "jobs" }));
             _Catalog.Add(new CommandDescriptor("mux.save", "Save session", "ctrl+s", SaveSession, "Session", new[] { "save" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Cycle theme", null, CycleTheme, "View", new[] { "theme" }));
@@ -160,17 +160,11 @@ namespace Mux.Cli.App
             _MenuBar = MenuBarBuilder.Build(_Catalog);
             _SlashHandler = new SlashCommandParser(_Catalog).TryHandle;
 
-            _App.KeyReceived += OnKeyReceived;
-            _JobEventHandler = (object? sender, JobManagerEvent e) =>
-            {
-                RefreshSidebar();
-                RefreshFooter();
-                if (e is JobCompletedEvent)
-                {
-                    AutoSave();
-                }
-            };
-            _JobManager.EventPublished += _JobEventHandler;
+            // Own input via the pre-widget KeyFilter. The composer is a focusable TextEditor that would
+            // otherwise consume Enter (as a newline) and every Ctrl+key (swallowing command chords) before
+            // they could reach us, so we intercept here — dispatching submits, chords, and edits ourselves —
+            // and forward the remaining keys to the composer. Modals and the Ctrl+C policy still run first.
+            _App.KeyFilter = OnKeyFilter;
 
             WriteHeader();
             RefreshSidebar();
@@ -179,7 +173,7 @@ namespace Mux.Cli.App
 
             if (showSplash)
             {
-                _App.Modals.Push(new MuxBoxModal(string.Empty, MuxBanner.SplashLines(Defaults.ProductVersion), "Press Enter to start"));
+                _App.Modals.Push(new MuxBoxModal("mux", MuxBanner.SplashLines(Defaults.ProductVersion), "press any key to start", centered: true));
             }
         }
 
@@ -212,22 +206,7 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
-        /// The id of the job whose pane is currently bound to the transcript region, or null when the
-        /// home pane is shown.
-        /// </summary>
-        public string? FocusedJobId
-        {
-            get
-            {
-                lock (_Sync)
-                {
-                    return _FocusedJobId;
-                }
-            }
-        }
-
-        /// <summary>
-        /// The ids of jobs that have a transcript pane, in submission order.
+        /// The ids of the turn jobs run so far, in order. Each conversation turn is executed as one job.
         /// </summary>
         public IReadOnlyList<string> JobIds
         {
@@ -235,7 +214,69 @@ namespace Mux.Cli.App
             {
                 lock (_Sync)
                 {
-                    return new List<string>(_JobOrder);
+                    return new List<string>(_TurnJobIds);
+                }
+            }
+        }
+
+        /// <summary>
+        /// The id of the currently running turn's job, or the most recently run turn's job when idle;
+        /// null before the first turn.
+        /// </summary>
+        public string? FocusedJobId
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    if (_ActiveJob != null)
+                    {
+                        return _ActiveJob.Id;
+                    }
+
+                    return _TurnJobIds.Count > 0 ? _TurnJobIds[_TurnJobIds.Count - 1] : null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Whether a turn is currently running.
+        /// </summary>
+        public bool IsBusy
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _TurnInFlight;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The number of prompts queued behind the running turn.
+        /// </summary>
+        public int QueuedCount
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _PendingPrompts.Count;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The number of turns started this session.
+        /// </summary>
+        public int TurnCount
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _TurnJobIds.Count;
                 }
             }
         }
@@ -255,7 +296,7 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
-        /// The active theme's name (e.g. "Dark", "Light", "HighContrast").
+        /// The active theme's name (e.g. "mux", "Dark", "Light", "HighContrast").
         /// </summary>
         public string ThemeName
         {
@@ -285,45 +326,8 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
-        /// How a submit is handled while another job is active. Defaults to
-        /// <see cref="EnqueueBehavior.Ask"/> (show the chooser).
-        /// </summary>
-        public EnqueueBehavior DefaultEnqueueBehavior
-        {
-            get
-            {
-                lock (_Sync)
-                {
-                    return _DefaultEnqueueBehavior;
-                }
-            }
-            set
-            {
-                lock (_Sync)
-                {
-                    _DefaultEnqueueBehavior = value;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Whether the submit chooser is currently awaiting a choice.
-        /// </summary>
-        public bool IsChooserActive
-        {
-            get
-            {
-                lock (_Sync)
-                {
-                    return _ChooserActive;
-                }
-            }
-        }
-
-        /// <summary>
         /// Handler invoked for a composer submission that begins with <c>/</c>. Returns true when the
-        /// input was handled as a command (so it is not submitted as a prompt). When unset, a built-in
-        /// stub reports the command as unknown. Replaced by the slash-command router in a later milestone.
+        /// input was handled as a command (so it is not submitted as a prompt).
         /// </summary>
         public Func<string, bool>? SlashHandler
         {
@@ -333,7 +337,7 @@ namespace Mux.Cli.App
 
         /// <summary>
         /// The catalog-derived menu bar (menus grouped by command category, items wired to command
-        /// handlers). Interactive dropdown activation is a follow-up; the menu is a view over the catalog.
+        /// handlers).
         /// </summary>
         public MenuBar MenuBar
         {
@@ -385,7 +389,7 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
-        /// Whether a modal (approval, jobs, message, …) is currently active and trapping input.
+        /// Whether a modal (approval, sessions, message, …) is currently active and trapping input.
         /// </summary>
         public bool IsModalActive
         {
@@ -467,75 +471,6 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
-        /// Binds the given job's pane to the transcript region and makes it the focused job.
-        /// </summary>
-        /// <param name="jobId">The job id to focus.</param>
-        /// <returns>True when the job has a pane and was focused; otherwise false.</returns>
-        public bool FocusJob(string jobId)
-        {
-            if (string.IsNullOrEmpty(jobId))
-            {
-                return false;
-            }
-
-            lock (_Sync)
-            {
-                if (!_JobPanes.TryGetValue(jobId, out Pane? pane))
-                {
-                    return false;
-                }
-
-                _App.BindPane(TranscriptRegion, pane);
-                _CurrentPane = pane;
-                _FocusedJobId = jobId;
-            }
-
-            _JobManager.Focus(jobId);
-            RefreshSidebar();
-            RefreshFooter();
-            return true;
-        }
-
-        /// <summary>
-        /// Focuses the next job in submission order, wrapping around. No-op when there are no jobs.
-        /// </summary>
-        public void FocusNext()
-        {
-            string? target = null;
-            lock (_Sync)
-            {
-                if (_JobOrder.Count == 0)
-                {
-                    return;
-                }
-
-                int current = _FocusedJobId == null ? -1 : _JobOrder.IndexOf(_FocusedJobId);
-                target = _JobOrder[(current + 1) % _JobOrder.Count];
-            }
-
-            FocusJob(target);
-        }
-
-        /// <summary>
-        /// Focuses the job at the given 1-based position in submission order.
-        /// </summary>
-        /// <param name="oneBasedIndex">The 1-based job position.</param>
-        /// <returns>True when a job exists at that position and was focused; otherwise false.</returns>
-        public bool FocusByIndex(int oneBasedIndex)
-        {
-            string? target = null;
-            lock (_Sync)
-            {
-                if (oneBasedIndex >= 1 && oneBasedIndex <= _JobOrder.Count)
-                {
-                    target = _JobOrder[oneBasedIndex - 1];
-                }
-            }
-
-            return target != null && FocusJob(target);
-        }
-
-        /// <summary>
         /// Cycles the active theme (Dark → Light → HighContrast → …).
         /// </summary>
         public void CycleTheme()
@@ -556,7 +491,7 @@ namespace Mux.Cli.App
             lock (_Sync)
             {
                 _Compact = !_Compact;
-                BuildLayouts(_Compact ? 3 : 4);
+                BuildLayouts(_Compact ? 1 : 2);
                 _App.Layout = _CollapsedApplied ? _CollapsedLayout : _ExpandedLayout;
             }
         }
@@ -628,7 +563,7 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
-        /// Builds a snapshot of the current session (jobs, histories, prompt history, metadata).
+        /// Builds a snapshot of the current session (turn jobs, histories, prompt history, metadata).
         /// </summary>
         /// <returns>The session snapshot.</returns>
         public SessionSnapshot BuildSnapshot()
@@ -639,7 +574,7 @@ namespace Mux.Cli.App
                 _Title,
                 _EndpointName,
                 _Model,
-                _History.Snapshot(),
+                _PromptHistory.Snapshot(),
                 DateTime.UtcNow);
         }
 
@@ -670,9 +605,8 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
-        /// Rebuilds transcript panes and prompt history from a resumed session. Completed jobs render
-        /// read-only; interrupted jobs render with a re-run notice (nothing is auto-run). Replaces the
-        /// current transcript view.
+        /// Replays a resumed session into the single conversation transcript and rebuilds the prompt and
+        /// conversation history. Nothing is auto-run.
         /// </summary>
         /// <param name="resume">The resumed session state. Must not be null.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="resume"/> is null.</exception>
@@ -682,34 +616,21 @@ namespace Mux.Cli.App
 
             lock (_Sync)
             {
-                _JobPanes.Clear();
-                _JobOrder.Clear();
-                _FocusedJobId = null;
-                _CurrentPane = _HomePane;
+                _Conversation.Clear();
+                _ConversationHistory.Clear();
+                _TurnJobIds.Clear();
             }
 
-            _App.BindPane(TranscriptRegion, _HomePane);
-            _History.Restore(resume.PromptHistory);
+            _PromptHistory.Restore(resume.PromptHistory);
 
             foreach (PersistedJobSnapshot job in resume.CompletedJobs)
             {
-                RestoreJobPane(job, interrupted: false);
+                ReplayJob(job, interrupted: false);
             }
 
             foreach (PersistedJobSnapshot job in resume.InterruptedJobs)
             {
-                RestoreJobPane(job, interrupted: true);
-            }
-
-            string? last;
-            lock (_Sync)
-            {
-                last = _JobOrder.Count > 0 ? _JobOrder[_JobOrder.Count - 1] : null;
-            }
-
-            if (last != null)
-            {
-                FocusJob(last);
+                ReplayJob(job, interrupted: true);
             }
 
             RefreshSidebar();
@@ -717,45 +638,41 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
-        /// Awaits all in-flight job projections. Test helper that makes projected transcript content
-        /// deterministic before asserting.
+        /// Awaits all in-flight turn projections, including turns dequeued while draining. Test helper
+        /// that makes projected transcript content deterministic before asserting.
         /// </summary>
-        /// <returns>A task that completes when every started projection has finished.</returns>
-        public Task DrainProjectorsAsync()
+        /// <returns>A task that completes when the conversation is idle and no projections remain.</returns>
+        public async Task DrainProjectorsAsync()
         {
-            Task[] snapshot;
-            lock (_Sync)
+            while (true)
             {
-                snapshot = _ProjectorTasks.ToArray();
-            }
+                Task[] snapshot;
+                lock (_Sync)
+                {
+                    snapshot = _ProjectorTasks.ToArray();
+                }
 
-            return Task.WhenAll(snapshot);
+                await Task.WhenAll(snapshot).ConfigureAwait(false);
+
+                lock (_Sync)
+                {
+                    if (!_TurnInFlight && _ProjectorTasks.Count == snapshot.Length)
+                    {
+                        return;
+                    }
+                }
+            }
         }
 
         /// <summary>
-        /// Returns a plain-text snapshot of the currently focused transcript pane. Test helper.
+        /// Returns a plain-text snapshot of the conversation transcript. Test helper.
         /// </summary>
         /// <returns>The committed transcript lines without styling.</returns>
         public IReadOnlyList<string> TranscriptSnapshot()
         {
             lock (_Sync)
             {
-                return _CurrentPane.SnapshotPlainLines();
-            }
-        }
-
-        /// <summary>
-        /// Returns a plain-text snapshot of a specific job's transcript pane. Test helper.
-        /// </summary>
-        /// <param name="jobId">The job id.</param>
-        /// <returns>The job's transcript lines without styling, or an empty list when unknown.</returns>
-        public IReadOnlyList<string> JobTranscriptSnapshot(string jobId)
-        {
-            lock (_Sync)
-            {
-                return _JobPanes.TryGetValue(jobId, out Pane? pane)
-                    ? pane.SnapshotPlainLines()
-                    : new List<string>();
+                return _Conversation.SnapshotPlainLines();
             }
         }
 
@@ -793,18 +710,14 @@ namespace Mux.Cli.App
                 return string.Empty;
             }
 
-            IWidget? widget;
-            lock (_Sync)
+            IWidget? widget = regionId switch
             {
-                widget = regionId switch
-                {
-                    TranscriptRegion => _CurrentPane,
-                    SidebarRegion => _SidebarPane,
-                    FooterRegion => _Footer,
-                    ComposerRegion => _Composer,
-                    _ => (IWidget?)null
-                };
-            }
+                TranscriptRegion => _Conversation,
+                SidebarRegion => _SidebarPane,
+                FooterRegion => _Footer,
+                ComposerRegion => _Composer,
+                _ => (IWidget?)null
+            };
 
             return widget == null ? string.Empty : Snapshot.RenderWidget(widget, width, height);
         }
@@ -815,8 +728,6 @@ namespace Mux.Cli.App
             if (_Disposed) return;
             _Disposed = true;
 
-            _JobManager.EventPublished -= _JobEventHandler;
-
             try
             {
                 _Cts.Cancel();
@@ -825,7 +736,7 @@ namespace Mux.Cli.App
             {
             }
 
-            _App.KeyReceived -= OnKeyReceived;
+            _App.KeyFilter = null;
             _App.Stop();
             _App.Dispose();
             _Cts.Dispose();
@@ -838,19 +749,31 @@ namespace Mux.Cli.App
 
         private void BuildLayouts(int composerHeight)
         {
-            int reserve = composerHeight + 1; // composer + 1-row footer
+            int promptWidth = PromptText.Length;
+            int reserve = composerHeight + 1; // input row(s) + 1 status row
             _ExpandedLayout = Layout.Create()
-                .Add(TranscriptRegion, r => r.FillWidth(0, SidebarWidth).FillHeight(0, reserve).WithBorder(BorderStyle.Rounded, "Workspace"))
-                .Add(SidebarRegion, r => r.RightAnchored(0, SidebarWidth).FillHeight(0, reserve).WithBorder(BorderStyle.Rounded, "Jobs"))
-                .Add(ComposerRegion, r => r.FillWidth().BottomAnchored(1, composerHeight).WithBorder(BorderStyle.Rounded, "mux ›"))
-                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(0, 1).WithPadding(0))
+                .Add(TranscriptRegion, r => r.FillWidth(0, SidebarWidth).FillHeight(0, reserve).WithPadding(0))
+                .Add(SidebarRegion, r => r.RightAnchored(0, SidebarWidth).FillHeight(0, reserve).WithPadding(0))
+                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(composerHeight, 1).WithPadding(0))
+                .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).WithPadding(0))
+                .Add(ComposerRegion, r => r.FillWidth(promptWidth, 0).BottomAnchored(0, composerHeight).WithPadding(0))
                 .Build();
 
             _CollapsedLayout = Layout.Create()
-                .Add(TranscriptRegion, r => r.FillWidth().FillHeight(0, reserve).WithBorder(BorderStyle.Rounded, "Workspace"))
-                .Add(ComposerRegion, r => r.FillWidth().BottomAnchored(1, composerHeight).WithBorder(BorderStyle.Rounded, "mux ›"))
-                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(0, 1).WithPadding(0))
+                .Add(TranscriptRegion, r => r.FillWidth().FillHeight(0, reserve).WithPadding(0))
+                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(composerHeight, 1).WithPadding(0))
+                .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).WithPadding(0))
+                .Add(ComposerRegion, r => r.FillWidth(promptWidth, 0).BottomAnchored(0, composerHeight).WithPadding(0))
                 .Build();
+        }
+
+        private static Theme CreateTheme()
+        {
+            CellStyle text = CellStyle.Default.WithForeground(Color.FromPalette(7));   // light grey, default background
+            CellStyle accent = CellStyle.Default.WithForeground(Color.FromPalette(2)); // mux green
+            CellStyle border = CellStyle.Default.WithForeground(Color.FromPalette(8)); // dim
+            CellStyle muted = CellStyle.Default.WithForeground(Color.FromPalette(8));
+            return new Theme("mux", text, accent, border, muted, false);
         }
 
         private async Task MonitorResponsiveAsync(CancellationToken cancellationToken)
@@ -868,71 +791,87 @@ namespace Mux.Cli.App
             }
         }
 
-        private void OnKeyReceived(KeyEvent key)
+        private bool OnKeyFilter(KeyEvent key)
         {
-            // While the command palette is open it captures keys.
+            // While the command palette is open it captures every key.
             if (_PaletteActive)
             {
                 HandlePaletteKey(key);
-                return;
+                return true;
             }
 
-            // While the submit chooser is open it captures keys.
-            if (IsChooserActive)
-            {
-                HandleChooserKey(key);
-                return;
-            }
-
-            // Plain Enter (no modifiers) submits. Modified Enter arrives as a carriage-return character
-            // event (CSI-u in enhanced mode, ESC+CR for Alt in legacy mode), never as KeyCode.Enter.
+            // Plain Enter (no modifiers) submits.
             if (key.Code == KeyCode.Enter && key.Modifiers == KeyModifiers.None)
             {
                 OnEnter();
-                return;
+                return true;
+            }
+
+            // Shift+Enter (and any other modified Enter, which arrives as a carriage-return character in
+            // the enhanced keyboard protocol) inserts a newline. Alt+Enter is intercepted by Windows
+            // Terminal for the full-screen toggle and never reaches us.
+            if (IsCarriageReturn(key))
+            {
+                _Composer.InsertNewline();
+                return true;
+            }
+
+            // Function-key and Ctrl chords. The focused composer swallows every Ctrl+key, so command
+            // chords must be dispatched here rather than through the app's command router.
+            if (key.Code == KeyCode.F1)
+            {
+                OpenCommandMenu();
+                return true;
+            }
+
+            if (key.Code == KeyCode.F12)
+            {
+                ToggleMouseCapture();
+                return true;
+            }
+
+            if (key.Code == KeyCode.Character && (key.Modifiers & KeyModifiers.Ctrl) != 0)
+            {
+                // Ctrl+Backspace deletes the previous word (0x7F/0x08 carrying the Ctrl modifier).
+                if (key.Rune == 127 || key.Rune == 8)
+                {
+                    DeletePreviousWord();
+                    return true;
+                }
+
+                switch (char.ToLowerInvariant((char)key.Rune))
+                {
+                    case 'q': RequestQuit(); return true;
+                    case 'l': ClearTranscript(); return true;
+                    case 'k': OpenPalette(); return true;
+                    case 'b': ToggleSidebar(); return true;
+                    case 's': SaveSession(); return true;
+                }
+
+                // Swallow any other Ctrl+key so control codes never land in the composer as text.
+                return true;
             }
 
             if (key.Code == KeyCode.Escape)
             {
-                CancelFocusedJob();
-                return;
-            }
-
-            if (IsCarriageReturn(key))
-            {
-                if ((key.Modifiers & KeyModifiers.Ctrl) != 0)
-                {
-                    // Ctrl+Enter: submit as a new job, bypassing the chooser (enhanced keyboard only).
-                    SubmitDecided(EnqueueBehavior.NewJob);
-                }
-                else
-                {
-                    // Alt/Shift+Enter: insert a newline into the composer.
-                    _Composer.HandleKey(KeyEvent.Special(KeyCode.Enter));
-                }
-
-                return;
-            }
-
-            if (key.Code == KeyCode.Character
-                && (key.Modifiers & KeyModifiers.Alt) != 0
-                && key.Rune >= '1' && key.Rune <= '9')
-            {
-                FocusByIndex(key.Rune - '0');
-                return;
+                CancelActiveTurn();
+                return true;
             }
 
             if (key.Code == KeyCode.Up && _Composer.CaretRow == 0 && RecallPrevious())
             {
-                return;
+                return true;
             }
 
             if (key.Code == KeyCode.Down && _Composer.CaretRow == ComposerLineCount() - 1 && RecallNext())
             {
-                return;
+                return true;
             }
 
+            // Everything else is ordinary editing: forward to the composer and consume it so the app's
+            // focus routing does not handle it a second time.
             _Composer.HandleKey(key);
+            return true;
         }
 
         private void OnEnter()
@@ -944,7 +883,7 @@ namespace Mux.Cli.App
             }
 
             _Composer.Text = string.Empty;
-            _History.Add(prompt);
+            _PromptHistory.Add(prompt);
 
             if (prompt.TrimStart().StartsWith("/", StringComparison.Ordinal))
             {
@@ -952,178 +891,138 @@ namespace Mux.Cli.App
                 return;
             }
 
-            EnqueueBehavior configured;
+            // Echo the submitted prompt into the transcript immediately, so the user always sees what they
+            // sent even before the model responds.
+            EchoPrompt(prompt);
+            EnqueueOrRun(prompt);
+        }
+
+        private void EnqueueOrRun(string prompt)
+        {
+            bool startNow;
             lock (_Sync)
             {
-                configured = _SessionEnqueueDefault ?? _DefaultEnqueueBehavior;
+                if (_TurnInFlight)
+                {
+                    _PendingPrompts.Enqueue(prompt);
+                    startNow = false;
+                }
+                else
+                {
+                    _TurnInFlight = true;
+                    startNow = true;
+                }
             }
 
-            EnqueueBehavior behavior = HasActiveJob() ? configured : EnqueueBehavior.NewJob;
-
-            if (behavior == EnqueueBehavior.Ask)
+            if (startNow)
             {
-                OpenChooser(prompt);
-                return;
+                RunTurn(prompt);
             }
-
-            SubmitDecidedWith(behavior, prompt);
+            else
+            {
+                RefreshSidebar();
+                RefreshFooter();
+            }
         }
 
-        private void SubmitDecided(EnqueueBehavior behavior)
+        private void RunTurn(string prompt)
         {
-            string prompt = _Composer.Text;
-            if (string.IsNullOrWhiteSpace(prompt))
+            List<ConversationMessage> seed;
+            lock (_Sync)
             {
-                return;
+                seed = new List<ConversationMessage>(_ConversationHistory);
             }
 
-            _Composer.Text = string.Empty;
-            _History.Add(prompt);
-            SubmitDecidedWith(behavior, prompt);
-        }
-
-        private void SubmitDecidedWith(EnqueueBehavior behavior, string prompt)
-        {
-            if (behavior == EnqueueBehavior.AddToFocused && TryAddToFocused(prompt))
-            {
-                return;
-            }
-
-            SubmitNewJob(prompt);
-        }
-
-        private void SubmitNewJob(string prompt)
-        {
             Job job = _JobManager
-                .SubmitAsync(prompt, _ApprovalPolicy, null, _Cts.Token)
+                .SubmitAsync(prompt, _ApprovalPolicy, seed, _Cts.Token)
                 .GetAwaiter()
                 .GetResult();
 
-            Pane pane = new Pane("job:" + job.Id);
-            pane.WriteLine(Text.From("› " + prompt).Cyan().Bold());
+            AgentEventProjector projector = new AgentEventProjector(_Conversation);
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            long[] ttft = { -1 };
+            projector.FirstTokenReceived += () => ttft[0] = stopwatch.ElapsedMilliseconds;
 
             lock (_Sync)
             {
-                _JobPanes[job.Id] = pane;
-                _JobOrder.Add(job.Id);
+                _ActiveJob = job;
+                _TurnJobIds.Add(job.Id);
             }
 
-            FocusJob(job.Id);
+            RefreshSidebar();
+            RefreshFooter();
 
-            AgentEventProjector projector = new AgentEventProjector(pane);
-            Task projection = Task.Run(() => projector.ProjectAsync(job.ReadEventsAsync(_Cts.Token), _Cts.Token));
+            Task projection = Task.Run(async () =>
+            {
+                await projector.ProjectAsync(job.ReadEventsAsync(_Cts.Token), _Cts.Token).ConfigureAwait(false);
+                long total = stopwatch.ElapsedMilliseconds;
+                OnTurnComplete(prompt, projector, total, ttft[0]);
+            });
+
             lock (_Sync)
             {
                 _ProjectorTasks.Add(projection);
             }
         }
 
-        private bool TryAddToFocused(string prompt)
+        private void OnTurnComplete(string prompt, AgentEventProjector projector, long totalMs, long ttftMs)
         {
-            string? focusedId;
-            Pane? pane;
+            string? next;
             lock (_Sync)
             {
-                focusedId = _FocusedJobId;
-                if (focusedId == null || !_JobPanes.TryGetValue(focusedId, out pane))
+                _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.User, Content = prompt });
+                string answer = projector.CapturedAssistantText;
+                if (!string.IsNullOrEmpty(answer))
                 {
-                    return false;
+                    _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.Assistant, Content = answer });
+                }
+
+                _Stats.Turns++;
+                _Stats.LastTtftMs = ttftMs;
+                long stream = ttftMs >= 0 ? Math.Max(0, totalMs - ttftMs) : 0;
+                _Stats.LastStreamMs = stream;
+                _Stats.SessionStreamMs += stream;
+                if (ttftMs >= 0)
+                {
+                    _Stats.SessionTtftMs += ttftMs;
+                    _Stats.TtftSamples++;
+                }
+
+                if (projector.LastRunCompleted != null)
+                {
+                    _Stats.LastContextTokens = projector.LastRunCompleted.FinalEstimatedTokens;
+                }
+
+                _ActiveJob = null;
+                next = _PendingPrompts.Count > 0 ? _PendingPrompts.Dequeue() : null;
+                if (next == null)
+                {
+                    _TurnInFlight = false;
                 }
             }
 
-            if (!IsJobActive(focusedId))
-            {
-                return false;
-            }
+            RefreshSidebar();
+            RefreshFooter();
+            AutoSave();
 
-            bool added = _JobManager.AddFollowUpAsync(focusedId, prompt, _Cts.Token).GetAwaiter().GetResult();
-            if (!added)
+            if (next != null)
             {
-                return false;
+                RunTurn(next);
             }
-
-            pane!.WriteLine(Text.From("› " + prompt).Cyan().Bold());
-            return true;
         }
 
-        private void OpenChooser(string prompt)
+        private void CancelActiveTurn()
         {
+            Job? active;
             lock (_Sync)
             {
-                _PendingPrompt = prompt;
-                _ChooserActive = true;
-                _RememberChoice = false;
+                active = _ActiveJob;
             }
 
-            ShowChooserHint();
-        }
-
-        private void HandleChooserKey(KeyEvent key)
-        {
-            if (key.Code == KeyCode.Escape)
+            if (active != null)
             {
-                CancelChooser();
-                return;
+                _ = _JobManager.CancelAsync(active.Id, _Cts.Token);
             }
-
-            if (key.Code == KeyCode.Character && (key.Rune == 'r' || key.Rune == 'R'))
-            {
-                lock (_Sync)
-                {
-                    _RememberChoice = !_RememberChoice;
-                }
-
-                ShowChooserHint();
-                return;
-            }
-
-            if (key.Code == KeyCode.Character && key.Rune == '1')
-            {
-                ResolveChooser(EnqueueBehavior.NewJob);
-                return;
-            }
-
-            if (key.Code == KeyCode.Character && key.Rune == '2')
-            {
-                ResolveChooser(EnqueueBehavior.AddToFocused);
-                return;
-            }
-        }
-
-        private void ResolveChooser(EnqueueBehavior behavior)
-        {
-            string prompt;
-            lock (_Sync)
-            {
-                prompt = _PendingPrompt ?? string.Empty;
-                _PendingPrompt = null;
-                _ChooserActive = false;
-                if (_RememberChoice)
-                {
-                    _SessionEnqueueDefault = behavior;
-                }
-
-                _RememberChoice = false;
-            }
-
-            SetFooterHint(FooterHint);
-
-            if (!string.IsNullOrWhiteSpace(prompt))
-            {
-                SubmitDecidedWith(behavior, prompt);
-            }
-        }
-
-        private void CancelChooser()
-        {
-            lock (_Sync)
-            {
-                _PendingPrompt = null;
-                _ChooserActive = false;
-                _RememberChoice = false;
-            }
-
-            SetFooterHint(FooterHint);
         }
 
         private void RouteSlash(string input)
@@ -1131,16 +1030,13 @@ namespace Mux.Cli.App
             bool handled = _SlashHandler != null && _SlashHandler(input);
             if (!handled)
             {
-                lock (_Sync)
-                {
-                    _CurrentPane.WriteLine(Text.From($"Unknown command: {input}").Yellow());
-                }
+                _Conversation.WriteLine(Text.From($"Unknown command: {input}").Yellow());
             }
         }
 
         private bool RecallPrevious()
         {
-            if (_History.TryPrevious(out string entry))
+            if (_PromptHistory.TryPrevious(out string entry))
             {
                 _Composer.Text = entry;
                 return true;
@@ -1151,7 +1047,7 @@ namespace Mux.Cli.App
 
         private bool RecallNext()
         {
-            if (_History.TryNext(out string entry))
+            if (_PromptHistory.TryNext(out string entry))
             {
                 _Composer.Text = entry;
                 return true;
@@ -1160,76 +1056,43 @@ namespace Mux.Cli.App
             return false;
         }
 
-        private bool HasActiveJob()
+        private void DeletePreviousWord()
         {
-            List<string> ids;
-            lock (_Sync)
+            string text = _Composer.Text.Replace("\r\n", "\n").Replace("\r", "\n");
+            int row = _Composer.CaretRow;
+            int col = _Composer.CaretColumn;
+            string[] lines = text.Split('\n');
+            if (row < 0 || row >= lines.Length || col <= 0)
             {
-                ids = new List<string>(_JobOrder);
-            }
-
-            foreach (string id in ids)
-            {
-                if (IsJobActive(id))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private bool IsJobActive(string jobId)
-        {
-            foreach (Job job in _JobManager.Jobs)
-            {
-                if (string.Equals(job.Id, jobId, StringComparison.Ordinal))
-                {
-                    return job.State != JobState.Completed
-                        && job.State != JobState.Failed
-                        && job.State != JobState.Cancelled;
-                }
-            }
-
-            return false;
-        }
-
-        private void ShowChooserHint()
-        {
-            bool remember;
-            lock (_Sync)
-            {
-                remember = _RememberChoice;
-            }
-
-            string hint = "Job active — [1] new job · [2] add to focused · [r] remember"
-                + (remember ? " ✓" : string.Empty)
-                + " · [Esc] cancel";
-            SetFooterHint(hint);
-        }
-
-        private void SetFooterHint(string hint)
-        {
-            _Footer.Clear();
-            _Footer.WriteLine(Text.From(hint).Dim());
-        }
-
-        private void RefreshFooter()
-        {
-            if (IsPaletteActive || IsChooserActive)
-            {
+                _Composer.Backspace();
                 return;
             }
 
-            int jobCount;
-            string focused;
-            lock (_Sync)
+            string line = lines[row];
+            int i = Math.Min(col, line.Length);
+            while (i > 0 && char.IsWhiteSpace(line[i - 1]))
             {
-                jobCount = _JobOrder.Count;
-                focused = _FocusedJobId ?? "-";
+                i--;
             }
 
-            SetFooterHint($"jobs:{jobCount} focused:{focused} · {FooterHint}");
+            while (i > 0 && !char.IsWhiteSpace(line[i - 1]))
+            {
+                i--;
+            }
+
+            int count = Math.Max(1, col - i);
+            for (int k = 0; k < count; k++)
+            {
+                _Composer.Backspace();
+            }
+        }
+
+        private void EchoPrompt(string prompt)
+        {
+            // "mux> <prompt>" with a leading and trailing blank line; "mux>" in green, the prompt in grey.
+            _Conversation.WriteLine(Text.From(string.Empty));
+            _Conversation.WriteLine(Text.From(PromptText).Green().Bold().Append(Text.From(prompt ?? string.Empty)));
+            _Conversation.WriteLine(Text.From(string.Empty));
         }
 
         private void AutoSave()
@@ -1315,42 +1178,40 @@ namespace Mux.Cli.App
             }
         }
 
-        private void RestoreJobPane(PersistedJobSnapshot job, bool interrupted)
+        private void ReplayJob(PersistedJobSnapshot job, bool interrupted)
         {
-            Pane pane = new Pane("job:" + job.Id);
             string label = string.IsNullOrWhiteSpace(job.Title) ? job.Prompt : job.Title;
-            pane.WriteLine(Text.From($"« resumed: {label} »").Dim());
+            _Conversation.WriteLine(Text.From($"« resumed: {label} »").Dim());
 
             foreach (ConversationMessage message in job.ConversationHistory)
             {
                 if (message.Role == RoleEnum.User && !string.IsNullOrEmpty(message.Content))
                 {
-                    pane.WriteLine(Text.From("› " + message.Content).Cyan());
+                    EchoPrompt(message.Content);
+                    lock (_Sync)
+                    {
+                        _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.User, Content = message.Content });
+                    }
                 }
                 else if (message.Role == RoleEnum.Assistant && !string.IsNullOrEmpty(message.Content))
                 {
-                    pane.WriteLine(Text.From(message.Content));
+                    _Conversation.WriteLine(Text.From(message.Content));
+                    lock (_Sync)
+                    {
+                        _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.Assistant, Content = message.Content });
+                    }
                 }
             }
 
             if (interrupted)
             {
-                pane.WriteLine(Text.From("⚠ interrupted — re-run required").Yellow());
-            }
-
-            lock (_Sync)
-            {
-                _JobPanes[job.Id] = pane;
-                _JobOrder.Add(job.Id);
+                _Conversation.WriteLine(Text.From("⚠ interrupted — re-run required").Yellow());
             }
         }
 
         private void WriteNotice(string text)
         {
-            lock (_Sync)
-            {
-                _CurrentPane.WriteLine(Text.From(text).Dim());
-            }
+            _Conversation.WriteLine(Text.From(text).Dim());
         }
 
         private void OpenCommandMenu()
@@ -1387,55 +1248,6 @@ namespace Mux.Cli.App
             {
                 commands[index].Handler();
             }
-        }
-
-        private void OpenJobsModal()
-        {
-            List<string> ids;
-            lock (_Sync)
-            {
-                ids = new List<string>(_JobOrder);
-            }
-
-            if (ids.Count == 0)
-            {
-                _App.Modals.Push(new MessageModal("Jobs", "No jobs yet.", new List<string> { "OK" }));
-                return;
-            }
-
-            List<string> labels = new List<string>();
-            for (int i = 0; i < ids.Count; i++)
-            {
-                labels.Add($"{i + 1}. {JobLabel(ids[i])}");
-            }
-
-            SelectModal modal = new SelectModal("Jobs — select to focus", labels);
-            _App.Modals.Push(modal);
-            _ = ResolveJobsModalAsync(modal, ids);
-        }
-
-        private async Task ResolveJobsModalAsync(SelectModal modal, IReadOnlyList<string> ids)
-        {
-            object? result = await modal.Completion.ConfigureAwait(false);
-            int index = result is int value ? value : -1;
-            if (index >= 0 && index < ids.Count)
-            {
-                FocusJob(ids[index]);
-            }
-        }
-
-        private string JobLabel(string jobId)
-        {
-            foreach (Job job in _JobManager.Jobs)
-            {
-                if (string.Equals(job.Id, jobId, StringComparison.Ordinal))
-                {
-                    string title = string.IsNullOrWhiteSpace(job.Title) ? job.Prompt : job.Title;
-                    return $"{job.State} · {title}";
-                }
-            }
-
-            return jobId;
         }
 
         private void OpenPalette()
@@ -1476,14 +1288,12 @@ namespace Mux.Cli.App
 
         private void ClosePalette()
         {
-            Pane current;
             lock (_Sync)
             {
                 _PaletteActive = false;
-                current = _CurrentPane;
             }
 
-            _App.BindPane(TranscriptRegion, current);
+            _App.BindPane(TranscriptRegion, _Conversation);
             _Palette = null;
             RefreshFooter();
         }
@@ -1505,7 +1315,7 @@ namespace Mux.Cli.App
         {
             MessageModal modal = new MessageModal(
                 "Quit mux?",
-                "Exit mux? Running jobs will be cancelled.",
+                "Exit mux? A running turn will be cancelled.",
                 new List<string> { "Quit", "Cancel" });
             _App.Modals.Push(modal);
             _ = ResolveQuitAsync(modal);
@@ -1723,44 +1533,63 @@ namespace Mux.Cli.App
             return lines;
         }
 
-        private void CancelFocusedJob()
+        private void ClearTranscript()
         {
-            Job? focused = _JobManager.FocusedJob;
-            if (focused == null)
+            _Conversation.Clear();
+        }
+
+        private void SetFooterHint(string hint)
+        {
+            _Footer.Clear();
+            _Footer.WriteLine(Text.From(hint).Dim());
+        }
+
+        private void RefreshFooter()
+        {
+            if (IsPaletteActive)
             {
                 return;
             }
 
-            _ = _JobManager.CancelAsync(focused.Id, _Cts.Token);
-        }
-
-        private void ClearTranscript()
-        {
-            lock (_Sync)
-            {
-                _CurrentPane.Clear();
-            }
+            SetFooterHint(FooterHint);
         }
 
         private void RefreshSidebar()
         {
-            string? focused;
             string endpointName;
-            string model;
+            ConversationStats stats;
             lock (_Sync)
             {
-                focused = _FocusedJobId;
                 endpointName = _EndpointName;
-                model = _Model;
+                stats = CloneStatsNoLock();
             }
 
-            _Sidebar.Refresh(_JobManager.Jobs, focused, _Title, endpointName, model);
+            _Sidebar.Refresh(_Title, endpointName, stats);
+        }
+
+        private ConversationStats CloneStatsNoLock()
+        {
+            return new ConversationStats
+            {
+                Busy = _TurnInFlight,
+                Queued = _PendingPrompts.Count,
+                Turns = _Stats.Turns,
+                LastTtftMs = _Stats.LastTtftMs,
+                LastStreamMs = _Stats.LastStreamMs,
+                LastContextTokens = _Stats.LastContextTokens,
+                SessionStreamMs = _Stats.SessionStreamMs,
+                SessionTtftMs = _Stats.SessionTtftMs,
+                TtftSamples = _Stats.TtftSamples,
+                InputTokens = _Stats.InputTokens,
+                OutputTokens = _Stats.OutputTokens,
+                CachedTokens = _Stats.CachedTokens
+            };
         }
 
         private void WriteHeader()
         {
-            _HomePane.WriteLine(Text.From("mux · " + _Title).Cyan().Bold());
-            _HomePane.WriteLine(Text.From("Type a prompt and press Enter. Alt+Enter for a newline.").Dim());
+            _Conversation.WriteLine(Text.From("mux · " + _Title).Cyan().Bold());
+            _Conversation.WriteLine(Text.From("Type a prompt and press Enter. Shift+Enter for a newline.").Dim());
         }
 
         #endregion

@@ -33,7 +33,7 @@ namespace Test.Shared.Suites
                 "Shell sidebar listing, focus marking, and responsive collapse",
                 new List<TestCaseDescriptor>
                 {
-                    Case("SidebarEmptyInitially", "The sidebar shows a zero job count before any submission", async (CancellationToken ct) =>
+                    Case("SidebarShowsTelemetryHeaders", "The sidebar shows status and telemetry sections before any turn", async (CancellationToken ct) =>
                     {
                         HeadlessBackend backend = Wide();
                         await using (JobManager manager = NewManager(EchoRunner))
@@ -41,49 +41,44 @@ namespace Test.Shared.Suites
                         {
                             await Task.CompletedTask.ConfigureAwait(false);
                             string sidebar = Join(app.SidebarSnapshot());
-                            MuxAssert.Contains("JOBS (0)", sidebar, "zero jobs");
-                            MuxAssert.Contains("no jobs", sidebar, "empty hint");
+                            MuxAssert.Contains("STATUS", sidebar, "status header");
+                            MuxAssert.Contains("idle", sidebar, "idle before any turn");
+                            MuxAssert.Contains("THIS TURN", sidebar, "this-turn header");
+                            MuxAssert.Contains("SESSION", sidebar, "session header");
+                            MuxAssert.Contains("TTFT", sidebar, "ttft row");
                         }
                     }),
 
-                    Case("SidebarListsSubmittedJobs", "The sidebar lists each submitted job", async (CancellationToken ct) =>
+                    Case("SidebarShowsEndpointName", "The sidebar shows the active endpoint name, not the model", async (CancellationToken ct) =>
                     {
                         HeadlessBackend backend = Wide();
-                        await using (JobManager manager = new JobManager(EchoRunner, maxConcurrency: 2))
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove, endpointName: "local-llm", model: "qwen2.5-coder"))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            string sidebar = Join(app.SidebarSnapshot());
+                            MuxAssert.Contains("local-llm", sidebar, "endpoint name shown");
+                            MuxAssert.IsFalse(sidebar.Contains("qwen2.5-coder", StringComparison.Ordinal), "model name not shown");
+                        }
+                    }),
+
+                    Case("SidebarCountsCompletedTurns", "The session turn count increments after a turn completes", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = Wide();
+                        await using (JobManager manager = NewManager(EchoRunner))
                         using (MuxTuiApp app = NewApp(backend, manager))
                         {
                             Submit(backend, app, "alpha");
-                            Submit(backend, app, "beta");
                             await app.DrainProjectorsAsync().ConfigureAwait(false);
 
                             string sidebar = Join(app.SidebarSnapshot());
-                            MuxAssert.Contains("JOBS (2)", sidebar, "two jobs");
-                            MuxAssert.Contains("alpha", sidebar, "first job label");
-                            MuxAssert.Contains("beta", sidebar, "second job label");
+                            MuxAssert.Contains("idle", sidebar, "idle after turn");
+                            MuxAssert.Contains("Turns", sidebar, "turns row present");
+                            MuxAssert.AreEqual(1, app.TurnCount, "one turn ran");
                         }
                     }),
 
-                    Case("SidebarMarksFocusedJob", "The focus marker moves to the focused job", async (CancellationToken ct) =>
-                    {
-                        HeadlessBackend backend = Wide();
-                        await using (JobManager manager = new JobManager(EchoRunner, maxConcurrency: 2))
-                        using (MuxTuiApp app = NewApp(backend, manager))
-                        {
-                            Submit(backend, app, "alpha");
-                            Submit(backend, app, "beta");
-                            await app.DrainProjectorsAsync().ConfigureAwait(false);
-
-                            // Newest (position 2) is focused after submit.
-                            MuxAssert.Contains("▸2", Join(app.SidebarSnapshot()), "second focused");
-
-                            MuxAssert.IsTrue(app.FocusByIndex(1), "focus first");
-                            string sidebar = Join(app.SidebarSnapshot());
-                            MuxAssert.Contains("▸1", sidebar, "first focused marker");
-                            MuxAssert.IsFalse(sidebar.Contains("▸2", StringComparison.Ordinal), "second unmarked");
-                        }
-                    }),
-
-                    Case("SidebarReflectsRunningThenCompleted", "The state glyph updates from running to completed", async (CancellationToken ct) =>
+                    Case("SidebarReflectsBusyThenIdle", "Status shows running while a turn is active and idle after", async (CancellationToken ct) =>
                     {
                         TaskCompletionSource<bool> release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -98,15 +93,12 @@ namespace Test.Shared.Suites
                         using (MuxTuiApp app = NewApp(backend, manager))
                         {
                             Submit(backend, app, "work");
-                            string jobId = app.JobIds[0];
-                            await WaitForStateAsync(manager, jobId, JobState.Running, ct).ConfigureAwait(false);
-                            app.FocusJob(jobId); // force a deterministic sidebar refresh
-                            MuxAssert.Contains("↻", Join(app.SidebarSnapshot()), "running glyph");
+                            await WaitForStateAsync(manager, app.JobIds[0], JobState.Running, ct).ConfigureAwait(false);
+                            MuxAssert.Contains("running", Join(app.SidebarSnapshot()), "running status");
 
                             release.TrySetResult(true);
-                            await WaitForStateAsync(manager, jobId, JobState.Completed, ct).ConfigureAwait(false);
-                            app.FocusJob(jobId);
-                            MuxAssert.Contains("✓", Join(app.SidebarSnapshot()), "completed glyph");
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+                            MuxAssert.Contains("idle", Join(app.SidebarSnapshot()), "idle status");
                         }
                     }),
 
@@ -184,7 +176,6 @@ namespace Test.Shared.Suites
         {
             MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove);
             // These cases exercise the sidebar, not the submit chooser; make submit deterministic.
-            app.DefaultEnqueueBehavior = EnqueueBehavior.NewJob;
             return app;
         }
 

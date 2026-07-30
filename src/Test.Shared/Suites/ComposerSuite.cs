@@ -117,8 +117,8 @@ namespace Test.Shared.Suites
                         }
                     }),
 
-                    // ---- Submit chooser ----
-                    Case("EnterShowsChooserWhenJobActive", "Enter opens the chooser while a job is active", async (CancellationToken ct) =>
+                    // ---- Single conversation queue ----
+                    Case("SecondPromptQueuesWhileBusy", "A prompt entered while a turn runs is queued, not started immediately", async (CancellationToken ct) =>
                     {
                         TaskCompletionSource<bool> release = NewSignal();
                         await using (JobManager manager = new JobManager(Gated(release), maxConcurrency: 2))
@@ -126,21 +126,22 @@ namespace Test.Shared.Suites
                         {
                             Feed(backend, app, "first" + "\r");
                             await WaitForActiveAsync(manager, ct).ConfigureAwait(false);
+                            MuxAssert.AreEqual(1, app.JobIds.Count, "first turn running");
+                            MuxAssert.IsTrue(app.IsBusy, "busy");
 
                             Feed(backend, app, "second" + "\r");
-                            MuxAssert.IsTrue(app.IsChooserActive, "chooser open");
-                            MuxAssert.AreEqual(1, app.JobIds.Count, "no new job yet");
-
-                            Feed(backend, app, "1"); // new job
-                            MuxAssert.IsFalse(app.IsChooserActive, "chooser closed");
-                            MuxAssert.AreEqual(2, app.JobIds.Count, "second job created");
+                            MuxAssert.AreEqual(1, app.JobIds.Count, "second is queued, no new turn yet");
+                            MuxAssert.AreEqual(1, app.QueuedCount, "one queued");
+                            // Both prompts are echoed to the single transcript immediately on Enter.
+                            MuxAssert.Contains("first", Join(app.TranscriptSnapshot()), "first echoed");
+                            MuxAssert.Contains("second", Join(app.TranscriptSnapshot()), "second echoed");
 
                             release.TrySetResult(true);
                             await app.DrainProjectorsAsync().ConfigureAwait(false);
                         }
                     }),
 
-                    Case("ChooserAddToFocusedAppendsFollowUp", "Choosing add-to-focused appends to the active job", async (CancellationToken ct) =>
+                    Case("QueuedPromptRunsAfterActiveCompletes", "The queued prompt runs as the next turn once the active turn finishes", async (CancellationToken ct) =>
                     {
                         TaskCompletionSource<bool> release = NewSignal();
                         await using (JobManager manager = new JobManager(Gated(release), maxConcurrency: 2))
@@ -148,82 +149,14 @@ namespace Test.Shared.Suites
                         {
                             Feed(backend, app, "first" + "\r");
                             await WaitForActiveAsync(manager, ct).ConfigureAwait(false);
-                            string focused = app.JobIds[0];
-
                             Feed(backend, app, "second" + "\r");
-                            Feed(backend, app, "2"); // add to focused
-
-                            MuxAssert.IsFalse(app.IsChooserActive, "chooser closed");
-                            MuxAssert.AreEqual(1, app.JobIds.Count, "no new job");
-                            MuxAssert.Contains("second", Join(app.JobTranscriptSnapshot(focused)), "follow-up echoed to focused pane");
 
                             release.TrySetResult(true);
                             await app.DrainProjectorsAsync().ConfigureAwait(false);
-                        }
-                    }),
 
-                    Case("ChooserEscapeCancels", "Escape dismisses the chooser without submitting", async (CancellationToken ct) =>
-                    {
-                        TaskCompletionSource<bool> release = NewSignal();
-                        await using (JobManager manager = new JobManager(Gated(release), maxConcurrency: 2))
-                        using (MuxTuiApp app = NewApp(backend: out HeadlessBackend backend, manager: manager))
-                        {
-                            Feed(backend, app, "first" + "\r");
-                            await WaitForActiveAsync(manager, ct).ConfigureAwait(false);
-
-                            Feed(backend, app, "second" + "\r");
-                            MuxAssert.IsTrue(app.IsChooserActive, "chooser open");
-
-                            backend.FeedInput(new byte[] { 0x1b }); // Escape
-                            app.PumpInputOnce();
-                            app.PumpInputOnce();
-
-                            MuxAssert.IsFalse(app.IsChooserActive, "chooser cancelled");
-                            MuxAssert.AreEqual(1, app.JobIds.Count, "no new job");
-
-                            release.TrySetResult(true);
-                            await app.DrainProjectorsAsync().ConfigureAwait(false);
-                        }
-                    }),
-
-                    Case("ChooserRememberSetsSessionDefault", "Remembering a choice skips the chooser next time", async (CancellationToken ct) =>
-                    {
-                        TaskCompletionSource<bool> release = NewSignal();
-                        await using (JobManager manager = new JobManager(Gated(release), maxConcurrency: 4))
-                        using (MuxTuiApp app = NewApp(backend: out HeadlessBackend backend, manager: manager))
-                        {
-                            Feed(backend, app, "first" + "\r");
-                            await WaitForActiveAsync(manager, ct).ConfigureAwait(false);
-
-                            Feed(backend, app, "second" + "\r");
-                            Feed(backend, app, "r"); // toggle remember
-                            Feed(backend, app, "1"); // new job, remembered
-                            MuxAssert.AreEqual(2, app.JobIds.Count, "second created");
-
-                            Feed(backend, app, "third" + "\r");
-                            MuxAssert.IsFalse(app.IsChooserActive, "chooser skipped by remembered default");
-                            MuxAssert.AreEqual(3, app.JobIds.Count, "third created directly");
-
-                            release.TrySetResult(true);
-                            await app.DrainProjectorsAsync().ConfigureAwait(false);
-                        }
-                    }),
-
-                    Case("CtrlEnterBypassesChooser", "Ctrl+Enter submits a new job without the chooser", async (CancellationToken ct) =>
-                    {
-                        TaskCompletionSource<bool> release = NewSignal();
-                        await using (JobManager manager = new JobManager(Gated(release), maxConcurrency: 2))
-                        using (MuxTuiApp app = NewApp(backend: out HeadlessBackend backend, manager: manager))
-                        {
-                            Feed(backend, app, "first" + "\r");
-                            await WaitForActiveAsync(manager, ct).ConfigureAwait(false);
-
-                            Feed(backend, app, "second" + Esc + "[13;5u"); // Ctrl+Enter
-                            MuxAssert.IsFalse(app.IsChooserActive, "no chooser");
-                            MuxAssert.AreEqual(2, app.JobIds.Count, "second job created directly");
-
-                            release.TrySetResult(true);
-                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+                            MuxAssert.AreEqual(2, app.JobIds.Count, "queued prompt ran as a second turn");
+                            MuxAssert.AreEqual(0, app.QueuedCount, "queue drained");
+                            MuxAssert.IsFalse(app.IsBusy, "idle after both turns");
                         }
                     }),
 

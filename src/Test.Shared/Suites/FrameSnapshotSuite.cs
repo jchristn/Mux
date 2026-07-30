@@ -80,38 +80,34 @@ namespace Test.Shared.Suites
                         }
                     }),
 
-                    Case("RunningJobShowsSpinnerInSidebar", "A running job renders its glyph in the sidebar", async (CancellationToken ct) =>
+                    Case("RunningStatusRendersInSidebar", "The sidebar renders a running status while a turn is active", async (CancellationToken ct) =>
                     {
                         TaskCompletionSource<bool> release = Signal();
                         await using (JobManager manager = new JobManager(Gated(release), maxConcurrency: 1))
                         using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager))
                         {
                             Submit(backend, app, "work");
-                            await WaitUntilAsync(() => Join(app.SidebarSnapshot()).Contains("↻", StringComparison.Ordinal), ct).ConfigureAwait(false);
+                            await WaitUntilAsync(() => Join(app.SidebarSnapshot()).Contains("running", StringComparison.Ordinal), ct).ConfigureAwait(false);
 
-                            string frame = app.RenderRegion("sidebar", 30, 12);
-                            MuxAssert.Contains("↻", frame, "running glyph rendered");
-                            MuxAssert.Contains("work", frame, "job title rendered");
+                            string frame = app.RenderRegion("sidebar", 30, 20);
+                            MuxAssert.Contains("STATUS", frame, "status header rendered");
+                            MuxAssert.Contains("running", frame, "running status rendered");
                             release.TrySetResult(true);
                         }
                     }),
 
-                    Case("MultipleJobsListedInSidebar", "Three jobs render in the sidebar list", async (CancellationToken ct) =>
+                    Case("SessionTelemetryRendersInSidebar", "The sidebar renders session telemetry after a turn", async (CancellationToken ct) =>
                     {
-                        TaskCompletionSource<bool> release = Signal();
-                        await using (JobManager manager = new JobManager(Gated(release), maxConcurrency: 3))
+                        await using (JobManager manager = NewManager())
                         using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager))
                         {
                             Submit(backend, app, "one");
-                            Submit(backend, app, "two");
-                            Submit(backend, app, "three");
-                            await WaitUntilAsync(() => Join(app.SidebarSnapshot()).Contains("JOBS (3)", StringComparison.Ordinal), ct).ConfigureAwait(false);
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
 
                             string frame = app.RenderRegion("sidebar", 30, 14);
-                            MuxAssert.Contains("JOBS (3)", frame, "job count rendered");
-                            MuxAssert.Contains("one", frame, "first job rendered");
-                            MuxAssert.Contains("three", frame, "third job rendered");
-                            release.TrySetResult(true);
+                            MuxAssert.Contains("SESSION", frame, "session header rendered");
+                            MuxAssert.Contains("Turns", frame, "turns row rendered");
+                            MuxAssert.Contains("idle", frame, "idle after the turn");
                         }
                     }),
 
@@ -204,7 +200,6 @@ namespace Test.Shared.Suites
         {
             backend = new HeadlessBackend(120, 30);
             MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove);
-            app.DefaultEnqueueBehavior = EnqueueBehavior.NewJob;
             return app;
         }
 

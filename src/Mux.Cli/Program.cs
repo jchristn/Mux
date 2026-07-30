@@ -259,7 +259,6 @@ CONFIG:
                     runtime.Endpoint.Model,
                     onEndpointSelected: (EndpointConfig endpoint) => template.Endpoint = endpoint,
                     showSplash: true);
-                app.DefaultEnqueueBehavior = MapEnqueueBehavior(runtime.MuxSettings.DefaultEnqueueBehavior);
 
                 // Route escalated tool approvals to the shell's modal. The template is captured by
                 // CreateForAgentLoop and read per job run, so setting this before the run loop starts
@@ -273,24 +272,6 @@ CONFIG:
             finally
             {
                 jobManager.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            }
-        }
-
-        /// <summary>
-        /// Maps the persisted default-enqueue-behavior string to the shell enum. Run-now and queue-after
-        /// both map to a new job (the scheduler governs concurrency); unknown values fall back to Ask.
-        /// </summary>
-        private static EnqueueBehavior MapEnqueueBehavior(string behavior)
-        {
-            switch (behavior)
-            {
-                case "run_now":
-                case "queue_after":
-                    return EnqueueBehavior.NewJob;
-                case "add_to_focused":
-                    return EnqueueBehavior.AddToFocused;
-                default:
-                    return EnqueueBehavior.Ask;
             }
         }
 

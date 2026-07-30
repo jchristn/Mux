@@ -15,9 +15,13 @@ namespace Mux.Cli.App
     {
         #region Private-Members
 
+        private const int PadX = 3;
+        private const int PadY = 1;
+
         private readonly string _Title;
         private readonly IReadOnlyList<string> _Lines;
         private readonly string _Hint;
+        private readonly bool _Centered;
 
         #endregion
 
@@ -29,12 +33,14 @@ namespace Mux.Cli.App
         /// <param name="title">The box title. May be empty.</param>
         /// <param name="lines">The content lines, rendered verbatim. Must not be null.</param>
         /// <param name="hint">An optional dimmed footer hint; empty to omit.</param>
+        /// <param name="centered">When true, each content line and the hint are horizontally centered in the box.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="lines"/> is null.</exception>
-        public MuxBoxModal(string title, IReadOnlyList<string> lines, string hint = "Enter / Esc to close")
+        public MuxBoxModal(string title, IReadOnlyList<string> lines, string hint = "Enter / Esc to close", bool centered = false)
         {
             _Title = title ?? string.Empty;
             _Lines = lines ?? throw new ArgumentNullException(nameof(lines));
             _Hint = hint ?? string.Empty;
+            _Centered = centered;
         }
 
         #endregion
@@ -44,13 +50,9 @@ namespace Mux.Cli.App
         /// <inheritdoc/>
         public override bool HandleKey(KeyEvent key)
         {
-            if (key.Code == KeyCode.Enter || key.Code == KeyCode.Escape)
-            {
-                Close(0);
-                return true;
-            }
-
-            return true; // trap all input while the box is up
+            // Any key dismisses the box so it never blocks the user from getting to the prompt.
+            Close(0);
+            return true;
         }
 
         /// <inheritdoc/>
@@ -72,12 +74,12 @@ namespace Mux.Cli.App
                 contentWidth = Math.Max(contentWidth, Measure(_Hint));
             }
 
-            contentWidth = Math.Max(4, Math.Min(contentWidth, screenWidth - 4));
+            contentWidth = Math.Max(4, Math.Min(contentWidth, screenWidth - 2 - (2 * PadX)));
 
             int hintRows = _Hint.Length > 0 ? 2 : 0; // blank gap + hint
             int contentHeight = _Lines.Count + hintRows;
-            int boxWidth = Math.Min(screenWidth, contentWidth + 4); // border + 1-col padding each side
-            int boxHeight = Math.Min(screenHeight, contentHeight + 2); // border top/bottom
+            int boxWidth = Math.Min(screenWidth, contentWidth + 2 + (2 * PadX));  // border + interior padding
+            int boxHeight = Math.Min(screenHeight, contentHeight + 2 + (2 * PadY));
 
             int boxX = Math.Max(0, (screenWidth - boxWidth) / 2);
             int boxY = Math.Max(0, (screenHeight - boxHeight) / 2);
@@ -86,9 +88,9 @@ namespace Mux.Cli.App
             surface.Fill(box, Cell.Blank(CellStyle.Default));
             surface.DrawBox(box, CellStyle.Default.WithForeground(Color.FromPalette(6)), _Title);
 
-            int contentX = boxX + 2;
-            int firstRow = boxY + 1;
-            int lastContentRow = boxY + boxHeight - 2;
+            int contentX = boxX + 1 + PadX;
+            int firstRow = boxY + 1 + PadY;
+            int lastContentRow = boxY + boxHeight - 2 - PadY;
 
             for (int i = 0; i < _Lines.Count; i++)
             {
@@ -98,17 +100,27 @@ namespace Mux.Cli.App
                     break;
                 }
 
-                surface.DrawText(contentX, row, _Lines[i], CellStyle.Default);
+                surface.DrawText(LineX(contentX, contentWidth, _Lines[i]), row, _Lines[i], CellStyle.Default);
             }
 
             if (_Hint.Length > 0)
             {
-                int hintRow = boxY + boxHeight - 2;
+                int hintRow = lastContentRow;
                 if (hintRow > firstRow + _Lines.Count - 1)
                 {
-                    surface.DrawText(contentX, hintRow, _Hint, CellStyle.Default.WithForeground(Color.FromPalette(8)));
+                    surface.DrawText(LineX(contentX, contentWidth, _Hint), hintRow, _Hint, CellStyle.Default.WithForeground(Color.FromPalette(8)));
                 }
             }
+        }
+
+        private int LineX(int contentX, int contentWidth, string line)
+        {
+            if (!_Centered)
+            {
+                return contentX;
+            }
+
+            return contentX + Math.Max(0, (contentWidth - Measure(line)) / 2);
         }
 
         #endregion

@@ -24,8 +24,11 @@ namespace Mux.Cli.App
 
         private readonly Pane _Pane;
         private readonly StringBuilder _AssistantText = new StringBuilder();
+        private readonly StringBuilder _RunAssistantText = new StringBuilder();
         private readonly Dictionary<string, PaneLineHandle> _ToolLines = new Dictionary<string, PaneLineHandle>(StringComparer.Ordinal);
         private readonly List<PaneLineHandle> _AssistantLines = new List<PaneLineHandle>();
+        private bool _FirstTokenSeen;
+        private RunCompletedEvent? _LastRunCompleted;
 
         #endregion
 
@@ -39,6 +42,38 @@ namespace Mux.Cli.App
         public AgentEventProjector(Pane pane)
         {
             _Pane = pane ?? throw new ArgumentNullException(nameof(pane));
+        }
+
+        #endregion
+
+        #region Public-Events
+
+        /// <summary>
+        /// Raised once, when the first assistant token of the run is projected. Used by the shell to
+        /// stamp time-to-first-token.
+        /// </summary>
+        public event Action? FirstTokenReceived;
+
+        #endregion
+
+        #region Public-Members
+
+        /// <summary>
+        /// The full assistant text emitted across the run, accumulated verbatim (all blocks joined).
+        /// Consumed by the shell to append the assistant turn to conversation history.
+        /// </summary>
+        public string CapturedAssistantText
+        {
+            get => _RunAssistantText.ToString();
+        }
+
+        /// <summary>
+        /// The final <see cref="RunCompletedEvent"/> observed for this run, or null when the run produced
+        /// none. Carries the engine's end-of-run summary (estimated tokens, duration, counts).
+        /// </summary>
+        public RunCompletedEvent? LastRunCompleted
+        {
+            get => _LastRunCompleted;
         }
 
         #endregion
@@ -106,8 +141,9 @@ namespace Mux.Cli.App
                     _Pane.WriteLine(Text.From($"Error [{errorEvent.Code}]: {errorEvent.Message}").Red());
                     break;
 
-                case RunCompletedEvent:
+                case RunCompletedEvent runCompleted:
                     FinalizeAssistantBlock();
+                    _LastRunCompleted = runCompleted;
                     break;
 
                 default:
@@ -118,6 +154,13 @@ namespace Mux.Cli.App
         private void AppendAssistantText(string text)
         {
             _AssistantText.Append(text);
+            _RunAssistantText.Append(text);
+
+            if (!_FirstTokenSeen && !string.IsNullOrEmpty(text))
+            {
+                _FirstTokenSeen = true;
+                FirstTokenReceived?.Invoke();
+            }
 
             // Stream the full response as it grows, one pane line per text line, so it fills the
             // available vertical space; the block is re-rendered as markdown when it finalizes.
