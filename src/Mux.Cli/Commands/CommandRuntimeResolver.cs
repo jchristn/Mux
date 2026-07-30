@@ -110,7 +110,7 @@ namespace Mux.Cli.Commands
                 .Replace("{WorkingDirectory}", workingDirectory)
                 .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd());
 
-            ApprovalPolicyEnum approvalPolicy = ResolveApprovalPolicy(settings, endpoint);
+            ApprovalPolicyEnum approvalPolicy = ResolveApprovalPolicy(settings, endpoint, allowAskApproval);
 
             if (!allowAskApproval && approvalPolicy == ApprovalPolicyEnum.Ask)
             {
@@ -149,7 +149,7 @@ namespace Mux.Cli.Commands
             };
         }
 
-        internal static ApprovalPolicyEnum ResolveApprovalPolicy(CommonSettings settings, EndpointConfig endpoint)
+        internal static ApprovalPolicyEnum ResolveApprovalPolicy(CommonSettings settings, EndpointConfig endpoint, bool allowAskApproval = false)
         {
             if (settings.Yolo)
             {
@@ -174,7 +174,10 @@ namespace Mux.Cli.Commands
                 return ApprovalPolicyEnum.AutoApprove;
             }
 
-            return ApprovalPolicyEnum.Deny;
+            // Interactive mode defaults to Ask (the caller remaps it to AutoSafe: read-only tools run
+            // automatically, mutating tools escalate to the approval modal). Non-interactive modes cannot
+            // prompt, so they default to the safe Deny.
+            return allowAskApproval ? ApprovalPolicyEnum.Ask : ApprovalPolicyEnum.Deny;
         }
 
         private static void ValidateCommandSettings(

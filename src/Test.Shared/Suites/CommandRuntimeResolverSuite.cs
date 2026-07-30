@@ -43,6 +43,24 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("CommandRuntimeResolver", "ResolveApprovalPolicyNonInteractiveDefaultsToDeny", "No policy in non-interactive mode defaults to Deny", (CancellationToken ct) =>
+                    {
+                        PrintSettings settings = new PrintSettings();
+                        EndpointConfig endpoint = new EndpointConfig();
+                        ApprovalPolicyEnum result = CommandRuntimeResolver.ResolveApprovalPolicy(settings, endpoint, allowAskApproval: false);
+                        MuxAssert.AreEqual(ApprovalPolicyEnum.Deny, result, "policy");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("CommandRuntimeResolver", "ResolveApprovalPolicyInteractiveDefaultsToAsk", "No policy in interactive mode defaults to Ask", (CancellationToken ct) =>
+                    {
+                        PrintSettings settings = new PrintSettings();
+                        EndpointConfig endpoint = new EndpointConfig();
+                        ApprovalPolicyEnum result = CommandRuntimeResolver.ResolveApprovalPolicy(settings, endpoint, allowAskApproval: true);
+                        MuxAssert.AreEqual(ApprovalPolicyEnum.Ask, result, "policy");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("CommandRuntimeResolver", "ApplyMuxSettingsOverridesIgnoreCertErrors", "IgnoreCertErrors override enables the setting", (CancellationToken ct) =>
                     {
                         PrintSettings settings = new PrintSettings { IgnoreCertErrors = true };
