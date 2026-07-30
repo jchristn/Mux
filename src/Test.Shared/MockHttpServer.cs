@@ -31,11 +31,14 @@ namespace Test.Shared
         #region Public-Members
 
         /// <summary>
-        /// The base URL of the mock server, including scheme and port.
+        /// The base URL of the mock server, including scheme and port. Uses the literal IPv4 loopback
+        /// (<c>127.0.0.1</c>) rather than the <c>localhost</c> hostname so the client and listener always
+        /// agree on the loopback stack — on CI runners <c>localhost</c> can resolve to IPv6 <c>::1</c>
+        /// first while the listener is bound to IPv4, which refuses the connection.
         /// </summary>
         public string BaseUrl
         {
-            get => $"http://localhost:{_Port}";
+            get => $"http://127.0.0.1:{_Port}";
         }
 
         /// <summary>
@@ -64,7 +67,7 @@ namespace Test.Shared
         {
             _Port = GetAvailablePort();
             _Listener = new HttpListener();
-            _Listener.Prefixes.Add($"http://localhost:{_Port}/");
+            _Listener.Prefixes.Add($"http://127.0.0.1:{_Port}/");
         }
 
         #endregion
