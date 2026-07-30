@@ -89,7 +89,10 @@ namespace Test.Shared
                     TuiShellSuite.Create(),
 
                     // Mux.Cli AgentEvent projector suite (M7).
-                    ProjectorSuite.Create()
+                    ProjectorSuite.Create(),
+
+                    // Mux.Cli sidebar + responsive collapse suite (M8).
+                    SidebarSuite.Create()
                 };
             }
         }

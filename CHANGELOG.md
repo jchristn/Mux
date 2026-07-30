@@ -21,6 +21,10 @@ All notable changes to mux are documented here.
   `MarkdownRenderer`) and collapses each tool call to a single line updated in place from
   `running…` to `✓/✗ name (N ms)`. Covered by `ProjectorSuite` (12 cases) and expanded `TuiShellSuite`
   (per-job isolation, focus swap, focus cycling).
+- Added a sidebar listing all jobs with a state glyph and a focus marker, kept live from
+  `JobManager` events. Focus by number (`Alt+1`–`Alt+9`), toggle the sidebar with `Ctrl+B`, and the
+  sidebar auto-collapses below 100 columns (a manual toggle overrides the width rule). Covered by
+  `SidebarSuite` (7 cases).
 - Interim interactive approval behavior pending the M11 approval modal: the default `ask` policy runs
   read-only tools automatically (`AutoSafe`) and denies mutating tools with a visible notice; pass
   `--yolo` / `--approval-policy auto` to auto-approve, or `deny` to block all tools.

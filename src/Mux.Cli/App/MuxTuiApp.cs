@@ -15,35 +15,47 @@ namespace Mux.Cli.App
     using TUIKit.Widgets;
 
     /// <summary>
-    /// The TUIKit-hosted interactive shell for mux. Lays out a transcript region, a composer editor, and
-    /// a footer hint line. Each job owns its own transcript <see cref="Pane"/>; only the focused job's
-    /// pane is bound to the transcript region, so concurrent jobs never write over one another. Keys are
-    /// forwarded to the composer; <c>Enter</c> submits the prompt as a new job and projects that job's
-    /// <see cref="Mux.Core.Agent.AgentEvent"/> stream onto its pane. The terminal backend is injected so
-    /// the shell can be driven headlessly in tests.
+    /// The TUIKit-hosted interactive shell for mux. Lays out a sidebar, a transcript region, a composer
+    /// editor, and a footer hint line. Each job owns its own transcript <see cref="Pane"/>; only the
+    /// focused job's pane is bound to the transcript region, so concurrent jobs never write over one
+    /// another. The sidebar lists all jobs and tracks focus. Below a width threshold (or via a manual
+    /// toggle) the sidebar collapses and the transcript reclaims the width. The terminal backend is
+    /// injected so the shell can be driven headlessly in tests.
     /// </summary>
     public sealed class MuxTuiApp : IDisposable
     {
         #region Private-Members
 
         private const string TranscriptRegion = "transcript";
+        private const string SidebarRegion = "sidebar";
         private const string ComposerRegion = "composer";
         private const string FooterRegion = "footer";
+        private const int SidebarWidth = 28;
+        private const int CollapseThreshold = 100;
 
+        private readonly ITerminalBackend _Backend;
         private readonly TuiApplication _App;
         private readonly JobManager _JobManager;
         private readonly ApprovalPolicyEnum _ApprovalPolicy;
+        private readonly string _Title;
         private readonly Pane _HomePane;
+        private readonly Pane _SidebarPane;
         private readonly Pane _Footer;
         private readonly TextEditor _Composer;
+        private readonly SidebarView _Sidebar;
         private readonly MuxCommandCatalog _Catalog;
+        private readonly Layout _ExpandedLayout;
+        private readonly Layout _CollapsedLayout;
         private readonly Dictionary<string, Pane> _JobPanes = new Dictionary<string, Pane>(StringComparer.Ordinal);
         private readonly List<string> _JobOrder = new List<string>();
         private readonly List<Task> _ProjectorTasks = new List<Task>();
         private readonly object _Sync = new object();
         private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
+        private readonly EventHandler<JobManagerEvent> _JobEventHandler;
         private Pane _CurrentPane;
         private string? _FocusedJobId;
+        private bool _ManualCollapsed;
+        private bool _CollapsedApplied;
         private bool _Disposed;
 
         #endregion
@@ -55,7 +67,7 @@ namespace Mux.Cli.App
         /// </summary>
         /// <param name="backend">The terminal backend (console for production, headless for tests). Must not be null.</param>
         /// <param name="jobManager">The job manager that runs submitted prompts. Must not be null.</param>
-        /// <param name="title">A short session title shown in the transcript header.</param>
+        /// <param name="title">A short session title shown in the transcript header and sidebar.</param>
         /// <param name="approvalPolicy">The approval policy applied to submitted jobs.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
@@ -64,25 +76,36 @@ namespace Mux.Cli.App
             string title,
             ApprovalPolicyEnum approvalPolicy)
         {
-            if (backend is null) throw new ArgumentNullException(nameof(backend));
+            _Backend = backend ?? throw new ArgumentNullException(nameof(backend));
             _JobManager = jobManager ?? throw new ArgumentNullException(nameof(jobManager));
             _ApprovalPolicy = approvalPolicy;
+            _Title = string.IsNullOrWhiteSpace(title) ? "mux" : title;
 
             _App = new TuiApplication(backend);
             _App.CtrlCPolicy = CtrlCPolicy.DoubleTapToExit;
 
-            _App.Layout = Layout.Create()
+            _ExpandedLayout = Layout.Create()
+                .Add(SidebarRegion, r => r.LeftAnchored(0, SidebarWidth).FillHeight(0, 4).WithPadding(0))
+                .Add(TranscriptRegion, r => r.FillWidth(SidebarWidth, 0).FillHeight(0, 4).WithPadding(0))
+                .Add(ComposerRegion, r => r.FillWidth().BottomAnchored(1, 3).WithPadding(0))
+                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(0, 1).WithPadding(0))
+                .Build();
+
+            _CollapsedLayout = Layout.Create()
                 .Add(TranscriptRegion, r => r.FillWidth().FillHeight(0, 4).WithPadding(0))
                 .Add(ComposerRegion, r => r.FillWidth().BottomAnchored(1, 3).WithPadding(0))
                 .Add(FooterRegion, r => r.FillWidth().BottomAnchored(0, 1).WithPadding(0))
                 .Build();
 
             _HomePane = new Pane("home");
+            _SidebarPane = new Pane(SidebarRegion);
             _Footer = new Pane(FooterRegion);
             _Composer = new TextEditor { IsFocused = true };
             _CurrentPane = _HomePane;
+            _Sidebar = new SidebarView(_SidebarPane);
 
             _App.BindPane(TranscriptRegion, _HomePane);
+            _App.BindPane(SidebarRegion, _SidebarPane);
             _App.BindPane(FooterRegion, _Footer);
             _App.Bind(ComposerRegion, _Composer);
 
@@ -93,11 +116,16 @@ namespace Mux.Cli.App
             // which terminals and the input parser deliver as Enter, so it cannot be distinguished from a
             // submit in legacy keyboard mode. Revisit when the enhanced-keyboard keymap lands (M10).
             _Catalog.Add(new CommandDescriptor("mux.focus.next", "Focus next job", "ctrl+n", FocusNext));
+            _Catalog.Add(new CommandDescriptor("mux.sidebar.toggle", "Toggle sidebar", "ctrl+b", ToggleSidebar));
             _Catalog.ApplyTo(_App);
 
             _App.KeyReceived += OnKeyReceived;
+            _JobEventHandler = (object? sender, JobManagerEvent e) => RefreshSidebar();
+            _JobManager.EventPublished += _JobEventHandler;
 
-            WriteHeader(title ?? string.Empty);
+            WriteHeader();
+            RefreshSidebar();
+            ApplyResponsiveLayout();
         }
 
         #endregion
@@ -157,6 +185,20 @@ namespace Mux.Cli.App
             }
         }
 
+        /// <summary>
+        /// Whether the sidebar is currently collapsed (manually or by the responsive width rule).
+        /// </summary>
+        public bool IsSidebarCollapsed
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _CollapsedApplied;
+                }
+            }
+        }
+
         #endregion
 
         #region Public-Methods
@@ -195,15 +237,31 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
-        /// Runs the interactive input and render loop until the user quits or the token is cancelled.
+        /// Runs the interactive input and render loop until the user quits or the token is cancelled,
+        /// while a background monitor keeps the layout responsive to terminal-size changes.
         /// </summary>
         /// <param name="cancellationToken">A token used to stop the loop.</param>
         /// <returns>A task that completes when the loop exits.</returns>
         public async Task RunAsync(CancellationToken cancellationToken)
         {
-            using (CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _Cts.Token))
+            using (CancellationTokenSource loopCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _Cts.Token))
             {
-                await _App.RunAsync(linked.Token).ConfigureAwait(false);
+                Task monitor = MonitorResponsiveAsync(loopCts.Token);
+                try
+                {
+                    await _App.RunAsync(loopCts.Token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    loopCts.Cancel();
+                    try
+                    {
+                        await monitor.ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                    }
+                }
             }
         }
 
@@ -232,6 +290,7 @@ namespace Mux.Cli.App
             }
 
             _JobManager.Focus(jobId);
+            RefreshSidebar();
             return true;
         }
 
@@ -253,6 +312,57 @@ namespace Mux.Cli.App
             }
 
             FocusJob(target);
+        }
+
+        /// <summary>
+        /// Focuses the job at the given 1-based position in submission order.
+        /// </summary>
+        /// <param name="oneBasedIndex">The 1-based job position.</param>
+        /// <returns>True when a job exists at that position and was focused; otherwise false.</returns>
+        public bool FocusByIndex(int oneBasedIndex)
+        {
+            string? target = null;
+            lock (_Sync)
+            {
+                if (oneBasedIndex >= 1 && oneBasedIndex <= _JobOrder.Count)
+                {
+                    target = _JobOrder[oneBasedIndex - 1];
+                }
+            }
+
+            return target != null && FocusJob(target);
+        }
+
+        /// <summary>
+        /// Toggles the manual sidebar collapse and re-applies the responsive layout.
+        /// </summary>
+        public void ToggleSidebar()
+        {
+            lock (_Sync)
+            {
+                _ManualCollapsed = !_ManualCollapsed;
+            }
+
+            ApplyResponsiveLayout();
+        }
+
+        /// <summary>
+        /// Applies the collapsed or expanded layout based on the manual toggle and the current terminal
+        /// width. Idempotent; safe to call from the render loop or from tests after a resize.
+        /// </summary>
+        public void ApplyResponsiveLayout()
+        {
+            lock (_Sync)
+            {
+                bool shouldCollapse = _ManualCollapsed || _Backend.Size.Width < CollapseThreshold;
+                if (shouldCollapse == _CollapsedApplied && _App.Layout != null)
+                {
+                    return;
+                }
+
+                _App.Layout = shouldCollapse ? _CollapsedLayout : _ExpandedLayout;
+                _CollapsedApplied = shouldCollapse;
+            }
         }
 
         /// <summary>
@@ -299,6 +409,15 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
+        /// Returns a plain-text snapshot of the sidebar lines. Test helper.
+        /// </summary>
+        /// <returns>The committed sidebar lines without styling.</returns>
+        public IReadOnlyList<string> SidebarSnapshot()
+        {
+            return _SidebarPane.SnapshotPlainLines();
+        }
+
+        /// <summary>
         /// Returns a plain-text snapshot of the footer lines. Test helper.
         /// </summary>
         /// <returns>The committed footer lines without styling.</returns>
@@ -312,6 +431,8 @@ namespace Mux.Cli.App
         {
             if (_Disposed) return;
             _Disposed = true;
+
+            _JobManager.EventPublished -= _JobEventHandler;
 
             try
             {
@@ -331,6 +452,21 @@ namespace Mux.Cli.App
 
         #region Private-Methods
 
+        private async Task MonitorResponsiveAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    ApplyResponsiveLayout();
+                    await Task.Delay(150, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
         private void OnKeyReceived(KeyEvent key)
         {
             if (key.Code == KeyCode.Enter
@@ -344,6 +480,14 @@ namespace Mux.Cli.App
             if (key.Code == KeyCode.Escape)
             {
                 CancelFocusedJob();
+                return;
+            }
+
+            if (key.Code == KeyCode.Character
+                && (key.Modifiers & KeyModifiers.Alt) != 0
+                && key.Rune >= '1' && key.Rune <= '9')
+            {
+                FocusByIndex(key.Rune - '0');
                 return;
             }
 
@@ -403,12 +547,22 @@ namespace Mux.Cli.App
             }
         }
 
-        private void WriteHeader(string title)
+        private void RefreshSidebar()
         {
-            string heading = string.IsNullOrWhiteSpace(title) ? "mux" : "mux · " + title;
-            _HomePane.WriteLine(Text.From(heading).Cyan().Bold());
+            string? focused;
+            lock (_Sync)
+            {
+                focused = _FocusedJobId;
+            }
+
+            _Sidebar.Refresh(_JobManager.Jobs, focused, _Title, _JobManager.SessionId);
+        }
+
+        private void WriteHeader()
+        {
+            _HomePane.WriteLine(Text.From("mux · " + _Title).Cyan().Bold());
             _HomePane.WriteLine(Text.From("Type a prompt and press Enter. Alt+Enter for a newline.").Dim());
-            _Footer.WriteLine(Text.From("Ctrl+Q quit · Ctrl+L clear · Ctrl+N next job · Enter send · Esc cancel").Dim());
+            _Footer.WriteLine(Text.From("^Q quit · ^L clear · ^N next · ^B sidebar · Alt+# focus · Enter send · Esc cancel").Dim());
         }
 
         #endregion

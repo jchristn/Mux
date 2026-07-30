@@ -779,15 +779,40 @@ milestones (M8/M10) rather than as empty M6 stubs, per "build it right, not scaf
 
 ---
 
-## M8 — Cli: Sidebar + focus switcher
+## M8 — Cli: Sidebar + focus switcher ✅ DONE
 
-- [ ] `Regions/SidebarRegion.cs` — vertical stack: context `Gauge`, model, session, cwd/branch, jobs list.
-- [ ] `Regions/JobsListWidget.cs` — one row per job with state glyph, id, title, live tokens/elapsed; focusable; Enter focuses that job's transcript.
-- [ ] Bind sidebar fields to `Observable<T>` fed by `JobManagerEvent`s and focused-job `ContextStatusEvent`.
-- [ ] Focus switching: sidebar select + `Ctrl+J` cycle + `Alt+<n>` jump; swap transcript pane binding.
-- [ ] Sidebar collapse toggle (`Ctrl+B`) + responsive auto-collapse below `100` columns.
-- [ ] **Tests** (`Test.Shared/Suites/SidebarSuite.cs`, headless): jobs list reflects manager state; switching focus swaps the rendered transcript; collapse reclaims width; context gauge reflects focused job.
-- **Exit criteria:** ambient info + switcher verified headlessly across ≥ 2 concurrent jobs.
+- [x] `App/SidebarView.cs` — renders the sidebar into its own `Pane`: a session header (title +
+  shortened session id) and a jobs list, one row per job as `{focus-marker}{index} {state-glyph}
+  {title}`. `Refresh(jobs, focusedId, title, sessionId)` clears and rewrites from a job snapshot and is
+  internally locked, so it is safe to call on every manager event and focus change. (A focusable
+  `DataTable`-based jobs widget with live per-row token/elapsed columns is a later enhancement; the
+  row-per-job pane render covers the M8 need and tests cleanly.)
+- [x] `MuxTuiApp` owns the sidebar: an **expanded** layout (28-col left `sidebar` + transcript filling
+  the rest) and a **collapsed** layout (transcript full width), swapped by `ApplyResponsiveLayout`.
+  The sidebar refreshes from an event-driven subscription to `JobManager.EventPublished` (job
+  added/state-changed/completed) plus focus changes — simpler and more deterministic to test than
+  `Observable<T>` field binding, which we can layer on later without changing behavior.
+- [x] Focus switching: `FocusNext` (`Ctrl+N`), `FocusByIndex` (`Alt+1..9`), and sidebar focus marker;
+  each swaps the transcript pane binding and syncs `JobManager.Focus`. (`Ctrl+J` avoided — it is LF; see
+  M7 note.)
+- [x] Sidebar collapse toggle (`Ctrl+B`) + responsive auto-collapse below `100` columns, applied by a
+  background resize-monitor task during `RunAsync` (TUIKit exposes no resize event, so the monitor
+  polls `ITerminalBackend.Size`); a manual collapse overrides the responsive rule.
+- [x] **Tests** (`Test.Shared/Suites/SidebarSuite.cs`, 7 cases, headless, 120-col backend): empty job
+  count; lists submitted jobs; focus marker moves with `FocusByIndex`; state glyph goes running→
+  completed (gated runner); `Ctrl+B` toggles collapse; width resize auto-collapses/restores; manual
+  collapse overrides the width rule. Green on the console runner (net8+net10) and both adapters.
+- **Exit criteria:** ✅ ambient job info + focus switcher verified headlessly across ≥ 2 concurrent
+  jobs; collapse reclaims width; responsive + manual collapse both covered.
+
+**Deferred from M8 (with rationale):**
+- **Context `Gauge`** (per-focused-job context budget). The `Gauge` widget exists in 0.2.0, but a live
+  gauge needs the focused job's `ContextStatusEvent` surfaced to the shell (currently the projector
+  sees context events per job but does not publish a focused-job context observable). Wire this when the
+  context/observable plumbing lands (with the M9/M10 status surfaces); the sidebar has a natural slot
+  for it in the header.
+- **Live token/elapsed columns** per job row — depends on the same per-job stats stream; the row layout
+  already leaves room.
 
 ---
 

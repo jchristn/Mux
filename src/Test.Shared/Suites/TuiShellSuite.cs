@@ -46,7 +46,7 @@ namespace Test.Shared.Suites
                             MuxAssert.Contains("mux", transcript, "header brand");
                             MuxAssert.Contains("demo", transcript, "header title");
                             MuxAssert.Contains("Type a prompt", transcript, "header hint");
-                            MuxAssert.Contains("Ctrl+Q", footer, "footer quit hint");
+                            MuxAssert.Contains("^Q", footer, "footer quit hint");
                         }
                     }),
 
