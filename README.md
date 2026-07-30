@@ -135,61 +135,39 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 
 ### Interactive Commands
 
+Every command is also reachable by key binding and the `F1` menu (one catalog, three surfaces).
+
 ```text
-/endpoint, /model                 List configured endpoints
-/endpoint list|ls, /model list|ls Alias for /endpoint
-/endpoint <name>, /model <name>   Switch to a named endpoint
-/endpoint show <name>             Show endpoint details and probe connectivity
-/model show <name>                Alias for /endpoint show <name>
-/endpoint add, /model add         Start the guided endpoint creation wizard
-/endpoint edit <name>             Start the guided endpoint edit wizard
-/model edit <name>                Alias for /endpoint edit <name>
-/endpoint remove|delete|rm <name> Remove an endpoint from endpoints.json after confirmation
-/model remove|delete|rm <name>    Alias for /endpoint remove|delete|rm <name>
-/search, /search list|ls          List external search providers and global search status
-/search add [name]                Start the guided external search provider add wizard
-/search show <name>               Show external search provider details
-/search edit <name>               Start the guided external search provider edit wizard
-/search remove|delete|rm <name>   Remove an external search provider from settings.json
-/tools                            List available tools
-/status                           Show session metadata, title, and estimated context usage
-/context                          Alias for /status
-/compact                          Compact older conversation history with the configured strategy
-/compact summary                  Compact older conversation history with a one-off summary pass
-/compact trim                     Trim older conversation history without asking the model to summarize it
-/compact strategy [summary|trim]  Show or set the session compaction strategy
-/title                            Show the current conversation title
-/title <text>                     Set the conversation title and disable automatic retitling
-/mcp list|ls                      Show MCP server status
-/mcp add                          Start the guided MCP server add wizard
-/mcp remove|delete|rm <name>      Remove an MCP server
-/system                           Show the full current system prompt
-/system <text>                    Replace the system prompt for this session
-/clear                            Clear conversation history
-/help or /?                       Show command help
-/exit                             Quit mux
+/endpoint, /model                 Open the endpoints / models picker (also Ctrl+E)
+/endpoints, /models               Aliases for /endpoint
+/sessions                         Browse and resume saved sessions
+/save                             Save the current session
+/theme                            Open the theme selector
+/sidebar                          Toggle the sidebar
+/mouse                            Toggle mouse capture (on by default)
+/menu                             Open the command menu (also F1)
+/clear                            Clear the transcript
+/help, /?                         Show the keybinding / command reference
+/exit, /quit, /q                  Quit mux
 ```
 
-Endpoint management happens directly against `endpoints.json`. `show` performs a lightweight probe of the configured endpoint. `add` and `edit` run guided workflows that prompt for the adapter, base URL, model, auth mode (`none`, `bearer token`, or `custom headers`), default status, endpoint-scoped tool auto-approval, and optional advanced settings before probing and saving. Endpoints can persist `autoApproveTools: true` so tool calls auto-approve whenever that endpoint is active unless CLI approval flags override it. Endpoints can also set `maxAgentIterations`; leave it `null` to inherit the global `settings.json` default.
+The `/endpoint` picker (also `Ctrl+E`) lists your configured endpoints; pick one to switch the active endpoint for subsequent prompts. The same modal offers **Add**, **Edit**, and **Remove** entries: **Add** and **Edit** run a guided form (adapter, base URL, model, auth mode — `none`, `bearer token`, or `custom headers` — default status, endpoint-scoped tool auto-approval, and optional advanced settings) and probe before saving; **Remove** asks for confirmation and refuses to delete the endpoint active in the current session. All three persist to `endpoints.json`. Endpoints can persist `autoApproveTools: true` so tool calls auto-approve whenever that endpoint is active unless CLI approval flags override it, and can set `maxAgentIterations` (leave it `null` to inherit the global `settings.json` default).
 
-External search management happens directly against `settings.json`. `/search add` configures Tavily or You.com search providers, stores API keys directly or as environment-variable references, and enables the `web_search` tool when at least one enabled provider is fully configured. `web_search` is for discovering candidate results; fetching the actual contents of a known URL is handled by `web_retrieve`.
+For secret values, the form lets you either store the value directly in `endpoints.json` or store an environment-variable reference. It accepts a bare variable name plus `${VAR}`, `%VAR%`, `$VAR`, and `$env:VAR`, then stores environment references canonically as `${VAR}`. For `ollama`, mux uses Ollama's OpenAI-compatible API root, so the usual base URL is `http://localhost:11434/v1`.
 
-MCP server management happens directly against `mcp-servers.json`. `/mcp add` is wizard-driven and lets you choose `stdio` or HTTP transport interactively. Successful adds are connected for the current session and saved for future sessions.
-
-For secret values, the wizard lets you either store the value directly in `endpoints.json` or store an environment-variable reference. It accepts a bare variable name plus `${VAR}`, `%VAR%`, `$VAR`, and `$env:VAR`, then stores environment references canonically as `${VAR}`. For `ollama`, mux uses Ollama's OpenAI-compatible API root, so the usual base URL is `http://localhost:11434/v1`. `remove` asks for confirmation and still refuses to delete the endpoint active in the current session.
+External search is configured in `settings.json` (Tavily or You.com); when at least one enabled provider is fully configured the `web_search` tool is enabled. `web_search` discovers candidate results; fetching the contents of a known URL is handled by `web_retrieve`. MCP servers are configured in `mcp-servers.json`.
 
 ### Interactive Input
 
-Interactive mode accepts one prompt at a time. Prompt entry supports multi-line editing and paste while idle. After you press `Enter`, prompt entry blocks until the run completes or you cancel it with `Esc`. There is no queued prompt mode and no `/queue` command.
-Streamed responses end cleanly before the next `mux>` prompt is shown.
+Interactive mode works like a chat client. Prompt entry supports multi-line editing and paste. After you press `Enter` the prompt runs; you can keep typing and submitting while a turn is in flight, and those prompts queue to run in order as each turn finishes. The sidebar shows the current status and how many prompts are queued.
 
 Each interactive session also maintains a short conversation title. By default mux asks the current model to revisit that title periodically as the discussion evolves. If you set a title manually with `/title <text>`, mux keeps that title fixed until you change it again.
 
 While idle, `Up` and `Down` recall submitted prompts from the current session. `Shift+Enter` and `Ctrl+Enter` insert a newline so you can compose or paste multi-line prompts before submission.
 
-During generation, `Esc` cancels the active run. If a tool approval is needed, mux prints the approval request inline and waits for `y`, `n`, `Enter`, or `a` (`always`). Choosing `always` auto-approves the rest of the current run and saves endpoint-scoped auto-approval for future sessions. When mux runs a post-turn title refresh, it now emits a visible `Generating title...` notice before returning to the next prompt.
+`Esc` cancels the running turn. If a tool approval is needed, mux shows an approval modal — **Approve once**, **Deny**, or **Always this session** (which auto-approves the rest of the session).
 
-`/status` reports the active title, model, endpoint, max agent iterations, compaction policy, and estimated context budget; `/context` is an alias. New prompts are checked against that budget before each run. When a prompt would exceed the usable context budget, mux automatically compacts older persisted history before sending the next model call. If an active tool-using run grows too large mid-flight, mux now honors the configured compaction strategy there too: `summary` uses a summary sidecar pass first and trims only if needed, while `trim` stays trim-only. mux also emits a dim post-turn context line when the session is approaching the usable limit, but it does not keep a persistent meter on screen. `/compact` uses the configured compaction strategy, `/compact summary` and `/compact trim` provide one-off overrides, and `/compact strategy [summary|trim]` changes the interactive session policy without touching `settings.json`. `/clear` clears the transcript state and redraws the screen with the current title at the top.
+New prompts are checked against the context budget before each run. When a prompt would exceed the usable context budget, mux automatically compacts older persisted history before sending the next model call, using the configured compaction strategy (`summary` uses a summary sidecar pass first and trims only if needed; `trim` stays trim-only). `/clear` clears the transcript.
 
 ### Interactive Examples
 
