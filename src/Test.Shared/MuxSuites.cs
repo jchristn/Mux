@@ -95,7 +95,10 @@ namespace Test.Shared
                     SidebarSuite.Create(),
 
                     // Mux.Cli composer + prompt history + submit chooser suite (M9).
-                    ComposerSuite.Create()
+                    ComposerSuite.Create(),
+
+                    // Mux.Cli command surfaces: slash / palette / keybinding / menu (M10).
+                    CommandSurfacesSuite.Create()
                 };
             }
         }

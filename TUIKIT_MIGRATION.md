@@ -859,16 +859,46 @@ terminals, and `Ctrl+Enter` is the new-job bypass.
 
 ---
 
-## M10 — Cli: Footer, menu bar, function keys, palette, slash router
+## M10 — Cli: Footer, menu bar, function keys, palette, slash router ✅ DONE
 
-- [ ] `Regions/MenuBarRegion.cs` — TUIKit `MenuBar` with the §5 tree (Session/Jobs, Model/Endpoints, View/Appearance, Tools/Help), each item invoking a `CommandCatalog` command.
-- [ ] `App/CommandPalette.cs` — `Ctrl+K` fuzzy palette (`FuzzyList`) over the catalog; shows bound keys.
-- [ ] `Commands/SlashCommandParser.cs` — parses composer `/…` input against catalog `SlashAlias`es (§7 table).
-- [ ] Footer status content (`ctx · jobs · lease · focused state`) + context-sensitive f-key hint strip (`F1..F4`, `^K`).
-- [ ] Bind function keys and global chords via `CommandRouter`/`KeyChord`; document the full keymap (§9).
-- [ ] `NotificationCenter` toasts for ephemeral messages (errors, "queued j4", "copied").
-- [ ] **Tests** (`Test.Shared/Suites/CommandSurfacesSuite.cs`, headless): the same command id is reachable via menu, palette, slash, and f-key and produces identical effect; palette fuzzy-match ranks expected item; unknown slash shows an error toast, not a crash.
-- **Exit criteria:** one catalog, four surfaces, verified to converge on identical behavior.
+Every surface resolves against the single `MuxCommandCatalog`; `CommandDescriptor` gained `Category`
+(menu grouping) and `SlashAliases`. The seeded catalog: `mux.quit` (^Q, /quit /exit /q, Session),
+`mux.clear` (^L, /clear, View), `mux.focus.next` (^N, /next, Jobs), `mux.sidebar.toggle` (^B, /sidebar,
+View), `mux.palette` (^K, /commands /palette, Session), `mux.help` (F1, /help /?, Help).
+
+- [x] `App/SlashCommandParser.cs` — resolves `/token …` against catalog aliases (`Resolve` /
+  `TryHandle`); wired as the shell's default `SlashHandler`. Unknown input falls through to the
+  `Unknown command` transcript notice.
+- [x] `App/CommandPalette.cs` — `Ctrl+K` opens a fuzzy palette (TUIKit `FuzzyList`) over command titles;
+  typing filters, `Enter` runs the selection's command, `Esc` closes. Maps the selected title back to
+  its `CommandDescriptor`.
+- [x] `App/MenuBarBuilder.cs` — builds a TUIKit `MenuBar`/`Menu` tree grouped by `Category`, each item
+  wired to its command's handler (`MenuItem.Action` is the very same delegate — convergence by
+  construction). Exposed via `MuxTuiApp.MenuBar`.
+- [x] Footer status (`jobs:N focused:jX · <key hints>`) refreshed on job events and focus changes;
+  overridden by the chooser / palette hints while those are open.
+- [x] Function keys / global chords bound through the catalog (`F1` help, `^K` palette, `^Q/^L/^N/^B`);
+  `f1` chord parses and dispatches. `App/CommandDescriptor.cs` carries the keymap as the single source
+  (`mux.help` renders it via `/help`).
+- [x] **Tests** (`Test.Shared/Suites/CommandSurfacesSuite.cs`, 11 cases, headless): slash resolve-by-
+  alias + try-handle + unknown; `/clear` clears the transcript; palette fuzzy-selects, runs, and Esc-
+  closes; `Ctrl+L` keybinding clears; menu groups by category and a menu item invokes the same handler;
+  **four-surface convergence** (slash, palette, keybinding, and menu all resolve to `mux.clear` and share
+  one handler delegate); `/help` lists commands with chords. Green on the console runner (net8+net10) and
+  both adapters.
+- **Exit criteria:** ✅ one catalog, four surfaces, verified to converge on identical behavior.
+
+**Deferred from M10 (with rationale):**
+- **Interactive menu-bar dropdown** (open/navigate/select on screen). The `MenuBar` is built from the
+  catalog and its items invoke the right handlers (tested), but binding it to a 1-row top region clips
+  the dropdown, and a proper overlay needs render support the current fixed-region layout does not offer
+  cleanly. Wire interactive activation once an overlay/z-order render path exists (or give the menubar a
+  dedicated expanding region); the catalog wiring is already in place.
+- **`NotificationCenter` toasts** are available (`app.Notify`) but not asserted — they are time-based and
+  awkward to snapshot; testable user feedback stays on transcript notices for now. Use toasts for purely
+  ephemeral cues (e.g. "focused jN") in a later polish pass.
+- **Full §9 keymap doc + §5 menu tree** (Model/Endpoints, Tools) land with the modals that back those
+  commands (M11).
 
 ---
 

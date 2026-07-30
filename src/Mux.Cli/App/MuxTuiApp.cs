@@ -54,7 +54,10 @@ namespace Mux.Cli.App
         private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
         private readonly EventHandler<JobManagerEvent> _JobEventHandler;
         private readonly PromptHistory _History = new PromptHistory();
+        private readonly MenuBar _MenuBar;
         private Pane _CurrentPane;
+        private CommandPalette? _Palette;
+        private bool _PaletteActive;
         private string? _FocusedJobId;
         private EnqueueBehavior _DefaultEnqueueBehavior = EnqueueBehavior.Ask;
         private EnqueueBehavior? _SessionEnqueueDefault;
@@ -118,21 +121,30 @@ namespace Mux.Cli.App
             _App.Bind(ComposerRegion, _Composer);
 
             _Catalog = new MuxCommandCatalog();
-            _Catalog.Add(new CommandDescriptor("mux.quit", "Quit", "ctrl+q", () => _App.RequestStop()));
-            _Catalog.Add(new CommandDescriptor("mux.clear", "Clear transcript", "ctrl+l", ClearTranscript));
+            _Catalog.Add(new CommandDescriptor("mux.quit", "Quit", "ctrl+q", () => _App.RequestStop(), "Session", new[] { "quit", "exit", "q" }));
+            _Catalog.Add(new CommandDescriptor("mux.clear", "Clear transcript", "ctrl+l", ClearTranscript, "View", new[] { "clear" }));
             // Focus-next is bound to Ctrl+N rather than the conventional Ctrl+J: Ctrl+J is byte 0x0A (LF),
             // which terminals and the input parser deliver as Enter, so it cannot be distinguished from a
-            // submit in legacy keyboard mode. Revisit when the enhanced-keyboard keymap lands (M10).
-            _Catalog.Add(new CommandDescriptor("mux.focus.next", "Focus next job", "ctrl+n", FocusNext));
-            _Catalog.Add(new CommandDescriptor("mux.sidebar.toggle", "Toggle sidebar", "ctrl+b", ToggleSidebar));
+            // submit in legacy keyboard mode. Revisit when the enhanced-keyboard keymap lands.
+            _Catalog.Add(new CommandDescriptor("mux.focus.next", "Focus next job", "ctrl+n", FocusNext, "Jobs", new[] { "next" }));
+            _Catalog.Add(new CommandDescriptor("mux.sidebar.toggle", "Toggle sidebar", "ctrl+b", ToggleSidebar, "View", new[] { "sidebar" }));
+            _Catalog.Add(new CommandDescriptor("mux.palette", "Command palette", "ctrl+k", OpenPalette, "Session", new[] { "commands", "palette" }));
+            _Catalog.Add(new CommandDescriptor("mux.help", "Help", "f1", ShowHelp, "Help", new[] { "help", "?" }));
             _Catalog.ApplyTo(_App);
+            _MenuBar = MenuBarBuilder.Build(_Catalog);
+            _SlashHandler = new SlashCommandParser(_Catalog).TryHandle;
 
             _App.KeyReceived += OnKeyReceived;
-            _JobEventHandler = (object? sender, JobManagerEvent e) => RefreshSidebar();
+            _JobEventHandler = (object? sender, JobManagerEvent e) =>
+            {
+                RefreshSidebar();
+                RefreshFooter();
+            };
             _JobManager.EventPublished += _JobEventHandler;
 
             WriteHeader();
             RefreshSidebar();
+            RefreshFooter();
             ApplyResponsiveLayout();
         }
 
@@ -254,6 +266,45 @@ namespace Mux.Cli.App
             set => _SlashHandler = value;
         }
 
+        /// <summary>
+        /// The catalog-derived menu bar (menus grouped by command category, items wired to command
+        /// handlers). Interactive dropdown activation is a follow-up; the menu is a view over the catalog.
+        /// </summary>
+        public MenuBar MenuBar
+        {
+            get => _MenuBar;
+        }
+
+        /// <summary>
+        /// Whether the command palette is currently open.
+        /// </summary>
+        public bool IsPaletteActive
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _PaletteActive;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The number of catalog entries matching the palette's current query, or zero when closed.
+        /// </summary>
+        public int PaletteMatchCount
+        {
+            get => _Palette?.MatchCount ?? 0;
+        }
+
+        /// <summary>
+        /// The command id currently selected in the palette, or null when closed or unmatched.
+        /// </summary>
+        public string? PaletteSelectionId
+        {
+            get => _Palette?.Selected?.Id;
+        }
+
         #endregion
 
         #region Public-Methods
@@ -346,6 +397,7 @@ namespace Mux.Cli.App
 
             _JobManager.Focus(jobId);
             RefreshSidebar();
+            RefreshFooter();
             return true;
         }
 
@@ -524,6 +576,13 @@ namespace Mux.Cli.App
 
         private void OnKeyReceived(KeyEvent key)
         {
+            // While the command palette is open it captures keys.
+            if (_PaletteActive)
+            {
+                HandlePaletteKey(key);
+                return;
+            }
+
             // While the submit chooser is open it captures keys.
             if (IsChooserActive)
             {
@@ -861,6 +920,88 @@ namespace Mux.Cli.App
             _Footer.WriteLine(Text.From(hint).Dim());
         }
 
+        private void RefreshFooter()
+        {
+            if (IsPaletteActive || IsChooserActive)
+            {
+                return;
+            }
+
+            int jobCount;
+            string focused;
+            lock (_Sync)
+            {
+                jobCount = _JobOrder.Count;
+                focused = _FocusedJobId ?? "-";
+            }
+
+            SetFooterHint($"jobs:{jobCount} focused:{focused} · {FooterHint}");
+        }
+
+        private void OpenPalette()
+        {
+            _Palette = new CommandPalette(_Catalog);
+            lock (_Sync)
+            {
+                _PaletteActive = true;
+            }
+
+            _App.Bind(TranscriptRegion, _Palette.Widget);
+            SetFooterHint("Palette — type to filter · Enter run · Esc cancel");
+        }
+
+        private void HandlePaletteKey(KeyEvent key)
+        {
+            if (key.Code == KeyCode.Escape)
+            {
+                ClosePalette();
+                return;
+            }
+
+            if (key.Code == KeyCode.Enter)
+            {
+                RunPaletteSelection();
+                return;
+            }
+
+            _Palette?.HandleKey(key);
+        }
+
+        private void RunPaletteSelection()
+        {
+            CommandDescriptor? command = _Palette?.Selected;
+            ClosePalette();
+            command?.Handler();
+        }
+
+        private void ClosePalette()
+        {
+            Pane current;
+            lock (_Sync)
+            {
+                _PaletteActive = false;
+                current = _CurrentPane;
+            }
+
+            _App.BindPane(TranscriptRegion, current);
+            _Palette = null;
+            RefreshFooter();
+        }
+
+        private void ShowHelp()
+        {
+            lock (_Sync)
+            {
+                _CurrentPane.WriteLine(Text.From("Commands").Bold());
+                foreach (CommandDescriptor descriptor in _Catalog.Commands)
+                {
+                    string keys = descriptor.Chord ?? string.Empty;
+                    string aliases = descriptor.SlashAliases.Count > 0 ? "/" + string.Join(" /", descriptor.SlashAliases) : string.Empty;
+                    _CurrentPane.WriteLine(Text.From($"  {descriptor.Title,-18} {keys,-8} {aliases}").Dim());
+                }
+            }
+        }
+
         private static bool IsCarriageReturn(KeyEvent key)
         {
             return key.Code == KeyCode.Character && (key.Rune == 13 || key.Rune == 10);
@@ -915,7 +1056,6 @@ namespace Mux.Cli.App
         {
             _HomePane.WriteLine(Text.From("mux · " + _Title).Cyan().Bold());
             _HomePane.WriteLine(Text.From("Type a prompt and press Enter. Alt+Enter for a newline.").Dim());
-            _Footer.WriteLine(Text.From(FooterHint).Dim());
         }
 
         #endregion

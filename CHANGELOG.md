@@ -28,9 +28,14 @@ All notable changes to mux are documented here.
 - Multi-line composer and enqueue-while-busy: `Alt+Enter`/`Shift+Enter` insert a newline, `Enter`
   submits, and while a job is active `Enter` opens an inline chooser to start a new job (`1`) or append
   to the focused job (`2`), with `r` to remember the choice and `Ctrl+Enter` to bypass. Prompt history
-  recalls with `Up`/`Down`, and a leading `/` routes to the (M10) slash handler. Covered by
+  recalls with `Up`/`Down`, and a leading `/` routes to the slash handler. Covered by
   `ComposerSuite` (15 cases). The enqueue default is read from `settings.json`
   (`defaultEnqueueBehavior`).
+- Command surfaces over a single catalog: a `/`-slash router (aliases like `/clear`, `/help`, `/quit`),
+  a `Ctrl+K` fuzzy command palette, key bindings (`^Q/^L/^N/^B`, `F1`), and a catalog-derived menu —
+  all resolving to the same command handlers. `/help` lists commands and their keys, and the footer
+  shows live `jobs/focused` status. Covered by `CommandSurfacesSuite` (11 cases, including four-surface
+  convergence).
 - Interim interactive approval behavior pending the M11 approval modal: the default `ask` policy runs
   read-only tools automatically (`AutoSafe`) and denies mutating tools with a visible notice; pass
   `--yolo` / `--approval-policy auto` to auto-approve, or `deny` to block all tools.
