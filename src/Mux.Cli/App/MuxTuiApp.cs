@@ -75,6 +75,11 @@ namespace Mux.Cli.App
         private bool _PaletteActive;
         private Job? _ActiveJob;
         private bool _TurnInFlight;
+        private readonly object _ThinkingSync = new object();
+        private PaneLineHandle? _ThinkingHandle;
+        private CancellationTokenSource? _ThinkingCts;
+        private string? _ThinkingMessage;
+        private bool _ThinkingActive;
         private Func<string, bool>? _SlashHandler;
         private bool _ManualCollapsed;
         private bool _CollapsedApplied;
@@ -695,6 +700,35 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
+        /// Whether the thinking indicator is currently shown (a turn is running and has not yet produced
+        /// output). Test helper.
+        /// </summary>
+        public bool IsThinking
+        {
+            get
+            {
+                lock (_ThinkingSync)
+                {
+                    return _ThinkingActive;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The thinking phrase currently displayed, or null when the indicator is hidden. Test helper.
+        /// </summary>
+        public string? CurrentThinkingMessage
+        {
+            get
+            {
+                lock (_ThinkingSync)
+                {
+                    return _ThinkingMessage;
+                }
+            }
+        }
+
+        /// <summary>
         /// Renders a single region's widget into a fresh cell buffer of the given size and returns its
         /// text grid (via TUIKit's own render path). Deterministic golden-snapshot helper for tests.
         /// Unknown region ids or non-positive dimensions return an empty string.
@@ -727,6 +761,8 @@ namespace Mux.Cli.App
         {
             if (_Disposed) return;
             _Disposed = true;
+
+            StopThinking();
 
             try
             {
@@ -943,6 +979,9 @@ namespace Mux.Cli.App
             long[] ttft = { -1 };
             projector.FirstTokenReceived += () => ttft[0] = stopwatch.ElapsedMilliseconds;
 
+            // Dismiss the thinking indicator the instant the model produces output.
+            projector.ModelResponded += StopThinking;
+
             lock (_Sync)
             {
                 _ActiveJob = job;
@@ -951,6 +990,9 @@ namespace Mux.Cli.App
 
             RefreshSidebar();
             RefreshFooter();
+
+            // Show a thinking indicator beneath the echoed prompt until results begin streaming.
+            StartThinking();
 
             Task projection = Task.Run(async () =>
             {
@@ -967,6 +1009,9 @@ namespace Mux.Cli.App
 
         private void OnTurnComplete(string prompt, AgentEventProjector projector, long totalMs, long ttftMs)
         {
+            // Safety net: dismiss the indicator even if the turn produced no observable output.
+            StopThinking();
+
             string? next;
             lock (_Sync)
             {
@@ -1025,6 +1070,91 @@ namespace Mux.Cli.App
             {
                 _ = _JobManager.CancelAsync(active.Id, _Cts.Token);
             }
+        }
+
+        private void StartThinking()
+        {
+            string message = ThinkingMessages.Next();
+            CancellationTokenSource cts = new CancellationTokenSource();
+
+            lock (_ThinkingSync)
+            {
+                _ThinkingMessage = message;
+                _ThinkingActive = true;
+                _ThinkingCts = cts;
+                _ThinkingHandle = _Conversation.WriteLine(RenderThinking(0, message));
+            }
+
+            _ = AnimateThinkingAsync(cts.Token);
+        }
+
+        private void StopThinking()
+        {
+            CancellationTokenSource? cts;
+            lock (_ThinkingSync)
+            {
+                if (!_ThinkingActive)
+                {
+                    return;
+                }
+
+                _ThinkingActive = false;
+                _ThinkingHandle?.Update(StyledText.Empty);
+                _ThinkingHandle = null;
+                _ThinkingMessage = null;
+                cts = _ThinkingCts;
+                _ThinkingCts = null;
+            }
+
+            try
+            {
+                cts?.Cancel();
+                cts?.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        private async Task AnimateThinkingAsync(CancellationToken cancellationToken)
+        {
+            int tick = 0;
+            int ticksSinceSwap = 0;
+
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    await Task.Delay(130, cancellationToken).ConfigureAwait(false);
+                    tick++;
+                    ticksSinceSwap++;
+
+                    lock (_ThinkingSync)
+                    {
+                        if (!_ThinkingActive || _ThinkingHandle == null)
+                        {
+                            return;
+                        }
+
+                        // Rotate to a new phrase roughly every four seconds — lively but unhurried.
+                        if (ticksSinceSwap >= 30)
+                        {
+                            _ThinkingMessage = ThinkingMessages.Next();
+                            ticksSinceSwap = 0;
+                        }
+
+                        _ThinkingHandle.Update(RenderThinking(tick, _ThinkingMessage ?? "Thinking…"));
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private static StyledText RenderThinking(int tick, string message)
+        {
+            return Text.From(ThinkingMessages.SpinnerFrame(tick) + " " + message).Dim();
         }
 
         private void RouteSlash(string input)

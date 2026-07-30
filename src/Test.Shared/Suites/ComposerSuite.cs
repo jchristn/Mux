@@ -160,6 +160,37 @@ namespace Test.Shared.Suites
                         }
                     }),
 
+                    // ---- Thinking indicator ----
+                    Case("ThinkingLibraryLoadsFromResource", "The thinking-message library loads a large set from the embedded resource", async (CancellationToken ct) =>
+                    {
+                        await Task.CompletedTask.ConfigureAwait(false);
+                        MuxAssert.IsTrue(ThinkingMessages.All.Count > 100, "many thinking phrases loaded");
+                        MuxAssert.IsTrue(ThinkingMessages.All.Contains("Thinking..."), "a known phrase from the library is present");
+                        MuxAssert.IsTrue(ThinkingMessages.Spinner.Count > 0, "spinner frames present");
+                    }),
+
+                    Case("ThinkingIndicatorShownWhileWorkingThenHidden", "A thinking indicator shows beneath the prompt while the model works and vanishes when output begins", async (CancellationToken ct) =>
+                    {
+                        TaskCompletionSource<bool> release = NewSignal();
+                        await using (JobManager manager = new JobManager(Gated(release), maxConcurrency: 2))
+                        using (MuxTuiApp app = NewApp(backend: out HeadlessBackend backend, manager: manager))
+                        {
+                            Feed(backend, app, "hello" + "\r");
+                            await WaitForActiveAsync(manager, ct).ConfigureAwait(false);
+
+                            MuxAssert.IsTrue(app.IsThinking, "indicator shown while working");
+                            string message = app.CurrentThinkingMessage ?? string.Empty;
+                            MuxAssert.IsTrue(ThinkingMessages.All.Contains(message), "indicator shows a phrase from the library");
+                            MuxAssert.Contains(message, Join(app.TranscriptSnapshot()), "indicator rendered into the transcript");
+
+                            release.TrySetResult(true);
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+
+                            MuxAssert.IsFalse(app.IsThinking, "indicator hidden once results stream");
+                            MuxAssert.IsTrue(app.CurrentThinkingMessage == null, "no active thinking phrase after completion");
+                        }
+                    }),
+
                     // ---- Slash routing ----
                     Case("SlashInputRoutesToHandler", "A leading slash routes to the slash handler, not a job", async (CancellationToken ct) =>
                     {

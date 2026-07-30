@@ -28,6 +28,7 @@ namespace Mux.Cli.App
         private readonly Dictionary<string, PaneLineHandle> _ToolLines = new Dictionary<string, PaneLineHandle>(StringComparer.Ordinal);
         private readonly List<PaneLineHandle> _AssistantLines = new List<PaneLineHandle>();
         private bool _FirstTokenSeen;
+        private bool _ModelResponded;
         private RunCompletedEvent? _LastRunCompleted;
 
         #endregion
@@ -53,6 +54,12 @@ namespace Mux.Cli.App
         /// stamp time-to-first-token.
         /// </summary>
         public event Action? FirstTokenReceived;
+
+        /// <summary>
+        /// Raised once, when the run produces its first observable output (assistant text, a tool call,
+        /// or an error). Used by the shell to dismiss the "thinking" indicator the moment results begin.
+        /// </summary>
+        public event Action? ModelResponded;
 
         #endregion
 
@@ -114,6 +121,8 @@ namespace Mux.Cli.App
 
         private void Project(AgentEvent agentEvent)
         {
+            SignalRespondedIfMeaningful(agentEvent);
+
             switch (agentEvent)
             {
                 case AssistantTextEvent textEvent:
@@ -148,6 +157,23 @@ namespace Mux.Cli.App
 
                 default:
                     break;
+            }
+        }
+
+        private void SignalRespondedIfMeaningful(AgentEvent agentEvent)
+        {
+            if (_ModelResponded)
+            {
+                return;
+            }
+
+            if (agentEvent is AssistantTextEvent
+                || agentEvent is ToolCallProposedEvent
+                || agentEvent is ToolCallCompletedEvent
+                || agentEvent is ErrorEvent)
+            {
+                _ModelResponded = true;
+                ModelResponded?.Invoke();
             }
         }
 
