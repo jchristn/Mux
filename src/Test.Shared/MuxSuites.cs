@@ -64,12 +64,6 @@ namespace Test.Shared
                     WebRetrieveToolSuite.Create(),
                     McpToolManagerSuite.Create(),
 
-                    // Mux.Core / Llm unit suites (ported from Test.Xunit/Llm).
-                    OpenAiAdapterSuite.Create(),
-                    OllamaAdapterSuite.Create(),
-                    LlmClientSuite.Create(),
-                    GenericOpenAiAdapterSuite.Create(),
-
                     // Settings + non-interactive CLI command unit suites (ported from Test.Xunit).
                     EndpointConfigSuite.Create(),
                     SettingsLoaderSuite.Create(),

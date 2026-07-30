@@ -991,6 +991,8 @@ namespace Mux.Cli.App
                 if (projector.LastRunCompleted != null)
                 {
                     _Stats.LastContextTokens = projector.LastRunCompleted.FinalEstimatedTokens;
+                    _Stats.InputTokens += projector.LastRunCompleted.InputTokens;
+                    _Stats.OutputTokens += projector.LastRunCompleted.OutputTokens;
                 }
 
                 _ActiveJob = null;

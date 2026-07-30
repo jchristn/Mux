@@ -19,6 +19,9 @@ namespace Mux.Core.Agent
         private long _DurationMs = 0;
         private int _FinalEstimatedTokens = 0;
         private int _CompactionCount = 0;
+        private int _InputTokens = 0;
+        private int _OutputTokens = 0;
+        private int _TotalTokens = 0;
 
         #endregion
 
@@ -115,6 +118,33 @@ namespace Mux.Core.Agent
         {
             get => _CompactionCount;
             set => _CompactionCount = value;
+        }
+
+        /// <summary>
+        /// Provider-reported prompt/input tokens across the run (0 when the provider reported none).
+        /// </summary>
+        public int InputTokens
+        {
+            get => _InputTokens;
+            set => _InputTokens = value;
+        }
+
+        /// <summary>
+        /// Provider-reported completion/output tokens across the run (0 when the provider reported none).
+        /// </summary>
+        public int OutputTokens
+        {
+            get => _OutputTokens;
+            set => _OutputTokens = value;
+        }
+
+        /// <summary>
+        /// Provider-reported total tokens across the run (0 when the provider reported none).
+        /// </summary>
+        public int TotalTokens
+        {
+            get => _TotalTokens;
+            set => _TotalTokens = value;
         }
 
         #endregion

@@ -348,7 +348,10 @@ namespace Mux.Core.Agent
                 AssistantTextChars = assistantTextChars,
                 DurationMs = stopwatch.ElapsedMilliseconds,
                 FinalEstimatedTokens = finalSnapshot.UsedTokens,
-                CompactionCount = compactionCount
+                CompactionCount = compactionCount,
+                InputTokens = _LlmClient.CumulativeUsage.InputTokens,
+                OutputTokens = _LlmClient.CumulativeUsage.OutputTokens,
+                TotalTokens = _LlmClient.CumulativeUsage.TotalTokens
             };
         }
 

@@ -2,7 +2,6 @@ namespace Mux.Core.Llm
 {
     using System;
     using System.Collections.Generic;
-    using System.IO;
     using System.Net;
     using System.Net.Http;
     using System.Runtime.CompilerServices;
@@ -13,18 +12,31 @@ namespace Mux.Core.Llm
     using Mux.Core.Enums;
     using Mux.Core.Models;
     using Mux.Core.Utility;
+    using PolyPrompt.Clients;
+    using SyslogLogging;
+    using Pp = PolyPrompt.Models;
 
     /// <summary>
-    /// Orchestrates LLM calls by delegating request building and response parsing to an <see cref="IBackendAdapter"/>.
+    /// Drives LLM calls through the PolyPrompt library. Maps mux conversation messages and tool
+    /// definitions onto PolyPrompt's provider-normalized streaming tool-chat API and projects the
+    /// resulting text deltas and assembled tool calls back onto mux <see cref="AgentEvent"/> values.
+    /// A mux-owned <see cref="HttpClient"/> is injected into the PolyPrompt client so transport options
+    /// such as TLS certificate bypass and per-endpoint headers are honored.
     /// </summary>
     public class LlmClient : IDisposable
     {
         #region Private-Members
 
-        private HttpClient _HttpClient;
-        private IBackendAdapter _Adapter;
-        private EndpointConfig _Endpoint;
+        private const int MaxRetries = 3;
+
+        private static readonly LoggingModule SilentLogging = CreateSilentLogging();
+
+        private readonly HttpClient _HttpClient;
+        private readonly CompletionClientBase _Client;
+        private readonly EndpointConfig _Endpoint;
+        private readonly LlmUsage _CumulativeUsage = new LlmUsage();
         private Action<int, int, string>? _OnRetry = null;
+        private LlmUsage? _LastUsage = null;
         private bool _Disposed = false;
 
         #endregion
@@ -37,7 +49,7 @@ namespace Mux.Core.Llm
         /// <param name="endpoint">The endpoint configuration to use for LLM requests.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is null.</exception>
         public LlmClient(EndpointConfig endpoint)
-            : this(endpoint, null, null, false)
+            : this(endpoint, false)
         {
         }
 
@@ -48,65 +60,17 @@ namespace Mux.Core.Llm
         /// <param name="ignoreCertErrors">True to bypass TLS certificate validation.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is null.</exception>
         public LlmClient(EndpointConfig endpoint, bool ignoreCertErrors)
-            : this(endpoint, null, null, ignoreCertErrors)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="LlmClient"/> class with optional transport overrides.
-        /// </summary>
-        /// <param name="endpoint">The endpoint configuration to use for LLM requests.</param>
-        /// <param name="httpClient">An optional HTTP client override, primarily for tests.</param>
-        /// <param name="adapter">An optional backend adapter override, primarily for tests.</param>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is null.</exception>
-        public LlmClient(EndpointConfig endpoint, HttpClient? httpClient, IBackendAdapter? adapter = null)
-            : this(endpoint, httpClient, adapter, false)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="LlmClient"/> class with optional transport overrides.
-        /// </summary>
-        /// <param name="endpoint">The endpoint configuration to use for LLM requests.</param>
-        /// <param name="httpClient">An optional HTTP client override, primarily for tests.</param>
-        /// <param name="adapter">An optional backend adapter override, primarily for tests.</param>
-        /// <param name="ignoreCertErrors">True to bypass TLS certificate validation when mux creates the HTTP client.</param>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is null.</exception>
-        public LlmClient(EndpointConfig endpoint, HttpClient? httpClient, IBackendAdapter? adapter, bool ignoreCertErrors)
         {
             _Endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
-            _HttpClient = httpClient ?? MuxHttpClientFactory.Create(ignoreCertErrors);
 
-            // Streaming chat responses can remain open for minutes. Per-request timeouts are
-            // applied explicitly where needed instead of letting HttpClient cancel the whole stream.
+            // A mux-owned transport carries certificate policy and per-endpoint headers. Streaming
+            // responses stay open for minutes, so the transport timeout is disabled and per-request
+            // timeouts are enforced by PolyPrompt via TimeoutMs.
+            _HttpClient = MuxHttpClientFactory.Create(ignoreCertErrors);
             _HttpClient.Timeout = Timeout.InfiniteTimeSpan;
-            _Adapter = adapter ?? ResolveAdapter(endpoint.AdapterType);
-        }
+            ApplyEndpointHeaders();
 
-        /// <summary>
-        /// Resolves the appropriate <see cref="IBackendAdapter"/> for the given adapter type.
-        /// </summary>
-        /// <param name="type">The adapter type to resolve.</param>
-        /// <returns>An instance of the corresponding adapter.</returns>
-        /// <exception cref="ArgumentOutOfRangeException">Thrown when the adapter type is not recognized.</exception>
-        public static IBackendAdapter ResolveAdapter(AdapterTypeEnum type)
-        {
-            switch (type)
-            {
-                case AdapterTypeEnum.OpenAi:
-                    return new OpenAiAdapter();
-                case AdapterTypeEnum.Ollama:
-                    return new OllamaAdapter();
-                case AdapterTypeEnum.Vllm:
-                    return new GenericOpenAiAdapter();
-                case AdapterTypeEnum.OpenAiCompatible:
-                    return new GenericOpenAiAdapter();
-                default:
-                    throw new ArgumentOutOfRangeException(
-                        nameof(type),
-                        type,
-                        "Unsupported adapter type.");
-            }
+            _Client = CreateClient(_Endpoint, _HttpClient);
         }
 
         #endregion
@@ -130,6 +94,22 @@ namespace Mux.Core.Llm
             set => _OnRetry = value;
         }
 
+        /// <summary>
+        /// Provider-reported token usage for the most recent streaming call, or null when none was reported.
+        /// </summary>
+        public LlmUsage? LastUsage
+        {
+            get => _LastUsage;
+        }
+
+        /// <summary>
+        /// Provider-reported token usage accumulated across every streaming call made by this client.
+        /// </summary>
+        public LlmUsage CumulativeUsage
+        {
+            get => _CumulativeUsage;
+        }
+
         #endregion
 
         #region Public-Methods
@@ -150,48 +130,28 @@ namespace Mux.Core.Llm
             if (messages == null) throw new ArgumentNullException(nameof(messages));
             if (tools == null) throw new ArgumentNullException(nameof(tools));
 
-            string sendUrl = _Endpoint.BaseUrl.TrimEnd('/') + "/chat/completions";
+            Pp.ToolChatRequest request = BuildRequest(messages, tools);
+            Pp.ToolChatResponse response = await _Client.ToolChatAsync(request, cancellationToken).ConfigureAwait(false);
 
-            return await RetryHandler.ExecuteWithRetryAsync(async () =>
+            if (!response.Success)
             {
-                HttpRequestMessage request = _Adapter.BuildRequest(messages, tools, _Endpoint, stream: false);
-                using CancellationTokenSource requestCts = CreateRequestTimeoutTokenSource(cancellationToken);
+                throw new HttpRequestException(
+                    $"LLM request to {_Endpoint.BaseUrl} failed with status {response.StatusCode}: {response.Error}",
+                    null,
+                    response.StatusCode.HasValue ? (HttpStatusCode)response.StatusCode.Value : null);
+            }
 
-                HttpResponseMessage response;
-                string responseBody;
-
-                try
-                {
-                    response = await _HttpClient
-                        .SendAsync(request, requestCts.Token)
-                        .ConfigureAwait(false);
-
-                    responseBody = await response.Content
-                        .ReadAsStringAsync(requestCts.Token)
-                        .ConfigureAwait(false);
-                }
-                catch (OperationCanceledException ex) when (IsRequestTimeout(requestCts, cancellationToken))
-                {
-                    throw CreateTimeoutException(ex);
-                }
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    throw new HttpRequestException(
-                        $"LLM request to {sendUrl} failed with status {(int)response.StatusCode} ({response.StatusCode}): {responseBody}",
-                        null,
-                        (System.Net.HttpStatusCode)(int)response.StatusCode);
-                }
-
-                OpenAiChatCompletionResponse? document =
-                    JsonSerializer.Deserialize<OpenAiChatCompletionResponse>(responseBody);
-                document ??= new OpenAiChatCompletionResponse();
-                return _Adapter.NormalizeFinalResponse(document);
-            }, maxRetries: 3, cancellationToken: cancellationToken, onRetry: _OnRetry).ConfigureAwait(false);
+            return new ConversationMessage
+            {
+                Role = RoleEnum.Assistant,
+                Content = string.IsNullOrEmpty(response.Text) ? null : response.Text,
+                ToolCalls = MapToolCallsToMux(response.ToolCalls)
+            };
         }
 
         /// <summary>
-        /// Sends a streaming chat completion request and yields agent events as they arrive.
+        /// Sends a streaming chat completion request and yields agent events as they arrive. Assistant
+        /// text is yielded as it streams; assembled tool calls are yielded after the stream completes.
         /// </summary>
         /// <param name="messages">The conversation messages to send.</param>
         /// <param name="tools">The tool definitions available to the model.</param>
@@ -205,149 +165,178 @@ namespace Mux.Core.Llm
             if (messages == null) throw new ArgumentNullException(nameof(messages));
             if (tools == null) throw new ArgumentNullException(nameof(tools));
 
-            string requestUrl = _Endpoint.BaseUrl.TrimEnd('/') + "/chat/completions";
+            Pp.ToolChatRequest request = BuildRequest(messages, tools);
 
-            ErrorEvent? connectionError = null;
-            HttpResponseMessage? response = null;
+            Pp.ToolChatStreamingResponse? response = null;
+            ErrorEvent? startupError = null;
 
-            try
+            for (int attempt = 0; ; attempt++)
             {
-                response = await RetryHandler.ExecuteWithRetryAsync(async () =>
+                bool retry = false;
+                string? failureMessage = null;
+
+                try
                 {
-                    HttpRequestMessage retryRequest = _Adapter.BuildRequest(messages, tools, _Endpoint, stream: true);
-                    return await _HttpClient
-                        .SendAsync(retryRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                        .ConfigureAwait(false);
-                }, maxRetries: 3, cancellationToken: cancellationToken, onRetry: _OnRetry).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                connectionError = new ErrorEvent
+                    response = await _Client.ToolChatStreamingAsync(request, cancellationToken).ConfigureAwait(false);
+
+                    // PolyPrompt surfaces transport-level failures (connection refused, DNS, TLS) as an
+                    // unsuccessful response with no HTTP status rather than throwing. Treat those like the
+                    // exceptions the old client retried on.
+                    if (!response.Success && IsNetworkFailure(response))
+                    {
+                        failureMessage = string.IsNullOrEmpty(response.Error) ? "connection error" : response.Error;
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    Code = "llm_connection_error",
-                    Message = $"Failed to connect to {requestUrl}: {ex.Message}"
-                };
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    failureMessage = ex.Message;
+                }
+
+                if (failureMessage != null)
+                {
+                    if (attempt < MaxRetries)
+                    {
+                        _OnRetry?.Invoke(attempt + 1, MaxRetries, failureMessage);
+                        retry = true;
+                    }
+                    else
+                    {
+                        startupError = new ErrorEvent
+                        {
+                            Code = "llm_connection_error",
+                            Message = $"Failed to connect to {_Endpoint.BaseUrl}: {failureMessage}"
+                        };
+                    }
+                }
+
+                if (!retry)
+                {
+                    break;
+                }
             }
 
-            if (connectionError != null)
+            if (startupError != null)
             {
-                yield return connectionError;
+                yield return startupError;
                 yield break;
             }
 
-            if (!response!.IsSuccessStatusCode)
+            // HTTP-level failures surface as an unsuccessful response rather than an exception. When the
+            // model rejects tool definitions, retry once without tools to preserve prior behavior.
+            if (!response!.Success
+                && tools.Count > 0
+                && (response.Error ?? string.Empty).Contains("does not support tools", StringComparison.OrdinalIgnoreCase))
             {
-                string errorBody = string.Empty;
+                request.Tools.Clear();
+                request.ToolChoice = "none";
+
+                ErrorEvent? retryError = null;
                 try
                 {
-                    errorBody = await response.Content
-                        .ReadAsStringAsync()
-                        .ConfigureAwait(false);
+                    response = await _Client.ToolChatStreamingAsync(request, cancellationToken).ConfigureAwait(false);
                 }
-                catch
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    // Swallow read errors for the error body
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    retryError = new ErrorEvent
+                    {
+                        Code = "llm_connection_error",
+                        Message = $"Retry without tools failed to {_Endpoint.BaseUrl}: {ex.Message}"
+                    };
                 }
 
-                // If 400 and the error mentions tools not being supported, retry without tools
-                if ((int)response.StatusCode == 400
-                    && errorBody.Contains("does not support tools", StringComparison.OrdinalIgnoreCase)
-                    && tools.Count > 0)
+                if (retryError != null)
                 {
-                    response.Dispose();
-                    List<ToolDefinition> emptyTools = new List<ToolDefinition>();
+                    yield return retryError;
+                    yield break;
+                }
+            }
 
-                    HttpResponseMessage? retryResponse = null;
-                    ErrorEvent? retryError = null;
+            if (!response!.Success)
+            {
+                yield return new ErrorEvent
+                {
+                    Code = "llm_error",
+                    Message = $"LLM request to {_Endpoint.BaseUrl} failed with status {response.StatusCode}: {response.Error}"
+                };
+                yield break;
+            }
+
+            IAsyncEnumerator<Pp.ToolChatStreamingChunk> enumerator = response.Chunks.GetAsyncEnumerator(cancellationToken);
+            try
+            {
+                while (true)
+                {
+                    Pp.ToolChatStreamingChunk? chunk = null;
+                    ErrorEvent? streamError = null;
+                    bool moved = false;
 
                     try
                     {
-                        HttpRequestMessage retryRequest = _Adapter.BuildRequest(messages, emptyTools, _Endpoint, stream: true);
-                        retryResponse = await _HttpClient
-                            .SendAsync(retryRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                            .ConfigureAwait(false);
+                        moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                        if (moved)
+                        {
+                            chunk = enumerator.Current;
+                        }
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
                         throw;
                     }
-                    catch (Exception retryEx)
+                    catch (Exception ex)
                     {
-                        retryError = new ErrorEvent
+                        streamError = new ErrorEvent
                         {
-                            Code = "llm_connection_error",
-                            Message = $"Retry without tools failed to {requestUrl}: {retryEx.Message}"
+                            Code = "llm_stream_error",
+                            Message = $"Failed to read response stream from {_Endpoint.BaseUrl}: {ex.Message}"
                         };
                     }
 
-                    if (retryError != null)
+                    if (streamError != null)
                     {
-                        yield return retryError;
+                        yield return streamError;
                         yield break;
                     }
 
-                    if (!retryResponse!.IsSuccessStatusCode)
+                    if (!moved)
                     {
-                        string retryBody = string.Empty;
-                        try { retryBody = await retryResponse.Content.ReadAsStringAsync().ConfigureAwait(false); } catch { }
-                        yield return new ErrorEvent
-                        {
-                            Code = "llm_error",
-                            Message = $"LLM request to {requestUrl} failed with status {(int)retryResponse.StatusCode}: {retryBody}"
-                        };
-                        yield break;
+                        break;
                     }
 
-                    response = retryResponse;
+                    if (chunk != null && !string.IsNullOrEmpty(chunk.Text))
+                    {
+                        yield return new AssistantTextEvent { Text = chunk.Text };
+                    }
                 }
-                else
+            }
+            finally
+            {
+                await enumerator.DisposeAsync().ConfigureAwait(false);
+            }
+
+            RecordUsage(response);
+
+            if (response.ToolCalls != null)
+            {
+                foreach (Pp.ToolCall call in response.ToolCalls)
                 {
-                    yield return new ErrorEvent
+                    yield return new ToolCallProposedEvent
                     {
-                        Code = "llm_error",
-                        Message = $"LLM request to {requestUrl} failed with status {(int)response.StatusCode} ({response.StatusCode}): {errorBody}"
+                        ToolCall = new ToolCall
+                        {
+                            Id = call.Id ?? string.Empty,
+                            Name = call.Name,
+                            Arguments = call.ArgumentsJson
+                        }
                     };
-                    yield break;
                 }
-            }
-
-            ErrorEvent? streamError = null;
-            Stream? responseStream = null;
-
-            try
-            {
-                responseStream = await response.Content
-                    .ReadAsStreamAsync(cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                streamError = new ErrorEvent
-                {
-                    Code = "llm_stream_error",
-                    Message = $"Failed to read response stream from {requestUrl}: {ex.Message}"
-                };
-            }
-
-            if (streamError != null)
-            {
-                yield return streamError;
-                yield break;
-            }
-
-            await foreach (AgentEvent agentEvent in _Adapter
-                .ReadStreamingEvents(responseStream!, _Endpoint, cancellationToken)
-                .ConfigureAwait(false))
-            {
-                yield return agentEvent;
             }
         }
 
@@ -374,6 +363,8 @@ namespace Mux.Core.Llm
             {
                 if (disposing)
                 {
+                    // The PolyPrompt client does not own the injected transport, so dispose it explicitly.
+                    _Client?.Dispose();
                     _HttpClient?.Dispose();
                 }
 
@@ -381,22 +372,203 @@ namespace Mux.Core.Llm
             }
         }
 
-        private CancellationTokenSource CreateRequestTimeoutTokenSource(CancellationToken cancellationToken)
+        private void ApplyEndpointHeaders()
         {
-            CancellationTokenSource requestCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            requestCts.CancelAfter(_Endpoint.TimeoutMs);
-            return requestCts;
+            if (_Endpoint.Headers == null)
+            {
+                return;
+            }
+
+            foreach (KeyValuePair<string, string> header in _Endpoint.Headers)
+            {
+                if (!string.IsNullOrEmpty(header.Key))
+                {
+                    _HttpClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
+                }
+            }
         }
 
-        private static bool IsRequestTimeout(CancellationTokenSource requestCts, CancellationToken cancellationToken)
+        private static bool IsNetworkFailure(Pp.ToolChatStreamingResponse response)
         {
-            return requestCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested;
+            // A transport-level failure carries no HTTP status; an HTTP error status (4xx/5xx) does.
+            return !response.StatusCode.HasValue || response.StatusCode.Value == 0;
         }
 
-        private TaskCanceledException CreateTimeoutException(OperationCanceledException innerException)
+        private void RecordUsage(Pp.ToolChatStreamingResponse response)
         {
-            string message = $"The request timed out after {_Endpoint.TimeoutMs}ms.";
-            return new TaskCanceledException(message, innerException);
+            Pp.ChatStreamingUsage? usage = response.Usage;
+            int input = usage?.PromptTokens ?? 0;
+            int output = usage?.CompletionTokens ?? 0;
+            int total = usage?.TotalTokens ?? (input + output);
+
+            LlmUsage record = new LlmUsage
+            {
+                InputTokens = input,
+                OutputTokens = output,
+                TotalTokens = total
+            };
+
+            _LastUsage = record;
+            _CumulativeUsage.Add(record);
+        }
+
+        private Pp.ToolChatRequest BuildRequest(List<ConversationMessage> messages, List<ToolDefinition> tools)
+        {
+            Pp.ToolChatRequest request = new Pp.ToolChatRequest
+            {
+                Model = string.IsNullOrWhiteSpace(_Endpoint.Model) ? null : _Endpoint.Model,
+                MaxTokens = _Endpoint.MaxTokens
+            };
+
+            foreach (ConversationMessage message in messages)
+            {
+                request.Messages.Add(MapMessage(message));
+            }
+
+            foreach (ToolDefinition tool in tools)
+            {
+                request.Tools.Add(Pp.ToolDefinition.Function(
+                    tool.Name,
+                    tool.Description,
+                    ConvertSchema(tool.ParametersSchema)));
+            }
+
+            request.ToolChoice = tools.Count > 0 ? "auto" : "none";
+            return request;
+        }
+
+        private static Pp.ChatMessage MapMessage(ConversationMessage message)
+        {
+            switch (message.Role)
+            {
+                case RoleEnum.System:
+                    return Pp.ChatMessage.System(message.Content ?? string.Empty);
+                case RoleEnum.User:
+                    return Pp.ChatMessage.User(message.Content ?? string.Empty);
+                case RoleEnum.Assistant:
+                    return new Pp.ChatMessage
+                    {
+                        Role = "assistant",
+                        Content = message.Content,
+                        ToolCalls = MapToolCallsToPoly(message.ToolCalls)
+                    };
+                case RoleEnum.Tool:
+                    return new Pp.ChatMessage
+                    {
+                        Role = "tool",
+                        ToolCallId = message.ToolCallId,
+                        Content = message.Content
+                    };
+                default:
+                    return Pp.ChatMessage.User(message.Content ?? string.Empty);
+            }
+        }
+
+        private static List<Pp.ToolCall> MapToolCallsToPoly(List<ToolCall>? toolCalls)
+        {
+            List<Pp.ToolCall> mapped = new List<Pp.ToolCall>();
+            if (toolCalls == null)
+            {
+                return mapped;
+            }
+
+            foreach (ToolCall call in toolCalls)
+            {
+                mapped.Add(new Pp.ToolCall
+                {
+                    Id = call.Id,
+                    Name = call.Name,
+                    ArgumentsJson = string.IsNullOrEmpty(call.Arguments) ? "{}" : call.Arguments
+                });
+            }
+
+            return mapped;
+        }
+
+        private static List<ToolCall>? MapToolCallsToMux(List<Pp.ToolCall>? toolCalls)
+        {
+            if (toolCalls == null || toolCalls.Count == 0)
+            {
+                return null;
+            }
+
+            List<ToolCall> mapped = new List<ToolCall>();
+            foreach (Pp.ToolCall call in toolCalls)
+            {
+                mapped.Add(new ToolCall
+                {
+                    Id = call.Id ?? string.Empty,
+                    Name = call.Name,
+                    Arguments = call.ArgumentsJson
+                });
+            }
+
+            return mapped;
+        }
+
+        private static Dictionary<string, object> ConvertSchema(object? schema)
+        {
+            if (schema is Dictionary<string, object> dictionary)
+            {
+                return dictionary;
+            }
+
+            if (schema == null)
+            {
+                return new Dictionary<string, object>();
+            }
+
+            try
+            {
+                string json = JsonSerializer.Serialize(schema);
+                Dictionary<string, object>? parsed = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+                return parsed ?? new Dictionary<string, object>();
+            }
+            catch (Exception)
+            {
+                return new Dictionary<string, object>();
+            }
+        }
+
+        private static CompletionClientBase CreateClient(EndpointConfig endpoint, HttpClient httpClient)
+        {
+            CompletionClientBase client;
+            switch (endpoint.AdapterType)
+            {
+                case AdapterTypeEnum.Ollama:
+                    client = new OllamaClient(endpoint.BaseUrl, apiKey: null, logging: SilentLogging, httpClient: httpClient);
+                    break;
+                case AdapterTypeEnum.OpenAi:
+                case AdapterTypeEnum.Vllm:
+                case AdapterTypeEnum.OpenAiCompatible:
+                default:
+                    client = new OpenAiClient(endpoint.BaseUrl, apiKey: null, logging: SilentLogging, httpClient: httpClient);
+                    break;
+            }
+
+            if (!string.IsNullOrWhiteSpace(endpoint.Model))
+            {
+                client.Model = endpoint.Model;
+            }
+
+            client.TimeoutMs = endpoint.TimeoutMs > 0 ? endpoint.TimeoutMs : 120000;
+            return client;
+        }
+
+        private static LoggingModule CreateSilentLogging()
+        {
+            // PolyPrompt logs warnings on request failures; console output would corrupt the interactive
+            // TUI, so route the shared logging module to nothing.
+            LoggingModule logging = new LoggingModule();
+            try
+            {
+                logging.Settings.EnableConsole = false;
+            }
+            catch (Exception)
+            {
+            }
+
+            return logging;
         }
 
         #endregion
