@@ -1476,6 +1476,7 @@ namespace Mux.Cli.App
             options.Add("+ Add endpoint…");
             if (endpoints.Count > 0)
             {
+                options.Add("✎ Edit endpoint…");
                 options.Add("- Remove endpoint…");
             }
 
@@ -1502,9 +1503,13 @@ namespace Mux.Cli.App
             int extra = index - endpoints.Count;
             if (extra == 0)
             {
-                await AddEndpointWizardAsync().ConfigureAwait(false);
+                await AddEndpointFormAsync().ConfigureAwait(false);
             }
             else if (extra == 1)
+            {
+                await EditEndpointFormAsync(endpoints).ConfigureAwait(false);
+            }
+            else if (extra == 2)
             {
                 await RemoveEndpointAsync(endpoints).ConfigureAwait(false);
             }
@@ -1524,51 +1529,72 @@ namespace Mux.Cli.App
             RefreshSidebar();
         }
 
-        private async Task AddEndpointWizardAsync()
+        private async Task AddEndpointFormAsync()
         {
-            string? name = await PromptAsync("Endpoint name", string.Empty).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(name))
+            EndpointFormModal modal = new EndpointFormModal("Add endpoint");
+            _App.Modals.Push(modal);
+            object? result = await modal.Completion.ConfigureAwait(false);
+            if (result is EndpointConfig endpoint)
+            {
+                SaveEndpoint(endpoint, isNew: true, previousName: null);
+            }
+        }
+
+        private async Task EditEndpointFormAsync(List<EndpointConfig> endpoints)
+        {
+            List<string> names = new List<string>();
+            foreach (EndpointConfig endpoint in endpoints)
+            {
+                names.Add(endpoint.Name);
+            }
+
+            SelectModal pick = new SelectModal("Edit which endpoint?", names);
+            _App.Modals.Push(pick);
+            object? pickResult = await pick.Completion.ConfigureAwait(false);
+            int pickIndex = pickResult is int p ? p : -1;
+            if (pickIndex < 0 || pickIndex >= endpoints.Count)
             {
                 return;
             }
 
-            string[] adapters = { "openai-compatible", "ollama", "openai", "vllm" };
-            SelectModal adapterModal = new SelectModal($"Adapter for {name}", adapters);
-            _App.Modals.Push(adapterModal);
-            object? adapterResult = await adapterModal.Completion.ConfigureAwait(false);
-            int adapterIndex = adapterResult is int a ? a : -1;
-            if (adapterIndex < 0)
+            EndpointConfig original = endpoints[pickIndex];
+            EndpointFormModal modal = new EndpointFormModal($"Edit {original.Name}", original);
+            _App.Modals.Push(modal);
+            object? result = await modal.Completion.ConfigureAwait(false);
+            if (result is EndpointConfig edited)
             {
-                return;
+                SaveEndpoint(edited, isNew: false, previousName: original.Name);
+
+                // Keep the running session consistent if the active endpoint was edited.
+                bool editingActive;
+                lock (_Sync)
+                {
+                    editingActive = string.Equals(original.Name, _EndpointName, StringComparison.OrdinalIgnoreCase);
+                }
+
+                if (editingActive)
+                {
+                    SwitchEndpoint(edited);
+                }
             }
+        }
 
-            string? baseUrl = await PromptAsync("Base URL", "http://localhost:11434/v1").ConfigureAwait(false);
-            if (baseUrl == null)
-            {
-                return;
-            }
-
-            string? model = await PromptAsync("Model", string.Empty).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(model))
-            {
-                return;
-            }
-
-            EndpointConfig endpoint = new EndpointConfig
-            {
-                Name = name!.Trim(),
-                AdapterType = ParseAdapter(adapters[adapterIndex]),
-                BaseUrl = baseUrl.Trim(),
-                Model = model!.Trim()
-            };
-
+        private void SaveEndpoint(EndpointConfig endpoint, bool isNew, string? previousName)
+        {
             List<EndpointConfig> endpoints = LoadEndpointsSafe();
             endpoints.RemoveAll(e => string.Equals(e.Name, endpoint.Name, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(previousName) && !string.Equals(previousName, endpoint.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                endpoints.RemoveAll(e => string.Equals(e.Name, previousName, StringComparison.OrdinalIgnoreCase));
+            }
+
             endpoints.Add(endpoint);
             try
             {
                 SettingsLoader.SaveEndpoints(endpoints);
-                WriteNotice($"Saved endpoint {endpoint.Name}. Use /endpoint to switch to it.");
+                WriteNotice(isNew
+                    ? $"Saved endpoint {endpoint.Name}. Use /endpoint to switch to it."
+                    : $"Updated endpoint {endpoint.Name}.");
             }
             catch (Exception ex)
             {
@@ -1615,14 +1641,6 @@ namespace Mux.Cli.App
             }
         }
 
-        private async Task<string?> PromptAsync(string title, string initial)
-        {
-            PromptModal modal = new PromptModal(title, initial);
-            _App.Modals.Push(modal);
-            object? result = await modal.Completion.ConfigureAwait(false);
-            return result as string;
-        }
-
         private static List<EndpointConfig> LoadEndpointsSafe()
         {
             try
@@ -1632,17 +1650,6 @@ namespace Mux.Cli.App
             catch (Exception)
             {
                 return new List<EndpointConfig>();
-            }
-        }
-
-        private static AdapterTypeEnum ParseAdapter(string adapter)
-        {
-            switch (adapter)
-            {
-                case "ollama": return AdapterTypeEnum.Ollama;
-                case "openai": return AdapterTypeEnum.OpenAi;
-                case "vllm": return AdapterTypeEnum.Vllm;
-                default: return AdapterTypeEnum.OpenAiCompatible;
             }
         }
 

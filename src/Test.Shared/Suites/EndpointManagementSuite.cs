@@ -75,26 +75,53 @@ namespace Test.Shared.Suites
                             }
                         })),
 
-                    Case("AddEndpointWizardPersists", "The add wizard creates and persists a new endpoint", (CancellationToken ct) =>
+                    Case("AddEndpointFormPersists", "The add form creates and persists a new endpoint", (CancellationToken ct) =>
                         WithConfigDirAsync(async dir =>
                         {
                             await using (JobManager manager = NewManager())
                             using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager, string.Empty, null))
                             {
-                                Feed(backend, app, "/endpoint" + "\r");           // only option: "+ Add endpoint…"
+                                Feed(backend, app, "/endpoint" + "\r");   // no endpoints -> only "+ Add endpoint…"
                                 await WaitModal(app, ct).ConfigureAwait(false);
-                                Feed(backend, app, "\r");                          // choose Add
+                                Feed(backend, app, "\r");                 // choose Add -> opens the single form
                                 await WaitModal(app, ct).ConfigureAwait(false);
-                                Feed(backend, app, "brandnew" + "\r");             // name
-                                await WaitModal(app, ct).ConfigureAwait(false);
-                                Feed(backend, app, "\r");                          // adapter: openai-compatible (index 0)
-                                await WaitModal(app, ct).ConfigureAwait(false);
-                                Feed(backend, app, "\r");                          // base URL: accept default
-                                await WaitModal(app, ct).ConfigureAwait(false);
-                                Feed(backend, app, "the-model" + "\r");            // model -> save
+
+                                // One form: type the name, Tab past Adapter (default) and Base URL (default)
+                                // to the Model field, fill it, then Enter to validate and save.
+                                Feed(backend, app, "brandnew");
+                                Feed(backend, app, "\t\t\t");
+                                Feed(backend, app, "the-model");
+                                Feed(backend, app, "\r");
 
                                 await WaitUntilAsync(() => HasEndpoint("brandnew"), ct).ConfigureAwait(false);
                                 MuxAssert.IsTrue(HasEndpoint("brandnew"), "endpoint persisted");
+                            }
+                        })),
+
+                    Case("EditEndpointFormUpdates", "The edit form updates an existing endpoint's model", (CancellationToken ct) =>
+                        WithConfigDirAsync(async dir =>
+                        {
+                            Seed(Endpoint("solo", AdapterTypeEnum.OpenAiCompatible, "old-model"));
+                            await using (JobManager manager = NewManager())
+                            using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager, "solo", null))
+                            {
+                                // Options: [solo, + Add, ✎ Edit, - Remove] -> Edit is index 2.
+                                Feed(backend, app, "/endpoint" + "\r");
+                                await WaitModal(app, ct).ConfigureAwait(false);
+                                Feed(backend, app, Esc + "[B"); // Down -> + Add
+                                Feed(backend, app, Esc + "[B"); // Down -> ✎ Edit
+                                Feed(backend, app, "\r");       // choose Edit
+                                await WaitModal(app, ct).ConfigureAwait(false);
+                                Feed(backend, app, "\r");       // pick "solo" (index 0) -> opens the form pre-filled
+                                await WaitModal(app, ct).ConfigureAwait(false);
+
+                                // Tab to the Model field (Name -> Adapter -> Base URL -> Model), replace it.
+                                Feed(backend, app, "\t\t\t");
+                                Feed(backend, app, "new-model");
+                                Feed(backend, app, "\r");
+
+                                await WaitUntilAsync(() => EndpointModelContains("solo", "new-model"), ct).ConfigureAwait(false);
+                                MuxAssert.IsTrue(EndpointModelContains("solo", "new-model"), "endpoint model updated");
                             }
                         })),
 
@@ -105,11 +132,12 @@ namespace Test.Shared.Suites
                             await using (JobManager manager = NewManager())
                             using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager, "solo", null))
                             {
-                                // Options: [solo, + Add, - Remove] -> Remove is index 2.
+                                // Options: [solo, + Add, ✎ Edit, - Remove] -> Remove is index 3.
                                 Feed(backend, app, "/endpoint" + "\r");
                                 await WaitModal(app, ct).ConfigureAwait(false);
-                                Feed(backend, app, Esc + "[B"); // Down -> +Add
-                                Feed(backend, app, Esc + "[B"); // Down -> -Remove
+                                Feed(backend, app, Esc + "[B"); // Down -> + Add
+                                Feed(backend, app, Esc + "[B"); // Down -> ✎ Edit
+                                Feed(backend, app, Esc + "[B"); // Down -> - Remove
                                 Feed(backend, app, "\r");       // choose Remove
                                 await WaitModal(app, ct).ConfigureAwait(false);
                                 Feed(backend, app, "\r");       // pick "solo" (index 0)
@@ -179,6 +207,20 @@ namespace Test.Shared.Suites
             foreach (EndpointConfig endpoint in SettingsLoader.LoadEndpoints())
             {
                 if (string.Equals(endpoint.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool EndpointModelContains(string name, string modelSubstring)
+        {
+            foreach (EndpointConfig endpoint in SettingsLoader.LoadEndpoints())
+            {
+                if (string.Equals(endpoint.Name, name, StringComparison.OrdinalIgnoreCase)
+                    && endpoint.Model.Contains(modelSubstring, StringComparison.Ordinal))
                 {
                     return true;
                 }
