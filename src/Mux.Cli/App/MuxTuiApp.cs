@@ -24,11 +24,14 @@ namespace Mux.Cli.App
 
     /// <summary>
     /// The TUIKit-hosted interactive shell for mux. Presents a single continuous conversation: the user
-    /// types a prompt and it runs; typing another prompt while a turn is running queues it to run when the
-    /// current turn finishes (like a chat client). One transcript <see cref="Pane"/> holds the whole
-    /// conversation; a sidebar shows the active endpoint and per-turn / session telemetry; the bottom row
-    /// is a green <c>mux&gt;</c> prompt and the composer. The terminal backend is injected so the shell can
-    /// be driven headlessly in tests.
+    /// types a prompt and it runs. Prompts entered while turns are already running start their own turns
+    /// concurrently, up to the job manager's configured concurrency; prompts beyond that limit queue and
+    /// start as slots free. While more than one turn is in flight, each turn's echoed prompt and streamed
+    /// output carry a compact colored <c>#N</c> marker so the interleaved transcript stays attributable,
+    /// and <c>Esc</c> offers a modal to choose which turn to cancel. One transcript <see cref="Pane"/>
+    /// holds the whole conversation; a sidebar shows the active endpoint and per-turn / session telemetry;
+    /// the bottom row is a green <c>mux&gt;</c> prompt and the composer. The terminal backend is injected so
+    /// the shell can be driven headlessly in tests.
     /// </summary>
     public sealed class MuxTuiApp : IDisposable
     {
@@ -62,22 +65,17 @@ namespace Mux.Cli.App
         private Layout _ExpandedLayout = null!;
         private Layout _CollapsedLayout = null!;
         private readonly List<ConversationMessage> _ConversationHistory = new List<ConversationMessage>();
-        private readonly Queue<string> _PendingPrompts = new Queue<string>();
+        private readonly Queue<PendingPrompt> _PendingPrompts = new Queue<PendingPrompt>();
         private readonly List<string> _TurnJobIds = new List<string>();
         private readonly List<Task> _ProjectorTasks = new List<Task>();
+        private readonly Dictionary<string, ActiveTurn> _ActiveTurns = new Dictionary<string, ActiveTurn>(StringComparer.Ordinal);
         private readonly ConversationStats _Stats = new ConversationStats();
         private readonly object _Sync = new object();
         private readonly SemaphoreSlim _SaveGate = new SemaphoreSlim(1, 1);
         private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
         private readonly PromptHistory _PromptHistory = new PromptHistory();
         private readonly MenuBar _MenuBar;
-        private Job? _ActiveJob;
-        private bool _TurnInFlight;
-        private readonly object _ThinkingSync = new object();
-        private PaneLineHandle? _ThinkingHandle;
-        private CancellationTokenSource? _ThinkingCts;
-        private string? _ThinkingMessage;
-        private bool _ThinkingActive;
+        private int _TurnCounter;
         private Func<string, bool>? _SlashHandler;
         private bool _ManualCollapsed;
         private bool _CollapsedApplied;
@@ -86,6 +84,44 @@ namespace Mux.Cli.App
 
         private static readonly Theme MuxTheme = CreateTheme();
         private static readonly Theme[] _Themes = { MuxTheme, Theme.Dark, Theme.Light, Theme.HighContrast };
+
+        #endregion
+
+        #region Nested-Types
+
+        // One in-flight turn: its display number, prompt, job, projector, timing, and its own thinking
+        // indicator. Several of these run at once (up to the job manager's concurrency), so all per-turn
+        // state that used to be single fields on the shell now lives here, one instance per turn.
+        private sealed class ActiveTurn
+        {
+            public int Number;
+            public string Prompt = string.Empty;
+            public Job Job = null!;
+            public AgentEventProjector Projector = null!;
+            public Stopwatch Stopwatch = null!;
+            public long Ttft = -1;
+
+            public readonly object ThinkingSync = new object();
+            public PaneLineHandle? ThinkingHandle;
+            public CancellationTokenSource? ThinkingCts;
+            public string? ThinkingMessage;
+            public bool ThinkingActive;
+        }
+
+        // A prompt waiting for a concurrency slot. Its turn number is assigned when the user submits it, so
+        // its echo and later output share the same marker whether it runs immediately or after a wait.
+        private readonly struct PendingPrompt
+        {
+            public PendingPrompt(int number, string prompt)
+            {
+                Number = number;
+                Prompt = prompt;
+            }
+
+            public int Number { get; }
+
+            public string Prompt { get; }
+        }
 
         #endregion
 
@@ -240,18 +276,14 @@ namespace Mux.Cli.App
             {
                 lock (_Sync)
                 {
-                    if (_ActiveJob != null)
-                    {
-                        return _ActiveJob.Id;
-                    }
-
+                    // The most recently started in-flight turn, or the last completed turn's job.
                     return _TurnJobIds.Count > 0 ? _TurnJobIds[_TurnJobIds.Count - 1] : null;
                 }
             }
         }
 
         /// <summary>
-        /// Whether a turn is currently running.
+        /// Whether at least one turn is currently running.
         /// </summary>
         public bool IsBusy
         {
@@ -259,13 +291,27 @@ namespace Mux.Cli.App
             {
                 lock (_Sync)
                 {
-                    return _TurnInFlight;
+                    return _ActiveTurns.Count > 0;
                 }
             }
         }
 
         /// <summary>
-        /// The number of prompts queued behind the running turn.
+        /// The number of turns currently running concurrently.
+        /// </summary>
+        public int InFlightCount
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _ActiveTurns.Count;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The number of prompts waiting for a free concurrency slot.
         /// </summary>
         public int QueuedCount
         {
@@ -652,6 +698,8 @@ namespace Mux.Cli.App
                 _Conversation.Clear();
                 _ConversationHistory.Clear();
                 _TurnJobIds.Clear();
+                _ActiveTurns.Clear();
+                _PendingPrompts.Clear();
             }
 
             _PromptHistory.Restore(resume.PromptHistory);
@@ -689,7 +737,7 @@ namespace Mux.Cli.App
 
                 lock (_Sync)
                 {
-                    if (!_TurnInFlight && _ProjectorTasks.Count == snapshot.Length)
+                    if (_ActiveTurns.Count == 0 && _ProjectorTasks.Count == snapshot.Length)
                     {
                         return;
                     }
@@ -735,25 +783,59 @@ namespace Mux.Cli.App
         {
             get
             {
-                lock (_ThinkingSync)
-                {
-                    return _ThinkingActive;
-                }
+                return AnyThinkingTurn(out _);
             }
         }
 
         /// <summary>
-        /// The thinking phrase currently displayed, or null when the indicator is hidden. Test helper.
+        /// A thinking phrase currently displayed by some in-flight turn, or null when none is thinking.
+        /// Test helper.
         /// </summary>
         public string? CurrentThinkingMessage
         {
             get
             {
-                lock (_ThinkingSync)
+                return AnyThinkingTurn(out string? message) ? message : null;
+            }
+        }
+
+        private bool AnyThinkingTurn(out string? message)
+        {
+            List<ActiveTurn> turns;
+            lock (_Sync)
+            {
+                turns = new List<ActiveTurn>(_ActiveTurns.Values);
+            }
+
+            foreach (ActiveTurn turn in turns)
+            {
+                lock (turn.ThinkingSync)
                 {
-                    return _ThinkingMessage;
+                    if (turn.ThinkingActive)
+                    {
+                        message = turn.ThinkingMessage;
+                        return true;
+                    }
                 }
             }
+
+            message = null;
+            return false;
+        }
+
+        // True while more than one turn is in flight; the projector, echo, and thinking lines use this to
+        // decide whether to show the per-turn "#N" marker, so a lone turn renders exactly as before.
+        private bool IsConcurrent()
+        {
+            lock (_Sync)
+            {
+                return _ActiveTurns.Count > 1;
+            }
+        }
+
+        private int MaxConcurrentTurns()
+        {
+            return Math.Max(1, _JobManager.MaxConcurrency);
         }
 
         /// <summary>
@@ -790,7 +872,7 @@ namespace Mux.Cli.App
             if (_Disposed) return;
             _Disposed = true;
 
-            StopThinking();
+            StopAllThinking();
 
             try
             {
@@ -973,32 +1055,43 @@ namespace Mux.Cli.App
                 return;
             }
 
+            int number;
+            bool concurrent;
+            lock (_Sync)
+            {
+                number = ++_TurnCounter;
+
+                // Concurrent when another turn is already running: this new prompt shares the transcript
+                // with it, so its echo (and the running turn's later output) carry the "#N" marker.
+                concurrent = _ActiveTurns.Count >= 1;
+            }
+
             // Echo the submitted prompt into the transcript immediately, so the user always sees what they
             // sent even before the model responds.
-            EchoPrompt(prompt);
-            EnqueueOrRun(prompt);
+            EchoPrompt(number, prompt, concurrent);
+            EnqueueOrRun(number, prompt);
         }
 
-        private void EnqueueOrRun(string prompt)
+        private void EnqueueOrRun(int number, string prompt)
         {
             bool startNow;
             lock (_Sync)
             {
-                if (_TurnInFlight)
+                // Run immediately while a concurrency slot is free; otherwise wait for one to open.
+                if (_ActiveTurns.Count < MaxConcurrentTurns())
                 {
-                    _PendingPrompts.Enqueue(prompt);
-                    startNow = false;
+                    startNow = true;
                 }
                 else
                 {
-                    _TurnInFlight = true;
-                    startNow = true;
+                    _PendingPrompts.Enqueue(new PendingPrompt(number, prompt));
+                    startNow = false;
                 }
             }
 
             if (startNow)
             {
-                RunTurn(prompt);
+                RunTurn(number, prompt);
             }
             else
             {
@@ -1007,7 +1100,7 @@ namespace Mux.Cli.App
             }
         }
 
-        private void RunTurn(string prompt)
+        private void RunTurn(int number, string prompt)
         {
             List<ConversationMessage> seed;
             lock (_Sync)
@@ -1020,31 +1113,39 @@ namespace Mux.Cli.App
                 .GetAwaiter()
                 .GetResult();
 
-            AgentEventProjector projector = new AgentEventProjector(_Conversation);
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            long[] ttft = { -1 };
-            projector.FirstTokenReceived += () => ttft[0] = stopwatch.ElapsedMilliseconds;
+            ActiveTurn turn = new ActiveTurn
+            {
+                Number = number,
+                Prompt = prompt,
+                Job = job,
+                Stopwatch = Stopwatch.StartNew()
+            };
 
-            // Dismiss the thinking indicator the instant the model produces output.
-            projector.ModelResponded += StopThinking;
+            // The projector prefixes this turn's output with "#N" whenever more than one turn is in flight.
+            AgentEventProjector projector = new AgentEventProjector(_Conversation, number, IsConcurrent);
+            turn.Projector = projector;
+            projector.FirstTokenReceived += () => turn.Ttft = turn.Stopwatch.ElapsedMilliseconds;
+
+            // Dismiss this turn's thinking indicator the instant its model produces output.
+            projector.ModelResponded += () => StopThinking(turn);
 
             lock (_Sync)
             {
-                _ActiveJob = job;
+                _ActiveTurns[job.Id] = turn;
                 _TurnJobIds.Add(job.Id);
             }
 
             RefreshSidebar();
             RefreshFooter();
 
-            // Show a thinking indicator beneath the echoed prompt until results begin streaming.
-            StartThinking();
+            // Show a thinking indicator beneath the echoed prompt until this turn's results begin streaming.
+            StartThinking(turn);
 
             Task projection = Task.Run(async () =>
             {
                 await projector.ProjectAsync(job.ReadEventsAsync(_Cts.Token), _Cts.Token).ConfigureAwait(false);
-                long total = stopwatch.ElapsedMilliseconds;
-                OnTurnComplete(prompt, projector, total, ttft[0]);
+                long total = turn.Stopwatch.ElapsedMilliseconds;
+                OnTurnComplete(turn, total);
             });
 
             lock (_Sync)
@@ -1053,16 +1154,16 @@ namespace Mux.Cli.App
             }
         }
 
-        private void OnTurnComplete(string prompt, AgentEventProjector projector, long totalMs, long ttftMs)
+        private void OnTurnComplete(ActiveTurn turn, long totalMs)
         {
-            // Safety net: dismiss the indicator even if the turn produced no observable output.
-            StopThinking();
+            // Safety net: dismiss this turn's indicator even if it produced no observable output.
+            StopThinking(turn);
 
-            string? next;
+            long ttftMs = turn.Ttft;
             lock (_Sync)
             {
-                _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.User, Content = prompt });
-                string answer = projector.CapturedAssistantText;
+                _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.User, Content = turn.Prompt });
+                string answer = turn.Projector.CapturedAssistantText;
                 if (!string.IsNullOrEmpty(answer))
                 {
                     _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.Assistant, Content = answer });
@@ -1079,77 +1180,146 @@ namespace Mux.Cli.App
                     _Stats.TtftSamples++;
                 }
 
-                if (projector.LastRunCompleted != null)
+                if (turn.Projector.LastRunCompleted != null)
                 {
-                    _Stats.LastContextTokens = projector.LastRunCompleted.FinalEstimatedTokens;
-                    _Stats.InputTokens += projector.LastRunCompleted.InputTokens;
-                    _Stats.OutputTokens += projector.LastRunCompleted.OutputTokens;
+                    _Stats.LastContextTokens = turn.Projector.LastRunCompleted.FinalEstimatedTokens;
+                    _Stats.InputTokens += turn.Projector.LastRunCompleted.InputTokens;
+                    _Stats.OutputTokens += turn.Projector.LastRunCompleted.OutputTokens;
                 }
 
-                _ActiveJob = null;
-                next = _PendingPrompts.Count > 0 ? _PendingPrompts.Dequeue() : null;
-                if (next == null)
-                {
-                    _TurnInFlight = false;
-                }
+                _ActiveTurns.Remove(turn.Job.Id);
             }
 
             RefreshSidebar();
             RefreshFooter();
             AutoSave();
 
-            if (next != null)
+            // A slot just freed — start as many queued prompts as now fit.
+            FillConcurrencySlots();
+        }
+
+        // Starts queued prompts into any free concurrency slots. Each RunTurn adds the turn to the active
+        // set before this loop re-checks capacity, so it never oversubscribes from a single caller.
+        private void FillConcurrencySlots()
+        {
+            while (true)
             {
-                RunTurn(next);
+                PendingPrompt next;
+                lock (_Sync)
+                {
+                    if (_ActiveTurns.Count >= MaxConcurrentTurns() || _PendingPrompts.Count == 0)
+                    {
+                        return;
+                    }
+
+                    next = _PendingPrompts.Dequeue();
+                }
+
+                RunTurn(next.Number, next.Prompt);
             }
         }
 
+        // Esc cancels an in-flight turn. With one running, it is cancelled directly; with several, a modal
+        // asks which to cancel (or all), so a stray Esc never kills the wrong concurrent turn.
         private void CancelActiveTurn()
         {
-            Job? active;
+            List<ActiveTurn> turns;
             lock (_Sync)
             {
-                active = _ActiveJob;
+                turns = new List<ActiveTurn>(_ActiveTurns.Values);
             }
 
-            if (active != null)
+            if (turns.Count == 0)
             {
-                _ = _JobManager.CancelAsync(active.Id, _Cts.Token);
+                return;
             }
+
+            if (turns.Count == 1)
+            {
+                CancelJob(turns[0].Job.Id);
+                return;
+            }
+
+            turns.Sort((ActiveTurn a, ActiveTurn b) => a.Number.CompareTo(b.Number));
+
+            List<string> options = new List<string>();
+            foreach (ActiveTurn turn in turns)
+            {
+                options.Add("#" + turn.Number + ": " + PromptPreview(turn.Prompt));
+            }
+
+            options.Add("Cancel all");
+
+            SelectModal modal = new SelectModal("Cancel which turn? — ↑↓ then Enter", options);
+            _App.Modals.Push(modal);
+            _ = ResolveCancelSelectionAsync(modal, turns);
         }
 
-        private void StartThinking()
+        private async Task ResolveCancelSelectionAsync(SelectModal modal, List<ActiveTurn> turns)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            if (result is not int index || index < 0)
+            {
+                return;
+            }
+
+            if (index >= turns.Count)
+            {
+                foreach (ActiveTurn turn in turns)
+                {
+                    CancelJob(turn.Job.Id);
+                }
+
+                return;
+            }
+
+            CancelJob(turns[index].Job.Id);
+        }
+
+        private void CancelJob(string jobId)
+        {
+            _ = _JobManager.CancelAsync(jobId, _Cts.Token);
+        }
+
+        private static string PromptPreview(string prompt)
+        {
+            string flattened = (prompt ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+            const int max = 40;
+            return flattened.Length <= max ? flattened : flattened.Substring(0, max - 1) + "…";
+        }
+
+        private void StartThinking(ActiveTurn turn)
         {
             string message = ThinkingMessages.Next();
             CancellationTokenSource cts = new CancellationTokenSource();
 
-            lock (_ThinkingSync)
+            lock (turn.ThinkingSync)
             {
-                _ThinkingMessage = message;
-                _ThinkingActive = true;
-                _ThinkingCts = cts;
-                _ThinkingHandle = _Conversation.WriteLine(RenderThinking(0, message));
+                turn.ThinkingMessage = message;
+                turn.ThinkingActive = true;
+                turn.ThinkingCts = cts;
+                turn.ThinkingHandle = _Conversation.WriteLine(RenderThinking(turn, 0, message));
             }
 
-            _ = AnimateThinkingAsync(cts.Token);
+            _ = AnimateThinkingAsync(turn, cts.Token);
         }
 
-        private void StopThinking()
+        private void StopThinking(ActiveTurn turn)
         {
             CancellationTokenSource? cts;
-            lock (_ThinkingSync)
+            lock (turn.ThinkingSync)
             {
-                if (!_ThinkingActive)
+                if (!turn.ThinkingActive)
                 {
                     return;
                 }
 
-                _ThinkingActive = false;
-                _ThinkingHandle?.Update(StyledText.Empty);
-                _ThinkingHandle = null;
-                _ThinkingMessage = null;
-                cts = _ThinkingCts;
-                _ThinkingCts = null;
+                turn.ThinkingActive = false;
+                turn.ThinkingHandle?.Update(StyledText.Empty);
+                turn.ThinkingHandle = null;
+                turn.ThinkingMessage = null;
+                cts = turn.ThinkingCts;
+                turn.ThinkingCts = null;
             }
 
             try
@@ -1162,7 +1332,21 @@ namespace Mux.Cli.App
             }
         }
 
-        private async Task AnimateThinkingAsync(CancellationToken cancellationToken)
+        private void StopAllThinking()
+        {
+            List<ActiveTurn> turns;
+            lock (_Sync)
+            {
+                turns = new List<ActiveTurn>(_ActiveTurns.Values);
+            }
+
+            foreach (ActiveTurn turn in turns)
+            {
+                StopThinking(turn);
+            }
+        }
+
+        private async Task AnimateThinkingAsync(ActiveTurn turn, CancellationToken cancellationToken)
         {
             int tick = 0;
             int ticksSinceSwap = 0;
@@ -1175,9 +1359,9 @@ namespace Mux.Cli.App
                     tick++;
                     ticksSinceSwap++;
 
-                    lock (_ThinkingSync)
+                    lock (turn.ThinkingSync)
                     {
-                        if (!_ThinkingActive || _ThinkingHandle == null)
+                        if (!turn.ThinkingActive || turn.ThinkingHandle == null)
                         {
                             return;
                         }
@@ -1185,11 +1369,11 @@ namespace Mux.Cli.App
                         // Rotate to a new phrase roughly every four seconds — lively but unhurried.
                         if (ticksSinceSwap >= 30)
                         {
-                            _ThinkingMessage = ThinkingMessages.Next();
+                            turn.ThinkingMessage = ThinkingMessages.Next();
                             ticksSinceSwap = 0;
                         }
 
-                        _ThinkingHandle.Update(RenderThinking(tick, _ThinkingMessage ?? "Thinking…"));
+                        turn.ThinkingHandle.Update(RenderThinking(turn, tick, turn.ThinkingMessage ?? "Thinking…"));
                     }
                 }
             }
@@ -1198,9 +1382,12 @@ namespace Mux.Cli.App
             }
         }
 
-        private static StyledText RenderThinking(int tick, string message)
+        private StyledText RenderThinking(ActiveTurn turn, int tick, string message)
         {
-            return Text.From(ThinkingMessages.SpinnerFrame(tick) + " " + message).Dim();
+            StyledText body = Text.From(ThinkingMessages.SpinnerFrame(tick) + " " + message).Dim();
+
+            // Attribute the indicator to its turn while several run at once, matching the output marker.
+            return IsConcurrent() ? AgentEventProjector.Marker(turn.Number).Append(body) : body;
         }
 
         private void RouteSlash(string input)
@@ -1267,11 +1454,24 @@ namespace Mux.Cli.App
 
         private void EchoPrompt(string prompt)
         {
+            EchoPrompt(0, prompt, false);
+        }
+
+        private void EchoPrompt(int number, string prompt, bool concurrent)
+        {
             // "mux> <prompt>" with a leading blank line; "mux>" in green, the prompt in grey. The thinking
             // indicator is shown directly beneath the prompt (no blank between), and once it is dismissed
-            // the blanked line becomes the trailing separator before the response.
+            // the blanked line becomes the trailing separator before the response. When the prompt is one of
+            // several concurrent turns, a "#N" marker prefixes the line so it can be told apart from the rest.
             _Conversation.WriteLine(Text.From(string.Empty));
-            _Conversation.WriteLine(Text.From(PromptText).Green().Bold().Append(Text.From(prompt ?? string.Empty)));
+
+            StyledText head = Text.From(PromptText).Green().Bold();
+            if (concurrent && number > 0)
+            {
+                head = AgentEventProjector.Marker(number).Append(head);
+            }
+
+            _Conversation.WriteLine(head.Append(Text.From(prompt ?? string.Empty)));
         }
 
         private void AutoSave()
@@ -1729,7 +1929,8 @@ namespace Mux.Cli.App
         {
             return new ConversationStats
             {
-                Busy = _TurnInFlight,
+                Busy = _ActiveTurns.Count > 0,
+                InFlight = _ActiveTurns.Count,
                 Queued = _PendingPrompts.Count,
                 Turns = _Stats.Turns,
                 LastTtftMs = _Stats.LastTtftMs,
