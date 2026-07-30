@@ -102,20 +102,19 @@ Running `mux` with no non-interactive command launches the TUIKit shell (new in 
 > **Note:** MCP tool execution inside the TUIKit shell is not yet wired in v0.3.0 — built-in tools work
 > in interactive; MCP servers remain configurable in `mcp-servers.json` for a future release.
 
-The screen has a transcript (per job), a sidebar listing all jobs with a state glyph and focus marker,
-a multi-line composer, and a footer with live `jobs/focused` status and key hints. Each job runs
-concurrently (up to `maxConcurrency`) and renders into its own transcript.
+The screen has a single transcript holding the whole conversation, a sidebar showing the active
+endpoint and per-turn / session telemetry (status, timings, token counts), a multi-line composer, and
+a footer with key hints. It behaves like a chat client: you type a prompt and it runs; typing another
+while a turn is in flight queues it to run when the current turn finishes.
 
 ### Keys
 
 | Key | Action |
 |---|---|
-| `Enter` | Submit the prompt (opens the enqueue chooser when a job is already active) |
+| `Enter` | Submit the prompt (queued if a turn is already running) |
 | `Alt+Enter` / `Shift+Enter` | Insert a newline in the composer |
-| `Ctrl+Enter` | Submit as a new job, bypassing the chooser |
 | `Up` / `Down` | Recall prompt history at the composer edges |
-| `Esc` | Cancel the focused job (or dismiss a modal/chooser) |
-| `Ctrl+N` / `Alt+1`…`Alt+9` | Focus the next job / the Nth job |
+| `Esc` | Cancel the running turn (or dismiss a modal) |
 | `Ctrl+B` | Toggle the sidebar (auto-collapses below 100 columns) |
 | `Ctrl+E` | Open the endpoints / models picker |
 | `Ctrl+L` | Clear the transcript |
@@ -146,11 +145,10 @@ name, adapter type, base URL, and model) and **- Remove endpoint…** (with a co
 to `endpoints.json`. You can still select an endpoint at launch with `--endpoint <name>` or an ad-hoc
 `--base-url`/`--model`/`--adapter-type`, and inspect with `mux endpoint list` / `mux endpoint show`.
 
-### Enqueue while busy
+### Queueing prompts
 
-Submitting while a job is active shows a chooser: `[1]` start a new job, `[2]` append to the focused
-job, `[r]` remember the choice for the session, `[Esc]` cancel. Set `defaultEnqueueBehavior` in
-`settings.json` to skip the chooser (`run_now` / `add_to_focused`).
+Submitting while a turn is running queues the new prompt; queued prompts run in order as each turn
+finishes, like a chat client. The sidebar shows the current status and how many prompts are queued.
 
 ### Tool approval
 
@@ -161,8 +159,8 @@ auto-approve, or `--approval-policy deny` to block all tools.
 ### Sessions
 
 The session autosaves at each turn boundary. `Ctrl+S` / `/save` saves on demand; `/sessions` lists and
-resumes saved sessions (under `~/.mux/sessions`). A resumed session shows completed conversations
-read-only and marks interrupted jobs as re-run-required — it never silently re-runs them.
+resumes saved sessions (under `~/.mux/sessions`). A resumed session shows the completed conversation
+read-only and marks an interrupted turn as re-run-required — it never silently re-runs it.
 
 ## Built-In Process Execution
 
