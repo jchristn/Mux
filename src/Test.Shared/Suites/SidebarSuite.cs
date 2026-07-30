@@ -182,7 +182,10 @@ namespace Test.Shared.Suites
 
         private static MuxTuiApp NewApp(HeadlessBackend backend, JobManager manager)
         {
-            return new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove);
+            MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove);
+            // These cases exercise the sidebar, not the submit chooser; make submit deterministic.
+            app.DefaultEnqueueBehavior = EnqueueBehavior.NewJob;
+            return app;
         }
 
         private static void Submit(HeadlessBackend backend, MuxTuiApp app, string prompt)

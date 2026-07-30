@@ -397,7 +397,10 @@ namespace Test.Shared.Suites
 
         private static MuxTuiApp NewApp(HeadlessBackend backend, JobManager manager, string title)
         {
-            return new MuxTuiApp(backend, manager, title, ApprovalPolicyEnum.AutoApprove);
+            MuxTuiApp app = new MuxTuiApp(backend, manager, title, ApprovalPolicyEnum.AutoApprove);
+            // These cases exercise panes/focus, not the submit chooser; make submit deterministic.
+            app.DefaultEnqueueBehavior = EnqueueBehavior.NewJob;
+            return app;
         }
 
         private static RunCompletedEvent CompletedEvent()

@@ -816,14 +816,46 @@ milestones (M8/M10) rather than as empty M6 stubs, per "build it right, not scaf
 
 ---
 
-## M9 — Cli: Composer + enqueue gesture
+## M9 — Cli: Composer + enqueue gesture ✅ DONE
 
-- [ ] `Regions/ComposerRegion.cs` — multi-line `TextEditor`; Enter submits, Shift+Enter newline; autogrow to a cap then scroll.
-- [ ] `App/SubmitChooser.cs` — the "ask per submit" chooser (run-now parallel / queue-after / add-to-focused / remember-choice) shown when ≥ 1 job runs; modifier bypass: `Alt+Enter` run-now, `Ctrl+Enter` queue-after.
-- [ ] Prompt-history recall at buffer edges (Up/Down), reading persisted per-session history.
-- [ ] Leading `/` routes to the slash parser (M10) instead of submitting a prompt.
-- [ ] **Tests** (`Test.Shared/Suites/ComposerSuite.cs`, headless): Enter with no active job submits immediately; Enter with an active job shows the chooser; each chooser branch dispatches to the right `JobManager` call; modifiers bypass the chooser; Shift+Enter inserts a newline; history recall works.
-- **Exit criteria:** enqueue-while-running behavior matches §3.4 for every branch, verified headlessly.
+**Key-encoding reality (drives the gesture map).** Plain Enter arrives as `KeyCode.Enter`; every
+*modified* Enter arrives as a carriage-return **character** event (`Char(13, mods)`) — via Kitty CSI-u
+in enhanced mode (`ESC [ 13 ; <mod> u`) and via `ESC + CR` for Alt in legacy mode. `Shift+Enter` and
+`Ctrl+Enter` are only distinguishable in enhanced-keyboard mode; `Alt+Enter` works in both. The gesture
+map below is built on what terminals can actually deliver (same spirit as the M7 `Ctrl+J` note).
+
+- [x] Multi-line composer (the existing `TextEditor`): **Enter** submits; **Alt+Enter** and
+  **Shift+Enter** insert a newline (Alt+Enter is the legacy-compatible one). Newline is applied by
+  feeding the editor a synthetic `KeyCode.Enter`.
+- [x] Submit chooser (state on `MuxTuiApp`, not a modal — modals are M11): when a job is **active** and
+  the effective behavior is `Ask`, Enter opens an inline chooser (footer shows `[1] new job · [2] add
+  to focused · [r] remember · [Esc] cancel`); `1`/`2` dispatch, `r` toggles remembering the choice as
+  the session default, `Esc` cancels. **`Ctrl+Enter`** bypasses the chooser and submits a new job.
+  `App/EnqueueBehavior.cs` models `Ask | NewJob | AddToFocused`; `Program.RunInteractive` maps
+  `MuxSettings.DefaultEnqueueBehavior` (`run_now`/`queue_after` → `NewJob`, `add_to_focused` →
+  `AddToFocused`, else `Ask`). "run-now parallel" vs "queue-after" collapse to **new job** because the
+  engine scheduler already governs parallelism by the concurrency cap; the meaningful split is new-job
+  vs append-to-focused (`JobManager.AddFollowUpAsync`, guarded to only target a still-active focused job,
+  else falls back to a new job).
+- [x] `App/PromptHistory.cs` — shell-style recall (cursor past the newest entry; `TryPrevious`/`TryNext`
+  with a fresh-draft position; consecutive-duplicate/blank coalescing). `Up` at composer row 0 recalls
+  older, `Down` on the last row walks back to the fresh draft. (In-memory this milestone; cross-session
+  persistence is M12.)
+- [x] Leading `/` routes to `SlashHandler` (settable; the M10 router will supply it) instead of
+  submitting; the built-in stub writes an `Unknown command` notice.
+- [x] **Tests** (`Test.Shared/Suites/ComposerSuite.cs`, 15 cases, headless): `PromptHistory`
+  reverse-order recall, return-to-fresh-draft, blank/dup coalescing, empty-previous; Alt+Enter and
+  Shift+Enter newline; multi-line submit as one job; Enter opens the chooser while busy; chooser new-job,
+  add-to-focused (echoes + `AddFollowUpAsync`), Esc-cancel, and remember-sets-session-default;
+  Ctrl+Enter bypass; slash routes to a handler; unknown slash writes a notice; Up recalls the last
+  prompt and Down returns to the draft. Green on the console runner (net8+net10) and both adapters.
+- **Exit criteria:** ✅ enqueue-while-running behavior verified headlessly for every branch (new-job,
+  add-to-focused, remember, bypass, cancel); multi-line entry, history recall, and slash routing covered.
+
+**Deviations from the original §3.4 sketch (documented):** run-now/queue-after collapse to new-job
+(scheduler governs concurrency); the chooser is an inline footer prompt rather than a modal (modals are
+M11); `Alt+Enter` is newline (not run-now) because it is the only modified-Enter available in legacy
+terminals, and `Ctrl+Enter` is the new-job bypass.
 
 ---
 

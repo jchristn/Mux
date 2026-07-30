@@ -32,6 +32,7 @@ namespace Mux.Cli.App
         private const string FooterRegion = "footer";
         private const int SidebarWidth = 28;
         private const int CollapseThreshold = 100;
+        private const string FooterHint = "^Q quit · ^L clear · ^N next · ^B sidebar · Alt+# focus · Enter send · Esc cancel";
 
         private readonly ITerminalBackend _Backend;
         private readonly TuiApplication _App;
@@ -52,8 +53,15 @@ namespace Mux.Cli.App
         private readonly object _Sync = new object();
         private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
         private readonly EventHandler<JobManagerEvent> _JobEventHandler;
+        private readonly PromptHistory _History = new PromptHistory();
         private Pane _CurrentPane;
         private string? _FocusedJobId;
+        private EnqueueBehavior _DefaultEnqueueBehavior = EnqueueBehavior.Ask;
+        private EnqueueBehavior? _SessionEnqueueDefault;
+        private Func<string, bool>? _SlashHandler;
+        private bool _ChooserActive;
+        private bool _RememberChoice;
+        private string? _PendingPrompt;
         private bool _ManualCollapsed;
         private bool _CollapsedApplied;
         private bool _Disposed;
@@ -197,6 +205,53 @@ namespace Mux.Cli.App
                     return _CollapsedApplied;
                 }
             }
+        }
+
+        /// <summary>
+        /// How a submit is handled while another job is active. Defaults to
+        /// <see cref="EnqueueBehavior.Ask"/> (show the chooser).
+        /// </summary>
+        public EnqueueBehavior DefaultEnqueueBehavior
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _DefaultEnqueueBehavior;
+                }
+            }
+            set
+            {
+                lock (_Sync)
+                {
+                    _DefaultEnqueueBehavior = value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Whether the submit chooser is currently awaiting a choice.
+        /// </summary>
+        public bool IsChooserActive
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _ChooserActive;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Handler invoked for a composer submission that begins with <c>/</c>. Returns true when the
+        /// input was handled as a command (so it is not submitted as a prompt). When unset, a built-in
+        /// stub reports the command as unknown. Replaced by the slash-command router in a later milestone.
+        /// </summary>
+        public Func<string, bool>? SlashHandler
+        {
+            get => _SlashHandler;
+            set => _SlashHandler = value;
         }
 
         #endregion
@@ -469,17 +524,40 @@ namespace Mux.Cli.App
 
         private void OnKeyReceived(KeyEvent key)
         {
-            if (key.Code == KeyCode.Enter
-                && (key.Modifiers & KeyModifiers.Alt) == 0
-                && (key.Modifiers & KeyModifiers.Shift) == 0)
+            // While the submit chooser is open it captures keys.
+            if (IsChooserActive)
             {
-                SubmitCurrentPrompt();
+                HandleChooserKey(key);
+                return;
+            }
+
+            // Plain Enter (no modifiers) submits. Modified Enter arrives as a carriage-return character
+            // event (CSI-u in enhanced mode, ESC+CR for Alt in legacy mode), never as KeyCode.Enter.
+            if (key.Code == KeyCode.Enter && key.Modifiers == KeyModifiers.None)
+            {
+                OnEnter();
                 return;
             }
 
             if (key.Code == KeyCode.Escape)
             {
                 CancelFocusedJob();
+                return;
+            }
+
+            if (IsCarriageReturn(key))
+            {
+                if ((key.Modifiers & KeyModifiers.Ctrl) != 0)
+                {
+                    // Ctrl+Enter: submit as a new job, bypassing the chooser (enhanced keyboard only).
+                    SubmitDecided(EnqueueBehavior.NewJob);
+                }
+                else
+                {
+                    // Alt/Shift+Enter: insert a newline into the composer.
+                    _Composer.HandleKey(KeyEvent.Special(KeyCode.Enter));
+                }
+
                 return;
             }
 
@@ -491,10 +569,20 @@ namespace Mux.Cli.App
                 return;
             }
 
+            if (key.Code == KeyCode.Up && _Composer.CaretRow == 0 && RecallPrevious())
+            {
+                return;
+            }
+
+            if (key.Code == KeyCode.Down && _Composer.CaretRow == ComposerLineCount() - 1 && RecallNext())
+            {
+                return;
+            }
+
             _Composer.HandleKey(key);
         }
 
-        private void SubmitCurrentPrompt()
+        private void OnEnter()
         {
             string prompt = _Composer.Text;
             if (string.IsNullOrWhiteSpace(prompt))
@@ -503,7 +591,56 @@ namespace Mux.Cli.App
             }
 
             _Composer.Text = string.Empty;
+            _History.Add(prompt);
 
+            if (prompt.TrimStart().StartsWith("/", StringComparison.Ordinal))
+            {
+                RouteSlash(prompt.TrimStart());
+                return;
+            }
+
+            EnqueueBehavior configured;
+            lock (_Sync)
+            {
+                configured = _SessionEnqueueDefault ?? _DefaultEnqueueBehavior;
+            }
+
+            EnqueueBehavior behavior = HasActiveJob() ? configured : EnqueueBehavior.NewJob;
+
+            if (behavior == EnqueueBehavior.Ask)
+            {
+                OpenChooser(prompt);
+                return;
+            }
+
+            SubmitDecidedWith(behavior, prompt);
+        }
+
+        private void SubmitDecided(EnqueueBehavior behavior)
+        {
+            string prompt = _Composer.Text;
+            if (string.IsNullOrWhiteSpace(prompt))
+            {
+                return;
+            }
+
+            _Composer.Text = string.Empty;
+            _History.Add(prompt);
+            SubmitDecidedWith(behavior, prompt);
+        }
+
+        private void SubmitDecidedWith(EnqueueBehavior behavior, string prompt)
+        {
+            if (behavior == EnqueueBehavior.AddToFocused && TryAddToFocused(prompt))
+            {
+                return;
+            }
+
+            SubmitNewJob(prompt);
+        }
+
+        private void SubmitNewJob(string prompt)
+        {
             Job job = _JobManager
                 .SubmitAsync(prompt, _ApprovalPolicy, null, _Cts.Token)
                 .GetAwaiter()
@@ -526,6 +663,222 @@ namespace Mux.Cli.App
             {
                 _ProjectorTasks.Add(projection);
             }
+        }
+
+        private bool TryAddToFocused(string prompt)
+        {
+            string? focusedId;
+            Pane? pane;
+            lock (_Sync)
+            {
+                focusedId = _FocusedJobId;
+                if (focusedId == null || !_JobPanes.TryGetValue(focusedId, out pane))
+                {
+                    return false;
+                }
+            }
+
+            if (!IsJobActive(focusedId))
+            {
+                return false;
+            }
+
+            bool added = _JobManager.AddFollowUpAsync(focusedId, prompt, _Cts.Token).GetAwaiter().GetResult();
+            if (!added)
+            {
+                return false;
+            }
+
+            pane!.WriteLine(Text.From("› " + prompt).Cyan().Bold());
+            return true;
+        }
+
+        private void OpenChooser(string prompt)
+        {
+            lock (_Sync)
+            {
+                _PendingPrompt = prompt;
+                _ChooserActive = true;
+                _RememberChoice = false;
+            }
+
+            ShowChooserHint();
+        }
+
+        private void HandleChooserKey(KeyEvent key)
+        {
+            if (key.Code == KeyCode.Escape)
+            {
+                CancelChooser();
+                return;
+            }
+
+            if (key.Code == KeyCode.Character && (key.Rune == 'r' || key.Rune == 'R'))
+            {
+                lock (_Sync)
+                {
+                    _RememberChoice = !_RememberChoice;
+                }
+
+                ShowChooserHint();
+                return;
+            }
+
+            if (key.Code == KeyCode.Character && key.Rune == '1')
+            {
+                ResolveChooser(EnqueueBehavior.NewJob);
+                return;
+            }
+
+            if (key.Code == KeyCode.Character && key.Rune == '2')
+            {
+                ResolveChooser(EnqueueBehavior.AddToFocused);
+                return;
+            }
+        }
+
+        private void ResolveChooser(EnqueueBehavior behavior)
+        {
+            string prompt;
+            lock (_Sync)
+            {
+                prompt = _PendingPrompt ?? string.Empty;
+                _PendingPrompt = null;
+                _ChooserActive = false;
+                if (_RememberChoice)
+                {
+                    _SessionEnqueueDefault = behavior;
+                }
+
+                _RememberChoice = false;
+            }
+
+            SetFooterHint(FooterHint);
+
+            if (!string.IsNullOrWhiteSpace(prompt))
+            {
+                SubmitDecidedWith(behavior, prompt);
+            }
+        }
+
+        private void CancelChooser()
+        {
+            lock (_Sync)
+            {
+                _PendingPrompt = null;
+                _ChooserActive = false;
+                _RememberChoice = false;
+            }
+
+            SetFooterHint(FooterHint);
+        }
+
+        private void RouteSlash(string input)
+        {
+            bool handled = _SlashHandler != null && _SlashHandler(input);
+            if (!handled)
+            {
+                lock (_Sync)
+                {
+                    _CurrentPane.WriteLine(Text.From($"Unknown command: {input}").Yellow());
+                }
+            }
+        }
+
+        private bool RecallPrevious()
+        {
+            if (_History.TryPrevious(out string entry))
+            {
+                _Composer.Text = entry;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool RecallNext()
+        {
+            if (_History.TryNext(out string entry))
+            {
+                _Composer.Text = entry;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool HasActiveJob()
+        {
+            List<string> ids;
+            lock (_Sync)
+            {
+                ids = new List<string>(_JobOrder);
+            }
+
+            foreach (string id in ids)
+            {
+                if (IsJobActive(id))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsJobActive(string jobId)
+        {
+            foreach (Job job in _JobManager.Jobs)
+            {
+                if (string.Equals(job.Id, jobId, StringComparison.Ordinal))
+                {
+                    return job.State != JobState.Completed
+                        && job.State != JobState.Failed
+                        && job.State != JobState.Cancelled;
+                }
+            }
+
+            return false;
+        }
+
+        private void ShowChooserHint()
+        {
+            bool remember;
+            lock (_Sync)
+            {
+                remember = _RememberChoice;
+            }
+
+            string hint = "Job active — [1] new job · [2] add to focused · [r] remember"
+                + (remember ? " ✓" : string.Empty)
+                + " · [Esc] cancel";
+            SetFooterHint(hint);
+        }
+
+        private void SetFooterHint(string hint)
+        {
+            _Footer.Clear();
+            _Footer.WriteLine(Text.From(hint).Dim());
+        }
+
+        private static bool IsCarriageReturn(KeyEvent key)
+        {
+            return key.Code == KeyCode.Character && (key.Rune == 13 || key.Rune == 10);
+        }
+
+        private int ComposerLineCount()
+        {
+            string text = _Composer.Text;
+            int lines = 1;
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] == '\n')
+                {
+                    lines++;
+                }
+            }
+
+            return lines;
         }
 
         private void CancelFocusedJob()
@@ -562,7 +915,7 @@ namespace Mux.Cli.App
         {
             _HomePane.WriteLine(Text.From("mux · " + _Title).Cyan().Bold());
             _HomePane.WriteLine(Text.From("Type a prompt and press Enter. Alt+Enter for a newline.").Dim());
-            _Footer.WriteLine(Text.From("^Q quit · ^L clear · ^N next · ^B sidebar · Alt+# focus · Enter send · Esc cancel").Dim());
+            _Footer.WriteLine(Text.From(FooterHint).Dim());
         }
 
         #endregion

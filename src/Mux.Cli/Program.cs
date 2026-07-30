@@ -251,6 +251,7 @@ CONFIG:
                     : $"{runtime.Endpoint.Name} · {runtime.Endpoint.Model}";
 
                 using MuxTuiApp app = new MuxTuiApp(new ConsoleBackend(), jobManager, title, effectivePolicy);
+                app.DefaultEnqueueBehavior = MapEnqueueBehavior(runtime.MuxSettings.DefaultEnqueueBehavior);
                 using CancellationTokenSource cts = new CancellationTokenSource();
                 app.RunAsync(cts.Token).GetAwaiter().GetResult();
                 return 0;
@@ -258,6 +259,24 @@ CONFIG:
             finally
             {
                 jobManager.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+        }
+
+        /// <summary>
+        /// Maps the persisted default-enqueue-behavior string to the shell enum. Run-now and queue-after
+        /// both map to a new job (the scheduler governs concurrency); unknown values fall back to Ask.
+        /// </summary>
+        private static EnqueueBehavior MapEnqueueBehavior(string behavior)
+        {
+            switch (behavior)
+            {
+                case "run_now":
+                case "queue_after":
+                    return EnqueueBehavior.NewJob;
+                case "add_to_focused":
+                    return EnqueueBehavior.AddToFocused;
+                default:
+                    return EnqueueBehavior.Ask;
             }
         }
 

@@ -92,7 +92,10 @@ namespace Test.Shared
                     ProjectorSuite.Create(),
 
                     // Mux.Cli sidebar + responsive collapse suite (M8).
-                    SidebarSuite.Create()
+                    SidebarSuite.Create(),
+
+                    // Mux.Cli composer + prompt history + submit chooser suite (M9).
+                    ComposerSuite.Create()
                 };
             }
         }
