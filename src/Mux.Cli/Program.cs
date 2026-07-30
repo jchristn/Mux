@@ -256,7 +256,9 @@ CONFIG:
                     effectivePolicy,
                     sessionStore,
                     runtime.Endpoint.Name,
-                    runtime.Endpoint.Model);
+                    runtime.Endpoint.Model,
+                    onEndpointSelected: (EndpointConfig endpoint) => template.Endpoint = endpoint,
+                    showSplash: true);
                 app.DefaultEnqueueBehavior = MapEnqueueBehavior(runtime.MuxSettings.DefaultEnqueueBehavior);
 
                 // Route escalated tool approvals to the shell's modal. The template is captured by

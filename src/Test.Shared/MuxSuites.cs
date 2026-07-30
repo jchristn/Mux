@@ -110,7 +110,10 @@ namespace Test.Shared
                     FrameSnapshotSuite.Create(),
 
                     // Mux.Cli polish: theme / density / mouse / resize (M14).
-                    PolishSuite.Create()
+                    PolishSuite.Create(),
+
+                    // Mux.Cli interactive endpoint/model management (post-migration restoration).
+                    EndpointManagementSuite.Create()
                 };
             }
         }

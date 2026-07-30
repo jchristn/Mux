@@ -167,6 +167,42 @@ namespace Test.Shared.Suites
                             MuxAssert.IsFalse(app.IsModalActive, "modal closed");
                             MuxAssert.AreEqual(focusedBefore, app.FocusedJobId, "focus unchanged");
                         }
+                    }),
+
+                    // ---- Quit confirmation + startup splash ----
+                    Case("QuitOpensConfirmationModal", "Quitting opens a confirmation modal that Escape dismisses", async (CancellationToken ct) =>
+                    {
+                        await using (JobManager manager = NewManager())
+                        using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            Feed(backend, app, "/quit" + "\r");
+                            MuxAssert.IsTrue(app.IsModalActive, "quit confirmation shown");
+
+                            backend.FeedInput(new byte[] { 0x1b }); // Escape -> cancel
+                            app.PumpInputOnce();
+                            app.PumpInputOnce();
+                            MuxAssert.IsFalse(app.IsModalActive, "confirmation dismissed");
+                        }
+                    }),
+
+                    Case("StartupSplashShownAndDismissed", "The startup splash modal shows and dismisses on Enter", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 30);
+                        await using (JobManager manager = NewManager())
+                        using (MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove, null, string.Empty, string.Empty, null, showSplash: true))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            MuxAssert.IsTrue(app.IsModalActive, "splash shown at startup");
+
+                            app.Start();
+                            app.RenderOnce();
+                            MuxAssert.Contains("Joel Christner", backend.PeekOutput(), "splash shows copyright");
+
+                            backend.FeedInput("\r");
+                            app.PumpInputOnce();
+                            MuxAssert.IsFalse(app.IsModalActive, "splash dismissed");
+                        }
                     })
                 });
         }

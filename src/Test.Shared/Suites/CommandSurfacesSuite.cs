@@ -214,16 +214,21 @@ namespace Test.Shared.Suites
                     }),
 
                     // ---- Help ----
-                    Case("HelpListsCatalogCommands", "Help lists commands with their key bindings", async (CancellationToken ct) =>
+                    Case("HelpOpensModalNotInline", "Help opens a modal listing commands, not inline text", async (CancellationToken ct) =>
                     {
                         await using (JobManager manager = NewManager())
                         using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager))
                         {
                             await Task.CompletedTask.ConfigureAwait(false);
                             Feed(backend, app, "/help" + "\r");
-                            string transcript = Join(app.TranscriptSnapshot());
-                            MuxAssert.Contains("Quit", transcript, "help lists quit");
-                            MuxAssert.Contains("ctrl+q", transcript, "help lists chord");
+
+                            MuxAssert.IsTrue(app.IsModalActive, "help modal open");
+                            MuxAssert.IsFalse(Join(app.TranscriptSnapshot()).Contains("Quit", StringComparison.Ordinal), "help not written inline");
+
+                            // The modal renders the command listing through the full pipeline.
+                            app.Start();
+                            app.RenderOnce();
+                            MuxAssert.Contains("Quit", backend.PeekOutput(), "modal lists commands");
                         }
                     })
                 });

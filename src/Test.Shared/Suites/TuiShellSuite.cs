@@ -217,7 +217,9 @@ namespace Test.Shared.Suites
                         using (MuxTuiApp app = NewApp(backend, manager, "demo"))
                         {
                             Task run = app.RunAsync(ct);
-                            backend.FeedInput(new byte[] { 0x11 }); // Ctrl+Q
+                            backend.FeedInput(new byte[] { 0x11 }); // Ctrl+Q -> quit-confirmation modal
+                            await WaitUntilAsync(() => app.IsModalActive, ct).ConfigureAwait(false);
+                            backend.FeedInput("\r"); // confirm "Quit" (default button)
 
                             await run.WaitAsync(TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
                             MuxAssert.IsTrue(run.IsCompletedSuccessfully, "run loop exited");
@@ -417,6 +419,18 @@ namespace Test.Shared.Suites
         private static string Join(IReadOnlyList<string> lines)
         {
             return string.Join("\n", lines);
+        }
+
+        private static async Task WaitUntilAsync(Func<bool> condition, CancellationToken cancellationToken)
+        {
+            using (CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+            using (CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token))
+            {
+                while (!condition())
+                {
+                    await Task.Delay(10, linked.Token).ConfigureAwait(false);
+                }
+            }
         }
 
         private static async Task WaitForStateAsync(Job job, JobState expectedState, CancellationToken cancellationToken)

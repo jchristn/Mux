@@ -132,7 +132,7 @@ namespace Mux.Core.Settings
                 return new List<EndpointConfig>();
             }
 
-            string json = File.ReadAllText(filePath);
+            string json = ReadAllTextShared(filePath);
             EndpointsFile? file = JsonSerializer.Deserialize<EndpointsFile>(json, _JsonOptions);
             if (file == null || file.Endpoints == null)
             {
@@ -140,6 +140,66 @@ namespace Mux.Core.Settings
             }
 
             return file.Endpoints;
+        }
+
+        /// <summary>
+        /// Reads a text file allowing concurrent readers/writers to hold the file, so a read during a
+        /// concurrent atomic replace does not raise a sharing violation.
+        /// </summary>
+        /// <param name="path">The file path.</param>
+        /// <returns>The file contents.</returns>
+        private static string ReadAllTextShared(string path)
+        {
+            // Allow ReadWrite and Delete sharing so a concurrent atomic replace (write temp + move over
+            // this path) is not blocked by an in-flight reader, and vice versa; retry briefly to absorb
+            // transient Windows sharing/pending-delete windows.
+            string result = string.Empty;
+            WithIoRetry(() =>
+            {
+                using (FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                using (StreamReader reader = new StreamReader(stream))
+                {
+                    result = reader.ReadToEnd();
+                }
+            });
+
+            return result;
+        }
+
+        private static void WithIoRetry(Action action)
+        {
+            const int attempts = 12;
+            for (int i = 0; i < attempts; i++)
+            {
+                try
+                {
+                    action();
+                    return;
+                }
+                catch (IOException) when (i < attempts - 1)
+                {
+                    System.Threading.Thread.Sleep(20);
+                }
+                catch (UnauthorizedAccessException) when (i < attempts - 1)
+                {
+                    System.Threading.Thread.Sleep(20);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Writes a text file atomically: writes a temporary sibling and moves it over the target so
+        /// readers never observe a partially written or write-locked file.
+        /// </summary>
+        /// <param name="path">The destination path.</param>
+        /// <param name="content">The content to write.</param>
+        private static void WriteAllTextAtomic(string path, string content)
+        {
+            string directory = Path.GetDirectoryName(path) ?? GetConfigDirectory();
+            Directory.CreateDirectory(directory);
+            string tempPath = Path.Combine(directory, Path.GetRandomFileName());
+            File.WriteAllText(tempPath, content);
+            WithIoRetry(() => File.Move(tempPath, path, overwrite: true));
         }
 
         /// <summary>
@@ -162,7 +222,7 @@ namespace Mux.Core.Settings
             };
 
             string json = JsonSerializer.Serialize(file, _JsonWriteOptions);
-            File.WriteAllText(Path.Combine(GetConfigDirectory(), "endpoints.json"), json);
+            WriteAllTextAtomic(Path.Combine(GetConfigDirectory(), "endpoints.json"), json);
         }
 
         /// <summary>

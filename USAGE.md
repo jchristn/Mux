@@ -127,8 +127,19 @@ concurrently (up to `maxConcurrency`) and renders into its own transcript.
 
 Type a leading `/` in the composer to run a command instead of submitting a prompt. Every command is
 also reachable by key, the palette, and the menu (one catalog, four surfaces):
-`/help` (`/?`), `/clear`, `/next`, `/sidebar`, `/commands`, `/jobs`, `/save`, `/sessions`, `/theme`,
-`/density`, `/mouse`, `/quit` (`/exit`).
+`/endpoint` (`/model`), `/help` (`/?`), `/clear`, `/next`, `/sidebar`, `/commands`, `/jobs`, `/save`,
+`/sessions`, `/theme`, `/density`, `/mouse`, `/quit` (`/exit`).
+
+`/help` (`F1`) opens the keybinding/command reference in a modal. On startup mux shows a splash box, and
+quitting (`Ctrl+Q` / `/quit`) asks for confirmation.
+
+### Choosing, adding, and removing models/endpoints
+
+`/endpoint` (alias `/model`) opens a modal listing your configured endpoints; pick one to switch the
+active endpoint for subsequent prompts. The same modal offers **+ Add endpoint…** (a short wizard for
+name, adapter type, base URL, and model) and **- Remove endpoint…** (with a confirmation) — both persist
+to `endpoints.json`. You can still select an endpoint at launch with `--endpoint <name>` or an ad-hoc
+`--base-url`/`--model`/`--adapter-type`, and inspect with `mux endpoint list` / `mux endpoint show`.
 
 ### Enqueue while busy
 

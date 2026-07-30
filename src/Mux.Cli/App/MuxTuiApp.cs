@@ -8,6 +8,7 @@ namespace Mux.Cli.App
     using Mux.Core.Jobs;
     using Mux.Core.Models;
     using Mux.Core.Sessions;
+    using Mux.Core.Settings;
     using TUIKit;
     using TUIKit.Content;
     using TUIKit.Hosting;
@@ -44,8 +45,9 @@ namespace Mux.Cli.App
         private readonly JobManager _JobManager;
         private readonly ApprovalPolicyEnum _ApprovalPolicy;
         private readonly SessionStore? _Store;
-        private readonly string _EndpointName;
-        private readonly string _Model;
+        private readonly Action<EndpointConfig>? _OnEndpointSelected;
+        private string _EndpointName;
+        private string _Model;
         private readonly string _Title;
         private readonly Pane _HomePane;
         private readonly Pane _SidebarPane;
@@ -94,8 +96,10 @@ namespace Mux.Cli.App
         /// <param name="title">A short session title shown in the transcript header and sidebar.</param>
         /// <param name="approvalPolicy">The approval policy applied to submitted jobs.</param>
         /// <param name="sessionStore">Optional session store; when supplied, the session autosaves at turn boundaries and can be saved/browsed. Null disables persistence.</param>
-        /// <param name="endpointName">The effective endpoint name recorded in saved sessions.</param>
-        /// <param name="model">The effective model recorded in saved sessions.</param>
+        /// <param name="endpointName">The effective endpoint name (shown in the sidebar, recorded in sessions).</param>
+        /// <param name="model">The effective model (shown in the sidebar, recorded in sessions).</param>
+        /// <param name="onEndpointSelected">Optional callback invoked when the user switches endpoints, so the caller can apply it to future jobs. Null disables live switching.</param>
+        /// <param name="showSplash">When true, opens the startup splash modal.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
             ITerminalBackend backend,
@@ -104,12 +108,15 @@ namespace Mux.Cli.App
             ApprovalPolicyEnum approvalPolicy,
             SessionStore? sessionStore = null,
             string endpointName = "",
-            string model = "")
+            string model = "",
+            Action<EndpointConfig>? onEndpointSelected = null,
+            bool showSplash = false)
         {
             _Backend = backend ?? throw new ArgumentNullException(nameof(backend));
             _JobManager = jobManager ?? throw new ArgumentNullException(nameof(jobManager));
             _ApprovalPolicy = approvalPolicy;
             _Store = sessionStore;
+            _OnEndpointSelected = onEndpointSelected;
             _EndpointName = endpointName ?? string.Empty;
             _Model = model ?? string.Empty;
             _Title = string.IsNullOrWhiteSpace(title) ? "mux" : title;
@@ -132,7 +139,8 @@ namespace Mux.Cli.App
             _App.Bind(ComposerRegion, _Composer);
 
             _Catalog = new MuxCommandCatalog();
-            _Catalog.Add(new CommandDescriptor("mux.quit", "Quit", "ctrl+q", () => _App.RequestStop(), "Session", new[] { "quit", "exit", "q" }));
+            _Catalog.Add(new CommandDescriptor("mux.quit", "Quit", "ctrl+q", RequestQuit, "Session", new[] { "quit", "exit", "q" }));
+            _Catalog.Add(new CommandDescriptor("mux.endpoint", "Endpoints / models", null, OpenEndpointModal, "Model", new[] { "endpoint", "endpoints", "model", "models" }));
             _Catalog.Add(new CommandDescriptor("mux.clear", "Clear transcript", "ctrl+l", ClearTranscript, "View", new[] { "clear" }));
             // Focus-next is bound to Ctrl+N rather than the conventional Ctrl+J: Ctrl+J is byte 0x0A (LF),
             // which terminals and the input parser deliver as Enter, so it cannot be distinguished from a
@@ -167,6 +175,11 @@ namespace Mux.Cli.App
             RefreshSidebar();
             RefreshFooter();
             ApplyResponsiveLayout();
+
+            if (showSplash)
+            {
+                _App.Modals.Push(new MuxBoxModal(string.Empty, MuxBanner.SplashLines(Defaults.ProductVersion), "Press Enter to start"));
+            }
         }
 
         #endregion
@@ -354,6 +367,20 @@ namespace Mux.Cli.App
         public string? PaletteSelectionId
         {
             get => _Palette?.Selected?.Id;
+        }
+
+        /// <summary>
+        /// The name of the currently active endpoint (updated when the user switches).
+        /// </summary>
+        public string ActiveEndpointName
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _EndpointName;
+                }
+            }
         }
 
         /// <summary>
@@ -1426,15 +1453,216 @@ namespace Mux.Cli.App
 
         private void ShowHelp()
         {
+            List<string> lines = new List<string>();
+            foreach (CommandDescriptor descriptor in _Catalog.Commands)
+            {
+                string keys = descriptor.Chord ?? string.Empty;
+                string aliases = descriptor.SlashAliases.Count > 0 ? "/" + string.Join(" /", descriptor.SlashAliases) : string.Empty;
+                lines.Add($"{descriptor.Title,-20} {keys,-8} {aliases}");
+            }
+
+            _App.Modals.Push(new MuxBoxModal("Commands", lines));
+        }
+
+        private void RequestQuit()
+        {
+            MessageModal modal = new MessageModal(
+                "Quit mux?",
+                "Exit mux? Running jobs will be cancelled.",
+                new List<string> { "Quit", "Cancel" });
+            _App.Modals.Push(modal);
+            _ = ResolveQuitAsync(modal);
+        }
+
+        private async Task ResolveQuitAsync(MessageModal modal)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            if (result is int index && index == 0)
+            {
+                _App.RequestStop();
+            }
+        }
+
+        private void OpenEndpointModal()
+        {
+            List<EndpointConfig> endpoints = LoadEndpointsSafe();
+            List<string> options = new List<string>();
+            foreach (EndpointConfig endpoint in endpoints)
+            {
+                string marker = string.Equals(endpoint.Name, _EndpointName, StringComparison.OrdinalIgnoreCase) ? "● " : "  ";
+                options.Add($"{marker}{endpoint.Name}  ({endpoint.AdapterType} · {endpoint.Model})");
+            }
+
+            options.Add("+ Add endpoint…");
+            if (endpoints.Count > 0)
+            {
+                options.Add("- Remove endpoint…");
+            }
+
+            SelectModal modal = new SelectModal("Endpoints / models — Enter to switch", options);
+            _App.Modals.Push(modal);
+            _ = ResolveEndpointModalAsync(modal, endpoints);
+        }
+
+        private async Task ResolveEndpointModalAsync(SelectModal modal, List<EndpointConfig> endpoints)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            int index = result is int value ? value : -1;
+            if (index < 0)
+            {
+                return;
+            }
+
+            if (index < endpoints.Count)
+            {
+                SwitchEndpoint(endpoints[index]);
+                return;
+            }
+
+            int extra = index - endpoints.Count;
+            if (extra == 0)
+            {
+                await AddEndpointWizardAsync().ConfigureAwait(false);
+            }
+            else if (extra == 1)
+            {
+                await RemoveEndpointAsync(endpoints).ConfigureAwait(false);
+            }
+        }
+
+        private void SwitchEndpoint(EndpointConfig endpoint)
+        {
+            _OnEndpointSelected?.Invoke(endpoint);
             lock (_Sync)
             {
-                _CurrentPane.WriteLine(Text.From("Commands").Bold());
-                foreach (CommandDescriptor descriptor in _Catalog.Commands)
-                {
-                    string keys = descriptor.Chord ?? string.Empty;
-                    string aliases = descriptor.SlashAliases.Count > 0 ? "/" + string.Join(" /", descriptor.SlashAliases) : string.Empty;
-                    _CurrentPane.WriteLine(Text.From($"  {descriptor.Title,-18} {keys,-8} {aliases}").Dim());
-                }
+                _EndpointName = endpoint.Name;
+                _Model = endpoint.Model;
+            }
+
+            WriteNotice($"Switched to endpoint {endpoint.Name} ({endpoint.Model}).");
+            RefreshFooter();
+            RefreshSidebar();
+        }
+
+        private async Task AddEndpointWizardAsync()
+        {
+            string? name = await PromptAsync("Endpoint name", string.Empty).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return;
+            }
+
+            string[] adapters = { "openai-compatible", "ollama", "openai", "vllm" };
+            SelectModal adapterModal = new SelectModal($"Adapter for {name}", adapters);
+            _App.Modals.Push(adapterModal);
+            object? adapterResult = await adapterModal.Completion.ConfigureAwait(false);
+            int adapterIndex = adapterResult is int a ? a : -1;
+            if (adapterIndex < 0)
+            {
+                return;
+            }
+
+            string? baseUrl = await PromptAsync("Base URL", "http://localhost:11434/v1").ConfigureAwait(false);
+            if (baseUrl == null)
+            {
+                return;
+            }
+
+            string? model = await PromptAsync("Model", string.Empty).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(model))
+            {
+                return;
+            }
+
+            EndpointConfig endpoint = new EndpointConfig
+            {
+                Name = name!.Trim(),
+                AdapterType = ParseAdapter(adapters[adapterIndex]),
+                BaseUrl = baseUrl.Trim(),
+                Model = model!.Trim()
+            };
+
+            List<EndpointConfig> endpoints = LoadEndpointsSafe();
+            endpoints.RemoveAll(e => string.Equals(e.Name, endpoint.Name, StringComparison.OrdinalIgnoreCase));
+            endpoints.Add(endpoint);
+            try
+            {
+                SettingsLoader.SaveEndpoints(endpoints);
+                WriteNotice($"Saved endpoint {endpoint.Name}. Use /endpoint to switch to it.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Save failed: " + ex.Message);
+            }
+        }
+
+        private async Task RemoveEndpointAsync(List<EndpointConfig> endpoints)
+        {
+            List<string> names = new List<string>();
+            foreach (EndpointConfig endpoint in endpoints)
+            {
+                names.Add(endpoint.Name);
+            }
+
+            SelectModal pick = new SelectModal("Remove which endpoint?", names);
+            _App.Modals.Push(pick);
+            object? pickResult = await pick.Completion.ConfigureAwait(false);
+            int pickIndex = pickResult is int p ? p : -1;
+            if (pickIndex < 0 || pickIndex >= endpoints.Count)
+            {
+                return;
+            }
+
+            string name = endpoints[pickIndex].Name;
+            MessageModal confirm = new MessageModal("Remove endpoint", $"Remove '{name}'?", new List<string> { "Remove", "Cancel" });
+            _App.Modals.Push(confirm);
+            object? confirmResult = await confirm.Completion.ConfigureAwait(false);
+            if (!(confirmResult is int c) || c != 0)
+            {
+                return;
+            }
+
+            List<EndpointConfig> current = LoadEndpointsSafe();
+            current.RemoveAll(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+            try
+            {
+                SettingsLoader.SaveEndpoints(current);
+                WriteNotice($"Removed endpoint {name}.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Remove failed: " + ex.Message);
+            }
+        }
+
+        private async Task<string?> PromptAsync(string title, string initial)
+        {
+            PromptModal modal = new PromptModal(title, initial);
+            _App.Modals.Push(modal);
+            object? result = await modal.Completion.ConfigureAwait(false);
+            return result as string;
+        }
+
+        private static List<EndpointConfig> LoadEndpointsSafe()
+        {
+            try
+            {
+                return SettingsLoader.LoadEndpoints();
+            }
+            catch (Exception)
+            {
+                return new List<EndpointConfig>();
+            }
+        }
+
+        private static AdapterTypeEnum ParseAdapter(string adapter)
+        {
+            switch (adapter)
+            {
+                case "ollama": return AdapterTypeEnum.Ollama;
+                case "openai": return AdapterTypeEnum.OpenAi;
+                case "vllm": return AdapterTypeEnum.Vllm;
+                default: return AdapterTypeEnum.OpenAiCompatible;
             }
         }
 
