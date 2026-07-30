@@ -902,19 +902,42 @@ View), `mux.palette` (^K, /commands /palette, Session), `mux.help` (F1, /help /?
 
 ---
 
-## M11 — Cli: Modals (`Mux.Cli/Modals/`)
+## M11 — Cli: Modals (`Mux.Cli/Modals/`) 🟡 IN PROGRESS
 
-All via `ModalStack`; concurrent approval requests queue.
+All via TUIKit `ModalStack` (documented thread-safe), which `TuiApplication` already renders and routes
+input to when active — the shell pushes a `Modal` and awaits its `Completion`. The prebuilt
+`SelectModal` (returns the chosen index / -1 on Esc), `MessageModal`, and `PromptModal` cover most needs,
+so custom `Modal` subclasses are only needed for the config forms.
 
-- [ ] `Modals/ModelModal.cs` — searchable picker + detail; actions: set active, pull/download (progress), remove, bind-to-endpoint.
-- [ ] `Modals/SettingsModal.cs` — grouped `Form` (General/Model/Tools/Approvals/Jobs/Appearance), live apply → `MuxSettings` + settings file.
-- [ ] `Modals/McpEndpointModal.cs` — endpoints (list/add/edit/test/set-active) + MCP servers (add/remove/inspect tools via `DataTable`, enable/disable).
-- [ ] `Modals/JobsModal.cs` — `DataTable<Job>` queue manager: focus, pause/resume, cancel, reorder, retry, open transcript, merge transcript, view diff; opened from the footer job counter.
-- [ ] `Modals/ApprovalModal.cs` — the policy-escalation prompt (Yes/No/Always-tool/Always-session, with diff); titled with the requesting job id; multiple queue in `ModalStack`.
-- [ ] `Modals/HelpModal.cs` — keybindings/commands reference generated from the catalog (never drifts).
-- [ ] `Modals/SessionBrowserModal.cs` — list persisted sessions; resume/delete/duplicate/export.
-- [ ] **Tests** (`Test.Shared/Suites/ModalsSuite.cs`, headless): each modal opens/renders/returns its awaitable result; settings changes propagate to `MuxSettings`; approval modal resolves the engine's awaiting request; two queued approvals present in order; jobs modal actions call the right `JobManager` methods.
-- **Exit criteria:** every §8 modal functional and driven headlessly; approval escalation round-trips with the engine.
+**Done this pass — the functionally critical modals:**
+- [x] **Approval modal** (`MuxTuiApp.RequestApprovalAsync`, a `SelectModal`) — **replaces the M6/M9
+  `ask`→deny-stub interim.** Presents Approve once / Deny / Always allow this session, and returns the
+  engine's response string (`"y"` / `"n"` / `"always"`); Escape or app shutdown denies. `Program`
+  wires it as the job template's `PromptUserFunc` (set after `CreateForAgentLoop`, read per job run), so
+  under the default `AutoSafe` policy read-only tools auto-run and **mutating tools now escalate to a
+  real interactive prompt** rather than being denied. (`AlwaysThisTool` is intentionally omitted — the
+  engine's `MapPromptResponseToDecision` has no string for it; Approve/Deny/Always-session are the
+  reachable outcomes.)
+- [x] **Jobs modal** (`mux.jobs`, `F2` / `/jobs`, a `SelectModal`) — lists jobs (`state · title`);
+  selecting one focuses it; empty list shows a `MessageModal`. (Pause/resume/cancel/reorder/retry/merge
+  via a `DataTable` is the richer follow-up.)
+- [x] Modal infrastructure surfaced for tests (`IsModalActive`, `ModalCount`).
+- [x] **Tests** (`Test.Shared/Suites/ModalsSuite.cs`, 9 cases, headless): approval approve/deny/always
+  (positive), plus escape-denies, null-tool-call, and dispose-while-awaiting-denies (negative); jobs
+  modal focuses the selection, empty-list shows a message, and escape leaves focus unchanged. Green on
+  the console runner (net8+net10) and both adapters. (The router↔escalation round-trip is covered by the
+  M3 `ApprovalRoutingSuite`; this suite covers the modal↔response mapping.)
+
+**Remaining M11 (management/config modals — tracked follow-ups):**
+- [ ] `HelpModal` — currently `/help` renders the catalog keymap into the transcript (tested, never
+  drifts); a dedicated overlay modal is optional polish.
+- [ ] `ModelModal`, `SettingsModal`, `McpEndpointModal` — searchable model picker, grouped settings
+  `Form` with live write-back to `MuxSettings`/`settings.json`, and endpoint/MCP management. These need
+  config-form + persistence plumbing (endpoints.json, mcp-servers.json, settings write-back) and are a
+  substantial sub-milestone of their own; deferred with the richer jobs `DataTable`.
+- [ ] `SessionBrowserModal` — folded into **M12** (persistence UX), where resume/delete/duplicate live.
+- **Exit criteria (partial):** ✅ approval escalation reaches the engine via an interactive modal and
+  round-trips; jobs modal functional headlessly. Remaining: config/session modals.
 
 ---
 
@@ -1053,12 +1076,11 @@ Styles: `dim/bold/italic/underline`, fg `cyan/green/red/yellow/grey/blue/grey15`
   meaningless `warn` parameter; callers needing the boundary check use `IsWithinWorkingDirectory`.
   Verified green on the console runner (net8+net10) and both adapters.
 
-**M6 approval decision (→ M11).** M6 has no interactive approval modal. Rather than let the default `ask`
-policy silently auto-approve every tool (`DefaultPromptUserFunc` returns `"y"`), `Program.RunInteractive`
-translates `ask` → `AutoSafe` (read-only tools auto-run) and installs a deny-stub `PromptUserFunc` so
-mutating tools are **denied with a visible transcript notice** until M11 wires `ApprovalModal`. `--yolo`
-/`--approval-policy auto` (AutoApprove) and `deny` pass through unchanged. **M11 replaces the deny-stub
-with the real escalation modal** and should remove this translation.
+**Approval decision (RESOLVED in M11).** The default `ask` policy maps to `AutoSafe` (read-only tools
+auto-run). Mutating tools escalate to the interactive **approval modal** (`MuxTuiApp.RequestApprovalAsync`,
+a `SelectModal`), wired as the job template's `PromptUserFunc` in `Program.RunInteractive`. The earlier
+M6/M9 deny-stub interim is gone. `--yolo` / `--approval-policy auto` (AutoApprove) and `deny` still pass
+through unchanged.
 
 **MCP in interactive (→ later).** `ResolveRuntime(..., supportsMcp:true)` reports MCP capability counts,
 but the M6 shell does not yet start MCP servers or wire an `ExternalToolExecutor` into the `JobManager`

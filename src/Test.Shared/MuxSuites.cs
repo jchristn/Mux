@@ -98,7 +98,10 @@ namespace Test.Shared
                     ComposerSuite.Create(),
 
                     // Mux.Cli command surfaces: slash / palette / keybinding / menu (M10).
-                    CommandSurfacesSuite.Create()
+                    CommandSurfacesSuite.Create(),
+
+                    // Mux.Cli modals: approval + jobs (M11).
+                    ModalsSuite.Create()
                 };
             }
         }

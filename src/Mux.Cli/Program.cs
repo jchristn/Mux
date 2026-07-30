@@ -229,19 +229,16 @@ CONFIG:
             ResolvedRuntime runtime = CommandRuntimeResolver.ResolveRuntime(
                 settings, "interactive", supportsMcp: true, allowAskApproval: true);
 
-            // M6 has no interactive approval modal yet (that arrives in M11). Rather than silently
-            // auto-approving every tool, translate the default "ask" policy to AutoSafe (read-only tools
-            // run automatically) and deny escalated mutating tools with a visible transcript notice. Pass
-            // --yolo or --approval-policy auto to auto-approve everything, or deny to block all tools.
+            // The default "ask" policy maps to AutoSafe: read-only tools run automatically and mutating
+            // tools escalate to the interactive approval modal (wired below). --yolo / --approval-policy
+            // auto auto-approves everything; deny blocks all tools.
             ApprovalPolicyEnum effectivePolicy = runtime.ApprovalPolicy;
-            Func<ToolCall, Task<string>>? promptFunc = null;
             if (effectivePolicy == ApprovalPolicyEnum.Ask)
             {
                 effectivePolicy = ApprovalPolicyEnum.AutoSafe;
-                promptFunc = (ToolCall _) => Task.FromResult("n");
             }
 
-            AgentLoopOptions template = BuildInteractiveTemplate(runtime, settings, effectivePolicy, promptFunc);
+            AgentLoopOptions template = BuildInteractiveTemplate(runtime, settings, effectivePolicy, null);
             JobManager jobManager = JobManager.CreateForAgentLoop(template, runtime.MuxSettings.MaxConcurrency);
 
             try
@@ -252,6 +249,12 @@ CONFIG:
 
                 using MuxTuiApp app = new MuxTuiApp(new ConsoleBackend(), jobManager, title, effectivePolicy);
                 app.DefaultEnqueueBehavior = MapEnqueueBehavior(runtime.MuxSettings.DefaultEnqueueBehavior);
+
+                // Route escalated tool approvals to the shell's modal. The template is captured by
+                // CreateForAgentLoop and read per job run, so setting this before the run loop starts
+                // (jobs only run after the user submits) takes effect for every job.
+                template.PromptUserFunc = (ToolCall toolCall) => app.RequestApprovalAsync(toolCall);
+
                 using CancellationTokenSource cts = new CancellationTokenSource();
                 app.RunAsync(cts.Token).GetAwaiter().GetResult();
                 return 0;

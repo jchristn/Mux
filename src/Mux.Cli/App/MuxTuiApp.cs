@@ -6,11 +6,13 @@ namespace Mux.Cli.App
     using System.Threading.Tasks;
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
+    using Mux.Core.Models;
     using TUIKit;
     using TUIKit.Content;
     using TUIKit.Hosting;
     using TUIKit.Input;
     using TUIKit.Layout;
+    using TUIKit.Modals;
     using TUIKit.Terminal;
     using TUIKit.Widgets;
 
@@ -129,6 +131,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.focus.next", "Focus next job", "ctrl+n", FocusNext, "Jobs", new[] { "next" }));
             _Catalog.Add(new CommandDescriptor("mux.sidebar.toggle", "Toggle sidebar", "ctrl+b", ToggleSidebar, "View", new[] { "sidebar" }));
             _Catalog.Add(new CommandDescriptor("mux.palette", "Command palette", "ctrl+k", OpenPalette, "Session", new[] { "commands", "palette" }));
+            _Catalog.Add(new CommandDescriptor("mux.jobs", "Jobs", "f2", OpenJobsModal, "Jobs", new[] { "jobs" }));
             _Catalog.Add(new CommandDescriptor("mux.help", "Help", "f1", ShowHelp, "Help", new[] { "help", "?" }));
             _Catalog.ApplyTo(_App);
             _MenuBar = MenuBarBuilder.Build(_Catalog);
@@ -305,6 +308,22 @@ namespace Mux.Cli.App
             get => _Palette?.Selected?.Id;
         }
 
+        /// <summary>
+        /// Whether a modal (approval, jobs, message, …) is currently active and trapping input.
+        /// </summary>
+        public bool IsModalActive
+        {
+            get => _App.Modals.IsActive;
+        }
+
+        /// <summary>
+        /// The number of active modals on the stack.
+        /// </summary>
+        public int ModalCount
+        {
+            get => _App.Modals.Count;
+        }
+
         #endregion
 
         #region Public-Methods
@@ -469,6 +488,32 @@ namespace Mux.Cli.App
 
                 _App.Layout = shouldCollapse ? _CollapsedLayout : _ExpandedLayout;
                 _CollapsedApplied = shouldCollapse;
+            }
+        }
+
+        /// <summary>
+        /// Presents a tool-approval modal and resolves to a response string understood by the agent
+        /// loop's approval mapping: <c>"y"</c> (approve once), <c>"n"</c> (deny), or <c>"always"</c>
+        /// (approve for the session). Intended to be used as the engine's <c>PromptUserFunc</c>; it runs
+        /// on the engine's worker thread and blocks that tool call until the user answers on the UI
+        /// thread. Escaping the modal, or app shutdown, denies.
+        /// </summary>
+        /// <param name="toolCall">The tool call awaiting approval.</param>
+        /// <returns>The approval response string.</returns>
+        public async Task<string> RequestApprovalAsync(ToolCall toolCall)
+        {
+            string name = toolCall != null && !string.IsNullOrWhiteSpace(toolCall.Name) ? toolCall.Name : "tool";
+            SelectModal modal = new SelectModal(
+                $"Approve {name}?",
+                new List<string> { "Approve once", "Deny", "Always allow this session" });
+
+            _App.Modals.Push(modal);
+
+            using (CancellationTokenRegistration registration = _Cts.Token.Register(() => modal.RequestClose(-1)))
+            {
+                object? result = await modal.Completion.ConfigureAwait(false);
+                int index = result is int value ? value : -1;
+                return index == 0 ? "y" : index == 2 ? "always" : "n";
             }
         }
 
@@ -936,6 +981,55 @@ namespace Mux.Cli.App
             }
 
             SetFooterHint($"jobs:{jobCount} focused:{focused} · {FooterHint}");
+        }
+
+        private void OpenJobsModal()
+        {
+            List<string> ids;
+            lock (_Sync)
+            {
+                ids = new List<string>(_JobOrder);
+            }
+
+            if (ids.Count == 0)
+            {
+                _App.Modals.Push(new MessageModal("Jobs", "No jobs yet.", new List<string> { "OK" }));
+                return;
+            }
+
+            List<string> labels = new List<string>();
+            for (int i = 0; i < ids.Count; i++)
+            {
+                labels.Add($"{i + 1}. {JobLabel(ids[i])}");
+            }
+
+            SelectModal modal = new SelectModal("Jobs — select to focus", labels);
+            _App.Modals.Push(modal);
+            _ = ResolveJobsModalAsync(modal, ids);
+        }
+
+        private async Task ResolveJobsModalAsync(SelectModal modal, IReadOnlyList<string> ids)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            int index = result is int value ? value : -1;
+            if (index >= 0 && index < ids.Count)
+            {
+                FocusJob(ids[index]);
+            }
+        }
+
+        private string JobLabel(string jobId)
+        {
+            foreach (Job job in _JobManager.Jobs)
+            {
+                if (string.Equals(job.Id, jobId, StringComparison.Ordinal))
+                {
+                    string title = string.IsNullOrWhiteSpace(job.Title) ? job.Prompt : job.Title;
+                    return $"{job.State} · {title}";
+                }
+            }
+
+            return jobId;
         }
 
         private void OpenPalette()

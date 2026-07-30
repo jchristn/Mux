@@ -36,6 +36,10 @@ All notable changes to mux are documented here.
   all resolving to the same command handlers. `/help` lists commands and their keys, and the footer
   shows live `jobs/focused` status. Covered by `CommandSurfacesSuite` (11 cases, including four-surface
   convergence).
+- Interactive tool approval: under the default policy, read-only tools run automatically and mutating
+  tools now prompt with an approval modal (Approve once / Deny / Always this session) instead of being
+  refused — replacing the earlier placeholder that denied all writes. A jobs modal (`F2` / `/jobs`)
+  lists jobs and focuses the one you pick. Covered by `ModalsSuite` (9 cases).
 - Interim interactive approval behavior pending the M11 approval modal: the default `ask` policy runs
   read-only tools automatically (`AutoSafe`) and denies mutating tools with a visible notice; pass
   `--yolo` / `--approval-policy auto` to auto-approve, or `deny` to block all tools.
