@@ -10,6 +10,14 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- Rebuilt the interactive UI on TUIKit: `mux` with no non-interactive command now launches the
+  `MuxTuiApp` shell — a transcript / composer / footer layout with a streaming `AgentEvent` projector,
+  a command catalog (`Ctrl+Q` quit, `Ctrl+L` clear), `Esc` to cancel the focused job, and
+  double-tap-`Ctrl+C` to exit. Prompts submit to the concurrent `JobManager`; the terminal backend is
+  injected so the shell is driven headlessly in tests (`TuiShellSuite`, 12 cases).
+- Interim interactive approval behavior pending the M11 approval modal: the default `ask` policy runs
+  read-only tools automatically (`AutoSafe`) and denies mutating tools with a visible notice; pass
+  `--yolo` / `--approval-policy auto` to auto-approve, or `deny` to block all tools.
 - Pinned `TUIKit` `0.2.0` package reference to `Mux.Cli` — the rendering library for the rebuilt
   interactive UI.
 - Added a narrow mux-owned command dispatcher/parser to replace `Spectre.Console.Cli`.
@@ -27,9 +35,8 @@ All notable changes to mux are documented here.
 - Removed direct and transitive `Spectre.Console` usage from `Mux.Cli`, including
   `Spectre.Console.Cli`.
 - Tore down the legacy hand-rolled interactive renderer (`InteractiveCommand`, cursor/chrome layout,
-  `LineBuffer`, prompt history, paste heuristics — 11 files) ahead of the TUIKit-based interactive UI.
-  Interactive `mux` is temporarily unavailable in this pre-release (prints a notice and exits);
-  `mux print`, `mux probe`, and `mux endpoint` are unaffected.
+  `LineBuffer`, prompt history, paste heuristics — 11 files) and replaced it with the TUIKit-based
+  `MuxTuiApp` shell (see Added). `mux print`, `mux probe`, and `mux endpoint` are unaffected.
 
 ## Unreleased
 

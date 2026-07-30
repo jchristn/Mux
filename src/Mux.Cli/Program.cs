@@ -3,8 +3,15 @@ namespace Mux.Cli
     using System;
     using System.Linq;
     using System.Threading;
+    using System.Threading.Tasks;
+    using Mux.Cli.App;
     using Mux.Cli.Commands;
+    using Mux.Core.Agent;
+    using Mux.Core.Enums;
+    using Mux.Core.Jobs;
+    using Mux.Core.Models;
     using Mux.Core.Settings;
+    using TUIKit.Terminal;
 
     /// <summary>
     /// Entry point for the mux CLI application.
@@ -201,21 +208,94 @@ CONFIG:
                         .GetResult();
                 }
 
-                // Interactive REPL is being rebuilt on TUIKit (M6). The legacy renderer has been torn
-                // down; the new interactive shell is not yet available in this pre-release. Parse the
-                // args (so unknown options still error consistently), then report unavailability.
-                CliArgumentParser.ParseInteractive(args);
-                Console.Error.WriteLine(
-                    $"mux interactive mode is being rebuilt on TUIKit and is temporarily unavailable in this "
-                    + $"pre-release (v{Defaults.ProductVersion}). Use 'mux print <prompt>' for non-interactive "
-                    + "runs, or 'mux probe' / 'mux endpoint' for diagnostics and configuration.");
-                return 2;
+                // Default path: the TUIKit-hosted interactive shell.
+                return RunInteractive(args);
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine(ex.Message);
                 return 1;
             }
+        }
+
+        /// <summary>
+        /// Resolves runtime configuration and runs the TUIKit interactive shell to completion.
+        /// </summary>
+        /// <param name="args">The command-line arguments.</param>
+        /// <returns>The process exit code.</returns>
+        private static int RunInteractive(string[] args)
+        {
+            InteractiveSettings settings = CliArgumentParser.ParseInteractive(args);
+            ResolvedRuntime runtime = CommandRuntimeResolver.ResolveRuntime(
+                settings, "interactive", supportsMcp: true, allowAskApproval: true);
+
+            // M6 has no interactive approval modal yet (that arrives in M11). Rather than silently
+            // auto-approving every tool, translate the default "ask" policy to AutoSafe (read-only tools
+            // run automatically) and deny escalated mutating tools with a visible transcript notice. Pass
+            // --yolo or --approval-policy auto to auto-approve everything, or deny to block all tools.
+            ApprovalPolicyEnum effectivePolicy = runtime.ApprovalPolicy;
+            Func<ToolCall, Task<string>>? promptFunc = null;
+            if (effectivePolicy == ApprovalPolicyEnum.Ask)
+            {
+                effectivePolicy = ApprovalPolicyEnum.AutoSafe;
+                promptFunc = (ToolCall _) => Task.FromResult("n");
+            }
+
+            AgentLoopOptions template = BuildInteractiveTemplate(runtime, settings, effectivePolicy, promptFunc);
+            JobManager jobManager = JobManager.CreateForAgentLoop(template, runtime.MuxSettings.MaxConcurrency);
+
+            try
+            {
+                string title = string.IsNullOrWhiteSpace(runtime.Endpoint.Model)
+                    ? runtime.Endpoint.Name
+                    : $"{runtime.Endpoint.Name} · {runtime.Endpoint.Model}";
+
+                using MuxTuiApp app = new MuxTuiApp(new ConsoleBackend(), jobManager, title, effectivePolicy);
+                using CancellationTokenSource cts = new CancellationTokenSource();
+                app.RunAsync(cts.Token).GetAwaiter().GetResult();
+                return 0;
+            }
+            finally
+            {
+                jobManager.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+        }
+
+        /// <summary>
+        /// Builds the baseline agent-loop options cloned for each interactive job.
+        /// </summary>
+        private static AgentLoopOptions BuildInteractiveTemplate(
+            ResolvedRuntime runtime,
+            InteractiveSettings settings,
+            ApprovalPolicyEnum approvalPolicy,
+            Func<ToolCall, Task<string>>? promptFunc)
+        {
+            return new AgentLoopOptions(runtime.Endpoint)
+            {
+                MuxSettings = runtime.MuxSettings,
+                IgnoreCertErrors = runtime.MuxSettings.IgnoreCertErrors,
+                SystemPrompt = runtime.SystemPrompt,
+                ApprovalPolicy = approvalPolicy,
+                PromptUserFunc = promptFunc,
+                WorkingDirectory = runtime.WorkingDirectory,
+                MaxIterations = runtime.MaxAgentIterations,
+                TokenEstimationRatio = runtime.MuxSettings.TokenEstimationRatio,
+                ContextWindowSafetyMarginPercent = runtime.MuxSettings.ContextWindowSafetyMarginPercent,
+                AutoCompactEnabled = runtime.MuxSettings.AutoCompactEnabled,
+                ContextWarningThresholdPercent = runtime.MuxSettings.ContextWarningThresholdPercent,
+                CompactionStrategy = runtime.MuxSettings.CompactionStrategy,
+                CompactionPreserveTurns = runtime.MuxSettings.CompactionPreserveTurns,
+                CommandName = runtime.Metadata.CommandName,
+                ConfigDirectory = runtime.Metadata.ConfigDirectory,
+                EndpointSelectionSource = runtime.Metadata.EndpointSelectionSource,
+                CliOverridesApplied = runtime.Metadata.CliOverridesApplied,
+                McpSupported = runtime.Capabilities.McpSupported,
+                McpConfigured = runtime.Capabilities.McpConfigured,
+                McpServerCount = runtime.Capabilities.McpServerCount,
+                BuiltInToolCount = runtime.Capabilities.BuiltInToolCount,
+                EffectiveToolCount = runtime.Capabilities.EffectiveToolCount,
+                Verbose = settings.Verbose
+            };
         }
 
         #endregion

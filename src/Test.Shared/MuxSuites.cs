@@ -83,7 +83,10 @@ namespace Test.Shared
                     WebSearchServiceSuite.Create(),
 
                     // Mux.Core / Sessions persistence suite (M4).
-                    SessionStoreSuite.Create()
+                    SessionStoreSuite.Create(),
+
+                    // Mux.Cli TUIKit interactive shell suite (M6).
+                    TuiShellSuite.Create()
                 };
             }
         }

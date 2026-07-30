@@ -710,7 +710,7 @@ Per `C:\code\agents\requirements\BACKEND_TEST_ARCHITECTURE.md` (Touchstone, runn
 
 ---
 
-## M6 — Cli shell: `MuxTuiApp` host + layout + command catalog (single job end-to-end)
+## M6 — Cli shell: `MuxTuiApp` host + layout + command catalog (single job end-to-end) ✅ DONE
 
 **Teardown (done — "teardown first" per owner).** The legacy interactive renderer is deleted:
 `InteractiveCommand(.Search)`, `InteractivePasteHeuristics`, `InputShortcut`, and the cursor/chrome
@@ -722,17 +722,19 @@ extracted to its own file (survives for M6). `Program.cs` default (interactive) 
 `ToolCallRenderer`, `Tool*Summary`, `CertificateWarningHint`, `ThinkingAnimation`) are **kept and
 green**. Doomed `LineBufferSuite` removed. Build warning-clean; console runner green both TFMs.
 
-**Remaining M6 (the TUIKit rebuild):**
-- [ ] `App/MuxTuiApp.cs` — owns `ConsoleBackend` + `TuiApplication`, builds the `Layout` (regions from §4.1: `menu`, `sidebar`, `transcript`, `composer`, `footer`), binds panes/widgets, registers keybindings, runs `RunAsync`. Implements `IAsyncDisposable`.
-- [ ] `Commands/CommandDescriptor.cs` — `{ Id, Title, Category, KeyBinding?, SlashAlias?, RunAsync }`.
-- [ ] `Commands/CommandCatalog.cs` — the single source of truth; palette, menu bar, function keys, and slash parser all resolve against it.
-- [ ] `Regions/TranscriptRegion.cs` — hosts the focused job's `Pane`; swap binding on focus change.
-- [ ] `Regions/ComposerRegion.cs` — TUIKit `TextEditor` host (behavior fleshed out in M9).
-- [ ] `Regions/FooterRegion.cs` — status line + f-key hint strip (content in M10).
-- [ ] Wire a **single** job end-to-end: type prompt → `JobManager.SubmitAsync` → project its `AgentEvent`s into the transcript pane (projector stub; full in M7).
-- [ ] `CtrlCPolicy` = double-tap-to-exit; `Esc` cancels the focused job.
-- [ ] **Tests** (`Test.Shared/Suites/TuiShellSuite.cs`, headless): app boots against `HeadlessBackend`; layout regions present at representative sizes; too-narrow collapses sidebar (not a block screen); submitting a prompt drives one job to completion and renders its final text (snapshot).
-- **Exit criteria:** a single prompt runs and renders end-to-end on TUIKit with no legacy renderer; headless snapshot stable.
+**Rebuild (done).** A lean, end-to-end shell — the full region set (sidebar/menu bar) lands in its own
+milestones (M8/M10) rather than as empty M6 stubs, per "build it right, not scaffolded":
+- [x] `App/MuxTuiApp.cs` — owns the injected `ITerminalBackend` (`ConsoleBackend` in prod, `HeadlessBackend` in tests) + `TuiApplication`, builds the `Layout` (`transcript` fill / `composer` 3-row / `footer` 1-row), binds the transcript+footer `Pane`s and the composer `TextEditor`, applies the command catalog, forwards `KeyReceived`, runs `RunAsync`. `IDisposable` (TUIKit host is sync-disposable; the `JobManager` it drives is `IAsyncDisposable` and owned by the caller).
+- [x] `App/CommandDescriptor.cs` — `{ Id, Title, Chord?, Handler }` (Category/SlashAlias added in M10 when the palette/slash router need them).
+- [x] `App/MuxCommandCatalog.cs` — the single source of truth; `ApplyTo(app)` registers ids + binds chords. Seeded with `mux.quit` (Ctrl+Q) and `mux.clear` (Ctrl+L); palette/menu/slash resolve against it in M10.
+- [x] `App/AgentEventProjector.cs` — projects a job's `AgentEvent` stream to the transcript pane: assistant text streams into a single line updated in place via `PaneLineHandle.Update`, tool proposed/completed and errors render as their own lines. (Full inline tool-status view + markdown/diff is M7.)
+- [x] Transcript / composer / footer as `Layout` regions with bound `Pane`/`TextEditor` (dedicated `Region*` classes are unnecessary at this size; folded into `MuxTuiApp`).
+- [x] Wire a **single** job end-to-end: `Enter` → `JobManager.SubmitAsync(prompt, policy, …)` → background projector → transcript. Composer clears on submit; empty/whitespace prompts are ignored.
+- [x] `CtrlCPolicy` = double-tap-to-exit; `Esc` cancels the focused job.
+- [x] **Approval (M6 interim):** no modal yet (that is M11). `Program.cs` translates the default `ask` policy to **`AutoSafe`** (read-only tools auto-run) with a **deny-stub `PromptUserFunc`** so mutating tools are denied with a visible transcript notice instead of silently auto-approved; `--yolo`/`auto`/`deny` pass through unchanged. Tracked as the M11 replacement point.
+- [x] `Program.cs` default path launches `MuxTuiApp` (stub removed); resolves runtime via `CommandRuntimeResolver.ResolveRuntime(settings, "interactive", supportsMcp:true, allowAskApproval:true)` and builds the `JobManager` template with `JobManager.CreateForAgentLoop`.
+- [x] **Tests** (`Test.Shared/Suites/TuiShellSuite.cs`, headless, 12 cases): boot renders header/footer; render emits output; typing accumulates in the composer; `Enter` submits + clears; empty/whitespace `Enter` no-ops; assistant text, tool proposed/completed, and error events project to the transcript; `Ctrl+L` clears; `Esc` cancels a running job; `Ctrl+Q` exits the run loop. Green on console (net8+net10) and both adapters (xUnit/NUnit).
+- **Exit criteria:** ✅ a single prompt runs and renders end-to-end on TUIKit with no legacy renderer; headless projection is deterministic (`DrainProjectorsAsync`) and asserted. Responsive collapse belongs to the sidebar (M8), not M6.
 
 ---
 
@@ -924,10 +926,26 @@ Styles: `dim/bold/italic/underline`, fg `cyan/green/red/yellow/grey/blue/grey15`
   validated (Windows/Linux/macOS) target, but it is not yet on nuget.org (latest is 0.2.0). The live
   `Mux.Cli` pin stays at 0.2.0 until 0.3.1 publishes to avoid a broken restore; then bump the
   `<PackageReference Include="TUIKit" Version="…"/>` and re-run the full test matrix on both TFMs.
-- [ ] **`Mux.Core` stderr-diagnostic sites (M5 finding).** `RetryHandler` and `WorkingDirectoryGuard`
-  write human-facing messages directly via `Console.Error.WriteLine` (using `ConsoleMessageStyler`),
-  which violates the "`Mux.Core` is `Console.*`-free" DoD. They predate the migration and write to
-  stderr only. Reroute through the engine's callback/event surface (`AgentLoopOptions.OnRetry` already
-  exists for the retry case) so the Cli owns the rendering — do this during the **M6** rebuild, and
-  update `CliCommandSuite.PrintCommandRuntimeFailure...` (which currently asserts the retry text in
-  captured stderr) to match the new path.
+- [ ] **`Mux.Core` stderr-diagnostic sites (M5 finding) — now urgent with the live TUI.** `RetryHandler`
+  and `WorkingDirectoryGuard` write human-facing messages directly via `Console.Error.WriteLine` (using
+  `ConsoleMessageStyler`), which violates the "`Mux.Core` is `Console.*`-free" DoD. With the M6 shell now
+  running on the TUIKit alt-screen, a stray write causes a one-frame flicker (retained-mode redraw
+  overwrites it next frame) rather than lasting corruption, but it is still wrong. Reroute through the
+  engine's callback/event surface (`AgentLoopOptions.OnRetry` already exists and is wired
+  `LlmClient → RetryHandler.onRetry`; the direct write is redundant with it) so the Cli owns rendering:
+  delete the `RetryHandler` write and wire `OnRetry` in `PrintCommand`/`ProbeCommand` to preserve their
+  stderr retry notices; drop the `WorkingDirectoryGuard` write (informational only). Update
+  `CliCommandSuite.PrintCommandRuntimeFailure...` (asserts retry text in captured stderr) to match. Being
+  done as the focused follow-up commit immediately after the M6 shell commit.
+
+**M6 approval decision (→ M11).** M6 has no interactive approval modal. Rather than let the default `ask`
+policy silently auto-approve every tool (`DefaultPromptUserFunc` returns `"y"`), `Program.RunInteractive`
+translates `ask` → `AutoSafe` (read-only tools auto-run) and installs a deny-stub `PromptUserFunc` so
+mutating tools are **denied with a visible transcript notice** until M11 wires `ApprovalModal`. `--yolo`
+/`--approval-policy auto` (AutoApprove) and `deny` pass through unchanged. **M11 replaces the deny-stub
+with the real escalation modal** and should remove this translation.
+
+**MCP in interactive (→ later).** `ResolveRuntime(..., supportsMcp:true)` reports MCP capability counts,
+but the M6 shell does not yet start MCP servers or wire an `ExternalToolExecutor` into the `JobManager`
+template — built-in tools work; MCP tool execution is a follow-up (fold into M11's MCP endpoint modal or
+earlier if needed).
