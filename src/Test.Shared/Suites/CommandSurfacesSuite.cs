@@ -14,9 +14,9 @@ namespace Test.Shared.Suites
     using TUIKit.Widgets;
 
     /// <summary>
-    /// Touchstone suite for the M10 command surfaces: the slash router, the fuzzy command palette, key
-    /// bindings, and the catalog-derived menu. Verifies that the four surfaces all resolve against the
-    /// single <see cref="MuxCommandCatalog"/> and converge on identical command handlers.
+    /// Touchstone suite for the M10 command surfaces: the slash router, key bindings, and the
+    /// catalog-derived menu. Verifies that the surfaces all resolve against the single
+    /// <see cref="MuxCommandCatalog"/> and converge on identical command handlers.
     /// </summary>
     public static class CommandSurfacesSuite
     {
@@ -30,7 +30,7 @@ namespace Test.Shared.Suites
         {
             return new TestSuiteDescriptor(
                 SuiteId,
-                "Slash router, command palette, key bindings, and menu convergence",
+                "Slash router, key bindings, and menu convergence",
                 new List<TestCaseDescriptor>
                 {
                     // ---- Slash parser (unit) ----
@@ -77,58 +77,6 @@ namespace Test.Shared.Suites
                             Feed(backend, app, "/clear" + "\r");
                             MuxAssert.AreEqual(0, app.TranscriptSnapshot().Count, "cleared via slash");
                             MuxAssert.AreEqual(0, manager.Jobs.Count, "no job created");
-                        }
-                    }),
-
-                    // ---- Palette ----
-                    Case("PaletteFuzzySelectsCommand", "Typing in the palette fuzzy-selects a command", async (CancellationToken ct) =>
-                    {
-                        await using (JobManager manager = NewManager())
-                        using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager))
-                        {
-                            await Task.CompletedTask.ConfigureAwait(false);
-                            Feed(backend, app, new byte[] { 0x0b }); // Ctrl+K
-                            MuxAssert.IsTrue(app.IsPaletteActive, "palette open");
-
-                            Feed(backend, app, "clear");
-                            MuxAssert.AreEqual("mux.clear", app.PaletteSelectionId, "selected clear");
-                            MuxAssert.IsTrue(app.PaletteMatchCount >= 1, "at least one match");
-                        }
-                    }),
-
-                    Case("PaletteRunInvokesSelectedCommand", "Enter runs the palette's selection", async (CancellationToken ct) =>
-                    {
-                        await using (JobManager manager = NewManager())
-                        using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager))
-                        {
-                            await Task.CompletedTask.ConfigureAwait(false);
-                            MuxAssert.IsTrue(app.TranscriptSnapshot().Count > 0, "seeded");
-
-                            Feed(backend, app, new byte[] { 0x0b }); // Ctrl+K
-                            Feed(backend, app, "clear");
-                            Feed(backend, app, "\r"); // run
-
-                            MuxAssert.IsFalse(app.IsPaletteActive, "palette closed");
-                            MuxAssert.AreEqual(0, app.TranscriptSnapshot().Count, "cleared via palette");
-                        }
-                    }),
-
-                    Case("PaletteEscapeClosesWithoutRunning", "Escape closes the palette without running", async (CancellationToken ct) =>
-                    {
-                        await using (JobManager manager = NewManager())
-                        using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager))
-                        {
-                            await Task.CompletedTask.ConfigureAwait(false);
-                            int before = app.TranscriptSnapshot().Count;
-
-                            Feed(backend, app, new byte[] { 0x0b }); // Ctrl+K
-                            Feed(backend, app, "clear");
-                            backend.FeedInput(new byte[] { 0x1b }); // Escape
-                            app.PumpInputOnce();
-                            app.PumpInputOnce();
-
-                            MuxAssert.IsFalse(app.IsPaletteActive, "palette closed");
-                            MuxAssert.AreEqual(before, app.TranscriptSnapshot().Count, "nothing cleared");
                         }
                     }),
 
@@ -182,7 +130,7 @@ namespace Test.Shared.Suites
                     }),
 
                     // ---- Convergence ----
-                    Case("FourSurfacesConvergeOnSameCommand", "Slash, palette, keybinding, and menu resolve to one command", async (CancellationToken ct) =>
+                    Case("ThreeSurfacesConvergeOnSameCommand", "Slash, keybinding, and menu resolve to one command", async (CancellationToken ct) =>
                     {
                         await using (JobManager manager = NewManager())
                         using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager))
@@ -198,15 +146,10 @@ namespace Test.Shared.Suites
                             SlashCommandParser parser = new SlashCommandParser(app.Catalog);
                             CommandDescriptor? slashCommand = parser.Resolve("/clear");
 
-                            Feed(backend, app, new byte[] { 0x0b });
-                            Feed(backend, app, "clear");
-                            string? paletteId = app.PaletteSelectionId;
-
                             MenuItem? menuItem = FindItem(MenuBarBuilder.BuildMenus(app.Catalog), "Clear transcript");
 
                             MuxAssert.AreEqual("mux.clear", keyCommand?.Id, "keybinding -> clear");
                             MuxAssert.AreEqual("mux.clear", slashCommand?.Id, "slash -> clear");
-                            MuxAssert.AreEqual("mux.clear", paletteId, "palette -> clear");
                             MuxAssert.IsNotNull(menuItem, "menu -> clear item");
                             // The menu item's action is the very same delegate the command carries.
                             MuxAssert.IsTrue(ReferenceEquals(menuItem!.Action, keyCommand!.Handler), "menu shares the command handler");

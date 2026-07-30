@@ -13,8 +13,8 @@ namespace Test.Shared.Suites
     using TUIKit.Terminal;
 
     /// <summary>
-    /// Touchstone suite for M14 polish: theme cycling, density toggle, mouse-capture toggle, and resize
-    /// repaint. Positive, command-path, determinism, and idempotence cases.
+    /// Touchstone suite for M14 polish: theme cycling, mouse-capture toggle, and resize repaint.
+    /// Positive, command-path, determinism, and idempotence cases.
     /// </summary>
     public static class PolishSuite
     {
@@ -29,7 +29,7 @@ namespace Test.Shared.Suites
         {
             return new TestSuiteDescriptor(
                 SuiteId,
-                "Theme, density, mouse, and resize polish",
+                "Theme, mouse, and resize polish",
                 new List<TestCaseDescriptor>
                 {
                     Case("ThemeCyclesAndWraps", "Cycling the theme advances and wraps back", async (CancellationToken ct) =>
@@ -48,15 +48,29 @@ namespace Test.Shared.Suites
                         }
                     }),
 
-                    Case("ThemeCycleViaSlash", "The /theme command changes the theme", async (CancellationToken ct) =>
+                    Case("ThemeSelectorOpensViaSlash", "The /theme command opens the theme selector", async (CancellationToken ct) =>
                     {
                         await using (JobManager manager = NewManager())
                         using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager))
                         {
                             await Task.CompletedTask.ConfigureAwait(false);
-                            string start = app.ThemeName;
                             Feed(backend, app, "/theme" + "\r");
-                            MuxAssert.IsFalse(string.Equals(start, app.ThemeName, StringComparison.Ordinal), "theme changed via slash");
+                            MuxAssert.IsTrue(app.IsModalActive, "theme selector modal open");
+                        }
+                    }),
+
+                    Case("ApplyThemeConformsAndWraps", "Applying a theme by index switches and wraps", async (CancellationToken ct) =>
+                    {
+                        await using (JobManager manager = NewManager())
+                        using (MuxTuiApp app = NewApp(out _, manager))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            string start = app.ThemeName; // "mux" default at index 0
+                            app.ApplyTheme(1);
+                            MuxAssert.IsFalse(string.Equals(start, app.ThemeName, StringComparison.Ordinal), "theme changed");
+                            MuxAssert.Contains("mux", app.RenderRegion("transcript", 80, 10), "renders under new theme");
+                            app.ApplyTheme(0);
+                            MuxAssert.AreEqual(start, app.ThemeName, "back to default at index 0");
                         }
                     }),
 
@@ -70,32 +84,6 @@ namespace Test.Shared.Suites
                             string frame = app.RenderRegion("transcript", 80, 10);
                             MuxAssert.Contains("mux", frame, "transcript still renders");
                             MuxAssert.AreEqual(frame, app.RenderRegion("transcript", 80, 10), "deterministic after theme switch");
-                        }
-                    }),
-
-                    Case("DensityTogglesAndRestores", "Toggling density flips and restores compact state", async (CancellationToken ct) =>
-                    {
-                        await using (JobManager manager = NewManager())
-                        using (MuxTuiApp app = NewApp(out _, manager))
-                        {
-                            await Task.CompletedTask.ConfigureAwait(false);
-                            MuxAssert.IsFalse(app.IsCompact, "comfortable by default");
-                            app.ToggleDensity();
-                            MuxAssert.IsTrue(app.IsCompact, "compact after toggle");
-                            MuxAssert.Contains("mux", app.RenderRegion("transcript", 80, 10), "renders while compact");
-                            app.ToggleDensity();
-                            MuxAssert.IsFalse(app.IsCompact, "comfortable after second toggle");
-                        }
-                    }),
-
-                    Case("DensityViaSlash", "The /density command toggles compact", async (CancellationToken ct) =>
-                    {
-                        await using (JobManager manager = NewManager())
-                        using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager))
-                        {
-                            await Task.CompletedTask.ConfigureAwait(false);
-                            Feed(backend, app, "/density" + "\r");
-                            MuxAssert.IsTrue(app.IsCompact, "compact via slash");
                         }
                     }),
 

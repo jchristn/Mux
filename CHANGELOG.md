@@ -30,9 +30,9 @@ unaffected.
   submits (opening the chooser when a job is active — start a new job, append to the focused job, or
   remember the choice), `Alt+Enter`/`Shift+Enter` insert a newline, `Ctrl+Enter` bypasses the chooser.
   The default is read from `settings.json` (`defaultEnqueueBehavior`).
-- Command surfaces over a single catalog — a `/`-slash router, a `Ctrl+K` fuzzy palette, key bindings,
-  and a catalog-derived menu — all resolving to the same handlers; `/help` lists commands and keys, and
-  the footer shows live `jobs/focused` status.
+- Command surfaces over a single catalog — a `/`-slash router, key bindings, and a catalog-derived menu
+  (`F1`) — all resolving to the same handlers; `/help` lists commands and keys, and the footer shows
+  live `jobs/focused` status.
 - Interactive tool approval: read-only tools run automatically and mutating tools prompt with an
   approval modal (Approve once / Deny / Always this session). A jobs modal (`F2` / `/jobs`) lists jobs
   and focuses the one you pick.
@@ -40,8 +40,9 @@ unaffected.
   `/save`; `/sessions` browses and resumes saved sessions. Restored sessions render completed
   conversations read-only and mark interrupted jobs as re-run-required (never auto-running them), and
   prompt history survives a restart.
-- Appearance and input: cycle the theme (`/theme`), toggle compact density (`/density`), and toggle
-  mouse capture (`F12` / `/mouse`).
+- Appearance and input: pick a theme from a selector (`/theme`) — the whole UI, including the panes
+  behind the text, conforms to the chosen theme — open the endpoints / models picker with `Ctrl+E`, and
+  toggle mouse capture (`F12` / `/mouse`), which is on by default.
 - Built-in `web_retrieve` tool for fetching rendered URL content through headless Playwright Chromium or
   Firefox, with browser installation handled on demand.
 - External web search through the `web_search` tool, configurable with Tavily and You.com providers from

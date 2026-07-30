@@ -117,21 +117,26 @@ concurrently (up to `maxConcurrency`) and renders into its own transcript.
 | `Esc` | Cancel the focused job (or dismiss a modal/chooser) |
 | `Ctrl+N` / `Alt+1`…`Alt+9` | Focus the next job / the Nth job |
 | `Ctrl+B` | Toggle the sidebar (auto-collapses below 100 columns) |
-| `Ctrl+K` | Command palette (fuzzy) |
+| `Ctrl+E` | Open the endpoints / models picker |
 | `Ctrl+L` | Clear the transcript |
 | `Ctrl+S` | Save the session |
-| `F1` / `F2` / `F12` | Help · Jobs · toggle mouse capture |
+| `F1` | Command menu |
+| `F12` | Toggle mouse capture (on by default; toggle off to hand the mouse back for native selection) |
 | `Ctrl+Q` / double `Ctrl+C` | Quit |
 
 ### Slash commands
 
 Type a leading `/` in the composer to run a command instead of submitting a prompt. Every command is
-also reachable by key, the palette, and the menu (one catalog, four surfaces):
-`/endpoint` (`/model`), `/help` (`/?`), `/clear`, `/next`, `/sidebar`, `/commands`, `/jobs`, `/save`,
-`/sessions`, `/theme`, `/density`, `/mouse`, `/quit` (`/exit`).
+also reachable by key and the menu (one catalog, three surfaces):
+`/endpoint` (`/model`), `/help` (`/?`), `/clear`, `/sidebar`, `/save`, `/sessions`, `/theme`,
+`/mouse`, `/menu`, `/quit` (`/exit`).
 
-`/help` (`F1`) opens the keybinding/command reference in a modal. On startup mux shows a splash box, and
-quitting (`Ctrl+Q` / `/quit`) asks for confirmation.
+`/theme` opens a theme selector (pick a theme and apply it); the whole UI — including the panes behind
+the text — conforms to the chosen theme.
+
+`/help` (`/?`) opens the keybinding/command reference in a modal; `F1` opens the command menu (the same
+catalog as a pick-and-run list). On startup mux shows a splash box, and quitting (`Ctrl+Q` / `/quit`)
+asks for confirmation.
 
 ### Choosing, adding, and removing models/endpoints
 

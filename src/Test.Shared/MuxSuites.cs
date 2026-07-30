@@ -94,7 +94,7 @@ namespace Test.Shared
                     // Mux.Cli composer + prompt history + submit chooser suite (M9).
                     ComposerSuite.Create(),
 
-                    // Mux.Cli command surfaces: slash / palette / keybinding / menu (M10).
+                    // Mux.Cli command surfaces: slash / keybinding / menu (M10).
                     CommandSurfacesSuite.Create(),
 
                     // Mux.Cli modals: approval + jobs (M11).
@@ -106,7 +106,7 @@ namespace Test.Shared
                     // Mux.Cli headless frame rendering + golden snapshots (M13).
                     FrameSnapshotSuite.Create(),
 
-                    // Mux.Cli polish: theme / density / mouse / resize (M14).
+                    // Mux.Cli polish: theme / mouse / resize (M14).
                     PolishSuite.Create(),
 
                     // Mux.Cli interactive endpoint/model management (post-migration restoration).

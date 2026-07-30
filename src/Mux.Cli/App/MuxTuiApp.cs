@@ -41,7 +41,7 @@ namespace Mux.Cli.App
         private const string PromptText = "mux> ";
         private const int SidebarWidth = 28;
         private const int CollapseThreshold = 100;
-        private const string FooterHint = "^Q quit · ^L clear · ^K palette · F1 menu · Shift+Enter newline · Enter send · Esc cancel";
+        private const string FooterHint = "^Q quit · ^L clear · F1 menu · Shift+Enter newline · Enter send · Esc cancel";
 
         private readonly ITerminalBackend _Backend;
         private readonly TuiApplication _App;
@@ -71,8 +71,6 @@ namespace Mux.Cli.App
         private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
         private readonly PromptHistory _PromptHistory = new PromptHistory();
         private readonly MenuBar _MenuBar;
-        private CommandPalette? _Palette;
-        private bool _PaletteActive;
         private Job? _ActiveJob;
         private bool _TurnInFlight;
         private readonly object _ThinkingSync = new object();
@@ -83,7 +81,6 @@ namespace Mux.Cli.App
         private Func<string, bool>? _SlashHandler;
         private bool _ManualCollapsed;
         private bool _CollapsedApplied;
-        private bool _Compact;
         private int _ThemeIndex;
         private bool _Disposed;
 
@@ -129,6 +126,7 @@ namespace Mux.Cli.App
 
             _App = new TuiApplication(backend);
             _App.CtrlCPolicy = CtrlCPolicy.DoubleTapToExit;
+            _App.MouseCaptureEnabled = true; // always on by default; F12 hands the mouse back for native text selection
             _App.Theme = MuxTheme; // no background color; the terminal's own background shows through
 
             BuildLayouts(1);
@@ -148,16 +146,18 @@ namespace Mux.Cli.App
             _App.BindPane(FooterRegion, _Footer);
             _App.Bind(ComposerRegion, _Composer);
 
+            // Fill every pane's blank cells with the theme background so the rectangles conform to the
+            // active theme (the mux default is transparent, so this is a no-op until a theme is selected).
+            ApplyPaneBackgrounds(MuxTheme);
+
             _Catalog = new MuxCommandCatalog();
             _Catalog.Add(new CommandDescriptor("mux.quit", "Quit", "ctrl+q", RequestQuit, "Session", new[] { "quit", "exit", "q" }));
-            _Catalog.Add(new CommandDescriptor("mux.endpoint", "Endpoints / models", null, OpenEndpointModal, "Model", new[] { "endpoint", "endpoints", "model", "models" }));
+            _Catalog.Add(new CommandDescriptor("mux.endpoint", "Endpoints / models", "ctrl+e", OpenEndpointModal, "Model", new[] { "endpoint", "endpoints", "model", "models" }));
             _Catalog.Add(new CommandDescriptor("mux.clear", "Clear transcript", "ctrl+l", ClearTranscript, "View", new[] { "clear" }));
             _Catalog.Add(new CommandDescriptor("mux.sidebar.toggle", "Toggle sidebar", "ctrl+b", ToggleSidebar, "View", new[] { "sidebar" }));
-            _Catalog.Add(new CommandDescriptor("mux.palette", "Command palette", "ctrl+k", OpenPalette, "Session", new[] { "commands", "palette" }));
             _Catalog.Add(new CommandDescriptor("mux.save", "Save session", "ctrl+s", SaveSession, "Session", new[] { "save" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
-            _Catalog.Add(new CommandDescriptor("mux.theme", "Cycle theme", null, CycleTheme, "View", new[] { "theme" }));
-            _Catalog.Add(new CommandDescriptor("mux.density", "Toggle density", null, ToggleDensity, "View", new[] { "density" }));
+            _Catalog.Add(new CommandDescriptor("mux.theme", "Theme…", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
             _Catalog.Add(new CommandDescriptor("mux.menu", "Command menu", "f1", OpenCommandMenu, "Help", new[] { "menu" }));
             _Catalog.Add(new CommandDescriptor("mux.help", "Help (keymap)", null, ShowHelp, "Help", new[] { "help", "?" }));
@@ -317,20 +317,6 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
-        /// Whether the compact density is active (shorter composer).
-        /// </summary>
-        public bool IsCompact
-        {
-            get
-            {
-                lock (_Sync)
-                {
-                    return _Compact;
-                }
-            }
-        }
-
-        /// <summary>
         /// Handler invoked for a composer submission that begins with <c>/</c>. Returns true when the
         /// input was handled as a command (so it is not submitted as a prompt).
         /// </summary>
@@ -347,36 +333,6 @@ namespace Mux.Cli.App
         public MenuBar MenuBar
         {
             get => _MenuBar;
-        }
-
-        /// <summary>
-        /// Whether the command palette is currently open.
-        /// </summary>
-        public bool IsPaletteActive
-        {
-            get
-            {
-                lock (_Sync)
-                {
-                    return _PaletteActive;
-                }
-            }
-        }
-
-        /// <summary>
-        /// The number of catalog entries matching the palette's current query, or zero when closed.
-        /// </summary>
-        public int PaletteMatchCount
-        {
-            get => _Palette?.MatchCount ?? 0;
-        }
-
-        /// <summary>
-        /// The command id currently selected in the palette, or null when closed or unmatched.
-        /// </summary>
-        public string? PaletteSelectionId
-        {
-            get => _Palette?.Selected?.Id;
         }
 
         /// <summary>
@@ -476,29 +432,95 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
-        /// Cycles the active theme (Dark → Light → HighContrast → …).
+        /// Opens a modal theme selector. The chosen theme is applied to the whole UI — text and the
+        /// rectangles behind it — via <see cref="ApplyTheme"/>.
         /// </summary>
-        public void CycleTheme()
+        public void OpenThemeSelector()
         {
-            lock (_Sync)
+            List<string> labels = new List<string>();
+            for (int i = 0; i < _Themes.Length; i++)
             {
-                _ThemeIndex = (_ThemeIndex + 1) % _Themes.Length;
-                _App.Theme = _Themes[_ThemeIndex];
+                string marker = i == _ThemeIndex ? "● " : "  ";
+                labels.Add(marker + ThemeLabel(_Themes[i]));
+            }
+
+            SelectModal modal = new SelectModal("Theme — ↑↓ then Enter to apply", labels);
+            _App.Modals.Push(modal);
+            _ = ResolveThemeSelectorAsync(modal);
+        }
+
+        private async Task ResolveThemeSelectorAsync(SelectModal modal)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            if (result is int index && index >= 0 && index < _Themes.Length)
+            {
+                ApplyTheme(index);
             }
         }
 
         /// <summary>
-        /// Toggles between comfortable and compact density (compact uses a shorter composer). Rebuilds
-        /// and re-applies the layouts.
+        /// Applies the theme at the given index to the application and to every bound pane, so the whole
+        /// UI conforms to the selected theme (the panes' blank cells inherit the theme background and any
+        /// foreground-only text composes over it). The index wraps.
         /// </summary>
-        public void ToggleDensity()
+        /// <param name="index">The index into the theme preset list; wraps if out of range.</param>
+        public void ApplyTheme(int index)
         {
+            Theme theme;
             lock (_Sync)
             {
-                _Compact = !_Compact;
-                BuildLayouts(_Compact ? 1 : 2);
-                _App.Layout = _CollapsedApplied ? _CollapsedLayout : _ExpandedLayout;
+                _ThemeIndex = ((index % _Themes.Length) + _Themes.Length) % _Themes.Length;
+                theme = _Themes[_ThemeIndex];
+                _App.Theme = theme;
+                ApplyPaneBackgrounds(theme);
             }
+
+            // Rewrite the panes so the new background repaints immediately rather than on the next content
+            // change.
+            RepaintPromptLabel();
+            RefreshSidebar();
+            RefreshFooter();
+        }
+
+        /// <summary>
+        /// Advances to the next theme preset. Retained for programmatic and test use; the interactive
+        /// surface is the modal selector (<see cref="OpenThemeSelector"/>).
+        /// </summary>
+        public void CycleTheme()
+        {
+            int next;
+            lock (_Sync)
+            {
+                next = _ThemeIndex + 1;
+            }
+
+            ApplyTheme(next);
+        }
+
+        private void ApplyPaneBackgrounds(Theme theme)
+        {
+            CellStyle background = theme.Text;
+            _Conversation.Background = background;
+            _SidebarPane.Background = background;
+            _PromptLabel.Background = background;
+            _Footer.Background = background;
+        }
+
+        private void RepaintPromptLabel()
+        {
+            _PromptLabel.Clear();
+            _PromptLabel.WriteLine(Text.From(PromptText).Green().Bold());
+        }
+
+        private static string ThemeLabel(Theme theme)
+        {
+            string name = theme.Name ?? string.Empty;
+            if (name.Length == 0)
+            {
+                return "theme";
+            }
+
+            return char.ToUpperInvariant(name[0]) + name.Substring(1);
         }
 
         /// <summary>
@@ -829,13 +851,6 @@ namespace Mux.Cli.App
 
         private bool OnKeyFilter(KeyEvent key)
         {
-            // While the command palette is open it captures every key.
-            if (_PaletteActive)
-            {
-                HandlePaletteKey(key);
-                return true;
-            }
-
             // Plain Enter (no modifiers) submits.
             if (key.Code == KeyCode.Enter && key.Modifiers == KeyModifiers.None)
             {
@@ -879,9 +894,9 @@ namespace Mux.Cli.App
                 {
                     case 'q': RequestQuit(); return true;
                     case 'l': ClearTranscript(); return true;
-                    case 'k': OpenPalette(); return true;
                     case 'b': ToggleSidebar(); return true;
                     case 's': SaveSession(); return true;
+                    case 'e': OpenEndpointModal(); return true;
                 }
 
                 // Swallow any other Ctrl+key so control codes never land in the composer as text.
@@ -1383,54 +1398,6 @@ namespace Mux.Cli.App
             }
         }
 
-        private void OpenPalette()
-        {
-            _Palette = new CommandPalette(_Catalog);
-            lock (_Sync)
-            {
-                _PaletteActive = true;
-            }
-
-            _App.Bind(TranscriptRegion, _Palette.Widget);
-            SetFooterHint("Palette — type to filter · Enter run · Esc cancel");
-        }
-
-        private void HandlePaletteKey(KeyEvent key)
-        {
-            if (key.Code == KeyCode.Escape)
-            {
-                ClosePalette();
-                return;
-            }
-
-            if (key.Code == KeyCode.Enter)
-            {
-                RunPaletteSelection();
-                return;
-            }
-
-            _Palette?.HandleKey(key);
-        }
-
-        private void RunPaletteSelection()
-        {
-            CommandDescriptor? command = _Palette?.Selected;
-            ClosePalette();
-            command?.Handler();
-        }
-
-        private void ClosePalette()
-        {
-            lock (_Sync)
-            {
-                _PaletteActive = false;
-            }
-
-            _App.BindPane(TranscriptRegion, _Conversation);
-            _Palette = null;
-            RefreshFooter();
-        }
-
         private void ShowHelp()
         {
             List<string> lines = new List<string>();
@@ -1690,11 +1657,6 @@ namespace Mux.Cli.App
 
         private void RefreshFooter()
         {
-            if (IsPaletteActive)
-            {
-                return;
-            }
-
             SetFooterHint(FooterHint);
         }
 
