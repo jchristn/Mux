@@ -107,7 +107,10 @@ namespace Test.Shared
                     PersistenceUxSuite.Create(),
 
                     // Mux.Cli headless frame rendering + golden snapshots (M13).
-                    FrameSnapshotSuite.Create()
+                    FrameSnapshotSuite.Create(),
+
+                    // Mux.Cli polish: theme / density / mouse / resize (M14).
+                    PolishSuite.Create()
                 };
             }
         }

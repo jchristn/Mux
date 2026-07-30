@@ -1004,14 +1004,32 @@ suites (M2), since the fake UI runners bypass the real tool/lease path.
 
 ---
 
-## M14 — Polish
+## M14 — Polish ✅ DONE (core)
 
-- [ ] `Rendering/MuxTheme.cs` — Mux theme (truecolor + graceful 256/16 quantization); theme picker in Settings/View.
-- [ ] Density setting (compact/comfortable) affecting padding + inline tool-detail expansion.
-- [ ] Mouse: click-to-focus panes/jobs, wheel scroll, clickable transcript links; `F12` toggle mouse capture.
-- [ ] Verify resize handling (TUIKit `SyncSize`) repaints correctly; sidebar breakpoint tuned.
-- [ ] **Tests:** headless cases for theme switch (no layout break), density toggle, and resize repaint.
-- **Exit criteria:** theming/density/mouse/resize verified; no snapshot breakage.
+- [x] Theme cycling (`mux.theme` / `/theme`, View) across TUIKit's `Dark` / `Light` / `HighContrast`
+  presets via `TuiApplication.Theme`; `ThemeName` exposed. Rendering stays stable and deterministic
+  across switches.
+- [x] Density setting (`mux.density` / `/density`, View): comfortable (3-row composer) vs compact
+  (2-row); `ToggleDensity` rebuilds both layouts (`BuildLayouts(composerHeight)`) and re-applies the
+  active one. `IsCompact` exposed.
+- [x] Mouse capture toggle (`mux.mouse` / `/mouse` / `F12`) via `TuiApplication.ToggleMouseCapture`;
+  `IsMouseCaptureEnabled` exposed.
+- [x] Resize repaint: the background resize monitor + `ApplyResponsiveLayout` collapse/restore around
+  the 100-col breakpoint is verified to repaint (renders at 40/70/120/140 cols without breakage).
+- [x] **Tests** (`Test.Shared/Suites/PolishSuite.cs`, 9 cases): theme cycle-and-wrap + `/theme` +
+  render-stable-and-deterministic-after-switch; density toggle-and-restore + `/density`; mouse toggle
+  (direct + `F12`) with restore-on-second-toggle (idempotence); renders at multiple widths; resize
+  drives responsive collapse and repaints. Green on the console runner (net8+net10) and both adapters.
+- **Exit criteria:** ✅ theming / density / mouse / resize verified headlessly; no snapshot breakage.
+
+**Deferred from M14 (with rationale):**
+- **Bespoke `MuxTheme`** (truecolor brand palette + explicit 256/16 quantization) — the presets cover the
+  functional need; a custom-palette theme is cosmetic and can be added as a fourth entry in the cycle.
+- **Mouse click-to-focus / wheel scroll / clickable transcript links** — need region hit-testing and
+  link extraction from the transcript; `F12` capture toggle and the `MouseReceived` plumbing are in
+  place, so this is an additive follow-up.
+- **Theme/density pickers inside the Settings modal** — land with the deferred `SettingsModal` (M11
+  follow-up #24); the commands already drive the same state a picker would.
 
 ---
 

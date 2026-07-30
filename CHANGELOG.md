@@ -45,6 +45,9 @@ All notable changes to mux are documented here.
   conversations read-only and mark interrupted jobs as re-run-required (never auto-running them), and
   prompt history survives a restart. Backed by a reusable `Mux.Core` snapshot builder and covered by
   `PersistenceUxSuite` (11 cases).
+- Appearance and input polish: cycle the theme (`/theme`, Dark/Light/HighContrast), toggle compact
+  density (`/density`), and toggle mouse capture (`F12` / `/mouse`); the layout repaints across the
+  responsive sidebar breakpoint on resize. Covered by `PolishSuite` (9 cases).
 - Interim interactive approval behavior pending the M11 approval modal: the default `ask` policy runs
   read-only tools automatically (`AutoSafe`) and denies mutating tools with a visible notice; pass
   `--yolo` / `--approval-policy auto` to auto-approve, or `deny` to block all tools.

@@ -16,6 +16,7 @@ namespace Mux.Cli.App
     using TUIKit.Modals;
     using TUIKit.Terminal;
     using TUIKit.Testing;
+    using TUIKit.Theming;
     using TUIKit.Widgets;
 
     /// <summary>
@@ -52,8 +53,8 @@ namespace Mux.Cli.App
         private readonly TextEditor _Composer;
         private readonly SidebarView _Sidebar;
         private readonly MuxCommandCatalog _Catalog;
-        private readonly Layout _ExpandedLayout;
-        private readonly Layout _CollapsedLayout;
+        private Layout _ExpandedLayout = null!;
+        private Layout _CollapsedLayout = null!;
         private readonly Dictionary<string, Pane> _JobPanes = new Dictionary<string, Pane>(StringComparer.Ordinal);
         private readonly List<string> _JobOrder = new List<string>();
         private readonly List<Task> _ProjectorTasks = new List<Task>();
@@ -75,7 +76,11 @@ namespace Mux.Cli.App
         private string? _PendingPrompt;
         private bool _ManualCollapsed;
         private bool _CollapsedApplied;
+        private bool _Compact;
+        private int _ThemeIndex;
         private bool _Disposed;
+
+        private static readonly Theme[] _Themes = { Theme.Dark, Theme.Light, Theme.HighContrast };
 
         #endregion
 
@@ -112,18 +117,7 @@ namespace Mux.Cli.App
             _App = new TuiApplication(backend);
             _App.CtrlCPolicy = CtrlCPolicy.DoubleTapToExit;
 
-            _ExpandedLayout = Layout.Create()
-                .Add(SidebarRegion, r => r.LeftAnchored(0, SidebarWidth).FillHeight(0, 4).WithPadding(0))
-                .Add(TranscriptRegion, r => r.FillWidth(SidebarWidth, 0).FillHeight(0, 4).WithPadding(0))
-                .Add(ComposerRegion, r => r.FillWidth().BottomAnchored(1, 3).WithPadding(0))
-                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(0, 1).WithPadding(0))
-                .Build();
-
-            _CollapsedLayout = Layout.Create()
-                .Add(TranscriptRegion, r => r.FillWidth().FillHeight(0, 4).WithPadding(0))
-                .Add(ComposerRegion, r => r.FillWidth().BottomAnchored(1, 3).WithPadding(0))
-                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(0, 1).WithPadding(0))
-                .Build();
+            BuildLayouts(3);
 
             _HomePane = new Pane("home");
             _SidebarPane = new Pane(SidebarRegion);
@@ -149,6 +143,9 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.jobs", "Jobs", "f2", OpenJobsModal, "Jobs", new[] { "jobs" }));
             _Catalog.Add(new CommandDescriptor("mux.save", "Save session", "ctrl+s", SaveSession, "Session", new[] { "save" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
+            _Catalog.Add(new CommandDescriptor("mux.theme", "Cycle theme", null, CycleTheme, "View", new[] { "theme" }));
+            _Catalog.Add(new CommandDescriptor("mux.density", "Toggle density", null, ToggleDensity, "View", new[] { "density" }));
+            _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
             _Catalog.Add(new CommandDescriptor("mux.help", "Help", "f1", ShowHelp, "Help", new[] { "help", "?" }));
             _Catalog.ApplyTo(_App);
             _MenuBar = MenuBarBuilder.Build(_Catalog);
@@ -239,6 +236,36 @@ namespace Mux.Cli.App
                 lock (_Sync)
                 {
                     return _CollapsedApplied;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The active theme's name (e.g. "Dark", "Light", "HighContrast").
+        /// </summary>
+        public string ThemeName
+        {
+            get => _App.Theme.Name;
+        }
+
+        /// <summary>
+        /// Whether mouse capture is currently enabled.
+        /// </summary>
+        public bool IsMouseCaptureEnabled
+        {
+            get => _App.MouseCaptureEnabled;
+        }
+
+        /// <summary>
+        /// Whether the compact density is active (shorter composer).
+        /// </summary>
+        public bool IsCompact
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _Compact;
                 }
             }
         }
@@ -478,6 +505,40 @@ namespace Mux.Cli.App
             }
 
             return target != null && FocusJob(target);
+        }
+
+        /// <summary>
+        /// Cycles the active theme (Dark → Light → HighContrast → …).
+        /// </summary>
+        public void CycleTheme()
+        {
+            lock (_Sync)
+            {
+                _ThemeIndex = (_ThemeIndex + 1) % _Themes.Length;
+                _App.Theme = _Themes[_ThemeIndex];
+            }
+        }
+
+        /// <summary>
+        /// Toggles between comfortable and compact density (compact uses a shorter composer). Rebuilds
+        /// and re-applies the layouts.
+        /// </summary>
+        public void ToggleDensity()
+        {
+            lock (_Sync)
+            {
+                _Compact = !_Compact;
+                BuildLayouts(_Compact ? 2 : 3);
+                _App.Layout = _CollapsedApplied ? _CollapsedLayout : _ExpandedLayout;
+            }
+        }
+
+        /// <summary>
+        /// Toggles terminal mouse capture.
+        /// </summary>
+        public void ToggleMouseCapture()
+        {
+            _App.ToggleMouseCapture();
         }
 
         /// <summary>
@@ -746,6 +807,23 @@ namespace Mux.Cli.App
         #endregion
 
         #region Private-Methods
+
+        private void BuildLayouts(int composerHeight)
+        {
+            int reserve = composerHeight + 1; // composer + 1-row footer
+            _ExpandedLayout = Layout.Create()
+                .Add(SidebarRegion, r => r.LeftAnchored(0, SidebarWidth).FillHeight(0, reserve).WithPadding(0))
+                .Add(TranscriptRegion, r => r.FillWidth(SidebarWidth, 0).FillHeight(0, reserve).WithPadding(0))
+                .Add(ComposerRegion, r => r.FillWidth().BottomAnchored(1, composerHeight).WithPadding(0))
+                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(0, 1).WithPadding(0))
+                .Build();
+
+            _CollapsedLayout = Layout.Create()
+                .Add(TranscriptRegion, r => r.FillWidth().FillHeight(0, reserve).WithPadding(0))
+                .Add(ComposerRegion, r => r.FillWidth().BottomAnchored(1, composerHeight).WithPadding(0))
+                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(0, 1).WithPadding(0))
+                .Build();
+        }
 
         private async Task MonitorResponsiveAsync(CancellationToken cancellationToken)
         {
