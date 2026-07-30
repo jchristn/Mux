@@ -72,6 +72,11 @@ namespace Test.Shared.Suites
                                 await WaitUntilAsync(() => switched != null, ct).ConfigureAwait(false);
                                 MuxAssert.AreEqual("beta", switched!.Name, "callback got beta");
                                 MuxAssert.AreEqual("beta", app.ActiveEndpointName, "active is beta");
+                                // The callback is wired to `template.Endpoint = endpoint`, so the full
+                                // endpoint (adapter + model), not just the display name, must propagate to
+                                // the runtime that builds each turn's LlmClient.
+                                MuxAssert.AreEqual(AdapterTypeEnum.Ollama, switched!.AdapterType, "runtime adapter switched to beta's");
+                                MuxAssert.AreEqual("m-b", switched!.Model, "runtime model switched to beta's");
                             }
                         })),
 

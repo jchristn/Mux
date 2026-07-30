@@ -1537,6 +1537,10 @@ namespace Mux.Cli.App
             if (result is EndpointConfig endpoint)
             {
                 SaveEndpoint(endpoint, isNew: true, previousName: null);
+
+                // Make the newly added endpoint active so the very next turn uses its adapter, URL, and
+                // model — otherwise a freshly added endpoint looks ignored until it is switched to.
+                SwitchEndpoint(endpoint);
             }
         }
 
@@ -1593,7 +1597,7 @@ namespace Mux.Cli.App
             {
                 SettingsLoader.SaveEndpoints(endpoints);
                 WriteNotice(isNew
-                    ? $"Saved endpoint {endpoint.Name}. Use /endpoint to switch to it."
+                    ? $"Saved endpoint {endpoint.Name}."
                     : $"Updated endpoint {endpoint.Name}.");
             }
             catch (Exception ex)
