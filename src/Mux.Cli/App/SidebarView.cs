@@ -46,9 +46,10 @@ namespace Mux.Cli.App
         /// <param name="jobs">The jobs to list, in display order. Must not be null.</param>
         /// <param name="focusedJobId">The id of the focused job, or null.</param>
         /// <param name="title">The session title shown in the header.</param>
-        /// <param name="sessionId">The session id shown in the header.</param>
+        /// <param name="endpointName">The active endpoint name shown in the header.</param>
+        /// <param name="model">The active model shown in the header.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="jobs"/> is null.</exception>
-        public void Refresh(IReadOnlyList<Job> jobs, string? focusedJobId, string title, string sessionId)
+        public void Refresh(IReadOnlyList<Job> jobs, string? focusedJobId, string title, string endpointName, string model)
         {
             if (jobs is null) throw new ArgumentNullException(nameof(jobs));
 
@@ -56,9 +57,14 @@ namespace Mux.Cli.App
             {
                 _Pane.Clear();
                 _Pane.WriteLine(Text.From(Fit(string.IsNullOrWhiteSpace(title) ? "mux" : title)).Cyan().Bold());
-                if (!string.IsNullOrWhiteSpace(sessionId))
+                if (!string.IsNullOrWhiteSpace(endpointName))
                 {
-                    _Pane.WriteLine(Text.From(Fit("session " + Shorten(sessionId, 8))).Dim());
+                    _Pane.WriteLine(Text.From(Fit(endpointName)).Dim());
+                }
+
+                if (!string.IsNullOrWhiteSpace(model))
+                {
+                    _Pane.WriteLine(Text.From(Fit(model)).Dim());
                 }
 
                 _Pane.WriteLine(Text.From(string.Empty));
@@ -108,11 +114,6 @@ namespace Mux.Cli.App
         {
             string value = text ?? string.Empty;
             return value.Length <= Width ? value : value.Substring(0, Width - 1) + "…";
-        }
-
-        private static string Shorten(string value, int length)
-        {
-            return value.Length <= length ? value : value.Substring(0, length);
         }
 
         #endregion

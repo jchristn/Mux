@@ -124,7 +124,7 @@ namespace Mux.Cli.App
             _App = new TuiApplication(backend);
             _App.CtrlCPolicy = CtrlCPolicy.DoubleTapToExit;
 
-            BuildLayouts(3);
+            BuildLayouts(4);
 
             _HomePane = new Pane("home");
             _SidebarPane = new Pane(SidebarRegion);
@@ -154,7 +154,8 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.theme", "Cycle theme", null, CycleTheme, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.density", "Toggle density", null, ToggleDensity, "View", new[] { "density" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
-            _Catalog.Add(new CommandDescriptor("mux.help", "Help", "f1", ShowHelp, "Help", new[] { "help", "?" }));
+            _Catalog.Add(new CommandDescriptor("mux.menu", "Command menu", "f1", OpenCommandMenu, "Help", new[] { "menu" }));
+            _Catalog.Add(new CommandDescriptor("mux.help", "Help (keymap)", null, ShowHelp, "Help", new[] { "help", "?" }));
             _Catalog.ApplyTo(_App);
             _MenuBar = MenuBarBuilder.Build(_Catalog);
             _SlashHandler = new SlashCommandParser(_Catalog).TryHandle;
@@ -555,7 +556,7 @@ namespace Mux.Cli.App
             lock (_Sync)
             {
                 _Compact = !_Compact;
-                BuildLayouts(_Compact ? 2 : 3);
+                BuildLayouts(_Compact ? 3 : 4);
                 _App.Layout = _CollapsedApplied ? _CollapsedLayout : _ExpandedLayout;
             }
         }
@@ -839,15 +840,15 @@ namespace Mux.Cli.App
         {
             int reserve = composerHeight + 1; // composer + 1-row footer
             _ExpandedLayout = Layout.Create()
-                .Add(SidebarRegion, r => r.LeftAnchored(0, SidebarWidth).FillHeight(0, reserve).WithPadding(0))
-                .Add(TranscriptRegion, r => r.FillWidth(SidebarWidth, 0).FillHeight(0, reserve).WithPadding(0))
-                .Add(ComposerRegion, r => r.FillWidth().BottomAnchored(1, composerHeight).WithPadding(0))
+                .Add(TranscriptRegion, r => r.FillWidth(0, SidebarWidth).FillHeight(0, reserve).WithBorder(BorderStyle.Rounded, "Workspace"))
+                .Add(SidebarRegion, r => r.RightAnchored(0, SidebarWidth).FillHeight(0, reserve).WithBorder(BorderStyle.Rounded, "Jobs"))
+                .Add(ComposerRegion, r => r.FillWidth().BottomAnchored(1, composerHeight).WithBorder(BorderStyle.Rounded, "mux ›"))
                 .Add(FooterRegion, r => r.FillWidth().BottomAnchored(0, 1).WithPadding(0))
                 .Build();
 
             _CollapsedLayout = Layout.Create()
-                .Add(TranscriptRegion, r => r.FillWidth().FillHeight(0, reserve).WithPadding(0))
-                .Add(ComposerRegion, r => r.FillWidth().BottomAnchored(1, composerHeight).WithPadding(0))
+                .Add(TranscriptRegion, r => r.FillWidth().FillHeight(0, reserve).WithBorder(BorderStyle.Rounded, "Workspace"))
+                .Add(ComposerRegion, r => r.FillWidth().BottomAnchored(1, composerHeight).WithBorder(BorderStyle.Rounded, "mux ›"))
                 .Add(FooterRegion, r => r.FillWidth().BottomAnchored(0, 1).WithPadding(0))
                 .Build();
         }
@@ -1352,6 +1353,42 @@ namespace Mux.Cli.App
             }
         }
 
+        private void OpenCommandMenu()
+        {
+            List<CommandDescriptor> commands = new List<CommandDescriptor>();
+            List<string> labels = new List<string>();
+            foreach (CommandDescriptor descriptor in _Catalog.Commands)
+            {
+                if (string.Equals(descriptor.Id, "mux.menu", StringComparison.Ordinal))
+                {
+                    continue; // don't list the menu inside itself
+                }
+
+                commands.Add(descriptor);
+                string keys = string.IsNullOrEmpty(descriptor.Chord) ? string.Empty : descriptor.Chord;
+                labels.Add($"{descriptor.Title,-22} {keys}");
+            }
+
+            if (commands.Count == 0)
+            {
+                return;
+            }
+
+            SelectModal modal = new SelectModal("Commands — ↑↓ then Enter to run", labels);
+            _App.Modals.Push(modal);
+            _ = ResolveCommandMenuAsync(modal, commands);
+        }
+
+        private async Task ResolveCommandMenuAsync(SelectModal modal, List<CommandDescriptor> commands)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            int index = result is int value ? value : -1;
+            if (index >= 0 && index < commands.Count)
+            {
+                commands[index].Handler();
+            }
+        }
+
         private void OpenJobsModal()
         {
             List<string> ids;
@@ -1708,12 +1745,16 @@ namespace Mux.Cli.App
         private void RefreshSidebar()
         {
             string? focused;
+            string endpointName;
+            string model;
             lock (_Sync)
             {
                 focused = _FocusedJobId;
+                endpointName = _EndpointName;
+                model = _Model;
             }
 
-            _Sidebar.Refresh(_JobManager.Jobs, focused, _Title, _JobManager.SessionId);
+            _Sidebar.Refresh(_JobManager.Jobs, focused, _Title, endpointName, model);
         }
 
         private void WriteHeader()

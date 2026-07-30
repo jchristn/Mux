@@ -25,7 +25,7 @@ namespace Mux.Cli.App
         private readonly Pane _Pane;
         private readonly StringBuilder _AssistantText = new StringBuilder();
         private readonly Dictionary<string, PaneLineHandle> _ToolLines = new Dictionary<string, PaneLineHandle>(StringComparer.Ordinal);
-        private PaneLineHandle? _AssistantLine;
+        private readonly List<PaneLineHandle> _AssistantLines = new List<PaneLineHandle>();
 
         #endregion
 
@@ -119,32 +119,57 @@ namespace Mux.Cli.App
         {
             _AssistantText.Append(text);
 
-            // While streaming, show a single live line with the latest content so the user sees
-            // progress; the full block is re-rendered as markdown when it finalizes.
-            StyledText preview = Text.From(LastLine(_AssistantText.ToString()));
-            if (_AssistantLine == null || !_AssistantLine.Update(preview))
+            // Stream the full response as it grows, one pane line per text line, so it fills the
+            // available vertical space; the block is re-rendered as markdown when it finalizes.
+            string[] lines = _AssistantText.ToString().Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+            for (int i = 0; i < lines.Length; i++)
             {
-                _AssistantLine = _Pane.WriteLine(preview);
+                StyledText styled = Text.From(lines[i]);
+                if (i < _AssistantLines.Count)
+                {
+                    if (!_AssistantLines[i].Update(styled))
+                    {
+                        _AssistantLines[i] = _Pane.WriteLine(styled);
+                    }
+                }
+                else
+                {
+                    _AssistantLines.Add(_Pane.WriteLine(styled));
+                }
             }
         }
 
         private void FinalizeAssistantBlock()
         {
-            if (_AssistantLine == null)
+            if (_AssistantLines.Count == 0)
             {
+                _AssistantText.Clear();
                 return;
             }
 
             IReadOnlyList<StyledText> rendered = MarkdownRenderer.Render(_AssistantText.ToString());
 
-            // The live line becomes the first rendered line; the rest are appended after it.
-            _AssistantLine.Update(rendered.Count > 0 ? rendered[0] : StyledText.Empty);
-            for (int i = 1; i < rendered.Count; i++)
+            int i = 0;
+            for (; i < rendered.Count; i++)
             {
-                _Pane.WriteLine(rendered[i]);
+                if (i < _AssistantLines.Count)
+                {
+                    _AssistantLines[i].Update(rendered[i]);
+                }
+                else
+                {
+                    _AssistantLines.Add(_Pane.WriteLine(rendered[i]));
+                }
             }
 
-            _AssistantLine = null;
+            // Markdown often yields fewer lines than the raw stream (e.g. code fences removed); blank the
+            // leftover streamed lines so no stale raw text remains.
+            for (; i < _AssistantLines.Count; i++)
+            {
+                _AssistantLines[i].Update(StyledText.Empty);
+            }
+
+            _AssistantLines.Clear();
             _AssistantText.Clear();
         }
 
@@ -164,17 +189,6 @@ namespace Mux.Cli.App
             }
 
             _Pane.WriteLine(styled);
-        }
-
-        private static string LastLine(string text)
-        {
-            if (string.IsNullOrEmpty(text))
-            {
-                return string.Empty;
-            }
-
-            int lastNewline = text.LastIndexOf('\n');
-            return lastNewline < 0 ? text : text.Substring(lastNewline + 1);
         }
 
         #endregion
