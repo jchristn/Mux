@@ -64,6 +64,9 @@ namespace Test.Shared
                     WebRetrieveToolSuite.Create(),
                     McpToolManagerSuite.Create(),
 
+                    // Mux.Core / Llm bridge suite (PolyPrompt-backed LlmClient against mock servers).
+                    LlmBridgeSuite.Create(),
+
                     // Settings + non-interactive CLI command unit suites (ported from Test.Xunit).
                     EndpointConfigSuite.Create(),
                     SettingsLoaderSuite.Create(),
