@@ -38,7 +38,7 @@
 - External web search: optional Tavily and You.com providers expose `web_search` for result discovery
 - Shell-aware process execution metadata: `run_process` tells the model which OS and shell it will run under
 - MCP extensible in interactive mode: external tool servers appear beside built-in tools
-- Simpler interactive REPL: prompt entry supports multi-line editing and paste while idle, blocks while mux is running, has no queued follow-up prompt mode, and supports `Esc` cancellation for the active generation
+- TUIKit interactive UI (alpha, `v0.3.0`): a full-screen shell with per-job transcripts, a job sidebar, a multi-line composer, a command palette / slash commands / menu over one command catalog, an interactive tool-approval modal, and autosaved resumable sessions. Multiple prompts run as concurrent background jobs (a single-writer lease serializes file edits); enqueue-while-busy lets you start a new job or append to the focused one. See `USAGE.md`.
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
 - Health checks: `mux probe` validates config, backend reachability, auth, and model access

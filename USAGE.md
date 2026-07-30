@@ -95,6 +95,57 @@ Notes:
 - `/search add [name]` configures Tavily or You.com and enables `web_search` when the provider is usable
 - `/search show`, `/search edit`, and `/search remove`/`delete`/`rm` inspect and maintain stored search providers
 
+## Interactive UI (TUIKit)
+
+> **Alpha.** Running `mux` with no non-interactive command launches the TUIKit shell. The interactive
+> experience is being built out on `feature/v0.3.0`; see `TUIKIT_MIGRATION.md`.
+
+The screen has a transcript (per job), a sidebar listing all jobs with a state glyph and focus marker,
+a multi-line composer, and a footer with live `jobs/focused` status and key hints. Each job runs
+concurrently (up to `maxConcurrency`) and renders into its own transcript.
+
+### Keys
+
+| Key | Action |
+|---|---|
+| `Enter` | Submit the prompt (opens the enqueue chooser when a job is already active) |
+| `Alt+Enter` / `Shift+Enter` | Insert a newline in the composer |
+| `Ctrl+Enter` | Submit as a new job, bypassing the chooser |
+| `Up` / `Down` | Recall prompt history at the composer edges |
+| `Esc` | Cancel the focused job (or dismiss a modal/chooser) |
+| `Ctrl+N` / `Alt+1`…`Alt+9` | Focus the next job / the Nth job |
+| `Ctrl+B` | Toggle the sidebar (auto-collapses below 100 columns) |
+| `Ctrl+K` | Command palette (fuzzy) |
+| `Ctrl+L` | Clear the transcript |
+| `Ctrl+S` | Save the session |
+| `F1` / `F2` / `F12` | Help · Jobs · toggle mouse capture |
+| `Ctrl+Q` / double `Ctrl+C` | Quit |
+
+### Slash commands
+
+Type a leading `/` in the composer to run a command instead of submitting a prompt. Every command is
+also reachable by key, the palette, and the menu (one catalog, four surfaces):
+`/help` (`/?`), `/clear`, `/next`, `/sidebar`, `/commands`, `/jobs`, `/save`, `/sessions`, `/theme`,
+`/density`, `/mouse`, `/quit` (`/exit`).
+
+### Enqueue while busy
+
+Submitting while a job is active shows a chooser: `[1]` start a new job, `[2]` append to the focused
+job, `[r]` remember the choice for the session, `[Esc]` cancel. Set `defaultEnqueueBehavior` in
+`settings.json` to skip the chooser (`run_now` / `add_to_focused`).
+
+### Tool approval
+
+Under the default policy, read-only tools run automatically and mutating tools prompt with an approval
+modal (Approve once / Deny / Always this session). Use `--yolo` (or `--approval-policy auto`) to
+auto-approve, or `--approval-policy deny` to block all tools.
+
+### Sessions
+
+The session autosaves at each turn boundary. `Ctrl+S` / `/save` saves on demand; `/sessions` lists and
+resumes saved sessions (under `~/.mux/sessions`). A resumed session shows completed conversations
+read-only and marks interrupted jobs as re-run-required — it never silently re-runs them.
+
 ## Built-In Process Execution
 
 The built-in `run_process` tool executes commands using the host shell for the current operating system:

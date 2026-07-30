@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: Build & test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET (8.0 + 10.0)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore src/Mux.sln
+
+      - name: Build (net8.0 + net10.0, no restore)
+        run: dotnet build src/Mux.sln --configuration Release --no-restore
+
+      - name: Console runner — net8.0
+        run: dotnet run --project src/Test.Automated/Test.Automated.csproj --configuration Release --framework net8.0 --no-build -- --results results-net8.json
+
+      - name: Console runner — net10.0
+        run: dotnet run --project src/Test.Automated/Test.Automated.csproj --configuration Release --framework net10.0 --no-build -- --results results-net10.json
+
+      - name: xUnit adapter
+        run: dotnet test src/Test.Xunit/Test.Xunit.csproj --configuration Release --no-build
+
+      - name: NUnit adapter
+        run: dotnet test src/Test.Nunit/Test.Nunit.csproj --configuration Release --no-build
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: touchstone-results-${{ matrix.os }}
+          path: results-*.json
+          if-no-files-found: ignore

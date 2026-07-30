@@ -44,6 +44,7 @@ If the directory does not exist, `mux` creates it. If `endpoints.json` is missin
 | `mcp-servers.json` | MCP server definitions | No |
 | `settings.json` | Global mux settings | No |
 | `system-prompt.md` | Custom default system prompt | No |
+| `sessions/` | Saved interactive sessions (one JSON file per session); the shell autosaves here at each turn boundary and `/sessions` browses/resumes them | Created on demand |
 
 For current non-interactive orchestration paths:
 - `settings.json` is optional
@@ -221,6 +222,8 @@ Fields:
 | `compactionPreserveTurns` | int | number of recent user-led turns to preserve during compaction; clamped to `1-10` |
 | `maxAgentIterations` | int | default loop guard for tool-using runs; clamped to `1-100` and overridden by endpoint `maxAgentIterations` when that value is set |
 | `ignoreCertErrors` | bool | disable TLS certificate validation for mux-owned network requests; default `false` |
+| `maxConcurrency` | int | maximum number of interactive jobs allowed to run at once; clamped to `1-32`, default `3` |
+| `defaultEnqueueBehavior` | string | how the interactive shell handles a submit while a job is active: `ask` (show the chooser), `run_now`, `queue_after` (both start a new job — the concurrency cap governs parallelism), or `add_to_focused` (append to the focused job); default `ask` |
 | `externalSearch` | object | optional Tavily/You.com provider configuration for the `web_search` tool |
 
 Notes:

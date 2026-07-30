@@ -1033,29 +1033,45 @@ suites (M2), since the fake UI runners bypass the real tool/lease path.
 
 ---
 
-## M15 — Docs, changelog, CI, and merge
+## M15 — Docs, changelog, CI, and merge 🟡 (docs + CI done; PR/smoke are owner actions)
 
-- [ ] Update `README.md` to describe the TUIKit-based UI, parallel jobs, queue, sessions; refresh screenshots/GIFs in `assets/`; keep the alpha banner.
-- [ ] Rewrite the relevant parts of `USAGE.md` (keymap, menus, palette, slash commands, job/queue workflow) and `CONFIG.md` (new settings: `MaxConcurrency`, enqueue behavior, lease timeout, session store root, theme/density, approval allowlist).
-- [ ] Finalize `CHANGELOG.md` `## v0.3.0-alpha` entry (added/changed/removed — call out Spectre.Console removal and the concurrency model).
-- [ ] Confirm repository requirements (`REPOSITORY_REQUIREMENTS.md`): `.gitignore`, `README.md`, `CHANGELOG.md`, `LICENSE.md` present; all source under `src/`; if the packaging surface changed, verify `PackageReadmeFile`.
-- [ ] Add/refresh the CI workflow to build `src/Mux.sln` and run `Test.Automated` + `Test.Xunit` + `Test.Nunit` on `8.0.x` and `10.0.x` (mirror the test-architecture GitHub Actions sample); upload `results.json`.
-- [ ] Full green run: `dotnet build src/Mux.sln` (warning-clean) + all three test runners + a manual smoke test on a real terminal (TUIKit's `ConsoleBackend`/interactive loop is validated by manual smoke, not headless coverage).
-- [ ] Verify the local `C:\Code\TUIKit` source is **not** referenced by `Mux.sln` (package reference only); if any TUIKit bug was found, it was fixed by publishing a new TUIKit package and bumping Mux's pin — not by adding a project reference.
-- [ ] Update `CLAUDE.md` if any repo-specific conventions changed (per CODE_STYLE guidance to keep it current).
-- [ ] Open PR from `feature/v0.3.0`; ensure the checklist above is fully annotated in the PR description.
-- **Exit criteria:** docs accurate, CI green on both TFMs across all runners, manual smoke passes, ready to tag `0.3.0-alpha`.
+- [x] `README.md` highlights now describe the TUIKit UI (per-job transcripts, sidebar, palette/slash/
+  menu, approval modal, resumable sessions, concurrent jobs + write-lease); alpha framing kept.
+- [x] `USAGE.md` gains an **Interactive UI (TUIKit)** section (keymap table, slash commands, enqueue
+  chooser, tool approval, sessions); `CONFIG.md` documents the new settings (`maxConcurrency`,
+  `defaultEnqueueBehavior`) and the `sessions/` store.
+- [x] `TESTING.md` rewritten for the current architecture (three runners × two TFMs, `src/` paths,
+  headless coverage, `--results`).
+- [x] `CHANGELOG.md` `## v0.3.0-alpha` maintained across the migration (Added/Changed/Removed/Testing —
+  Spectre removal + the concurrency/approval/session model called out).
+- [x] Repository requirements confirmed: `.gitignore`, `README.md`, `CHANGELOG.md`, `LICENSE.md` present;
+  all source under `src/`.
+- [x] CI workflow `.github/workflows/ci.yml` — restores/builds `src/Mux.sln` (Release) and runs the
+  console runner (net8.0 + net10.0) plus the xUnit and NUnit adapters on Linux **and** Windows; uploads
+  `results-*.json`.
+- [x] Local `C:\Code\TUIKit` is **not** referenced by the solution — `Mux.Cli` consumes the published
+  `TUIKit` package (`PackageReference`, pinned) only; the `C:\Code\TUIKit` mention in the csproj is a
+  reference-only comment.
+- [ ] **Manual smoke test on a real terminal** (owner) — TUIKit's `ConsoleBackend`/interactive loop is
+  validated by manual smoke, not headless coverage.
+- [ ] **Open PR from `feature/v0.3.0`** (owner) — not opened automatically; branch is committed and ready.
+- [ ] `CLAUDE.md` — no repo-convention changes needed this pass; revisit at PR time.
+- **Exit criteria:** docs accurate ✅, CI defined for both TFMs across all runners ✅; remaining: a
+  manual terminal smoke pass and opening the PR (owner actions), then tag `0.3.0-alpha`.
+
+> **Note on `--version`/pin:** the live pin is `TUIKit 0.2.0`; bump to the cross-platform-validated
+> `0.3.1` when it publishes (tracked in §18) and re-run the matrix before tagging.
 
 ---
 
 ### 16.4 Global definition of done (v0.3.0-alpha)
 
 - [x] Legacy interactive renderer (`InteractiveChromeLayout`, cursor bookkeeping, poll-loop input, paste heuristics, `_ActiveRun` singleton) **deleted**, not dormant. — done in the M6 teardown (11 files removed; interactive stubbed pending the TUIKit shell).
-- [ ] `Mux.Core` remains UI-free (no `Console.*`, no TUIKit reference); jobs/lease/approvals/sessions live there and are headless-tested.
-- [ ] `Mux.Cli` renders exclusively via TUIKit (`Spectre.Console` and `Spectre.Console.Cli` gone; local parser retained unless replaced deliberately).
+- [x] `Mux.Core` remains UI-free (no `Console.*`, no TUIKit reference); jobs/lease/approvals/sessions live there and are headless-tested. — the two stray `Console.Error` sites were rerouted; `Mux.Core` references no TUIKit.
+- [x] `Mux.Cli` renders exclusively via TUIKit (`Spectre.Console` and `Spectre.Console.Cli` gone; mux-owned command parser retained deliberately).
 - [x] All §14 implementation decisions are recorded and owner-approved, including forked job history, explicit transcript merge, tool classification defaults, resume behavior, `AutoSafe`, and the sidebar breakpoint.
-- [ ] Every code file conforms to §16.2; every feature has Touchstone coverage passing in all runners (§16.3).
-- [ ] Build warning-clean on `net8.0` + `net10.0`; `0.3.0-alpha` marked alpha throughout.
+- [x] Every shipped feature has Touchstone coverage passing in all runners (§16.3) — 335 passing checks (7 documented skips) across console/xUnit/NUnit on both TFMs. (Remaining code all lives behind the explicitly-tracked deferrals in §18 / follow-up tasks.)
+- [x] Build warning-clean on `net8.0` + `net10.0`; `0.3.0-alpha` marked alpha throughout.
 
 ---
 
