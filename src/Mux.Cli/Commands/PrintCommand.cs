@@ -125,7 +125,9 @@ namespace Mux.Cli.Commands
                 McpServerCount = runtime.Capabilities.McpServerCount,
                 BuiltInToolCount = runtime.Capabilities.BuiltInToolCount,
                 EffectiveToolCount = runtime.Capabilities.EffectiveToolCount,
-                Verbose = settings.Verbose
+                Verbose = settings.Verbose,
+                OnRetry = (int attempt, int maxRetries, string message) =>
+                    Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Retry {attempt}/{maxRetries}: {message}"))
             };
 
             int exitCode = 0;

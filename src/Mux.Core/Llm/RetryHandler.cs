@@ -6,7 +6,6 @@ namespace Mux.Core.Llm
     using System.Net.Http;
     using System.Threading;
     using System.Threading.Tasks;
-    using Mux.Core.Utility;
 
     /// <summary>
     /// Provides retry logic with exponential backoff for LLM HTTP requests.
@@ -55,9 +54,8 @@ namespace Mux.Core.Llm
                     int delaySeconds = (int)Math.Pow(2, attempt - 1); // 1s, 2s, 4s
                     int delayMs = delaySeconds * 1000;
 
-                    string message = $"retry {attempt}/{maxRetries} after {delaySeconds}s: {ex.Message}";
-                    Console.Error.WriteLine(ConsoleMessageStyler.Notification(char.ToUpperInvariant(message[0]) + message.Substring(1)));
-
+                    // Surface the retry through the caller-supplied callback only; Mux.Core stays
+                    // Console-free so the presentation layer (Cli) owns all user-facing output.
                     if (onRetry != null)
                     {
                         onRetry(attempt, maxRetries, ex.Message);

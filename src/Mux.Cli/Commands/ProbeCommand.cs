@@ -170,6 +170,8 @@ namespace Mux.Cli.Commands
                 }
 
                 using LlmClient client = new LlmClient(runtime.Endpoint, runtime.MuxSettings.IgnoreCertErrors);
+                client.OnRetry = (int attempt, int maxRetries, string message) =>
+                    Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Retry {attempt}/{maxRetries}: {message}"));
                 List<ConversationMessage> messages = new List<ConversationMessage>
                 {
                     new ConversationMessage

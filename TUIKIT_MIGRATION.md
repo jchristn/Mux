@@ -926,17 +926,15 @@ Styles: `dim/bold/italic/underline`, fg `cyan/green/red/yellow/grey/blue/grey15`
   validated (Windows/Linux/macOS) target, but it is not yet on nuget.org (latest is 0.2.0). The live
   `Mux.Cli` pin stays at 0.2.0 until 0.3.1 publishes to avoid a broken restore; then bump the
   `<PackageReference Include="TUIKit" Version="…"/>` and re-run the full test matrix on both TFMs.
-- [ ] **`Mux.Core` stderr-diagnostic sites (M5 finding) — now urgent with the live TUI.** `RetryHandler`
-  and `WorkingDirectoryGuard` write human-facing messages directly via `Console.Error.WriteLine` (using
-  `ConsoleMessageStyler`), which violates the "`Mux.Core` is `Console.*`-free" DoD. With the M6 shell now
-  running on the TUIKit alt-screen, a stray write causes a one-frame flicker (retained-mode redraw
-  overwrites it next frame) rather than lasting corruption, but it is still wrong. Reroute through the
-  engine's callback/event surface (`AgentLoopOptions.OnRetry` already exists and is wired
-  `LlmClient → RetryHandler.onRetry`; the direct write is redundant with it) so the Cli owns rendering:
-  delete the `RetryHandler` write and wire `OnRetry` in `PrintCommand`/`ProbeCommand` to preserve their
-  stderr retry notices; drop the `WorkingDirectoryGuard` write (informational only). Update
-  `CliCommandSuite.PrintCommandRuntimeFailure...` (asserts retry text in captured stderr) to match. Being
-  done as the focused follow-up commit immediately after the M6 shell commit.
+- [x] **`Mux.Core` stderr-diagnostic sites (M5 finding) — DONE.** `RetryHandler` and
+  `WorkingDirectoryGuard` no longer touch the console, so `Mux.Core` is `Console.*`-free. `RetryHandler`
+  now surfaces retries only through its `onRetry` callback (already wired `LlmClient → RetryHandler`);
+  the Cli owns rendering by setting `OnRetry` on `PrintCommand`'s `AgentLoopOptions` and on
+  `ProbeCommand`'s `LlmClient`, both emitting `Retry {n}/{max}: {msg}` to stderr — so
+  `CliCommandSuite.PrintCommandRuntimeFailure...` (asserts "retry" in stderr) still passes unchanged.
+  `WorkingDirectoryGuard.ResolveSafely` (dead code — no callers) dropped its stderr warning and the now-
+  meaningless `warn` parameter; callers needing the boundary check use `IsWithinWorkingDirectory`.
+  Verified green on the console runner (net8+net10) and both adapters.
 
 **M6 approval decision (→ M11).** M6 has no interactive approval modal. Rather than let the default `ask`
 policy silently auto-approve every tool (`DefaultPromptUserFunc` returns `"y"`), `Program.RunInteractive`
