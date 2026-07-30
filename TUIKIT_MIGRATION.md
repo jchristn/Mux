@@ -738,14 +738,44 @@ milestones (M8/M10) rather than as empty M6 stubs, per "build it right, not scaf
 
 ---
 
-## M7 — Cli: AgentEvent projector (events → panes)
+## M7 — Cli: AgentEvent projector (events → panes) ✅ DONE
 
-- [ ] `Rendering/AgentEventProjector.cs` — maps each `AgentEvent` to `Pane` writes for a given job: assistant text streaming, tool proposed/completed → **inline line updated in place** via `Pane.UpdateLine` (`running…` → `done 0.3s`), context status → sidebar observable, errors → toast, run started/completed → state.
-- [ ] `Rendering/ToolCallView.cs` — inline summary line + optional expand (args/output/diff).
-- [ ] Markdown via TUIKit `MarkdownRenderer`; `Edit` diffs via `DiffView` + `SyntaxHighlighter`.
-- [ ] Ensure each job writes to **its own** `Pane`; only the focused pane is bound to `transcript`.
-- [ ] **Tests** (`Test.Shared/Suites/ProjectorSuite.cs`, headless): a scripted `AgentEvent` sequence produces the expected pane snapshot; tool line mutates in place (not appended twice); interleaved events from two jobs land in the correct panes.
-- **Exit criteria:** inline tool status updates verified via snapshot; two jobs' output never cross-contaminate panes.
+- [x] `App/AgentEventProjector.cs` — one projector instance per job pane, driven by
+  `ProjectAsync(IAsyncEnumerable<AgentEvent>, ct)` (so it is unit-testable off a scripted stream, and
+  `MuxTuiApp` feeds it `job.ReadEventsAsync`). Mapping: **assistant text** buffers per block and, when
+  the block ends (a tool call, an error, or run completion), re-renders through TUIKit
+  `MarkdownRenderer.Render` (bullets → `•`, code fences stripped, headings/quotes/tables styled); a
+  single live line shows the latest content while the block streams, then becomes the first rendered
+  line with the rest appended (no stale lines, no removal needed). **Tool calls** render as one line
+  per call, written on `ToolCallProposed` (`⏵ name running…`) and **updated in place** via
+  `PaneLineHandle.Update` on `ToolCallCompleted` (`✓/✗ name (N ms)`), matched by tool-call id; an
+  orphan completion (no prior proposal) writes its own line. **Errors** render a red line;
+  **cancellation** finalizes the open block and writes `(cancelled)`.
+- [x] Each job writes to **its own** `Pane`; `MuxTuiApp` keeps a `home` pane plus a per-job pane map and
+  binds only the focused job's pane to the `transcript` region. `FocusJob(id)` / `FocusNext()`
+  (`Ctrl+N` — not `Ctrl+J`, which is byte `0x0A`/LF and indistinguishable from Enter in legacy keyboard
+  mode; revisit in M10) swap the binding and keep engine focus (`JobManager.Focus`) in sync.
+- [x] **Tests:** `Test.Shared/Suites/ProjectorSuite.cs` (12 cases, headless, scripted streams): plain
+  text; markdown bullets/code-fence/multi-line; tool line updated in place (asserts exactly one line,
+  running→done, mark, elapsed); failed tool cross; orphan completion; text/tool/text interleave order;
+  three-block finalize; error line; empty stream; cancellation notice. `Test.Shared/Suites/TuiShellSuite.cs`
+  gains 5 cases: home pane before any job; submit creates+focuses a job pane; **two jobs' output never
+  cross-contaminates panes**; `FocusJob` swaps the transcript; `Ctrl+N` cycles focus and wraps. Green on
+  the console runner (net8+net10) and both adapters.
+- **Exit criteria:** ✅ inline tool status updates verified via snapshot; two jobs' output never
+  cross-contaminate panes.
+
+**Deferred from M7 (with rationale):**
+- `Edit`/`write` **diffs via `DiffView` + `SyntaxHighlighter`** (widgets exist in 0.2.0, verified). Not
+  wired yet because `ToolResult` exposes only an opaque JSON `Content` string — there is no structured
+  before/after to feed `DiffView(old, new, lang)`. Doing this right needs the edit/write tools in
+  `Mux.Core` to surface structured pre/post content (or a unified diff) on the tool result/event; that
+  is a `Mux.Core` tool-result enrichment, not a projector concern. Tracked for a dedicated pass
+  (fold into the tools work or an M7.5) so the projector can render real diffs instead of guessing.
+- `Rendering/ToolCallView.cs` **expandable** tool view (args/output/diff drill-down) — depends on the
+  above and on interactive focus within a pane; revisit alongside the diff work / M11 modals.
+- Context-status → **sidebar** observable and error **toasts** belong to M8 (sidebar) and M10
+  (`NotificationCenter`) respectively; the projector already handles the transcript-facing events.
 
 ---
 

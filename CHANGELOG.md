@@ -12,9 +12,15 @@ All notable changes to mux are documented here.
 
 - Rebuilt the interactive UI on TUIKit: `mux` with no non-interactive command now launches the
   `MuxTuiApp` shell — a transcript / composer / footer layout with a streaming `AgentEvent` projector,
-  a command catalog (`Ctrl+Q` quit, `Ctrl+L` clear), `Esc` to cancel the focused job, and
-  double-tap-`Ctrl+C` to exit. Prompts submit to the concurrent `JobManager`; the terminal backend is
-  injected so the shell is driven headlessly in tests (`TuiShellSuite`, 12 cases).
+  a command catalog (`Ctrl+Q` quit, `Ctrl+L` clear, `Ctrl+N` next job), `Esc` to cancel the focused
+  job, and double-tap-`Ctrl+C` to exit. Prompts submit to the concurrent `JobManager`; the terminal
+  backend is injected so the shell is driven headlessly in tests.
+- Each job renders into its **own** transcript pane; only the focused job's pane is shown, so
+  concurrent jobs never write over one another (`FocusJob`/`Ctrl+N` switch between them). The
+  `AgentEventProjector` renders assistant text as markdown at block boundaries (via TUIKit
+  `MarkdownRenderer`) and collapses each tool call to a single line updated in place from
+  `running…` to `✓/✗ name (N ms)`. Covered by `ProjectorSuite` (12 cases) and expanded `TuiShellSuite`
+  (per-job isolation, focus swap, focus cycling).
 - Interim interactive approval behavior pending the M11 approval modal: the default `ask` policy runs
   read-only tools automatically (`AutoSafe`) and denies mutating tools with a visible notice; pass
   `--yolo` / `--approval-policy auto` to auto-approve, or `deny` to block all tools.

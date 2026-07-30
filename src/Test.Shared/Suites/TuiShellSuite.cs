@@ -222,6 +222,115 @@ namespace Test.Shared.Suites
                             await run.WaitAsync(TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
                             MuxAssert.IsTrue(run.IsCompletedSuccessfully, "run loop exited");
                         }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "HomePaneShownBeforeAnyJob", "Before any job the home pane is focused", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            MuxAssert.IsTrue(app.FocusedJobId == null, "no focused job");
+                            MuxAssert.AreEqual(0, app.JobIds.Count, "no jobs");
+                            MuxAssert.Contains("mux", Join(app.TranscriptSnapshot()), "home header");
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "SubmitCreatesAndFocusesJobPane", "Submitting creates a job pane and focuses it", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            backend.FeedInput("hi\r");
+                            app.PumpInputOnce();
+
+                            MuxAssert.AreEqual(1, app.JobIds.Count, "one job pane");
+                            string jobId = app.JobIds[0];
+                            MuxAssert.AreEqual(jobId, app.FocusedJobId, "job focused");
+
+                            string transcript = Join(app.TranscriptSnapshot());
+                            MuxAssert.Contains("hi", transcript, "prompt echoed to job pane");
+                            MuxAssert.IsFalse(transcript.Contains("Type a prompt", StringComparison.Ordinal), "home header not in job pane");
+
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "TwoJobsGetIsolatedPanes", "Two jobs' output never cross-contaminates panes", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = new JobManager(EchoRunner, maxConcurrency: 2))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            backend.FeedInput("one\r");
+                            app.PumpInputOnce();
+                            backend.FeedInput("two\r");
+                            app.PumpInputOnce();
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+
+                            MuxAssert.AreEqual(2, app.JobIds.Count, "two job panes");
+                            string first = Join(app.JobTranscriptSnapshot(app.JobIds[0]));
+                            string second = Join(app.JobTranscriptSnapshot(app.JobIds[1]));
+
+                            MuxAssert.Contains("Echo: one", first, "first pane has its own output");
+                            MuxAssert.IsFalse(first.Contains("two", StringComparison.Ordinal), "first pane free of second's output");
+                            MuxAssert.Contains("Echo: two", second, "second pane has its own output");
+                            MuxAssert.IsFalse(second.Contains("one", StringComparison.Ordinal), "second pane free of first's output");
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "FocusJobSwapsTranscript", "Focusing a job binds its pane to the transcript region", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = new JobManager(EchoRunner, maxConcurrency: 2))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            backend.FeedInput("one\r");
+                            app.PumpInputOnce();
+                            backend.FeedInput("two\r");
+                            app.PumpInputOnce();
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+
+                            // Newest job is focused after submit.
+                            MuxAssert.AreEqual(app.JobIds[1], app.FocusedJobId, "newest focused");
+                            MuxAssert.Contains("Echo: two", Join(app.TranscriptSnapshot()), "transcript shows newest");
+
+                            MuxAssert.IsTrue(app.FocusJob(app.JobIds[0]), "focus first");
+                            MuxAssert.AreEqual(app.JobIds[0], app.FocusedJobId, "first focused");
+                            string transcript = Join(app.TranscriptSnapshot());
+                            MuxAssert.Contains("Echo: one", transcript, "transcript shows first");
+                            MuxAssert.IsFalse(transcript.Contains("two", StringComparison.Ordinal), "no second output");
+
+                            MuxAssert.IsFalse(app.FocusJob("nonexistent"), "unknown focus rejected");
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "FocusNextCyclesJobs", "Ctrl+N cycles focus through jobs and wraps", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = new JobManager(EchoRunner, maxConcurrency: 2))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            backend.FeedInput("one\r");
+                            app.PumpInputOnce();
+                            backend.FeedInput("two\r");
+                            app.PumpInputOnce();
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+
+                            string second = app.JobIds[1];
+                            string firstId = app.JobIds[0];
+                            MuxAssert.AreEqual(second, app.FocusedJobId, "start focused on newest");
+
+                            backend.FeedInput(new byte[] { 0x0e }); // Ctrl+N
+                            app.PumpInputOnce();
+                            MuxAssert.AreEqual(firstId, app.FocusedJobId, "wrapped to first");
+
+                            backend.FeedInput(new byte[] { 0x0e }); // Ctrl+N
+                            app.PumpInputOnce();
+                            MuxAssert.AreEqual(second, app.FocusedJobId, "back to second");
+                        }
                     })
                 });
         }

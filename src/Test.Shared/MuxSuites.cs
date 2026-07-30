@@ -86,7 +86,10 @@ namespace Test.Shared
                     SessionStoreSuite.Create(),
 
                     // Mux.Cli TUIKit interactive shell suite (M6).
-                    TuiShellSuite.Create()
+                    TuiShellSuite.Create(),
+
+                    // Mux.Cli AgentEvent projector suite (M7).
+                    ProjectorSuite.Create()
                 };
             }
         }
