@@ -10,11 +10,12 @@ namespace Test.Shared.Suites
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Touchstone.Core;
+    using TUIKit.Input;
     using TUIKit.Terminal;
 
     /// <summary>
-    /// Touchstone suite for the composer, prompt history, and the enqueue-while-busy submit chooser.
-    /// Covers <see cref="PromptHistory"/> in isolation plus the shell's newline / submit / chooser /
+    /// Touchstone suite for the composer, prompt history, and the serial prompt queue with its editor.
+    /// Covers <see cref="PromptHistory"/> in isolation plus the shell's newline / submit / queue / editor /
     /// history / slash-routing gestures driven through the real input path.
     /// </summary>
     public static class ComposerSuite
@@ -169,8 +170,8 @@ namespace Test.Shared.Suites
                         }
                     }),
 
-                    // ---- Single conversation queue ----
-                    Case("SecondPromptQueuesWhileBusy", "A prompt entered while a turn runs is queued, not started immediately", async (CancellationToken ct) =>
+                    // ---- Serial queue ----
+                    Case("SecondPromptQueuesToStripNotTranscript", "A prompt entered while a turn runs queues to the strip, not the transcript", async (CancellationToken ct) =>
                     {
                         TaskCompletionSource<bool> release = NewSignal();
                         await using (JobManager manager = new JobManager(Gated(release), maxConcurrency: 2))
@@ -184,16 +185,46 @@ namespace Test.Shared.Suites
                             Feed(backend, app, "second" + "\r");
                             MuxAssert.AreEqual(1, app.JobIds.Count, "second is queued, no new turn yet");
                             MuxAssert.AreEqual(1, app.QueuedCount, "one queued");
-                            // Both prompts are echoed to the single transcript immediately on Enter.
-                            MuxAssert.Contains("first", Join(app.TranscriptSnapshot()), "first echoed");
-                            MuxAssert.Contains("second", Join(app.TranscriptSnapshot()), "second echoed");
+
+                            // The active prompt is echoed to the transcript; the queued one shows in the
+                            // strip above the composer and is NOT echoed to the transcript until it starts.
+                            MuxAssert.Contains("first", Join(app.TranscriptSnapshot()), "first echoed to transcript");
+                            MuxAssert.IsFalse(Join(app.TranscriptSnapshot()).Contains("second"), "second not yet in transcript");
+                            MuxAssert.Contains("second", Join(app.QueueStripSnapshot()), "second shown in the queue strip");
+                            MuxAssert.Contains("QUEUED", Join(app.QueueStripSnapshot()), "queue strip labeled");
 
                             release.TrySetResult(true);
                             await app.DrainProjectorsAsync().ConfigureAwait(false);
                         }
                     }),
 
-                    Case("QueuedPromptRunsAfterActiveCompletes", "The queued prompt runs as the next turn once the active turn finishes", async (CancellationToken ct) =>
+                    Case("QueuedPromptsRunInOrderAsTurnsComplete", "Queued prompts run one at a time, in order, as each turn finishes", async (CancellationToken ct) =>
+                    {
+                        TaskCompletionSource<bool> release = NewSignal();
+                        await using (JobManager manager = new JobManager(Gated(release), maxConcurrency: 2))
+                        using (MuxTuiApp app = NewApp(backend: out HeadlessBackend backend, manager: manager))
+                        {
+                            Feed(backend, app, "first" + "\r");
+                            await WaitForActiveAsync(manager, ct).ConfigureAwait(false);
+                            Feed(backend, app, "second" + "\r");
+                            Feed(backend, app, "third" + "\r");
+
+                            // Serial: only one runs; the other two wait in the queue.
+                            MuxAssert.AreEqual(1, app.JobIds.Count, "one running");
+                            MuxAssert.AreEqual(2, app.QueuedCount, "two queued");
+
+                            release.TrySetResult(true);
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+
+                            MuxAssert.AreEqual(3, app.JobIds.Count, "all three ran in turn");
+                            MuxAssert.AreEqual(0, app.QueuedCount, "queue drained");
+                            MuxAssert.IsFalse(app.IsBusy, "idle after all turns");
+                            // The queue strip collapses once empty.
+                            MuxAssert.AreEqual(string.Empty, Join(app.QueueStripSnapshot()).Trim(), "strip cleared");
+                        }
+                    }),
+
+                    Case("QueueEditorPausesProcessingUntilClosed", "Opening the queue editor pauses processing; closing it resumes", async (CancellationToken ct) =>
                     {
                         TaskCompletionSource<bool> release = NewSignal();
                         await using (JobManager manager = new JobManager(Gated(release), maxConcurrency: 2))
@@ -203,13 +234,65 @@ namespace Test.Shared.Suites
                             await WaitForActiveAsync(manager, ct).ConfigureAwait(false);
                             Feed(backend, app, "second" + "\r");
 
+                            // Ctrl+G (0x07) opens the queue editor and pauses processing.
+                            Feed(backend, app, "");
+                            MuxAssert.IsTrue(app.IsQueuePaused, "paused while editor open");
+
+                            // The active turn finishes while paused — the queued prompt must NOT start.
                             release.TrySetResult(true);
                             await app.DrainProjectorsAsync().ConfigureAwait(false);
+                            MuxAssert.AreEqual(1, app.JobIds.Count, "queued prompt held while paused");
+                            MuxAssert.AreEqual(1, app.QueuedCount, "still queued");
+                            MuxAssert.IsFalse(app.IsBusy, "idle while paused");
 
-                            MuxAssert.AreEqual(2, app.JobIds.Count, "queued prompt ran as a second turn");
+                            // Esc closes the editor, which resumes and starts the queued prompt (the close
+                            // handler runs asynchronously, so wait for the resume before draining). A lone
+                            // Escape byte is held pending until a no-input pump flushes it, so pump twice.
+                            Feed(backend, app, Esc.ToString());
+                            app.PumpInputOnce();
+                            await WaitUntilAsync(() => app.JobIds.Count == 2, ct).ConfigureAwait(false);
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+                            MuxAssert.IsFalse(app.IsQueuePaused, "resumed after close");
+                            MuxAssert.AreEqual(2, app.JobIds.Count, "queued prompt ran after resume");
                             MuxAssert.AreEqual(0, app.QueuedCount, "queue drained");
-                            MuxAssert.IsFalse(app.IsBusy, "idle after both turns");
                         }
+                    }),
+
+                    // ---- Queue editor modal ----
+                    Case("QueueEditorReordersEntries", "The editor reorders queued prompts", async (CancellationToken ct) =>
+                    {
+                        QueueEditorModal modal = new QueueEditorModal(new List<string> { "a", "b", "c" });
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Down));   // select "b"
+                        modal.HandleKey(KeyEvent.Char((int)']'));          // move "b" down → a, c, b
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Escape)); // close
+
+                        List<string> result = (List<string>)(await modal.Completion.ConfigureAwait(false))!;
+                        MuxAssert.AreEqual("a,c,b", string.Join(",", result), "reordered");
+                    }),
+
+                    Case("QueueEditorRemovesEntries", "The editor removes a queued prompt", async (CancellationToken ct) =>
+                    {
+                        QueueEditorModal modal = new QueueEditorModal(new List<string> { "a", "b", "c" });
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Down));   // select "b"
+                        modal.HandleKey(KeyEvent.Char((int)'d'));          // delete "b" → a, c
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Escape));
+
+                        List<string> result = (List<string>)(await modal.Completion.ConfigureAwait(false))!;
+                        MuxAssert.AreEqual("a,c", string.Join(",", result), "removed");
+                    }),
+
+                    Case("QueueEditorEditsText", "The editor edits a queued prompt's text", async (CancellationToken ct) =>
+                    {
+                        QueueEditorModal modal = new QueueEditorModal(new List<string> { "a", "b" });
+                        modal.HandleKey(KeyEvent.Char((int)'e'));          // begin editing "a"
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Backspace)); // clear "a"
+                        modal.HandleKey(KeyEvent.Char((int)'x'));
+                        modal.HandleKey(KeyEvent.Char((int)'y'));
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Enter));  // commit → "xy"
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Escape));
+
+                        List<string> result = (List<string>)(await modal.Completion.ConfigureAwait(false))!;
+                        MuxAssert.AreEqual("xy,b", string.Join(",", result), "edited");
                     }),
 
                     // ---- Thinking indicator ----
@@ -379,6 +462,18 @@ namespace Test.Shared.Suites
                 }
 
                 linked.Token.ThrowIfCancellationRequested();
+            }
+        }
+
+        private static async Task WaitUntilAsync(Func<bool> condition, CancellationToken cancellationToken)
+        {
+            using (CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+            using (CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token))
+            {
+                while (!condition())
+                {
+                    await Task.Delay(10, linked.Token).ConfigureAwait(false);
+                }
             }
         }
 

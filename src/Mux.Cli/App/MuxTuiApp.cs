@@ -24,11 +24,13 @@ namespace Mux.Cli.App
 
     /// <summary>
     /// The TUIKit-hosted interactive shell for mux. Presents a single continuous conversation: the user
-    /// types a prompt and it runs; typing another prompt while a turn is running queues it to run when the
-    /// current turn finishes (like a chat client). One transcript <see cref="Pane"/> holds the whole
-    /// conversation; a sidebar shows the active endpoint and per-turn / session telemetry; the bottom row
-    /// is a green <c>mux&gt;</c> prompt and the composer. The terminal backend is injected so the shell can
-    /// be driven headlessly in tests.
+    /// types a prompt and it runs, one turn at a time. Prompts entered while a turn is running are queued
+    /// and serviced in order; the pending queue is shown in a strip above the composer (not echoed into the
+    /// transcript until each prompt starts) and can be edited, reordered, or trimmed in a modal (Ctrl+G)
+    /// that pauses processing while open. One transcript <see cref="Pane"/> holds the whole conversation; a
+    /// sidebar shows the active endpoint and per-turn / session telemetry; the bottom row is a green
+    /// <c>mux&gt;</c> prompt and the composer. The terminal backend is injected so the shell can be driven
+    /// headlessly in tests.
     /// </summary>
     public sealed class MuxTuiApp : IDisposable
     {
@@ -39,6 +41,8 @@ namespace Mux.Cli.App
         private const string ComposerRegion = "composer";
         private const string PromptLabelRegion = "promptlabel";
         private const string FooterRegion = "footer";
+        private const string QueueRegion = "queue";
+        private const int MaxQueueStripRows = 6;
         private const string PromptText = "mux> ";
         private const int SidebarWidth = 28;
         private const int CollapseThreshold = 100;
@@ -56,13 +60,14 @@ namespace Mux.Cli.App
         private readonly Pane _SidebarPane;
         private readonly Pane _PromptLabel;
         private readonly Pane _Footer;
+        private readonly Pane _QueuePane;
         private readonly TextEditor _Composer;
         private readonly SidebarView _Sidebar;
         private readonly MuxCommandCatalog _Catalog;
         private Layout _ExpandedLayout = null!;
         private Layout _CollapsedLayout = null!;
         private readonly List<ConversationMessage> _ConversationHistory = new List<ConversationMessage>();
-        private readonly Queue<string> _PendingPrompts = new Queue<string>();
+        private readonly List<string> _PendingPrompts = new List<string>();
         private readonly List<string> _TurnJobIds = new List<string>();
         private readonly List<Task> _ProjectorTasks = new List<Task>();
         private readonly ConversationStats _Stats = new ConversationStats();
@@ -83,6 +88,12 @@ namespace Mux.Cli.App
         private bool _CollapsedApplied;
         private int _ThemeIndex;
         private bool _Disposed;
+
+        // Queue processing is paused while the queue-editor modal is open, so a turn finishing mid-edit
+        // does not start the next prompt out from under the user. _QueueHeight is the strip's current row
+        // count, tracked so the layout is only rebuilt when it actually changes.
+        private bool _QueuePaused;
+        private int _QueueHeight;
 
         private static readonly Theme MuxTheme = CreateTheme();
         private static readonly Theme[] _Themes = { MuxTheme, Theme.Dark, Theme.Light, Theme.HighContrast };
@@ -129,12 +140,13 @@ namespace Mux.Cli.App
             _App.MouseCaptureEnabled = true; // always on by default; F12 hands the mouse back for native text selection
             _App.Theme = MuxTheme; // no background color; the terminal's own background shows through
 
-            BuildLayouts(1);
+            BuildLayouts(1, 0);
 
             _Conversation = new Pane(TranscriptRegion);
             _SidebarPane = new Pane(SidebarRegion);
             _PromptLabel = new Pane(PromptLabelRegion);
             _Footer = new Pane(FooterRegion);
+            _QueuePane = new Pane(QueueRegion);
             _Composer = new TextEditor { IsFocused = true };
             _Sidebar = new SidebarView(_SidebarPane);
 
@@ -144,6 +156,7 @@ namespace Mux.Cli.App
             _App.BindPane(SidebarRegion, _SidebarPane);
             _App.BindPane(PromptLabelRegion, _PromptLabel);
             _App.BindPane(FooterRegion, _Footer);
+            _App.BindPane(QueueRegion, _QueuePane);
             _App.Bind(ComposerRegion, _Composer);
 
             // Fill every pane's blank cells with the theme background so the rectangles conform to the
@@ -156,6 +169,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.clear", "Clear transcript", "ctrl+l", ClearTranscript, "View", new[] { "clear" }));
             _Catalog.Add(new CommandDescriptor("mux.sidebar.toggle", "Toggle sidebar", "ctrl+b", ToggleSidebar, "View", new[] { "sidebar" }));
             _Catalog.Add(new CommandDescriptor("mux.save", "Save session", "ctrl+s", SaveSession, "Session", new[] { "save" }));
+            _Catalog.Add(new CommandDescriptor("mux.queue", "Edit queue", "ctrl+g", OpenQueueEditor, "Session", new[] { "queue", "edit queue", "pending" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme…", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
@@ -652,8 +666,11 @@ namespace Mux.Cli.App
                 _Conversation.Clear();
                 _ConversationHistory.Clear();
                 _TurnJobIds.Clear();
+                _PendingPrompts.Clear();
+                _QueuePaused = false;
             }
 
+            UpdateQueueStrip();
             _PromptHistory.Restore(resume.PromptHistory);
 
             foreach (PersistedJobSnapshot job in resume.CompletedJobs)
@@ -725,6 +742,29 @@ namespace Mux.Cli.App
         public IReadOnlyList<string> FooterSnapshot()
         {
             return _Footer.SnapshotPlainLines();
+        }
+
+        /// <summary>
+        /// Returns a plain-text snapshot of the queue strip above the composer. Test helper.
+        /// </summary>
+        /// <returns>The committed queue-strip lines without styling.</returns>
+        public IReadOnlyList<string> QueueStripSnapshot()
+        {
+            return _QueuePane.SnapshotPlainLines();
+        }
+
+        /// <summary>
+        /// Whether queue processing is currently paused (the queue editor is open). Test helper.
+        /// </summary>
+        public bool IsQueuePaused
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _QueuePaused;
+                }
+            }
         }
 
         /// <summary>
@@ -811,24 +851,41 @@ namespace Mux.Cli.App
 
         #region Private-Methods
 
-        private void BuildLayouts(int composerHeight)
+        private void BuildLayouts(int composerHeight, int queueHeight)
         {
             int promptWidth = PromptText.Length;
-            int reserve = composerHeight + 1; // input row(s) + 1 status row
-            _ExpandedLayout = Layout.Create()
+
+            // Bottom rows, from the bottom up: composer (composerHeight) · footer (2 rows: a blank spacer
+            // above the hint so the transcript never butts into the prompt area) · queue strip (queueHeight,
+            // zero when empty). The transcript fills whatever remains above them.
+            const int footerHeight = 2;
+            int reserve = composerHeight + footerHeight + queueHeight;
+            int queueOffset = composerHeight + footerHeight;
+
+            LayoutBuilder expanded = Layout.Create()
                 .Add(TranscriptRegion, r => r.FillWidth(0, SidebarWidth).FillHeight(0, reserve).WithPadding(0))
                 .Add(SidebarRegion, r => r.RightAnchored(0, SidebarWidth).FillHeight(0, reserve).WithPadding(0))
-                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(composerHeight, 1).WithPadding(0))
+                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(composerHeight, footerHeight).WithPadding(0))
                 .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).WithPadding(0))
-                .Add(ComposerRegion, r => r.FillWidth(promptWidth, 0).BottomAnchored(0, composerHeight).WithPadding(0))
-                .Build();
+                .Add(ComposerRegion, r => r.FillWidth(promptWidth, 0).BottomAnchored(0, composerHeight).WithPadding(0));
+            if (queueHeight > 0)
+            {
+                expanded.Add(QueueRegion, r => r.FillWidth(0, SidebarWidth).BottomAnchored(queueOffset, queueHeight).WithPadding(0));
+            }
 
-            _CollapsedLayout = Layout.Create()
+            _ExpandedLayout = expanded.Build();
+
+            LayoutBuilder collapsed = Layout.Create()
                 .Add(TranscriptRegion, r => r.FillWidth().FillHeight(0, reserve).WithPadding(0))
-                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(composerHeight, 1).WithPadding(0))
+                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(composerHeight, footerHeight).WithPadding(0))
                 .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).WithPadding(0))
-                .Add(ComposerRegion, r => r.FillWidth(promptWidth, 0).BottomAnchored(0, composerHeight).WithPadding(0))
-                .Build();
+                .Add(ComposerRegion, r => r.FillWidth(promptWidth, 0).BottomAnchored(0, composerHeight).WithPadding(0));
+            if (queueHeight > 0)
+            {
+                collapsed.Add(QueueRegion, r => r.FillWidth().BottomAnchored(queueOffset, queueHeight).WithPadding(0));
+            }
+
+            _CollapsedLayout = collapsed.Build();
         }
 
         private static Theme CreateTheme()
@@ -916,6 +973,7 @@ namespace Mux.Cli.App
                     case 'b': ToggleSidebar(); return true;
                     case 's': SaveSession(); return true;
                     case 'e': OpenEndpointModal(); return true;
+                    case 'g': OpenQueueEditor(); return true;
                 }
 
                 // Swallow any other Ctrl+key so control codes never land in the composer as text.
@@ -973,9 +1031,6 @@ namespace Mux.Cli.App
                 return;
             }
 
-            // Echo the submitted prompt into the transcript immediately, so the user always sees what they
-            // sent even before the model responds.
-            EchoPrompt(prompt);
             EnqueueOrRun(prompt);
         }
 
@@ -984,15 +1039,17 @@ namespace Mux.Cli.App
             bool startNow;
             lock (_Sync)
             {
-                if (_TurnInFlight)
-                {
-                    _PendingPrompts.Enqueue(prompt);
-                    startNow = false;
-                }
-                else
+                // Run immediately only when idle and the queue isn't paused for editing; otherwise the
+                // prompt joins the queue and is serviced in order once the model is free again.
+                if (!_TurnInFlight && !_QueuePaused)
                 {
                     _TurnInFlight = true;
                     startNow = true;
+                }
+                else
+                {
+                    _PendingPrompts.Add(prompt);
+                    startNow = false;
                 }
             }
 
@@ -1002,6 +1059,9 @@ namespace Mux.Cli.App
             }
             else
             {
+                // A queued prompt is shown in the strip above the composer, not echoed into the transcript;
+                // it is echoed there only when it actually starts.
+                UpdateQueueStrip();
                 RefreshSidebar();
                 RefreshFooter();
             }
@@ -1009,6 +1069,10 @@ namespace Mux.Cli.App
 
         private void RunTurn(string prompt)
         {
+            // Echo the prompt into the transcript when the turn actually starts, so the transcript shows
+            // real turns in order rather than prompts that are still waiting in the queue.
+            EchoPrompt(prompt);
+
             List<ConversationMessage> seed;
             lock (_Sync)
             {
@@ -1087,16 +1151,141 @@ namespace Mux.Cli.App
                 }
 
                 _ActiveJob = null;
-                next = _PendingPrompts.Count > 0 ? _PendingPrompts.Dequeue() : null;
-                if (next == null)
+
+                // Start the next queued prompt in order — unless the queue is paused for editing, in which
+                // case the shell goes idle and resumes when the editor closes.
+                if (!_QueuePaused && _PendingPrompts.Count > 0)
                 {
+                    next = _PendingPrompts[0];
+                    _PendingPrompts.RemoveAt(0);
+                }
+                else
+                {
+                    next = null;
                     _TurnInFlight = false;
                 }
             }
 
+            UpdateQueueStrip();
             RefreshSidebar();
             RefreshFooter();
             AutoSave();
+
+            if (next != null)
+            {
+                RunTurn(next);
+            }
+        }
+
+        // Renders the pending-prompt strip above the composer and resizes it to fit, so an empty queue
+        // takes no space and a growing queue pushes the transcript up. Called whenever the queue changes.
+        private void UpdateQueueStrip()
+        {
+            List<string> queued;
+            bool paused;
+            lock (_Sync)
+            {
+                queued = new List<string>(_PendingPrompts);
+                paused = _QueuePaused;
+
+                int desired = queued.Count == 0 ? 0 : Math.Min(queued.Count + 1, MaxQueueStripRows);
+                if (desired != _QueueHeight)
+                {
+                    _QueueHeight = desired;
+                    BuildLayouts(1, desired);
+                    bool collapse = _ManualCollapsed || _Backend.Size.Width < CollapseThreshold;
+                    _App.Layout = collapse ? _CollapsedLayout : _ExpandedLayout;
+                    _CollapsedApplied = collapse;
+                }
+            }
+
+            RenderQueueStrip(queued, paused);
+        }
+
+        private void RenderQueueStrip(List<string> queued, bool paused)
+        {
+            _QueuePane.Clear();
+            if (queued.Count == 0)
+            {
+                return;
+            }
+
+            string hint = paused ? "paused — editing" : "^G to edit";
+            _QueuePane.WriteLine(Text.From($"QUEUED ({queued.Count}) · {hint}").Yellow().Bold());
+
+            // One header row plus up to MaxQueueStripRows-1 prompt rows; the last row summarizes any excess.
+            int promptRows = MaxQueueStripRows - 1;
+            if (queued.Count <= promptRows)
+            {
+                for (int i = 0; i < queued.Count; i++)
+                {
+                    _QueuePane.WriteLine(Text.From($"  {i + 1}. {PromptPreview(queued[i])}").Dim());
+                }
+
+                return;
+            }
+
+            for (int i = 0; i < promptRows - 1; i++)
+            {
+                _QueuePane.WriteLine(Text.From($"  {i + 1}. {PromptPreview(queued[i])}").Dim());
+            }
+
+            _QueuePane.WriteLine(Text.From($"  …and {queued.Count - (promptRows - 1)} more").Dim());
+        }
+
+        private static string PromptPreview(string prompt)
+        {
+            string flattened = (prompt ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+            const int max = 60;
+            return flattened.Length <= max ? flattened : flattened.Substring(0, max - 1) + "…";
+        }
+
+        // Opens the queue editor. Processing pauses while it is open so a turn finishing mid-edit does not
+        // start the next prompt; on close the edited list becomes the queue and processing resumes.
+        private void OpenQueueEditor()
+        {
+            List<string> snapshot;
+            lock (_Sync)
+            {
+                _QueuePaused = true;
+                snapshot = new List<string>(_PendingPrompts);
+            }
+
+            UpdateQueueStrip();
+            RefreshSidebar();
+
+            QueueEditorModal modal = new QueueEditorModal(snapshot);
+            _App.Modals.Push(modal);
+            _ = ResolveQueueEditorAsync(modal);
+        }
+
+        private async Task ResolveQueueEditorAsync(QueueEditorModal modal)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+
+            string? next = null;
+            lock (_Sync)
+            {
+                if (result is List<string> edited)
+                {
+                    _PendingPrompts.Clear();
+                    _PendingPrompts.AddRange(edited);
+                }
+
+                _QueuePaused = false;
+
+                // Resume: if the model is idle and prompts remain, start the next one in order.
+                if (!_TurnInFlight && _PendingPrompts.Count > 0)
+                {
+                    _TurnInFlight = true;
+                    next = _PendingPrompts[0];
+                    _PendingPrompts.RemoveAt(0);
+                }
+            }
+
+            UpdateQueueStrip();
+            RefreshSidebar();
+            RefreshFooter();
 
             if (next != null)
             {
@@ -1682,7 +1871,10 @@ namespace Mux.Cli.App
 
         private void SetFooterHint(string hint)
         {
+            // A blank spacer line sits above the hint (the footer region is two rows) so the transcript
+            // never butts directly into the prompt area.
             _Footer.Clear();
+            _Footer.WriteLine(Text.From(string.Empty));
             _Footer.WriteLine(Text.From(hint).Dim());
         }
 
