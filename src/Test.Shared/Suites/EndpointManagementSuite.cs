@@ -110,9 +110,10 @@ namespace Test.Shared.Suites
                             await using (JobManager manager = NewManager())
                             using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager, "solo", null))
                             {
-                                // Options: [solo, + Add, ✎ Edit, - Remove] -> Edit is index 2.
+                                // Options: [solo, (blank), + Add, ✎ Edit, - Remove, ⬇ Import] -> Edit is index 3.
                                 Feed(backend, app, "/endpoint" + "\r");
                                 await WaitModal(app, ct).ConfigureAwait(false);
+                                Feed(backend, app, Esc + "[B"); // Down -> (blank separator)
                                 Feed(backend, app, Esc + "[B"); // Down -> + Add
                                 Feed(backend, app, Esc + "[B"); // Down -> ✎ Edit
                                 Feed(backend, app, "\r");       // choose Edit
@@ -137,9 +138,10 @@ namespace Test.Shared.Suites
                             await using (JobManager manager = NewManager())
                             using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager, "solo", null))
                             {
-                                // Options: [solo, + Add, ✎ Edit, - Remove] -> Remove is index 3.
+                                // Options: [solo, (blank), + Add, ✎ Edit, - Remove, ⬇ Import] -> Remove is index 4.
                                 Feed(backend, app, "/endpoint" + "\r");
                                 await WaitModal(app, ct).ConfigureAwait(false);
+                                Feed(backend, app, Esc + "[B"); // Down -> (blank separator)
                                 Feed(backend, app, Esc + "[B"); // Down -> + Add
                                 Feed(backend, app, Esc + "[B"); // Down -> ✎ Edit
                                 Feed(backend, app, Esc + "[B"); // Down -> - Remove

@@ -11,6 +11,7 @@ namespace Mux.Cli.App
     using Mux.Core.Models;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
+    using Mux.Core.Utility;
     using TUIKit;
     using TUIKit.Content;
     using TUIKit.Hosting;
@@ -1790,55 +1791,85 @@ namespace Mux.Cli.App
             }
         }
 
+        // The kinds of rows shown in the Endpoints / models list, kept in a list parallel to the option
+        // strings so a blank separator or a trailing action never has to be inferred from index math.
+        private enum EndpointMenuAction
+        {
+            Switch,
+            None,
+            Add,
+            Edit,
+            Remove,
+            Import
+        }
+
         private void OpenEndpointModal()
         {
             List<EndpointConfig> endpoints = LoadEndpointsSafe();
             List<string> options = new List<string>();
+            List<EndpointMenuAction> actions = new List<EndpointMenuAction>();
+
             foreach (EndpointConfig endpoint in endpoints)
             {
                 string marker = string.Equals(endpoint.Name, _EndpointName, StringComparison.OrdinalIgnoreCase) ? "● " : "  ";
                 options.Add($"{marker}{endpoint.Name}  ({endpoint.AdapterType} · {endpoint.Model})");
+                actions.Add(EndpointMenuAction.Switch);
+            }
+
+            // A blank separator row sets the configured models apart from the management actions below.
+            if (endpoints.Count > 0)
+            {
+                options.Add(string.Empty);
+                actions.Add(EndpointMenuAction.None);
             }
 
             options.Add("+ Add endpoint…");
+            actions.Add(EndpointMenuAction.Add);
             if (endpoints.Count > 0)
             {
                 options.Add("✎ Edit endpoint…");
+                actions.Add(EndpointMenuAction.Edit);
                 options.Add("- Remove endpoint…");
+                actions.Add(EndpointMenuAction.Remove);
             }
+
+            options.Add("⬇ Import from Ollama…");
+            actions.Add(EndpointMenuAction.Import);
 
             SelectModal modal = new SelectModal("Endpoints / models — Enter to switch", options);
             _App.Modals.Push(modal);
-            _ = ResolveEndpointModalAsync(modal, endpoints);
+            _ = ResolveEndpointModalAsync(modal, endpoints, actions);
         }
 
-        private async Task ResolveEndpointModalAsync(SelectModal modal, List<EndpointConfig> endpoints)
+        private async Task ResolveEndpointModalAsync(SelectModal modal, List<EndpointConfig> endpoints, List<EndpointMenuAction> actions)
         {
             object? result = await modal.Completion.ConfigureAwait(false);
             int index = result is int value ? value : -1;
-            if (index < 0)
+            if (index < 0 || index >= actions.Count)
             {
                 return;
             }
 
-            if (index < endpoints.Count)
+            switch (actions[index])
             {
-                SwitchEndpoint(endpoints[index]);
-                return;
-            }
-
-            int extra = index - endpoints.Count;
-            if (extra == 0)
-            {
-                await AddEndpointFormAsync().ConfigureAwait(false);
-            }
-            else if (extra == 1)
-            {
-                await EditEndpointFormAsync(endpoints).ConfigureAwait(false);
-            }
-            else if (extra == 2)
-            {
-                await RemoveEndpointAsync(endpoints).ConfigureAwait(false);
+                case EndpointMenuAction.Switch:
+                    SwitchEndpoint(endpoints[index]);
+                    break;
+                case EndpointMenuAction.Add:
+                    await AddEndpointFormAsync().ConfigureAwait(false);
+                    break;
+                case EndpointMenuAction.Edit:
+                    await EditEndpointFormAsync(endpoints).ConfigureAwait(false);
+                    break;
+                case EndpointMenuAction.Remove:
+                    await RemoveEndpointAsync(endpoints).ConfigureAwait(false);
+                    break;
+                case EndpointMenuAction.Import:
+                    await ImportFromOllamaAsync().ConfigureAwait(false);
+                    break;
+                case EndpointMenuAction.None:
+                default:
+                    break;
             }
         }
 
@@ -1969,6 +2000,169 @@ namespace Mux.Cli.App
             catch (Exception ex)
             {
                 WriteNotice("Remove failed: " + ex.Message);
+            }
+        }
+
+        private async Task ImportFromOllamaAsync()
+        {
+            // Ask for the Ollama base URL to import completion models from.
+            PromptModal urlPrompt = new PromptModal("Import from Ollama — base URL", "http://localhost:11434");
+            _App.Modals.Push(urlPrompt);
+            object? urlResult = await urlPrompt.Completion.ConfigureAwait(false);
+            string entered = (urlResult as string ?? string.Empty).Trim();
+            if (entered.Length == 0)
+            {
+                return;
+            }
+
+            string normalized = OllamaModelLister.NormalizeBaseUrl(entered);
+
+            // Pull the installed models from the endpoint.
+            WriteNotice($"Querying Ollama at {normalized}…");
+            List<string> models;
+            try
+            {
+                models = await OllamaModelLister
+                    .ListModelsAsync(normalized, LoadIgnoreCertSafe(), _Cts.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                WriteNotice($"Ollama import failed: {ex.Message}");
+                return;
+            }
+
+            if (models.Count == 0)
+            {
+                WriteNotice($"No models found at {normalized}.");
+                return;
+            }
+
+            // Only offer model+endpoint combinations that are not already configured.
+            List<EndpointConfig> existing = LoadEndpointsSafe();
+            HashSet<string> alreadyImported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (EndpointConfig endpoint in existing)
+            {
+                if (endpoint.AdapterType == AdapterTypeEnum.Ollama
+                    && string.Equals(OllamaModelLister.NormalizeBaseUrl(endpoint.BaseUrl), normalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    alreadyImported.Add(endpoint.Model);
+                }
+            }
+
+            List<string> candidates = new List<string>();
+            foreach (string model in models)
+            {
+                if (!alreadyImported.Contains(model))
+                {
+                    candidates.Add(model);
+                }
+            }
+
+            int skipped = models.Count - candidates.Count;
+            if (candidates.Count == 0)
+            {
+                WriteNotice($"All {models.Count} model(s) at {normalized} are already imported.");
+                return;
+            }
+
+            string title = skipped > 0
+                ? $"Import from {normalized} ({skipped} already imported)"
+                : $"Import from {normalized}";
+            MultiSelectModal picker = new MultiSelectModal(
+                title,
+                candidates,
+                "⚠ Select COMPLETION models only — do not select embedding models.");
+            _App.Modals.Push(picker);
+            object? pickResult = await picker.Completion.ConfigureAwait(false);
+            if (!(pickResult is List<int> chosen) || chosen.Count == 0)
+            {
+                return;
+            }
+
+            // Add an endpoint per selected model, skipping any combination that already exists and giving
+            // each a name unique among the configured endpoints.
+            List<EndpointConfig> current = LoadEndpointsSafe();
+            HashSet<string> takenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (EndpointConfig endpoint in current)
+            {
+                takenNames.Add(endpoint.Name);
+            }
+
+            int added = 0;
+            foreach (int index in chosen)
+            {
+                if (index < 0 || index >= candidates.Count)
+                {
+                    continue;
+                }
+
+                string model = candidates[index];
+                bool exists = current.Exists(e =>
+                    e.AdapterType == AdapterTypeEnum.Ollama
+                    && string.Equals(OllamaModelLister.NormalizeBaseUrl(e.BaseUrl), normalized, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(e.Model, model, StringComparison.OrdinalIgnoreCase));
+                if (exists)
+                {
+                    continue;
+                }
+
+                string name = UniqueEndpointName(model, takenNames);
+                takenNames.Add(name);
+                current.Add(new EndpointConfig
+                {
+                    Name = name,
+                    AdapterType = AdapterTypeEnum.Ollama,
+                    BaseUrl = normalized,
+                    Model = model
+                });
+                added++;
+            }
+
+            if (added == 0)
+            {
+                WriteNotice("Nothing to import — the selected models are already configured.");
+                return;
+            }
+
+            try
+            {
+                SettingsLoader.SaveEndpoints(current);
+                WriteNotice($"Imported {added} model(s) from {normalized}.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Import save failed: " + ex.Message);
+            }
+        }
+
+        private static string UniqueEndpointName(string model, HashSet<string> taken)
+        {
+            string baseName = string.IsNullOrWhiteSpace(model) ? "ollama-model" : model.Trim();
+            if (!taken.Contains(baseName))
+            {
+                return baseName;
+            }
+
+            for (int suffix = 2; ; suffix++)
+            {
+                string candidate = $"{baseName} ({suffix})";
+                if (!taken.Contains(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        private static bool LoadIgnoreCertSafe()
+        {
+            try
+            {
+                return SettingsLoader.LoadSettings().IgnoreCertErrors;
+            }
+            catch (Exception)
+            {
+                return false;
             }
         }
 

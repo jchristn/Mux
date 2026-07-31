@@ -113,7 +113,10 @@ namespace Test.Shared
                     PolishSuite.Create(),
 
                     // Mux.Cli interactive endpoint/model management (post-migration restoration).
-                    EndpointManagementSuite.Create()
+                    EndpointManagementSuite.Create(),
+
+                    // Ollama completion-model importer: URL normalization + /api/tags discovery.
+                    OllamaImportSuite.Create()
                 };
             }
         }

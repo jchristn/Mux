@@ -155,6 +155,14 @@ The `/endpoint` picker (also `Ctrl+E`) lists your configured endpoints; pick one
 
 For secret values, the form lets you either store the value directly in `endpoints.json` or store an environment-variable reference. It accepts a bare variable name plus `${VAR}`, `%VAR%`, `$VAR`, and `$env:VAR`, then stores environment references canonically as `${VAR}`. For `ollama`, mux uses Ollama's native API root, so the usual base URL is `http://localhost:11434` (no `/v1`); a trailing `/v1` is tolerated and stripped for this adapter.
 
+Below the configured endpoints (which are separated from the actions by a blank row), the picker also offers **Import from Ollama…** for bulk-importing completion models from a running Ollama server:
+
+1. It prompts for the server's base URL, defaulting to `http://localhost:11434`. A missing scheme is filled in with `http://`, and a trailing `/v1` or slash is stripped so the value matches Ollama's native API root.
+2. It queries the server's installed models (`GET /api/tags`) and presents a scrollable multi-select checklist of what it finds. `Space` toggles the highlighted model, `a` toggles all, `Enter` imports the checked models, and `Esc` cancels.
+3. Because Ollama's model list does not distinguish completion models from embedding models, **every** installed model is shown with a reminder to select completion models only — leave embedding models (for example `nomic-embed-text`) unchecked.
+
+Any model whose model-plus-endpoint combination is already configured is left out of the checklist, so re-running the import never creates duplicates (the picker's title notes how many were already imported). Each selected model is saved to `endpoints.json` as a new `ollama` endpoint pointing at the normalized base URL, named after the model and de-duplicated against your existing endpoint names, and becomes selectable like any other endpoint.
+
 External search is configured in `settings.json` (Tavily or You.com); when at least one enabled provider is fully configured the `web_search` tool is enabled. `web_search` discovers candidate results; fetching the contents of a known URL is handled by `web_retrieve`. MCP servers are configured in `mcp-servers.json`.
 
 ### Interactive Input

@@ -244,6 +244,17 @@ namespace Test.Shared
                     return;
                 }
 
+                if (path == "/api/tags")
+                {
+                    // Ollama's model-discovery endpoint. Returns a fixed, intentionally unsorted set so the
+                    // model importer's sorting and name extraction can be exercised deterministically.
+                    await WriteJsonAsync(
+                        context,
+                        200,
+                        "{\"models\":[{\"name\":\"qwen2.5-coder:7b\",\"model\":\"qwen2.5-coder:7b\"},{\"name\":\"llama3:latest\",\"model\":\"llama3:latest\"},{\"name\":\"nomic-embed-text:latest\",\"model\":\"nomic-embed-text:latest\"}]}").ConfigureAwait(false);
+                    return;
+                }
+
                 await WriteJsonAsync(context, 404, "{\"error\":\"not found\"}").ConfigureAwait(false);
             }
             catch

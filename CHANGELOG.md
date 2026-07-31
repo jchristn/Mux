@@ -2,6 +2,30 @@
 
 All notable changes to mux are documented here.
 
+## Unreleased
+
+### Added
+
+- **Import completion models from an Ollama server** directly in the interactive endpoints / models
+  picker (`Ctrl+E`, `/endpoint`, `/model`). A new **Import from Ollama…** entry at the bottom of the
+  picker prompts for an Ollama base URL (default `http://localhost:11434`; a missing scheme is filled in
+  and a trailing `/v1` or slash is stripped to Ollama's native API root), queries the server's installed
+  models via `GET /api/tags`, and presents a scrollable multi-select checklist of what it finds. `Space`
+  toggles the highlighted model, `a` toggles all, `Enter` imports the checked models, and `Esc` cancels.
+  Ollama's model list does not classify models as completion vs. embedding, so every installed model is
+  listed with an on-screen reminder to select completion models only (leave embedding models unchecked).
+  Model-plus-endpoint combinations already present in `endpoints.json` are excluded from the checklist so
+  re-imports never create duplicates, and each selected model is saved as a new `ollama` endpoint at the
+  normalized base URL, uniquely named after the model.
+- `Mux.Core.Utility.OllamaModelLister` — a small utility that normalizes an Ollama base URL and lists a
+  server's installed model names from `GET /api/tags`.
+
+### Changed
+
+- The endpoints / models picker now renders a blank separator row between the configured endpoints and
+  the management actions (**Add endpoint**, **Edit endpoint**, **Remove endpoint**, and
+  **Import from Ollama…**).
+
 ## v0.3.0 - 2026-07-29
 
 This release rebuilds the mux interactive front-end on
