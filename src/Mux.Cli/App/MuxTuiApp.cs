@@ -171,7 +171,7 @@ namespace Mux.Cli.App
             ApplyPaneBackgrounds(MuxTheme);
 
             _Catalog = new MuxCommandCatalog();
-            _Catalog.Add(new CommandDescriptor("mux.quit", "Quit", "ctrl+q", RequestQuit, "Session", new[] { "quit", "exit", "q" }));
+            _Catalog.Add(new CommandDescriptor("mux.quit", "Exit", "ctrl+q", RequestQuit, "Session", new[] { "quit", "exit", "q" }));
             _Catalog.Add(new CommandDescriptor("mux.endpoint", "Endpoints / models", "ctrl+e", OpenEndpointModal, "Model", new[] { "endpoint", "endpoints", "model", "models" }));
             _Catalog.Add(new CommandDescriptor("mux.clear", "Clear transcript", "ctrl+l", ClearTranscript, "View", new[] { "clear" }));
             _Catalog.Add(new CommandDescriptor("mux.sidebar.toggle", "Toggle sidebar", "ctrl+b", ToggleSidebar, "View", new[] { "sidebar" }));
@@ -1765,11 +1765,20 @@ namespace Mux.Cli.App
         private void RequestQuit()
         {
             MessageModal modal = new MessageModal(
-                "Quit mux?",
-                "Exit mux? A running turn will be cancelled.",
-                new List<string> { "Quit", "Cancel" });
+                string.Empty,
+                CenterMessage("Exit mux?"),
+                new List<string> { "Exit", "Cancel" });
             _App.Modals.Push(modal);
             _ = ResolveQuitAsync(modal);
+        }
+
+        // MessageModal draws its message left-aligned in a box that is at least 28 columns wide, so a short
+        // prompt looks left-shifted; pad it so it renders centered.
+        private static string CenterMessage(string text)
+        {
+            const int minBoxContentWidth = 28;
+            int pad = Math.Max(0, (minBoxContentWidth - text.Length) / 2);
+            return new string(' ', pad) + text;
         }
 
         private async Task ResolveQuitAsync(MessageModal modal)

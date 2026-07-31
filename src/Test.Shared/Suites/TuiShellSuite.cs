@@ -220,7 +220,7 @@ namespace Test.Shared.Suites
                             Task run = app.RunAsync(ct);
                             backend.FeedInput(new byte[] { 0x11 }); // Ctrl+Q -> quit-confirmation modal
                             await WaitUntilAsync(() => app.IsModalActive, ct).ConfigureAwait(false);
-                            backend.FeedInput("\r"); // confirm "Quit" (default button)
+                            backend.FeedInput("\r"); // confirm "Exit" (default button)
 
                             await run.WaitAsync(TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
                             MuxAssert.IsTrue(run.IsCompletedSuccessfully, "run loop exited");

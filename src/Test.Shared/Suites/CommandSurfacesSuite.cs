@@ -166,12 +166,12 @@ namespace Test.Shared.Suites
                             Feed(backend, app, "/help" + "\r");
 
                             MuxAssert.IsTrue(app.IsModalActive, "help modal open");
-                            MuxAssert.IsFalse(Join(app.TranscriptSnapshot()).Contains("Quit", StringComparison.Ordinal), "help not written inline");
+                            MuxAssert.IsFalse(Join(app.TranscriptSnapshot()).Contains("Exit", StringComparison.Ordinal), "help not written inline");
 
                             // The modal renders the command listing through the full pipeline.
                             app.Start();
                             app.RenderOnce();
-                            MuxAssert.Contains("Quit", backend.PeekOutput(), "modal lists commands");
+                            MuxAssert.Contains("Exit", backend.PeekOutput(), "modal lists commands");
                         }
                     })
                 });
