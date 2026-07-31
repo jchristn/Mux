@@ -59,7 +59,6 @@ namespace Mux.Cli
             if (!isNonInteractiveCommand && !Console.IsOutputRedirected)
             {
                 Console.WriteLine($"mux v{Defaults.ProductVersion} - AI agent for local and remote LLMs");
-                Console.WriteLine("Initializing...");
             }
 
             return Dispatch(args);
