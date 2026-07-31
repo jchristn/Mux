@@ -94,6 +94,7 @@ namespace Mux.Cli.App
         private Func<string, bool>? _SlashHandler;
         private bool _ManualCollapsed;
         private bool _CollapsedApplied;
+        private bool _ShowBoundaries;
         private int _ThemeIndex;
         private bool _Disposed;
 
@@ -125,6 +126,7 @@ namespace Mux.Cli.App
         /// <param name="onEndpointSelected">Optional callback invoked when the user switches endpoints, so the caller can apply it to future runs. Null disables live switching.</param>
         /// <param name="onPromptProfileSelected">Optional callback invoked when the user applies a prompt profile, so the caller can substitute placeholders and apply it to future runs. Null disables live prompt switching.</param>
         /// <param name="showSplash">When true, opens the startup splash modal.</param>
+        /// <param name="showBoundaries">When true, the shell starts with the dark-grey boundary lines drawn (toggle with <c>/borders</c>).</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
             ITerminalBackend backend,
@@ -136,7 +138,8 @@ namespace Mux.Cli.App
             string model = "",
             Action<EndpointConfig>? onEndpointSelected = null,
             Action<PromptProfile>? onPromptProfileSelected = null,
-            bool showSplash = false)
+            bool showSplash = false,
+            bool showBoundaries = false)
         {
             _Backend = backend ?? throw new ArgumentNullException(nameof(backend));
             _JobManager = jobManager ?? throw new ArgumentNullException(nameof(jobManager));
@@ -146,12 +149,14 @@ namespace Mux.Cli.App
             _OnPromptProfileSelected = onPromptProfileSelected;
             _EndpointName = endpointName ?? string.Empty;
             _Model = model ?? string.Empty;
+            _ShowBoundaries = showBoundaries;
             _Title = string.IsNullOrWhiteSpace(title) ? "mux" : title;
 
             _App = new TuiApplication(backend);
             _App.CtrlCPolicy = CtrlCPolicy.DoubleTapToExit;
             _App.MouseCaptureEnabled = true; // always on by default; F12 hands the mouse back for native text selection
             _App.Theme = MuxTheme; // no background color; the terminal's own background shows through
+            _App.RenderOverlay = DrawBoundaries; // optional dark-grey rules between the main regions
 
             BuildLayouts(1, 0);
 
@@ -188,6 +193,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme…", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
+            _Catalog.Add(new CommandDescriptor("mux.borders", "Toggle boundary lines", null, ToggleBoundaries, "View", new[] { "borders", "boundaries", "boundary", "lines" }));
             _Catalog.Add(new CommandDescriptor("mux.menu", "Command menu", "f1", OpenCommandMenu, "Help", new[] { "menu" }));
             _Catalog.Add(new CommandDescriptor("mux.help", "Help (keymap)", null, ShowHelp, "Help", new[] { "help", "?" }));
             _Catalog.ApplyTo(_App);
@@ -580,6 +586,117 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
+        /// Toggles the dark-grey boundary lines on or off, rebuilds the layout so the rules get (or give
+        /// back) their reserved rows, and persists the choice to <c>settings.json</c>.
+        /// </summary>
+        public void ToggleBoundaries()
+        {
+            bool enabled;
+            lock (_Sync)
+            {
+                _ShowBoundaries = !_ShowBoundaries;
+                enabled = _ShowBoundaries;
+                RebuildLayoutNoLock();
+            }
+
+            PersistBoundaries(enabled);
+            WriteNotice(enabled ? "Boundary lines on." : "Boundary lines off.");
+            RefreshFooter();
+        }
+
+        private static void PersistBoundaries(bool enabled)
+        {
+            // Best-effort persistence: a save failure must never take down the interactive session, so a
+            // failed write just leaves the choice in effect for this run.
+            try
+            {
+                MuxSettings settings = SettingsLoader.LoadSettings();
+                settings.ShowBoundaryLines = enabled;
+                SettingsLoader.SaveSettings(settings);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        // Paints the optional boundary rules onto the root surface after the panes render. The row/column
+        // positions mirror the reserved gaps computed in BuildLayouts: a rule above the composer input, a
+        // rule above the queue strip (when shown), and a vertical rule in the gutter left of the sidebar.
+        private void DrawBoundaries(ISurface surface)
+        {
+            if (!_ShowBoundaries || surface == null)
+            {
+                return;
+            }
+
+            int width = surface.Size.Width;
+            int height = surface.Size.Height;
+            if (width < 2 || height < 4)
+            {
+                return;
+            }
+
+            int composerHeight;
+            int queueHeight;
+            bool collapsed;
+            lock (_Sync)
+            {
+                composerHeight = _ComposerHeight;
+                queueHeight = _QueueHeight;
+                collapsed = _CollapsedApplied;
+            }
+
+            const int footerHeight = 2;
+            const int inputBoundary = 1;
+            int queueBoundary = queueHeight > 0 ? 1 : 0;
+            int reserve = composerHeight + inputBoundary + footerHeight + queueHeight + queueBoundary;
+
+            CellStyle style = CellStyle.Default.WithForeground(Color.FromPalette(8)); // dim / dark grey
+
+            // 1) Horizontal rule directly above the prompt input (composer).
+            DrawHorizontalRule(surface, height - composerHeight - 1, width, style);
+
+            // 2) Horizontal rule directly above the queued-messages strip, when it is shown.
+            if (queueHeight > 0)
+            {
+                int queueOffset = composerHeight + inputBoundary + footerHeight;
+                DrawHorizontalRule(surface, height - queueOffset - queueHeight - 1, width, style);
+            }
+
+            // 3) Vertical rule in the gutter to the left of the sidebar, only when the sidebar is shown.
+            if (!collapsed)
+            {
+                int gutterX = width - SidebarWidth - 1;
+                int transcriptBottom = height - reserve - 1;
+                DrawVerticalRule(surface, gutterX, transcriptBottom, style);
+            }
+        }
+
+        private static void DrawHorizontalRule(ISurface surface, int row, int width, CellStyle style)
+        {
+            if (row < 0 || row >= surface.Size.Height)
+            {
+                return;
+            }
+
+            surface.DrawText(0, row, new string('─', Math.Max(0, Math.Min(width, surface.Size.Width))), style);
+        }
+
+        private static void DrawVerticalRule(ISurface surface, int col, int bottomRow, CellStyle style)
+        {
+            if (col < 0 || col >= surface.Size.Width)
+            {
+                return;
+            }
+
+            int bottom = Math.Min(bottomRow, surface.Size.Height - 1);
+            for (int y = 0; y <= bottom; y++)
+            {
+                surface.DrawText(col, y, "│", style);
+            }
+        }
+
+        /// <summary>
         /// Applies the collapsed or expanded layout based on the manual toggle and the current terminal
         /// width. Idempotent; safe to call from the render loop or from tests after a resize.
         /// </summary>
@@ -886,15 +1003,20 @@ namespace Mux.Cli.App
 
             // Bottom rows, from the bottom up: composer (composerHeight) · footer (2 rows: a blank spacer
             // above the hint so the transcript never butts into the prompt area) · queue strip (queueHeight,
-            // zero when empty). The transcript fills whatever remains above them.
+            // zero when empty). The transcript fills whatever remains above them. When boundary lines are on,
+            // one empty row is reserved above the composer (the input rule) and one above the queue strip
+            // (the queue rule); those rows carry no pane content and are painted by DrawBoundaries.
             const int footerHeight = 2;
-            int reserve = composerHeight + footerHeight + queueHeight;
-            int queueOffset = composerHeight + footerHeight;
+            int inputBoundary = _ShowBoundaries ? 1 : 0;
+            int queueBoundary = (_ShowBoundaries && queueHeight > 0) ? 1 : 0;
+            int reserve = composerHeight + inputBoundary + footerHeight + queueHeight + queueBoundary;
+            int footerOffset = composerHeight + inputBoundary;
+            int queueOffset = footerOffset + footerHeight;
 
             LayoutBuilder expanded = Layout.Create()
                 .Add(TranscriptRegion, r => r.FillWidth(0, SidebarWidth + SidebarGap).FillHeight(0, reserve).WithPadding(0))
                 .Add(SidebarRegion, r => r.RightAnchored(0, SidebarWidth).FillHeight(0, reserve).WithPadding(0))
-                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(composerHeight, footerHeight).WithPadding(0))
+                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(footerOffset, footerHeight).WithPadding(0))
                 .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).WithPadding(0))
                 .Add(ComposerRegion, r => r.FillWidth(promptWidth, 0).BottomAnchored(0, composerHeight).WithPadding(0));
             if (queueHeight > 0)
@@ -906,7 +1028,7 @@ namespace Mux.Cli.App
 
             LayoutBuilder collapsed = Layout.Create()
                 .Add(TranscriptRegion, r => r.FillWidth().FillHeight(0, reserve).WithPadding(0))
-                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(composerHeight, footerHeight).WithPadding(0))
+                .Add(FooterRegion, r => r.FillWidth().BottomAnchored(footerOffset, footerHeight).WithPadding(0))
                 .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).WithPadding(0))
                 .Add(ComposerRegion, r => r.FillWidth(promptWidth, 0).BottomAnchored(0, composerHeight).WithPadding(0));
             if (queueHeight > 0)

@@ -19,6 +19,11 @@ All notable changes to mux are documented here.
   normalized base URL, uniquely named after the model.
 - `Mux.Core.Utility.OllamaModelLister` — a small utility that normalizes an Ollama base URL and lists a
   server's installed model names from `GET /api/tags`.
+- **Optional boundary lines** in the interactive shell, off by default. A new `/borders` command (aliases
+  `/boundaries`, `/lines`; also on the `F1` menu under **View**) toggles dark-grey rules: a horizontal
+  rule above the prompt input, a horizontal rule above the queued-messages strip (when shown), and a
+  vertical rule in the gutter left of the sidebar. The choice persists to `settings.json` as the new
+  `showBoundaryLines` field (default `false`) and is applied on the next launch.
 - **Interactive MCP-server management** via a new `/mcp` command (aliases `/mcp-servers`, `/servers`;
   also on the `F1` menu under **Model**). It opens a picker over the servers configured in
   `mcp-servers.json` with **Add**, **Edit** (select a server row), and **Remove** (with confirmation)

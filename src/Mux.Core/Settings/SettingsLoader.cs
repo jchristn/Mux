@@ -798,6 +798,7 @@ namespace Mux.Core.Settings
                 MaxConcurrency = settings.MaxConcurrency,
                 DefaultEnqueueBehavior = settings.DefaultEnqueueBehavior,
                 IgnoreCertErrors = settings.IgnoreCertErrors,
+                ShowBoundaryLines = settings.ShowBoundaryLines,
                 ExternalSearch = NormalizeExternalSearchSettings(settings.ExternalSearch)
             };
 

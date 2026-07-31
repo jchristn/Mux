@@ -119,7 +119,10 @@ namespace Test.Shared
                     OllamaImportSuite.Create(),
 
                     // Mux.Cli interactive MCP-server management (list / add / edit / remove).
-                    McpManagementSuite.Create()
+                    McpManagementSuite.Create(),
+
+                    // Mux.Cli optional dark-grey boundary lines (/borders toggle + rendering).
+                    BoundaryLinesSuite.Create()
                 };
             }
         }

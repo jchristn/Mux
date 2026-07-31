@@ -200,6 +200,7 @@ Example:
   "compactionPreserveTurns": 3,
   "maxAgentIterations": 50,
   "ignoreCertErrors": false,
+  "showBoundaryLines": false,
   "externalSearch": {
     "enabled": false,
     "allowFallback": true,
@@ -224,6 +225,7 @@ Fields:
 | `compactionPreserveTurns` | int | number of recent user-led turns to preserve during compaction; clamped to `1-10` |
 | `maxAgentIterations` | int | default loop guard for tool-using runs; clamped to `1-100` and overridden by endpoint `maxAgentIterations` when that value is set |
 | `ignoreCertErrors` | bool | disable TLS certificate validation for mux-owned network requests; default `false` |
+| `showBoundaryLines` | bool | draw dark-grey boundary lines in the interactive shell (above the prompt input, above the queued-messages strip, and left of the sidebar); toggle live with `/borders`; default `false` |
 | `maxConcurrency` | int | maximum number of interactive jobs allowed to run at once; clamped to `1-32`, default `3` |
 | `defaultEnqueueBehavior` | string | how the interactive shell handles a submit while a job is active: `ask` (show the chooser), `run_now`, `queue_after` (both start a new job — the concurrency cap governs parallelism), or `add_to_focused` (append to the focused job); default `ask` |
 | `externalSearch` | object | optional Tavily/You.com provider configuration for the `web_search` tool |

@@ -273,7 +273,8 @@ CONFIG:
                         template.SystemPrompt = systemPrompt;
                         template.CompactionSystemPrompt = compactionPrompt;
                     },
-                    showSplash: true);
+                    showSplash: true,
+                    showBoundaries: runtime.MuxSettings.ShowBoundaryLines);
 
                 // Route escalated tool approvals to the shell's modal. The template is captured by
                 // CreateForAgentLoop and read per job run, so setting this before the run loop starts

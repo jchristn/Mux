@@ -24,6 +24,7 @@ namespace Mux.Core.Models
         private int _MaxConcurrency = 3;
         private string _DefaultEnqueueBehavior = "ask";
         private bool _IgnoreCertErrors = false;
+        private bool _ShowBoundaryLines = false;
         private ExternalSearchSettings _ExternalSearch = new ExternalSearchSettings();
 
         #endregion
@@ -201,6 +202,18 @@ namespace Mux.Core.Models
         {
             get => _IgnoreCertErrors;
             set => _IgnoreCertErrors = value;
+        }
+
+        /// <summary>
+        /// Whether the interactive shell draws dark-grey boundary lines: a horizontal rule above the
+        /// prompt input, a horizontal rule above the queued-messages strip, and a vertical rule in the
+        /// gutter to the left of the sidebar. Defaults to false (off). Toggle live with <c>/borders</c>.
+        /// </summary>
+        [JsonPropertyName("showBoundaryLines")]
+        public bool ShowBoundaryLines
+        {
+            get => _ShowBoundaryLines;
+            set => _ShowBoundaryLines = value;
         }
 
         /// <summary>
