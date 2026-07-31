@@ -17,7 +17,8 @@ The feature is being built on the `feature/skills` branch, phase by phase, each 
 - **Phase 2 — Execution and tools — done.** `SkillInterpreterResolver`, `SkillExecutor`, `SkillCatalog`, `SkillToolProvider` (`skill` / `run_skill`). Covered by `SkillProviderSuite`.
 - **Phase 3 — Interactive wiring — done.** `MuxSettings` skill fields, `SettingsLoader` skill index (`skills.json`) load/save and `skills/` seeding, `SkillRuntime` (an `IExternalToolProvider` with immutable-swap discovery, index enablement, and prompt-section building), `ExternalToolsBinder` composing MCP and skills onto the template, and the `Program.RunInteractive` wiring. Covered by `SkillRuntimeSuite` and `ExternalToolsBinderSuite`. The model can now discover and run skills in a live session.
 - **Phase 4 — Authoring and management surface — done.** `SkillScaffold`/`SkillScaffoldWriter`, a testable `SkillManager` (create, enable/disable, remove, duplicate, import), and the `/skills` inventory modal with status glyphs, per-skill actions (view, enable/disable, duplicate, remove), a step-by-step create wizard, local-path import, and reload. Covered by `SkillManagerSuite` (operations, tested directly) and `SkillManagementSuite` (the command surface). Import from a Git repo and the bundled-gallery install are deferred until the default library lands (Phase 6); the local-path import and duplicate cover the rest.
-- **Phases 5–7 — pending.**
+- **Phase 5 — CLI verb — done.** `mux skill list | show | validate | run | new | add`, dispatched from `Program`, sharing the same `SkillManager`/`SkillLoader`/`SkillExecutor` core as the UI. `validate` returns a nonzero exit on failure for CI, and `run` returns the process contract for hooks and automation. Covered by `SkillCommandSuite`.
+- **Phases 6–7 — pending.**
 
 Three decisions were settled during execution and the plan reflects them:
 

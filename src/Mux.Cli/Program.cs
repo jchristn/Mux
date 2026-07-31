@@ -211,6 +211,16 @@ CONFIG:
                         .GetResult();
                 }
 
+                if (args.Length > 0 && string.Equals(args[0], "skill", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] commandArgs = args.Skip(1).ToArray();
+                    SkillSettings settings = CliArgumentParser.ParseSkill(commandArgs);
+                    return new Mux.Cli.Commands.SkillCommand()
+                        .ExecuteAsync(new CommandContext("skill", args), settings, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+
                 // Default path: the TUIKit-hosted interactive shell.
                 return RunInteractive(args);
             }

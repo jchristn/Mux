@@ -139,6 +139,9 @@ namespace Test.Shared
                     SkillManagerSuite.Create(),
                     SkillManagementSuite.Create(),
 
+                    // Skills: the mux skill CLI verb.
+                    SkillCommandSuite.Create(),
+
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
                     McpRuntimeSuite.Create(),

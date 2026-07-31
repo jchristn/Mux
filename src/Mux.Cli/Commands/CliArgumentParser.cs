@@ -108,6 +108,70 @@ namespace Mux.Cli.Commands
             return settings;
         }
 
+        /// <summary>
+        /// Parses the arguments for the <c>mux skill</c> verb.
+        /// </summary>
+        /// <param name="args">The verb arguments (excluding the leading <c>skill</c>).</param>
+        /// <returns>The populated <see cref="SkillSettings"/>.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when an unknown option is supplied.</exception>
+        public static SkillSettings ParseSkill(string[] args)
+        {
+            SkillSettings settings = new SkillSettings();
+            List<string> positionals = new List<string>();
+
+            for (int i = 0; i < args.Length; i++)
+            {
+                string arg = args[i];
+                if (arg == "--")
+                {
+                    positionals.AddRange(args.Skip(i + 1));
+                    break;
+                }
+
+                SplitOption(arg, out string option, out string? inlineValue);
+                switch (option)
+                {
+                    case "--output-format":
+                        settings.OutputFormat = ReadValue(option, inlineValue, args, ref i);
+                        break;
+                    case "--config-dir":
+                        settings.ConfigDir = ReadValue(option, inlineValue, args, ref i);
+                        break;
+                    case "--cwd":
+                        settings.WorkingDirectory = ReadValue(option, inlineValue, args, ref i);
+                        break;
+                    case "--arg":
+                        settings.Args.Add(ReadValue(option, inlineValue, args, ref i));
+                        break;
+                    default:
+                        if (IsOption(arg))
+                        {
+                            throw new InvalidOperationException($"Unknown skill option '{arg}'.");
+                        }
+
+                        positionals.Add(arg);
+                        break;
+                }
+            }
+
+            if (positionals.Count > 0)
+            {
+                settings.Action = positionals[0];
+            }
+
+            if (positionals.Count > 1)
+            {
+                settings.Name = positionals[1];
+            }
+
+            if (positionals.Count > 2)
+            {
+                settings.Command = positionals[2];
+            }
+
+            return settings;
+        }
+
         private delegate bool ExtraOptionHandler(string option, string? inlineValue, string[] args, ref int index);
 
         private static List<string> ParseCommon(string[] args, CommonSettings settings, ExtraOptionHandler? extraHandler)
