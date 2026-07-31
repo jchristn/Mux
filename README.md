@@ -43,6 +43,13 @@
 <p align="center"><img src="assets/ss4.png" alt="mux screenshot 4" width="900"></p>
 <p align="center"><img src="assets/ss5.png" alt="mux screenshot 5" width="900"></p>
 
+**MCP tools**
+
+<p align="center"><img src="assets/ss6.png" alt="mux MCP tools screenshot 1" width="900"></p>
+<p align="center"><img src="assets/ss7.png" alt="mux MCP tools screenshot 2" width="900"></p>
+<p align="center"><img src="assets/ss8.png" alt="mux MCP tools screenshot 3" width="900"></p>
+<p align="center"><img src="assets/ss9.png" alt="mux MCP tools screenshot 4" width="900"></p>
+
 </details>
 
 ## Highlights
