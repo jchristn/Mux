@@ -137,7 +137,26 @@ namespace Test.Shared
         /// </summary>
         public void Start()
         {
-            _Listener.Start();
+            // The port is chosen by GetAvailablePort, which closes its probe socket before we bind, so a
+            // concurrent listener can claim it in between (a TOCTOU race that flakes on busy CI). Retry with
+            // a fresh port and listener on a bind failure.
+            const int attempts = 10;
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    _Listener.Start();
+                    break;
+                }
+                catch (Exception ex) when ((ex is HttpListenerException || ex is System.Net.Sockets.SocketException) && attempt < attempts)
+                {
+                    try { _Listener.Close(); } catch { }
+                    _Port = GetAvailablePort();
+                    _Listener = new HttpListener();
+                    _Listener.Prefixes.Add($"http://127.0.0.1:{_Port}/");
+                }
+            }
+
             _ListenerTask = Task.Run(() => ListenLoopAsync(_Cts.Token));
         }
 

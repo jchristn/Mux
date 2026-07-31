@@ -99,12 +99,27 @@ namespace Test.Shared
         /// <returns>The started server.</returns>
         public static LocalLlmTestServer Start()
         {
-            int port = GetFreePort();
-            string prefix = "http://127.0.0.1:" + port + "/";
-            HttpListener listener = new HttpListener();
-            listener.Prefixes.Add(prefix);
-            listener.Start();
-            return new LocalLlmTestServer(listener, prefix);
+            // GetFreePort closes its probe socket before we bind, so another listener can grab the port in
+            // between (a TOCTOU race that flakes on busy CI). Retry with a fresh port on a bind failure.
+            const int attempts = 10;
+            for (int attempt = 1; ; attempt++)
+            {
+                int port = GetFreePort();
+                string prefix = "http://127.0.0.1:" + port + "/";
+                HttpListener listener = new HttpListener();
+                listener.Prefixes.Add(prefix);
+                try
+                {
+                    listener.Start();
+                }
+                catch (Exception ex) when ((ex is HttpListenerException || ex is SocketException) && attempt < attempts)
+                {
+                    try { listener.Close(); } catch { }
+                    continue;
+                }
+
+                return new LocalLlmTestServer(listener, prefix);
+            }
         }
 
         #endregion
