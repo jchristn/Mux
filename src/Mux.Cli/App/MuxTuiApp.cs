@@ -42,7 +42,7 @@ namespace Mux.Cli.App
         private const string PromptLabelRegion = "promptlabel";
         private const string FooterRegion = "footer";
         private const string QueueRegion = "queue";
-        private const int MaxQueueStripRows = 6;
+        private const int MaxQueueStripRows = 7;
         private const int MaxComposerRows = 8;
         private const string PromptText = "mux> ";
         private const int SidebarWidth = 28;
@@ -1209,7 +1209,8 @@ namespace Mux.Cli.App
                 queued = new List<string>(_PendingPrompts);
                 paused = _QueuePaused;
 
-                int desired = queued.Count == 0 ? 0 : Math.Min(queued.Count + 1, MaxQueueStripRows);
+                // Rows: a blank spacer, the header, then one row per queued prompt (capped).
+                int desired = queued.Count == 0 ? 0 : Math.Min(queued.Count + 2, MaxQueueStripRows);
                 if (desired != _QueueHeight)
                 {
                     _QueueHeight = desired;
@@ -1255,11 +1256,15 @@ namespace Mux.Cli.App
                 return;
             }
 
+            // A blank spacer above the header so the transcript never butts into the queue strip.
+            _QueuePane.WriteLine(Text.From(string.Empty));
+
             string hint = paused ? "paused — editing" : "CTRL-G/edit";
             _QueuePane.WriteLine(Text.From($"QUEUED ({queued.Count}) · {hint}").Yellow().Bold());
 
-            // One header row plus up to MaxQueueStripRows-1 prompt rows; the last row summarizes any excess.
-            int promptRows = MaxQueueStripRows - 1;
+            // A spacer row and a header row, then up to MaxQueueStripRows-2 prompt rows; the last row
+            // summarizes any excess.
+            int promptRows = MaxQueueStripRows - 2;
             if (queued.Count <= promptRows)
             {
                 for (int i = 0; i < queued.Count; i++)

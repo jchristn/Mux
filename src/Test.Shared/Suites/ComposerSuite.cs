@@ -225,8 +225,12 @@ namespace Test.Shared.Suites
                             // strip above the composer and is NOT echoed to the transcript until it starts.
                             MuxAssert.Contains("first", Join(app.TranscriptSnapshot()), "first echoed to transcript");
                             MuxAssert.IsFalse(Join(app.TranscriptSnapshot()).Contains("second"), "second not yet in transcript");
-                            MuxAssert.Contains("second", Join(app.QueueStripSnapshot()), "second shown in the queue strip");
-                            MuxAssert.Contains("QUEUED", Join(app.QueueStripSnapshot()), "queue strip labeled");
+                            IReadOnlyList<string> strip = app.QueueStripSnapshot();
+                            MuxAssert.Contains("second", Join(strip), "second shown in the queue strip");
+                            MuxAssert.Contains("QUEUED", Join(strip), "queue strip labeled");
+                            // A blank spacer row sits above the QUEUED header.
+                            MuxAssert.AreEqual(string.Empty, strip[0].Trim(), "blank spacer above the header");
+                            MuxAssert.Contains("QUEUED", strip[1], "header on the second row");
 
                             release.TrySetResult(true);
                             await app.DrainProjectorsAsync().ConfigureAwait(false);
