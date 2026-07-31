@@ -89,7 +89,7 @@ namespace Mux.Cli.Commands
 
             SettingsLoader.EnsureConfigDirectory();
             MuxSettings muxSettings = SettingsLoader.LoadSettings();
-            string skillsDirectory = muxSettings.SkillsDirectory ?? SettingsLoader.GetSkillsDirectory();
+            string skillsDirectory = SettingsLoader.ResolveSkillsDirectory(muxSettings);
             string action = (settings.Action ?? string.Empty).Trim().ToLowerInvariant();
 
             try

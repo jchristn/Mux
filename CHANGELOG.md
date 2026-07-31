@@ -12,12 +12,14 @@ All notable changes to mux are documented here.
   interpreter (`bash`, `sh`, `pwsh`, `python`, `node`, `dotnet-script`) with a timeout and captured output.
   On startup the interactive shell discovers skills, lists the enabled ones in the system prompt, and
   exposes two tools — `skill` (read a skill's instructions) and `run_skill` (execute a command, returned
-  like `run_process` and gated by the approval policy and write lease). A curated default set is seeded on
-  first run and preserved on upgrade. Manage skills in-app with `/skills` (inventory with status glyphs,
-  per-skill view/enable/disable/duplicate/remove, a create wizard, and local-path import) or with the
-  `mux skill list | show | validate | run | new | add` verb; `validate` returns a nonzero exit for CI and
-  `run` returns the process contract for hooks. New `settings.json` fields: `skillsEnabled`,
-  `skillRefreshIntervalSeconds`, `skillsDirectory`.
+  like `run_process` and gated by the approval policy and write lease). A curated library of 46 default
+  skills — spanning git/GitHub, .NET build and quality, repository hygiene, scaffolding, documentation, and
+  developer workflow — is seeded on first run and preserved on upgrade. Manage skills in-app with `/skills`
+  (inventory with status glyphs, per-skill view/in-app edit/enable/disable/duplicate/remove, a create
+  wizard, and local-path import) or with the `mux skill list | show | validate | run | new | add` verb;
+  `validate` returns a nonzero exit for CI and `run` returns the process contract for hooks. Caller
+  arguments reach the interpreter as separate argv entries with no shell, so shell metacharacters cannot
+  inject. New `settings.json` fields: `skillsEnabled`, `skillRefreshIntervalSeconds`, `skillsDirectory`.
 
 - **MCP servers are now connected live in the interactive shell.** On startup mux connects to every server
   configured in `mcp-servers.json`, queries each for its available tools (`tools/list`), and then both

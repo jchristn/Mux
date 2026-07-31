@@ -131,6 +131,9 @@ namespace Test.Shared
                     // Skills: execution and the skill / run_skill tools.
                     SkillProviderSuite.Create(),
 
+                    // Skills: the trust boundary — arguments reach the interpreter without a shell.
+                    SkillSecuritySuite.Create(),
+
                     // Skills: interactive runtime lifecycle and template composition.
                     SkillRuntimeSuite.Create(),
                     ExternalToolsBinderSuite.Create(),

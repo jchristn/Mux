@@ -282,7 +282,7 @@ CONFIG:
 
             if (runtime.MuxSettings.SkillsEnabled)
             {
-                string skillsDirectory = runtime.MuxSettings.SkillsDirectory ?? SettingsLoader.GetSkillsDirectory();
+                string skillsDirectory = SettingsLoader.ResolveSkillsDirectory(runtime.MuxSettings);
                 skillRuntime = new SkillRuntime(
                     skillsDirectory,
                     SettingsLoader.LoadSkillIndex,

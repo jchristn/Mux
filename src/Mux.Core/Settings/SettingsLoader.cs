@@ -155,6 +155,23 @@ namespace Mux.Core.Settings
         }
 
         /// <summary>
+        /// Resolves the skills directory to use: the explicit <see cref="MuxSettings.SkillsDirectory"/> override
+        /// when set, otherwise the default under the active config directory. Both the interactive host and the
+        /// <c>mux skill</c> CLI verb resolve the directory through this method so they always agree.
+        /// </summary>
+        /// <param name="settings">The loaded settings; may be null, in which case the default is returned.</param>
+        /// <returns>The absolute path of the skills directory to use.</returns>
+        public static string ResolveSkillsDirectory(MuxSettings? settings)
+        {
+            if (settings != null && !string.IsNullOrWhiteSpace(settings.SkillsDirectory))
+            {
+                return settings.SkillsDirectory;
+            }
+
+            return GetSkillsDirectory();
+        }
+
+        /// <summary>
         /// Loads the skills index (<c>~/.mux/skills.json</c>), which holds per-skill enablement and pinning.
         /// </summary>
         /// <returns>The index entries, or an empty list when the file does not exist or cannot be read.</returns>

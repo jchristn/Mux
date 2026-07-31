@@ -8,6 +8,7 @@ namespace Test.Shared.Suites
     using System.Threading.Tasks;
     using Mux.Cli.App;
     using Mux.Core.Models;
+    using Mux.Core.Settings;
     using Touchstone.Core;
 
     /// <summary>
@@ -85,7 +86,44 @@ namespace Test.Shared.Suites
                                 MuxAssert.AreEqual(1, runtime.GetStatus().Count, "still listed in status");
                                 MuxAssert.IsFalse(runtime.GetStatus()[0].Enabled, "status reports disabled");
                             }
-                        }))
+                        })),
+
+                    Case("SkillsDirectoryOverrideHonored", "The configured SkillsDirectory override wins over the default", (CancellationToken ct) =>
+                    {
+                        string configDir = Path.Combine(Path.GetTempPath(), "mux-skilldiroverride-" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(configDir);
+                        try
+                        {
+                            using (SettingsLoader.PushConfigDirectoryOverride(configDir))
+                            {
+                                string expectedDefault = Path.Combine(configDir, "skills");
+
+                                // No override set: fall back to the default under the config directory.
+                                MuxAssert.AreEqual(expectedDefault, SettingsLoader.ResolveSkillsDirectory(new MuxSettings { SkillsDirectory = null }), "null override uses default");
+                                MuxAssert.AreEqual(expectedDefault, SettingsLoader.ResolveSkillsDirectory(new MuxSettings { SkillsDirectory = "   " }), "whitespace override uses default");
+                                MuxAssert.AreEqual(expectedDefault, SettingsLoader.ResolveSkillsDirectory(null), "null settings uses default");
+
+                                // Override set: it wins verbatim.
+                                string custom = Path.Combine(Path.GetTempPath(), "mux-custom-skills-elsewhere");
+                                MuxAssert.AreEqual(custom, SettingsLoader.ResolveSkillsDirectory(new MuxSettings { SkillsDirectory = custom }), "explicit override wins");
+                            }
+                        }
+                        finally
+                        {
+                            try
+                            {
+                                if (Directory.Exists(configDir))
+                                {
+                                    Directory.Delete(configDir, true);
+                                }
+                            }
+                            catch (IOException)
+                            {
+                            }
+                        }
+
+                        return Task.CompletedTask;
+                    })
                 });
         }
 
