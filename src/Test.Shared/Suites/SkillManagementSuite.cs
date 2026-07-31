@@ -13,6 +13,7 @@ namespace Test.Shared.Suites
     using Mux.Core.Models;
     using Mux.Core.Settings;
     using Touchstone.Core;
+    using TUIKit.Input;
     using TUIKit.Terminal;
 
     /// <summary>
@@ -54,7 +55,29 @@ namespace Test.Shared.Suites
                                     MuxAssert.IsTrue(app.IsModalActive, "skills modal open");
                                 }
                             }
-                        }))
+                        })),
+
+                    Case("EditorSaveReturnsEditedText", "The skill editor returns the edited text on Ctrl+S", async (CancellationToken ct) =>
+                    {
+                        SkillEditorModal editor = new SkillEditorModal("demo", "hello");
+                        editor.HandleKey(KeyEvent.Char('X', KeyModifiers.None));
+                        editor.HandleKey(KeyEvent.Char('s', KeyModifiers.Ctrl));
+
+                        object? result = await editor.Completion.ConfigureAwait(false);
+                        MuxAssert.IsTrue(result is string, "save returns text");
+                        MuxAssert.Contains("hello", (string)result!, "original text kept");
+                        MuxAssert.Contains("X", (string)result!, "inserted text present");
+                    }),
+
+                    Case("EditorEscapeReturnsNull", "The skill editor returns null on Escape", async (CancellationToken ct) =>
+                    {
+                        SkillEditorModal editor = new SkillEditorModal("demo", "hello");
+                        editor.HandleKey(KeyEvent.Char('Y', KeyModifiers.None));
+                        editor.HandleKey(KeyEvent.Special(KeyCode.Escape));
+
+                        object? result = await editor.Completion.ConfigureAwait(false);
+                        MuxAssert.IsNull(result, "escape cancels with null");
+                    })
                 });
         }
 

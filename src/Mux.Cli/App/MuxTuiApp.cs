@@ -2606,6 +2606,7 @@ namespace Mux.Cli.App
             List<string> actions = new List<string>
             {
                 "View",
+                "Edit",
                 status.Enabled ? "Disable" : "Enable",
                 "Duplicate",
                 "Remove"
@@ -2626,16 +2627,63 @@ namespace Mux.Cli.App
                     ViewSkill(status);
                     break;
                 case 1:
-                    ToggleSkill(status);
+                    await EditSkillAsync(status).ConfigureAwait(false);
                     break;
                 case 2:
-                    await DuplicateSkillAsync(status).ConfigureAwait(false);
+                    ToggleSkill(status);
                     break;
                 case 3:
+                    await DuplicateSkillAsync(status).ConfigureAwait(false);
+                    break;
+                case 4:
                     await RemoveSkillAsync(status).ConfigureAwait(false);
                     break;
                 default:
                     break;
+            }
+        }
+
+        private async Task EditSkillAsync(SkillStatus status)
+        {
+            string path = Path.Combine(_SkillRuntime!.SkillsDirectory, status.Name, "SKILL.md");
+            string original;
+            try
+            {
+                original = File.ReadAllText(path);
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Could not open skill for editing: " + ex.Message);
+                return;
+            }
+
+            SkillEditorModal editor = new SkillEditorModal(status.Name + " — SKILL.md", original);
+            _App.Modals.Push(editor);
+            object? result = await editor.Completion.ConfigureAwait(false);
+            if (!(result is string edited) || string.Equals(edited, original, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            try
+            {
+                File.WriteAllText(path, edited);
+                _SkillRuntime.RequestRefresh();
+
+                Skill reloaded = new SkillLoader(_SkillRuntime.SkillsDirectory).Load(Path.Combine(_SkillRuntime.SkillsDirectory, status.Name));
+                if (reloaded.IsValid)
+                {
+                    WriteNotice($"Saved {status.Name}.");
+                }
+                else
+                {
+                    string reason = reloaded.Validation.Errors.Count > 0 ? reloaded.Validation.Errors[0] : "unknown error";
+                    WriteNotice($"Saved {status.Name}, but it is now invalid: {reason}");
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Save failed: " + ex.Message);
             }
         }
 
