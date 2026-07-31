@@ -71,6 +71,7 @@ namespace Test.Shared.Suites
                             MuxAssert.AreEqual("summary", options.CompactionStrategy, "CompactionStrategy");
                             MuxAssert.AreEqual(3, options.CompactionPreserveTurns, "CompactionPreserveTurns");
                             MuxAssert.IsNull(options.AdditionalTools, "AdditionalTools");
+                            MuxAssert.IsNull(options.ExternalToolProviders, "ExternalToolProviders");
                             MuxAssert.IsNull(options.PromptUserFunc, "PromptUserFunc");
                             MuxAssert.IsNull(options.ExternalToolExecutor, "ExternalToolExecutor");
                             return Task.CompletedTask;

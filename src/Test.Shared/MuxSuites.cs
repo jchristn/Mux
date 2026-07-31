@@ -48,6 +48,7 @@ namespace Test.Shared
                     ConversationCompactionPlannerSuite.Create(),
                     ConversationTrimCompactorSuite.Create(),
                     AgentLoopOptionsSuite.Create(),
+                    ExternalToolProviderSuite.Create(),
                     JobManagerSuite.Create(),
                     WriteLeaseSuite.Create(),
                     WriteLeaseIntegrationSuite.Create(),

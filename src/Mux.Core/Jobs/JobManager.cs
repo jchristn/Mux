@@ -9,6 +9,7 @@ namespace Mux.Core.Jobs
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Tools;
 
     /// <summary>
     /// Owns the live set of jobs, schedules queued work under a concurrency cap, and pumps each
@@ -808,6 +809,7 @@ namespace Mux.Core.Jobs
                 BuiltInToolCount = templateOptions.BuiltInToolCount,
                 EffectiveToolCount = templateOptions.EffectiveToolCount,
                 AdditionalTools = templateOptions.AdditionalTools == null ? null : new List<ToolDefinition>(templateOptions.AdditionalTools),
+                ExternalToolProviders = templateOptions.ExternalToolProviders == null ? null : new List<IExternalToolProvider>(templateOptions.ExternalToolProviders),
                 PromptUserFunc = templateOptions.PromptUserFunc,
                 ExternalToolExecutor = templateOptions.ExternalToolExecutor,
                 OnRetry = templateOptions.OnRetry,

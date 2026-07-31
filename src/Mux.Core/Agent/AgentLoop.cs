@@ -429,7 +429,34 @@ namespace Mux.Core.Agent
                 allTools.AddRange(_Options.AdditionalTools);
             }
 
+            // External tool providers (MCP connections, skills catalog).
+            if (_Options.ExternalToolProviders != null)
+            {
+                foreach (IExternalToolProvider provider in _Options.ExternalToolProviders)
+                {
+                    allTools.AddRange(provider.GetToolDefinitions());
+                }
+            }
+
             return allTools;
+        }
+
+        private IExternalToolProvider? FindProviderFor(string toolName)
+        {
+            if (_Options.ExternalToolProviders == null)
+            {
+                return null;
+            }
+
+            foreach (IExternalToolProvider provider in _Options.ExternalToolProviders)
+            {
+                if (provider.HasTool(toolName))
+                {
+                    return provider;
+                }
+            }
+
+            return null;
         }
 
         private ContextBudgetSnapshot GetContextBudgetSnapshot(
@@ -981,7 +1008,16 @@ namespace Mux.Core.Agent
                     .ConfigureAwait(false);
             }
 
-            // Try external executor for MCP tools
+            // Try an external tool provider (MCP connection, skills catalog) that owns the tool.
+            IExternalToolProvider? provider = FindProviderFor(toolCall.Name);
+            if (provider != null)
+            {
+                return await provider
+                    .ExecuteAsync(toolCall.Name, arguments, _Options.WorkingDirectory, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            // Fall back to the legacy single external executor for MCP tools.
             if (_Options.ExternalToolExecutor != null)
             {
                 return await _Options
@@ -1000,10 +1036,20 @@ namespace Mux.Core.Agent
 
         private ToolMutationKind ClassifyTool(string toolName)
         {
-            // Unknown/external (MCP) tools are treated as mutating — the safe default.
-            return _ToolRegistry.HasTool(toolName)
-                ? _ToolRegistry.GetMutationKind(toolName)
-                : ToolMutationKind.Mutating;
+            if (_ToolRegistry.HasTool(toolName))
+            {
+                return _ToolRegistry.GetMutationKind(toolName);
+            }
+
+            // A provider that owns the tool decides its classification (a read-only skill, for example).
+            IExternalToolProvider? provider = FindProviderFor(toolName);
+            if (provider != null)
+            {
+                return provider.GetMutationKind(toolName);
+            }
+
+            // Unknown/external tools are treated as mutating — the safe default.
+            return ToolMutationKind.Mutating;
         }
 
         private static ApprovalDecision MapPromptResponseToDecision(string response)

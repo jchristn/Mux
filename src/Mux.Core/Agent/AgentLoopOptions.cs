@@ -9,6 +9,7 @@ namespace Mux.Core.Agent
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Mux.Core.Models;
+    using Mux.Core.Tools;
 
     /// <summary>
     /// Configuration options for the <see cref="AgentLoop"/>.
@@ -41,6 +42,7 @@ namespace Mux.Core.Agent
         private int _BuiltInToolCount = 0;
         private int _EffectiveToolCount = 0;
         private List<ToolDefinition>? _AdditionalTools = null;
+        private List<IExternalToolProvider>? _ExternalToolProviders = null;
         private Func<ToolCall, Task<string>>? _PromptUserFunc = null;
         private Func<string, JsonElement, string, CancellationToken, Task<ToolResult>>? _ExternalToolExecutor = null;
         private Action<int, int, string>? _OnRetry = null;
@@ -295,6 +297,17 @@ namespace Mux.Core.Agent
         {
             get => _AdditionalTools;
             set => _AdditionalTools = value;
+        }
+
+        /// <summary>
+        /// External tool providers (for example MCP connections and the skills catalog) whose tools are
+        /// merged alongside the built-in tools and routed to when the model calls one of their tools.
+        /// Nullable; when null or empty, only built-in tools and <see cref="AdditionalTools"/> apply.
+        /// </summary>
+        public List<IExternalToolProvider>? ExternalToolProviders
+        {
+            get => _ExternalToolProviders;
+            set => _ExternalToolProviders = value;
         }
 
         /// <summary>
