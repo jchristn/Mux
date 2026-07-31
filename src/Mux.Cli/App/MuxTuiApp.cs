@@ -1849,7 +1849,8 @@ namespace Mux.Cli.App
         private void OpenCommandMenu()
         {
             List<CommandDescriptor> commands = new List<CommandDescriptor>();
-            List<string> labels = new List<string>();
+            List<string> chords = new List<string>();
+            List<string> aliasText = new List<string>();
             foreach (CommandDescriptor descriptor in _Catalog.Commands)
             {
                 // The menu-openers (F1 / help) would just reopen the menu from within itself, so omit them.
@@ -1860,14 +1861,10 @@ namespace Mux.Cli.App
                 }
 
                 commands.Add(descriptor);
-
-                // Show the title, its key chord, and its /slash aliases so the menu is a single reference for
-                // every way to invoke a command.
-                string keys = string.IsNullOrEmpty(descriptor.Chord) ? string.Empty : descriptor.Chord;
-                string aliases = descriptor.SlashAliases.Count > 0
+                chords.Add(string.IsNullOrEmpty(descriptor.Chord) ? string.Empty : descriptor.Chord);
+                aliasText.Add(descriptor.SlashAliases.Count > 0
                     ? "/" + string.Join(" /", descriptor.SlashAliases)
-                    : string.Empty;
-                labels.Add($"{descriptor.Title,-18} {keys,-6} {aliases}".TrimEnd());
+                    : string.Empty);
             }
 
             if (commands.Count == 0)
@@ -1875,12 +1872,23 @@ namespace Mux.Cli.App
                 return;
             }
 
-            SelectModal modal = new SelectModal("Commands — ↑↓ then Enter to run", labels);
+            // Align the chord column and the /slash column each on a single vertical axis across every row.
+            List<string> titles = new List<string>(commands.Count);
+            foreach (CommandDescriptor descriptor in commands)
+            {
+                titles.Add(descriptor.Title);
+            }
+
+            List<string> labels = CommandMenuFormatter.AlignRows(titles, chords, aliasText);
+
+            // Widen the modal by ~50% over the default select width (46) so the three aligned columns fit.
+            const int commandMenuWidth = 69;
+            WideSelectModal modal = new WideSelectModal("Commands — ↑↓ then Enter to run", labels, commandMenuWidth);
             _App.Modals.Push(modal);
             _ = ResolveCommandMenuAsync(modal, commands);
         }
 
-        private async Task ResolveCommandMenuAsync(SelectModal modal, List<CommandDescriptor> commands)
+        private async Task ResolveCommandMenuAsync(WideSelectModal modal, List<CommandDescriptor> commands)
         {
             object? result = await modal.Completion.ConfigureAwait(false);
             int index = result is int value ? value : -1;

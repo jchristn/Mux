@@ -126,7 +126,10 @@ namespace Test.Shared
 
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
-                    McpRuntimeSuite.Create()
+                    McpRuntimeSuite.Create(),
+
+                    // Command-menu column alignment (F1 / /? menu).
+                    CommandMenuFormatterSuite.Create()
                 };
             }
         }
