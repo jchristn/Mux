@@ -135,6 +135,10 @@ namespace Test.Shared
                     SkillRuntimeSuite.Create(),
                     ExternalToolsBinderSuite.Create(),
 
+                    // Skills: manager operations (create/enable/disable/remove/import) and the /skills surface.
+                    SkillManagerSuite.Create(),
+                    SkillManagementSuite.Create(),
+
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
                     McpRuntimeSuite.Create(),

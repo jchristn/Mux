@@ -3,6 +3,7 @@ namespace Mux.Cli.App
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.IO;
     using System.Runtime.InteropServices;
     using System.Threading;
     using System.Threading.Tasks;
@@ -11,6 +12,7 @@ namespace Mux.Cli.App
     using Mux.Core.Models;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
+    using Mux.Core.Skills;
     using Mux.Core.Utility;
     using TUIKit;
     using TUIKit.Content;
@@ -62,6 +64,7 @@ namespace Mux.Cli.App
         private readonly Action<EndpointConfig>? _OnEndpointSelected;
         private readonly Action<PromptProfile>? _OnPromptProfileSelected;
         private readonly McpRuntime? _McpRuntime;
+        private readonly SkillRuntime? _SkillRuntime;
         private string _EndpointName;
         private string _Model;
         private readonly string _Title;
@@ -129,6 +132,7 @@ namespace Mux.Cli.App
         /// <param name="showSplash">When true, opens the startup splash modal.</param>
         /// <param name="showBoundaries">When true, the shell starts with the dark-grey boundary lines drawn (toggle with <c>/borders</c>).</param>
         /// <param name="mcpRuntime">Optional MCP runtime used to show per-server connectivity in the MCP manager and to trigger a reconnect after edits. Null disables live MCP status.</param>
+        /// <param name="skillRuntime">Optional skills runtime used to show skill status in the skills manager and to trigger a re-scan after edits. Null disables the skills manager.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
             ITerminalBackend backend,
@@ -142,7 +146,8 @@ namespace Mux.Cli.App
             Action<PromptProfile>? onPromptProfileSelected = null,
             bool showSplash = false,
             bool showBoundaries = false,
-            McpRuntime? mcpRuntime = null)
+            McpRuntime? mcpRuntime = null,
+            SkillRuntime? skillRuntime = null)
         {
             _Backend = backend ?? throw new ArgumentNullException(nameof(backend));
             _JobManager = jobManager ?? throw new ArgumentNullException(nameof(jobManager));
@@ -151,6 +156,7 @@ namespace Mux.Cli.App
             _OnEndpointSelected = onEndpointSelected;
             _OnPromptProfileSelected = onPromptProfileSelected;
             _McpRuntime = mcpRuntime;
+            _SkillRuntime = skillRuntime;
             _EndpointName = endpointName ?? string.Empty;
             _Model = model ?? string.Empty;
             _ShowBoundaries = showBoundaries;
@@ -194,6 +200,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.queue", "Edit queue", "ctrl+g", OpenQueueEditor, "Session", new[] { "queue", "edit queue", "pending" }));
             _Catalog.Add(new CommandDescriptor("mux.prompts", "Prompts", "ctrl+p", OpenPromptEditor, "Model", new[] { "prompts", "prompt", "system prompt" }));
             _Catalog.Add(new CommandDescriptor("mux.mcp", "MCP servers", null, OpenMcpModal, "Model", new[] { "mcp", "mcp-servers", "mcpservers", "servers" }));
+            _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
@@ -2514,6 +2521,301 @@ namespace Mux.Cli.App
             catch (Exception)
             {
                 return new List<McpServerConfig>();
+            }
+        }
+
+        private void OpenSkillsModal()
+        {
+            if (_SkillRuntime == null)
+            {
+                WriteNotice("Skills are disabled (settings.json: skillsEnabled).");
+                return;
+            }
+
+            List<SkillStatus> statuses = _SkillRuntime.GetStatus();
+            List<string> options = new List<string>();
+            List<SkillMenuAction> actions = new List<SkillMenuAction>();
+
+            int enabledCount = 0;
+            int invalidCount = 0;
+            foreach (SkillStatus status in statuses)
+            {
+                if (status.Valid && status.Enabled) enabledCount++;
+                if (!status.Valid) invalidCount++;
+
+                string glyph = !status.Valid ? "⚠" : (status.Enabled ? "●" : "○");
+                string tags = status.Tags.Count > 0 ? "  [" + string.Join(", ", status.Tags) + "]" : string.Empty;
+                string plural = status.CommandCount == 1 ? string.Empty : "s";
+                options.Add($"{glyph} {status.Title}  ({status.CommandCount} command{plural}){tags}");
+                actions.Add(SkillMenuAction.Manage);
+            }
+
+            if (statuses.Count > 0)
+            {
+                options.Add(string.Empty);
+                actions.Add(SkillMenuAction.None);
+            }
+
+            options.Add("+ New skill…");
+            actions.Add(SkillMenuAction.New);
+            options.Add("⬇ Import skill…");
+            actions.Add(SkillMenuAction.Import);
+            options.Add("↻ Reload skills");
+            actions.Add(SkillMenuAction.Reload);
+
+            string title = statuses.Count == 0
+                ? "Skills — none yet"
+                : $"Skills — {statuses.Count} ({enabledCount} on, {invalidCount} invalid)";
+            SelectModal modal = new SelectModal(title, options);
+            _App.Modals.Push(modal);
+            _ = ResolveSkillsModalAsync(modal, statuses, actions);
+        }
+
+        private async Task ResolveSkillsModalAsync(SelectModal modal, List<SkillStatus> statuses, List<SkillMenuAction> actions)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            int index = result is int value ? value : -1;
+            if (index < 0 || index >= actions.Count)
+            {
+                return;
+            }
+
+            switch (actions[index])
+            {
+                case SkillMenuAction.Manage:
+                    await ManageSkillAsync(statuses[index]).ConfigureAwait(false);
+                    break;
+                case SkillMenuAction.New:
+                    await NewSkillWizardAsync().ConfigureAwait(false);
+                    break;
+                case SkillMenuAction.Import:
+                    await ImportSkillAsync().ConfigureAwait(false);
+                    break;
+                case SkillMenuAction.Reload:
+                    _SkillRuntime?.RequestRefresh();
+                    WriteNotice("Re-scanning skills…");
+                    break;
+                case SkillMenuAction.None:
+                default:
+                    break;
+            }
+        }
+
+        private async Task ManageSkillAsync(SkillStatus status)
+        {
+            List<string> actions = new List<string>
+            {
+                "View",
+                status.Enabled ? "Disable" : "Enable",
+                "Duplicate",
+                "Remove"
+            };
+
+            SelectModal pick = new SelectModal($"{status.Title} — action", actions);
+            _App.Modals.Push(pick);
+            object? result = await pick.Completion.ConfigureAwait(false);
+            int index = result is int value ? value : -1;
+            if (index < 0)
+            {
+                return;
+            }
+
+            switch (index)
+            {
+                case 0:
+                    ViewSkill(status);
+                    break;
+                case 1:
+                    ToggleSkill(status);
+                    break;
+                case 2:
+                    await DuplicateSkillAsync(status).ConfigureAwait(false);
+                    break;
+                case 3:
+                    await RemoveSkillAsync(status).ConfigureAwait(false);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        private void ViewSkill(SkillStatus status)
+        {
+            string path = Path.Combine(_SkillRuntime!.SkillsDirectory, status.Name, "SKILL.md");
+            List<string> lines = new List<string>();
+            try
+            {
+                foreach (string line in File.ReadAllLines(path))
+                {
+                    lines.Add(line);
+                }
+            }
+            catch (Exception ex)
+            {
+                lines.Add("Could not read SKILL.md: " + ex.Message);
+            }
+
+            if (!status.Valid && status.Error != null)
+            {
+                lines.Insert(0, "⚠ " + status.Error);
+                lines.Insert(1, string.Empty);
+            }
+
+            _App.Modals.Push(new MuxBoxModal(status.Name, lines));
+        }
+
+        private void ToggleSkill(SkillStatus status)
+        {
+            try
+            {
+                new SkillManager(_SkillRuntime!.SkillsDirectory).SetEnabled(status.Name, !status.Enabled);
+                _SkillRuntime.RequestRefresh();
+                WriteNotice($"{(status.Enabled ? "Disabled" : "Enabled")} skill {status.Name}.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Skill update failed: " + ex.Message);
+            }
+        }
+
+        private async Task DuplicateSkillAsync(SkillStatus status)
+        {
+            PromptModal prompt = new PromptModal("Duplicate as (new id)", status.Name + "-copy");
+            _App.Modals.Push(prompt);
+            object? result = await prompt.Completion.ConfigureAwait(false);
+            string newId = (result as string ?? string.Empty).Trim();
+            if (newId.Length == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                string sourceDir = Path.Combine(_SkillRuntime!.SkillsDirectory, status.Name);
+                new SkillManager(_SkillRuntime.SkillsDirectory).Import(sourceDir, newId);
+                _SkillRuntime.RequestRefresh();
+                WriteNotice($"Duplicated {status.Name} to {newId}.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Duplicate failed: " + ex.Message);
+            }
+        }
+
+        private async Task RemoveSkillAsync(SkillStatus status)
+        {
+            MessageModal confirm = new MessageModal("Remove skill", $"Remove '{status.Name}' and its files?", new List<string> { "Remove", "Cancel" });
+            _App.Modals.Push(confirm);
+            object? result = await confirm.Completion.ConfigureAwait(false);
+            if (!(result is int c) || c != 0)
+            {
+                return;
+            }
+
+            try
+            {
+                new SkillManager(_SkillRuntime!.SkillsDirectory).Remove(status.Name);
+                _SkillRuntime.RequestRefresh();
+                WriteNotice($"Removed skill {status.Name}.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Remove failed: " + ex.Message);
+            }
+        }
+
+        private async Task NewSkillWizardAsync()
+        {
+            SkillManager manager = new SkillManager(_SkillRuntime!.SkillsDirectory);
+
+            PromptModal idPrompt = new PromptModal("New skill — id (lowercase-hyphenated)", string.Empty);
+            _App.Modals.Push(idPrompt);
+            string id = ((await idPrompt.Completion.ConfigureAwait(false)) as string ?? string.Empty).Trim();
+            if (id.Length == 0)
+            {
+                return;
+            }
+
+            if (!SkillManager.IsValidId(id))
+            {
+                WriteNotice($"'{id}' is not a valid skill id (use lowercase and hyphens).");
+                return;
+            }
+
+            if (manager.Exists(id))
+            {
+                WriteNotice($"A skill named '{id}' already exists.");
+                return;
+            }
+
+            PromptModal titlePrompt = new PromptModal("New skill — title", id);
+            _App.Modals.Push(titlePrompt);
+            string skillTitle = ((await titlePrompt.Completion.ConfigureAwait(false)) as string ?? string.Empty).Trim();
+
+            PromptModal descPrompt = new PromptModal("New skill — description", string.Empty);
+            _App.Modals.Push(descPrompt);
+            string description = ((await descPrompt.Completion.ConfigureAwait(false)) as string ?? string.Empty).Trim();
+
+            SelectModal mutatingPick = new SelectModal("New skill — behavior", new List<string> { "Read-only (no writes)", "Mutating (writes; needs approval)" });
+            _App.Modals.Push(mutatingPick);
+            object? mutatingResult = await mutatingPick.Completion.ConfigureAwait(false);
+            int mutatingIndex = mutatingResult is int m ? m : 0;
+            if (mutatingIndex < 0)
+            {
+                return;
+            }
+
+            List<string> interpreters = new List<string> { "pwsh", "bash", "python", "node", "sh", "dotnet-script" };
+            SelectModal interpreterPick = new SelectModal("New skill — interpreter", interpreters);
+            _App.Modals.Push(interpreterPick);
+            object? interpreterResult = await interpreterPick.Completion.ConfigureAwait(false);
+            int interpreterIndex = interpreterResult is int i ? i : -1;
+            if (interpreterIndex < 0 || interpreterIndex >= interpreters.Count)
+            {
+                return;
+            }
+
+            SkillScaffold scaffold = new SkillScaffold
+            {
+                Id = id,
+                Title = skillTitle,
+                Description = description,
+                Mutating = mutatingIndex == 1,
+                Interpreter = interpreters[interpreterIndex]
+            };
+
+            try
+            {
+                string dir = manager.Create(scaffold);
+                _SkillRuntime.RequestRefresh();
+                WriteNotice($"Created skill {id}. Edit {Path.Combine(dir, "SKILL.md")} to build it out.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Create failed: " + ex.Message);
+            }
+        }
+
+        private async Task ImportSkillAsync()
+        {
+            PromptModal prompt = new PromptModal("Import skill — source directory path", string.Empty);
+            _App.Modals.Push(prompt);
+            object? result = await prompt.Completion.ConfigureAwait(false);
+            string path = (result as string ?? string.Empty).Trim();
+            if (path.Length == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                string id = new SkillManager(_SkillRuntime!.SkillsDirectory).Import(path, null);
+                _SkillRuntime.RequestRefresh();
+                WriteNotice($"Imported skill {id}.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Import failed: " + ex.Message);
             }
         }
 

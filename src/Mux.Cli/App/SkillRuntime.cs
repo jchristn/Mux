@@ -66,6 +66,11 @@ namespace Mux.Cli.App
         public string Name => "skills";
 
         /// <summary>
+        /// The directory this runtime scans for skills.
+        /// </summary>
+        public string SkillsDirectory => _SkillsDirectory;
+
+        /// <summary>
         /// A task that completes after the first discovery finishes.
         /// </summary>
         public Task FirstRefreshCompleted => _FirstRefresh.Task;

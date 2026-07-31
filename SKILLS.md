@@ -16,7 +16,7 @@ The feature is being built on the `feature/skills` branch, phase by phase, each 
 - **Phase 1 — Core model and loader — done.** The skill model, `SkillInterpreters`, a dependency-free frontmatter parser, and `SkillLoader`. Covered by `SkillLoaderSuite` (validation matrix + 500-iteration fuzz).
 - **Phase 2 — Execution and tools — done.** `SkillInterpreterResolver`, `SkillExecutor`, `SkillCatalog`, `SkillToolProvider` (`skill` / `run_skill`). Covered by `SkillProviderSuite`.
 - **Phase 3 — Interactive wiring — done.** `MuxSettings` skill fields, `SettingsLoader` skill index (`skills.json`) load/save and `skills/` seeding, `SkillRuntime` (an `IExternalToolProvider` with immutable-swap discovery, index enablement, and prompt-section building), `ExternalToolsBinder` composing MCP and skills onto the template, and the `Program.RunInteractive` wiring. Covered by `SkillRuntimeSuite` and `ExternalToolsBinderSuite`. The model can now discover and run skills in a live session.
-- **Phase 4 — Authoring and management surface — pending (next).**
+- **Phase 4 — Authoring and management surface — done.** `SkillScaffold`/`SkillScaffoldWriter`, a testable `SkillManager` (create, enable/disable, remove, duplicate, import), and the `/skills` inventory modal with status glyphs, per-skill actions (view, enable/disable, duplicate, remove), a step-by-step create wizard, local-path import, and reload. Covered by `SkillManagerSuite` (operations, tested directly) and `SkillManagementSuite` (the command surface). Import from a Git repo and the bundled-gallery install are deferred until the default library lands (Phase 6); the local-path import and duplicate cover the rest.
 - **Phases 5–7 — pending.**
 
 Three decisions were settled during execution and the plan reflects them:
