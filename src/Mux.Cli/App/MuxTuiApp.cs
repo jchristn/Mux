@@ -43,6 +43,7 @@ namespace Mux.Cli.App
         private const string FooterRegion = "footer";
         private const string QueueRegion = "queue";
         private const int MaxQueueStripRows = 6;
+        private const int MaxComposerRows = 8;
         private const string PromptText = "mux> ";
         private const int SidebarWidth = 28;
         private const int CollapseThreshold = 100;
@@ -90,10 +91,12 @@ namespace Mux.Cli.App
         private bool _Disposed;
 
         // Queue processing is paused while the queue-editor modal is open, so a turn finishing mid-edit
-        // does not start the next prompt out from under the user. _QueueHeight is the strip's current row
-        // count, tracked so the layout is only rebuilt when it actually changes.
+        // does not start the next prompt out from under the user. _QueueHeight and _ComposerHeight are the
+        // current row counts of the queue strip and the (multi-line) composer, tracked so the layout is
+        // only rebuilt when they actually change.
         private bool _QueuePaused;
         private int _QueueHeight;
+        private int _ComposerHeight = 1;
 
         private static readonly Theme MuxTheme = CreateTheme();
         private static readonly Theme[] _Themes = { MuxTheme, Theme.Dark, Theme.Light, Theme.HighContrast };
@@ -754,6 +757,20 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
+        /// The current height of the composer region in rows (grows with multi-line input). Test helper.
+        /// </summary>
+        public int ComposerRowCount
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _ComposerHeight;
+                }
+            }
+        }
+
+        /// <summary>
         /// Whether queue processing is currently paused (the queue editor is open). Test helper.
         /// </summary>
         public bool IsQueuePaused
@@ -927,6 +944,7 @@ namespace Mux.Cli.App
             if (IsCarriageReturn(key))
             {
                 _Composer.InsertNewline();
+                RefreshComposerLayout();
                 return true;
             }
 
@@ -967,7 +985,7 @@ namespace Mux.Cli.App
                     // Ctrl+J is the terminal-independent "insert newline" chord: it arrives as line feed
                     // (0x0A), distinct from Enter's carriage return, so it works even where the terminal
                     // cannot report Shift+Enter (Windows Terminal, macOS Terminal.app, legacy xterm).
-                    case 'j': _Composer.InsertNewline(); return true;
+                    case 'j': _Composer.InsertNewline(); RefreshComposerLayout(); return true;
                     case 'q': RequestQuit(); return true;
                     case 'l': ClearTranscript(); return true;
                     case 'b': ToggleSidebar(); return true;
@@ -999,6 +1017,7 @@ namespace Mux.Cli.App
             // Everything else is ordinary editing: forward to the composer and consume it so the app's
             // focus routing does not handle it a second time.
             _Composer.HandleKey(key);
+            RefreshComposerLayout();
             return true;
         }
 
@@ -1012,6 +1031,7 @@ namespace Mux.Cli.App
             // Insert verbatim at the caret; newlines are preserved so a pasted block stays one unit. Enter
             // still submits the whole composer, so a multi-line paste is sent to the model as a single prompt.
             _Composer.InsertText(text);
+            RefreshComposerLayout();
         }
 
         private void OnEnter()
@@ -1023,6 +1043,7 @@ namespace Mux.Cli.App
             }
 
             _Composer.Text = string.Empty;
+            RefreshComposerLayout();
             _PromptHistory.Add(prompt);
 
             if (prompt.TrimStart().StartsWith("/", StringComparison.Ordinal))
@@ -1192,14 +1213,38 @@ namespace Mux.Cli.App
                 if (desired != _QueueHeight)
                 {
                     _QueueHeight = desired;
-                    BuildLayouts(1, desired);
-                    bool collapse = _ManualCollapsed || _Backend.Size.Width < CollapseThreshold;
-                    _App.Layout = collapse ? _CollapsedLayout : _ExpandedLayout;
-                    _CollapsedApplied = collapse;
+                    RebuildLayoutNoLock();
                 }
             }
 
             RenderQueueStrip(queued, paused);
+        }
+
+        // Grows or shrinks the composer to fit its current line count (up to a cap), so Ctrl+J newlines are
+        // visible as they are typed. Called after any composer edit; rebuilds the layout only on a change.
+        private void RefreshComposerLayout()
+        {
+            int desired = Math.Clamp(ComposerLineCount(), 1, MaxComposerRows);
+            lock (_Sync)
+            {
+                if (desired == _ComposerHeight)
+                {
+                    return;
+                }
+
+                _ComposerHeight = desired;
+                RebuildLayoutNoLock();
+            }
+        }
+
+        // Rebuilds both layout variants from the current composer/queue heights and re-applies the active
+        // one. Caller must hold _Sync.
+        private void RebuildLayoutNoLock()
+        {
+            BuildLayouts(_ComposerHeight, _QueueHeight);
+            bool collapse = _ManualCollapsed || _Backend.Size.Width < CollapseThreshold;
+            _App.Layout = collapse ? _CollapsedLayout : _ExpandedLayout;
+            _CollapsedApplied = collapse;
         }
 
         private void RenderQueueStrip(List<string> queued, bool paused)
@@ -1210,7 +1255,7 @@ namespace Mux.Cli.App
                 return;
             }
 
-            string hint = paused ? "paused — editing" : "^G to edit";
+            string hint = paused ? "paused — editing" : "CTRL-G/edit";
             _QueuePane.WriteLine(Text.From($"QUEUED ({queued.Count}) · {hint}").Yellow().Bold());
 
             // One header row plus up to MaxQueueStripRows-1 prompt rows; the last row summarizes any excess.
@@ -1406,6 +1451,7 @@ namespace Mux.Cli.App
             if (_PromptHistory.TryPrevious(out string entry))
             {
                 _Composer.Text = entry;
+                RefreshComposerLayout();
                 return true;
             }
 
@@ -1417,6 +1463,7 @@ namespace Mux.Cli.App
             if (_PromptHistory.TryNext(out string entry))
             {
                 _Composer.Text = entry;
+                RefreshComposerLayout();
                 return true;
             }
 
@@ -1432,6 +1479,7 @@ namespace Mux.Cli.App
             if (row < 0 || row >= lines.Length || col <= 0)
             {
                 _Composer.Backspace();
+                RefreshComposerLayout();
                 return;
             }
 
@@ -1452,15 +1500,25 @@ namespace Mux.Cli.App
             {
                 _Composer.Backspace();
             }
+
+            RefreshComposerLayout();
         }
 
         private void EchoPrompt(string prompt)
         {
-            // "mux> <prompt>" with a leading blank line; "mux>" in green, the prompt in grey. The thinking
-            // indicator is shown directly beneath the prompt (no blank between), and once it is dismissed
-            // the blanked line becomes the trailing separator before the response.
+            // "mux> <prompt>" with a leading blank line; "mux>" in green, the prompt in grey. A multi-line
+            // prompt keeps its newlines: the first line follows the "mux>" marker and each subsequent line
+            // is indented to align under it. The thinking indicator is shown directly beneath the prompt.
             _Conversation.WriteLine(Text.From(string.Empty));
-            _Conversation.WriteLine(Text.From(PromptText).Green().Bold().Append(Text.From(prompt ?? string.Empty)));
+
+            string[] lines = (prompt ?? string.Empty).Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+            _Conversation.WriteLine(Text.From(PromptText).Green().Bold().Append(Text.From(lines[0])));
+
+            string indent = new string(' ', PromptText.Length);
+            for (int i = 1; i < lines.Length; i++)
+            {
+                _Conversation.WriteLine(Text.From(indent + lines[i]));
+            }
         }
 
         private void AutoSave()

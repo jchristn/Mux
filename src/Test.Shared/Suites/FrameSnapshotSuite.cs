@@ -52,10 +52,13 @@ namespace Test.Shared.Suites
                         using (MuxTuiApp app = NewApp(out _, manager))
                         {
                             await Task.CompletedTask.ConfigureAwait(false);
-                            // The footer is two rows: a blank spacer above the hint line.
+                            // The footer is two rows: a blank spacer above the hint line, so the transcript
+                            // never butts into the prompt area.
                             string footer = app.RenderRegion("footer", 120, 2);
-                            MuxAssert.Contains("CTRL+J/newline", footer, "newline hint rendered");
-                            MuxAssert.Contains("CTRL-Q/quit", footer, "quit hint rendered");
+                            string[] rows = footer.Replace("\r\n", "\n").Split('\n');
+                            MuxAssert.AreEqual(string.Empty, rows[0].Trim(), "blank spacer above the hint");
+                            MuxAssert.Contains("CTRL+J/newline", rows[1], "hint on the second row");
+                            MuxAssert.Contains("CTRL-Q/quit", rows[1], "quit hint on the second row");
                         }
                     }),
 

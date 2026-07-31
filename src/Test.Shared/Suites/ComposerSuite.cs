@@ -105,6 +105,41 @@ namespace Test.Shared.Suites
                         }
                     }),
 
+                    Case("ComposerGrowsWithNewlines", "The composer region grows a row per newline and resets on submit", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            MuxAssert.AreEqual(1, app.ComposerRowCount, "one row at rest");
+
+                            Feed(backend, app, "a" + Esc + "[106;5u" + "b" + Esc + "[106;5u" + "c");
+                            MuxAssert.AreEqual(3, app.ComposerRowCount, "three rows for three lines");
+
+                            Feed(backend, app, "\r"); // submit
+                            MuxAssert.AreEqual(1, app.ComposerRowCount, "resets to one row after submit");
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+                        }
+                    }),
+
+                    Case("MultiLinePromptEchoesAcrossLines", "A multi-line prompt echoes with each line preserved and indented", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            Feed(backend, app, "this" + Esc + "[106;5u" + "is" + Esc + "[106;5u" + "a" + Esc + "[106;5u" + "test" + "\r");
+                            MuxAssert.AreEqual("this\nis\na\ntest", manager.Jobs[0].Prompt, "prompt keeps newlines");
+
+                            string transcript = Join(app.TranscriptSnapshot());
+                            MuxAssert.Contains("mux> this", transcript, "first line after the marker");
+                            MuxAssert.Contains("     is", transcript, "second line indented under the marker");
+                            MuxAssert.Contains("     test", transcript, "last line indented");
+                            MuxAssert.IsFalse(transcript.Contains("thisisatest"), "lines are not flattened");
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+                        }
+                    }),
+
                     Case("EnterSubmitsMultiLinePrompt", "Enter submits a multi-line prompt as one job", async (CancellationToken ct) =>
                     {
                         HeadlessBackend backend = new HeadlessBackend(100, 24);
