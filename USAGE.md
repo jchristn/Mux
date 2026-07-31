@@ -97,10 +97,11 @@ Notes:
 
 ## Interactive UI (TUIKit)
 
-Running `mux` with no non-interactive command launches the TUIKit shell (new in v0.3.0).
+Running `mux` with no non-interactive command launches the TUIKit shell.
 
-> **Note:** MCP tool execution inside the TUIKit shell is not yet wired in v0.3.0 — built-in tools work
-> in interactive; MCP servers remain configurable in `mcp-servers.json` for a future release.
+> **Note:** As of v0.4.0 the interactive shell connects to configured MCP servers, discovers their tools,
+> exposes those tools to the model, and shows per-server connectivity; manage servers with `/mcp` or in
+> `mcp-servers.json`.
 
 The screen has a single transcript holding the whole conversation, a sidebar showing the active
 endpoint and per-turn / session telemetry (status, timings, token counts), a multi-line composer, and

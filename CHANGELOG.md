@@ -2,7 +2,7 @@
 
 All notable changes to mux are documented here.
 
-## Unreleased
+## v0.4.0 - 2026-07-31
 
 ### Added
 

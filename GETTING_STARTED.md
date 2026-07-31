@@ -118,7 +118,7 @@ mux probe --output-format json
 - `mux print` defaults to denied tool calls unless overridden
 - `--yolo` or `--approval-policy auto` enables automatic execution
 - `mux print` and `mux probe` reject `--approval-policy ask`
-- MCP tool execution inside the TUIKit interactive UI is not yet wired in v0.3.0; built-in tools work in interactive, and MCP servers remain configurable in `mcp-servers.json`
+- As of v0.4.0, the TUIKit interactive UI connects to configured MCP servers and exposes their tools to the model; manage servers with `/mcp` or in `mcp-servers.json`
 
 ## Configure More Endpoints
 

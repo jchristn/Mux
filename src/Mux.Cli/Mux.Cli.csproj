@@ -2,13 +2,13 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Description>CLI interface for mux AI agent</Description>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mux</ToolCommandName>
     <PackageId>Mux.Cli</PackageId>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>0.3.0: TUIKit front-end. The interactive UI is rebuilt on TUIKit (per-job transcripts, sidebar, slash/menu commands, tool-approval modal, resumable sessions, concurrent jobs with a single-writer lease). Test suite migrated to Touchstone. TUIKit is the rendering dependency (pinned to 0.2.0). The legacy Spectre.Console rendering and command-host dependencies have been removed.</PackageReleaseNotes>
+    <PackageReleaseNotes>0.4.0: Live MCP tool servers in the interactive UI (connect, discover tools, expose them to the model, per-server connectivity), Ollama completion-model import, optional boundary lines, a widened and column-aligned command menu, and the foundation for user-authored skills (versioned Markdown-plus-code capabilities managed in ~/.mux/skills). See CHANGELOG.md and SKILLS.md.</PackageReleaseNotes>
     <NoWarn>$(NoWarn);NU5111</NoWarn>
   </PropertyGroup>
 
