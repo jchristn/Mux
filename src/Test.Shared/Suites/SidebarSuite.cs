@@ -49,7 +49,7 @@ namespace Test.Shared.Suites
                         }
                     }),
 
-                    Case("SidebarShowsEndpointName", "The sidebar shows the active endpoint name, not the model", async (CancellationToken ct) =>
+                    Case("SidebarShowsModel", "The sidebar header shows the active model, not the endpoint name", async (CancellationToken ct) =>
                     {
                         HeadlessBackend backend = Wide();
                         await using (JobManager manager = NewManager(EchoRunner))
@@ -57,8 +57,8 @@ namespace Test.Shared.Suites
                         {
                             await Task.CompletedTask.ConfigureAwait(false);
                             string sidebar = Join(app.SidebarSnapshot());
-                            MuxAssert.Contains("local-llm", sidebar, "endpoint name shown");
-                            MuxAssert.IsFalse(sidebar.Contains("qwen2.5-coder", StringComparison.Ordinal), "model name not shown");
+                            MuxAssert.Contains("qwen2.5-coder", sidebar, "model shown in the header");
+                            MuxAssert.IsFalse(sidebar.Contains("local-llm", StringComparison.Ordinal), "endpoint name not shown");
                         }
                     }),
 

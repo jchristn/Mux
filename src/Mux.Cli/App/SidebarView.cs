@@ -15,7 +15,7 @@ namespace Mux.Cli.App
     {
         #region Private-Members
 
-        private const int Width = 28;
+        private const int Width = 24;
 
         private readonly Pane _Pane;
         private readonly object _Sync = new object();
@@ -39,24 +39,20 @@ namespace Mux.Cli.App
         #region Public-Methods
 
         /// <summary>
-        /// Rewrites the sidebar from the given header and telemetry snapshot.
+        /// Rewrites the sidebar from the current model and telemetry snapshot. The header is just the
+        /// active model name (truncated to the sidebar width); everything else is telemetry.
         /// </summary>
-        /// <param name="title">The session title shown in the header.</param>
-        /// <param name="endpointName">The active endpoint name shown in the header.</param>
+        /// <param name="model">The active model name shown in the header.</param>
         /// <param name="stats">The conversation telemetry to display. Must not be null.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="stats"/> is null.</exception>
-        public void Refresh(string title, string endpointName, ConversationStats stats)
+        public void Refresh(string model, ConversationStats stats)
         {
             if (stats is null) throw new ArgumentNullException(nameof(stats));
 
             lock (_Sync)
             {
                 _Pane.Clear();
-                _Pane.WriteLine(Text.From(Fit(string.IsNullOrWhiteSpace(title) ? "mux" : title)).Cyan().Bold());
-                if (!string.IsNullOrWhiteSpace(endpointName))
-                {
-                    _Pane.WriteLine(Text.From(Fit(endpointName)).Dim());
-                }
+                _Pane.WriteLine(Text.From(Fit(string.IsNullOrWhiteSpace(model) ? "mux" : model)).Cyan().Bold());
 
                 _Pane.WriteLine(Text.From(string.Empty));
 

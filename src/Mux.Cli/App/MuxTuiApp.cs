@@ -45,7 +45,7 @@ namespace Mux.Cli.App
         private const int MaxQueueStripRows = 7;
         private const int MaxComposerRows = 8;
         private const string PromptText = "mux> ";
-        private const int SidebarWidth = 28;
+        private const int SidebarWidth = 24;
         private const int CollapseThreshold = 100;
 
         private readonly ITerminalBackend _Backend;
@@ -1969,15 +1969,15 @@ namespace Mux.Cli.App
 
         private void RefreshSidebar()
         {
-            string endpointName;
+            string model;
             ConversationStats stats;
             lock (_Sync)
             {
-                endpointName = _EndpointName;
+                model = _Model;
                 stats = CloneStatsNoLock();
             }
 
-            _Sidebar.Refresh(_Title, endpointName, stats);
+            _Sidebar.Refresh(model, stats);
         }
 
         private ConversationStats CloneStatsNoLock()
