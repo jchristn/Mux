@@ -51,6 +51,16 @@ All notable changes to mux are documented here.
 - Renamed the **Theme…** command menu entry to **Theme**.
 - `/help` and `/?` now open the same navigable command menu as `F1` (previously a static, non-interactive
   list), and that menu now shows each command's `/slash` aliases alongside its title and key chord.
+- Widened the `F1` / `/?` command menu by ~50% and column-aligned it so the key-chord column and the
+  `/slash` alias column each line up on a single vertical axis.
+
+### Fixed
+
+- HTTP (streamable) MCP servers no longer fail to connect against spec-compliant servers. The bundled MCP
+  client (Voltaic `0.1.11`) sent `Accept: application/json` on its streamable-HTTP requests; servers that
+  require the MCP-mandated `Accept: application/json, text/event-stream` (returning `406 Not Acceptable`
+  otherwise) were shown as offline with no tools. Upgraded Voltaic to `0.4.0`, which sends the compliant
+  `Accept` header (verified end-to-end against a real server discovering all of its tools).
 
 ## v0.3.0 - 2026-07-29
 

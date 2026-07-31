@@ -6,7 +6,7 @@ namespace Test.Shared
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
-    using Voltaic;
+    using Voltaic.Mcp;
 
     /// <summary>
     /// A simple test fixture that hosts an MCP server over streamable HTTP for integration testing.

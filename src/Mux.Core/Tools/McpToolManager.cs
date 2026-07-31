@@ -9,7 +9,7 @@ namespace Mux.Core.Tools
     using Mux.Core.Enums;
     using Mux.Core.Models;
     using Mux.Core.Settings;
-    using Voltaic;
+    using Voltaic.Mcp;
     using ToolDefinition = Mux.Core.Models.ToolDefinition;
 
     /// <summary>
