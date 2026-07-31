@@ -128,6 +128,9 @@ namespace Test.Shared
                     // Skills: loader, parser, and validation matrix.
                     SkillLoaderSuite.Create(),
 
+                    // Skills: execution and the skill / run_skill tools.
+                    SkillProviderSuite.Create(),
+
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
                     McpRuntimeSuite.Create(),
