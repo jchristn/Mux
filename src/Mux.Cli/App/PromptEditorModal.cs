@@ -117,7 +117,7 @@ namespace Mux.Cli.App
             int screenWidth = surface.Size.Width;
             int screenHeight = surface.Size.Height;
 
-            int boxWidth = Math.Min(screenWidth, Math.Min(screenWidth - 4, 100));
+            int boxWidth = Math.Min(screenWidth, Math.Min(screenWidth - 4, 150));
             if (boxWidth < 20) boxWidth = Math.Min(screenWidth, 20);
 
             int boxHeight = Math.Min(screenHeight, Math.Max(10, screenHeight - 2));

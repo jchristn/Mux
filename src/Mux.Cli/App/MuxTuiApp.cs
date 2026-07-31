@@ -177,7 +177,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.sidebar.toggle", "Toggle sidebar", "ctrl+b", ToggleSidebar, "View", new[] { "sidebar" }));
             _Catalog.Add(new CommandDescriptor("mux.save", "Save session", "ctrl+s", SaveSession, "Session", new[] { "save" }));
             _Catalog.Add(new CommandDescriptor("mux.queue", "Edit queue", "ctrl+g", OpenQueueEditor, "Session", new[] { "queue", "edit queue", "pending" }));
-            _Catalog.Add(new CommandDescriptor("mux.prompts", "Prompts…", "ctrl+p", OpenPromptEditor, "Model", new[] { "prompts", "prompt", "system prompt" }));
+            _Catalog.Add(new CommandDescriptor("mux.prompts", "Prompts", "ctrl+p", OpenPromptEditor, "Model", new[] { "prompts", "prompt", "system prompt" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme…", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
