@@ -119,6 +119,7 @@ mux probe --output-format json
 - `--yolo` or `--approval-policy auto` enables automatic execution
 - `mux print` and `mux probe` reject `--approval-policy ask`
 - As of v0.4.0, the TUIKit interactive UI connects to configured MCP servers and exposes their tools to the model; manage servers with `/mcp` or in `mcp-servers.json`
+- Skills (v0.4.0): open `/skills` to create, import, and manage versioned Markdown-plus-code capabilities in `~/.mux/skills`; a curated default set (git, .NET, hygiene, and utility skills) is seeded on first run. Create your first with `/skills` → **+ New skill…** or `mux skill new <id>`, then edit its `SKILL.md`. See `SKILLS_AUTHORING.md`
 
 ## Configure More Endpoints
 

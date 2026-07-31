@@ -59,6 +59,7 @@
 - External web search: optional Tavily and You.com providers expose `web_search` for result discovery
 - Shell-aware process execution metadata: `run_process` tells the model which OS and shell it will run under
 - MCP tool servers: define `stdio`/HTTP servers in `mcp-servers.json` or manage them with `/mcp`; the interactive UI connects to them, discovers their tools, exposes those tools to the model, and shows per-server connectivity
+- Skills: versioned Markdown-plus-code capabilities in `~/.mux/skills` that turn a request into a fixed, deterministic procedure; author, inventory, and manage them in-app with `/skills` (or the `mux skill` verb), and a curated default set ships on first run
 - TUIKit interactive UI (`v0.3.0`): a full-screen shell with per-job transcripts, a job sidebar, a multi-line composer, slash commands / key bindings / menu over one command catalog, an interactive tool-approval modal, and autosaved resumable sessions. Multiple prompts run as concurrent background jobs (a single-writer lease serializes file edits); enqueue-while-busy lets you start a new job or append to the focused one. See `USAGE.md`.
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
@@ -161,6 +162,7 @@ Every command is also reachable by key binding and the `F1` menu (one catalog, t
 /endpoint, /model                 Open the endpoints / models picker (also Ctrl+E)
 /endpoints, /models               Aliases for /endpoint
 /mcp, /mcp-servers, /servers      Open the MCP servers manager (add / edit / remove)
+/skills, /skill                   Open the skills manager (inventory / create / import)
 /prompts                          Open the prompt-profile editor (also Ctrl+P)
 /sessions                         Browse and resume saved sessions
 /save                             Save the current session
@@ -188,6 +190,25 @@ Any model whose model-plus-endpoint combination is already configured is left ou
 The `/mcp` command (aliases `/mcp-servers`, `/servers`; also on the `F1` menu under **Model**) opens the MCP servers manager, which edits `mcp-servers.json` through the same modal style as the endpoints picker. Each server row shows a live connectivity glyph — `●` online (with its discovered tool count), `○` offline — followed by the server name and transport detail. The list (separated from the actions by a blank row) sits above a **+ Add MCP server…** entry and, when servers exist, a **- Remove MCP server…** entry; selecting a server row opens its **Edit** form. **Add** and **Edit** run a guided form: a **name**, a **transport** (`stdio` or `http`), and the transport-specific fields — **command**, space-separated **args**, and comma-separated `KEY=VALUE` **env** for `stdio`; **url** and **mcp path** (default `/mcp`) for `http`. The form validates that a `stdio` server has a command and an `http` server has a url. **Remove** asks for confirmation.
 
 Configured MCP servers are connected live: on startup mux connects to each server, queries it for its available tools, and both registers those tools as callable (so the model can invoke them, routed back to the owning server) and appends them to the system prompt so the model is explicitly aware of them. Connectivity is re-validated on a periodic timer, and down servers are periodically retried; the manager's glyphs reflect the current state. Adding, editing, or removing a server through the modal reconnects in the background and takes effect on the next turn — no restart required.
+
+### Skills
+
+A skill is a versioned folder under `~/.mux/skills/<id>/` holding a `SKILL.md` — YAML frontmatter (name, description, when-to-use, mutation posture, tags, and commands) plus a Markdown body — and optional bundled scripts. Each command runs a fenced code block or a bundled script through an allowlisted interpreter (`bash`, `sh`, `pwsh`, `python`, `node`, `dotnet-script`) with a timeout and captured output, so a fuzzy request becomes the same fixed procedure every time. The Markdown carries judgment; the code carries determinism.
+
+On startup mux discovers every skill, lists the enabled ones in the system prompt, and exposes two tools to the model: `skill` (read a skill's instructions and commands) and `run_skill` (execute one command deterministically, returned like `run_process`). A skill's code runs under the approval policy and the workspace write lease, the same posture as `run_process`. A curated default set — `git-status-vs-head`, `git-commit`, `git-push`, `git-secret-scan`, `dotnet-build`, `dotnet-test`, `todo-scan`, `gitignore-audit`, `env-report`, `json-validate` — is seeded on first run and left untouched afterward, so your edits and removals survive upgrades.
+
+The `/skills` command (alias `/skill`; also on the `F1` menu under **Model**) opens the manager. The inventory lists each skill with a state glyph — `●` enabled, `○` disabled, `⚠` invalid (the detail view shows why) — its command count, and its tags. Per-skill actions cover view, enable/disable, duplicate, and remove; a **+ New skill…** wizard walks you through id, title, description, read-only vs mutating, and interpreter, then writes a working starter skill; and **⬇ Import skill…** brings one in from a local path after validating it. Enable/disable state lives in `~/.mux/skills.json` so toggling never rewrites a hand-edited `SKILL.md`. The same operations are available non-interactively:
+
+```text
+mux skill list                       # inventory with validity and enablement
+mux skill show <name>                # metadata, commands, and body
+mux skill validate [<name>]          # validate one or all; nonzero exit on failure (CI gate)
+mux skill run <name> <command> [--arg v ...] [--cwd dir]   # execute deterministically
+mux skill new <name>                 # scaffold a skill
+mux skill add <path>                 # import from a directory
+```
+
+Skills are documented in full in `SKILLS_AUTHORING.md`.
 
 The `/borders` command (aliases `/boundaries`, `/lines`; also on the `F1` menu under **View**) toggles optional dark-grey boundary lines, off by default. When on, the shell draws a horizontal rule above the prompt input, a horizontal rule above the queued-messages strip (when one is shown), and a vertical rule in the gutter to the left of the sidebar. The choice persists to `settings.json` as `showBoundaryLines` (also settable there directly) and is applied on the next launch.
 
@@ -375,6 +396,7 @@ See [CONFIG.md](CONFIG.md) for the full reference.
 - [GETTING_STARTED.md](GETTING_STARTED.md)
 - [USAGE.md](USAGE.md)
 - [CONFIG.md](CONFIG.md)
+- [SKILLS_AUTHORING.md](SKILLS_AUTHORING.md)
 - [ARMADA.md](ARMADA.md)
 - [TESTING.md](TESTING.md)
 - [CHANGELOG.md](CHANGELOG.md)

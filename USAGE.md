@@ -551,6 +551,27 @@ Important:
 - `mux print` and `mux probe` do not load MCP servers
 - passing `--no-mcp` to `print` or `probe` returns a structured configuration error instead of silently implying MCP support
 
+## Skills
+
+Skills are versioned Markdown-plus-code capabilities under `~/.mux/skills`. Each is a folder with a `SKILL.md` — frontmatter plus a body — whose commands run a fenced code block or a bundled script through an allowlisted interpreter with a timeout and captured output, turning a request into a fixed, deterministic procedure. The interactive shell discovers skills on startup, lists the enabled ones in the system prompt, and exposes `skill` (read a skill's instructions) and `run_skill` (execute a command, gated by the approval policy and the write lease). A curated default set is seeded on first run and preserved on upgrade.
+
+Manage skills in-app with `/skills` (aliases `/skill`; also on the `F1` menu under **Model**): the inventory shows a state glyph (`●` enabled, `○` disabled, `⚠` invalid), command counts, and tags; per-skill actions cover view, enable/disable, duplicate, and remove; a **+ New skill…** wizard scaffolds a working skill; and **⬇ Import skill…** brings one in from a local path. Enablement lives in `~/.mux/skills.json`, separate from each `SKILL.md`.
+
+The same operations run non-interactively:
+
+```bash
+mux skill list                       # inventory with validity and enablement
+mux skill show <name>                # metadata, commands, and body
+mux skill validate [<name>]          # validate one or all; nonzero exit on failure (CI gate)
+mux skill run <name> <command> [--arg v ...] [--cwd dir]   # execute deterministically
+mux skill new <name>                 # scaffold a skill
+mux skill add <path>                 # import from a directory
+```
+
+`mux skill run` returns the same `stdout`/`stderr`/`exit_code` contract the agent sees, so a Git hook or CI job can invoke a curated procedure with no model in the loop. The full authoring reference is in `SKILLS_AUTHORING.md`.
+
+Settings in `settings.json`: `skillsEnabled` (default `true`), `skillRefreshIntervalSeconds` (default `30`), and `skillsDirectory` (override the default `~/.mux/skills`).
+
 ## Orchestrator Integration
 
 Recommended command forms:

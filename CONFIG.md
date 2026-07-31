@@ -34,8 +34,9 @@ When config directory selection is applied, mux uses that directory for:
 - `settings.json`
 - `system-prompt.md`
 - `prompts.json`
+- `skills.json` and the `skills/` directory
 
-If the directory does not exist, `mux` creates it. If `endpoints.json` is missing, `mux` seeds a default Ollama endpoint there. If `settings.json` is missing, `mux` writes editable default settings. If `prompts.json` is missing, `mux` seeds one active `Default` profile that inherits every built-in prompt. Existing files are not overwritten.
+If the directory does not exist, `mux` creates it. If `endpoints.json` is missing, `mux` seeds a default Ollama endpoint there. If `settings.json` is missing, `mux` writes editable default settings. If `prompts.json` is missing, `mux` seeds one active `Default` profile that inherits every built-in prompt. If the `skills/` directory is missing, `mux` creates it and seeds the curated default skills. Existing files are not overwritten.
 
 ## Files
 
@@ -46,6 +47,8 @@ If the directory does not exist, `mux` creates it. If `endpoints.json` is missin
 | `settings.json` | Global mux settings | No |
 | `system-prompt.md` | Custom default system prompt | No |
 | `prompts.json` | Named, switchable prompt profiles (system + internal prompts) | No |
+| `skills/` | User-authored skills, one folder per skill (`SKILL.md` plus optional `scripts/` and `resources/`); seeded with a curated default set on first run | Created on demand |
+| `skills.json` | Per-skill enablement and pinning, kept separate from each `SKILL.md` so toggling a skill never rewrites it | No |
 | `sessions/` | Saved interactive sessions (one JSON file per session); the shell autosaves here at each turn boundary and `/sessions` browses/resumes them | Created on demand |
 
 For current non-interactive orchestration paths:
@@ -201,6 +204,9 @@ Example:
   "maxAgentIterations": 50,
   "ignoreCertErrors": false,
   "showBoundaryLines": false,
+  "skillsEnabled": true,
+  "skillRefreshIntervalSeconds": 30,
+  "skillsDirectory": null,
   "externalSearch": {
     "enabled": false,
     "allowFallback": true,
@@ -226,6 +232,9 @@ Fields:
 | `maxAgentIterations` | int | default loop guard for tool-using runs; clamped to `1-100` and overridden by endpoint `maxAgentIterations` when that value is set |
 | `ignoreCertErrors` | bool | disable TLS certificate validation for mux-owned network requests; default `false` |
 | `showBoundaryLines` | bool | draw dark-grey boundary lines in the interactive shell (above the prompt input, above the queued-messages strip, and left of the sidebar); toggle live with `/borders`; default `false` |
+| `skillsEnabled` | bool | load user-authored skills and expose them to the model in the interactive shell; default `true` |
+| `skillRefreshIntervalSeconds` | int | how often the shell re-scans the skills directory for changes; clamped to a minimum of `5`; default `30` |
+| `skillsDirectory` | string or null | override for the skills directory (for a shared, version-controlled library); `null` uses `~/.mux/skills` |
 | `maxConcurrency` | int | maximum number of interactive jobs allowed to run at once; clamped to `1-32`, default `3` |
 | `defaultEnqueueBehavior` | string | how the interactive shell handles a submit while a job is active: `ask` (show the chooser), `run_now`, `queue_after` (both start a new job — the concurrency cap governs parallelism), or `add_to_focused` (append to the focused job); default `ask` |
 | `externalSearch` | object | optional Tavily/You.com provider configuration for the `web_search` tool |

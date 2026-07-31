@@ -6,6 +6,19 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **Skills** — versioned Markdown-plus-code capabilities in `~/.mux/skills` that turn a request into a
+  fixed, deterministic procedure. Each skill is a folder with a `SKILL.md` (YAML frontmatter plus a body)
+  and optional bundled scripts; its commands run a fenced code block or a script through an allowlisted
+  interpreter (`bash`, `sh`, `pwsh`, `python`, `node`, `dotnet-script`) with a timeout and captured output.
+  On startup the interactive shell discovers skills, lists the enabled ones in the system prompt, and
+  exposes two tools — `skill` (read a skill's instructions) and `run_skill` (execute a command, returned
+  like `run_process` and gated by the approval policy and write lease). A curated default set is seeded on
+  first run and preserved on upgrade. Manage skills in-app with `/skills` (inventory with status glyphs,
+  per-skill view/enable/disable/duplicate/remove, a create wizard, and local-path import) or with the
+  `mux skill list | show | validate | run | new | add` verb; `validate` returns a nonzero exit for CI and
+  `run` returns the process contract for hooks. New `settings.json` fields: `skillsEnabled`,
+  `skillRefreshIntervalSeconds`, `skillsDirectory`.
+
 - **MCP servers are now connected live in the interactive shell.** On startup mux connects to every server
   configured in `mcp-servers.json`, queries each for its available tools (`tools/list`), and then both
   registers those tools as callable (routing invocations back to the owning server) and appends them to the
@@ -48,6 +61,8 @@ All notable changes to mux are documented here.
   **Import from Ollama…**).
 - The interactive shell now keeps a one-column gutter between the transcript (and queue strip) and the
   right-anchored sidebar, so the two panes no longer butt directly against each other.
+- Introduced an external-tool provider seam (`IExternalToolProvider` on the agent loop) so MCP servers and
+  skills compose their tools and prompt sections instead of contending for a single hook.
 - Renamed the **Theme…** command menu entry to **Theme**.
 - `/help` and `/?` now open the same navigable command menu as `F1` (previously a static, non-interactive
   list), and that menu now shows each command's `/slash` aliases alongside its title and key chord.
