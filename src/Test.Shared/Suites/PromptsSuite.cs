@@ -71,6 +71,27 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    Case("ResolveIncludesTaskGuidanceWhenPlanToolPresent", "The default prompt includes task-planning guidance when plan_tasks is offered", ct =>
+                    {
+                        List<ToolDefinition> tools = new List<ToolDefinition>
+                        {
+                            new ToolDefinition { Name = "plan_tasks", Description = "plan" },
+                            new ToolDefinition { Name = "update_task", Description = "update" }
+                        };
+                        (string system, _) = CommandRuntimeResolver.ResolveProfilePrompts(new PromptProfile(), true, "/w", tools);
+                        MuxAssert.Contains("Task planning:", system, "guidance present");
+                        MuxAssert.IsFalse(system.Contains("{TaskPlanningGuidance}"), "placeholder substituted");
+                        return Task.CompletedTask;
+                    }),
+
+                    Case("ResolveOmitsTaskGuidanceWithoutPlanTool", "The default prompt omits task-planning guidance when plan_tasks is absent", ct =>
+                    {
+                        (string system, _) = CommandRuntimeResolver.ResolveProfilePrompts(new PromptProfile(), true, "/w", new List<ToolDefinition> { new ToolDefinition { Name = "read_file", Description = "read" } });
+                        MuxAssert.IsFalse(system.Contains("Task planning:"), "guidance omitted");
+                        MuxAssert.IsFalse(system.Contains("{TaskPlanningGuidance}"), "placeholder substituted");
+                        return Task.CompletedTask;
+                    }),
+
                     // ---- PromptEditorModal ----
                     Case("ModalActivatesSelectedProfile", "Space activates the selected profile", async ct =>
                     {

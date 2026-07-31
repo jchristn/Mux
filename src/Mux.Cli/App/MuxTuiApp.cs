@@ -202,6 +202,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.mcp", "MCP servers", null, OpenMcpModal, "Model", new[] { "mcp", "mcp-servers", "mcpservers", "servers" }));
             _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
+            _Catalog.Add(new CommandDescriptor("mux.tasks", "Tasks", null, OpenTasksModal, "View", new[] { "tasks", "task", "plan", "todo" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
             _Catalog.Add(new CommandDescriptor("mux.borders", "Toggle boundary lines", null, ToggleBoundaries, "View", new[] { "borders", "boundaries", "boundary", "lines" }));
@@ -1453,6 +1454,29 @@ namespace Mux.Cli.App
             QueueEditorModal modal = new QueueEditorModal(snapshot);
             _App.Modals.Push(modal);
             _ = ResolveQueueEditorAsync(modal);
+        }
+
+        // Opens the tasks viewer for the focused job's plan, letting a human inspect and annotate task
+        // status and notes. Changes apply to the live plan, so they persist and show in the sidebar.
+        private void OpenTasksModal()
+        {
+            Job? planJob;
+            lock (_Sync)
+            {
+                planJob = _ActiveJob ?? _JobManager.FocusedJob;
+            }
+
+            Mux.Core.Tasks.TaskPlan plan = planJob?.TaskPlan ?? new Mux.Core.Tasks.TaskPlan();
+            TasksModal modal = new TasksModal(plan);
+            _App.Modals.Push(modal);
+            _ = ResolveTasksModalAsync(modal);
+        }
+
+        private async Task ResolveTasksModalAsync(TasksModal modal)
+        {
+            await modal.Completion.ConfigureAwait(false);
+            RefreshSidebar();
+            AutoSave();
         }
 
         private async Task ResolveQueueEditorAsync(QueueEditorModal modal)
@@ -2942,6 +2966,16 @@ namespace Mux.Cli.App
 
         private ConversationStats CloneStatsNoLock()
         {
+            Job? planJob = _ActiveJob ?? _JobManager.FocusedJob;
+            int taskTotal = 0;
+            int taskCompleted = 0;
+            if (planJob != null)
+            {
+                Mux.Core.Tasks.TaskPlan plan = planJob.TaskPlan;
+                taskTotal = plan.TotalCount;
+                taskCompleted = plan.CompletedCount;
+            }
+
             return new ConversationStats
             {
                 Busy = _TurnInFlight,
@@ -2955,7 +2989,9 @@ namespace Mux.Cli.App
                 TtftSamples = _Stats.TtftSamples,
                 InputTokens = _Stats.InputTokens,
                 OutputTokens = _Stats.OutputTokens,
-                CachedTokens = _Stats.CachedTokens
+                CachedTokens = _Stats.CachedTokens,
+                TaskTotal = taskTotal,
+                TaskCompleted = taskCompleted
             };
         }
 

@@ -19,7 +19,7 @@ namespace Mux.Core.Settings
         /// <summary>
         /// The product version.
         /// </summary>
-        public static readonly string ProductVersion = "0.4.0";
+        public static readonly string ProductVersion = "0.5.0";
 
         /// <summary>
         /// The default system prompt used when no custom prompt is configured.
@@ -39,6 +39,7 @@ namespace Mux.Core.Settings
             "- For edits, read the relevant file first, then prefer edit_file or multi_edit for targeted changes; use write_file for new files or full rewrites.\n" +
             "- After making changes, verify with read_file, grep, tests, or run_process when practical.\n" +
             "- Treat delete_file and directory deletion as destructive; use them only when the user clearly asked or the task requires it.\n\n" +
+            "{TaskPlanningGuidance}" +
             "Guidelines:\n" +
             "- Use the available tools to explore the codebase before making changes.\n" +
             "- The listed tools are executable capabilities. When the user asks you to retrieve, fetch, read, scrape, browse, or display the contents of a URL, call web_retrieve with that URL if it is available.\n" +
@@ -48,6 +49,18 @@ namespace Mux.Core.Settings
             "- Prefer precise, minimal edits over rewriting entire files.\n" +
             "- Explain your reasoning when making non-trivial changes.\n" +
             "- If a task is ambiguous, ask for clarification before proceeding.";
+
+        /// <summary>
+        /// Guidance injected into <see cref="SystemPrompt"/> at the <c>{TaskPlanningGuidance}</c> placeholder
+        /// when task planning is active for the run. Teaches the model when to plan and how to keep the plan
+        /// current; the tool signatures themselves come from the tool listing. Ends with a blank line so the
+        /// surrounding prompt reads cleanly, and expands to an empty string when task planning is off.
+        /// </summary>
+        public static readonly string TaskPlanningGuidance =
+            "Task planning:\n" +
+            "- For a request that takes more than a couple of steps or spans several files, call plan_tasks first to lay out the work as tasks with short ids and titles.\n" +
+            "- Call update_task to set a task in_progress when you start it and completed as soon as you finish it; keep exactly one task in_progress at a time.\n" +
+            "- Mark a task blocked (with a note) when it cannot proceed and failed (a note is required) when an attempt fails. Re-call plan_tasks to reorganize the plan.\n\n";
 
         /// <summary>
         /// The system prompt used instead of <see cref="SystemPrompt"/> when the active endpoint does not

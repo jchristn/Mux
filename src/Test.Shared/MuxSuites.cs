@@ -153,7 +153,22 @@ namespace Test.Shared
                     McpRuntimeSuite.Create(),
 
                     // Command-menu column alignment (F1 / /? menu).
-                    CommandMenuFormatterSuite.Create()
+                    CommandMenuFormatterSuite.Create(),
+
+                    // Background tasks: task-plan model, timing, readiness, and validation (M1).
+                    TaskPlanSuite.Create(),
+
+                    // Background tasks: model-facing tools + registration (M3).
+                    TaskToolsSuite.Create(),
+
+                    // Background tasks: AgentLoop task-plan event emission (M3).
+                    TaskEventSuite.Create(),
+
+                    // Background tasks: /tasks viewer + human annotation (M7).
+                    TaskModalSuite.Create(),
+
+                    // Background tasks: orchestrated parallel execution over the job manager (M8).
+                    TaskOrchestratorSuite.Create()
                 };
             }
         }

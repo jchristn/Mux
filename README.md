@@ -15,7 +15,7 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.4.0-blue.svg" alt="v0.4.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.5.0-blue.svg" alt="v0.5.0"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha"></a>
 </p>
 
@@ -61,6 +61,7 @@
 - MCP tool servers: define `stdio`/HTTP servers in `mcp-servers.json` or manage them with `/mcp`; the interactive UI connects to them, discovers their tools, exposes those tools to the model, and shows per-server connectivity
 - Skills: versioned Markdown-plus-code capabilities in `~/.mux/skills` that turn a request into a fixed, deterministic procedure; author, inventory, and manage them in-app with `/skills` (or the `mux skill` verb), and a curated default set ships on first run
 - TUIKit interactive UI (`v0.3.0`): a full-screen shell with per-job transcripts, a job sidebar, a multi-line composer, slash commands / key bindings / menu over one command catalog, an interactive tool-approval modal, and autosaved resumable sessions. Multiple prompts run as concurrent background jobs (a single-writer lease serializes file edits); enqueue-while-busy lets you start a new job or append to the focused one. See `USAGE.md`.
+- Background tasks: for a large request the model lays out the work as a tracked plan of tasks and advances them as it goes; the interactive shell draws a live checklist that updates in place (pending → running → done), the sidebar shows `TASKS n/m`, `/tasks` opens a viewer to inspect and hand-annotate the plan, and the plan persists across save/resume. A `task_plan_updated` event is emitted in `jsonl` mode for orchestrators. See `USAGE.md`
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
 - Health checks: `mux probe` validates config, backend reachability, auth, and model access
@@ -165,6 +166,7 @@ Every command is also reachable by key binding and the `F1` menu (one catalog, t
 /skills, /skill                   Open the skills manager (inventory / create / import)
 /prompts                          Open the prompt-profile editor (also Ctrl+P)
 /sessions                         Browse and resume saved sessions
+/tasks                            View and annotate the focused job's task plan
 /save                             Save the current session
 /theme                            Open the theme selector
 /sidebar                          Toggle the sidebar
@@ -213,6 +215,36 @@ Skills are documented in full in `SKILLS_AUTHORING.md`.
 The `/borders` command (aliases `/boundaries`, `/lines`; also on the `F1` menu under **View**) toggles optional dark-grey boundary lines, off by default. When on, the shell draws a horizontal rule above the prompt input, a horizontal rule above the queued-messages strip (when one is shown), and a vertical rule in the gutter to the left of the sidebar. The choice persists to `settings.json` as `showBoundaryLines` (also settable there directly) and is applied on the next launch.
 
 External search is configured in `settings.json` (Tavily or You.com); when at least one enabled provider is fully configured the `web_search` tool is enabled. `web_search` discovers candidate results; fetching the contents of a known URL is handled by `web_retrieve`.
+
+### Background Tasks
+
+When a request is large enough to need more than a couple of steps — porting a pattern across several
+files, wiring an endpoint through routing and tests — `mux` lets the model break the work into a plan of
+tasks and track it as it goes. The model calls two tools to do this: `plan_tasks` lays out the tasks (each
+with a short id, a title, and optional `dependsOn` prerequisites), and `update_task` advances one task's
+status as work starts and finishes. You do not call these tools; the model does, and the system prompt
+tells it when planning is worth the effort. Task planning is on by default and can be turned off with
+`taskPlanningEnabled` in `settings.json`.
+
+In the interactive shell the plan renders as a live checklist inside the transcript, updating in place as
+each task moves from pending (`◻`) to running (`◼`) to done (`✔`) — a failed task shows `✗` with the
+reason, a blocked one `▦`, a skipped one `⊘`. The sidebar shows overall progress as `TASKS n/m`. Because
+the checklist holds its place in the transcript, a task completing several turns later updates the original
+line rather than reprinting the list. The plan is saved with the session, so resuming a session shows it
+exactly where it stood.
+
+Open `/tasks` (also on the `F1` menu under **View**) to inspect the focused job's plan and annotate it by
+hand: `c` marks the selected task complete, `i` marks it in progress, `b` blocked, `k` skipped, `p` pending,
+and `n` edits its note. Manual changes apply to the same plan the model edits, so they persist and show up
+in the sidebar.
+
+For automation, every plan change is a `task_plan_updated` event in `mux print --output-format jsonl`,
+carrying the full task snapshot and what changed, and `run_completed` includes a `taskSummary` tally — so an
+orchestrator driving `mux` non-interactively can follow subtask progress the same way it follows tool calls.
+An opt-in orchestration engine, `TaskOrchestrator`, runs a task DAG as parallel jobs under the same
+single-writer workspace lease that protects concurrent jobs. It is gated by `taskParallelismEnabled`
+(default off) and is not yet wired into the interactive shell, so today's interactive experience tracks
+one job's plan; the engine is used for programmatic orchestration.
 
 ### Interactive Input
 
@@ -293,6 +325,7 @@ Event types currently emitted:
 - `context_compacted`
 - `error`
 - `run_completed`
+- `task_plan_updated`
 
 Default `text` mode for `mux print` remains:
 - `stdout`: assistant text

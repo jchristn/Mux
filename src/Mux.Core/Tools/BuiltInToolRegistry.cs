@@ -8,6 +8,7 @@ namespace Mux.Core.Tools
     using System.Threading.Tasks;
     using Mux.Core.Models;
     using Mux.Core.Search;
+    using Mux.Core.Tasks;
     using Mux.Core.Tools.Tools;
 
     /// <summary>
@@ -29,7 +30,12 @@ namespace Mux.Core.Tools
         /// Initializes a new instance of the <see cref="BuiltInToolRegistry"/> class,
         /// registering all built-in tool implementations.
         /// </summary>
-        public BuiltInToolRegistry(MuxSettings? muxSettings = null)
+        /// <param name="muxSettings">Effective settings; gates optional tools such as web search and task
+        /// planning. Null uses defaults.</param>
+        /// <param name="taskPlan">The per-job task plan the task tools write to, or null when no plan is
+        /// bound to this run. The task tools are registered only when
+        /// <see cref="MuxSettings.TaskPlanningEnabled"/> is true.</param>
+        public BuiltInToolRegistry(MuxSettings? muxSettings = null, TaskPlan? taskPlan = null)
         {
             RegisterTool(new ReadFileTool(), ToolMutationKind.ReadOnly);
             RegisterTool(new WriteFileTool(), ToolMutationKind.Mutating);
@@ -47,6 +53,12 @@ namespace Mux.Core.Tools
             if (WebSearchServiceFactory.Create(muxSettings) is { } searchService)
             {
                 RegisterTool(new WebSearchTool(searchService), ToolMutationKind.ReadOnly);
+            }
+
+            if (muxSettings?.TaskPlanningEnabled ?? true)
+            {
+                RegisterTool(new PlanTasksTool(taskPlan), ToolMutationKind.ReadOnly);
+                RegisterTool(new UpdateTaskTool(taskPlan), ToolMutationKind.ReadOnly);
             }
         }
 

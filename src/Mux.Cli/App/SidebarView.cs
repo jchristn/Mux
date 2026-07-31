@@ -65,6 +65,11 @@ namespace Mux.Cli.App
                 _Pane.WriteLine(Text.From(Fit("STATUS")).Bold());
                 _Pane.WriteLine(Text.From(Fit(" " + status)).Dim());
 
+                if (stats.TaskTotal > 0)
+                {
+                    _Pane.WriteLine(Text.From(Fit(Row("TASKS", stats.TaskCompleted + "/" + stats.TaskTotal))).Dim());
+                }
+
                 _Pane.WriteLine(Text.From(string.Empty));
                 _Pane.WriteLine(Text.From(Fit("THIS TURN")).Bold());
                 _Pane.WriteLine(Text.From(Fit(Row("TTFT", FormatMs(stats.LastTtftMs)))));

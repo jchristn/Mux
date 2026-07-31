@@ -124,12 +124,58 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("ccc", joined, "block c");
                     }),
 
+                    Case("TaskPlanRendersChecklistBlock", "A task plan renders a header and one line per task", async (CancellationToken ct) =>
+                    {
+                        IReadOnlyList<string> lines = await ProjectAsync(ct, PlanEvent(
+                            Mux.Core.Enums.TaskPlanChangeKindEnum.PlanCreated,
+                            TaskItem("t1", "Study the pattern", Mux.Core.Enums.AgentTaskStatusEnum.Pending),
+                            TaskItem("t2", "Add the interface", Mux.Core.Enums.AgentTaskStatusEnum.Pending)), Completed());
+                        string joined = Join(lines);
+                        MuxAssert.Contains("Tasks 0/2", joined, "header");
+                        MuxAssert.Contains("Study the pattern", joined, "task 1");
+                        MuxAssert.Contains("Add the interface", joined, "task 2");
+                        MuxAssert.Contains("◻", joined, "pending glyph");
+                    }),
+
+                    Case("TaskStatusUpdatesInPlace", "A later status change rewrites the task line, not appends", async (CancellationToken ct) =>
+                    {
+                        IReadOnlyList<string> lines = await ProjectAsync(ct,
+                            PlanEvent(Mux.Core.Enums.TaskPlanChangeKindEnum.PlanCreated,
+                                TaskItem("t1", "Study the pattern", Mux.Core.Enums.AgentTaskStatusEnum.InProgress)),
+                            PlanEvent(Mux.Core.Enums.TaskPlanChangeKindEnum.TaskStatusChanged,
+                                TaskItem("t1", "Study the pattern", Mux.Core.Enums.AgentTaskStatusEnum.Completed)),
+                            Completed());
+                        MuxAssert.AreEqual(1, CountContaining(lines, "Study the pattern"), "single task line (updated in place)");
+                        string joined = Join(lines);
+                        MuxAssert.Contains("✔", joined, "completed glyph");
+                        MuxAssert.Contains("Tasks 1/1", joined, "header updated");
+                    }),
+
                     Case("ErrorRendersErrorLine", "An error event renders a code/message line", async (CancellationToken ct) =>
                     {
                         IReadOnlyList<string> lines = await ProjectAsync(ct, new ErrorEvent { Code = "llm_error", Message = "kaboom" }, Completed());
                         string joined = Join(lines);
                         MuxAssert.Contains("Error [llm_error]", joined, "error code");
                         MuxAssert.Contains("kaboom", joined, "error message");
+                    }),
+
+                    Case("SidebarShowsTaskProgress", "The sidebar shows a TASKS n/m row when the plan has tasks", async (CancellationToken ct) =>
+                    {
+                        Pane pane = new Pane("s");
+                        new SidebarView(pane).Refresh("model", new ConversationStats { TaskTotal = 3, TaskCompleted = 1 });
+                        string text = Join(pane.SnapshotPlainLines());
+                        await Task.CompletedTask.ConfigureAwait(false);
+                        MuxAssert.Contains("TASKS", text, "tasks row");
+                        MuxAssert.Contains("1/3", text, "progress");
+                    }),
+
+                    Case("SidebarHidesTasksWhenNoPlan", "The sidebar omits the TASKS row when there is no plan", async (CancellationToken ct) =>
+                    {
+                        Pane pane = new Pane("s");
+                        new SidebarView(pane).Refresh("model", new ConversationStats { TaskTotal = 0 });
+                        string text = Join(pane.SnapshotPlainLines());
+                        await Task.CompletedTask.ConfigureAwait(false);
+                        MuxAssert.IsFalse(text.Contains("TASKS", StringComparison.Ordinal), "no tasks row");
                     }),
 
                     Case("EmptyStreamProducesNoLines", "A stream with only run completion writes nothing", async (CancellationToken ct) =>
@@ -200,6 +246,16 @@ namespace Test.Shared.Suites
         private static RunCompletedEvent Completed()
         {
             return new RunCompletedEvent { RunId = Guid.NewGuid().ToString("N"), Status = "completed", IterationsCompleted = 1, DurationMs = 1 };
+        }
+
+        private static Mux.Core.Tasks.AgentTask TaskItem(string id, string title, Mux.Core.Enums.AgentTaskStatusEnum status)
+        {
+            return new Mux.Core.Tasks.AgentTask { Id = id, Title = title, Status = status };
+        }
+
+        private static TaskPlanUpdatedEvent PlanEvent(Mux.Core.Enums.TaskPlanChangeKindEnum changeKind, params Mux.Core.Tasks.AgentTask[] tasks)
+        {
+            return new TaskPlanUpdatedEvent { ChangeKind = changeKind, Tasks = new List<Mux.Core.Tasks.AgentTask>(tasks) };
         }
 
         private static string Join(IReadOnlyList<string> lines)

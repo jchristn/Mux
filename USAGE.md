@@ -128,7 +128,7 @@ while a turn is in flight queues it to run when the current turn finishes.
 
 Type a leading `/` in the composer to run a command instead of submitting a prompt. Every command is
 also reachable by key and the menu (one catalog, three surfaces):
-`/endpoint` (`/model`), `/help` (`/?`), `/clear`, `/sidebar`, `/save`, `/sessions`, `/theme`,
+`/endpoint` (`/model`), `/help` (`/?`), `/clear`, `/sidebar`, `/save`, `/sessions`, `/tasks`, `/theme`,
 `/mouse`, `/menu`, `/quit` (`/exit`).
 
 `/theme` opens a theme selector (pick a theme and apply it); the whole UI — including the panes behind
@@ -162,6 +162,24 @@ auto-approve, or `--approval-policy deny` to block all tools.
 The session autosaves at each turn boundary. `Ctrl+S` / `/save` saves on demand; `/sessions` lists and
 resumes saved sessions (under `~/.mux/sessions`). A resumed session shows the completed conversation
 read-only and marks an interrupted turn as re-run-required — it never silently re-runs it.
+
+### Background tasks
+
+For a request that spans several steps or files, the model decomposes the work into a plan of tasks
+(through the `plan_tasks` and `update_task` tools it calls on its own) and advances them as it goes. The
+transcript shows a live checklist that updates in place — `◻` pending, `◼` running, `✔` done, `✗` failed,
+`▦` blocked, `⊘` skipped — and the sidebar shows overall progress as `TASKS n/m`. The plan is saved with
+the session and restored on resume.
+
+`/tasks` opens a viewer for the focused job's plan. Inside it, arrow keys move the selection and single
+keys annotate the highlighted task: `c` complete, `i` in progress, `b` blocked, `k` skipped, `p` pending,
+`n` edit note. Those manual edits change the same plan the model works from, so they persist and update the
+sidebar. Turn the feature off with `taskPlanningEnabled: false` in `settings.json`.
+
+Interactively, the model works one job's plan at a time (it keeps a single task `in_progress`), so the
+checklist tracks progress rather than fanning out to concurrent jobs. The opt-in `taskParallelismEnabled`
+(default off) gates the `TaskOrchestrator` engine, which runs a task DAG as parallel jobs under the shared
+write lease for programmatic orchestration; it is not yet wired into the interactive submit path.
 
 ## Built-In Process Execution
 
@@ -279,6 +297,12 @@ Current event types:
 - `context_compacted`
 - `error`
 - `run_completed`
+- `task_plan_updated`
+
+A `task_plan_updated` event carries `changeKind` (`plan_created`, `plan_replaced`, `task_status_changed`,
+`task_note_updated`, or `plan_cleared`), an optional `changedTaskId`, `totalCount`/`completedCount`, and a
+`tasks` array (each with `id`, `title`, `status`, `dependsOn`, and any `note`/`failureMessage`).
+`run_completed` additionally carries a `taskSummary` tally when the run had a task plan.
 
 Example:
 

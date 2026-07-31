@@ -63,7 +63,8 @@ namespace Mux.Core.Sessions
                     Prompt = job.Prompt,
                     State = job.State.ToString(),
                     ApprovalPolicy = job.ApprovalPolicy.ToString(),
-                    ConversationHistory = new List<ConversationMessage>(job.ConversationHistory)
+                    ConversationHistory = new List<ConversationMessage>(job.ConversationHistory),
+                    TaskPlan = new List<Mux.Core.Tasks.AgentTask>(job.TaskPlan.Snapshot())
                 };
 
                 snapshot.Jobs.Add(persisted);

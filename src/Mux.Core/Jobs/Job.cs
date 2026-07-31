@@ -7,6 +7,7 @@ namespace Mux.Core.Jobs
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Tasks;
 
     /// <summary>
     /// Represents one agent job, including its isolated input history, event transcript, and
@@ -23,6 +24,7 @@ namespace Mux.Core.Jobs
         private readonly List<ConversationMessage> _ConversationHistory;
         private readonly Queue<string> _PendingFollowUps = new Queue<string>();
         private readonly List<AgentEvent> _Transcript = new List<AgentEvent>();
+        private readonly TaskPlan _TaskPlan = new TaskPlan();
         private readonly string _Id;
         private readonly string _SessionId;
         private readonly string _Prompt;
@@ -329,6 +331,16 @@ namespace Mux.Core.Jobs
                     return new List<AgentEvent>(_Transcript);
                 }
             }
+        }
+
+        /// <summary>
+        /// The task plan for this job, edited by the model through the task tools and read by the TUI to
+        /// render the checklist. The instance is thread-safe and shared with the job's agent runs; it is
+        /// never null.
+        /// </summary>
+        public TaskPlan TaskPlan
+        {
+            get => _TaskPlan;
         }
 
         /// <summary>

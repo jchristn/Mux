@@ -9,6 +9,7 @@ namespace Mux.Core.Agent
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Mux.Core.Models;
+    using Mux.Core.Tasks;
     using Mux.Core.Tools;
 
     /// <summary>
@@ -52,6 +53,7 @@ namespace Mux.Core.Agent
         private string _JobId = "primary";
         private Action<bool>? _OnWriteLeaseWaitChanged = null;
         private List<string>? _AutoSafeApprovalAllowlist = null;
+        private TaskPlan? _TaskPlan = null;
 
         #endregion
 
@@ -403,6 +405,18 @@ namespace Mux.Core.Agent
         {
             get => _AutoSafeApprovalAllowlist;
             set => _AutoSafeApprovalAllowlist = value;
+        }
+
+        /// <summary>
+        /// The per-job task plan the model edits through the <c>plan_tasks</c> and <c>update_task</c> tools.
+        /// When set (and <see cref="MuxSettings.TaskPlanningEnabled"/> is true) the two task tools are
+        /// registered and the loop emits a <see cref="TaskPlanUpdatedEvent"/> whenever the plan changes.
+        /// Null (the default) disables task planning for the run.
+        /// </summary>
+        public TaskPlan? TaskPlan
+        {
+            get => _TaskPlan;
+            set => _TaskPlan = value;
         }
 
         #endregion

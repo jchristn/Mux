@@ -120,6 +120,7 @@ mux probe --output-format json
 - `mux print` and `mux probe` reject `--approval-policy ask`
 - As of v0.4.0, the TUIKit interactive UI connects to configured MCP servers and exposes their tools to the model; manage servers with `/mcp` or in `mcp-servers.json`
 - Skills (v0.4.0): open `/skills` to create, import, and manage versioned Markdown-plus-code capabilities in `~/.mux/skills`; a curated default set (git, .NET, hygiene, and utility skills) is seeded on first run. Create your first with `/skills` → **+ New skill…** or `mux skill new <id>`, then edit its `SKILL.md`. See `SKILLS_AUTHORING.md`
+- Background tasks (v0.5.0): give mux a multi-step request (for example "add a field to the model, update the API, and write a test") and watch it lay out a task checklist that ticks over as it works; the sidebar shows `TASKS n/m` and `/tasks` opens a viewer where you can hand-annotate status. See the Background Tasks section of `USAGE.md`
 
 ## Configure More Endpoints
 

@@ -91,6 +91,32 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("StructuredOutputFormatter", "TaskPlanUpdatedSerializesTasks", "A task_plan_updated event serializes its change kind and task snapshot", (CancellationToken ct) =>
+                    {
+                        TaskPlanUpdatedEvent planEvent = new TaskPlanUpdatedEvent
+                        {
+                            ChangeKind = Mux.Core.Enums.TaskPlanChangeKindEnum.TaskStatusChanged,
+                            ChangedTaskId = "t2",
+                            Tasks = new List<Mux.Core.Tasks.AgentTask>
+                            {
+                                new Mux.Core.Tasks.AgentTask { Id = "t1", Title = "Study the pattern", Status = Mux.Core.Enums.AgentTaskStatusEnum.Completed },
+                                new Mux.Core.Tasks.AgentTask { Id = "t2", Title = "Add the interface", Status = Mux.Core.Enums.AgentTaskStatusEnum.InProgress }
+                            }
+                        };
+                        JsonDocument json = JsonDocument.Parse(StructuredOutputFormatter.FormatEvent(planEvent));
+                        JsonElement root = json.RootElement;
+                        MuxAssert.AreEqual("task_plan_updated", root.GetProperty("eventType").GetString(), "eventType");
+                        MuxAssert.AreEqual("task_status_changed", root.GetProperty("changeKind").GetString(), "changeKind");
+                        MuxAssert.AreEqual("t2", root.GetProperty("changedTaskId").GetString(), "changedTaskId");
+                        MuxAssert.AreEqual(2, root.GetProperty("totalCount").GetInt32(), "totalCount");
+                        MuxAssert.AreEqual(1, root.GetProperty("completedCount").GetInt32(), "completedCount");
+                        JsonElement tasks = root.GetProperty("tasks");
+                        MuxAssert.AreEqual(2, tasks.GetArrayLength(), "tasks length");
+                        MuxAssert.AreEqual("completed", tasks[0].GetProperty("status").GetString(), "t1 status");
+                        MuxAssert.AreEqual("in_progress", tasks[1].GetProperty("status").GetString(), "t2 status");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("StructuredOutputFormatter", "ToolPayloadsRedactsSensitiveValues", "Sensitive values are redacted from tool payloads", (CancellationToken ct) =>
                     {
                         ToolCallProposedEvent agentEvent = new ToolCallProposedEvent

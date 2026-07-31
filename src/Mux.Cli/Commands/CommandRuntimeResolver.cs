@@ -106,9 +106,14 @@ namespace Mux.Cli.Commands
                     : activePromptProfile.ToolsDisabledPrompt;
             }
 
+            string taskPlanningGuidance = (toolsEnabled && muxSettings.TaskPlanningEnabled)
+                ? Defaults.TaskPlanningGuidance
+                : string.Empty;
+
             systemPrompt = systemPrompt
                 .Replace("{WorkingDirectory}", workingDirectory)
-                .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd());
+                .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd())
+                .Replace("{TaskPlanningGuidance}", taskPlanningGuidance);
 
             string compactionSystemPrompt = activePromptProfile.CompactionPrompt ?? string.Empty;
 
@@ -184,9 +189,23 @@ namespace Mux.Cli.Commands
                 }
             }
 
+            bool taskPlanningActive = false;
+            if (toolsEnabled && tools != null)
+            {
+                foreach (ToolDefinition tool in tools)
+                {
+                    if (string.Equals(tool.Name, "plan_tasks", StringComparison.Ordinal))
+                    {
+                        taskPlanningActive = true;
+                        break;
+                    }
+                }
+            }
+
             string systemPrompt = raw
                 .Replace("{WorkingDirectory}", workingDirectory ?? string.Empty)
-                .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd());
+                .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd())
+                .Replace("{TaskPlanningGuidance}", taskPlanningActive ? Defaults.TaskPlanningGuidance : string.Empty);
 
             string compaction = string.IsNullOrWhiteSpace(profile.CompactionPrompt)
                 ? Defaults.CompactionSystemPrompt

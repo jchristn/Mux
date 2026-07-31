@@ -2,13 +2,13 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Description>CLI interface for mux AI agent</Description>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mux</ToolCommandName>
     <PackageId>Mux.Cli</PackageId>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>0.4.0: Live MCP tool servers in the interactive UI (connect, discover tools, expose them to the model, per-server connectivity), Ollama completion-model import, optional boundary lines, a widened and column-aligned command menu, and the foundation for user-authored skills (versioned Markdown-plus-code capabilities managed in ~/.mux/skills). See CHANGELOG.md and SKILLS.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>0.5.0: Background tasks — the model decomposes a job into a tracked plan of tasks and advances them as it works, with a live in-place checklist in the interactive shell, a TASKS n/m sidebar row, a /tasks viewer for inspecting and hand-annotating the plan, per-job persistence across save/resume, and a task_plan_updated event in the jsonl automation contract. Gated by taskPlanningEnabled; an opt-in orchestration engine (taskParallelismEnabled) runs independent tasks as parallel jobs under the shared write lease. See CHANGELOG.md and BACKGROUND_TASKS.md.</PackageReleaseNotes>
     <NoWarn>$(NoWarn);NU5111</NoWarn>
   </PropertyGroup>
 

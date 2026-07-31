@@ -126,6 +126,7 @@ namespace Mux.Cli.Commands
                 BuiltInToolCount = runtime.Capabilities.BuiltInToolCount,
                 EffectiveToolCount = runtime.Capabilities.EffectiveToolCount,
                 Verbose = settings.Verbose,
+                TaskPlan = runtime.MuxSettings.TaskPlanningEnabled ? new Mux.Core.Tasks.TaskPlan() : null,
                 OnRetry = (int attempt, int maxRetries, string message) =>
                     Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Retry {attempt}/{maxRetries}: {message}"))
             };

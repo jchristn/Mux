@@ -881,6 +881,8 @@ namespace Mux.Core.Settings
                 SkillsEnabled = settings.SkillsEnabled,
                 SkillRefreshIntervalSeconds = settings.SkillRefreshIntervalSeconds,
                 SkillsDirectory = settings.SkillsDirectory,
+                TaskPlanningEnabled = settings.TaskPlanningEnabled,
+                TaskParallelismEnabled = settings.TaskParallelismEnabled,
                 ExternalSearch = NormalizeExternalSearchSettings(settings.ExternalSearch)
             };
 

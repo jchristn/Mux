@@ -2,6 +2,22 @@
 
 All notable changes to mux are documented here.
 
+## v0.5.0 - 2026-07-31
+
+### Added
+
+- **Background tasks** — the model can decompose a job into a tracked plan of tasks and advance them
+  as it works, and the interactive shell renders a live checklist that updates in place (pending →
+  running → done). Two model tools, `plan_tasks` and `update_task`, are the write path; the plan is
+  per-job, persists across session save and resume, and is summarized in the sidebar as `TASKS n/m`.
+  Open `/tasks` to inspect and hand-annotate the focused job's plan. Gated by `taskPlanningEnabled`
+  (default true).
+- `task_plan_updated` joins the `mux print --output-format jsonl` event contract so orchestrators can
+  track subtask progress, and `run_completed` carries a `taskSummary` tally.
+- Orchestration engine (`TaskOrchestrator`) that runs a task DAG as parallel jobs under the shared
+  workspace write lease, gated by `taskParallelismEnabled` (default false). The engine is complete and
+  tested; wiring it into the interactive submit path is a planned follow-up.
+
 ## v0.4.0 - 2026-07-31
 
 ### Added

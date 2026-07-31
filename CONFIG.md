@@ -207,6 +207,8 @@ Example:
   "skillsEnabled": true,
   "skillRefreshIntervalSeconds": 30,
   "skillsDirectory": null,
+  "taskPlanningEnabled": true,
+  "taskParallelismEnabled": false,
   "externalSearch": {
     "enabled": false,
     "allowFallback": true,
@@ -236,6 +238,8 @@ Fields:
 | `skillRefreshIntervalSeconds` | int | how often the shell re-scans the skills directory for changes; clamped to a minimum of `5`; default `30` |
 | `skillsDirectory` | string or null | override for the skills directory (for a shared, version-controlled library); `null` uses `~/.mux/skills` |
 | `maxConcurrency` | int | maximum number of interactive jobs allowed to run at once; clamped to `1-32`, default `3` |
+| `taskPlanningEnabled` | bool | offer the `plan_tasks`/`update_task` tools and teach the model to decompose large requests into a tracked task plan; default `true` |
+| `taskParallelismEnabled` | bool | allow the opt-in orchestration engine to run independent tasks as parallel jobs under the shared write lease; has no effect unless `taskPlanningEnabled` is also true; default `false` |
 | `defaultEnqueueBehavior` | string | how the interactive shell handles a submit while a job is active: `ask` (show the chooser), `run_now`, `queue_after` (both start a new job — the concurrency cap governs parallelism), or `add_to_focused` (append to the focused job); default `ask` |
 | `externalSearch` | object | optional Tavily/You.com provider configuration for the `web_search` tool |
 

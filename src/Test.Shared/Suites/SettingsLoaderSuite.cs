@@ -219,6 +219,25 @@ namespace Test.Shared.Suites
                     {
                         MuxAssert.IsTrue(root.TryGetProperty(field, out _), "has " + field);
                     }
+                    MuxAssert.IsTrue(root.TryGetProperty("taskPlanningEnabled", out _), "has taskPlanningEnabled");
+                    MuxAssert.IsTrue(root.TryGetProperty("taskParallelismEnabled", out _), "has taskParallelismEnabled");
+                    return Task.CompletedTask;
+                }),
+
+                Case("LoadSettingsMissingFileTaskDefaults", "Task-planning settings default to enabled tracking with parallelism off", (string dir, CancellationToken ct) =>
+                {
+                    MuxSettings settings = SettingsLoader.LoadSettings();
+                    MuxAssert.IsTrue(settings.TaskPlanningEnabled, "taskPlanningEnabled default");
+                    MuxAssert.IsFalse(settings.TaskParallelismEnabled, "taskParallelismEnabled default");
+                    return Task.CompletedTask;
+                }),
+
+                Case("SaveSettingsTaskFlagsRoundTrip", "Task-planning flags round-trip through save and load", (string dir, CancellationToken ct) =>
+                {
+                    SettingsLoader.SaveSettings(new MuxSettings { TaskPlanningEnabled = false, TaskParallelismEnabled = true });
+                    MuxSettings loaded = SettingsLoader.LoadSettings();
+                    MuxAssert.IsFalse(loaded.TaskPlanningEnabled, "taskPlanningEnabled");
+                    MuxAssert.IsTrue(loaded.TaskParallelismEnabled, "taskParallelismEnabled");
                     return Task.CompletedTask;
                 }),
 

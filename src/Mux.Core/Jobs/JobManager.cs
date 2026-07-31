@@ -80,6 +80,7 @@ namespace Mux.Core.Jobs
                     options.WriteLease = lease;
                     options.JobId = job.Id;
                     options.OnWriteLeaseWaitChanged = (bool waiting) => ApplyLeaseWaitState(job, waiting);
+                    options.TaskPlan = job.TaskPlan;
                     return RunAgentLoopAsync(options, prompt, cancellationToken);
                 },
                 maxConcurrency,

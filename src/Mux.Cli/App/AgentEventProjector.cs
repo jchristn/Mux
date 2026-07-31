@@ -6,6 +6,8 @@ namespace Mux.Cli.App
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Agent;
+    using Mux.Core.Enums;
+    using Mux.Core.Tasks;
     using TUIKit;
     using TUIKit.Content;
 
@@ -27,6 +29,7 @@ namespace Mux.Cli.App
         private readonly StringBuilder _RunAssistantText = new StringBuilder();
         private readonly Dictionary<string, PaneLineHandle> _ToolLines = new Dictionary<string, PaneLineHandle>(StringComparer.Ordinal);
         private readonly List<PaneLineHandle> _AssistantLines = new List<PaneLineHandle>();
+        private readonly List<PaneLineHandle> _TaskLines = new List<PaneLineHandle>();
         private bool _FirstTokenSeen;
         private bool _ModelResponded;
         private RunCompletedEvent? _LastRunCompleted;
@@ -150,6 +153,11 @@ namespace Mux.Cli.App
                     _Pane.WriteLine(Text.From($"Error [{errorEvent.Code}]: {errorEvent.Message}").Red());
                     break;
 
+                case TaskPlanUpdatedEvent taskPlanEvent:
+                    FinalizeAssistantBlock();
+                    ProjectTaskPlan(taskPlanEvent);
+                    break;
+
                 case RunCompletedEvent runCompleted:
                     FinalizeAssistantBlock();
                     _LastRunCompleted = runCompleted;
@@ -170,7 +178,8 @@ namespace Mux.Cli.App
             if (agentEvent is AssistantTextEvent
                 || agentEvent is ToolCallProposedEvent
                 || agentEvent is ToolCallCompletedEvent
-                || agentEvent is ErrorEvent)
+                || agentEvent is ErrorEvent
+                || agentEvent is TaskPlanUpdatedEvent)
             {
                 _ModelResponded = true;
                 ModelResponded?.Invoke();
@@ -258,6 +267,75 @@ namespace Mux.Cli.App
             }
 
             _Pane.WriteLine(styled);
+        }
+
+        private void ProjectTaskPlan(TaskPlanUpdatedEvent taskPlanEvent)
+        {
+            List<StyledText> lines = new List<StyledText>();
+            lines.Add(Text.From($"Tasks {taskPlanEvent.CompletedCount}/{taskPlanEvent.TotalCount}").Dim());
+            foreach (AgentTask task in taskPlanEvent.Tasks)
+            {
+                lines.Add(StyleTaskLine(task));
+            }
+
+            int i = 0;
+            for (; i < lines.Count; i++)
+            {
+                if (i < _TaskLines.Count)
+                {
+                    if (!_TaskLines[i].Update(lines[i]))
+                    {
+                        _TaskLines[i] = _Pane.WriteLine(lines[i]);
+                    }
+                }
+                else
+                {
+                    _TaskLines.Add(_Pane.WriteLine(lines[i]));
+                }
+            }
+
+            // The plan shrank (for example a replace with fewer tasks): blank the leftover lines and drop
+            // their handles so no stale task text remains in the block.
+            for (int j = i; j < _TaskLines.Count; j++)
+            {
+                _TaskLines[j].Update(StyledText.Empty);
+            }
+
+            if (_TaskLines.Count > lines.Count)
+            {
+                _TaskLines.RemoveRange(lines.Count, _TaskLines.Count - lines.Count);
+            }
+        }
+
+        private static StyledText StyleTaskLine(AgentTask task)
+        {
+            string text = "  " + TaskGlyph(task.Status) + " " + task.Title;
+            switch (task.Status)
+            {
+                case AgentTaskStatusEnum.Completed:
+                    return Text.From(text).Green();
+                case AgentTaskStatusEnum.InProgress:
+                    return Text.From(text).Yellow();
+                case AgentTaskStatusEnum.Failed:
+                    return Text.From(text).Red();
+                case AgentTaskStatusEnum.Blocked:
+                    return Text.From(text).Yellow();
+                default:
+                    return Text.From(text).Dim();
+            }
+        }
+
+        private static string TaskGlyph(AgentTaskStatusEnum status)
+        {
+            switch (status)
+            {
+                case AgentTaskStatusEnum.Completed: return "✔";
+                case AgentTaskStatusEnum.InProgress: return "◼";
+                case AgentTaskStatusEnum.Failed: return "✗";
+                case AgentTaskStatusEnum.Skipped: return "⊘";
+                case AgentTaskStatusEnum.Blocked: return "▦";
+                default: return "◻";
+            }
         }
 
         #endregion

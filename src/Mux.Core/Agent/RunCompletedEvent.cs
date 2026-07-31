@@ -2,6 +2,7 @@ namespace Mux.Core.Agent
 {
     using System;
     using Mux.Core.Enums;
+    using Mux.Core.Tasks;
 
     /// <summary>
     /// Event emitted when a mux run completes with a final status summary.
@@ -146,6 +147,11 @@ namespace Mux.Core.Agent
             get => _TotalTokens;
             set => _TotalTokens = value;
         }
+
+        /// <summary>
+        /// A tally of the job's task plan by status at run end, or null when the job had no task plan.
+        /// </summary>
+        public TaskPlanSummary? TaskSummary { get; set; }
 
         #endregion
     }

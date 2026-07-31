@@ -2,6 +2,7 @@ namespace Mux.Core.Sessions
 {
     using System.Collections.Generic;
     using Mux.Core.Models;
+    using Mux.Core.Tasks;
 
     /// <summary>
     /// Serializable snapshot of a single job within a persisted session. State and approval policy are
@@ -19,6 +20,7 @@ namespace Mux.Core.Sessions
         private string _ApprovalPolicy = "Ask";
         private List<string> _PendingFollowUps = new List<string>();
         private List<ConversationMessage> _ConversationHistory = new List<ConversationMessage>();
+        private List<AgentTask> _TaskPlan = new List<AgentTask>();
 
         #endregion
 
@@ -85,6 +87,16 @@ namespace Mux.Core.Sessions
         {
             get => _ConversationHistory;
             set => _ConversationHistory = value ?? new List<ConversationMessage>();
+        }
+
+        /// <summary>
+        /// The job's task plan at snapshot time, in plan order. Empty when the job had no plan. Older
+        /// session files without this field deserialize to an empty list (forward tolerance).
+        /// </summary>
+        public List<AgentTask> TaskPlan
+        {
+            get => _TaskPlan;
+            set => _TaskPlan = value ?? new List<AgentTask>();
         }
 
         #endregion

@@ -8,6 +8,7 @@ namespace Mux.Cli.Commands
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Tasks;
 
     /// <summary>
     /// Converts mux runtime objects into machine-readable structured output.
@@ -150,6 +151,23 @@ namespace Mux.Cli.Commands
                     payload["durationMs"] = runCompletedEvent.DurationMs;
                     payload["finalEstimatedTokens"] = runCompletedEvent.FinalEstimatedTokens;
                     payload["compactionCount"] = runCompletedEvent.CompactionCount;
+                    if (runCompletedEvent.TaskSummary != null)
+                    {
+                        payload["taskSummary"] = FormatTaskSummary(runCompletedEvent.TaskSummary);
+                    }
+                    break;
+
+                case TaskPlanUpdatedEvent taskPlanEvent:
+                    payload["changeKind"] = GetTaskChangeKindName(taskPlanEvent.ChangeKind);
+                    payload["changedTaskId"] = taskPlanEvent.ChangedTaskId;
+                    payload["totalCount"] = taskPlanEvent.TotalCount;
+                    payload["completedCount"] = taskPlanEvent.CompletedCount;
+                    List<object> taskItems = new List<object>();
+                    foreach (AgentTask task in taskPlanEvent.Tasks)
+                    {
+                        taskItems.Add(FormatTask(task));
+                    }
+                    payload["tasks"] = taskItems;
                     break;
             }
 
@@ -188,6 +206,61 @@ namespace Mux.Cli.Commands
             {
                 payload[propertyName] = value;
             }
+        }
+
+        private static object FormatTask(AgentTask task)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["id"] = task.Id,
+                ["title"] = RedactString(task.Title),
+                ["status"] = GetTaskStatusName(task.Status),
+                ["dependsOn"] = task.DependsOn,
+                ["note"] = task.Note == null ? null : RedactString(task.Note),
+                ["durationMs"] = task.DurationMs,
+                ["failureMessage"] = task.FailureMessage == null ? null : RedactString(task.FailureMessage)
+            };
+        }
+
+        private static object FormatTaskSummary(TaskPlanSummary summary)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["total"] = summary.Total,
+                ["completed"] = summary.Completed,
+                ["pending"] = summary.Pending,
+                ["inProgress"] = summary.InProgress,
+                ["failed"] = summary.Failed,
+                ["skipped"] = summary.Skipped,
+                ["blocked"] = summary.Blocked
+            };
+        }
+
+        private static string GetTaskStatusName(AgentTaskStatusEnum status)
+        {
+            return status switch
+            {
+                AgentTaskStatusEnum.Pending => "pending",
+                AgentTaskStatusEnum.InProgress => "in_progress",
+                AgentTaskStatusEnum.Completed => "completed",
+                AgentTaskStatusEnum.Failed => "failed",
+                AgentTaskStatusEnum.Skipped => "skipped",
+                AgentTaskStatusEnum.Blocked => "blocked",
+                _ => status.ToString()
+            };
+        }
+
+        private static string GetTaskChangeKindName(TaskPlanChangeKindEnum changeKind)
+        {
+            return changeKind switch
+            {
+                TaskPlanChangeKindEnum.PlanCreated => "plan_created",
+                TaskPlanChangeKindEnum.PlanReplaced => "plan_replaced",
+                TaskPlanChangeKindEnum.TaskStatusChanged => "task_status_changed",
+                TaskPlanChangeKindEnum.TaskNoteUpdated => "task_note_updated",
+                TaskPlanChangeKindEnum.PlanCleared => "plan_cleared",
+                _ => changeKind.ToString()
+            };
         }
 
         private static object FormatToolCall(ToolCall toolCall)
@@ -315,6 +388,7 @@ namespace Mux.Cli.Commands
                 AgentEventTypeEnum.ContextStatus => "context_status",
                 AgentEventTypeEnum.ContextCompacted => "context_compacted",
                 AgentEventTypeEnum.RunCompleted => "run_completed",
+                AgentEventTypeEnum.TaskPlanUpdated => "task_plan_updated",
                 _ => eventType.ToString()
             };
         }

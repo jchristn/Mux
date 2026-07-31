@@ -28,6 +28,8 @@ namespace Mux.Core.Models
         private bool _SkillsEnabled = true;
         private int _SkillRefreshIntervalSeconds = 30;
         private string? _SkillsDirectory = null;
+        private bool _TaskPlanningEnabled = true;
+        private bool _TaskParallelismEnabled = false;
         private ExternalSearchSettings _ExternalSearch = new ExternalSearchSettings();
 
         #endregion
@@ -250,6 +252,33 @@ namespace Mux.Core.Models
         {
             get => _SkillsDirectory;
             set => _SkillsDirectory = string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+
+        /// <summary>
+        /// Whether the model may decompose a job into a tracked plan of background tasks and advance
+        /// them with the <c>plan_tasks</c> and <c>update_task</c> tools. When true, the two task tools
+        /// are offered to the model and the system prompt teaches when to plan; when false, neither the
+        /// tools nor the guidance are surfaced. Defaults to true.
+        /// </summary>
+        [JsonPropertyName("taskPlanningEnabled")]
+        public bool TaskPlanningEnabled
+        {
+            get => _TaskPlanningEnabled;
+            set => _TaskPlanningEnabled = value;
+        }
+
+        /// <summary>
+        /// Whether dependency-ready tasks in an orchestrated plan may be dispatched as their own
+        /// concurrent jobs, subject to <see cref="MaxConcurrency"/> and the shared workspace write
+        /// lease. Has no effect unless <see cref="TaskPlanningEnabled"/> is also true. Defaults to
+        /// false, so task planning tracks work by default and only fans out to parallel jobs when the
+        /// operator opts in.
+        /// </summary>
+        [JsonPropertyName("taskParallelismEnabled")]
+        public bool TaskParallelismEnabled
+        {
+            get => _TaskParallelismEnabled;
+            set => _TaskParallelismEnabled = value;
         }
 
         /// <summary>

@@ -48,7 +48,7 @@ namespace Mux.Core.Agent
             _Options = options ?? throw new ArgumentNullException(nameof(options));
             _LlmClient = new LlmClient(options.Endpoint, options.IgnoreCertErrors);
             _LlmClient.OnRetry = options.OnRetry;
-            _ToolRegistry = new BuiltInToolRegistry(options.MuxSettings);
+            _ToolRegistry = new BuiltInToolRegistry(options.MuxSettings, options.TaskPlan);
             _ApprovalRouter = new ApprovalRouter(options.ApprovalPolicy, options.AutoSafeApprovalAllowlist);
         }
 
@@ -276,6 +276,7 @@ namespace Mux.Core.Agent
 
                     // Execute the tool
                     ToolResult result;
+                    int taskPlanVersionBefore = _Options.TaskPlan?.Version ?? 0;
                     System.Diagnostics.Stopwatch toolStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                     try
@@ -301,6 +302,18 @@ namespace Mux.Core.Agent
                         Result = result,
                         ElapsedMs = toolStopwatch.ElapsedMilliseconds
                     };
+
+                    // A task tool mutates the per-job plan; surface the change as its own event so the TUI
+                    // checklist, the sidebar, and the jsonl contract all observe it.
+                    if (_Options.TaskPlan != null && _Options.TaskPlan.Version != taskPlanVersionBefore)
+                    {
+                        yield return new TaskPlanUpdatedEvent
+                        {
+                            ChangeKind = _Options.TaskPlan.LastChangeKind,
+                            ChangedTaskId = _Options.TaskPlan.LastChangedTaskId,
+                            Tasks = _Options.TaskPlan.Snapshot()
+                        };
+                    }
 
                     // Append tool result to conversation
                     conversation.Add(new ConversationMessage
@@ -351,7 +364,10 @@ namespace Mux.Core.Agent
                 CompactionCount = compactionCount,
                 InputTokens = _LlmClient.CumulativeUsage.InputTokens,
                 OutputTokens = _LlmClient.CumulativeUsage.OutputTokens,
-                TotalTokens = _LlmClient.CumulativeUsage.TotalTokens
+                TotalTokens = _LlmClient.CumulativeUsage.TotalTokens,
+                TaskSummary = _Options.TaskPlan != null && !_Options.TaskPlan.IsEmpty
+                    ? Mux.Core.Tasks.TaskPlanSummary.FromTasks(_Options.TaskPlan.Snapshot())
+                    : null
             };
         }
 

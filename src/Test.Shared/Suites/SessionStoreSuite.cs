@@ -55,6 +55,37 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(1, loaded.Jobs[0].ConversationHistory.Count, "job history count");
                     }),
 
+                    Case("TaskPlanRoundTrips", "A job's task plan survives save and load", async (SessionStore store, string dir, CancellationToken ct) =>
+                    {
+                        SessionSnapshot original = BuildRichSnapshot("plan1", "Plan session");
+                        original.Jobs[0].TaskPlan = new List<Mux.Core.Tasks.AgentTask>
+                        {
+                            new Mux.Core.Tasks.AgentTask { Id = "t1", Title = "Study", Status = Mux.Core.Enums.AgentTaskStatusEnum.Completed },
+                            new Mux.Core.Tasks.AgentTask { Id = "t2", Title = "Build", Status = Mux.Core.Enums.AgentTaskStatusEnum.InProgress, DependsOn = new List<string> { "t1" } }
+                        };
+                        await store.SaveAsync(original, ct).ConfigureAwait(false);
+
+                        SessionSnapshot? loaded = await store.LoadAsync("plan1", ct).ConfigureAwait(false);
+                        MuxAssert.IsNotNull(loaded, "loaded");
+                        MuxAssert.AreEqual(2, loaded!.Jobs[0].TaskPlan.Count, "plan count");
+                        MuxAssert.AreEqual("t1", loaded.Jobs[0].TaskPlan[0].Id, "t1 id");
+                        MuxAssert.AreEqual(Mux.Core.Enums.AgentTaskStatusEnum.Completed, loaded.Jobs[0].TaskPlan[0].Status, "t1 status");
+                        MuxAssert.AreEqual(Mux.Core.Enums.AgentTaskStatusEnum.InProgress, loaded.Jobs[0].TaskPlan[1].Status, "t2 status");
+                        MuxAssert.AreEqual("t1", loaded.Jobs[0].TaskPlan[1].DependsOn[0], "t2 depends");
+                    }),
+
+                    Case("OldSnapshotWithoutTaskPlanLoadsEmpty", "A session file predating task plans loads with an empty plan", async (SessionStore store, string dir, CancellationToken ct) =>
+                    {
+                        Directory.CreateDirectory(dir);
+                        string json = "{\"schemaVersion\":1,\"id\":\"legacy\",\"title\":\"Legacy\",\"jobs\":[{\"id\":\"j1\",\"state\":\"Completed\",\"prompt\":\"a\"}]}";
+                        File.WriteAllText(Path.Combine(dir, "legacy.json"), json);
+                        SessionSnapshot? loaded = await store.LoadAsync("legacy", ct).ConfigureAwait(false);
+                        MuxAssert.IsNotNull(loaded, "loaded");
+                        MuxAssert.AreEqual(1, loaded!.Jobs.Count, "jobs count");
+                        MuxAssert.IsNotNull(loaded.Jobs[0].TaskPlan, "task plan not null");
+                        MuxAssert.AreEqual(0, loaded.Jobs[0].TaskPlan.Count, "task plan empty");
+                    }),
+
                     Case("ListExcludesTempAndUnknownFiles", "ListSessionIds returns saved ids and ignores temp files", async (SessionStore store, string dir, CancellationToken ct) =>
                     {
                         await store.SaveAsync(BuildRichSnapshot("alpha", "A"), ct).ConfigureAwait(false);

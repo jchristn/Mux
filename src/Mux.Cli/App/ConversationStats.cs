@@ -43,5 +43,11 @@ namespace Mux.Cli.App
 
         /// <summary>Session cached prompt tokens reported by the provider (0 when unavailable).</summary>
         public long CachedTokens { get; set; }
+
+        /// <summary>The number of tasks in the focused job's plan (0 when the job has no plan).</summary>
+        public int TaskTotal { get; set; }
+
+        /// <summary>The number of completed tasks in the focused job's plan.</summary>
+        public int TaskCompleted { get; set; }
     }
 }

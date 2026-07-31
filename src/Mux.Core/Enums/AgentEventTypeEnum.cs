@@ -67,6 +67,12 @@ namespace Mux.Core.Enums
         /// The run has finished and a final summary is available.
         /// </summary>
         [EnumMember(Value = "run_completed")]
-        RunCompleted
+        RunCompleted,
+
+        /// <summary>
+        /// A job's task plan was created, replaced, cleared, or had a task advanced.
+        /// </summary>
+        [EnumMember(Value = "task_plan_updated")]
+        TaskPlanUpdated
     }
 }

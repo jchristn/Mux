@@ -106,6 +106,11 @@ namespace Mux.Cli.Rendering
                             wasToolCall = false;
                             break;
 
+                        case TaskPlanUpdatedEvent taskPlanEvent:
+                            RenderTaskPlanUpdate(taskPlanEvent);
+                            wasToolCall = false;
+                            break;
+
                         default:
                             break;
                     }
@@ -222,6 +227,62 @@ namespace Mux.Cli.Rendering
         }
 
         /// <summary>
+        /// Renders a task-plan change in text mode: a status change narrates the affected task, while a
+        /// whole-plan change lists the current tasks with a status glyph.
+        /// </summary>
+        /// <param name="taskPlanEvent">The task-plan updated event.</param>
+        private static void RenderTaskPlanUpdate(TaskPlanUpdatedEvent taskPlanEvent)
+        {
+            if (taskPlanEvent.ChangeKind == Mux.Core.Enums.TaskPlanChangeKindEnum.TaskStatusChanged
+                || taskPlanEvent.ChangeKind == Mux.Core.Enums.TaskPlanChangeKindEnum.TaskNoteUpdated)
+            {
+                foreach (Mux.Core.Tasks.AgentTask task in taskPlanEvent.Tasks)
+                {
+                    if (string.Equals(task.Id, taskPlanEvent.ChangedTaskId, StringComparison.Ordinal))
+                    {
+                        AnsiConsole.MarkupLine($"[dim]{Markup.Escape($"task {TaskStatusGlyph(task.Status)} {task.Title}: {TaskStatusLabel(task.Status)}")}[/]");
+                        break;
+                    }
+                }
+
+                return;
+            }
+
+            AnsiConsole.MarkupLine($"[dim]{Markup.Escape($"plan: {taskPlanEvent.CompletedCount}/{taskPlanEvent.TotalCount} tasks")}[/]");
+            foreach (Mux.Core.Tasks.AgentTask task in taskPlanEvent.Tasks)
+            {
+                AnsiConsole.MarkupLine($"[dim]{Markup.Escape($"  {TaskStatusGlyph(task.Status)} {task.Title}")}[/]");
+            }
+        }
+
+        private static string TaskStatusGlyph(Mux.Core.Enums.AgentTaskStatusEnum status)
+        {
+            return status switch
+            {
+                Mux.Core.Enums.AgentTaskStatusEnum.Completed => "✔",
+                Mux.Core.Enums.AgentTaskStatusEnum.InProgress => "◼",
+                Mux.Core.Enums.AgentTaskStatusEnum.Failed => "✗",
+                Mux.Core.Enums.AgentTaskStatusEnum.Skipped => "⊘",
+                Mux.Core.Enums.AgentTaskStatusEnum.Blocked => "▦",
+                _ => "◻"
+            };
+        }
+
+        private static string TaskStatusLabel(Mux.Core.Enums.AgentTaskStatusEnum status)
+        {
+            return status switch
+            {
+                Mux.Core.Enums.AgentTaskStatusEnum.Pending => "pending",
+                Mux.Core.Enums.AgentTaskStatusEnum.InProgress => "in progress",
+                Mux.Core.Enums.AgentTaskStatusEnum.Completed => "completed",
+                Mux.Core.Enums.AgentTaskStatusEnum.Failed => "failed",
+                Mux.Core.Enums.AgentTaskStatusEnum.Skipped => "skipped",
+                Mux.Core.Enums.AgentTaskStatusEnum.Blocked => "blocked",
+                _ => status.ToString()
+            };
+        }
+
+        /// <summary>
         /// Summarizes a tool result for compact display.
         /// </summary>
         private static string SummarizeResult(string content)
@@ -327,7 +388,8 @@ namespace Mux.Cli.Rendering
                 || agentEvent is ErrorEvent
                 || agentEvent is ContextStatusEvent
                 || agentEvent is ContextCompactedEvent
-                || agentEvent is HeartbeatEvent;
+                || agentEvent is HeartbeatEvent
+                || agentEvent is TaskPlanUpdatedEvent;
         }
 
         #endregion
