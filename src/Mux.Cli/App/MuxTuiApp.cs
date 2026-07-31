@@ -47,6 +47,11 @@ namespace Mux.Cli.App
         private const int MaxComposerRows = 8;
         private const string PromptText = "mux> ";
         private const int SidebarWidth = 24;
+
+        // A one-column gutter kept clear between the transcript (and queue strip) on the left and the
+        // right-anchored sidebar, so the two panes never butt directly against each other. The sidebar
+        // stays anchored at SidebarWidth; the left panes simply reserve this extra column on their right.
+        private const int SidebarGap = 1;
         private const int CollapseThreshold = 100;
 
         private readonly ITerminalBackend _Backend;
@@ -886,14 +891,14 @@ namespace Mux.Cli.App
             int queueOffset = composerHeight + footerHeight;
 
             LayoutBuilder expanded = Layout.Create()
-                .Add(TranscriptRegion, r => r.FillWidth(0, SidebarWidth).FillHeight(0, reserve).WithPadding(0))
+                .Add(TranscriptRegion, r => r.FillWidth(0, SidebarWidth + SidebarGap).FillHeight(0, reserve).WithPadding(0))
                 .Add(SidebarRegion, r => r.RightAnchored(0, SidebarWidth).FillHeight(0, reserve).WithPadding(0))
                 .Add(FooterRegion, r => r.FillWidth().BottomAnchored(composerHeight, footerHeight).WithPadding(0))
                 .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).WithPadding(0))
                 .Add(ComposerRegion, r => r.FillWidth(promptWidth, 0).BottomAnchored(0, composerHeight).WithPadding(0));
             if (queueHeight > 0)
             {
-                expanded.Add(QueueRegion, r => r.FillWidth(0, SidebarWidth).BottomAnchored(queueOffset, queueHeight).WithPadding(0));
+                expanded.Add(QueueRegion, r => r.FillWidth(0, SidebarWidth + SidebarGap).BottomAnchored(queueOffset, queueHeight).WithPadding(0));
             }
 
             _ExpandedLayout = expanded.Build();
