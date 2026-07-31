@@ -61,6 +61,7 @@ namespace Mux.Cli.App
         private readonly SessionStore? _Store;
         private readonly Action<EndpointConfig>? _OnEndpointSelected;
         private readonly Action<PromptProfile>? _OnPromptProfileSelected;
+        private readonly McpRuntime? _McpRuntime;
         private string _EndpointName;
         private string _Model;
         private readonly string _Title;
@@ -127,6 +128,7 @@ namespace Mux.Cli.App
         /// <param name="onPromptProfileSelected">Optional callback invoked when the user applies a prompt profile, so the caller can substitute placeholders and apply it to future runs. Null disables live prompt switching.</param>
         /// <param name="showSplash">When true, opens the startup splash modal.</param>
         /// <param name="showBoundaries">When true, the shell starts with the dark-grey boundary lines drawn (toggle with <c>/borders</c>).</param>
+        /// <param name="mcpRuntime">Optional MCP runtime used to show per-server connectivity in the MCP manager and to trigger a reconnect after edits. Null disables live MCP status.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
             ITerminalBackend backend,
@@ -139,7 +141,8 @@ namespace Mux.Cli.App
             Action<EndpointConfig>? onEndpointSelected = null,
             Action<PromptProfile>? onPromptProfileSelected = null,
             bool showSplash = false,
-            bool showBoundaries = false)
+            bool showBoundaries = false,
+            McpRuntime? mcpRuntime = null)
         {
             _Backend = backend ?? throw new ArgumentNullException(nameof(backend));
             _JobManager = jobManager ?? throw new ArgumentNullException(nameof(jobManager));
@@ -147,6 +150,7 @@ namespace Mux.Cli.App
             _Store = sessionStore;
             _OnEndpointSelected = onEndpointSelected;
             _OnPromptProfileSelected = onPromptProfileSelected;
+            _McpRuntime = mcpRuntime;
             _EndpointName = endpointName ?? string.Empty;
             _Model = model ?? string.Empty;
             _ShowBoundaries = showBoundaries;
@@ -191,7 +195,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.prompts", "Prompts", "ctrl+p", OpenPromptEditor, "Model", new[] { "prompts", "prompt", "system prompt" }));
             _Catalog.Add(new CommandDescriptor("mux.mcp", "MCP servers", null, OpenMcpModal, "Model", new[] { "mcp", "mcp-servers", "mcpservers", "servers" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
-            _Catalog.Add(new CommandDescriptor("mux.theme", "Theme…", null, OpenThemeSelector, "View", new[] { "theme" }));
+            _Catalog.Add(new CommandDescriptor("mux.theme", "Theme", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
             _Catalog.Add(new CommandDescriptor("mux.borders", "Toggle boundary lines", null, ToggleBoundaries, "View", new[] { "borders", "boundaries", "boundary", "lines" }));
             _Catalog.Add(new CommandDescriptor("mux.menu", "Command menu", "f1", OpenCommandMenu, "Help", new[] { "menu" }));
@@ -2320,6 +2324,15 @@ namespace Mux.Cli.App
         private void OpenMcpModal()
         {
             List<McpServerConfig> servers = LoadMcpServersSafe();
+            Dictionary<string, McpServerStatus> statusByName = new Dictionary<string, McpServerStatus>(StringComparer.OrdinalIgnoreCase);
+            if (_McpRuntime != null)
+            {
+                foreach (McpServerStatus status in _McpRuntime.GetStatus())
+                {
+                    statusByName[status.Name] = status;
+                }
+            }
+
             List<string> options = new List<string>();
             List<McpMenuAction> actions = new List<McpMenuAction>();
 
@@ -2328,7 +2341,25 @@ namespace Mux.Cli.App
                 string detail = server.Transport == McpTransportTypeEnum.Http
                     ? server.Url
                     : server.Command;
-                options.Add($"  {server.Name}  ({server.Transport} · {detail})");
+
+                // Prefix each server with a connectivity glyph and append its live status when known.
+                string glyph = "·";
+                string state = string.Empty;
+                if (_McpRuntime != null)
+                {
+                    if (statusByName.TryGetValue(server.Name, out McpServerStatus? status) && status.Connected)
+                    {
+                        glyph = "●";
+                        state = $" · online, {status.ToolCount} tool{(status.ToolCount == 1 ? string.Empty : "s")}";
+                    }
+                    else
+                    {
+                        glyph = "○";
+                        state = " · offline";
+                    }
+                }
+
+                options.Add($"{glyph} {server.Name}  ({server.Transport} · {detail}{state})");
                 actions.Add(McpMenuAction.Edit);
             }
 
@@ -2413,14 +2444,22 @@ namespace Mux.Cli.App
             try
             {
                 SettingsLoader.SaveMcpServers(servers);
+                RefreshMcpRuntime();
                 WriteNotice(string.IsNullOrEmpty(previousName)
-                    ? $"Saved MCP server {server.Name}. Restart mux for it to take effect."
-                    : $"Updated MCP server {server.Name}. Restart mux for changes to take effect.");
+                    ? $"Saved MCP server {server.Name}. Connecting…"
+                    : $"Updated MCP server {server.Name}. Reconnecting…");
             }
             catch (Exception ex)
             {
                 WriteNotice("Save failed: " + ex.Message);
             }
+        }
+
+        private void RefreshMcpRuntime()
+        {
+            // Apply the new configuration to the live session: reconnect servers and rediscover tools so the
+            // change takes effect on the next turn without a restart. Null when MCP is not wired (e.g. tests).
+            _McpRuntime?.RequestRefresh();
         }
 
         private async Task RemoveMcpAsync(List<McpServerConfig> servers)
@@ -2454,7 +2493,8 @@ namespace Mux.Cli.App
             try
             {
                 SettingsLoader.SaveMcpServers(current);
-                WriteNotice($"Removed MCP server {name}. Restart mux for changes to take effect.");
+                RefreshMcpRuntime();
+                WriteNotice($"Removed MCP server {name}. Reconnecting…");
             }
             catch (Exception ex)
             {

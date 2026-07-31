@@ -6,6 +6,15 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **MCP servers are now connected live in the interactive shell.** On startup mux connects to every server
+  configured in `mcp-servers.json`, queries each for its available tools (`tools/list`), and then both
+  registers those tools as callable (routing invocations back to the owning server) and appends them to the
+  system prompt so the model is explicitly made aware of them. Connectivity is re-validated on a periodic
+  timer (default 30s) and disconnected servers are periodically retried; adding, editing, or removing a
+  server via `/mcp` reconnects in the background and takes effect on the next turn without a restart.
+- The `/mcp` manager now shows each server's live connectivity: `●` online (with its discovered tool
+  count) or `○` offline.
+
 - **Import completion models from an Ollama server** directly in the interactive endpoints / models
   picker (`Ctrl+E`, `/endpoint`, `/model`). A new **Import from Ollama…** entry at the bottom of the
   picker prompts for an Ollama base URL (default `http://localhost:11434`; a missing scheme is filled in
@@ -39,6 +48,7 @@ All notable changes to mux are documented here.
   **Import from Ollama…**).
 - The interactive shell now keeps a one-column gutter between the transcript (and queue strip) and the
   right-anchored sidebar, so the two panes no longer butt directly against each other.
+- Renamed the **Theme…** command menu entry to **Theme**.
 
 ## v0.3.0 - 2026-07-29
 

@@ -3,6 +3,7 @@ namespace Mux.Cli
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Cli.App;
@@ -243,6 +244,31 @@ CONFIG:
             AgentLoopOptions template = BuildInteractiveTemplate(runtime, settings, effectivePolicy, null);
             JobManager jobManager = JobManager.CreateForAgentLoop(template, runtime.MuxSettings.MaxConcurrency);
 
+            // The built-in tool set fills {ToolDescriptions}; MCP tools are appended on top of the resulting
+            // base prompt as servers connect. `basePrompt`/`baseCompaction` hold the MCP-free prompt so the
+            // MCP section can be rebuilt without disturbing the model's core instructions.
+            List<ToolDefinition> builtInTools = new BuiltInToolRegistry(runtime.MuxSettings).GetToolDefinitions();
+            string basePrompt = runtime.SystemPrompt;
+            string baseCompaction = runtime.CompactionSystemPrompt;
+            object promptSync = new object();
+            McpRuntime? mcpRuntime = null;
+
+            // Re-binds the live MCP tool set (callable tools + executor) and the MCP-aware system prompt onto
+            // the template. Runs at startup, whenever the connected MCP tool set changes, and on profile
+            // switch. The template is read per job run, so updates apply to the next submitted turn.
+            void ApplyTemplate()
+            {
+                lock (promptSync)
+                {
+                    List<ToolDefinition> mcpTools = mcpRuntime?.CurrentTools ?? new List<ToolDefinition>();
+                    Func<string, JsonElement, string, CancellationToken, Task<ToolResult>>? executor =
+                        mcpRuntime != null ? mcpRuntime.ExecuteToolAsync : null;
+                    McpTemplateBinder.Apply(template, basePrompt, baseCompaction, mcpTools, executor, builtInTools.Count);
+                }
+            }
+
+            mcpRuntime = new McpRuntime(SettingsLoader.LoadMcpServers, ApplyTemplate, TimeSpan.FromSeconds(30));
+
             try
             {
                 string title = string.IsNullOrWhiteSpace(runtime.Endpoint.Model)
@@ -251,8 +277,9 @@ CONFIG:
 
                 SessionStore sessionStore = new SessionStore();
 
-                // The built-in tool set fills {ToolDescriptions} when a prompt profile is applied live.
-                List<ToolDefinition> builtInTools = new BuiltInToolRegistry(runtime.MuxSettings).GetToolDefinitions();
+                // Baseline bind (wires the executor and leaves the prompt at its MCP-free base until the
+                // first MCP discovery completes).
+                ApplyTemplate();
 
                 using MuxTuiApp app = new MuxTuiApp(
                     new ConsoleBackend(),
@@ -265,21 +292,31 @@ CONFIG:
                     onEndpointSelected: (EndpointConfig endpoint) => template.Endpoint = endpoint,
                     onPromptProfileSelected: (PromptProfile profile) =>
                     {
-                        // Re-substitute placeholders for the current endpoint's tool support and apply to
-                        // the live template, so the next turn uses the selected profile's prompts.
+                        // Re-substitute placeholders for the current endpoint's tool support to form the new
+                        // base prompt, then re-append the MCP section so the selected profile keeps MCP
+                        // awareness.
                         bool toolsEnabled = template.Endpoint.Quirks?.SupportsTools ?? true;
                         (string systemPrompt, string compactionPrompt) = CommandRuntimeResolver.ResolveProfilePrompts(
                             profile, toolsEnabled, runtime.WorkingDirectory, builtInTools);
-                        template.SystemPrompt = systemPrompt;
-                        template.CompactionSystemPrompt = compactionPrompt;
+                        lock (promptSync)
+                        {
+                            basePrompt = systemPrompt;
+                            baseCompaction = compactionPrompt;
+                        }
+
+                        ApplyTemplate();
                     },
                     showSplash: true,
-                    showBoundaries: runtime.MuxSettings.ShowBoundaryLines);
+                    showBoundaries: runtime.MuxSettings.ShowBoundaryLines,
+                    mcpRuntime: mcpRuntime);
 
                 // Route escalated tool approvals to the shell's modal. The template is captured by
                 // CreateForAgentLoop and read per job run, so setting this before the run loop starts
                 // (jobs only run after the user submits) takes effect for every job.
                 template.PromptUserFunc = (ToolCall toolCall) => app.RequestApprovalAsync(toolCall);
+
+                // Connect MCP servers and start periodic connectivity validation in the background.
+                mcpRuntime.Start();
 
                 using CancellationTokenSource cts = new CancellationTokenSource();
                 app.RunAsync(cts.Token).GetAwaiter().GetResult();
@@ -287,6 +324,7 @@ CONFIG:
             }
             finally
             {
+                mcpRuntime.Dispose();
                 jobManager.DisposeAsync().AsTask().GetAwaiter().GetResult();
             }
         }
