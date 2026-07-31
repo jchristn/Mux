@@ -141,6 +141,7 @@ namespace Mux.Core.Settings
             if (!Directory.Exists(skillsDir))
             {
                 Directory.CreateDirectory(skillsDir);
+                Mux.Core.Skills.DefaultSkillLibrary.SeedInto(skillsDir);
             }
         }
 
