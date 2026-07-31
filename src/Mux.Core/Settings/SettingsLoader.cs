@@ -136,6 +136,67 @@ namespace Mux.Core.Settings
                 string defaultPrompts = JsonSerializer.Serialize(promptsRoot, _JsonWriteOptions);
                 File.WriteAllText(promptsPath, defaultPrompts);
             }
+
+            string skillsDir = Path.Combine(configDir, "skills");
+            if (!Directory.Exists(skillsDir))
+            {
+                Directory.CreateDirectory(skillsDir);
+            }
+        }
+
+        /// <summary>
+        /// Returns the default skills directory (<c>~/.mux/skills</c>) under the active config directory.
+        /// </summary>
+        /// <returns>The absolute path of the skills directory.</returns>
+        public static string GetSkillsDirectory()
+        {
+            return Path.Combine(GetConfigDirectory(), "skills");
+        }
+
+        /// <summary>
+        /// Loads the skills index (<c>~/.mux/skills.json</c>), which holds per-skill enablement and pinning.
+        /// </summary>
+        /// <returns>The index entries, or an empty list when the file does not exist or cannot be read.</returns>
+        public static List<SkillIndexEntry> LoadSkillIndex()
+        {
+            string filePath = Path.Combine(GetConfigDirectory(), "skills.json");
+            if (!File.Exists(filePath))
+            {
+                return new List<SkillIndexEntry>();
+            }
+
+            try
+            {
+                string json = ReadAllTextShared(filePath);
+                SkillIndexFile? file = JsonSerializer.Deserialize<SkillIndexFile>(json, _JsonOptions);
+                return file?.Skills ?? new List<SkillIndexEntry>();
+            }
+            catch (JsonException)
+            {
+                return new List<SkillIndexEntry>();
+            }
+            catch (IOException)
+            {
+                return new List<SkillIndexEntry>();
+            }
+        }
+
+        /// <summary>
+        /// Saves the skills index to <c>~/.mux/skills.json</c>.
+        /// </summary>
+        /// <param name="entries">The index entries to persist. Must not be null.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="entries"/> is null.</exception>
+        public static void SaveSkillIndex(List<SkillIndexEntry> entries)
+        {
+            if (entries == null)
+            {
+                throw new ArgumentNullException(nameof(entries));
+            }
+
+            EnsureConfigDirectory();
+            SkillIndexFile file = new SkillIndexFile { Skills = entries };
+            string json = JsonSerializer.Serialize(file, _JsonWriteOptions);
+            WriteAllTextAtomic(Path.Combine(GetConfigDirectory(), "skills.json"), json);
         }
 
         /// <summary>
@@ -799,6 +860,9 @@ namespace Mux.Core.Settings
                 DefaultEnqueueBehavior = settings.DefaultEnqueueBehavior,
                 IgnoreCertErrors = settings.IgnoreCertErrors,
                 ShowBoundaryLines = settings.ShowBoundaryLines,
+                SkillsEnabled = settings.SkillsEnabled,
+                SkillRefreshIntervalSeconds = settings.SkillRefreshIntervalSeconds,
+                SkillsDirectory = settings.SkillsDirectory,
                 ExternalSearch = NormalizeExternalSearchSettings(settings.ExternalSearch)
             };
 
@@ -935,6 +999,18 @@ namespace Mux.Core.Settings
             /// </summary>
             [JsonPropertyName("servers")]
             public List<McpServerConfig>? Servers { get; set; }
+        }
+
+        /// <summary>
+        /// Wrapper class for deserializing the skills index JSON file.
+        /// </summary>
+        private class SkillIndexFile
+        {
+            /// <summary>
+            /// The per-skill index entries.
+            /// </summary>
+            [JsonPropertyName("skills")]
+            public List<SkillIndexEntry>? Skills { get; set; }
         }
 
         #endregion

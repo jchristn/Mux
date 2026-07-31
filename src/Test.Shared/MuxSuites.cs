@@ -131,6 +131,10 @@ namespace Test.Shared
                     // Skills: execution and the skill / run_skill tools.
                     SkillProviderSuite.Create(),
 
+                    // Skills: interactive runtime lifecycle and template composition.
+                    SkillRuntimeSuite.Create(),
+                    ExternalToolsBinderSuite.Create(),
+
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
                     McpRuntimeSuite.Create(),

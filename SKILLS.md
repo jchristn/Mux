@@ -8,6 +8,25 @@ Mux lives at `C:\Code\Mux`, split into `Mux.Core` (the harness library) and `Mux
 
 ---
 
+## Implementation status
+
+The feature is being built on the `feature/skills` branch, phase by phase, each compiled, tested, and committed. This section is kept current as work lands.
+
+- **Phase 0 — Provider seam — done.** `IExternalToolProvider`, `AgentLoopOptions.ExternalToolProviders`, aggregation/routing/classification in `AgentLoop`, per-job cloning in `JobManager`. Covered by `ExternalToolProviderSuite`.
+- **Phase 1 — Core model and loader — done.** The skill model, `SkillInterpreters`, a dependency-free frontmatter parser, and `SkillLoader`. Covered by `SkillLoaderSuite` (validation matrix + 500-iteration fuzz).
+- **Phase 2 — Execution and tools — done.** `SkillInterpreterResolver`, `SkillExecutor`, `SkillCatalog`, `SkillToolProvider` (`skill` / `run_skill`). Covered by `SkillProviderSuite`.
+- **Phase 3 — Interactive wiring — done.** `MuxSettings` skill fields, `SettingsLoader` skill index (`skills.json`) load/save and `skills/` seeding, `SkillRuntime` (an `IExternalToolProvider` with immutable-swap discovery, index enablement, and prompt-section building), `ExternalToolsBinder` composing MCP and skills onto the template, and the `Program.RunInteractive` wiring. Covered by `SkillRuntimeSuite` and `ExternalToolsBinderSuite`. The model can now discover and run skills in a live session.
+- **Phase 4 — Authoring and management surface — pending (next).**
+- **Phases 5–7 — pending.**
+
+Three decisions were settled during execution and the plan reflects them:
+
+- **Frontmatter parsing uses a self-contained parser, not `YamlDotNet`.** The schema is small and fixed, and adding the first YAML dependency to a JSON-first codebase was left open for the owner. The parser fails soft and is fuzzed. `YamlDotNet` remains a drop-in replacement if the schema grows.
+- **`run_skill` is classified as mutating** regardless of a skill's `mutating` flag. The two-tool design cannot resolve the target skill from the tool name alone at classification time, and gating "run arbitrary skill code" behind the write lease and approval is the safer default. The `mutating` flag drives the inventory display and remains available for a future per-command classification.
+- **`SkillRuntime` re-scans on a periodic timer plus explicit refresh, not a `FileSystemWatcher`.** The timer plus the manager's refresh-on-edit covers the workflow without the platform quirks of file watching; a watcher can be added later as a latency optimization.
+
+---
+
 ## 1. What a skill is
 
 A skill is a directory. It holds one required file, `SKILL.md`, whose YAML frontmatter names the skill and says when to use it, and whose body explains the procedure to the model in prose. Alongside the prose a skill declares **commands** — named, runnable units that execute either a fenced code block from the body or a bundled script from a `scripts/` subfolder, through a declared interpreter, with a timeout and captured output. Because the code is authored, versioned, and stored rather than improvised per turn, running a command produces the same steps regardless of which model drives.

@@ -252,9 +252,10 @@ CONFIG:
             string baseCompaction = runtime.CompactionSystemPrompt;
             object promptSync = new object();
             McpRuntime? mcpRuntime = null;
+            SkillRuntime? skillRuntime = null;
 
-            // Re-binds the live MCP tool set (callable tools + executor) and the MCP-aware system prompt onto
-            // the template. Runs at startup, whenever the connected MCP tool set changes, and on profile
+            // Re-binds the live MCP tools and the skills runtime (callable tools + prompt awareness) onto the
+            // template. Runs at startup, whenever the MCP tool set or the skill set changes, and on profile
             // switch. The template is read per job run, so updates apply to the next submitted turn.
             void ApplyTemplate()
             {
@@ -263,11 +264,21 @@ CONFIG:
                     List<ToolDefinition> mcpTools = mcpRuntime?.CurrentTools ?? new List<ToolDefinition>();
                     Func<string, JsonElement, string, CancellationToken, Task<ToolResult>>? executor =
                         mcpRuntime != null ? mcpRuntime.ExecuteToolAsync : null;
-                    McpTemplateBinder.Apply(template, basePrompt, baseCompaction, mcpTools, executor, builtInTools.Count);
+                    ExternalToolsBinder.Apply(template, basePrompt, baseCompaction, mcpTools, executor, skillRuntime, builtInTools.Count);
                 }
             }
 
             mcpRuntime = new McpRuntime(SettingsLoader.LoadMcpServers, ApplyTemplate, TimeSpan.FromSeconds(30));
+
+            if (runtime.MuxSettings.SkillsEnabled)
+            {
+                string skillsDirectory = runtime.MuxSettings.SkillsDirectory ?? SettingsLoader.GetSkillsDirectory();
+                skillRuntime = new SkillRuntime(
+                    skillsDirectory,
+                    SettingsLoader.LoadSkillIndex,
+                    ApplyTemplate,
+                    TimeSpan.FromSeconds(runtime.MuxSettings.SkillRefreshIntervalSeconds));
+            }
 
             try
             {
@@ -315,8 +326,9 @@ CONFIG:
                 // (jobs only run after the user submits) takes effect for every job.
                 template.PromptUserFunc = (ToolCall toolCall) => app.RequestApprovalAsync(toolCall);
 
-                // Connect MCP servers and start periodic connectivity validation in the background.
+                // Connect MCP servers and discover skills in the background.
                 mcpRuntime.Start();
+                skillRuntime?.Start();
 
                 using CancellationTokenSource cts = new CancellationTokenSource();
                 app.RunAsync(cts.Token).GetAwaiter().GetResult();
@@ -324,6 +336,7 @@ CONFIG:
             }
             finally
             {
+                skillRuntime?.Dispose();
                 mcpRuntime.Dispose();
                 jobManager.DisposeAsync().AsTask().GetAwaiter().GetResult();
             }

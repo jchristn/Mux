@@ -25,6 +25,9 @@ namespace Mux.Core.Models
         private string _DefaultEnqueueBehavior = "ask";
         private bool _IgnoreCertErrors = false;
         private bool _ShowBoundaryLines = false;
+        private bool _SkillsEnabled = true;
+        private int _SkillRefreshIntervalSeconds = 30;
+        private string? _SkillsDirectory = null;
         private ExternalSearchSettings _ExternalSearch = new ExternalSearchSettings();
 
         #endregion
@@ -214,6 +217,39 @@ namespace Mux.Core.Models
         {
             get => _ShowBoundaryLines;
             set => _ShowBoundaryLines = value;
+        }
+
+        /// <summary>
+        /// Whether user-authored skills are loaded and exposed to the model in the interactive shell.
+        /// Defaults to true.
+        /// </summary>
+        [JsonPropertyName("skillsEnabled")]
+        public bool SkillsEnabled
+        {
+            get => _SkillsEnabled;
+            set => _SkillsEnabled = value;
+        }
+
+        /// <summary>
+        /// How often the interactive shell re-scans the skills directory for changes, in seconds. Clamped to
+        /// a minimum of 5. Defaults to 30.
+        /// </summary>
+        [JsonPropertyName("skillRefreshIntervalSeconds")]
+        public int SkillRefreshIntervalSeconds
+        {
+            get => _SkillRefreshIntervalSeconds;
+            set => _SkillRefreshIntervalSeconds = Math.Max(5, value);
+        }
+
+        /// <summary>
+        /// An optional override for the skills directory, letting a team point mux at a shared, version-
+        /// controlled library instead of the default <c>~/.mux/skills</c>. Null uses the default.
+        /// </summary>
+        [JsonPropertyName("skillsDirectory")]
+        public string? SkillsDirectory
+        {
+            get => _SkillsDirectory;
+            set => _SkillsDirectory = string.IsNullOrWhiteSpace(value) ? null : value;
         }
 
         /// <summary>
