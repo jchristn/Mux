@@ -20,6 +20,7 @@ namespace Mux.Core.Agent
         private EndpointConfig _Endpoint;
         private List<ConversationMessage> _ConversationHistory = new List<ConversationMessage>();
         private string _SystemPrompt = string.Empty;
+        private string _CompactionSystemPrompt = string.Empty;
         private ApprovalPolicyEnum _ApprovalPolicy = ApprovalPolicyEnum.Ask;
         private string _WorkingDirectory = Directory.GetCurrentDirectory();
         private int _MaxIterations = 50;
@@ -93,6 +94,16 @@ namespace Mux.Core.Agent
         {
             get => _SystemPrompt;
             set => _SystemPrompt = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// The system prompt for the automatic history-compaction sidecar call. Empty uses the built-in
+        /// default (<see cref="Mux.Core.Settings.Defaults.CompactionSystemPrompt"/>).
+        /// </summary>
+        public string CompactionSystemPrompt
+        {
+            get => _CompactionSystemPrompt;
+            set => _CompactionSystemPrompt = value ?? string.Empty;
         }
 
         /// <summary>

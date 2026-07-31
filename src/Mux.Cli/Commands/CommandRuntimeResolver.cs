@@ -95,20 +95,22 @@ namespace Mux.Cli.Commands
                 }
             }
 
+            PromptProfile activePromptProfile = SettingsLoader.GetActivePromptProfile();
+
             string systemPrompt = SettingsLoader.LoadSystemPrompt(settings.SystemPrompt, muxSettings);
             if (!toolsEnabled)
             {
-                systemPrompt = "You are mux, an AI assistant. You help the user by reading, writing, and editing data including documents, code, and other types " +
-                    "in their project.\n\n" +
-                    "Your current working directory is: {WorkingDirectory}\n\n" +
-                    "Guidelines:\n" +
-                    "- Explain your reasoning when making non-trivial suggestions.\n" +
-                    "- If a task is ambiguous, ask for clarification before proceeding.";
+                // No tools: use the active profile's tools-disabled prompt, falling back to the built-in.
+                systemPrompt = string.IsNullOrWhiteSpace(activePromptProfile.ToolsDisabledPrompt)
+                    ? Defaults.ToolsDisabledSystemPrompt
+                    : activePromptProfile.ToolsDisabledPrompt;
             }
 
             systemPrompt = systemPrompt
                 .Replace("{WorkingDirectory}", workingDirectory)
                 .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd());
+
+            string compactionSystemPrompt = activePromptProfile.CompactionPrompt ?? string.Empty;
 
             ApprovalPolicyEnum approvalPolicy = ResolveApprovalPolicy(settings, endpoint, allowAskApproval);
 
@@ -125,6 +127,7 @@ namespace Mux.Cli.Commands
                 MaxAgentIterations = muxSettings.GetEffectiveMaxAgentIterations(endpoint),
                 WorkingDirectory = workingDirectory,
                 SystemPrompt = systemPrompt,
+                CompactionSystemPrompt = compactionSystemPrompt,
                 ApprovalPolicy = approvalPolicy,
                 Metadata = new RuntimeMetadata
                 {
@@ -147,6 +150,49 @@ namespace Mux.Cli.Commands
                     McpServerCount = mcpServers.Count
                 }
             };
+        }
+
+        /// <summary>
+        /// Computes the fully-substituted system prompt and the compaction prompt for a prompt profile,
+        /// honoring the tools-disabled variant and the built-in fallbacks for empty fields. Used to apply a
+        /// profile to a running session without re-resolving the whole runtime.
+        /// </summary>
+        /// <param name="profile">The prompt profile to apply.</param>
+        /// <param name="toolsEnabled">Whether the active endpoint supports tools.</param>
+        /// <param name="workingDirectory">The working directory substituted for <c>{WorkingDirectory}</c>.</param>
+        /// <param name="tools">The tools whose names/descriptions fill <c>{ToolDescriptions}</c>.</param>
+        /// <returns>The substituted system prompt and the compaction system prompt.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="profile"/> is null.</exception>
+        public static (string SystemPrompt, string CompactionSystemPrompt) ResolveProfilePrompts(
+            PromptProfile profile,
+            bool toolsEnabled,
+            string workingDirectory,
+            IReadOnlyList<ToolDefinition> tools)
+        {
+            if (profile == null) throw new ArgumentNullException(nameof(profile));
+
+            string raw = toolsEnabled
+                ? (string.IsNullOrWhiteSpace(profile.SystemPrompt) ? Defaults.SystemPrompt : profile.SystemPrompt)
+                : (string.IsNullOrWhiteSpace(profile.ToolsDisabledPrompt) ? Defaults.ToolsDisabledSystemPrompt : profile.ToolsDisabledPrompt);
+
+            StringBuilder toolDescBuilder = new StringBuilder();
+            if (toolsEnabled && tools != null)
+            {
+                foreach (ToolDefinition tool in tools)
+                {
+                    toolDescBuilder.AppendLine($"- {tool.Name}: {tool.Description}");
+                }
+            }
+
+            string systemPrompt = raw
+                .Replace("{WorkingDirectory}", workingDirectory ?? string.Empty)
+                .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd());
+
+            string compaction = string.IsNullOrWhiteSpace(profile.CompactionPrompt)
+                ? Defaults.CompactionSystemPrompt
+                : profile.CompactionPrompt;
+
+            return (systemPrompt, compaction);
         }
 
         internal static ApprovalPolicyEnum ResolveApprovalPolicy(CommonSettings settings, EndpointConfig endpoint, bool allowAskApproval = false)
@@ -298,6 +344,11 @@ namespace Mux.Cli.Commands
         /// Effective system prompt.
         /// </summary>
         public string SystemPrompt { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Effective compaction-sidecar system prompt (empty inherits the built-in default).
+        /// </summary>
+        public string CompactionSystemPrompt { get; set; } = string.Empty;
 
         /// <summary>
         /// Effective approval policy.

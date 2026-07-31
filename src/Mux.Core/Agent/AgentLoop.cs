@@ -718,10 +718,9 @@ namespace Mux.Core.Agent
         private string GenerateCompactionSummary(List<ConversationMessage> messagesToCompact, CancellationToken cancellationToken)
         {
             string compactableDigest = BuildConversationDigest(messagesToCompact, maxChars: 12000);
-            string systemPrompt =
-                "You compact older conversation history for a coding agent. " +
-                "Preserve goals, constraints, important files, decisions, errors, and unresolved work. " +
-                "Return plain text only, concise but information-dense, suitable to carry forward as session memory.";
+            string systemPrompt = string.IsNullOrWhiteSpace(_Options.CompactionSystemPrompt)
+                ? Mux.Core.Settings.Defaults.CompactionSystemPrompt
+                : _Options.CompactionSystemPrompt;
             string userPrompt =
                 $"Compact this older conversation history:{Environment.NewLine}{Environment.NewLine}{compactableDigest}";
 

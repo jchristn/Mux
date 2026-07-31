@@ -94,6 +94,9 @@ namespace Test.Shared
                     // Mux.Cli composer + prompt history + submit chooser suite (M9).
                     ComposerSuite.Create(),
 
+                    // Prompt-profile resolution + prompt editor modal.
+                    PromptsSuite.Create(),
+
                     // Mux.Cli command surfaces: slash / keybinding / menu (M10).
                     CommandSurfacesSuite.Create(),
 

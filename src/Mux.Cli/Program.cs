@@ -1,6 +1,7 @@
 namespace Mux.Cli
 {
     using System;
+    using System.Collections.Generic;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -12,6 +13,7 @@ namespace Mux.Cli
     using Mux.Core.Models;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
+    using Mux.Core.Tools;
     using TUIKit.Terminal;
 
     /// <summary>
@@ -249,6 +251,10 @@ CONFIG:
                     : $"{runtime.Endpoint.Name} · {runtime.Endpoint.Model}";
 
                 SessionStore sessionStore = new SessionStore();
+
+                // The built-in tool set fills {ToolDescriptions} when a prompt profile is applied live.
+                List<ToolDefinition> builtInTools = new BuiltInToolRegistry(runtime.MuxSettings).GetToolDefinitions();
+
                 using MuxTuiApp app = new MuxTuiApp(
                     new ConsoleBackend(),
                     jobManager,
@@ -258,6 +264,16 @@ CONFIG:
                     runtime.Endpoint.Name,
                     runtime.Endpoint.Model,
                     onEndpointSelected: (EndpointConfig endpoint) => template.Endpoint = endpoint,
+                    onPromptProfileSelected: (PromptProfile profile) =>
+                    {
+                        // Re-substitute placeholders for the current endpoint's tool support and apply to
+                        // the live template, so the next turn uses the selected profile's prompts.
+                        bool toolsEnabled = template.Endpoint.Quirks?.SupportsTools ?? true;
+                        (string systemPrompt, string compactionPrompt) = CommandRuntimeResolver.ResolveProfilePrompts(
+                            profile, toolsEnabled, runtime.WorkingDirectory, builtInTools);
+                        template.SystemPrompt = systemPrompt;
+                        template.CompactionSystemPrompt = compactionPrompt;
+                    },
                     showSplash: true);
 
                 // Route escalated tool approvals to the shell's modal. The template is captured by
@@ -289,6 +305,7 @@ CONFIG:
                 MuxSettings = runtime.MuxSettings,
                 IgnoreCertErrors = runtime.MuxSettings.IgnoreCertErrors,
                 SystemPrompt = runtime.SystemPrompt,
+                CompactionSystemPrompt = runtime.CompactionSystemPrompt,
                 ApprovalPolicy = approvalPolicy,
                 PromptUserFunc = promptFunc,
                 WorkingDirectory = runtime.WorkingDirectory,

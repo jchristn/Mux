@@ -402,6 +402,106 @@ namespace Test.Shared.Suites
                     SettingsLoader.EnsureConfigDirectory();
                     MuxAssert.AreEqual(existingJson, File.ReadAllText(settingsPath), "unchanged");
                     return Task.CompletedTask;
+                }),
+
+                // ---- prompts.json ----
+                Case("LoadPromptsEmptyWhenNoFile", "LoadPrompts returns an empty list when prompts.json is absent", (string dir, CancellationToken ct) =>
+                {
+                    MuxAssert.AreEqual(0, SettingsLoader.LoadPrompts().Count, "no prompts");
+                    return Task.CompletedTask;
+                }),
+
+                Case("EnsureConfigDirectorySeedsActiveDefaultProfile", "EnsureConfigDirectory seeds prompts.json with one active Default profile", (string dir, CancellationToken ct) =>
+                {
+                    SettingsLoader.EnsureConfigDirectory();
+                    MuxAssert.IsTrue(File.Exists(Path.Combine(dir, "prompts.json")), "prompts.json created");
+                    List<PromptProfile> prompts = SettingsLoader.LoadPrompts();
+                    MuxAssert.AreEqual(1, prompts.Count, "one seeded profile");
+                    MuxAssert.AreEqual("Default", prompts[0].Name, "named Default");
+                    MuxAssert.IsTrue(prompts[0].IsActive, "active");
+                    MuxAssert.AreEqual(string.Empty, prompts[0].SystemPrompt, "system prompt inherits (empty)");
+                    return Task.CompletedTask;
+                }),
+
+                Case("SaveAndLoadPromptsRoundTrips", "SavePrompts persists profiles that LoadPrompts reads back", (string dir, CancellationToken ct) =>
+                {
+                    SettingsLoader.SavePrompts(new List<PromptProfile>
+                    {
+                        new PromptProfile { Name = "Default", IsActive = false, SystemPrompt = "A" },
+                        new PromptProfile { Name = "Concise", IsActive = true, SystemPrompt = "B", CompactionPrompt = "C" }
+                    });
+
+                    List<PromptProfile> loaded = SettingsLoader.LoadPrompts();
+                    MuxAssert.AreEqual(2, loaded.Count, "two profiles");
+                    MuxAssert.AreEqual("Concise", loaded[1].Name, "second name");
+                    MuxAssert.AreEqual("B", loaded[1].SystemPrompt, "second system prompt");
+                    MuxAssert.AreEqual("C", loaded[1].CompactionPrompt, "second compaction prompt");
+                    return Task.CompletedTask;
+                }),
+
+                Case("SavePromptsNormalizesToSingleActive", "SavePrompts keeps exactly one profile active", (string dir, CancellationToken ct) =>
+                {
+                    SettingsLoader.SavePrompts(new List<PromptProfile>
+                    {
+                        new PromptProfile { Name = "One", IsActive = true },
+                        new PromptProfile { Name = "Two", IsActive = true }
+                    });
+
+                    List<PromptProfile> loaded = SettingsLoader.LoadPrompts();
+                    int active = 0;
+                    foreach (PromptProfile p in loaded) { if (p.IsActive) active++; }
+                    MuxAssert.AreEqual(1, active, "one active");
+                    MuxAssert.IsTrue(loaded[0].IsActive, "first is active");
+                    return Task.CompletedTask;
+                }),
+
+                Case("GetActivePromptProfileReturnsActive", "GetActivePromptProfile returns the active profile", (string dir, CancellationToken ct) =>
+                {
+                    SettingsLoader.SavePrompts(new List<PromptProfile>
+                    {
+                        new PromptProfile { Name = "One" },
+                        new PromptProfile { Name = "Two", IsActive = true, SystemPrompt = "custom" }
+                    });
+
+                    PromptProfile active = SettingsLoader.GetActivePromptProfile();
+                    MuxAssert.AreEqual("Two", active.Name, "active name");
+                    MuxAssert.AreEqual("custom", active.SystemPrompt, "active system prompt");
+                    return Task.CompletedTask;
+                }),
+
+                Case("LoadSystemPromptUsesActiveProfile", "A non-empty active-profile system prompt is used", (string dir, CancellationToken ct) =>
+                {
+                    SettingsLoader.SavePrompts(new List<PromptProfile>
+                    {
+                        new PromptProfile { Name = "Custom", IsActive = true, SystemPrompt = "You are a specialized assistant." }
+                    });
+
+                    MuxAssert.AreEqual("You are a specialized assistant.", SettingsLoader.LoadSystemPrompt(null, new MuxSettings()), "profile prompt");
+                    return Task.CompletedTask;
+                }),
+
+                Case("LoadSystemPromptEmptyActiveProfileFallsBackToDefault", "An empty active-profile system prompt falls back to the built-in default", (string dir, CancellationToken ct) =>
+                {
+                    SettingsLoader.SavePrompts(new List<PromptProfile>
+                    {
+                        new PromptProfile { Name = "Default", IsActive = true }
+                    });
+
+                    MuxAssert.AreEqual(Defaults.SystemPrompt, SettingsLoader.LoadSystemPrompt(null, new MuxSettings()), "falls back to default");
+                    return Task.CompletedTask;
+                }),
+
+                Case("LoadSystemPromptCliPathWinsOverActiveProfile", "An explicit CLI system-prompt path overrides the active profile", (string dir, CancellationToken ct) =>
+                {
+                    SettingsLoader.SavePrompts(new List<PromptProfile>
+                    {
+                        new PromptProfile { Name = "Custom", IsActive = true, SystemPrompt = "profile prompt" }
+                    });
+                    string cliPath = Path.Combine(dir, "cli-prompt.md");
+                    File.WriteAllText(cliPath, "cli prompt");
+
+                    MuxAssert.AreEqual("cli prompt", SettingsLoader.LoadSystemPrompt(cliPath, new MuxSettings()), "cli path wins");
+                    return Task.CompletedTask;
                 })
             };
 

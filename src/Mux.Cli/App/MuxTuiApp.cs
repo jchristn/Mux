@@ -54,6 +54,7 @@ namespace Mux.Cli.App
         private readonly ApprovalPolicyEnum _ApprovalPolicy;
         private readonly SessionStore? _Store;
         private readonly Action<EndpointConfig>? _OnEndpointSelected;
+        private readonly Action<PromptProfile>? _OnPromptProfileSelected;
         private string _EndpointName;
         private string _Model;
         private readonly string _Title;
@@ -127,6 +128,7 @@ namespace Mux.Cli.App
             string endpointName = "",
             string model = "",
             Action<EndpointConfig>? onEndpointSelected = null,
+            Action<PromptProfile>? onPromptProfileSelected = null,
             bool showSplash = false)
         {
             _Backend = backend ?? throw new ArgumentNullException(nameof(backend));
@@ -134,6 +136,7 @@ namespace Mux.Cli.App
             _ApprovalPolicy = approvalPolicy;
             _Store = sessionStore;
             _OnEndpointSelected = onEndpointSelected;
+            _OnPromptProfileSelected = onPromptProfileSelected;
             _EndpointName = endpointName ?? string.Empty;
             _Model = model ?? string.Empty;
             _Title = string.IsNullOrWhiteSpace(title) ? "mux" : title;
@@ -173,6 +176,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.sidebar.toggle", "Toggle sidebar", "ctrl+b", ToggleSidebar, "View", new[] { "sidebar" }));
             _Catalog.Add(new CommandDescriptor("mux.save", "Save session", "ctrl+s", SaveSession, "Session", new[] { "save" }));
             _Catalog.Add(new CommandDescriptor("mux.queue", "Edit queue", "ctrl+g", OpenQueueEditor, "Session", new[] { "queue", "edit queue", "pending" }));
+            _Catalog.Add(new CommandDescriptor("mux.prompts", "Prompts…", "ctrl+p", OpenPromptEditor, "Model", new[] { "prompts", "prompt", "system prompt" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme…", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
@@ -992,6 +996,7 @@ namespace Mux.Cli.App
                     case 's': SaveSession(); return true;
                     case 'e': OpenEndpointModal(); return true;
                     case 'g': OpenQueueEditor(); return true;
+                    case 'p': OpenPromptEditor(); return true;
                 }
 
                 // Swallow any other Ctrl+key so control codes never land in the composer as text.
@@ -1341,6 +1346,68 @@ namespace Mux.Cli.App
             {
                 RunTurn(next);
             }
+        }
+
+        // Opens the prompt-profile editor. Empty fields are pre-filled with their built-in defaults so the
+        // user sees the effective prompt; on save, a field still equal to its default is stored empty
+        // (inherit), and the active profile is persisted and applied live.
+        private void OpenPromptEditor()
+        {
+            List<PromptProfile> stored = SettingsLoader.LoadPrompts();
+            if (stored.Count == 0)
+            {
+                stored = new List<PromptProfile> { new PromptProfile { Name = "Default", IsActive = true } };
+            }
+
+            List<PromptProfile> display = new List<PromptProfile>();
+            foreach (PromptProfile p in stored)
+            {
+                display.Add(new PromptProfile
+                {
+                    Name = p.Name,
+                    IsActive = p.IsActive,
+                    SystemPrompt = string.IsNullOrWhiteSpace(p.SystemPrompt) ? Defaults.SystemPrompt : p.SystemPrompt,
+                    ToolsDisabledPrompt = string.IsNullOrWhiteSpace(p.ToolsDisabledPrompt) ? Defaults.ToolsDisabledSystemPrompt : p.ToolsDisabledPrompt,
+                    CompactionPrompt = string.IsNullOrWhiteSpace(p.CompactionPrompt) ? Defaults.CompactionSystemPrompt : p.CompactionPrompt
+                });
+            }
+
+            PromptEditorModal modal = new PromptEditorModal(display);
+            _App.Modals.Push(modal);
+            _ = ResolvePromptEditorAsync(modal);
+        }
+
+        private async Task ResolvePromptEditorAsync(PromptEditorModal modal)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            if (result is not List<PromptProfile> edited || edited.Count == 0)
+            {
+                return;
+            }
+
+            // Store a field that still matches its built-in default as empty, so it keeps inheriting.
+            PromptProfile? active = null;
+            foreach (PromptProfile p in edited)
+            {
+                if (p.SystemPrompt == Defaults.SystemPrompt) p.SystemPrompt = string.Empty;
+                if (p.ToolsDisabledPrompt == Defaults.ToolsDisabledSystemPrompt) p.ToolsDisabledPrompt = string.Empty;
+                if (p.CompactionPrompt == Defaults.CompactionSystemPrompt) p.CompactionPrompt = string.Empty;
+
+                if (p.IsActive && active == null)
+                {
+                    active = p;
+                }
+            }
+
+            if (active == null)
+            {
+                active = edited[0];
+                active.IsActive = true;
+            }
+
+            SettingsLoader.SavePrompts(edited);
+            _OnPromptProfileSelected?.Invoke(active);
+            WriteNotice($"Prompt profile: {active.Name}");
         }
 
         private void CancelActiveTurn()

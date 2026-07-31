@@ -49,6 +49,26 @@ namespace Mux.Core.Settings
             "- Explain your reasoning when making non-trivial changes.\n" +
             "- If a task is ambiguous, ask for clarification before proceeding.";
 
+        /// <summary>
+        /// The system prompt used instead of <see cref="SystemPrompt"/> when the active endpoint does not
+        /// support tools. Contains the <c>{WorkingDirectory}</c> placeholder (no tool listing).
+        /// </summary>
+        public static readonly string ToolsDisabledSystemPrompt =
+            "You are mux, an AI assistant. You help the user by reading, writing, and editing data including documents, code, and other types " +
+            "in their project.\n\n" +
+            "Your current working directory is: {WorkingDirectory}\n\n" +
+            "Guidelines:\n" +
+            "- Explain your reasoning when making non-trivial suggestions.\n" +
+            "- If a task is ambiguous, ask for clarification before proceeding.";
+
+        /// <summary>
+        /// The system prompt for the automatic history-compaction sidecar call. No placeholders.
+        /// </summary>
+        public static readonly string CompactionSystemPrompt =
+            "You compact older conversation history for a coding agent. " +
+            "Preserve goals, constraints, important files, decisions, errors, and unresolved work. " +
+            "Return plain text only, concise but information-dense, suitable to carry forward as session memory.";
+
         #endregion
 
         #region Public-Methods

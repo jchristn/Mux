@@ -33,8 +33,9 @@ When config directory selection is applied, mux uses that directory for:
 - `mcp-servers.json`
 - `settings.json`
 - `system-prompt.md`
+- `prompts.json`
 
-If the directory does not exist, `mux` creates it. If `endpoints.json` is missing, `mux` seeds a default Ollama endpoint there. If `settings.json` is missing, `mux` writes editable default settings. Existing files are not overwritten.
+If the directory does not exist, `mux` creates it. If `endpoints.json` is missing, `mux` seeds a default Ollama endpoint there. If `settings.json` is missing, `mux` writes editable default settings. If `prompts.json` is missing, `mux` seeds one active `Default` profile that inherits every built-in prompt. Existing files are not overwritten.
 
 ## Files
 
@@ -44,6 +45,7 @@ If the directory does not exist, `mux` creates it. If `endpoints.json` is missin
 | `mcp-servers.json` | MCP server definitions | No |
 | `settings.json` | Global mux settings | No |
 | `system-prompt.md` | Custom default system prompt | No |
+| `prompts.json` | Named, switchable prompt profiles (system + internal prompts) | No |
 | `sessions/` | Saved interactive sessions (one JSON file per session); the shell autosaves here at each turn boundary and `/sessions` browses/resumes them | Created on demand |
 
 For current non-interactive orchestration paths:
@@ -302,15 +304,44 @@ Use `/search add`, `/search edit`, `/search show`, and `/search remove`/`delete`
 
 `web_search` discovers candidate web results. `web_retrieve` fetches a known HTTP or HTTPS URL and does not require external-search configuration.
 
+## `prompts.json`
+
+Named, switchable **prompt profiles** — the prompts mux sends to the model. Edit them in the interactive shell with **`Ctrl+P`** or the **`/prompts`** command (also in the `F1` menu): a large editor lets you switch the active profile, edit each prompt, and add / rename / remove profiles. Changes apply to the running session and are saved here.
+
+Each profile carries three prompts; **an empty field inherits the built-in default**, so a profile only stores what it customizes:
+
+| Field | Purpose |
+|---|---|
+| `systemPrompt` | The main system prompt (persona) sent with every turn. Keeps the `{WorkingDirectory}` and `{ToolDescriptions}` placeholders, which mux fills in at run time. |
+| `toolsDisabledPrompt` | Used instead of `systemPrompt` when the active endpoint does not support tools. Keeps `{WorkingDirectory}`. |
+| `compactionPrompt` | The system prompt for the automatic history-compaction sidecar call. |
+
+```json
+{
+  "prompts": [
+    {
+      "name": "Default",
+      "isActive": true,
+      "systemPrompt": "",
+      "toolsDisabledPrompt": "",
+      "compactionPrompt": ""
+    }
+  ]
+}
+```
+
+Exactly one profile is active. The active profile's `systemPrompt` (when non-empty) is the primary source for the system prompt — see the resolution priority below.
+
 ## `system-prompt.md`
 
 Optional plain-text or markdown file used as the default system prompt when no higher-priority override is present.
 
 Resolution priority:
 1. `--system-prompt <path>`
-2. `settings.json.systemPromptPath`
-3. `system-prompt.md` in the active config directory
-4. built-in default prompt
+2. active `prompts.json` profile `systemPrompt` (when non-empty)
+3. `settings.json.systemPromptPath`
+4. `system-prompt.md` in the active config directory
+5. built-in default prompt
 
 ## Environment Variables
 

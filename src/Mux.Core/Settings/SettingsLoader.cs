@@ -118,6 +118,24 @@ namespace Mux.Core.Settings
                 string defaultSettingsJson = JsonSerializer.Serialize(defaultSettings, _JsonWriteOptions);
                 File.WriteAllText(settingsPath, defaultSettingsJson);
             }
+
+            string promptsPath = Path.Combine(configDir, "prompts.json");
+            if (!File.Exists(promptsPath))
+            {
+                // Seed a single active "Default" profile with empty fields: every prompt inherits its
+                // built-in default until the user edits it, so existing system-prompt overrides are
+                // unaffected on upgrade.
+                PromptsFile promptsRoot = new PromptsFile
+                {
+                    Prompts = new List<PromptProfile>
+                    {
+                        new PromptProfile { Name = "Default", IsActive = true }
+                    }
+                };
+
+                string defaultPrompts = JsonSerializer.Serialize(promptsRoot, _JsonWriteOptions);
+                File.WriteAllText(promptsPath, defaultPrompts);
+            }
         }
 
         /// <summary>
@@ -226,6 +244,89 @@ namespace Mux.Core.Settings
         }
 
         /// <summary>
+        /// Loads the prompt profiles from <c>~/.mux/prompts.json</c>.
+        /// </summary>
+        /// <returns>The prompt profiles, or an empty list when the file does not exist.</returns>
+        public static List<PromptProfile> LoadPrompts()
+        {
+            string filePath = Path.Combine(GetConfigDirectory(), "prompts.json");
+            if (!File.Exists(filePath))
+            {
+                return new List<PromptProfile>();
+            }
+
+            string json = ReadAllTextShared(filePath);
+            PromptsFile? file = JsonSerializer.Deserialize<PromptsFile>(json, _JsonOptions);
+            if (file == null || file.Prompts == null)
+            {
+                return new List<PromptProfile>();
+            }
+
+            return file.Prompts;
+        }
+
+        /// <summary>
+        /// Saves prompt profiles to <c>~/.mux/prompts.json</c>. Exactly one profile is normalized to active
+        /// (the first, if none or several are marked).
+        /// </summary>
+        /// <param name="prompts">The prompt profiles to persist.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="prompts"/> is null.</exception>
+        public static void SavePrompts(List<PromptProfile> prompts)
+        {
+            if (prompts == null)
+            {
+                throw new ArgumentNullException(nameof(prompts));
+            }
+
+            EnsureConfigDirectory();
+            NormalizeActiveProfile(prompts);
+
+            PromptsFile file = new PromptsFile { Prompts = prompts };
+            string json = JsonSerializer.Serialize(file, _JsonWriteOptions);
+            WriteAllTextAtomic(Path.Combine(GetConfigDirectory(), "prompts.json"), json);
+        }
+
+        /// <summary>
+        /// Returns the active prompt profile from <c>~/.mux/prompts.json</c>, or an all-empty default
+        /// profile (which inherits every built-in prompt) when none is configured.
+        /// </summary>
+        /// <returns>The active <see cref="PromptProfile"/>.</returns>
+        public static PromptProfile GetActivePromptProfile()
+        {
+            List<PromptProfile> prompts = LoadPrompts();
+            foreach (PromptProfile profile in prompts)
+            {
+                if (profile.IsActive)
+                {
+                    return profile;
+                }
+            }
+
+            return prompts.Count > 0 ? prompts[0] : new PromptProfile { Name = "Default", IsActive = true };
+        }
+
+        private static void NormalizeActiveProfile(List<PromptProfile> prompts)
+        {
+            bool seenActive = false;
+            foreach (PromptProfile profile in prompts)
+            {
+                if (profile.IsActive && !seenActive)
+                {
+                    seenActive = true;
+                }
+                else
+                {
+                    profile.IsActive = false;
+                }
+            }
+
+            if (!seenActive && prompts.Count > 0)
+            {
+                prompts[0].IsActive = true;
+            }
+        }
+
+        /// <summary>
         /// Loads the global mux settings from <c>~/.mux/settings.json</c>.
         /// </summary>
         /// <returns>A <see cref="MuxSettings"/> instance, or a default instance if the file does not exist.</returns>
@@ -328,6 +429,15 @@ namespace Mux.Core.Settings
                 {
                     return File.ReadAllText(expandedCliPath);
                 }
+            }
+
+            // The active prompt profile is the primary runtime mechanism: an explicit CLI path still wins,
+            // but a customized profile system prompt takes precedence over the legacy settings/file paths.
+            // A blank profile field inherits, so an unedited profile leaves the legacy chain untouched.
+            string activeSystemPrompt = GetActivePromptProfile().SystemPrompt;
+            if (!string.IsNullOrWhiteSpace(activeSystemPrompt))
+            {
+                return activeSystemPrompt;
             }
 
             if (!string.IsNullOrWhiteSpace(settings.SystemPromptPath))
@@ -569,6 +679,18 @@ namespace Mux.Core.Settings
             /// </summary>
             [JsonPropertyName("endpoints")]
             public List<EndpointConfig>? Endpoints { get; set; }
+        }
+
+        /// <summary>
+        /// Wrapper class for deserializing the prompts JSON file.
+        /// </summary>
+        private class PromptsFile
+        {
+            /// <summary>
+            /// The list of prompt profiles.
+            /// </summary>
+            [JsonPropertyName("prompts")]
+            public List<PromptProfile>? Prompts { get; set; }
         }
 
         private static bool TryExtractEnvironmentVariableName(string value, bool allowBareName, out string variableName)
