@@ -43,8 +43,8 @@ namespace Test.Shared.Suites
                             string transcript = Join(app.TranscriptSnapshot());
                             string footer = Join(app.FooterSnapshot());
 
-                            MuxAssert.Contains("mux", transcript, "header brand");
-                            MuxAssert.Contains("demo", transcript, "header title");
+                            // The transcript header is the brand + version; the endpoint/model live in the sidebar.
+                            MuxAssert.Contains("mux v" + Mux.Core.Settings.Defaults.ProductVersion, transcript, "header brand + version");
                             // The prompt/newline/quit guidance renders in the footer, not the transcript header.
                             MuxAssert.Contains("Type a prompt", footer, "footer prompt hint");
                             MuxAssert.Contains("CTRL-Q/quit", footer, "footer quit hint");

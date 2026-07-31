@@ -2069,7 +2069,7 @@ namespace Mux.Cli.App
 
         private void WriteHeader()
         {
-            _Conversation.WriteLine(Text.From("mux · " + _Title).Cyan().Bold());
+            _Conversation.WriteLine(Text.From("mux v" + Defaults.ProductVersion).Cyan().Bold());
         }
 
         #endregion
