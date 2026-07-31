@@ -125,6 +125,9 @@ namespace Test.Shared
                     // Mux.Cli optional dark-grey boundary lines (/borders toggle + rendering).
                     BoundaryLinesSuite.Create(),
 
+                    // Skills: loader, parser, and validation matrix.
+                    SkillLoaderSuite.Create(),
+
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
                     McpRuntimeSuite.Create(),
