@@ -173,6 +173,26 @@ namespace Test.Shared.Suites
                             app.RenderOnce();
                             MuxAssert.Contains("Exit", backend.PeekOutput(), "modal lists commands");
                         }
+                    }),
+
+                    Case("QuestionMarkOpensNavigableMenuWithSlashCommands", "/? opens the interactive menu (like F1) listing slash commands", async (CancellationToken ct) =>
+                    {
+                        await using (JobManager manager = NewManager())
+                        using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            Feed(backend, app, "/?" + "\r");
+
+                            MuxAssert.IsTrue(app.IsModalActive, "menu modal open");
+
+                            app.Start();
+                            app.RenderOnce();
+                            string frame = backend.PeekOutput();
+                            // The interactive (navigable) menu — same one F1 opens — advertises Enter-to-run.
+                            MuxAssert.Contains("Enter to run", frame, "navigable command menu, not a static box");
+                            // The menu now surfaces /slash aliases alongside each command.
+                            MuxAssert.Contains("/clear", frame, "slash commands shown in the menu");
+                        }
                     })
                 });
         }

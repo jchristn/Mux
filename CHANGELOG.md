@@ -49,6 +49,8 @@ All notable changes to mux are documented here.
 - The interactive shell now keeps a one-column gutter between the transcript (and queue strip) and the
   right-anchored sidebar, so the two panes no longer butt directly against each other.
 - Renamed the **Theme…** command menu entry to **Theme**.
+- `/help` and `/?` now open the same navigable command menu as `F1` (previously a static, non-interactive
+  list), and that menu now shows each command's `/slash` aliases alongside its title and key chord.
 
 ## v0.3.0 - 2026-07-29
 

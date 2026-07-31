@@ -199,7 +199,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
             _Catalog.Add(new CommandDescriptor("mux.borders", "Toggle boundary lines", null, ToggleBoundaries, "View", new[] { "borders", "boundaries", "boundary", "lines" }));
             _Catalog.Add(new CommandDescriptor("mux.menu", "Command menu", "f1", OpenCommandMenu, "Help", new[] { "menu" }));
-            _Catalog.Add(new CommandDescriptor("mux.help", "Help (keymap)", null, ShowHelp, "Help", new[] { "help", "?" }));
+            _Catalog.Add(new CommandDescriptor("mux.help", "Help", null, OpenCommandMenu, "Help", new[] { "help", "?" }));
             _Catalog.ApplyTo(_App);
             _MenuBar = MenuBarBuilder.Build(_Catalog);
             _SlashHandler = new SlashCommandParser(_Catalog).TryHandle;
@@ -1852,14 +1852,22 @@ namespace Mux.Cli.App
             List<string> labels = new List<string>();
             foreach (CommandDescriptor descriptor in _Catalog.Commands)
             {
-                if (string.Equals(descriptor.Id, "mux.menu", StringComparison.Ordinal))
+                // The menu-openers (F1 / help) would just reopen the menu from within itself, so omit them.
+                if (string.Equals(descriptor.Id, "mux.menu", StringComparison.Ordinal)
+                    || string.Equals(descriptor.Id, "mux.help", StringComparison.Ordinal))
                 {
-                    continue; // don't list the menu inside itself
+                    continue;
                 }
 
                 commands.Add(descriptor);
+
+                // Show the title, its key chord, and its /slash aliases so the menu is a single reference for
+                // every way to invoke a command.
                 string keys = string.IsNullOrEmpty(descriptor.Chord) ? string.Empty : descriptor.Chord;
-                labels.Add($"{descriptor.Title,-22} {keys}");
+                string aliases = descriptor.SlashAliases.Count > 0
+                    ? "/" + string.Join(" /", descriptor.SlashAliases)
+                    : string.Empty;
+                labels.Add($"{descriptor.Title,-18} {keys,-6} {aliases}".TrimEnd());
             }
 
             if (commands.Count == 0)
@@ -1880,19 +1888,6 @@ namespace Mux.Cli.App
             {
                 commands[index].Handler();
             }
-        }
-
-        private void ShowHelp()
-        {
-            List<string> lines = new List<string>();
-            foreach (CommandDescriptor descriptor in _Catalog.Commands)
-            {
-                string keys = descriptor.Chord ?? string.Empty;
-                string aliases = descriptor.SlashAliases.Count > 0 ? "/" + string.Join(" /", descriptor.SlashAliases) : string.Empty;
-                lines.Add($"{descriptor.Title,-20} {keys,-8} {aliases}");
-            }
-
-            _App.Modals.Push(new MuxBoxModal("Commands", lines));
         }
 
         private void RequestQuit()

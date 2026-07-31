@@ -148,9 +148,8 @@ Every command is also reachable by key binding and the `F1` menu (one catalog, t
 /sidebar                          Toggle the sidebar
 /borders                          Toggle the boundary lines (off by default)
 /mouse                            Toggle mouse capture (on by default)
-/menu                             Open the command menu (also F1)
+/menu, /help, /?                  Open the navigable command menu (also F1)
 /clear                            Clear the transcript
-/help, /?                         Show the keybinding / command reference
 /exit, /quit, /q                  Quit mux
 ```
 
