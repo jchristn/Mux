@@ -14,7 +14,9 @@ All notable changes to mux are documented here.
   exposes two tools — `skill` (read a skill's instructions) and `run_skill` (execute a command, returned
   like `run_process` and gated by the approval policy and write lease). A curated library of 46 default
   skills — spanning git/GitHub, .NET build and quality, repository hygiene, scaffolding, documentation, and
-  developer workflow — is seeded on first run and preserved on upgrade. Manage skills in-app with `/skills`
+  developer workflow — is seeded on first run and, on upgrade, tops up an existing `~/.mux/skills` with any
+  newly shipped defaults (tracked in a `.seeded-defaults` manifest) without resurrecting ones you deleted or
+  overwriting your edits. Manage skills in-app with `/skills`
   (inventory with status glyphs, per-skill view/in-app edit/enable/disable/duplicate/remove, a create
   wizard, and local-path import) or with the `mux skill list | show | validate | run | new | add` verb;
   `validate` returns a nonzero exit for CI and `run` returns the process contract for hooks. Caller
