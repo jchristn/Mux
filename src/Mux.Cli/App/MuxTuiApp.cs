@@ -184,6 +184,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.save", "Save session", "ctrl+s", SaveSession, "Session", new[] { "save" }));
             _Catalog.Add(new CommandDescriptor("mux.queue", "Edit queue", "ctrl+g", OpenQueueEditor, "Session", new[] { "queue", "edit queue", "pending" }));
             _Catalog.Add(new CommandDescriptor("mux.prompts", "Prompts", "ctrl+p", OpenPromptEditor, "Model", new[] { "prompts", "prompt", "system prompt" }));
+            _Catalog.Add(new CommandDescriptor("mux.mcp", "MCP servers", null, OpenMcpModal, "Model", new[] { "mcp", "mcp-servers", "mcpservers", "servers" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme…", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
@@ -2180,6 +2181,174 @@ namespace Mux.Cli.App
             catch (Exception)
             {
                 return new List<EndpointConfig>();
+            }
+        }
+
+        // The kinds of rows shown in the MCP servers list, kept in a list parallel to the option strings
+        // so a blank separator or a trailing action never has to be inferred from index math. Selecting a
+        // server row edits that server directly.
+        private enum McpMenuAction
+        {
+            Edit,
+            None,
+            Add,
+            Remove
+        }
+
+        private void OpenMcpModal()
+        {
+            List<McpServerConfig> servers = LoadMcpServersSafe();
+            List<string> options = new List<string>();
+            List<McpMenuAction> actions = new List<McpMenuAction>();
+
+            foreach (McpServerConfig server in servers)
+            {
+                string detail = server.Transport == McpTransportTypeEnum.Http
+                    ? server.Url
+                    : server.Command;
+                options.Add($"  {server.Name}  ({server.Transport} · {detail})");
+                actions.Add(McpMenuAction.Edit);
+            }
+
+            // A blank separator row sets the configured servers apart from the management actions below.
+            if (servers.Count > 0)
+            {
+                options.Add(string.Empty);
+                actions.Add(McpMenuAction.None);
+            }
+
+            options.Add("+ Add MCP server…");
+            actions.Add(McpMenuAction.Add);
+            if (servers.Count > 0)
+            {
+                options.Add("- Remove MCP server…");
+                actions.Add(McpMenuAction.Remove);
+            }
+
+            SelectModal modal = new SelectModal("MCP servers — Enter to edit", options);
+            _App.Modals.Push(modal);
+            _ = ResolveMcpModalAsync(modal, servers, actions);
+        }
+
+        private async Task ResolveMcpModalAsync(SelectModal modal, List<McpServerConfig> servers, List<McpMenuAction> actions)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            int index = result is int value ? value : -1;
+            if (index < 0 || index >= actions.Count)
+            {
+                return;
+            }
+
+            switch (actions[index])
+            {
+                case McpMenuAction.Edit:
+                    await EditMcpFormAsync(servers[index]).ConfigureAwait(false);
+                    break;
+                case McpMenuAction.Add:
+                    await AddMcpFormAsync().ConfigureAwait(false);
+                    break;
+                case McpMenuAction.Remove:
+                    await RemoveMcpAsync(servers).ConfigureAwait(false);
+                    break;
+                case McpMenuAction.None:
+                default:
+                    break;
+            }
+        }
+
+        private async Task AddMcpFormAsync()
+        {
+            McpServerFormModal modal = new McpServerFormModal("Add MCP server");
+            _App.Modals.Push(modal);
+            object? result = await modal.Completion.ConfigureAwait(false);
+            if (result is McpServerConfig server)
+            {
+                SaveMcpServer(server, previousName: null);
+            }
+        }
+
+        private async Task EditMcpFormAsync(McpServerConfig original)
+        {
+            McpServerFormModal modal = new McpServerFormModal($"Edit {original.Name}", original);
+            _App.Modals.Push(modal);
+            object? result = await modal.Completion.ConfigureAwait(false);
+            if (result is McpServerConfig edited)
+            {
+                SaveMcpServer(edited, previousName: original.Name);
+            }
+        }
+
+        private void SaveMcpServer(McpServerConfig server, string? previousName)
+        {
+            List<McpServerConfig> servers = LoadMcpServersSafe();
+            servers.RemoveAll(s => string.Equals(s.Name, server.Name, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(previousName) && !string.Equals(previousName, server.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                servers.RemoveAll(s => string.Equals(s.Name, previousName, StringComparison.OrdinalIgnoreCase));
+            }
+
+            servers.Add(server);
+            try
+            {
+                SettingsLoader.SaveMcpServers(servers);
+                WriteNotice(string.IsNullOrEmpty(previousName)
+                    ? $"Saved MCP server {server.Name}. Restart mux for it to take effect."
+                    : $"Updated MCP server {server.Name}. Restart mux for changes to take effect.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Save failed: " + ex.Message);
+            }
+        }
+
+        private async Task RemoveMcpAsync(List<McpServerConfig> servers)
+        {
+            List<string> names = new List<string>();
+            foreach (McpServerConfig server in servers)
+            {
+                names.Add(server.Name);
+            }
+
+            SelectModal pick = new SelectModal("Remove which MCP server?", names);
+            _App.Modals.Push(pick);
+            object? pickResult = await pick.Completion.ConfigureAwait(false);
+            int pickIndex = pickResult is int p ? p : -1;
+            if (pickIndex < 0 || pickIndex >= servers.Count)
+            {
+                return;
+            }
+
+            string name = servers[pickIndex].Name;
+            MessageModal confirm = new MessageModal("Remove MCP server", $"Remove '{name}'?", new List<string> { "Remove", "Cancel" });
+            _App.Modals.Push(confirm);
+            object? confirmResult = await confirm.Completion.ConfigureAwait(false);
+            if (!(confirmResult is int c) || c != 0)
+            {
+                return;
+            }
+
+            List<McpServerConfig> current = LoadMcpServersSafe();
+            current.RemoveAll(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+            try
+            {
+                SettingsLoader.SaveMcpServers(current);
+                WriteNotice($"Removed MCP server {name}. Restart mux for changes to take effect.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Remove failed: " + ex.Message);
+            }
+        }
+
+        private static List<McpServerConfig> LoadMcpServersSafe()
+        {
+            try
+            {
+                return SettingsLoader.LoadMcpServers();
+            }
+            catch (Exception)
+            {
+                return new List<McpServerConfig>();
             }
         }
 

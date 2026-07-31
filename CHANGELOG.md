@@ -19,12 +19,21 @@ All notable changes to mux are documented here.
   normalized base URL, uniquely named after the model.
 - `Mux.Core.Utility.OllamaModelLister` — a small utility that normalizes an Ollama base URL and lists a
   server's installed model names from `GET /api/tags`.
+- **Interactive MCP-server management** via a new `/mcp` command (aliases `/mcp-servers`, `/servers`;
+  also on the `F1` menu under **Model**). It opens a picker over the servers configured in
+  `mcp-servers.json` with **Add**, **Edit** (select a server row), and **Remove** (with confirmation)
+  actions. The add/edit form collects a name, a transport (`stdio` or `http`), and the transport-specific
+  fields — command / space-separated args / comma-separated `KEY=VALUE` env for `stdio`; url / mcp path
+  (default `/mcp`) for `http` — validating that `stdio` has a command and `http` has a url. Changes
+  persist to `mcp-servers.json`, with a notice that mux must be restarted for them to take effect.
 
 ### Changed
 
 - The endpoints / models picker now renders a blank separator row between the configured endpoints and
   the management actions (**Add endpoint**, **Edit endpoint**, **Remove endpoint**, and
   **Import from Ollama…**).
+- The interactive shell now keeps a one-column gutter between the transcript (and queue strip) and the
+  right-anchored sidebar, so the two panes no longer butt directly against each other.
 
 ## v0.3.0 - 2026-07-29
 

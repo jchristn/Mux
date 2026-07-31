@@ -140,6 +140,8 @@ Every command is also reachable by key binding and the `F1` menu (one catalog, t
 ```text
 /endpoint, /model                 Open the endpoints / models picker (also Ctrl+E)
 /endpoints, /models               Aliases for /endpoint
+/mcp, /mcp-servers, /servers      Open the MCP servers manager (add / edit / remove)
+/prompts                          Open the prompt-profile editor (also Ctrl+P)
 /sessions                         Browse and resume saved sessions
 /save                             Save the current session
 /theme                            Open the theme selector
@@ -163,7 +165,9 @@ Below the configured endpoints (which are separated from the actions by a blank 
 
 Any model whose model-plus-endpoint combination is already configured is left out of the checklist, so re-running the import never creates duplicates (the picker's title notes how many were already imported). Each selected model is saved to `endpoints.json` as a new `ollama` endpoint pointing at the normalized base URL, named after the model and de-duplicated against your existing endpoint names, and becomes selectable like any other endpoint.
 
-External search is configured in `settings.json` (Tavily or You.com); when at least one enabled provider is fully configured the `web_search` tool is enabled. `web_search` discovers candidate results; fetching the contents of a known URL is handled by `web_retrieve`. MCP servers are configured in `mcp-servers.json`.
+The `/mcp` command (aliases `/mcp-servers`, `/servers`; also on the `F1` menu under **Model**) opens the MCP servers manager, which edits `mcp-servers.json` through the same modal style as the endpoints picker. It lists the configured servers (separated from the actions by a blank row) above a **+ Add MCP server…** entry and, when servers exist, a **- Remove MCP server…** entry; selecting a server row opens its **Edit** form. **Add** and **Edit** run a guided form: a **name**, a **transport** (`stdio` or `http`), and the transport-specific fields — **command**, space-separated **args**, and comma-separated `KEY=VALUE` **env** for `stdio`; **url** and **mcp path** (default `/mcp`) for `http`. The form validates that a `stdio` server has a command and an `http` server has a url. **Remove** asks for confirmation. All changes persist to `mcp-servers.json`; because MCP servers are initialized when mux starts, a notice reminds you to restart mux for the change to take effect.
+
+External search is configured in `settings.json` (Tavily or You.com); when at least one enabled provider is fully configured the `web_search` tool is enabled. `web_search` discovers candidate results; fetching the contents of a known URL is handled by `web_retrieve`.
 
 ### Interactive Input
 
