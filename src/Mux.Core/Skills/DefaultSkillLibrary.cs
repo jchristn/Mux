@@ -5,9 +5,10 @@ namespace Mux.Core.Skills
     using System.IO;
 
     /// <summary>
-    /// The curated set of skills mux seeds into an empty skills directory on first run, so the feature is
-    /// useful immediately and every default doubles as a worked example. Each entry is a complete, valid
-    /// <c>SKILL.md</c>; <see cref="SeedInto"/> writes any that are missing without overwriting user edits.
+    /// The curated set of skills mux seeds into the skills directory, so the feature is useful immediately
+    /// and every default doubles as a worked example. Each entry is a complete, valid <c>SKILL.md</c>.
+    /// <see cref="SeedNewInto"/> is the startup path — it seeds newly shipped defaults on upgrade while
+    /// honoring deletions via a manifest; <see cref="SeedInto"/> is the simpler write-any-missing form.
     /// The git and .NET skills default to <c>pwsh</c> for cross-platform reach; a real machine needs the
     /// named interpreter installed to run them, but they always validate.
     /// </summary>
@@ -66,6 +67,100 @@ namespace Mux.Core.Skills
 
                 Directory.CreateDirectory(dir);
                 File.WriteAllText(Path.Combine(dir, "SKILL.md"), skill.Value);
+            }
+        }
+
+        /// <summary>
+        /// The name of the manifest file, stored inside the skills directory, that records which default ids
+        /// have ever been seeded. It is a dot-prefixed plain-text file (one id per line) and is ignored by
+        /// skill discovery, which only considers subdirectories containing a <c>SKILL.md</c>.
+        /// </summary>
+        public const string SeededManifestFileName = ".seeded-defaults";
+
+        /// <summary>
+        /// Seeds default skills that have never been seeded before, so newly shipped defaults arrive on
+        /// upgrade while a default the user has deliberately deleted is not resurrected. A default is seeded
+        /// only when its id is absent from the manifest; its id is then recorded regardless of whether its
+        /// directory already existed. Existing skill directories are never overwritten. The first time this
+        /// runs against a pre-existing library (no manifest yet), every default is treated as new, which is
+        /// what upgrades an older install to the full catalog.
+        /// </summary>
+        /// <param name="skillsDirectory">The skills directory. Must not be null.</param>
+        /// <returns>The ids of the defaults written by this call (empty when nothing was added).</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="skillsDirectory"/> is null.</exception>
+        public static IReadOnlyList<string> SeedNewInto(string skillsDirectory)
+        {
+            if (skillsDirectory == null) throw new ArgumentNullException(nameof(skillsDirectory));
+
+            Directory.CreateDirectory(skillsDirectory);
+            string manifestPath = Path.Combine(skillsDirectory, SeededManifestFileName);
+            HashSet<string> seeded = LoadSeededManifest(manifestPath);
+            List<string> added = new List<string>();
+            bool manifestChanged = false;
+
+            foreach (KeyValuePair<string, string> skill in All())
+            {
+                if (seeded.Contains(skill.Key))
+                {
+                    continue;
+                }
+
+                string dir = Path.Combine(skillsDirectory, skill.Key);
+                if (!Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                    File.WriteAllText(Path.Combine(dir, "SKILL.md"), skill.Value);
+                    added.Add(skill.Key);
+                }
+
+                seeded.Add(skill.Key);
+                manifestChanged = true;
+            }
+
+            if (manifestChanged)
+            {
+                SaveSeededManifest(manifestPath, seeded);
+            }
+
+            return added;
+        }
+
+        private static HashSet<string> LoadSeededManifest(string manifestPath)
+        {
+            HashSet<string> seeded = new HashSet<string>(StringComparer.Ordinal);
+            if (!File.Exists(manifestPath))
+            {
+                return seeded;
+            }
+
+            try
+            {
+                foreach (string line in File.ReadAllLines(manifestPath))
+                {
+                    string id = line.Trim();
+                    if (id.Length > 0)
+                    {
+                        seeded.Add(id);
+                    }
+                }
+            }
+            catch (IOException)
+            {
+            }
+
+            return seeded;
+        }
+
+        private static void SaveSeededManifest(string manifestPath, HashSet<string> seeded)
+        {
+            List<string> ids = new List<string>(seeded);
+            ids.Sort(StringComparer.Ordinal);
+            try
+            {
+                File.WriteAllLines(manifestPath, ids);
+            }
+            catch (IOException)
+            {
             }
         }
     }

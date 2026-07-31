@@ -60,6 +60,41 @@ namespace Test.Shared.Suites
                             return Task.CompletedTask;
                         })),
 
+                    Case("SeedNewIntoUpgradesExistingLibrary", "SeedNewInto adds newly shipped defaults to a pre-existing library", (CancellationToken ct) =>
+                        WithDirAsync((root) =>
+                        {
+                            // Simulate an older install that already has one default and no manifest.
+                            Directory.CreateDirectory(Path.Combine(root, "env-report"));
+                            File.WriteAllText(Path.Combine(root, "env-report", "SKILL.md"), "---\nname: env-report\n---\n");
+
+                            IReadOnlyList<string> added = DefaultSkillLibrary.SeedNewInto(root);
+
+                            int expected = DefaultSkillLibrary.All().Count;
+                            IReadOnlyList<Skill> skills = new SkillLoader(root).Discover();
+                            MuxAssert.AreEqual(expected, skills.Count, "the full catalog is present after upgrade");
+                            // Everything except the pre-existing env-report was written this run.
+                            MuxAssert.AreEqual(expected - 1, added.Count, "every missing default was added");
+                            MuxAssert.IsFalse(added.Contains("env-report"), "the pre-existing skill was not rewritten");
+                            return Task.CompletedTask;
+                        })),
+
+                    Case("SeedNewIntoDoesNotResurrectDeleted", "SeedNewInto does not re-create a default the user has deleted", (CancellationToken ct) =>
+                        WithDirAsync((root) =>
+                        {
+                            DefaultSkillLibrary.SeedNewInto(root);
+                            int full = Directory.GetDirectories(root).Length;
+
+                            // The user removes a default; the manifest still records it as seeded.
+                            Directory.Delete(Path.Combine(root, "env-report"), true);
+
+                            IReadOnlyList<string> added = DefaultSkillLibrary.SeedNewInto(root);
+
+                            MuxAssert.AreEqual(0, added.Count, "nothing is added on a steady-state re-seed");
+                            MuxAssert.IsFalse(Directory.Exists(Path.Combine(root, "env-report")), "the deleted default stays deleted");
+                            MuxAssert.AreEqual(full - 1, Directory.GetDirectories(root).Length, "no directory was resurrected");
+                            return Task.CompletedTask;
+                        })),
+
                     Case("NodeDefaultRuns", "The json-validate default runs and reports valid and invalid JSON", (CancellationToken ct) =>
                         WithDirAsync(async (root) =>
                         {

@@ -137,12 +137,12 @@ namespace Mux.Core.Settings
                 File.WriteAllText(promptsPath, defaultPrompts);
             }
 
+            // Seed on every run, not just first creation, so defaults shipped in a later release appear on
+            // upgrade. SeedNewInto tracks which defaults have been seeded in a manifest, so a default the
+            // user has deleted is not resurrected and existing edits are never overwritten.
             string skillsDir = Path.Combine(configDir, "skills");
-            if (!Directory.Exists(skillsDir))
-            {
-                Directory.CreateDirectory(skillsDir);
-                Mux.Core.Skills.DefaultSkillLibrary.SeedInto(skillsDir);
-            }
+            Directory.CreateDirectory(skillsDir);
+            Mux.Core.Skills.DefaultSkillLibrary.SeedNewInto(skillsDir);
         }
 
         /// <summary>
