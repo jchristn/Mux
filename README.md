@@ -32,6 +32,19 @@
 
 `mux` does not install or manage model runners. You bring your own local or remote inference backend, and `mux` connects to it.
 
+## Screenshots
+
+<details>
+<summary>Click to expand</summary>
+
+<p align="center"><img src="assets/ss1.png" alt="mux screenshot 1" width="900"></p>
+<p align="center"><img src="assets/ss2.png" alt="mux screenshot 2" width="900"></p>
+<p align="center"><img src="assets/ss3.png" alt="mux screenshot 3" width="900"></p>
+<p align="center"><img src="assets/ss4.png" alt="mux screenshot 4" width="900"></p>
+<p align="center"><img src="assets/ss5.png" alt="mux screenshot 5" width="900"></p>
+
+</details>
+
 ## Highlights
 
 - Backend-agnostic: one CLI for local and remote model runners
