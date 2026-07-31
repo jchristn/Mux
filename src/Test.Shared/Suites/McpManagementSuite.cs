@@ -132,18 +132,23 @@ namespace Test.Shared.Suites
 
         private static async Task WithConfigDirAsync(Func<string, Task> body)
         {
+            // Isolate the config directory via the AsyncLocal override rather than the process-global
+            // MUX_CONFIG_DIR env var. The override flows with the async context (including the modal
+            // resolution continuations spawned on the thread pool, via ExecutionContext), so a fire-and-forget
+            // UI continuation that outlives this test still writes into this test's own temp directory instead
+            // of racing another test's config through the shared env var.
             string dir = Path.Combine(Path.GetTempPath(), "mux-mcp-" + Guid.NewGuid().ToString("N"));
-            string? previous = Environment.GetEnvironmentVariable("MUX_CONFIG_DIR");
-            Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", dir);
             Directory.CreateDirectory(dir);
-            try
+            using (SettingsLoader.PushConfigDirectoryOverride(dir))
             {
-                await body(dir).ConfigureAwait(false);
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", previous);
-                TryDelete(dir);
+                try
+                {
+                    await body(dir).ConfigureAwait(false);
+                }
+                finally
+                {
+                    TryDelete(dir);
+                }
             }
         }
 
