@@ -117,6 +117,7 @@ namespace Mux.Cli.App
         /// <param name="endpointName">The effective endpoint name (shown in the sidebar, recorded in sessions).</param>
         /// <param name="model">The effective model (recorded in sessions).</param>
         /// <param name="onEndpointSelected">Optional callback invoked when the user switches endpoints, so the caller can apply it to future runs. Null disables live switching.</param>
+        /// <param name="onPromptProfileSelected">Optional callback invoked when the user applies a prompt profile, so the caller can substitute placeholders and apply it to future runs. Null disables live prompt switching.</param>
         /// <param name="showSplash">When true, opens the startup splash modal.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
