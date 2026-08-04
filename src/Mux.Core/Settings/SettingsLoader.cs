@@ -460,7 +460,7 @@ namespace Mux.Core.Settings
                 return new List<McpServerConfig>();
             }
 
-            string json = File.ReadAllText(filePath);
+            string json = ReadAllTextShared(filePath);
             McpServersFile? file = JsonSerializer.Deserialize<McpServersFile>(json, _JsonOptions);
             if (file == null || file.Servers == null)
             {
@@ -489,7 +489,7 @@ namespace Mux.Core.Settings
             };
 
             string json = JsonSerializer.Serialize(file, _JsonWriteOptions);
-            File.WriteAllText(Path.Combine(GetConfigDirectory(), "mcp-servers.json"), json);
+            WriteAllTextAtomic(Path.Combine(GetConfigDirectory(), "mcp-servers.json"), json);
         }
 
         /// <summary>
