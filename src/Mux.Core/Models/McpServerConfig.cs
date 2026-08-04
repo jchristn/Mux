@@ -19,6 +19,7 @@ namespace Mux.Core.Models
         private Dictionary<string, string> _Env = new Dictionary<string, string>();
         private string _Url = string.Empty;
         private string _McpPath = "/mcp";
+        private McpAuthConfig _Auth = new McpAuthConfig();
 
         #endregion
 
@@ -103,6 +104,17 @@ namespace Mux.Core.Models
         {
             get => _McpPath;
             set => _McpPath = string.IsNullOrWhiteSpace(value) ? "/mcp" : value;
+        }
+
+        /// <summary>
+        /// Authentication used when connecting to an HTTP MCP server. Ignored for stdio servers.
+        /// Never null.
+        /// </summary>
+        [JsonPropertyName("auth")]
+        public McpAuthConfig Auth
+        {
+            get => _Auth;
+            set => _Auth = value ?? new McpAuthConfig();
         }
 
         #endregion

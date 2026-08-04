@@ -411,6 +411,7 @@ namespace Mux.Core.Tools
             }
 
             McpHttpClient client = new McpHttpClient();
+            ApplyAuthHeaders(client, config.Auth);
             bool connected = await client.ConnectStreamableAsync(config.Url, NormalizeMcpPath(config.McpPath), cancellationToken).ConfigureAwait(false);
             if (!connected)
             {
@@ -419,6 +420,40 @@ namespace Mux.Core.Tools
             }
 
             return new HttpMcpClientConnection(client);
+        }
+
+        private static void ApplyAuthHeaders(McpHttpClient client, McpAuthConfig? auth)
+        {
+            if (auth == null)
+            {
+                return;
+            }
+
+            switch (auth.Type)
+            {
+                case McpAuthTypeEnum.Bearer:
+                    string token = SettingsLoader.ExpandEnvironmentVariables(auth.BearerToken);
+                    if (!string.IsNullOrWhiteSpace(token))
+                    {
+                        client.SetRequestHeader("Authorization", "Bearer " + token);
+                    }
+
+                    break;
+
+                case McpAuthTypeEnum.ApiKey:
+                    string header = string.IsNullOrWhiteSpace(auth.ApiKeyHeader) ? "X-API-Key" : auth.ApiKeyHeader;
+                    string value = SettingsLoader.ExpandEnvironmentVariables(auth.ApiKeyValue);
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        client.SetRequestHeader(header, value);
+                    }
+
+                    break;
+
+                case McpAuthTypeEnum.None:
+                default:
+                    break;
+            }
         }
 
         private static McpServerConfig CloneConfig(McpServerConfig source)
@@ -431,7 +466,24 @@ namespace Mux.Core.Tools
                 Args = new List<string>(source.Args ?? new List<string>()),
                 Env = new Dictionary<string, string>(source.Env ?? new Dictionary<string, string>()),
                 Url = source.Url,
-                McpPath = NormalizeMcpPath(source.McpPath)
+                McpPath = NormalizeMcpPath(source.McpPath),
+                Auth = CloneAuth(source.Auth)
+            };
+        }
+
+        private static McpAuthConfig CloneAuth(McpAuthConfig? source)
+        {
+            if (source == null)
+            {
+                return new McpAuthConfig();
+            }
+
+            return new McpAuthConfig
+            {
+                Type = source.Type,
+                BearerToken = source.BearerToken,
+                ApiKeyHeader = source.ApiKeyHeader,
+                ApiKeyValue = source.ApiKeyValue
             };
         }
 

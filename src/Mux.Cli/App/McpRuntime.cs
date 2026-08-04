@@ -408,11 +408,28 @@ namespace Mux.Cli.App
                     Args = new List<string>(config.Args ?? new List<string>()),
                     Env = new Dictionary<string, string>(config.Env ?? new Dictionary<string, string>()),
                     Url = config.Url,
-                    McpPath = config.McpPath
+                    McpPath = config.McpPath,
+                    Auth = CloneAuth(config.Auth)
                 });
             }
 
             return clones;
+        }
+
+        private static McpAuthConfig CloneAuth(McpAuthConfig? source)
+        {
+            if (source == null)
+            {
+                return new McpAuthConfig();
+            }
+
+            return new McpAuthConfig
+            {
+                Type = source.Type,
+                BearerToken = source.BearerToken,
+                ApiKeyHeader = source.ApiKeyHeader,
+                ApiKeyValue = source.ApiKeyValue
+            };
         }
 
         #endregion

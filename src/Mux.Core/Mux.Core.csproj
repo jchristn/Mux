@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>0.5.0</Version>
+    <Version>0.6.0</Version>
     <Description>Core models, agent loop, tools, and LLM client for mux</Description>
     <PackageId>Mux.Core</PackageId>
   </PropertyGroup>
@@ -9,7 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Playwright" Version="1.59.0" />
     <PackageReference Include="PolyPrompt" Version="2.0.1" />
-    <PackageReference Include="Voltaic" Version="0.4.0" />
+    <PackageReference Include="Voltaic" Version="0.5.1" />
   </ItemGroup>
 
   <ItemGroup>

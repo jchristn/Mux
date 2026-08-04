@@ -10,12 +10,13 @@ namespace Mux.Cli.App
     using TUIKit.Widgets;
 
     /// <summary>
-    /// A single modal form for creating or editing an MCP server. It hosts a <see cref="Form"/> with
-    /// fields for the name, transport, and the transport-specific settings (command / args / env for
-    /// <c>stdio</c>; url / mcp path for <c>http</c>), navigated with Tab; Enter validates and returns a
+    /// A single modal form for creating or editing an MCP server. It hosts a <see cref="Form"/> whose
+    /// fields change with the selected transport: <c>stdio</c> shows command / args / env, while
+    /// <c>http</c> shows url / mcp path plus an authentication section (none / bearer token / API key).
+    /// The fields for the other transport are never shown, so switching transports cannot leave stale
+    /// values on screen. Tab or the arrow keys move between fields; Enter validates and returns a
     /// populated <see cref="McpServerConfig"/> (via <see cref="Modal.Completion"/>), and Escape cancels
-    /// (returns null). Both transports' fields are always shown; validation and the built result depend
-    /// on the selected transport.
+    /// (returns null). Changing the transport or the auth type rebuilds the field list in place.
     /// </summary>
     public sealed class McpServerFormModal : Modal
     {
@@ -24,11 +25,16 @@ namespace Mux.Cli.App
         private const int PadX = 3;
         private const int PadY = 1;
         private const int ContentWidth = 46;
+        private const char MaskChar = '•';
+
+        // Fixed field indices used to restore focus to a selector after the form is rebuilt.
+        private const int TransportFieldIndex = 1;
+        private const int AuthFieldIndex = 4; // Name, Transport, URL, MCP path, Auth (http layout only).
 
         private static readonly string[] _Transports = { "stdio", "http" };
+        private static readonly string[] _AuthTypes = { "none", "bearer", "apikey" };
 
         private readonly string _Title;
-        private readonly Form _Form;
         private readonly TextField _Name;
         private readonly RadioGroup _Transport;
         private readonly TextField _Command;
@@ -36,6 +42,13 @@ namespace Mux.Cli.App
         private readonly TextField _Env;
         private readonly TextField _Url;
         private readonly TextField _McpPath;
+        private readonly RadioGroup _AuthType;
+        private readonly TextField _BearerToken;
+        private readonly TextField _ApiKeyHeader;
+        private readonly TextField _ApiKeyValue;
+
+        private Form _Form;
+        private int _FormHeight;
         private string _Error = string.Empty;
 
         #endregion
@@ -58,35 +71,33 @@ namespace Mux.Cli.App
             _Env = new TextField();
             _Url = new TextField();
             _McpPath = new TextField();
+            _AuthType = new RadioGroup(_AuthTypes);
+            _BearerToken = new TextField { MaskChar = MaskChar };
+            _ApiKeyHeader = new TextField();
+            _ApiKeyValue = new TextField { MaskChar = MaskChar };
+
+            _ApiKeyHeader.Value = "X-API-Key";
+            _McpPath.Value = "/mcp";
 
             if (existing != null)
             {
                 _Name.Value = existing.Name;
-                int target = IndexOfTransport(existing.Transport);
-                for (int i = 0; i < target; i++)
-                {
-                    _Transport.HandleKey(KeyEvent.Special(KeyCode.Down));
-                }
+                SelectRadio(_Transport, IndexOfTransport(existing.Transport));
 
                 _Command.Value = existing.Command;
                 _Args.Value = existing.Args != null ? string.Join(" ", existing.Args) : string.Empty;
                 _Env.Value = FormatEnv(existing.Env);
                 _Url.Value = existing.Url;
                 _McpPath.Value = string.IsNullOrWhiteSpace(existing.McpPath) ? "/mcp" : existing.McpPath;
-            }
-            else
-            {
-                _McpPath.Value = "/mcp";
+
+                McpAuthConfig auth = existing.Auth ?? new McpAuthConfig();
+                SelectRadio(_AuthType, IndexOfAuthType(auth.Type));
+                _BearerToken.Value = auth.BearerToken ?? string.Empty;
+                _ApiKeyHeader.Value = string.IsNullOrWhiteSpace(auth.ApiKeyHeader) ? "X-API-Key" : auth.ApiKeyHeader;
+                _ApiKeyValue.Value = auth.ApiKeyValue ?? string.Empty;
             }
 
-            _Form = new Form();
-            _Form.Add("Name", _Name, () => _Name.Value.Trim().Length == 0 ? "Name is required." : null);
-            _Form.Add("Transport", _Transport);
-            _Form.Add("Command (stdio)", _Command, ValidateCommand);
-            _Form.Add("Args (space-separated)", _Args);
-            _Form.Add("Env (KEY=VALUE, comma-sep)", _Env);
-            _Form.Add("URL (http)", _Url, ValidateUrl);
-            _Form.Add("MCP path (http)", _McpPath);
+            _Form = BuildForm();
         }
 
         #endregion
@@ -108,7 +119,20 @@ namespace Mux.Cli.App
                 return true;
             }
 
-            return _Form.HandleKey(key);
+            int previousTransport = _Transport.SelectedIndex;
+            int previousAuth = _AuthType.SelectedIndex;
+            bool handled = _Form.HandleKey(key);
+
+            if (_Transport.SelectedIndex != previousTransport)
+            {
+                RebuildForm(TransportFieldIndex);
+            }
+            else if (_AuthType.SelectedIndex != previousAuth)
+            {
+                RebuildForm(AuthFieldIndex);
+            }
+
+            return handled;
         }
 
         /// <inheritdoc/>
@@ -119,7 +143,7 @@ namespace Mux.Cli.App
             int screenWidth = surface.Size.Width;
             int screenHeight = surface.Size.Height;
 
-            int formHeight = EstimateFormHeight();
+            int formHeight = _FormHeight;
             int hintRows = 2; // blank + hint/error
             int contentWidth = Math.Max(8, Math.Min(ContentWidth, screenWidth - 2 - (2 * PadX)));
             int boxWidth = Math.Min(screenWidth, contentWidth + 2 + (2 * PadX));
@@ -167,18 +191,69 @@ namespace Mux.Cli.App
 
         #region Private-Methods
 
-        private string? ValidateCommand()
+        private Form BuildForm()
         {
-            return ParseTransport(_Transport.SelectedOption) == McpTransportTypeEnum.Stdio && _Command.Value.Trim().Length == 0
-                ? "Command is required for stdio."
-                : null;
+            Form form = new Form();
+            int height = 0;
+
+            form.Add("Name", _Name, () => _Name.Value.Trim().Length == 0 ? "Name is required." : null);
+            height += FieldHeight(1);
+            form.Add("Transport", _Transport);
+            height += FieldHeight(_Transports.Length);
+
+            if (ParseTransport(_Transport.SelectedOption) == McpTransportTypeEnum.Stdio)
+            {
+                form.Add("Command (stdio)", _Command, () => _Command.Value.Trim().Length == 0 ? "Command is required for stdio." : null);
+                height += FieldHeight(1);
+                form.Add("Args (space-separated)", _Args);
+                height += FieldHeight(1);
+                form.Add("Env (KEY=VALUE, comma-sep)", _Env);
+                height += FieldHeight(1);
+            }
+            else
+            {
+                form.Add("URL (http)", _Url, () => _Url.Value.Trim().Length == 0 ? "URL is required for http." : null);
+                height += FieldHeight(1);
+                form.Add("MCP path (http)", _McpPath);
+                height += FieldHeight(1);
+                form.Add("Auth (none/bearer/apikey)", _AuthType);
+                height += FieldHeight(_AuthTypes.Length);
+
+                switch (ParseAuthType(_AuthType.SelectedOption))
+                {
+                    case McpAuthTypeEnum.Bearer:
+                        form.Add("Bearer token", _BearerToken, () => _BearerToken.Value.Trim().Length == 0 ? "Bearer token is required." : null);
+                        height += FieldHeight(1);
+                        break;
+
+                    case McpAuthTypeEnum.ApiKey:
+                        form.Add("API key header", _ApiKeyHeader, () => _ApiKeyHeader.Value.Trim().Length == 0 ? "API key header is required." : null);
+                        height += FieldHeight(1);
+                        form.Add("API key value", _ApiKeyValue, () => _ApiKeyValue.Value.Trim().Length == 0 ? "API key value is required." : null);
+                        height += FieldHeight(1);
+                        break;
+
+                    case McpAuthTypeEnum.None:
+                    default:
+                        break;
+                }
+            }
+
+            _FormHeight = height;
+            return form;
         }
 
-        private string? ValidateUrl()
+        private void RebuildForm(int focusIndex)
         {
-            return ParseTransport(_Transport.SelectedOption) == McpTransportTypeEnum.Http && _Url.Value.Trim().Length == 0
-                ? "URL is required for http."
-                : null;
+            _Form = BuildForm();
+
+            // A freshly built form focuses its first field; advance focus to the selector that changed
+            // so the user can keep adjusting it and watch the dependent fields update.
+            int target = Math.Min(focusIndex, _Form.FieldCount - 1);
+            for (int i = 0; i < target; i++)
+            {
+                _Form.HandleKey(KeyEvent.Special(KeyCode.Tab));
+            }
         }
 
         private void Submit()
@@ -208,23 +283,48 @@ namespace Mux.Cli.App
             {
                 server.Url = _Url.Value.Trim();
                 server.McpPath = string.IsNullOrWhiteSpace(_McpPath.Value) ? "/mcp" : _McpPath.Value.Trim();
+                server.Auth = BuildAuth();
             }
 
             Close(server);
         }
 
-        private int EstimateFormHeight()
+        private McpAuthConfig BuildAuth()
         {
-            // Each field renders a label row plus its widget height plus a spacing row.
-            int height = 0;
-            height += 1 + 1 + 1;                  // Name
-            height += 1 + _Transports.Length + 1; // Transport (one row per option)
-            height += 1 + 1 + 1;                  // Command
-            height += 1 + 1 + 1;                  // Args
-            height += 1 + 1 + 1;                  // Env
-            height += 1 + 1 + 1;                  // URL
-            height += 1 + 1 + 1;                  // MCP path
-            return height;
+            McpAuthTypeEnum type = ParseAuthType(_AuthType.SelectedOption);
+            McpAuthConfig auth = new McpAuthConfig { Type = type };
+
+            switch (type)
+            {
+                case McpAuthTypeEnum.Bearer:
+                    auth.BearerToken = _BearerToken.Value.Trim();
+                    break;
+
+                case McpAuthTypeEnum.ApiKey:
+                    auth.ApiKeyHeader = string.IsNullOrWhiteSpace(_ApiKeyHeader.Value) ? "X-API-Key" : _ApiKeyHeader.Value.Trim();
+                    auth.ApiKeyValue = _ApiKeyValue.Value.Trim();
+                    break;
+
+                case McpAuthTypeEnum.None:
+                default:
+                    break;
+            }
+
+            return auth;
+        }
+
+        private static int FieldHeight(int widgetHeight)
+        {
+            // A field renders a label row, the widget, and a spacing row.
+            return 1 + widgetHeight + 1;
+        }
+
+        private static void SelectRadio(RadioGroup group, int targetIndex)
+        {
+            for (int i = 0; i < targetIndex; i++)
+            {
+                group.HandleKey(KeyEvent.Special(KeyCode.Down));
+            }
         }
 
         private static int IndexOfTransport(McpTransportTypeEnum transport)
@@ -237,6 +337,31 @@ namespace Mux.Cli.App
             return string.Equals(transport, "http", StringComparison.OrdinalIgnoreCase)
                 ? McpTransportTypeEnum.Http
                 : McpTransportTypeEnum.Stdio;
+        }
+
+        private static int IndexOfAuthType(McpAuthTypeEnum type)
+        {
+            return type switch
+            {
+                McpAuthTypeEnum.Bearer => 1,
+                McpAuthTypeEnum.ApiKey => 2,
+                _ => 0
+            };
+        }
+
+        private static McpAuthTypeEnum ParseAuthType(string type)
+        {
+            if (string.Equals(type, "bearer", StringComparison.OrdinalIgnoreCase))
+            {
+                return McpAuthTypeEnum.Bearer;
+            }
+
+            if (string.Equals(type, "apikey", StringComparison.OrdinalIgnoreCase))
+            {
+                return McpAuthTypeEnum.ApiKey;
+            }
+
+            return McpAuthTypeEnum.None;
         }
 
         private static List<string> ParseArgs(string value)

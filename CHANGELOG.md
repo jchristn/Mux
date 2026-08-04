@@ -2,6 +2,25 @@
 
 All notable changes to mux are documented here.
 
+## v0.6.0 - 2026-08-04
+
+### Added
+
+- **HTTP MCP server authentication.** When configuring an HTTP MCP server through `/mcp`, you can now
+  choose an auth scheme — none, a bearer token, or an API key sent in a caller-specified header
+  (default `X-API-Key`). The credential is persisted in `mcp-servers.json` under the server's `auth`
+  object and attached to every request the client makes to that server (via `SetRequestHeader`),
+  including the connection handshake. Token and API-key values support `${VAR}` environment-variable
+  expansion, so secrets can be referenced from the environment instead of stored in plaintext. Secret
+  fields are masked in the form.
+
+### Fixed
+
+- **The MCP server form no longer mixes transports.** The add/edit form now shows only the selected
+  transport's fields — command / args / env for `stdio`, or url / mcp-path / auth for `http` — so
+  switching transports no longer leaves the other transport's stale values on screen. Only the fields
+  relevant to the chosen transport are collected and persisted.
+
 ## v0.5.0 - 2026-07-31
 
 ### Added

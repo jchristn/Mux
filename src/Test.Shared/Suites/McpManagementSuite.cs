@@ -97,6 +97,93 @@ namespace Test.Shared.Suites
                             }
                         })),
 
+                    Case("AuthConfigRoundTrips", "An HTTP server's auth config survives save and load", (CancellationToken ct) =>
+                        WithConfigDirAsync(async dir =>
+                        {
+                            Seed(new McpServerConfig
+                            {
+                                Name = "authsrv",
+                                Transport = McpTransportTypeEnum.Http,
+                                Url = "http://localhost:9000",
+                                McpPath = "/mcp",
+                                Auth = new McpAuthConfig
+                                {
+                                    Type = McpAuthTypeEnum.ApiKey,
+                                    ApiKeyHeader = "X-Custom-Key",
+                                    ApiKeyValue = "secret-123"
+                                }
+                            });
+
+                            McpServerConfig? loaded = GetServer("authsrv");
+                            MuxAssert.IsNotNull(loaded, "server loaded");
+                            MuxAssert.AreEqual(McpTransportTypeEnum.Http, loaded!.Transport, "transport");
+                            MuxAssert.AreEqual(McpAuthTypeEnum.ApiKey, loaded.Auth.Type, "auth type");
+                            MuxAssert.AreEqual("X-Custom-Key", loaded.Auth.ApiKeyHeader, "api key header");
+                            MuxAssert.AreEqual("secret-123", loaded.Auth.ApiKeyValue, "api key value");
+                            await Task.CompletedTask.ConfigureAwait(false);
+                        })),
+
+                    Case("SwitchTransportClearsStaleFields", "Editing a stdio server to http clears the stale command", (CancellationToken ct) =>
+                        WithConfigDirAsync(async dir =>
+                        {
+                            Seed(Server("solo", "old-cmd"));
+                            await using (JobManager manager = NewManager())
+                            using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager))
+                            {
+                                Feed(backend, app, "/mcp" + "\r");
+                                await WaitModal(app, ct).ConfigureAwait(false);
+                                Feed(backend, app, "\r");            // edit "solo" -> form (stdio, command=old-cmd)
+                                await WaitModal(app, ct).ConfigureAwait(false);
+
+                                Feed(backend, app, "\t");            // Name -> Transport
+                                Feed(backend, app, Esc + "[B");      // Down: stdio -> http (fields rebuild)
+                                Feed(backend, app, "\t");            // Transport -> URL
+                                Feed(backend, app, "http://localhost:9000");
+                                Feed(backend, app, "\r");            // save
+
+                                await WaitUntilAsync(() => GetServer("solo")?.Transport == McpTransportTypeEnum.Http, ct).ConfigureAwait(false);
+                                McpServerConfig? saved = GetServer("solo");
+                                MuxAssert.IsNotNull(saved, "server saved");
+                                MuxAssert.AreEqual(McpTransportTypeEnum.Http, saved!.Transport, "transport switched to http");
+                                MuxAssert.AreEqual("http://localhost:9000", saved.Url, "url saved");
+                                MuxAssert.AreEqual(string.Empty, saved.Command, "stale stdio command cleared");
+                            }
+                        })),
+
+                    Case("AddHttpServerWithBearerAuthPersists", "The add form persists an http server with bearer auth and no stdio fields", (CancellationToken ct) =>
+                        WithConfigDirAsync(async dir =>
+                        {
+                            await using (JobManager manager = NewManager())
+                            using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager))
+                            {
+                                Feed(backend, app, "/mcp" + "\r");
+                                await WaitModal(app, ct).ConfigureAwait(false);
+                                Feed(backend, app, "\r");            // Add -> form
+                                await WaitModal(app, ct).ConfigureAwait(false);
+
+                                Feed(backend, app, "bearsrv");       // Name
+                                Feed(backend, app, "\t");            // Name -> Transport
+                                Feed(backend, app, Esc + "[B");      // Down: stdio -> http
+                                Feed(backend, app, "\t");            // Transport -> URL
+                                Feed(backend, app, "http://localhost:9200");
+                                Feed(backend, app, "\t");            // URL -> MCP path (leave /mcp)
+                                Feed(backend, app, "\t");            // MCP path -> Auth
+                                Feed(backend, app, Esc + "[B");      // Down: none -> bearer (token field appears)
+                                Feed(backend, app, "\t");            // Auth -> Bearer token
+                                Feed(backend, app, "tok-abc");
+                                Feed(backend, app, "\r");            // save
+
+                                await WaitUntilAsync(() => GetServer("bearsrv") != null, ct).ConfigureAwait(false);
+                                McpServerConfig? saved = GetServer("bearsrv");
+                                MuxAssert.IsNotNull(saved, "server saved");
+                                MuxAssert.AreEqual(McpTransportTypeEnum.Http, saved!.Transport, "transport is http");
+                                MuxAssert.AreEqual("http://localhost:9200", saved.Url, "url saved");
+                                MuxAssert.AreEqual(McpAuthTypeEnum.Bearer, saved.Auth.Type, "auth type is bearer");
+                                MuxAssert.AreEqual("tok-abc", saved.Auth.BearerToken, "bearer token saved");
+                                MuxAssert.AreEqual(string.Empty, saved.Command, "no stdio command persisted");
+                            }
+                        })),
+
                     Case("RemoveMcpServerDeletes", "The remove flow deletes the chosen server after confirmation", (CancellationToken ct) =>
                         WithConfigDirAsync(async dir =>
                         {
@@ -190,6 +277,19 @@ namespace Test.Shared.Suites
             }
 
             return false;
+        }
+
+        private static McpServerConfig? GetServer(string name)
+        {
+            foreach (McpServerConfig server in SettingsLoader.LoadMcpServers())
+            {
+                if (string.Equals(server.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return server;
+                }
+            }
+
+            return null;
         }
 
         private static bool ServerCommandContains(string name, string commandSubstring)
