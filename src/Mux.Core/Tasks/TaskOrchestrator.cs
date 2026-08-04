@@ -83,10 +83,13 @@ namespace Mux.Core.Tasks
                         break;
                     }
 
-                    if (InFlightCount() == 0)
+                    if (InFlightCount() == 0 && _Plan.ReadyTasks().Count == 0)
                     {
-                        // Nothing running and nothing ready: a failed or blocked dependency has stalled the
-                        // remaining tasks. Stop rather than wait forever.
+                        // Nothing running and nothing ready to dispatch: a failed or blocked dependency has
+                        // stalled the remaining tasks. Stop rather than wait forever. The ready check is
+                        // essential — when a dependency's job completes fast enough to be reconciled in the
+                        // same iteration it was dispatched, in-flight can momentarily hit zero while a
+                        // now-ready dependent is still pending; breaking here would orphan it.
                         break;
                     }
 
