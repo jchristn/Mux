@@ -183,7 +183,7 @@ namespace Mux.Cli.App
             }
             else
             {
-                surface.DrawText(contentX, hintRow, Trim("Tab/↑↓ to move · Enter to save · Esc to cancel", contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(8)));
+                surface.DrawText(contentX, hintRow, Trim("Tab/↑↓ move · Enter save · Esc cancel", contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(8)));
             }
         }
 

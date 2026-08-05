@@ -2002,17 +2002,44 @@ namespace Mux.Cli.App
             options.Add("⬇ Import from Ollama…");
             actions.Add(EndpointMenuAction.Import);
 
-            SelectModal modal = new SelectModal("Endpoints / models — Enter to switch", options);
+            EndpointSelectModal modal = new EndpointSelectModal("Endpoints / models", options, endpoints.Count);
             _App.Modals.Push(modal);
             _ = ResolveEndpointModalAsync(modal, endpoints, actions);
         }
 
-        private async Task ResolveEndpointModalAsync(SelectModal modal, List<EndpointConfig> endpoints, List<EndpointMenuAction> actions)
+        private async Task ResolveEndpointModalAsync(EndpointSelectModal modal, List<EndpointConfig> endpoints, List<EndpointMenuAction> actions)
         {
             object? result = await modal.Completion.ConfigureAwait(false);
-            int index = result is int value ? value : -1;
+            if (!(result is EndpointModalResult choice))
+            {
+                return;
+            }
+
+            int index = choice.Index;
             if (index < 0 || index >= actions.Count)
             {
+                return;
+            }
+
+            // The e/d/Delete shortcuts act on the highlighted endpoint directly, skipping the "which
+            // endpoint?" picker the management rows use.
+            if (choice.Activation == EndpointModalActivationEnum.Edit)
+            {
+                if (index < endpoints.Count)
+                {
+                    await EditEndpointAsync(endpoints[index]).ConfigureAwait(false);
+                }
+
+                return;
+            }
+
+            if (choice.Activation == EndpointModalActivationEnum.Remove)
+            {
+                if (index < endpoints.Count)
+                {
+                    await RemoveEndpointConfirmAsync(endpoints[index]).ConfigureAwait(false);
+                }
+
                 return;
             }
 
@@ -2085,7 +2112,11 @@ namespace Mux.Cli.App
                 return;
             }
 
-            EndpointConfig original = endpoints[pickIndex];
+            await EditEndpointAsync(endpoints[pickIndex]).ConfigureAwait(false);
+        }
+
+        private async Task EditEndpointAsync(EndpointConfig original)
+        {
             EndpointFormModal modal = new EndpointFormModal($"Edit {original.Name}", original);
             _App.Modals.Push(modal);
             object? result = await modal.Completion.ConfigureAwait(false);
@@ -2114,6 +2145,17 @@ namespace Mux.Cli.App
             if (!string.IsNullOrEmpty(previousName) && !string.Equals(previousName, endpoint.Name, StringComparison.OrdinalIgnoreCase))
             {
                 endpoints.RemoveAll(e => string.Equals(e.Name, previousName, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Enforce a single default: when this endpoint is marked default, demote every other one so the
+            // saved list has exactly one, regardless of position (LoadEndpoints keeps the first default it
+            // finds and would otherwise demote this appended entry on the next load).
+            if (endpoint.IsDefault)
+            {
+                foreach (EndpointConfig other in endpoints)
+                {
+                    other.IsDefault = false;
+                }
             }
 
             endpoints.Add(endpoint);
@@ -2147,7 +2189,12 @@ namespace Mux.Cli.App
                 return;
             }
 
-            string name = endpoints[pickIndex].Name;
+            await RemoveEndpointConfirmAsync(endpoints[pickIndex]).ConfigureAwait(false);
+        }
+
+        private async Task RemoveEndpointConfirmAsync(EndpointConfig endpoint)
+        {
+            string name = endpoint.Name;
             MessageModal confirm = new MessageModal("Remove endpoint", $"Remove '{name}'?", new List<string> { "Remove", "Cancel" });
             _App.Modals.Push(confirm);
             object? confirmResult = await confirm.Completion.ConfigureAwait(false);

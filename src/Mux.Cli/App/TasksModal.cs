@@ -96,8 +96,9 @@ namespace Mux.Cli.App
             int screenHeight = surface.Size.Height;
 
             int contentWidth = Math.Max(8, Math.Min(ContentWidth, screenWidth - 2 - (2 * PadX)));
+            IReadOnlyList<string> hintLines = HintText.Wrap("↑↓ move · c complete · i start · b block · k skip · p pending · n note · Esc done", contentWidth);
             int listRows = Math.Max(1, _Tasks.Count);
-            int bodyRows = 1 /* header */ + 1 /* hint */ + 1 /* blank */ + listRows;
+            int bodyRows = 1 /* header */ + hintLines.Count /* hint */ + 1 /* blank */ + listRows;
             int boxHeight = Math.Min(screenHeight, bodyRows + 2 + (2 * PadY));
             int boxWidth = Math.Min(screenWidth, contentWidth + 2 + (2 * PadX));
 
@@ -113,8 +114,13 @@ namespace Mux.Cli.App
 
             surface.DrawText(contentX, row, Trim($"{CompletedCount()}/{_Tasks.Count} complete", contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(7)));
             row++;
-            surface.DrawText(contentX, row, Trim("↑↓ move · c complete · i start · b block · k skip · p pending · n note · Esc done", contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(8)));
-            row += 2;
+            foreach (string hintLine in hintLines)
+            {
+                surface.DrawText(contentX, row, Trim(hintLine, contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(8)));
+                row++;
+            }
+
+            row++; // blank separator before the task list
 
             if (_Tasks.Count == 0)
             {

@@ -134,6 +134,25 @@ namespace Mux.Cli.App
             int row = boxY + 1 + PadY;
             int bottomHintRow = boxY + boxHeight - 2;
 
+            // Resolve the footer hint up front so the editor area can reserve room for however many lines it
+            // wraps to at this width; a long hint spills onto another line instead of being truncated.
+            string hint;
+            if (_Naming)
+            {
+                hint = "name — Enter to confirm · Esc cancel";
+            }
+            else if (_Editing)
+            {
+                hint = "editing — Esc to stop";
+            }
+            else
+            {
+                hint = "←→ profile · Tab field · e/Enter edit · Space activate · a add · r rename · x remove · Esc save & close";
+            }
+
+            IReadOnlyList<string> hintLines = HintText.Wrap(hint, contentWidth);
+            int firstHintRow = bottomHintRow - hintLines.Count + 1;
+
             // Row 1: the profile list.
             RenderProfileList(surface, contentX, row, contentWidth);
             row++;
@@ -152,7 +171,7 @@ namespace Mux.Cli.App
 
             // The remaining rows host the editor (or the name entry when naming).
             int editTop = row;
-            int editHeight = Math.Max(1, bottomHintRow - 1 - editTop);
+            int editHeight = Math.Max(1, firstHintRow - 1 - editTop);
             if (editHeight >= 1)
             {
                 if (_Naming)
@@ -165,22 +184,12 @@ namespace Mux.Cli.App
                 }
             }
 
-            // Bottom hint line.
-            string hint;
-            if (_Naming)
+            // Bottom hint line(s): a wide screen keeps this on one row; a narrow one wraps it instead of
+            // truncating.
+            for (int i = 0; i < hintLines.Count; i++)
             {
-                hint = "name — Enter to confirm · Esc cancel";
+                surface.DrawText(contentX, firstHintRow + i, Trim(hintLines[i], contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(8)));
             }
-            else if (_Editing)
-            {
-                hint = "editing — Esc to stop";
-            }
-            else
-            {
-                hint = "←→ profile · Tab field · e/Enter edit · Space activate · a add · r rename · x remove · Esc save & close";
-            }
-
-            surface.DrawText(contentX, bottomHintRow, Trim(hint, contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(8)));
         }
 
         #endregion
