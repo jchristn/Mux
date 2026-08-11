@@ -31,6 +31,24 @@ namespace Mux.Cli.Commands
                     case "--output-last-message":
                         settings.OutputLastMessage = ReadValue(option, inlineValue, values, ref index);
                         return true;
+                    case "--resume":
+                        settings.Resume = ReadValue(option, inlineValue, values, ref index);
+                        return true;
+                    case "--continue":
+                        settings.Continue = ReadBool(option, inlineValue, defaultValue: true);
+                        return true;
+                    case "--session-id":
+                        settings.SessionId = ReadValue(option, inlineValue, values, ref index);
+                        return true;
+                    case "--fork-session":
+                        settings.ForkSession = ReadBool(option, inlineValue, defaultValue: true);
+                        return true;
+                    case "--no-session-persistence":
+                        settings.NoSessionPersistence = ReadBool(option, inlineValue, defaultValue: true);
+                        return true;
+                    case "--output-schema":
+                        settings.OutputSchema = ReadValue(option, inlineValue, values, ref index);
+                        return true;
                     default:
                         return false;
                 }
@@ -238,11 +256,41 @@ namespace Mux.Cli.Commands
                     case "--no-mcp":
                         settings.NoMcp = ReadBool(option, inlineValue, defaultValue: true);
                         break;
+                    case "--mcp-config":
+                        settings.McpConfig = ReadValue(option, inlineValue, args, ref i);
+                        break;
+                    case "--strict-mcp-config":
+                        settings.StrictMcpConfig = ReadBool(option, inlineValue, defaultValue: true);
+                        break;
                     case "--output-format":
                         settings.OutputFormat = ReadValue(option, inlineValue, args, ref i);
                         break;
+                    case "--input-format":
+                        settings.InputFormat = ReadValue(option, inlineValue, args, ref i);
+                        break;
                     case "--compaction-strategy":
                         settings.CompactionStrategy = ReadValue(option, inlineValue, args, ref i);
+                        break;
+                    case "--max-turns":
+                        settings.MaxTurns = int.Parse(ReadValue(option, inlineValue, args, ref i), CultureInfo.InvariantCulture);
+                        break;
+                    case "--append-system-prompt":
+                        settings.AppendSystemPrompt = ReadValue(option, inlineValue, args, ref i);
+                        break;
+                    case "--max-token-budget":
+                        settings.MaxTokenBudget = int.Parse(ReadValue(option, inlineValue, args, ref i), CultureInfo.InvariantCulture);
+                        break;
+                    case "--allow-tools":
+                        settings.AllowTools = ReadValue(option, inlineValue, args, ref i);
+                        break;
+                    case "--deny-tools":
+                        settings.DenyTools = ReadValue(option, inlineValue, args, ref i);
+                        break;
+                    case "--add-dir":
+                        settings.AddDir.Add(ReadValue(option, inlineValue, args, ref i));
+                        break;
+                    case "--sandbox":
+                        settings.Sandbox = ReadValue(option, inlineValue, args, ref i);
                         break;
                     case "--ignore-cert-errors":
                     case "--insecure":

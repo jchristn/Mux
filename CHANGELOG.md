@@ -2,6 +2,71 @@
 
 All notable changes to mux are documented here.
 
+## v0.7.0 - 2026-08-07
+
+### Added
+
+- **Driver SDKs — TypeScript (`sdk/typescript`, `@mux/sdk`) and Python (`sdk/python`, `mux-sdk`).** Each
+  spawns `mux print --output-format jsonl`, parses the event stream into typed events, and returns an
+  aggregated result — with a `Mux` client, streaming and buffered runs, and multi-turn `Thread`s that
+  persist through mux sessions (`--session-id`). They wrap the CLI rather than binding to internals, so
+  they stay in lockstep with the versioned JSONL contract and any language can integrate the same way.
+  Each ships with a hermetic test harness (a fake mux, no network or model) and a README.
+- **Multi-turn stdin input (`--input-format jsonl`).** `mux print --input-format jsonl` reads a stream of
+  turn records from stdin — one JSON value per line (`{"prompt":"..."}`, or `text`/`content`, or a bare
+  string) — and runs each as a turn against the accumulating conversation, so turn N sees turns 1..N-1.
+  Output follows `--output-format` per turn; `--output-last-message` captures the final turn; a session
+  flag persists the whole conversation as one session; and MCP servers connect once and are shared across
+  turns. Malformed records are reported and skipped without ending the stream.
+- **Headless MCP for `print`.** `--mcp-config <path|json>` connects MCP servers for a single `print` run —
+  reusing the same runtime as the interactive shell — waits (bounded) for tool discovery, exposes the
+  discovered tools to the model, and disposes the connections when the run ends. `--strict-mcp-config`
+  uses only the flag's servers, ignoring `mcp-servers.json`. MCP stays off unless `--mcp-config` is given,
+  so a plain `mux print` remains hermetic; the active state is reported on `run_started.mcp`.
+- **`--output-schema <path>` for `print`.** Folds a JSON Schema directive into the prompt and validates the
+  final response against it recursively — `type` (including union type arrays and `integer`), `enum`,
+  `required`, nested `properties`, and array `items` — reporting the first violation with a JSON path.
+  Value-level bounds/patterns/formats are not enforced, and validation is client-side (mux's LLM layer,
+  PolyPrompt, exposes no `response_format` field, so provider-native structured output is not available);
+  the approach is backend-agnostic. Code fences are unwrapped; a non-conforming response fails with
+  `schema_validation_failed` (exit `1`) and suppresses the artifact and `json` summary.
+- **Tool governance and a confinement posture.** `--allow-tools`/`--deny-tools` take comma-separated
+  tool-name globs (`*`/`?`) to restrict which tools a run may use — deny always wins, and an excluded tool
+  is neither advertised to the model nor allowed to execute. `--sandbox` adds an application-level posture:
+  `read-only` refuses every mutating tool, and `workspace-write` confines built-in file writes to the
+  working directory plus any `--add-dir` roots (repeatable), refusing writes that escape them. Refusals use
+  the `tool_call_denied` error code (exit `2`), and the active posture is reported as `sandboxPosture` on
+  `run_started`. This is a mux-level policy over the built-in tools, not an OS sandbox: `run_process` and
+  external MCP subprocesses are not kernel-confined and remain gated by the approval policy. All four flags
+  apply to `mux print` and to the interactive shell at launch.
+- **Headless session continuity.** `mux print` can now resume prior work non-interactively. `--resume
+  <id|title>` continues a persisted session, `--continue` picks up the most recently updated one,
+  `--session-id <id>` runs under a specific id (creating it if absent), `--fork-session` saves the
+  resumed run under a new id, and `--no-session-persistence` runs without writing to disk. Persistence
+  is opt-in — a plain `mux print` stays stateless — and print sessions share the one session store with
+  the interactive `/sessions` browser, so a session started in either surface can be continued in the
+  other. The resolved session id is now carried on the `run_started` and `run_completed` events (and in
+  the `json` run summary) so an orchestrator can capture it from one run and pass it to the next.
+- **Single-object `json` output for `print`.** `mux print --output-format json` emits one summary object
+  at the end of the run — `result`, `status`, `sessionId`, `iterationsCompleted`, `toolCallCount`,
+  `errorCount`, `durationMs`, `finalEstimatedTokens`, `compactionCount`, optional `taskSummary`, and
+  `contractVersion` — with the same secret redaction as the `jsonl` stream. The streaming `jsonl` form is
+  unchanged; `text` remains the default.
+- **`--max-turns <int>`.** Overrides the agent loop iteration cap for a single run (clamped to 1-100),
+  without editing `settings.json` or the endpoint.
+- **`--append-system-prompt <text>`.** Appends text to the resolved system prompt after all placeholder
+  substitution, so it survives profile switches. Complements the existing `--system-prompt <path>`.
+- **`--max-token-budget <int>` and `maxTokenBudget` in `settings.json`.** A backend-agnostic ceiling on
+  the estimated working-context tokens: when the estimate exceeds the budget before a model call, the run
+  stops cleanly with a `budget_exceeded` error and a matching `run_completed` status rather than
+  continuing. This is mux's provider-neutral analogue of a spend cap; it is based on mux's token estimate,
+  not a provider billing figure.
+
+### Fixed
+
+- **Version string.** `mux --version` now reports the current release; the compiled `ProductVersion`
+  constant had lagged the changelog.
+
 ## v0.6.0 - 2026-08-04
 
 ### Added

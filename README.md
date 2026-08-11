@@ -143,11 +143,27 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 | `--adapter-type <type>` |  | `ollama`, `openai`, `vllm`, `openai-compatible` |
 | `--temperature <float>` |  | Override temperature |
 | `--max-tokens <int>` |  | Override max output tokens |
+| `--max-turns <int>` |  | Override max agent loop iterations (1-100) |
+| `--max-token-budget <int>` |  | Stop with `budget_exceeded` when estimated context tokens exceed this |
 | `--compaction-strategy <mode>` |  | Override compaction strategy: `summary` or `trim` |
 | `--config-dir <path>` |  | Override the active config directory |
 | `--working-directory <path>` | `-w` | Tool execution directory |
 | `--system-prompt <path>` |  | Override system prompt file |
+| `--append-system-prompt <text>` |  | Append text to the resolved system prompt |
+| `--sandbox <posture>` |  | Confinement posture: `none` (default), `read-only`, or `workspace-write` |
+| `--allow-tools <globs>` |  | Comma-separated tool-name globs; only matching tools are allowed |
+| `--deny-tools <globs>` |  | Comma-separated tool-name globs to deny (deny wins over allow) |
+| `--add-dir <path>` |  | Additional writable root under `workspace-write` (repeatable) |
+| `--output-schema <path>` |  | print: constrain the final response to a JSON Schema file |
+| `--mcp-config <path\|json>` |  | print: load MCP servers from a file or inline JSON (enables MCP) |
+| `--strict-mcp-config` |  | print: use only `--mcp-config` servers, ignoring `mcp-servers.json` |
+| `--input-format <format>` |  | print: `text` (default) or `jsonl` (multi-turn stdin records) |
 | `--output-last-message <path>` |  | Write only the final assistant response text to a file |
+| `--resume <id\|title>` |  | print: resume a persisted session by id or title |
+| `--continue` |  | print: continue the most recently updated persisted session |
+| `--session-id <id>` |  | print: run under a specific session id, creating it if absent |
+| `--fork-session` |  | print: persist the resumed run under a new session id |
+| `--no-session-persistence` |  | print: do not persist the session to disk for this run |
 | `--yolo` |  | Auto-approve tool calls |
 | `--approval-policy <policy>` |  | interactive: `ask`, `auto`, or `deny`; print/probe: `auto` or `deny` |
 | `--output-format <format>` |  | `text`, `json`, or `jsonl` depending on the command |
@@ -303,16 +319,50 @@ mux print --output-format jsonl --output-last-message result.txt --yolo "impleme
 
 `result.txt` contains only the final assistant response text. If the run fails, mux does not create the file.
 
+For a single machine-readable object instead of a stream, use `--output-format json`:
+
+```bash
+mux print --output-format json --yolo "summarize README.md" | jq '.result'
+```
+
+`json` emits exactly one object at the end of the run — `result`, `status`, `sessionId`,
+`iterationsCompleted`, `toolCallCount`, `errorCount`, `durationMs`, `finalEstimatedTokens`,
+`compactionCount`, optional `taskSummary`, and `contractVersion` — with the same secret redaction as the
+`jsonl` stream. Failures still report on `stderr` with a non-zero exit code rather than a summary object.
+
+Print runs can be resumed non-interactively. Capture the `sessionId` from one run and continue it in the
+next:
+
+```bash
+sid=$(mux print --output-format json --session-id review-1 --yolo "start a security review" | jq -r '.sessionId')
+mux print --resume "$sid" --output-format json --yolo "now scan the dependencies" | jq -r '.result'
+```
+
+Session persistence is opt-in: a plain `mux print` stays stateless, and only a session flag (`--resume`,
+`--continue`, `--session-id`, or `--fork-session`) engages the store. Print sessions share the one store
+with the interactive `/sessions` browser, so a session started in either surface can be continued in the
+other; `--no-session-persistence` reads a session without writing the run back.
+
+For a scripted multi-turn conversation in one process, use `--input-format jsonl`: each stdin line is a
+turn record (`{"prompt":"..."}`, or `text`/`content`, or a bare JSON string) and runs against the
+accumulating history, so turn N sees turns 1..N-1. Output follows `--output-format` per turn.
+
+```bash
+printf '{"prompt":"start a plan"}\n{"prompt":"now refine step 2"}\n' | mux print --input-format jsonl --output-format jsonl --yolo
+```
+
 In `jsonl` mode:
 - all structured events are written to `stdout`
 - each line is a complete JSON object
 - default human-readable progress output is suppressed
 - every event includes `contractVersion`
+- `run_started` and `run_completed` include `sessionId` (empty when the run is not persisted)
+- `run_started` includes `sandboxPosture` (`none`, `read-only`, or `workspace-write`); tools refused by the allow/deny lists or the posture surface as `error` events with code `tool_call_denied` (exit `2`)
 - `run_started` includes effective non-interactive capability metadata such as `commandName`, `endpointSelectionSource`, `cliOverridesApplied`, built-in tool counts, and MCP support/config status
 - `run_started` also includes loop/context metadata such as `maxIterations`, `contextWindow`, `reservedOutputTokens`, `usableInputLimit`, `warningThresholdTokens`, `tokenEstimationRatio`, and `compactionStrategy`
 - `run_started` includes `ignoreCertErrors` so consumers can detect whether certificate validation was disabled for mux-owned network requests
-- `run_completed` also includes `finalEstimatedTokens` and `compactionCount`
-- `error` events keep `code` and also expose `errorCode`, `failureCategory`, and resolved runtime metadata when known
+- `run_completed` also includes `finalEstimatedTokens` and `compactionCount`, and reports `status` `budget_exceeded` when `--max-token-budget` stops the run
+- `error` events keep `code` and also expose `errorCode`, `failureCategory`, and resolved runtime metadata when known (including `budget_exceeded`, classified as `runtime`)
 
 Event types currently emitted:
 - `run_started`
@@ -337,9 +387,36 @@ Exit codes:
 - `2`: tool call denied
 
 Non-interactive constraints:
-- `mux print` and `mux probe` do not load MCP servers
+- `mux print` loads MCP servers only when `--mcp-config` is supplied (opt-in); otherwise it stays hermetic. `mux probe` never loads MCP
 - `--no-mcp` is interactive-only and is rejected in `print` and `probe`
 - `--approval-policy ask` is rejected in `print` and `probe`; use `auto` or `--yolo`, or `deny`
+
+Two more print options for orchestrators:
+- `--output-schema <path>` folds a JSON Schema directive into the prompt and validates the response recursively (`type` incl. unions/`integer`, `enum`, `required`, nested `properties`, and array `items`; value-level bounds/patterns/formats are not enforced); a non-conforming response fails with `schema_validation_failed` (exit `1`)
+- `--mcp-config <path|json>` (+ `--strict-mcp-config`) connects MCP servers for the single run and disposes them on exit
+
+### SDKs
+
+Thin driver SDKs wrap this contract with typed events, an aggregated result, and multi-turn `Thread`s that
+persist through mux sessions. Both spawn `mux print --output-format jsonl` rather than binding to internals,
+so any language can integrate the same way by consuming the JSONL stream directly.
+
+- [`@mux/sdk`](sdk/typescript/README.md) (TypeScript / Node)
+- [`mux-sdk`](sdk/python/README.md) (Python)
+
+```ts
+import { Mux } from "@mux/sdk";
+const mux = new Mux({ yolo: true, sandbox: "workspace-write" });
+const result = await mux.run("implement the feature described in TASK.md");
+console.log(result.text, result.exitCode);
+```
+
+```python
+from mux_sdk import Mux, MuxOptions
+mux = Mux(MuxOptions(yolo=True, sandbox="workspace-write"))
+result = mux.run("implement the feature described in TASK.md")
+print(result.text, result.exit_code)
+```
 
 ## Probe Command
 
@@ -432,6 +509,9 @@ See [CONFIG.md](CONFIG.md) for the full reference.
 - [SKILLS_AUTHORING.md](SKILLS_AUTHORING.md)
 - [ARMADA.md](ARMADA.md)
 - [TESTING.md](TESTING.md)
+- [HEADLESS_COMPARISON.md](HEADLESS_COMPARISON.md)
+- [TypeScript SDK](sdk/typescript/README.md)
+- [Python SDK](sdk/python/README.md)
 - [CHANGELOG.md](CHANGELOG.md)
 
 ## License

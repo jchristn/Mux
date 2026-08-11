@@ -221,9 +221,17 @@ mux> search the web for mux GitHub releases, then retrieve the most relevant res
 
 `mux print` supports:
 - `text` (default): assistant text on stdout, progress and errors on stderr
+- `json`: a single summary object on stdout at the end of the run
 - `jsonl`: one structured event per stdout line
 
+The `json` object carries `result`, `status`, `sessionId`, `iterationsCompleted`, `toolCallCount`,
+`errorCount`, `durationMs`, `finalEstimatedTokens`, `compactionCount`, an optional `taskSummary`, and
+`contractVersion`, with the same secret redaction as the `jsonl` stream. A failed run reports on `stderr`
+with a non-zero exit code rather than emitting a summary object.
+
 `mux print --output-last-message <path>` optionally writes only the final assistant response text to a file. If the run fails, mux does not create the file.
+
+`mux print --input-format jsonl` switches the prompt source from a single argument to a stream of stdin turn records (see [Multi-Turn Input](#multi-turn-input---input-format-jsonl)); the default `--input-format text` is the single-prompt behavior described above.
 
 `mux probe` supports:
 - `text` (default)
@@ -238,6 +246,7 @@ mux> search the web for mux GitHub releases, then retrieve the most relevant res
 
 Depending on the event, additional fields may include:
 - `runId`
+- `sessionId`
 - `endpointName`
 - `adapterType`
 - `baseUrl`
@@ -284,6 +293,7 @@ Depending on the event, additional fields may include:
 - `builtInToolCount`
 - `effectiveToolCount`
 - `ignoreCertErrors`
+- `sandboxPosture`
 - `mcp`
 
 Current event types:
@@ -322,7 +332,9 @@ Notes:
 - machine-readable output is on `stdout`
 - secret-like values in structured payloads are redacted on a best-effort basis
 - default text mode is unchanged
-- `run_started.mcp.supported` is always `false` in `print` mode today because non-interactive mode does not load MCP servers
+- `run_started.mcp.supported` is `false` in `print` unless `--mcp-config` is supplied; with it, `mcp.configured`/`mcp.serverCount` reflect the loaded servers
+- `run_started` and `run_completed` carry `sessionId` (empty when the run is not associated with a persisted session)
+- `run_completed.status` is `completed`, `completed_with_errors`, `max_iterations_reached`, or `budget_exceeded`; the matching `error` event code `budget_exceeded` is classified as `runtime`
 - `run_started` now includes `maxIterations`, context-budget metadata, and `ignoreCertErrors`, and `run_completed` includes `finalEstimatedTokens` plus `compactionCount`
 - `context_status` and `context_compacted` are additive event types within `contractVersion = 1`; consumers should ignore unknown event types in a known contract version
 - `error` events retain `code` for backward compatibility and also expose `errorCode` plus `failureCategory`
@@ -356,6 +368,128 @@ Notes:
 - interactive mode typically uses ask semantics
 - interactive mode also honors endpoint-scoped `autoApproveTools` unless CLI approval flags override it
 - `mux print` and `mux probe` reject `--approval-policy ask`
+
+## Structured Output (`--output-schema`)
+
+`mux print --output-schema <path>` points at a JSON Schema file. mux folds a directive into the system
+prompt telling the model to return a single JSON value conforming to that schema, and after the run it
+validates the response recursively. It enforces the widely-used keywords — `type` (including union type
+arrays and `integer`), `enum`, `required`, `properties` (validated recursively into nested objects), and
+array `items` (validated recursively per element) — reporting the first violation with a JSON path (for
+example `$.user.id`). Value-level constraints such as numeric bounds, string patterns, and formats are not
+enforced. mux does not use provider-native structured-output APIs: its LLM layer (PolyPrompt) does not
+expose a `response_format`/`json_schema` request field, so mux stays backend-agnostic by constraining via
+the prompt and validating the result itself — which works identically against any model.
+
+```bash
+mux print --yolo --output-schema ./person.schema.json "extract the person from bio.txt" | jq .
+```
+
+A response wrapped in a Markdown code fence is unwrapped before validation. A response that is not JSON, is
+the wrong top-level type, or is missing a required property fails the run with a `schema_validation_failed`
+error (exit `1`), and no `--output-last-message` artifact or `json` summary is written.
+
+## Headless MCP (`--mcp-config`)
+
+MCP is off by default in `print` so a plain run stays fast and hermetic. Supplying `--mcp-config` turns it
+on for that run: mux connects the servers, waits (bounded) for tool discovery, exposes the discovered tools
+to the model, and disposes the connections when the run ends. The value is a file path or inline JSON in
+the same `{ "servers": [ ... ] }` shape as `mcp-servers.json`.
+
+```bash
+mux print --yolo --mcp-config ./mcp-servers.json "use the database tool to list users"
+mux print --yolo --mcp-config '{"servers":[{"name":"ctx","transport":"stdio","command":"npx","args":["-y","@upstash/context7-mcp"]}]}' "look up the docs"
+```
+
+By default the `--mcp-config` servers are merged with the config directory's `mcp-servers.json`; add
+`--strict-mcp-config` to use only the servers from the flag. The active MCP state is reported on
+`run_started` under `mcp` (`supported`/`configured`/`serverCount`). `--no-mcp` remains interactive-only.
+
+## Tool Governance and Sandbox
+
+Between "deny every tool" and `--yolo`, mux offers a middle ground for unattended runs. Two independent
+controls layer on top of the approval policy, so they take effect once a tool would otherwise run
+(typically under `--yolo` or `--approval-policy auto`).
+
+Allow/deny lists filter which tools exist for a run. `--allow-tools` takes comma-separated tool-name
+globs (`*` and `?`); when set, only matching tools are advertised to the model and permitted to execute.
+`--deny-tools` removes tools, and a deny match always wins over an allow match. A tool excluded this way is
+never offered to the model, and if the model calls it anyway the call is refused with a `tool_call_denied`
+error (exit `2`) before it runs.
+
+```bash
+mux print --yolo --allow-tools "read_file,grep,glob" "summarize the code"   # read-only-ish, explicit
+mux print --yolo --deny-tools "delete_file,run_process" "tidy up imports"    # everything but these two
+```
+
+The `--sandbox` posture is an application-level confinement over mux's built-in tools. It is not an
+operating-system sandbox: it governs mux's own tools, not arbitrary subprocesses.
+
+| Posture | Effect |
+|---|---|
+| `none` (default) | No confinement beyond the approval policy and allow/deny lists |
+| `read-only` | Every mutating tool (write/edit/delete/manage-directory/run-process) is refused; reads and searches run |
+| `workspace-write` | Built-in file writes are confined to the working directory plus any `--add-dir` roots; a write whose path escapes them is refused |
+
+```bash
+mux print --yolo --sandbox read-only "audit this repo and report findings"
+mux print --yolo --sandbox workspace-write --add-dir ../shared "apply the refactor"
+```
+
+Under `workspace-write`, `run_process` is still allowed (subject to approval) because mux cannot
+OS-sandbox an arbitrary subprocess; confine those with `--deny-tools "run_process"` when needed. The
+active posture is reported as `sandboxPosture` on the `run_started` event, and governance refusals use the
+`tool_call_denied` error code (exit `2`), the same as an interactive denial.
+
+## Multi-Turn Input (`--input-format jsonl`)
+
+By default `mux print` runs one prompt. With `--input-format jsonl`, stdin becomes a stream of turn
+records — one JSON value per line — and each runs as a turn against the accumulating conversation, so turn
+N sees turns 1..N-1. A record is an object with a `prompt` (or `text`, or `content`) string, or a bare
+JSON string. Blank lines are skipped; a malformed record is reported and skipped without ending the stream.
+
+```bash
+printf '{"prompt":"summarize README.md"}\n{"prompt":"now list the risks you found"}\n' \
+  | mux print --input-format jsonl --output-format jsonl --yolo
+```
+
+Output follows `--output-format` per turn: `jsonl` streams each turn's events (so there is one
+`run_started`/`run_completed` pair per turn), `text` prints each turn's assistant text, and `json` emits
+one summary object per turn. `--output-last-message` captures the final turn's response. Combined with a
+session flag, the whole multi-turn conversation persists as one session; MCP servers from `--mcp-config`
+connect once and are shared across every turn.
+
+## Print Sessions (Headless Resume)
+
+`mux print` is single-shot, but a run can continue an earlier one. Persistence is opt-in: a plain
+`mux print "..."` stays stateless and writes nothing, and only a session flag engages the store.
+
+| Flag | Behavior |
+|---|---|
+| `--resume <id\|title>` | Continue a persisted session, matched first by id and then by title |
+| `--continue` | Continue the most recently updated persisted session in the active config directory |
+| `--session-id <id>` | Run under a specific id, creating the session if it does not exist |
+| `--fork-session` | Persist the resumed run under a new id instead of overwriting the source |
+| `--no-session-persistence` | Read the resumed session but do not write the run back to disk |
+
+The run's session id is surfaced on `run_started` and `run_completed` (and in the `json` summary), so an
+orchestrator can capture it from one run and feed it to the next:
+
+```bash
+sid=$(mux print --output-format json --session-id build-42 --yolo "start the migration" | jq -r '.sessionId')
+mux print --resume "$sid" --output-format json --yolo "continue where you left off" | jq -r '.result'
+```
+
+Print sessions live in the same store as the interactive shell, so a session started with `mux print` is
+resumable from the interactive `/sessions` browser and vice versa. On resume, mux replays the saved
+conversation history and re-applies the current system prompt, so switching endpoints or prompts between
+runs is safe. The stored history excludes the system message (it is rebuilt each run from the effective
+system prompt).
+
+> Concurrency note: print sessions and the interactive shell share one on-disk store. Each save is atomic,
+> but two processes writing the **same** session id concurrently (for example `mux print --resume X` while
+> the interactive shell has session `X` open) is last-writer-wins. Use distinct session ids, or
+> `--fork-session`, when running print against a session that may be open elsewhere.
 
 ## Config Isolation
 
@@ -571,9 +705,8 @@ mux --no-mcp
 ```
 
 Important:
-- MCP integration is interactive-only today
-- `mux print` and `mux probe` do not load MCP servers
-- passing `--no-mcp` to `print` or `probe` returns a structured configuration error instead of silently implying MCP support
+- interactive mode loads MCP servers from `mcp-servers.json` automatically; `mux print` loads them only when `--mcp-config` is supplied (see [Headless MCP](#headless-mcp---mcp-config)); `mux probe` never loads MCP
+- `--no-mcp` is interactive-only and, in `print`/`probe`, returns a structured configuration error rather than silently implying MCP support
 
 ## Skills
 

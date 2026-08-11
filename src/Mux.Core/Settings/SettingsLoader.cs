@@ -461,6 +461,25 @@ namespace Mux.Core.Settings
             }
 
             string json = ReadAllTextShared(filePath);
+            return ParseMcpServers(json);
+        }
+
+        /// <summary>
+        /// Parses MCP server configurations from a JSON document using the same <c>{ "servers": [ ... ] }</c>
+        /// shape as <c>mcp-servers.json</c>. Used to load servers supplied inline or by path on the command
+        /// line (for example <c>--mcp-config</c>).
+        /// </summary>
+        /// <param name="json">The JSON document text. Must not be null.</param>
+        /// <returns>The parsed servers, or an empty list when the document declares none.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="json"/> is null.</exception>
+        /// <exception cref="JsonException">Thrown when the document is not valid JSON.</exception>
+        public static List<McpServerConfig> ParseMcpServers(string json)
+        {
+            if (json == null)
+            {
+                throw new ArgumentNullException(nameof(json));
+            }
+
             McpServersFile? file = JsonSerializer.Deserialize<McpServersFile>(json, _JsonOptions);
             if (file == null || file.Servers == null)
             {

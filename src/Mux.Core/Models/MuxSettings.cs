@@ -21,6 +21,7 @@ namespace Mux.Core.Models
         private string _CompactionStrategy = "summary";
         private int _CompactionPreserveTurns = 3;
         private int _MaxAgentIterations = 50;
+        private int? _MaxTokenBudget = null;
         private int _MaxConcurrency = 3;
         private string _DefaultEnqueueBehavior = "ask";
         private bool _IgnoreCertErrors = false;
@@ -169,6 +170,20 @@ namespace Mux.Core.Models
         {
             get => _MaxAgentIterations;
             set => _MaxAgentIterations = Math.Clamp(value, 1, 100);
+        }
+
+        /// <summary>
+        /// Optional ceiling on the estimated working-context tokens for a single run. When set and the
+        /// estimate exceeds this value before a model call, the run stops cleanly with a
+        /// <c>budget_exceeded</c> error rather than continuing. This is a backend-agnostic guard based on
+        /// mux's token estimate, not a provider billing figure. Null (the default) disables the cap.
+        /// Values are clamped to a minimum of 1 when set.
+        /// </summary>
+        [JsonPropertyName("maxTokenBudget")]
+        public int? MaxTokenBudget
+        {
+            get => _MaxTokenBudget;
+            set => _MaxTokenBudget = value.HasValue ? Math.Max(1, value.Value) : (int?)null;
         }
 
         /// <summary>

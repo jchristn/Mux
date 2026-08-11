@@ -12,6 +12,7 @@ namespace Mux.Core.Agent
         #region Private-Members
 
         private string _RunId = string.Empty;
+        private string _SessionId = string.Empty;
         private string _Status = string.Empty;
         private int _IterationsCompleted = 0;
         private int _ToolCallCount = 0;
@@ -50,7 +51,18 @@ namespace Mux.Core.Agent
         }
 
         /// <summary>
-        /// Final run status such as completed, completed_with_errors, or max_iterations_reached.
+        /// Persisted session identifier this run belongs to, or empty when the run is not associated with
+        /// a persisted session.
+        /// </summary>
+        public string SessionId
+        {
+            get => _SessionId;
+            set => _SessionId = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Final run status such as completed, completed_with_errors, max_iterations_reached, or
+        /// budget_exceeded.
         /// </summary>
         public string Status
         {

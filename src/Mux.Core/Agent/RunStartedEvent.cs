@@ -12,6 +12,7 @@ namespace Mux.Core.Agent
         #region Private-Members
 
         private string _RunId = string.Empty;
+        private string _SessionId = string.Empty;
         private string _EndpointName = string.Empty;
         private string _AdapterType = string.Empty;
         private string _BaseUrl = string.Empty;
@@ -36,6 +37,7 @@ namespace Mux.Core.Agent
         private double _TokenEstimationRatio = 0;
         private string _CompactionStrategy = "summary";
         private bool _IgnoreCertErrors = false;
+        private string _SandboxPosture = "none";
 
         #endregion
 
@@ -60,6 +62,16 @@ namespace Mux.Core.Agent
         {
             get => _RunId;
             set => _RunId = value ?? throw new ArgumentNullException(nameof(RunId));
+        }
+
+        /// <summary>
+        /// Persisted session identifier this run belongs to, or empty when the run is not associated with
+        /// a persisted session.
+        /// </summary>
+        public string SessionId
+        {
+            get => _SessionId;
+            set => _SessionId = value ?? string.Empty;
         }
 
         /// <summary>
@@ -276,6 +288,16 @@ namespace Mux.Core.Agent
         {
             get => _IgnoreCertErrors;
             set => _IgnoreCertErrors = value;
+        }
+
+        /// <summary>
+        /// The active application-level confinement posture for the run: <c>none</c>, <c>read-only</c>, or
+        /// <c>workspace-write</c>.
+        /// </summary>
+        public string SandboxPosture
+        {
+            get => _SandboxPosture;
+            set => _SandboxPosture = value ?? "none";
         }
 
         #endregion

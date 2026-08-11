@@ -33,6 +33,7 @@ namespace Mux.Core.Agent
         private BuiltInToolRegistry _ToolRegistry;
         private IApprovalRouter _ApprovalRouter;
         private bool _Disposed = false;
+        private List<ConversationMessage> _FinalConversation = new List<ConversationMessage>();
 
         #endregion
 
@@ -50,6 +51,21 @@ namespace Mux.Core.Agent
             _LlmClient.OnRetry = options.OnRetry;
             _ToolRegistry = new BuiltInToolRegistry(options.MuxSettings, options.TaskPlan);
             _ApprovalRouter = new ApprovalRouter(options.ApprovalPolicy, options.AutoSafeApprovalAllowlist);
+        }
+
+        #endregion
+
+        #region Public-Members
+
+        /// <summary>
+        /// The full conversation (system, user, assistant, and tool messages) as it stood when the most
+        /// recent <see cref="RunAsync"/> enumeration completed. Empty until a run finishes. Callers that
+        /// persist a resumable session read this after enumerating the event stream so the saved history
+        /// is exactly what the loop produced, rather than a reconstruction from events.
+        /// </summary>
+        public IReadOnlyList<ConversationMessage> FinalConversation
+        {
+            get => _FinalConversation;
         }
 
         #endregion
@@ -76,6 +92,7 @@ namespace Mux.Core.Agent
             int errorCount = 0;
             int assistantTextChars = 0;
             bool maxIterationsReached = false;
+            bool budgetExceeded = false;
             int compactionCount = 0;
 
             // 1. Build conversation
@@ -88,6 +105,7 @@ namespace Mux.Core.Agent
             yield return new RunStartedEvent
             {
                 RunId = runId,
+                SessionId = _Options.SessionId,
                 EndpointName = _Options.Endpoint.Name,
                 AdapterType = _Options.Endpoint.AdapterType.ToString(),
                 BaseUrl = _Options.Endpoint.BaseUrl,
@@ -111,7 +129,8 @@ namespace Mux.Core.Agent
                 WarningThresholdTokens = initialSnapshot.WarningThresholdTokens,
                 TokenEstimationRatio = _Options.TokenEstimationRatio,
                 CompactionStrategy = _Options.CompactionStrategy,
-                IgnoreCertErrors = _Options.IgnoreCertErrors
+                IgnoreCertErrors = _Options.IgnoreCertErrors,
+                SandboxPosture = ToolGovernance.PostureName(_Options.SandboxPosture)
             };
 
             // 3. Enter loop
@@ -119,6 +138,24 @@ namespace Mux.Core.Agent
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 iterationCount = step + 1;
+
+                // Enforce the optional token budget before spending another model call. The estimate is
+                // mux's own working-context estimate (backend-agnostic), not a provider billing figure.
+                if (_Options.MaxTokenBudget.HasValue)
+                {
+                    ContextBudgetSnapshot budgetSnapshot = GetContextBudgetSnapshot(conversation, allTools);
+                    if (budgetSnapshot.UsedTokens > _Options.MaxTokenBudget.Value)
+                    {
+                        budgetExceeded = true;
+                        errorCount++;
+                        yield return new ErrorEvent
+                        {
+                            Code = "budget_exceeded",
+                            Message = $"Estimated context tokens ({budgetSnapshot.UsedTokens}) exceeded the configured budget of {_Options.MaxTokenBudget.Value}. Stopping before the next model call."
+                        };
+                        break;
+                    }
+                }
 
                 bool shouldAbortBeforeModelCall;
                 List<AgentEvent> contextEvents = PrepareConversationForModelCall(
@@ -201,6 +238,28 @@ namespace Mux.Core.Agent
 
                     // Yield proposed event
                     yield return new ToolCallProposedEvent { ToolCall = toolCall };
+
+                    // Governance gate: enforce allow/deny lists and the sandbox posture before approval so a
+                    // tool the model should never have called (including one it hallucinated past the
+                    // advertised set) is refused without executing.
+                    string? governanceDenyReason = EvaluateToolGovernance(toolCall);
+                    if (governanceDenyReason != null)
+                    {
+                        errorCount++;
+                        yield return new ErrorEvent
+                        {
+                            Code = "tool_call_denied",
+                            Message = governanceDenyReason
+                        };
+
+                        conversation.Add(new ConversationMessage
+                        {
+                            Role = RoleEnum.Tool,
+                            ToolCallId = toolCall.Id,
+                            Content = JsonSerializer.Serialize(new { error = "tool_call_denied", message = governanceDenyReason })
+                        });
+                        continue;
+                    }
 
                     // Run through approval
                     bool approved = false;
@@ -348,13 +407,17 @@ namespace Mux.Core.Agent
 
             stopwatch.Stop();
             ContextBudgetSnapshot finalSnapshot = GetContextBudgetSnapshot(conversation, allTools);
+            _FinalConversation = conversation;
 
             yield return new RunCompletedEvent
             {
                 RunId = runId,
-                Status = maxIterationsReached
-                    ? "max_iterations_reached"
-                    : (errorCount > 0 ? "completed_with_errors" : "completed"),
+                SessionId = _Options.SessionId,
+                Status = budgetExceeded
+                    ? "budget_exceeded"
+                    : (maxIterationsReached
+                        ? "max_iterations_reached"
+                        : (errorCount > 0 ? "completed_with_errors" : "completed")),
                 IterationsCompleted = iterationCount,
                 ToolCallCount = toolCallCount,
                 ErrorCount = errorCount,
@@ -452,6 +515,32 @@ namespace Mux.Core.Agent
                 {
                     allTools.AddRange(provider.GetToolDefinitions());
                 }
+            }
+
+            // Apply tool governance so the model is never offered a tool it may not call: drop tools
+            // excluded by the allow/deny policy, and (under the read-only posture) drop mutating tools.
+            bool hasAllowDeny = (_Options.AllowedTools != null && _Options.AllowedTools.Count > 0)
+                || (_Options.DeniedTools != null && _Options.DeniedTools.Count > 0);
+            if (hasAllowDeny || _Options.SandboxPosture == SandboxPostureEnum.ReadOnly)
+            {
+                List<ToolDefinition> permitted = new List<ToolDefinition>();
+                foreach (ToolDefinition tool in allTools)
+                {
+                    if (!ToolGovernance.IsPermitted(tool.Name, _Options.AllowedTools, _Options.DeniedTools))
+                    {
+                        continue;
+                    }
+
+                    if (_Options.SandboxPosture == SandboxPostureEnum.ReadOnly
+                        && ClassifyTool(tool.Name) == ToolMutationKind.Mutating)
+                    {
+                        continue;
+                    }
+
+                    permitted.Add(tool);
+                }
+
+                return permitted;
             }
 
             return allTools;
@@ -1048,6 +1137,32 @@ namespace Mux.Core.Agent
                 Success = false,
                 Content = JsonSerializer.Serialize(new { error = "unknown_tool", message = $"Tool '{toolCall.Name}' is not registered and no external executor is configured." })
             };
+        }
+
+        private string? EvaluateToolGovernance(ToolCall toolCall)
+        {
+            if (!ToolGovernance.IsPermitted(toolCall.Name, _Options.AllowedTools, _Options.DeniedTools))
+            {
+                return $"Tool '{toolCall.Name}' is not permitted by the configured tool policy (--allow-tools/--deny-tools).";
+            }
+
+            if (_Options.SandboxPosture == SandboxPostureEnum.ReadOnly
+                && ClassifyTool(toolCall.Name) == ToolMutationKind.Mutating)
+            {
+                return $"Tool '{toolCall.Name}' is blocked by the read-only sandbox posture.";
+            }
+
+            if (_Options.SandboxPosture == SandboxPostureEnum.WorkspaceWrite)
+            {
+                JsonElement arguments = ParseToolArguments(toolCall.Arguments);
+                return ToolGovernance.CheckWorkspaceWrite(
+                    toolCall.Name,
+                    arguments,
+                    _Options.WorkingDirectory,
+                    _Options.AdditionalDirectories);
+            }
+
+            return null;
         }
 
         private ToolMutationKind ClassifyTool(string toolName)

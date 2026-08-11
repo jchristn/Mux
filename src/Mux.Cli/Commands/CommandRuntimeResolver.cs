@@ -5,6 +5,7 @@ namespace Mux.Cli.Commands
     using System.IO;
     using System.Linq;
     using System.Text;
+    using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Models;
     using Mux.Core.Settings;
@@ -16,7 +17,7 @@ namespace Mux.Cli.Commands
     public static class CommandRuntimeResolver
     {
         private const string InteractiveModeOnlyMcpMessage =
-            "MCP is only supported in interactive mode. `mux print` and `mux probe` do not load MCP servers, so remove `--no-mcp` and do not rely on MCP tools there.";
+            "`--no-mcp` applies to interactive mode. `mux print` loads MCP only when `--mcp-config` is supplied, and `mux probe` never loads MCP, so `--no-mcp` has no effect here — remove it.";
 
         /// <summary>
         /// Parses a user-provided output format string.
@@ -77,6 +78,20 @@ namespace Mux.Cli.Commands
                 settings.MaxTokens);
 
             string workingDirectory = settings.WorkingDirectory ?? Directory.GetCurrentDirectory();
+
+            if (!ToolGovernance.TryParsePosture(settings.Sandbox, out SandboxPostureEnum sandboxPosture))
+            {
+                throw new InvalidOperationException(
+                    $"Unsupported sandbox posture '{settings.Sandbox}'. Supported values: none, read-only, workspace-write.");
+            }
+
+            List<string> allowedTools = SplitPatterns(settings.AllowTools);
+            List<string> deniedTools = SplitPatterns(settings.DenyTools);
+            List<string> additionalDirectories = (settings.AddDir ?? new List<string>())
+                .Where((string d) => !string.IsNullOrWhiteSpace(d))
+                .Select((string d) => Path.GetFullPath(d.Trim()))
+                .ToList();
+
             List<string> cliOverrides = GetCliOverrides(settings);
             string endpointSelectionSource = GetEndpointSelectionSource(endpoints, settings.Endpoint);
 
@@ -115,6 +130,15 @@ namespace Mux.Cli.Commands
                 .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd())
                 .Replace("{TaskPlanningGuidance}", taskPlanningGuidance);
 
+            // Append caller-supplied system-prompt text after all placeholder substitution so it survives
+            // profile switches and is never consumed by a placeholder.
+            if (!string.IsNullOrWhiteSpace(settings.AppendSystemPrompt))
+            {
+                systemPrompt = string.IsNullOrEmpty(systemPrompt)
+                    ? settings.AppendSystemPrompt!.Trim()
+                    : systemPrompt + Environment.NewLine + Environment.NewLine + settings.AppendSystemPrompt!.Trim();
+            }
+
             string compactionSystemPrompt = activePromptProfile.CompactionPrompt ?? string.Empty;
 
             ApprovalPolicyEnum approvalPolicy = ResolveApprovalPolicy(settings, endpoint, allowAskApproval);
@@ -129,11 +153,17 @@ namespace Mux.Cli.Commands
             {
                 Endpoint = endpoint,
                 MuxSettings = muxSettings,
-                MaxAgentIterations = muxSettings.GetEffectiveMaxAgentIterations(endpoint),
+                MaxAgentIterations = settings.MaxTurns.HasValue
+                    ? Math.Clamp(settings.MaxTurns.Value, 1, 100)
+                    : muxSettings.GetEffectiveMaxAgentIterations(endpoint),
                 WorkingDirectory = workingDirectory,
                 SystemPrompt = systemPrompt,
                 CompactionSystemPrompt = compactionSystemPrompt,
                 ApprovalPolicy = approvalPolicy,
+                SandboxPosture = sandboxPosture,
+                AllowedTools = allowedTools,
+                DeniedTools = deniedTools,
+                AdditionalDirectories = additionalDirectories,
                 Metadata = new RuntimeMetadata
                 {
                     CommandName = commandName,
@@ -298,12 +328,31 @@ namespace Mux.Cli.Commands
             if (settings.MaxTokens.HasValue) overrides.Add("maxTokens");
             if (!string.IsNullOrWhiteSpace(settings.WorkingDirectory)) overrides.Add("workingDirectory");
             if (!string.IsNullOrWhiteSpace(settings.SystemPrompt)) overrides.Add("systemPrompt");
+            if (!string.IsNullOrWhiteSpace(settings.AppendSystemPrompt)) overrides.Add("appendSystemPrompt");
+            if (settings.MaxTurns.HasValue) overrides.Add("maxTurns");
+            if (settings.MaxTokenBudget.HasValue) overrides.Add("maxTokenBudget");
+            if (!string.IsNullOrWhiteSpace(settings.AllowTools)) overrides.Add("allowTools");
+            if (!string.IsNullOrWhiteSpace(settings.DenyTools)) overrides.Add("denyTools");
+            if (settings.AddDir != null && settings.AddDir.Count > 0) overrides.Add("addDir");
+            if (!string.IsNullOrWhiteSpace(settings.Sandbox)) overrides.Add("sandbox");
             if (settings.Yolo) overrides.Add("yolo");
             if (!string.IsNullOrWhiteSpace(settings.ApprovalPolicy)) overrides.Add("approvalPolicy");
             if (!string.IsNullOrWhiteSpace(settings.CompactionStrategy)) overrides.Add("compactionStrategy");
             if (settings.IgnoreCertErrors) overrides.Add("ignoreCertErrors");
 
             return overrides;
+        }
+
+        private static List<string> SplitPatterns(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return new List<string>();
+            }
+
+            return value
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
         }
 
         /// <summary>
@@ -330,6 +379,11 @@ namespace Mux.Cli.Commands
             if (settings.IgnoreCertErrors)
             {
                 muxSettings.IgnoreCertErrors = true;
+            }
+
+            if (settings.MaxTokenBudget.HasValue)
+            {
+                muxSettings.MaxTokenBudget = settings.MaxTokenBudget.Value;
             }
         }
     }
@@ -373,6 +427,26 @@ namespace Mux.Cli.Commands
         /// Effective approval policy.
         /// </summary>
         public ApprovalPolicyEnum ApprovalPolicy { get; set; } = ApprovalPolicyEnum.Deny;
+
+        /// <summary>
+        /// Effective application-level confinement posture.
+        /// </summary>
+        public SandboxPostureEnum SandboxPosture { get; set; } = SandboxPostureEnum.None;
+
+        /// <summary>
+        /// Effective allow list of tool-name glob patterns (empty allows all non-denied tools).
+        /// </summary>
+        public List<string> AllowedTools { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Effective deny list of tool-name glob patterns (empty denies nothing).
+        /// </summary>
+        public List<string> DeniedTools { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Effective additional writable roots (absolute) honored under the workspace-write posture.
+        /// </summary>
+        public List<string> AdditionalDirectories { get; set; } = new List<string>();
 
         /// <summary>
         /// Effective non-interactive capability information.

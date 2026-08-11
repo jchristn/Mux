@@ -202,6 +202,7 @@ Example:
   "compactionStrategy": "summary",
   "compactionPreserveTurns": 3,
   "maxAgentIterations": 50,
+  "maxTokenBudget": null,
   "ignoreCertErrors": false,
   "showBoundaryLines": false,
   "skillsEnabled": true,
@@ -232,6 +233,7 @@ Fields:
 | `compactionStrategy` | string | `summary` or `trim`; controls `/compact`, interactive preflight auto-compaction, and in-run active-conversation compaction |
 | `compactionPreserveTurns` | int | number of recent user-led turns to preserve during compaction; clamped to `1-10` |
 | `maxAgentIterations` | int | default loop guard for tool-using runs; clamped to `1-100` and overridden by endpoint `maxAgentIterations` when that value is set |
+| `maxTokenBudget` | int or null | optional ceiling on estimated working-context tokens; when set and exceeded before a model call, the run stops with a `budget_exceeded` error; backend-agnostic (mux's estimate, not provider billing); overridden per run by `--max-token-budget`; `null` (default) disables the cap |
 | `ignoreCertErrors` | bool | disable TLS certificate validation for mux-owned network requests; default `false` |
 | `showBoundaryLines` | bool | draw dark-grey boundary lines in the interactive shell (above the prompt input, above the queued-messages strip, and left of the sidebar); toggle live with `/borders`; default `false` |
 | `skillsEnabled` | bool | load user-authored skills and expose them to the model in the interactive shell; default `true` |

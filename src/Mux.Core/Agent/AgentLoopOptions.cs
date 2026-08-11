@@ -34,6 +34,7 @@ namespace Mux.Core.Agent
         private string _CompactionStrategy = "summary";
         private int _CompactionPreserveTurns = 3;
         private string _CommandName = string.Empty;
+        private string _SessionId = string.Empty;
         private string _ConfigDirectory = string.Empty;
         private string _EndpointSelectionSource = string.Empty;
         private List<string> _CliOverridesApplied = new List<string>();
@@ -54,6 +55,11 @@ namespace Mux.Core.Agent
         private Action<bool>? _OnWriteLeaseWaitChanged = null;
         private List<string>? _AutoSafeApprovalAllowlist = null;
         private TaskPlan? _TaskPlan = null;
+        private int? _MaxTokenBudget = null;
+        private SandboxPostureEnum _SandboxPosture = SandboxPostureEnum.None;
+        private List<string>? _AllowedTools = null;
+        private List<string>? _DeniedTools = null;
+        private List<string>? _AdditionalDirectories = null;
 
         #endregion
 
@@ -218,6 +224,16 @@ namespace Mux.Core.Agent
         {
             get => _CommandName;
             set => _CommandName = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// The persisted session identifier this run belongs to, surfaced on the run's start and
+        /// completion events. Empty (the default) when the run is not associated with a persisted session.
+        /// </summary>
+        public string SessionId
+        {
+            get => _SessionId;
+            set => _SessionId = value ?? string.Empty;
         }
 
         /// <summary>
@@ -417,6 +433,59 @@ namespace Mux.Core.Agent
         {
             get => _TaskPlan;
             set => _TaskPlan = value;
+        }
+
+        /// <summary>
+        /// Optional ceiling on the estimated working-context tokens for the run. When set and the estimate
+        /// exceeds this value before a model call, the loop stops cleanly and emits a <c>budget_exceeded</c>
+        /// error instead of continuing. Backend-agnostic (based on mux's token estimate, not provider
+        /// billing). Null (the default) disables the cap; values are clamped to a minimum of 1 when set.
+        /// </summary>
+        public int? MaxTokenBudget
+        {
+            get => _MaxTokenBudget;
+            set => _MaxTokenBudget = value.HasValue ? Math.Max(1, value.Value) : (int?)null;
+        }
+
+        /// <summary>
+        /// The application-level confinement posture for tool execution. Defaults to
+        /// <see cref="SandboxPostureEnum.None"/> (no confinement).
+        /// </summary>
+        public SandboxPostureEnum SandboxPosture
+        {
+            get => _SandboxPosture;
+            set => _SandboxPosture = value;
+        }
+
+        /// <summary>
+        /// Optional allow list of tool-name glob patterns. When non-empty, only matching tools are
+        /// advertised to the model and permitted to run. Null (the default) allows all non-denied tools.
+        /// </summary>
+        public List<string>? AllowedTools
+        {
+            get => _AllowedTools;
+            set => _AllowedTools = value;
+        }
+
+        /// <summary>
+        /// Optional deny list of tool-name glob patterns. A denied tool is never advertised or executed,
+        /// even when it also matches <see cref="AllowedTools"/>. Null (the default) denies nothing.
+        /// </summary>
+        public List<string>? DeniedTools
+        {
+            get => _DeniedTools;
+            set => _DeniedTools = value;
+        }
+
+        /// <summary>
+        /// Optional additional writable roots (beyond <see cref="WorkingDirectory"/>) honored under the
+        /// workspace-write posture. Null (the default) means the working directory is the only writable
+        /// root.
+        /// </summary>
+        public List<string>? AdditionalDirectories
+        {
+            get => _AdditionalDirectories;
+            set => _AdditionalDirectories = value;
         }
 
         #endregion

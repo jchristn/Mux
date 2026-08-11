@@ -90,6 +90,7 @@ OPTIONS:
         --version, /version, -v          Show version and exit
     -p, --print                          Single-shot: process prompt, print result, exit
         --output-format <format>         text, json, or jsonl depending on the command
+        --input-format <format>          print: text (default) or jsonl (multi-turn stdin records)
         --config-dir <path>              Override active config directory
 
   Endpoint / Model:
@@ -99,19 +100,36 @@ OPTIONS:
         --adapter-type <type>            Adapter: ollama, openai, vllm, openai-compatible
         --temperature <float>            Override temperature (0.0 - 2.0)
         --max-tokens <int>               Override max output tokens
+        --max-turns <int>                Override max agent loop iterations (1-100)
+        --max-token-budget <int>         Stop with budget_exceeded when estimated context tokens exceed this
         --compaction-strategy <mode>     summary or trim
 
   Approval / Safety:
         --yolo                           Auto-approve all tool calls
         --approval-policy <policy>       interactive: ask, auto, or deny | print/probe: auto or deny
+        --sandbox <posture>              none (default), read-only, or workspace-write
+        --allow-tools <globs>            Comma-separated tool-name globs; only matching tools are allowed
+        --deny-tools <globs>             Comma-separated tool-name globs to deny (deny wins over allow)
 
   Execution:
     -w, --working-directory <path>       Set working directory for tool execution
+        --add-dir <path>                 Additional writable root under workspace-write (repeatable)
         --system-prompt <path>           Path to system prompt file
+        --append-system-prompt <text>    Append text to the resolved system prompt
+        --output-schema <path>           print: constrain the final response to a JSON Schema file
         --output-last-message <path>     Write only the final assistant response text to a file
+        --mcp-config <path|json>         print: load MCP servers from a file or inline JSON (enables MCP)
+        --strict-mcp-config              print: use only --mcp-config servers, ignoring mcp-servers.json
         --no-mcp                         Interactive only: skip MCP server initialization
         --ignore-cert-errors, --insecure Disable TLS certificate validation for mux-owned network requests
     -v, --verbose                        Emit detailed progress to stderr
+
+  Print Sessions (opt-in persistence; single-shot stays stateless without a session flag):
+        --resume <id|title>              Resume a persisted session by id or title
+        --continue                       Continue the most recently updated persisted session
+        --session-id <id>                Run under a specific session id, creating it if absent
+        --fork-session                   Persist the resumed run under a new session id
+        --no-session-persistence         Do not persist the session to disk for this run
 
 PROBE:
     mux probe --output-format json       Machine-readable health check
@@ -387,6 +405,11 @@ CONFIG:
                 McpServerCount = runtime.Capabilities.McpServerCount,
                 BuiltInToolCount = runtime.Capabilities.BuiltInToolCount,
                 EffectiveToolCount = runtime.Capabilities.EffectiveToolCount,
+                MaxTokenBudget = runtime.MuxSettings.MaxTokenBudget,
+                SandboxPosture = runtime.SandboxPosture,
+                AllowedTools = runtime.AllowedTools,
+                DeniedTools = runtime.DeniedTools,
+                AdditionalDirectories = runtime.AdditionalDirectories,
                 Verbose = settings.Verbose
             };
         }

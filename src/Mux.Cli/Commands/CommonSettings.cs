@@ -1,5 +1,6 @@
 namespace Mux.Cli.Commands
 {
+    using System.Collections.Generic;
     using System.ComponentModel;
 
     /// <summary>
@@ -101,6 +102,20 @@ namespace Mux.Cli.Commands
         public bool NoMcp { get; set; }
 
         /// <summary>
+        /// Path to a JSON file, or inline JSON, describing MCP servers to load for this run.
+        /// </summary>
+        [Description("MCP server config as a file path or inline JSON; enables MCP in print mode.")]
+        [CommandOption("--mcp-config")]
+        public string? McpConfig { get; set; }
+
+        /// <summary>
+        /// Use only the servers from <see cref="McpConfig"/>, ignoring the config directory's mcp-servers.json.
+        /// </summary>
+        [Description("Use only --mcp-config servers, ignoring the config directory's mcp-servers.json.")]
+        [CommandOption("--strict-mcp-config")]
+        public bool StrictMcpConfig { get; set; }
+
+        /// <summary>
         /// Output format for command results.
         /// </summary>
         [Description("Output format: text, json, or jsonl depending on the command.")]
@@ -108,11 +123,67 @@ namespace Mux.Cli.Commands
         public string? OutputFormat { get; set; }
 
         /// <summary>
+        /// Input format for the prompt stream: text (default) or jsonl for multi-turn stdin records.
+        /// </summary>
+        [Description("Input format: text (default) or jsonl (multi-turn stdin records).")]
+        [CommandOption("--input-format")]
+        public string? InputFormat { get; set; }
+
+        /// <summary>
         /// Override the compaction strategy used for automatic and manual history compaction.
         /// </summary>
         [Description("Compaction strategy (summary or trim).")]
         [CommandOption("--compaction-strategy")]
         public string? CompactionStrategy { get; set; }
+
+        /// <summary>
+        /// Override the maximum number of agent loop iterations (turns) for the run. Clamped to 1-100.
+        /// </summary>
+        [Description("Maximum agent loop iterations (turns) for the run.")]
+        [CommandOption("--max-turns")]
+        public int? MaxTurns { get; set; }
+
+        /// <summary>
+        /// Text appended to the resolved system prompt after all placeholder substitution.
+        /// </summary>
+        [Description("Text appended to the resolved system prompt.")]
+        [CommandOption("--append-system-prompt")]
+        public string? AppendSystemPrompt { get; set; }
+
+        /// <summary>
+        /// Ceiling on the estimated working-context tokens before the run stops with a budget_exceeded error.
+        /// </summary>
+        [Description("Estimated-token ceiling; stops the run with budget_exceeded when exceeded.")]
+        [CommandOption("--max-token-budget")]
+        public int? MaxTokenBudget { get; set; }
+
+        /// <summary>
+        /// Comma-separated tool-name glob patterns; when set, only matching tools may be used.
+        /// </summary>
+        [Description("Comma-separated tool-name globs; only matching tools are allowed.")]
+        [CommandOption("--allow-tools")]
+        public string? AllowTools { get; set; }
+
+        /// <summary>
+        /// Comma-separated tool-name glob patterns to deny; a deny match always wins.
+        /// </summary>
+        [Description("Comma-separated tool-name globs to deny (deny wins over allow).")]
+        [CommandOption("--deny-tools")]
+        public string? DenyTools { get; set; }
+
+        /// <summary>
+        /// Additional writable roots honored under the workspace-write sandbox. Repeatable.
+        /// </summary>
+        [Description("Additional writable root under the workspace-write sandbox (repeatable).")]
+        [CommandOption("--add-dir")]
+        public List<string> AddDir { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Application-level confinement posture: none, read-only, or workspace-write.
+        /// </summary>
+        [Description("Confinement posture: none, read-only, or workspace-write.")]
+        [CommandOption("--sandbox")]
+        public string? Sandbox { get; set; }
 
         /// <summary>
         /// Disable TLS certificate validation for mux-owned network requests.

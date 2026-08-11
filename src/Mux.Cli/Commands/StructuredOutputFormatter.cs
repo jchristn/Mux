@@ -45,6 +45,7 @@ namespace Mux.Cli.Commands
             {
                 case RunStartedEvent startedEvent:
                     payload["runId"] = startedEvent.RunId;
+                    payload["sessionId"] = startedEvent.SessionId;
                     payload["endpointName"] = startedEvent.EndpointName;
                     payload["adapterType"] = startedEvent.AdapterType;
                     payload["baseUrl"] = startedEvent.BaseUrl;
@@ -66,6 +67,7 @@ namespace Mux.Cli.Commands
                     payload["tokenEstimationRatio"] = startedEvent.TokenEstimationRatio;
                     payload["compactionStrategy"] = startedEvent.CompactionStrategy;
                     payload["ignoreCertErrors"] = startedEvent.IgnoreCertErrors;
+                    payload["sandboxPosture"] = startedEvent.SandboxPosture;
                     payload["mcp"] = new Dictionary<string, object?>
                     {
                         ["supported"] = startedEvent.McpSupported,
@@ -143,6 +145,7 @@ namespace Mux.Cli.Commands
 
                 case RunCompletedEvent runCompletedEvent:
                     payload["runId"] = runCompletedEvent.RunId;
+                    payload["sessionId"] = runCompletedEvent.SessionId;
                     payload["status"] = runCompletedEvent.Status;
                     payload["iterationsCompleted"] = runCompletedEvent.IterationsCompleted;
                     payload["toolCallCount"] = runCompletedEvent.ToolCallCount;
@@ -169,6 +172,39 @@ namespace Mux.Cli.Commands
                     }
                     payload["tasks"] = taskItems;
                     break;
+            }
+
+            return JsonSerializer.Serialize(payload, _JsonOptions);
+        }
+
+        /// <summary>
+        /// Serializes a single-object run summary for <c>print --output-format json</c>. Aggregates the
+        /// terminal <see cref="RunCompletedEvent"/> with the accumulated final assistant text into one
+        /// redacted JSON object carrying the contract version.
+        /// </summary>
+        /// <param name="completed">The terminal run-completed event, or null when the run produced none.</param>
+        /// <param name="resultText">The accumulated final assistant response text. Null is treated as empty.</param>
+        /// <param name="sessionId">The persisted session id, or null/empty when the run was not persisted.</param>
+        /// <returns>A compact, single-line JSON object.</returns>
+        public static string FormatRunSummary(RunCompletedEvent? completed, string? resultText, string? sessionId)
+        {
+            Dictionary<string, object?> payload = new Dictionary<string, object?>
+            {
+                ["contractVersion"] = StructuredOutputContractVersion,
+                ["result"] = RedactString(resultText),
+                ["sessionId"] = string.IsNullOrEmpty(sessionId) ? string.Empty : sessionId,
+                ["status"] = completed?.Status ?? "unknown",
+                ["iterationsCompleted"] = completed?.IterationsCompleted ?? 0,
+                ["toolCallCount"] = completed?.ToolCallCount ?? 0,
+                ["errorCount"] = completed?.ErrorCount ?? 0,
+                ["durationMs"] = completed?.DurationMs ?? 0,
+                ["finalEstimatedTokens"] = completed?.FinalEstimatedTokens ?? 0,
+                ["compactionCount"] = completed?.CompactionCount ?? 0
+            };
+
+            if (completed?.TaskSummary != null)
+            {
+                payload["taskSummary"] = FormatTaskSummary(completed.TaskSummary);
             }
 
             return JsonSerializer.Serialize(payload, _JsonOptions);
@@ -410,6 +446,8 @@ namespace Mux.Cli.Commands
                 "llm_stream_error" => "backend",
                 "context_limit_exceeded" => "runtime",
                 "max_iterations_reached" => "runtime",
+                "budget_exceeded" => "runtime",
+                "schema_validation_failed" => "validation",
                 "print_error" => "unknown",
                 _ => string.Empty
             };
