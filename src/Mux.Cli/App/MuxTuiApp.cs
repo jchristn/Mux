@@ -9,6 +9,7 @@ namespace Mux.Cli.App
     using System.Threading.Tasks;
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
+    using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
@@ -62,6 +63,7 @@ namespace Mux.Cli.App
         private readonly ApprovalPolicyEnum _ApprovalPolicy;
         private readonly SessionStore? _Store;
         private readonly Action<EndpointConfig>? _OnEndpointSelected;
+        private readonly Func<EndpointConfig, CancellationToken, Task<ModelLoadResult>>? _OnValidateModel;
         private readonly Action<PromptProfile>? _OnPromptProfileSelected;
         private readonly McpRuntime? _McpRuntime;
         private readonly SkillRuntime? _SkillRuntime;
@@ -128,6 +130,7 @@ namespace Mux.Cli.App
         /// <param name="endpointName">The effective endpoint name (shown in the sidebar, recorded in sessions).</param>
         /// <param name="model">The effective model (recorded in sessions).</param>
         /// <param name="onEndpointSelected">Optional callback invoked when the user switches endpoints, so the caller can apply it to future runs. Null disables live switching.</param>
+        /// <param name="onValidateModel">Optional callback invoked (in the background) after an endpoint switch to load/validate the newly selected model. Returns the load outcome so the shell can surface a notice. Null disables the model-load probe.</param>
         /// <param name="onPromptProfileSelected">Optional callback invoked when the user applies a prompt profile, so the caller can substitute placeholders and apply it to future runs. Null disables live prompt switching.</param>
         /// <param name="showSplash">When true, opens the startup splash modal.</param>
         /// <param name="showBoundaries">When true, the shell starts with the dark-grey boundary lines drawn (toggle with <c>/borders</c>).</param>
@@ -143,6 +146,7 @@ namespace Mux.Cli.App
             string endpointName = "",
             string model = "",
             Action<EndpointConfig>? onEndpointSelected = null,
+            Func<EndpointConfig, CancellationToken, Task<ModelLoadResult>>? onValidateModel = null,
             Action<PromptProfile>? onPromptProfileSelected = null,
             bool showSplash = false,
             bool showBoundaries = false,
@@ -154,6 +158,7 @@ namespace Mux.Cli.App
             _ApprovalPolicy = approvalPolicy;
             _Store = sessionStore;
             _OnEndpointSelected = onEndpointSelected;
+            _OnValidateModel = onValidateModel;
             _OnPromptProfileSelected = onPromptProfileSelected;
             _McpRuntime = mcpRuntime;
             _SkillRuntime = skillRuntime;
@@ -2094,6 +2099,45 @@ namespace Mux.Cli.App
             WriteNotice($"Switched to endpoint {endpoint.Name} ({endpoint.Model}).");
             RefreshFooter();
             RefreshSidebar();
+
+            ValidateSwitchedModel(endpoint);
+        }
+
+        // After an endpoint switch, load/validate the newly selected model in the background — for lazily
+        // loading backends (Ollama) this warms the model into memory; for hosted providers it confirms the
+        // model, URL, and credentials are usable before the next turn. The outcome is surfaced as a notice.
+        private void ValidateSwitchedModel(EndpointConfig endpoint)
+        {
+            if (_OnValidateModel == null)
+            {
+                return;
+            }
+
+            string label = string.IsNullOrWhiteSpace(endpoint.Model) ? endpoint.Name : endpoint.Model;
+            WriteNotice($"Loading model {label} on {endpoint.Name}…");
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    ModelLoadResult result = await _OnValidateModel(endpoint, _Cts.Token).ConfigureAwait(false);
+                    if (result.Success)
+                    {
+                        PostNotice($"Model {label} loaded successfully on {endpoint.Name}.");
+                    }
+                    else
+                    {
+                        PostNotice($"Unable to load model {label} on {endpoint.Name}: {result.Error}");
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                catch (Exception ex)
+                {
+                    PostNotice($"Unable to load model {label} on {endpoint.Name}: {ex.Message}");
+                }
+            });
         }
 
         private async Task AddEndpointFormAsync()

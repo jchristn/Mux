@@ -150,6 +150,72 @@ namespace Mux.Core.Llm
         }
 
         /// <summary>
+        /// Attempts to load (and thereby validate) the configured model by issuing a minimal, near-empty
+        /// completion request. For providers that lazily load models — such as Ollama — this warms the model
+        /// into memory; for hosted providers it confirms the model name, base URL, and credentials are usable.
+        /// The request uses the same transport and adapter as real turns, so a success here means the next
+        /// turn will reach the same model. Never throws for backend/transport errors; those are returned as a
+        /// failure result.
+        /// </summary>
+        /// <param name="cancellationToken">A token to cancel the probe.</param>
+        /// <returns>A <see cref="ModelLoadResult"/> describing success or the failure details.</returns>
+        public async Task<ModelLoadResult> LoadModelAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                Pp.ToolChatRequest request = new Pp.ToolChatRequest
+                {
+                    Model = string.IsNullOrWhiteSpace(_Endpoint.Model) ? null : _Endpoint.Model,
+                    MaxTokens = 1,
+                    ToolChoice = "none"
+                };
+
+                // A single minimal user message keeps the request valid across providers that reject an empty
+                // messages array while still asking for essentially no generation (max 1 token).
+                request.Messages.Add(Pp.ChatMessage.User("."));
+
+                Pp.ToolChatResponse response = await _Client.ToolChatAsync(request, cancellationToken).ConfigureAwait(false);
+
+                if (response.Success)
+                {
+                    return ModelLoadResult.Ok();
+                }
+
+                string status = response.StatusCode.HasValue ? $"status {response.StatusCode.Value}" : "no response";
+                string detail = string.IsNullOrWhiteSpace(response.Error) ? status : $"{status}: {response.Error}";
+                return ModelLoadResult.Fail(detail);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return ModelLoadResult.Fail(ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Creates a short-lived client for <paramref name="endpoint"/>, attempts to load its model, and
+        /// disposes the client. A convenience for callers (such as the shell) that only need a one-shot
+        /// model-load probe on an endpoint switch.
+        /// </summary>
+        /// <param name="endpoint">The endpoint whose model should be loaded/validated.</param>
+        /// <param name="ignoreCertErrors">True to bypass TLS certificate validation.</param>
+        /// <param name="cancellationToken">A token to cancel the probe.</param>
+        /// <returns>A <see cref="ModelLoadResult"/> describing success or the failure details.</returns>
+        public static async Task<ModelLoadResult> LoadModelAsync(EndpointConfig endpoint, bool ignoreCertErrors, CancellationToken cancellationToken)
+        {
+            if (endpoint == null)
+            {
+                return ModelLoadResult.Fail("no endpoint");
+            }
+
+            using LlmClient client = new LlmClient(endpoint, ignoreCertErrors);
+            return await client.LoadModelAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Sends a streaming chat completion request and yields agent events as they arrive. Assistant
         /// text is yielded as it streams; assembled tool calls are yielded after the stream completes.
         /// </summary>

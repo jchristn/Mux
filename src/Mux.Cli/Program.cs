@@ -11,6 +11,7 @@ namespace Mux.Cli
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
+    using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
@@ -337,6 +338,8 @@ CONFIG:
                     runtime.Endpoint.Name,
                     runtime.Endpoint.Model,
                     onEndpointSelected: (EndpointConfig endpoint) => template.Endpoint = endpoint,
+                    onValidateModel: (EndpointConfig endpoint, CancellationToken ct) =>
+                        LlmClient.LoadModelAsync(endpoint, runtime.MuxSettings.IgnoreCertErrors, ct),
                     onPromptProfileSelected: (PromptProfile profile) =>
                     {
                         // Re-substitute placeholders for the current endpoint's tool support to form the new
