@@ -45,10 +45,25 @@ namespace Test.Shared.Suites
                         AgentEventProjector projector = new AgentEventProjector(pane);
                         await projector.ProjectAsync(Script(new AgentEvent[] { Thinking("Let me think."), Text("the answer"), Completed() }, ct), ct).ConfigureAwait(false);
 
-                        string joined = Join(pane.SnapshotPlainLines());
+                        IReadOnlyList<string> lines = pane.SnapshotPlainLines();
+                        string joined = Join(lines);
                         MuxAssert.Contains("💭 thinking", joined, "thinking header rendered");
-                        MuxAssert.Contains("Let me think.", joined, "thinking body rendered");
                         MuxAssert.Contains("the answer", joined, "answer rendered");
+
+                        // Thinking body is not indented.
+                        MuxAssert.IsTrue(lines.Any(l => l == "Let me think."), "thinking body renders without indentation");
+
+                        // A blank line separates the thinking block from the answer.
+                        int thinkingIdx = IndexOfContaining(lines, "Let me think.");
+                        int answerIdx = IndexOfContaining(lines, "the answer");
+                        MuxAssert.IsTrue(thinkingIdx >= 0 && answerIdx > thinkingIdx, "the answer follows the thinking block");
+                        bool blankBetween = false;
+                        for (int i = thinkingIdx + 1; i < answerIdx; i++)
+                        {
+                            if (string.IsNullOrEmpty(lines[i])) blankBetween = true;
+                        }
+                        MuxAssert.IsTrue(blankBetween, "a blank line separates thinking from the answer");
+
                         MuxAssert.AreEqual("the answer", projector.CapturedAssistantText, "captured assistant text (history) excludes thinking");
                     }),
 
@@ -284,6 +299,16 @@ namespace Test.Shared.Suites
         private static int CountContaining(IReadOnlyList<string> lines, string needle)
         {
             return lines.Count(line => line.Contains(needle, StringComparison.Ordinal));
+        }
+
+        private static int IndexOfContaining(IReadOnlyList<string> lines, string needle)
+        {
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (lines[i].Contains(needle, StringComparison.Ordinal)) return i;
+            }
+
+            return -1;
         }
 
         #endregion

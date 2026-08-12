@@ -211,7 +211,7 @@ namespace Mux.Cli.App
             string[] lines = _ThinkingText.ToString().Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
             for (int i = 0; i < lines.Length; i++)
             {
-                StyledText styled = Text.From("  " + lines[i]).Dim();
+                StyledText styled = Text.From(lines[i]).Dim();
                 if (i < _ThinkingLines.Count)
                 {
                     if (!_ThinkingLines[i].Update(styled))
@@ -230,6 +230,12 @@ namespace Mux.Cli.App
         // stay in place above the answer, and the next thinking block starts fresh.
         private void FinalizeThinkingBlock()
         {
+            if (_ThinkingHeaderShown)
+            {
+                // A blank line separates the thinking block from the answer (or tool call) that follows.
+                _Pane.WriteLine(Text.From(string.Empty));
+            }
+
             _ThinkingLines.Clear();
             _ThinkingText.Clear();
             _ThinkingHeaderShown = false;
