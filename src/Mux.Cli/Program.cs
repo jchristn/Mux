@@ -104,6 +104,11 @@ OPTIONS:
         --max-turns <int>                Override max agent loop iterations (1-100)
         --max-token-budget <int>         Stop with budget_exceeded when estimated context tokens exceed this
         --compaction-strategy <mode>     summary or trim
+        --effort <level>                 Reasoning effort: off, minimal, low, medium, high
+        --effort-openai-value <str>      Override the OpenAI reasoning_effort value
+        --effort-gemini-budget <int>     Override the Gemini thinking budget (-1..32768)
+        --effort-ollama-think <val>      Override the Ollama think value (low/medium/high/true/false)
+        --show-thinking                  Surface the model's reasoning (thinking) for this run
 
   Approval / Safety:
         --yolo                           Auto-approve all tool calls
