@@ -60,6 +60,18 @@ namespace Test.Shared.Suites
                         }
                     }),
 
+                    Case("SlashResolvesThinking", "The slash parser resolves the thinking-display command", async (CancellationToken ct) =>
+                    {
+                        await using (JobManager manager = NewManager())
+                        using (MuxTuiApp app = NewApp(out _, manager))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            SlashCommandParser parser = new SlashCommandParser(app.Catalog);
+                            MuxAssert.AreEqual("mux.thinking", parser.Resolve("/thinking")?.Id, "thinking alias");
+                            MuxAssert.AreEqual("mux.thinking", parser.Resolve("/think")?.Id, "think alias");
+                        }
+                    }),
+
                     Case("SlashTryHandleInvokesAndReports", "TryHandle invokes a match and reports unknowns", async (CancellationToken ct) =>
                     {
                         await using (JobManager manager = NewManager())

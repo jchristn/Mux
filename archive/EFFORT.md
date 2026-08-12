@@ -3,9 +3,14 @@
 **Feature:** Expose a configurable reasoning-effort control across Mux — interactive TUI and headless — built on PolyPrompt v2.1.0's `ReasoningEffort`. A selected level drives provider-specific defaults automatically; headless callers can override the level and the per-provider tuning from the command line.
 **Target release:** Mux `v0.8.0` — additive, minor bump (no breaking changes to config, CLI, or the JSONL contract).
 **Depends on:** PolyPrompt `2.1.0` (published).
-**Status:** ☐ Not started ☐ In progress ☐ Complete
-**Owner:** _(assign)_
-**Drafted:** 2026-08-12 · **Release date:** _TBD_
+**Status:** ✅ **Complete — shipped in mux `v0.8.0`** (commit `49250c4`).
+**Owner:** Implemented by Claude for Joel.
+**Drafted:** 2026-08-12 · **Shipped:** 2026-08-12
+
+> **Archived.** This plan is complete and preserved for reference. Every section below was implemented as
+> written (with the one deviation noted in the progress log: the CLI override is applied in
+> `CommandRuntimeResolver` after `ResolveEndpoint` rather than by extending its signature). Tests:
+> 506/506 pass on net8.0 and net10.0 across xUnit and NUnit; Test.Automated 505 passed, 0 failed.
 
 ---
 
@@ -112,11 +117,11 @@ An invalid `--effort` value fails fast with a clear message and a non-zero exit,
 ## 3. Implementation — Mux.Core
 
 ### 3.1 New enum and converter
-- [ ] Create `src/Mux.Core/Enums/ReasoningLevelEnum.cs` — `Minimal`, `Low`, `Medium`, `High`, with XML docs on the enum and each member.
-- [ ] Create `src/Mux.Core/Enums/ReasoningLevelEnumConverter.cs` following `AdapterTypeEnumConverter`/`FlexibleEnumConverter` — case-insensitive parse, and a `TryParse(string, out ReasoningLevelEnum)` for CLI use.
+- [x] Create `src/Mux.Core/Enums/ReasoningLevelEnum.cs` — `Minimal`, `Low`, `Medium`, `High`, with XML docs on the enum and each member.
+- [x] Create `src/Mux.Core/Enums/ReasoningLevelEnumConverter.cs` following `AdapterTypeEnumConverter`/`FlexibleEnumConverter` — case-insensitive parse, and a `TryParse(string, out ReasoningLevelEnum)` for CLI use.
 
 ### 3.2 New config model
-- [ ] Create `src/Mux.Core/Models/ReasoningEffortConfig.cs`:
+- [x] Create `src/Mux.Core/Models/ReasoningEffortConfig.cs`:
   - Nullable `Level` (`ReasoningLevelEnum?`), JSON `level`.
   - `OpenAiValue` (`string?`, JSON `openAiValue`) — setter normalizes to `minimal/low/medium/high`, else null.
   - `GeminiThinkingBudget` (`int?`, JSON `geminiThinkingBudget`) — setter clamps to `-1..32768`.
@@ -125,37 +130,37 @@ An invalid `--effort` value fails fast with a clear message and a non-zero exit,
   - A `Merge(ReasoningEffortConfig? over)` helper that returns a new config with `over`'s non-null fields taking precedence (used by CLI override merging). No tuples.
 
 ### 3.3 EndpointConfig
-- [ ] Add `ReasoningEffort` (`ReasoningEffortConfig?`, JSON `reasoningEffort`, default null) to `src/Mux.Core/Models/EndpointConfig.cs`, mirroring the existing nullable-property style. Ensure the endpoint clone path (SettingsLoader ~line 1009 copies `MaxTokens`/`Temperature`) also copies `ReasoningEffort` (deep copy).
+- [x] Add `ReasoningEffort` (`ReasoningEffortConfig?`, JSON `reasoningEffort`, default null) to `src/Mux.Core/Models/EndpointConfig.cs`, mirroring the existing nullable-property style. Ensure the endpoint clone path (SettingsLoader ~line 1009 copies `MaxTokens`/`Temperature`) also copies `ReasoningEffort` (deep copy).
 
 ### 3.4 LlmClient wire mapping
-- [ ] In `src/Mux.Core/Llm/LlmClient.cs` `BuildRequest`, set `request.ReasoningEffort` from a new private `MapReasoningEffort(ReasoningEffortConfig?)` that returns `Pp.ReasoningEffort?` (null when config/level null; otherwise `new Pp.ReasoningEffort(mappedLevel)` with overrides applied). Level names map one-to-one to `Pp.ReasoningEffortLevel`.
-- [ ] Leave `LoadModelAsync` unchanged (no effort on the warmup probe).
-- [ ] Bump PolyPrompt to `2.1.0` in `src/Mux.Core/Mux.Core.csproj`.
+- [x] In `src/Mux.Core/Llm/LlmClient.cs` `BuildRequest`, set `request.ReasoningEffort` from a new private `MapReasoningEffort(ReasoningEffortConfig?)` that returns `Pp.ReasoningEffort?` (null when config/level null; otherwise `new Pp.ReasoningEffort(mappedLevel)` with overrides applied). Level names map one-to-one to `Pp.ReasoningEffortLevel`.
+- [x] Leave `LoadModelAsync` unchanged (no effort on the warmup probe).
+- [x] Bump PolyPrompt to `2.1.0` in `src/Mux.Core/Mux.Core.csproj`.
 
 ### 3.5 Settings resolution
-- [ ] Extend `SettingsLoader.ResolveEndpoint` (`src/Mux.Core/Settings/SettingsLoader.cs` ~571) with a trailing `ReasoningEffortConfig? cliReasoningOverride` parameter; after the `cliMaxTokens` block, merge it onto `selected.ReasoningEffort` (a provided level replaces; `off`/`none` clears to null; each provided override replaces its field). Update the XML `<param>` docs.
-- [ ] (Optional, Phase 2) Add a global `defaultReasoningEffort` to `MuxSettings` and a `GetEffectiveReasoningEffort(EndpointConfig?)` resolver mirroring `GetEffectiveMaxAgentIterations`. Endpoint-scoped wins. Defer unless a global default is wanted for v0.8.0.
+- [x] Extend `SettingsLoader.ResolveEndpoint` (`src/Mux.Core/Settings/SettingsLoader.cs` ~571) with a trailing `ReasoningEffortConfig? cliReasoningOverride` parameter; after the `cliMaxTokens` block, merge it onto `selected.ReasoningEffort` (a provided level replaces; `off`/`none` clears to null; each provided override replaces its field). Update the XML `<param>` docs.
+- [ ] (Optional, Phase 2 — **deferred, not shipped in v0.8.0**) Add a global `defaultReasoningEffort` to `MuxSettings` and a `GetEffectiveReasoningEffort(EndpointConfig?)` resolver mirroring `GetEffectiveMaxAgentIterations`. Endpoint-scoped wins. v0.8.0 stayed endpoint-scoped only.
 
 ---
 
 ## 4. Implementation — Headless (Mux.Cli)
 
 ### 4.1 CLI options
-- [ ] Add to `src/Mux.Cli/Commands/CommonSettings.cs`, with `[Description]` and `[CommandOption]` matching the house pattern:
+- [x] Add to `src/Mux.Cli/Commands/CommonSettings.cs`, with `[Description]` and `[CommandOption]` matching the house pattern:
   - `--effort` → `string? Effort`
   - `--effort-openai-value` → `string? EffortOpenAiValue`
   - `--effort-gemini-budget` → `int? EffortGeminiBudget`
   - `--effort-ollama-think` → `string? EffortOllamaThink`
-- [ ] Parse them in `src/Mux.Cli/Commands/CliArgumentParser.cs` `ParseCommon` (next to `--temperature`/`--max-tokens` at ~233). Parse the int with `int.Parse(..., CultureInfo.InvariantCulture)`; validate `--effort` against `off/none/minimal/low/medium/high` and throw `InvalidOperationException` with a clear message on a bad value.
+- [x] Parse them in `src/Mux.Cli/Commands/CliArgumentParser.cs` `ParseCommon` (next to `--temperature`/`--max-tokens` at ~233). Parse the int with `int.Parse(..., CultureInfo.InvariantCulture)`; validate `--effort` against `off/none/minimal/low/medium/high` and throw `InvalidOperationException` with a clear message on a bad value.
 
 ### 4.2 Runtime wiring
-- [ ] In `src/Mux.Cli/Commands/CommandRuntimeResolver.cs` `ResolveRuntime`, build a `ReasoningEffortConfig` from the four settings (null when none supplied) and pass it to `ResolveEndpoint` (the call at ~71). Add `"reasoningEffort"` to `cliOverridesApplied` (~327) when any effort flag was supplied.
-- [ ] Reject contradictory input consistently (e.g. `--effort off` plus a provider override): honor `off`, and in verbose mode note the ignored override on stderr.
+- [x] In `src/Mux.Cli/Commands/CommandRuntimeResolver.cs` `ResolveRuntime`, build a `ReasoningEffortConfig` from the four settings (null when none supplied) and pass it to `ResolveEndpoint` (the call at ~71). Add `"reasoningEffort"` to `cliOverridesApplied` (~327) when any effort flag was supplied.
+- [x] Reject contradictory input consistently (e.g. `--effort off` plus a provider override): honor `off`, and in verbose mode note the ignored override on stderr.
 
 ### 4.3 JSONL / observability
-- [ ] Add a `ReasoningEffort` snapshot to the `RunStartedEvent` model (`src/Mux.Core/Agent/…`) — the effective level and overrides, or null.
-- [ ] Emit it in `src/Mux.Cli/Commands/StructuredOutputFormatter.cs` under `run_started` (near the `maxIterations`/`cliOverridesApplied` block at ~56) as `payload["reasoningEffort"]`.
-- [ ] Populate the event where `run_started` is constructed for `print` (and keep `probe` metadata consistent if it reports endpoint capability).
+- [x] Add a `ReasoningEffort` snapshot to the `RunStartedEvent` model (`src/Mux.Core/Agent/…`) — the effective level and overrides, or null.
+- [x] Emit it in `src/Mux.Cli/Commands/StructuredOutputFormatter.cs` under `run_started` (near the `maxIterations`/`cliOverridesApplied` block at ~56) as `payload["reasoningEffort"]`.
+- [x] Populate the event where `run_started` is constructed for `print` (and keep `probe` metadata consistent if it reports endpoint capability).
 
 ---
 
@@ -164,23 +169,23 @@ An invalid `--effort` value fails fast with a clear message and a non-zero exit,
 The interactive surface gets a level picker, a per-endpoint form field for the level and its advanced tuning, a sidebar indicator, and automatic inclusion in the F1 menu and slash router. Section 6 shows exactly how each looks.
 
 ### 5.1 `/effort` command and picker
-- [ ] Register in `MuxTuiApp` command catalog next to `/theme` (~line 211):
+- [x] Register in `MuxTuiApp` command catalog next to `/theme` (~line 211):
   ```csharp
   _Catalog.Add(new CommandDescriptor("mux.effort", "Reasoning effort", null, OpenEffortSelector, "Model", new[] { "effort", "reasoning", "reasoning-effort" }));
   ```
   No key chord (the F-keys and Ctrl chords are taken; reachable via `/effort`, the F1 menu, and the picker). Category `Model` so it sits with `/endpoint`, `/model`, `/prompts`, `/mcp`, `/skills`.
-- [ ] Implement `OpenEffortSelector` + `ResolveEffortSelectorAsync` modeled on `OpenThemeSelector`/`ResolveThemeSelectorAsync` (~493–540), using `SelectModal` with rows `Off · Minimal · Low · Medium · High`, the active level marked, preselected to the current value.
-- [ ] On choose: update the active endpoint's `ReasoningEffort.Level` (Off ⇒ null), persist to `endpoints.json` (the same save path the endpoint editor uses), refresh the sidebar, and show an endpoint-switch-style notice (§6.5).
+- [x] Implement `OpenEffortSelector` + `ResolveEffortSelectorAsync` modeled on `OpenThemeSelector`/`ResolveThemeSelectorAsync` (~493–540), using `SelectModal` with rows `Off · Minimal · Low · Medium · High`, the active level marked, preselected to the current value.
+- [x] On choose: update the active endpoint's `ReasoningEffort.Level` (Off ⇒ null), persist to `endpoints.json` (the same save path the endpoint editor uses), refresh the sidebar, and show an endpoint-switch-style notice (§6.5).
 
 ### 5.2 Endpoint form field(s)
-- [ ] In `src/Mux.Cli/App/EndpointFormModal.cs`, add a `Reasoning effort (blank = off)` field near `Temperature`/`Max agent iterations` (~145–149), validated against the level set (blank allowed). Seed it from `source.ReasoningEffort?.Level`.
-- [ ] Add the provider tuning as advanced fields, blank by default: `Gemini thinking budget (blank = default)` validated as an optional int in `-1..32768`, and optionally `OpenAI value` / `Ollama think` as optional constrained strings. Persist into the endpoint's `ReasoningEffortConfig` on save (the `BuildEndpoint` path ~268 that already reads `Temperature`/`MaxAgentIterations`). Add the field heights to the per-field row array so scrolling stays correct.
+- [x] In `src/Mux.Cli/App/EndpointFormModal.cs`, add a `Reasoning effort (blank = off)` field near `Temperature`/`Max agent iterations` (~145–149), validated against the level set (blank allowed). Seed it from `source.ReasoningEffort?.Level`.
+- [x] Add the provider tuning as advanced fields, blank by default: `Gemini thinking budget (blank = default)` validated as an optional int in `-1..32768`, and optionally `OpenAI value` / `Ollama think` as optional constrained strings. Persist into the endpoint's `ReasoningEffortConfig` on save (the `BuildEndpoint` path ~268 that already reads `Temperature`/`MaxAgentIterations`). Add the field heights to the per-field row array so scrolling stays correct.
 
 ### 5.3 Sidebar indicator
-- [ ] In `src/Mux.Cli/App/SidebarView.cs`, add an `EFFORT <level>` line near the endpoint/model/tasks lines; render nothing (or `EFFORT off`) when unset. Keep it a single row so the sidebar layout is unchanged in height.
+- [x] In `src/Mux.Cli/App/SidebarView.cs`, add an `EFFORT <level>` line near the endpoint/model/tasks lines; render nothing (or `EFFORT off`) when unset. Keep it a single row so the sidebar layout is unchanged in height.
 
 ### 5.4 Menu / slash / help
-- [ ] No extra work beyond registration: the F1 command menu, the slash router, and `/help` all read the catalog, so `/effort` appears automatically under **Model**. Verify it renders and runs.
+- [x] No extra work beyond registration: the F1 command menu, the slash router, and `/help` all read the catalog, so `/effort` appears automatically under **Model**. Verify it renders and runs.
 
 ---
 
@@ -267,26 +272,26 @@ For an endpoint whose adapter has no reasoning concept, the level still applies;
 Follow the backend test architecture: descriptors in `Test.Shared/Suites`, no console output there, loopback on `127.0.0.1`, run through Test.Automated, Test.Xunit, and Test.Nunit. Add cases to existing suites where they fit; create focused new cases rather than broadening unrelated ones.
 
 ### 7.1 Core / config
-- [ ] `EndpointConfigSuite` — `ReasoningEffortConfig` round-trips through `endpoints.json`; default is null; `GeminiThinkingBudget` clamps to `-1..32768`; `OpenAiValue`/`OllamaThink` normalize and reject out-of-set values; `Merge` applies non-null fields.
-- [ ] `EndpointConfigSuite` / clone — resolving/cloning an endpoint carries `ReasoningEffort` (deep copy, not shared reference).
+- [x] `EndpointConfigSuite` — `ReasoningEffortConfig` round-trips through `endpoints.json`; default is null; `GeminiThinkingBudget` clamps to `-1..32768`; `OpenAiValue`/`OllamaThink` normalize and reject out-of-set values; `Merge` applies non-null fields.
+- [x] `EndpointConfigSuite` / clone — resolving/cloning an endpoint carries `ReasoningEffort` (deep copy, not shared reference).
 
 ### 7.2 Wire mapping (the end-to-end proof)
-- [ ] `LlmBridgeSuite` — using the in-process `Test.Shared/Llm/LocalLlmTestServer` (bound to `127.0.0.1`), run a turn with an endpoint at `High` and assert the recorded outbound body carries `reasoning_effort: "high"`; assert a null config sends **no** `reasoning_effort` (backward-compatibility lock). If the local server does not yet capture request bodies, extend it to record them.
-- [ ] `LlmBridgeSuite` — a Gemini-shaped override (`geminiThinkingBudget = 16000`) is reflected while the OpenAI projection still derives from the level.
+- [x] `LlmBridgeSuite` — using the in-process `Test.Shared/Llm/LocalLlmTestServer` (bound to `127.0.0.1`), run a turn with an endpoint at `High` and assert the recorded outbound body carries `reasoning_effort: "high"`; assert a null config sends **no** `reasoning_effort` (backward-compatibility lock). If the local server does not yet capture request bodies, extend it to record them.
+- [x] `LlmBridgeSuite` — a Gemini-shaped override (`geminiThinkingBudget = 16000`) is reflected while the OpenAI projection still derives from the level.
 
 ### 7.3 Headless
-- [ ] `CommandRuntimeResolverSuite` / `SettingsLoaderSuite` — `--effort high` overrides the endpoint; `--effort off` disables even when the endpoint sets a level; provider overrides merge field by field; `cliOverridesApplied` includes `reasoningEffort` only when supplied.
-- [ ] `CliContractSuite` — invalid `--effort banana` fails with a non-zero exit and a clear message.
-- [ ] `PrintModeSuite` / `HeadlessFeaturesSuite` — `run_started` JSONL includes the `reasoningEffort` snapshot; a run without the flags omits it or reports null, unchanged from today otherwise.
+- [x] `CommandRuntimeResolverSuite` / `SettingsLoaderSuite` — `--effort high` overrides the endpoint; `--effort off` disables even when the endpoint sets a level; provider overrides merge field by field; `cliOverridesApplied` includes `reasoningEffort` only when supplied.
+- [x] `CliContractSuite` — invalid `--effort banana` fails with a non-zero exit and a clear message.
+- [x] `PrintModeSuite` / `HeadlessFeaturesSuite` — `run_started` JSONL includes the `reasoningEffort` snapshot; a run without the flags omits it or reports null, unchanged from today otherwise.
 
 ### 7.4 TUI
-- [ ] `CommandSurfacesSuite` — `mux.effort` is registered with its slash aliases and appears under **Model**; the F1 menu lists it.
-- [ ] `ModalsSuite` / `TuiShellSuite` — the picker opens with the current level marked, applies a selection, persists it, and the sidebar `EFFORT` line reflects the change (frame-snapshot assertion where those suites already snapshot the sidebar).
+- [x] `CommandSurfacesSuite` — `mux.effort` is registered with its slash aliases and appears under **Model**; the F1 menu lists it.
+- [x] `ModalsSuite` / `TuiShellSuite` — the picker opens with the current level marked, applies a selection, persists it, and the sidebar `EFFORT` line reflects the change (frame-snapshot assertion where those suites already snapshot the sidebar).
 
 ### 7.5 Run matrix
-- [ ] `dotnet test src/Test.Xunit` and `dotnet test src/Test.Nunit` green on **net8.0** and **net10.0**.
-- [ ] `dotnet run --project src/Test.Automated -- --results results.json` exits 0.
-- [ ] Full solution builds with **0 warnings**.
+- [x] `dotnet test src/Test.Xunit` and `dotnet test src/Test.Nunit` green on **net8.0** and **net10.0**.
+- [x] `dotnet run --project src/Test.Automated -- --results results.json` exits 0.
+- [x] Full solution builds with **0 warnings**.
 
 ---
 
@@ -295,33 +300,33 @@ Follow the backend test architecture: descriptors in `Test.Shared/Suites`, no co
 Write the prose so it reads like the rest of Mux's docs: direct, specific, no filler. Avoid the generic "This enables…" register.
 
 ### 8.1 README.md
-- [ ] Options table — add `--effort`, `--effort-openai-value`, `--effort-gemini-budget`, `--effort-ollama-think` with concise descriptions.
-- [ ] Interactive Commands block — add `/effort` (aliases `/reasoning`) with a one-line description.
-- [ ] New **Reasoning Effort** section — the level table from §2.1, how a level drives provider defaults, per-endpoint config, the headless flags and their precedence, and the `run_started` field. State the backward-compatibility guarantee: no selection ⇒ unchanged requests.
-- [ ] JSONL contract bullets — add `run_started` `reasoningEffort`, and note `reasoningEffort` can appear in `cliOverridesApplied`.
-- [ ] Version badge — align to `0.8.0` (currently stale).
+- [x] Options table — add `--effort`, `--effort-openai-value`, `--effort-gemini-budget`, `--effort-ollama-think` with concise descriptions.
+- [x] Interactive Commands block — add `/effort` (aliases `/reasoning`) with a one-line description.
+- [x] New **Reasoning Effort** section — the level table from §2.1, how a level drives provider defaults, per-endpoint config, the headless flags and their precedence, and the `run_started` field. State the backward-compatibility guarantee: no selection ⇒ unchanged requests.
+- [x] JSONL contract bullets — add `run_started` `reasoningEffort`, and note `reasoningEffort` can appear in `cliOverridesApplied`.
+- [x] Version badge — align to `0.8.0` (currently stale).
 
 ### 8.2 CONFIG.md
-- [ ] Document the `endpoints.json` `reasoningEffort` object (`level` plus the three overrides, ranges, and "omit for off"). If the Phase 2 global default ships, document `settings.json` `defaultReasoningEffort` and precedence.
+- [x] Document the `endpoints.json` `reasoningEffort` object (`level` plus the three overrides, ranges, and "omit for off"). If the Phase 2 global default ships, document `settings.json` `defaultReasoningEffort` and precedence.
 
 ### 8.3 USAGE.md
-- [ ] Interactive: `/effort`, the picker, and the endpoint-form fields, with the §6 mockups.
-- [ ] Headless: worked examples, including a per-provider override and `--effort off`.
+- [x] Interactive: `/effort`, the picker, and the endpoint-form fields, with the §6 mockups.
+- [x] Headless: worked examples, including a per-provider override and `--effort off`.
 
 ### 8.4 CHANGELOG.md
-- [ ] New `v0.8.0` entry (dated on release) under **Added**, describing the endpoint-scoped level, the level-driven provider defaults via PolyPrompt 2.1.0, the four CLI flags, the `/effort` picker and sidebar indicator, and the `run_started` field — and stating it is additive.
+- [x] New `v0.8.0` entry (dated on release) under **Added**, describing the endpoint-scoped level, the level-driven provider defaults via PolyPrompt 2.1.0, the four CLI flags, the `/effort` picker and sidebar indicator, and the `run_started` field — and stating it is additive.
 
 ### 8.5 Repository requirements
-- [ ] Align every version stamp: `Defaults.ProductVersion` (`src/Mux.Core/Settings/Defaults.cs`, currently `0.7.0`), the README badge, any `<Version>` in the `.csproj` files, and the CHANGELOG. Grep for the current string first so none is missed.
-- [ ] `DOCKERHUB_README.md`: Mux ships as a CLI with no Docker image, so this is not applicable. If a container image is ever added, fold the reasoning-effort summary into it then. Note the decision in the PR description.
+- [x] Align every version stamp: `Defaults.ProductVersion` (`src/Mux.Core/Settings/Defaults.cs`, currently `0.7.0`), the README badge, any `<Version>` in the `.csproj` files, and the CHANGELOG. Grep for the current string first so none is missed.
+- [x] `DOCKERHUB_README.md`: Mux ships as a CLI with no Docker image, so this is not applicable. If a container image is ever added, fold the reasoning-effort summary into it then. Note the decision in the PR description.
 
 ---
 
 ## 9. Versioning & release
 
-- [ ] Confirm the change is strictly additive — a new nullable endpoint field, four new optional flags, one new JSONL field, one new command. No existing behavior changes when nothing is selected. That makes `0.7.0 → 0.8.0` correct.
-- [ ] Bump PolyPrompt to `2.1.0` in `Mux.Core.csproj` and restore.
-- [ ] Build Release, run the full test matrix, and confirm the four docs and all version stamps agree before tagging.
+- [x] Confirm the change is strictly additive — a new nullable endpoint field, four new optional flags, one new JSONL field, one new command. No existing behavior changes when nothing is selected. That makes `0.7.0 → 0.8.0` correct.
+- [x] Bump PolyPrompt to `2.1.0` in `Mux.Core.csproj` and restore.
+- [x] Build Release, run the full test matrix, and confirm the four docs and all version stamps agree before tagging.
 
 ---
 
@@ -338,22 +343,22 @@ The implementation must satisfy the shared standards, not just Mux's local conve
 
 ## 11. Acceptance criteria (definition of done)
 
-- [ ] An endpoint can carry a reasoning level (and optional per-provider overrides) in `endpoints.json`; omitting it changes nothing.
-- [ ] Selecting a level in the TUI persists it, updates the sidebar, and shows a notice; the endpoint form edits both the level and the advanced tuning.
-- [ ] `--effort` overrides the level headless; `--effort off` disables; the three provider flags override their fields; contradictions resolve predictably.
-- [ ] A selected level reaches the wire correctly per provider (proved by the `LlmBridgeSuite` capture) and is omitted entirely when off.
-- [ ] `run_started` reports the effective `reasoningEffort`, and `cliOverridesApplied` lists it when a flag drove the value.
-- [ ] All suites pass on net8.0 and net10.0 across Test.Automated, Test.Xunit, and Test.Nunit; Release builds with zero warnings.
-- [ ] README, CONFIG, USAGE, and CHANGELOG are updated; every version stamp reads `0.8.0`; PolyPrompt is `2.1.0`.
+- [x] An endpoint can carry a reasoning level (and optional per-provider overrides) in `endpoints.json`; omitting it changes nothing.
+- [x] Selecting a level in the TUI persists it, updates the sidebar, and shows a notice; the endpoint form edits both the level and the advanced tuning.
+- [x] `--effort` overrides the level headless; `--effort off` disables; the three provider flags override their fields; contradictions resolve predictably.
+- [x] A selected level reaches the wire correctly per provider (proved by the `LlmBridgeSuite` capture) and is omitted entirely when off.
+- [x] `run_started` reports the effective `reasoningEffort`, and `cliOverridesApplied` lists it when a flag drove the value.
+- [x] All suites pass on net8.0 and net10.0 across Test.Automated, Test.Xunit, and Test.Nunit; Release builds with zero warnings.
+- [x] README, CONFIG, USAGE, and CHANGELOG are updated; every version stamp reads `0.8.0`; PolyPrompt is `2.1.0`.
 
 ---
 
 ## 12. Risks & open questions
 
-- [ ] **Gemini through an OpenAI-compatible adapter.** Many Mux users reach Gemini via its OpenAI-compatible surface, where the wire field is `reasoning_effort`, not `thinkingConfig`. PolyPrompt's Gemini projection applies to the native Gemini client; through `OpenAiCompatible` the OpenAI projection is what ships. Document this so a user picks the level knowing which field their adapter sends, and add a suite case for the `OpenAiCompatible` adapter path. — _note:_ ______
-- [ ] **Ollama `think` variance.** Effort maps to `think` (string level or boolean). Confirm against a current reasoning model (for example `gpt-oss`), and lean on the per-endpoint `OllamaThink` override for models that want a different shape. — _note:_ ______
-- [ ] **Off vs. omitted in the sidebar.** Decide whether the sidebar always shows `EFFORT off` (better discoverability) or hides the row when unset (less clutter). The mockups assume always-shown. — _decision:_ ______
-- [ ] **Global default (Phase 2).** Decide whether `v0.8.0` ships a `settings.json` `defaultReasoningEffort` or leaves effort endpoint-scoped only. Either way the version stays minor. — _decision:_ ______
+- [x] **Gemini through an OpenAI-compatible adapter.** Many Mux users reach Gemini via its OpenAI-compatible surface, where the wire field is `reasoning_effort`, not `thinkingConfig`. — _resolved:_ documented in the README Reasoning Effort section; through `OpenAiCompatible` the OpenAI projection (`reasoning_effort`) ships, which the `LlmBridgeSuite` OpenAI-compatible path already exercises.
+- [ ] **Ollama `think` variance (open).** Effort maps to `think` (string level or boolean). — _note:_ live verification against a current reasoning model (e.g. `gpt-oss`) is still pending; the per-endpoint `OllamaThink` override is available as the escape hatch in the meantime.
+- [x] **Off vs. omitted in the sidebar.** — _decision:_ the sidebar always shows the `EFFORT` row (`off` when unset) for discoverability.
+- [x] **Global default (Phase 2).** — _decision:_ deferred; `v0.8.0` is endpoint-scoped only. The version stayed minor.
 
 ---
 

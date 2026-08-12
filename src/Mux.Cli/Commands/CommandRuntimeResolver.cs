@@ -79,6 +79,11 @@ namespace Mux.Cli.Commands
 
             ApplyReasoningOverride(endpoint, settings);
 
+            if (settings.ShowThinking)
+            {
+                endpoint.ShowThinking = true;
+            }
+
             string workingDirectory = settings.WorkingDirectory ?? Directory.GetCurrentDirectory();
 
             if (!ToolGovernance.TryParsePosture(settings.Sandbox, out SandboxPostureEnum sandboxPosture))
@@ -317,7 +322,7 @@ namespace Mux.Cli.Commands
             return "internal_default";
         }
 
-        private static List<string> GetCliOverrides(CommonSettings settings)
+        internal static List<string> GetCliOverrides(CommonSettings settings)
         {
             List<string> overrides = new List<string>();
 
@@ -329,6 +334,7 @@ namespace Mux.Cli.Commands
             if (settings.Temperature.HasValue) overrides.Add("temperature");
             if (settings.MaxTokens.HasValue) overrides.Add("maxTokens");
             if (HasReasoningOverride(settings)) overrides.Add("reasoningEffort");
+            if (settings.ShowThinking) overrides.Add("showThinking");
             if (!string.IsNullOrWhiteSpace(settings.WorkingDirectory)) overrides.Add("workingDirectory");
             if (!string.IsNullOrWhiteSpace(settings.SystemPrompt)) overrides.Add("systemPrompt");
             if (!string.IsNullOrWhiteSpace(settings.AppendSystemPrompt)) overrides.Add("appendSystemPrompt");

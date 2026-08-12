@@ -120,6 +120,13 @@ namespace Test.Shared.Suites
                         MuxAssert.IsTrue(CommandRuntimeResolver.HasReasoningOverride(new PrintSettings { Effort = "low" }), "level flag");
                         MuxAssert.IsTrue(CommandRuntimeResolver.HasReasoningOverride(new PrintSettings { EffortOllamaThink = "high" }), "provider flag");
                         return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("CommandRuntimeResolver", "ShowThinkingOverrideIsReported", "--show-thinking appears in cliOverridesApplied only when set", (CancellationToken ct) =>
+                    {
+                        MuxAssert.IsFalse(CommandRuntimeResolver.GetCliOverrides(new PrintSettings()).Contains("showThinking"), "absent by default");
+                        MuxAssert.IsTrue(CommandRuntimeResolver.GetCliOverrides(new PrintSettings { ShowThinking = true }).Contains("showThinking"), "present when set");
+                        return Task.CompletedTask;
                     })
                 });
         }

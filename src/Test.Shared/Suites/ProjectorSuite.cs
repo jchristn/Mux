@@ -39,6 +39,19 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("hello world", Join(lines), "assistant text");
                     }),
 
+                    Case("ThinkingRendersAndStaysOutOfHistory", "Thinking renders as a labeled block and is excluded from captured assistant text", async (CancellationToken ct) =>
+                    {
+                        Pane pane = new Pane("t");
+                        AgentEventProjector projector = new AgentEventProjector(pane);
+                        await projector.ProjectAsync(Script(new AgentEvent[] { Thinking("Let me think."), Text("the answer"), Completed() }, ct), ct).ConfigureAwait(false);
+
+                        string joined = Join(pane.SnapshotPlainLines());
+                        MuxAssert.Contains("💭 thinking", joined, "thinking header rendered");
+                        MuxAssert.Contains("Let me think.", joined, "thinking body rendered");
+                        MuxAssert.Contains("the answer", joined, "answer rendered");
+                        MuxAssert.AreEqual("the answer", projector.CapturedAssistantText, "captured assistant text (history) excludes thinking");
+                    }),
+
                     Case("AssistantMarkdownBulletsTransformed", "Markdown bullets render with bullet glyphs, not raw dashes", async (CancellationToken ct) =>
                     {
                         IReadOnlyList<string> lines = await ProjectAsync(ct, Text("- alpha\n- beta"), Completed());
@@ -225,6 +238,11 @@ namespace Test.Shared.Suites
         private static AssistantTextEvent Text(string text)
         {
             return new AssistantTextEvent { Text = text };
+        }
+
+        private static AssistantThinkingEvent Thinking(string text)
+        {
+            return new AssistantThinkingEvent { Text = text };
         }
 
         private static ToolCallProposedEvent Proposed(string id, string name)

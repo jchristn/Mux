@@ -26,6 +26,7 @@ namespace Mux.Core.Models
         private int? _MaxAgentIterations = null;
         private BackendQuirks? _Quirks = null;
         private ReasoningEffortConfig? _ReasoningEffort = null;
+        private bool _ShowThinking = false;
 
         #endregion
 
@@ -192,6 +193,17 @@ namespace Mux.Core.Models
         {
             get => _ReasoningEffort;
             set => _ReasoningEffort = value;
+        }
+
+        /// <summary>
+        /// Whether the model's reasoning ("thinking") is captured and displayed when this endpoint is
+        /// active. Defaults to false. When false, no reasoning is surfaced and behavior is unchanged.
+        /// </summary>
+        [JsonPropertyName("showThinking")]
+        public bool ShowThinking
+        {
+            get => _ShowThinking;
+            set => _ShowThinking = value;
         }
 
         #endregion

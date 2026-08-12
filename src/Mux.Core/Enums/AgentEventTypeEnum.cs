@@ -22,6 +22,12 @@ namespace Mux.Core.Enums
         AssistantText,
 
         /// <summary>
+        /// Streamed reasoning ("thinking") from the assistant, distinct from the final answer text.
+        /// </summary>
+        [EnumMember(Value = "assistant_thinking")]
+        AssistantThinking,
+
+        /// <summary>
         /// A tool call has been proposed by the model.
         /// </summary>
         [EnumMember(Value = "tool_call_proposed")]

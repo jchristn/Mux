@@ -39,6 +39,8 @@ namespace Test.Shared.Suites
                     Case("OllamaBridgeToleratesV1BaseUrl", "Ollama adapter strips a trailing /v1 and reaches the native /api/chat", RunOllamaV1BaseUrlAsync),
                     Case("ConnectionFailureRetriesAndClassifies", "A connection failure retries and surfaces llm_connection_error", RunConnectionFailureAsync),
                     Case("ReasoningEffortReachesTheWire", "Reasoning effort maps onto the outbound request per adapter", RunReasoningEffortWireAsync),
+                    Case("ThinkingCapturedWhenEnabled", "Thinking is surfaced as separate events when the endpoint enables it", RunThinkingCapturedAsync),
+                    Case("ThinkingSuppressedWhenDisabled", "No thinking events are produced when the endpoint disables it", RunThinkingSuppressedAsync),
                 });
         }
 
@@ -163,7 +165,48 @@ namespace Test.Shared.Suites
             }
         }
 
+        private static async Task RunThinkingCapturedAsync(CancellationToken ct)
+        {
+            using LocalLlmTestServer server = LocalLlmTestServer.Start();
+            EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+            endpoint.ShowThinking = true;
+
+            using LlmClient client = new LlmClient(endpoint);
+
+            List<AgentEvent> events = await CollectAsync(client.StreamAsync(Messages("reasoncapture please"), NoTools(), ct), ct).ConfigureAwait(false);
+            MuxAssert.AreEqual("Let me think.", ThinkingText(events), "thinking is captured as separate events");
+            MuxAssert.AreEqual("hello world", AssistantText(events), "the answer text is unchanged");
+            MuxAssert.IsFalse(AssistantText(events).Contains("think", StringComparison.Ordinal), "thinking does not leak into the answer text");
+        }
+
+        private static async Task RunThinkingSuppressedAsync(CancellationToken ct)
+        {
+            using LocalLlmTestServer server = LocalLlmTestServer.Start();
+            EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+            // ShowThinking defaults to false.
+
+            using LlmClient client = new LlmClient(endpoint);
+
+            List<AgentEvent> events = await CollectAsync(client.StreamAsync(Messages("reasoncapture please"), NoTools(), ct), ct).ConfigureAwait(false);
+            MuxAssert.AreEqual(string.Empty, ThinkingText(events), "no thinking events are produced when the endpoint has it off");
+            MuxAssert.AreEqual("hello world", AssistantText(events), "the answer is still produced when thinking is off");
+        }
+
         #region Helpers
+
+        private static string ThinkingText(List<AgentEvent> events)
+        {
+            StringBuilder builder = new StringBuilder();
+            foreach (AgentEvent agentEvent in events)
+            {
+                if (agentEvent is AssistantThinkingEvent thinkingEvent)
+                {
+                    builder.Append(thinkingEvent.Text);
+                }
+            }
+
+            return builder.ToString();
+        }
 
         private static TestCaseDescriptor Case(string id, string name, Func<CancellationToken, Task> body)
         {

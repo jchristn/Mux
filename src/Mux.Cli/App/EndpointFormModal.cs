@@ -57,6 +57,7 @@ namespace Mux.Cli.App
             1,                    // Max agent iterations
             1,                    // Reasoning effort
             1,                    // Gemini thinking budget
+            1,                    // Show thinking
         };
 
         private readonly string _Title;
@@ -76,6 +77,7 @@ namespace Mux.Cli.App
         private readonly TextField _MaxAgentIterations;
         private readonly TextField _ReasoningEffort;
         private readonly TextField _GeminiThinkingBudget;
+        private readonly Checkbox _ShowThinking;
         private string _Error = string.Empty;
 
         #endregion
@@ -110,6 +112,7 @@ namespace Mux.Cli.App
             _MaxAgentIterations = new TextField();
             _ReasoningEffort = new TextField();
             _GeminiThinkingBudget = new TextField();
+            _ShowThinking = new Checkbox("Show thinking (reasoning)", source.ShowThinking);
 
             if (existing != null)
             {
@@ -161,6 +164,7 @@ namespace Mux.Cli.App
             _Form.Add("Max agent iterations (blank = global)", _MaxAgentIterations, () => ValidateOptionalInt(_MaxAgentIterations.Value, "Max agent iterations", 1, 100));
             _Form.Add("Reasoning effort (blank = off)", _ReasoningEffort, () => ValidateOptionalEffort(_ReasoningEffort.Value));
             _Form.Add("Gemini thinking budget (blank = default)", _GeminiThinkingBudget, () => ValidateOptionalInt(_GeminiThinkingBudget.Value, "Gemini thinking budget", -1, 32768));
+            _Form.Add("Show thinking", _ShowThinking);
         }
 
         #endregion
@@ -285,6 +289,7 @@ namespace Mux.Cli.App
                 AutoApproveTools = _AutoApprove.Checked,
                 MaxAgentIterations = ParseOptionalInt(_MaxAgentIterations.Value),
                 ReasoningEffort = BuildReasoningConfig(),
+                ShowThinking = _ShowThinking.Checked,
 
                 // The quirks object is not editable here; carry it over so an edit never silently resets a
                 // hand-tuned backend behavior profile back to the adapter defaults.

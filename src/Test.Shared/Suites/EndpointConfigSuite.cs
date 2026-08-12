@@ -90,6 +90,27 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("EndpointConfig", "ShowThinkingRoundTrips", "ShowThinking round-trips and defaults to false", (CancellationToken ct) =>
+                    {
+                        EndpointConfig fresh = new EndpointConfig();
+                        MuxAssert.IsFalse(fresh.ShowThinking, "ShowThinking defaults to false");
+
+                        EndpointConfig original = new EndpointConfig
+                        {
+                            Name = "thinky",
+                            AdapterType = AdapterTypeEnum.OpenAi,
+                            BaseUrl = "https://api.openai.com/v1",
+                            Model = "gpt-5",
+                            ShowThinking = true
+                        };
+
+                        string json = JsonSerializer.Serialize(original);
+                        EndpointConfig? deserialized = JsonSerializer.Deserialize<EndpointConfig>(json);
+                        MuxAssert.IsNotNull(deserialized, "deserialized");
+                        MuxAssert.IsTrue(deserialized!.ShowThinking, "ShowThinking survives the round-trip");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("EndpointConfig", "ReasoningEffortDefaultsToNull", "Reasoning effort defaults to null and is omitted from JSON", (CancellationToken ct) =>
                     {
                         EndpointConfig config = new EndpointConfig { Name = "n", BaseUrl = "u", Model = "m" };

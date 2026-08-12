@@ -20,6 +20,7 @@ namespace Mux.Cli.App
         private readonly Pane _Pane;
         private readonly object _Sync = new object();
         private string _EffortLabel = string.Empty;
+        private string _ThinkingLabel = string.Empty;
 
         #endregion
 
@@ -33,6 +34,15 @@ namespace Mux.Cli.App
         {
             get => _EffortLabel;
             set => _EffortLabel = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// The active thinking-display label shown in the sidebar ("on" or "off"). Empty hides the row.
+        /// </summary>
+        public string ThinkingLabel
+        {
+            get => _ThinkingLabel;
+            set => _ThinkingLabel = value ?? string.Empty;
         }
 
         #endregion
@@ -88,6 +98,11 @@ namespace Mux.Cli.App
                 if (_EffortLabel.Length > 0)
                 {
                     _Pane.WriteLine(Text.From(Fit(Row("EFFORT", _EffortLabel))).Dim());
+                }
+
+                if (_ThinkingLabel.Length > 0)
+                {
+                    _Pane.WriteLine(Text.From(Fit(Row("THINK", _ThinkingLabel))).Dim());
                 }
 
                 _Pane.WriteLine(Text.From(string.Empty));

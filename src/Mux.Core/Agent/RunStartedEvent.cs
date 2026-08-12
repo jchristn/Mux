@@ -40,6 +40,7 @@ namespace Mux.Core.Agent
         private bool _IgnoreCertErrors = false;
         private string _SandboxPosture = "none";
         private ReasoningEffortConfig? _ReasoningEffort = null;
+        private bool _ShowThinking = false;
 
         #endregion
 
@@ -309,6 +310,15 @@ namespace Mux.Core.Agent
         {
             get => _ReasoningEffort;
             set => _ReasoningEffort = value;
+        }
+
+        /// <summary>
+        /// Whether the model's reasoning ("thinking") is surfaced for this run.
+        /// </summary>
+        public bool ShowThinking
+        {
+            get => _ShowThinking;
+            set => _ShowThinking = value;
         }
 
         #endregion

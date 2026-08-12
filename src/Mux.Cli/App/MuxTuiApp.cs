@@ -70,6 +70,7 @@ namespace Mux.Cli.App
         private string _EndpointName;
         private string _Model;
         private string _EffortLabel = string.Empty;
+        private string _ThinkingLabel = string.Empty;
         private readonly string _Title;
         private readonly Pane _Conversation;
         private readonly Pane _SidebarPane;
@@ -166,6 +167,7 @@ namespace Mux.Cli.App
             _EndpointName = endpointName ?? string.Empty;
             _Model = model ?? string.Empty;
             _EffortLabel = InitialEffortLabel(_EndpointName);
+            _ThinkingLabel = InitialThinkingLabel(_EndpointName);
             _ShowBoundaries = showBoundaries;
             _Title = string.IsNullOrWhiteSpace(title) ? "mux" : title;
 
@@ -214,6 +216,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
             _Catalog.Add(new CommandDescriptor("mux.borders", "Toggle boundary lines", null, ToggleBoundaries, "View", new[] { "borders", "boundaries", "boundary", "lines" }));
+            _Catalog.Add(new CommandDescriptor("mux.thinking", "Toggle thinking display", null, ToggleThinking, "View", new[] { "thinking", "think", "reasoning-display" }));
             _Catalog.Add(new CommandDescriptor("mux.menu", "Command menu", "f1", OpenCommandMenu, "Help", new[] { "menu" }));
             _Catalog.Add(new CommandDescriptor("mux.help", "Help", null, OpenCommandMenu, "Help", new[] { "help", "?" }));
             _Catalog.ApplyTo(_App);
@@ -585,6 +588,64 @@ namespace Mux.Cli.App
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Toggles whether the model's reasoning ("thinking") is displayed for the active endpoint,
+        /// persists the choice to endpoints.json, and applies it to the running session.
+        /// </summary>
+        public void ToggleThinking()
+        {
+            EndpointConfig? active = LoadActiveEndpoint();
+            if (active == null)
+            {
+                WriteNotice("No active endpoint to toggle thinking on");
+                return;
+            }
+
+            active.ShowThinking = !active.ShowThinking;
+
+            try
+            {
+                List<EndpointConfig> endpoints = LoadEndpointsSafe();
+                endpoints.RemoveAll(e => string.Equals(e.Name, active.Name, StringComparison.OrdinalIgnoreCase));
+                endpoints.Add(active);
+                SettingsLoader.SaveEndpoints(endpoints);
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Save failed: " + ex.Message);
+                return;
+            }
+
+            _OnEndpointSelected?.Invoke(active);
+            lock (_Sync)
+            {
+                _ThinkingLabel = active.ShowThinking ? "on" : "off";
+            }
+
+            WriteNotice($"Thinking display {(active.ShowThinking ? "on" : "off")} for endpoint {active.Name}");
+            RefreshSidebar();
+        }
+
+        private string InitialThinkingLabel(string endpointName)
+        {
+            try
+            {
+                foreach (EndpointConfig endpoint in LoadEndpointsSafe())
+                {
+                    if (string.Equals(endpoint.Name, endpointName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return endpoint.ShowThinking ? "on" : "off";
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // The sidebar label is cosmetic; never fail construction over it.
+            }
+
+            return string.Empty;
         }
 
         private string InitialEffortLabel(string endpointName)
@@ -2255,6 +2316,7 @@ namespace Mux.Cli.App
                 _EndpointName = endpoint.Name;
                 _Model = endpoint.Model;
                 _EffortLabel = EffortLabelFor(endpoint);
+                _ThinkingLabel = endpoint.ShowThinking ? "on" : "off";
             }
 
             WriteNotice($"Switched to endpoint {endpoint.Name} ({endpoint.Model})");
@@ -3225,15 +3287,18 @@ namespace Mux.Cli.App
         {
             string model;
             string effortLabel;
+            string thinkingLabel;
             ConversationStats stats;
             lock (_Sync)
             {
                 model = _Model;
                 effortLabel = _EffortLabel;
+                thinkingLabel = _ThinkingLabel;
                 stats = CloneStatsNoLock();
             }
 
             _Sidebar.EffortLabel = effortLabel;
+            _Sidebar.ThinkingLabel = thinkingLabel;
             _Sidebar.Refresh(model, stats);
         }
 

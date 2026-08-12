@@ -91,6 +91,17 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("StructuredOutputFormatter", "AssistantThinkingSerializes", "An assistant_thinking event serializes its text, and run_started reports showThinking", (CancellationToken ct) =>
+                    {
+                        JsonDocument thinkingJson = JsonDocument.Parse(StructuredOutputFormatter.FormatEvent(new AssistantThinkingEvent { Text = "Let me think." }));
+                        MuxAssert.AreEqual("assistant_thinking", thinkingJson.RootElement.GetProperty("eventType").GetString(), "thinking eventType");
+                        MuxAssert.AreEqual("Let me think.", thinkingJson.RootElement.GetProperty("text").GetString(), "thinking text");
+
+                        JsonDocument startedJson = JsonDocument.Parse(StructuredOutputFormatter.FormatEvent(new RunStartedEvent { RunId = "r", ShowThinking = true }));
+                        MuxAssert.IsTrue(startedJson.RootElement.GetProperty("showThinking").GetBoolean(), "run_started reports showThinking");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("StructuredOutputFormatter", "TaskPlanUpdatedSerializesTasks", "A task_plan_updated event serializes its change kind and task snapshot", (CancellationToken ct) =>
                     {
                         TaskPlanUpdatedEvent planEvent = new TaskPlanUpdatedEvent

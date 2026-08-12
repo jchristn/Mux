@@ -248,6 +248,9 @@ namespace Mux.Cli.Commands
                     case "--effort-ollama-think":
                         settings.EffortOllamaThink = ReadValue(option, inlineValue, args, ref i);
                         break;
+                    case "--show-thinking":
+                        settings.ShowThinking = ReadBool(option, inlineValue, defaultValue: true);
+                        break;
                     case "-w":
                     case "--working-directory":
                         settings.WorkingDirectory = ReadValue(option, inlineValue, args, ref i);

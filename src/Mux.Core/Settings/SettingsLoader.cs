@@ -1025,7 +1025,8 @@ namespace Mux.Core.Settings
                         DefaultFinishReason = source.Quirks.DefaultFinishReason,
                         StripRequestFields = new List<string>(source.Quirks.StripRequestFields)
                     },
-                ReasoningEffort = source.ReasoningEffort?.Clone()
+                ReasoningEffort = source.ReasoningEffort?.Clone(),
+                ShowThinking = source.ShowThinking
             };
         }
 

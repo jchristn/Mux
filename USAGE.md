@@ -142,6 +142,14 @@ active endpoint. The choice persists to `endpoints.json` and applies to the next
 `--effort-gemini-budget`, and `--effort-ollama-think`. Per-endpoint tuning is also available in the
 endpoint Add/Edit form (a **Reasoning effort** field plus an advanced **Gemini thinking budget** field).
 
+`/thinking` (`/think`) toggles whether the model's reasoning ("thinking") is displayed for the active
+endpoint. The choice is a per-endpoint property (`showThinking`), persists to `endpoints.json`, and applies
+to the next turn; the sidebar's `THINK` line shows `on`/`off`, and the endpoint form has a **Show thinking
+(reasoning)** checkbox. When on, thinking streams into the transcript under a dim `💭 thinking` header,
+kept separate from the answer and never fed back to the model. Headless runs surface it with
+`--show-thinking`: as `assistant_thinking` events in `jsonl`, or on stderr in `text` mode so stdout stays
+the answer.
+
 `/help` (`/?`) opens the keybinding/command reference in a modal; `F1` opens the command menu (the same
 catalog as a pick-and-run list). On startup mux shows a splash box, and quitting (`Ctrl+Q` / `/quit`)
 asks for confirmation.

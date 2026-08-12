@@ -89,6 +89,13 @@ namespace Mux.Cli.Commands
         public string? EffortOllamaThink { get; set; }
 
         /// <summary>
+        /// Surface the model's reasoning ("thinking") for this run, overriding the endpoint's setting.
+        /// </summary>
+        [Description("Surface the model's reasoning (thinking) for this run.")]
+        [CommandOption("--show-thinking")]
+        public bool ShowThinking { get; set; }
+
+        /// <summary>
         /// The working directory for tool execution.
         /// </summary>
         [Description("Working directory for tool execution.")]

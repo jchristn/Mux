@@ -147,6 +147,7 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 | `--effort-openai-value <str>` |  | Override the OpenAI `reasoning_effort` value |
 | `--effort-gemini-budget <int>` |  | Override the Gemini thinking budget (`-1`..`32768`) |
 | `--effort-ollama-think <val>` |  | Override the Ollama `think` value (`low`/`medium`/`high`/`true`/`false`) |
+| `--show-thinking` |  | Surface the model's reasoning ("thinking") for this run |
 | `--max-turns <int>` |  | Override max agent loop iterations (1-100) |
 | `--max-token-budget <int>` |  | Stop with `budget_exceeded` when estimated context tokens exceed this |
 | `--compaction-strategy <mode>` |  | Override compaction strategy: `summary` or `trim` |
@@ -186,6 +187,7 @@ Every command is also reachable by key binding and the `F1` menu (one catalog, t
 /skills, /skill                   Open the skills manager (inventory / create / import)
 /prompts                          Open the prompt-profile editor (also Ctrl+P)
 /effort, /reasoning               Set the active endpoint's reasoning effort level
+/thinking, /think                 Toggle displaying the model's reasoning ("thinking")
 /sessions                         Browse and resume saved sessions
 /tasks                            View and annotate the focused job's task plan
 /save                             Save the current session
@@ -238,6 +240,18 @@ mux print --yolo --effort medium --effort-gemini-budget 16000 "summarize the des
 ```
 
 Reasoning effort reaches Gemini as `thinkingConfig` only through mux's native Gemini path; when you reach a Gemini model through an OpenAI-compatible endpoint, the level ships as `reasoning_effort` instead. Backends whose model has no reasoning concept ignore the field.
+
+### Model Thinking
+
+Where effort controls how hard a model thinks, thinking display controls whether you see it. Reasoning models emit their deliberation on a separate channel, and mux can surface it — dimmed, above the answer in the chat transcript, and as its own event in headless. It is a property of the endpoint (`showThinking` in `endpoints.json`), off by default, so nothing changes until you turn it on.
+
+`/thinking` (alias `/think`; also on the `F1` menu under **View**) toggles it for the active endpoint, persists the choice, and applies it to the next turn; the sidebar shows a `THINK on/off` line, and the endpoint Add/Edit form carries a **Show thinking (reasoning)** checkbox. When on, thinking streams into the transcript under a dim `💭 thinking` header, kept visually distinct from the answer and never mixed into it. Thinking is display-only: mux never sends the model's reasoning back to the model on the next turn.
+
+Headless runs enable it with `--show-thinking` (overriding the endpoint for that run). In `--output-format jsonl`, thinking arrives as `assistant_thinking` events; in `text` mode it is written to stderr so stdout stays the answer (and `--output-last-message` stays clean).
+
+```bash
+mux print --yolo --show-thinking --output-format jsonl "explain the tradeoffs in this design"
+```
 
 ### Skills
 
@@ -392,12 +406,14 @@ In `jsonl` mode:
 - `run_started` also includes loop/context metadata such as `maxIterations`, `contextWindow`, `reservedOutputTokens`, `usableInputLimit`, `warningThresholdTokens`, `tokenEstimationRatio`, and `compactionStrategy`
 - `run_started` includes `ignoreCertErrors` so consumers can detect whether certificate validation was disabled for mux-owned network requests
 - `run_started` includes `reasoningEffort` (the effective level and any per-provider overrides, or `null` when off); `cliOverridesApplied` lists `reasoningEffort` when a `--effort*` flag drove the value
+- `run_started` includes `showThinking`; when thinking is enabled, the model's reasoning streams as `assistant_thinking` events, and `cliOverridesApplied` lists `showThinking` when `--show-thinking` drove it
 - `run_completed` also includes `finalEstimatedTokens` and `compactionCount`, and reports `status` `budget_exceeded` when `--max-token-budget` stops the run
 - `error` events keep `code` and also expose `errorCode`, `failureCategory`, and resolved runtime metadata when known (including `budget_exceeded`, classified as `runtime`)
 
 Event types currently emitted:
 - `run_started`
 - `assistant_text`
+- `assistant_thinking`
 - `tool_call_proposed`
 - `tool_call_approved`
 - `tool_call_completed`

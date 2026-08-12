@@ -219,6 +219,7 @@ namespace Test.Shared
                 bool hasTools = body.Contains("get_weather", StringComparison.Ordinal);
                 bool wantError = body.Contains("http500", StringComparison.OrdinalIgnoreCase);
                 bool wantUnsupported = body.Contains("unsupported", StringComparison.OrdinalIgnoreCase);
+                bool wantReasoning = body.Contains("reasoncapture", StringComparison.OrdinalIgnoreCase);
 
                 if (wantError)
                 {
@@ -234,7 +235,7 @@ namespace Test.Shared
 
                 if (path == "/v1/chat/completions")
                 {
-                    await HandleOpenAiAsync(context, stream, hasTools).ConfigureAwait(false);
+                    await HandleOpenAiAsync(context, stream, hasTools, wantReasoning).ConfigureAwait(false);
                     return;
                 }
 
@@ -263,7 +264,7 @@ namespace Test.Shared
             }
         }
 
-        private async Task HandleOpenAiAsync(HttpListenerContext context, bool stream, bool hasTools)
+        private async Task HandleOpenAiAsync(HttpListenerContext context, bool stream, bool hasTools, bool wantReasoning = false)
         {
             if (stream && hasTools)
             {
@@ -282,6 +283,11 @@ namespace Test.Shared
             if (stream)
             {
                 await BeginStream(context, "text/event-stream").ConfigureAwait(false);
+                if (wantReasoning)
+                {
+                    await WriteChunkAsync(context, "data: {\"id\":\"cc-2\",\"choices\":[{\"delta\":{\"reasoning_content\":\"Let me \"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+                    await WriteChunkAsync(context, "data: {\"id\":\"cc-2\",\"choices\":[{\"delta\":{\"reasoning_content\":\"think.\"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+                }
                 await WriteChunkAsync(context, "data: {\"id\":\"cc-2\",\"choices\":[{\"delta\":{\"content\":\"hello \"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
                 await WriteChunkAsync(context, "data: {\"id\":\"cc-2\",\"choices\":[{\"delta\":{\"content\":\"world\"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
                 await WriteChunkAsync(context, "data: {\"id\":\"cc-2\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}}\n\n").ConfigureAwait(false);

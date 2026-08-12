@@ -69,6 +69,7 @@ namespace Mux.Cli.Commands
                     payload["ignoreCertErrors"] = startedEvent.IgnoreCertErrors;
                     payload["sandboxPosture"] = startedEvent.SandboxPosture;
                     payload["reasoningEffort"] = FormatReasoningEffort(startedEvent.ReasoningEffort);
+                    payload["showThinking"] = startedEvent.ShowThinking;
                     payload["mcp"] = new Dictionary<string, object?>
                     {
                         ["supported"] = startedEvent.McpSupported,
@@ -79,6 +80,10 @@ namespace Mux.Cli.Commands
 
                 case AssistantTextEvent textEvent:
                     payload["text"] = RedactString(textEvent.Text);
+                    break;
+
+                case AssistantThinkingEvent thinkingEvent:
+                    payload["text"] = RedactString(thinkingEvent.Text);
                     break;
 
                 case ToolCallProposedEvent proposedEvent:
@@ -435,6 +440,7 @@ namespace Mux.Cli.Commands
             {
                 AgentEventTypeEnum.RunStarted => "run_started",
                 AgentEventTypeEnum.AssistantText => "assistant_text",
+                AgentEventTypeEnum.AssistantThinking => "assistant_thinking",
                 AgentEventTypeEnum.ToolCallProposed => "tool_call_proposed",
                 AgentEventTypeEnum.ToolCallApproved => "tool_call_approved",
                 AgentEventTypeEnum.ToolCallCompleted => "tool_call_completed",

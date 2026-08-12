@@ -515,6 +515,15 @@ namespace Mux.Cli.Commands
                             }
                             break;
 
+                        case AssistantThinkingEvent thinkingEvent:
+                            // Thinking is display-only: never part of the final response, and in text mode it
+                            // goes to stderr so stdout stays the answer (and --output-last-message is clean).
+                            if (outputFormat == OutputFormatEnum.Text)
+                            {
+                                Console.Error.Write(thinkingEvent.Text);
+                            }
+                            break;
+
                         case HeartbeatEvent heartbeatEvent:
                             stepCount = heartbeatEvent.StepNumber;
                             if (outputFormat == OutputFormatEnum.Text)

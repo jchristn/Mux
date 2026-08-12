@@ -131,7 +131,8 @@ namespace Mux.Core.Agent
                 CompactionStrategy = _Options.CompactionStrategy,
                 IgnoreCertErrors = _Options.IgnoreCertErrors,
                 SandboxPosture = ToolGovernance.PostureName(_Options.SandboxPosture),
-                ReasoningEffort = _Options.Endpoint.ReasoningEffort
+                ReasoningEffort = _Options.Endpoint.ReasoningEffort,
+                ShowThinking = _Options.Endpoint.ShowThinking
             };
 
             // 3. Enter loop

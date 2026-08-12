@@ -376,6 +376,14 @@ namespace Mux.Core.Llm
                         break;
                     }
 
+                    // Reasoning ("thinking") is surfaced only when the endpoint opts in, and always as a
+                    // separate event — it is never merged into the assistant text or the conversation
+                    // history. Emit it before the answer text so the display reads thinking-then-answer.
+                    if (chunk != null && _Endpoint.ShowThinking && !string.IsNullOrEmpty(chunk.ReasoningText))
+                    {
+                        yield return new AssistantThinkingEvent { Text = chunk.ReasoningText };
+                    }
+
                     if (chunk != null && !string.IsNullOrEmpty(chunk.Text))
                     {
                         yield return new AssistantTextEvent { Text = chunk.Text };

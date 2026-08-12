@@ -27,6 +27,9 @@ namespace Mux.Cli.App
         private readonly Pane _Pane;
         private readonly StringBuilder _AssistantText = new StringBuilder();
         private readonly StringBuilder _RunAssistantText = new StringBuilder();
+        private readonly StringBuilder _ThinkingText = new StringBuilder();
+        private readonly List<PaneLineHandle> _ThinkingLines = new List<PaneLineHandle>();
+        private bool _ThinkingHeaderShown;
         private readonly Dictionary<string, PaneLineHandle> _ToolLines = new Dictionary<string, PaneLineHandle>(StringComparer.Ordinal);
         private readonly List<PaneLineHandle> _AssistantLines = new List<PaneLineHandle>();
         private readonly List<PaneLineHandle> _TaskLines = new List<PaneLineHandle>();
@@ -132,6 +135,10 @@ namespace Mux.Cli.App
                     AppendAssistantText(textEvent.Text);
                     break;
 
+                case AssistantThinkingEvent thinkingEvent:
+                    AppendThinking(thinkingEvent.Text);
+                    break;
+
                 case ToolCallProposedEvent proposedEvent:
                     FinalizeAssistantBlock();
                     string toolName = proposedEvent.ToolCall.Name;
@@ -176,6 +183,7 @@ namespace Mux.Cli.App
             }
 
             if (agentEvent is AssistantTextEvent
+                || agentEvent is AssistantThinkingEvent
                 || agentEvent is ToolCallProposedEvent
                 || agentEvent is ToolCallCompletedEvent
                 || agentEvent is ErrorEvent
@@ -186,8 +194,50 @@ namespace Mux.Cli.App
             }
         }
 
+        private void AppendThinking(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+
+            // A dimmed, labeled block above the answer. Kept out of _RunAssistantText (and therefore out of
+            // conversation history) and never re-rendered as markdown — it reads as context, not the result.
+            if (!_ThinkingHeaderShown)
+            {
+                _Pane.WriteLine(Text.From("💭 thinking").Dim());
+                _ThinkingHeaderShown = true;
+            }
+
+            _ThinkingText.Append(text);
+
+            string[] lines = _ThinkingText.ToString().Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                StyledText styled = Text.From("  " + lines[i]).Dim();
+                if (i < _ThinkingLines.Count)
+                {
+                    if (!_ThinkingLines[i].Update(styled))
+                    {
+                        _ThinkingLines[i] = _Pane.WriteLine(styled);
+                    }
+                }
+                else
+                {
+                    _ThinkingLines.Add(_Pane.WriteLine(styled));
+                }
+            }
+        }
+
+        // Stop tracking the thinking block (the answer or a tool call is beginning); the rendered dim lines
+        // stay in place above the answer, and the next thinking block starts fresh.
+        private void FinalizeThinkingBlock()
+        {
+            _ThinkingLines.Clear();
+            _ThinkingText.Clear();
+            _ThinkingHeaderShown = false;
+        }
+
         private void AppendAssistantText(string text)
         {
+            FinalizeThinkingBlock();
             _AssistantText.Append(text);
             _RunAssistantText.Append(text);
 
@@ -219,6 +269,8 @@ namespace Mux.Cli.App
 
         private void FinalizeAssistantBlock()
         {
+            FinalizeThinkingBlock();
+
             if (_AssistantLines.Count == 0)
             {
                 _AssistantText.Clear();

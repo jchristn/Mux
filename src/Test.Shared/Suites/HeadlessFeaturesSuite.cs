@@ -98,6 +98,13 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("HeadlessFeatures", "ShowThinkingFlagParses", "--show-thinking parses as a boolean", (CancellationToken ct) =>
+                    {
+                        MuxAssert.IsFalse(CliArgumentParser.ParsePrint(new[] { "go" }).ShowThinking, "off by default");
+                        MuxAssert.IsTrue(CliArgumentParser.ParsePrint(new[] { "--show-thinking", "go" }).ShowThinking, "set by the flag");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("HeadlessFeatures", "MaxTurnsRejectsNonInteger", "--max-turns with a non-integer value fails", (CancellationToken ct) =>
                     {
                         MuxAssert.Throws<FormatException>(

@@ -21,9 +21,17 @@ All notable changes to mux are documented here.
 - **JSONL contract.** `run_started` now includes a `reasoningEffort` object (the effective level and any
   overrides, or `null`), and `cliOverridesApplied` lists `reasoningEffort` when a flag drove the value.
 
+- **Model thinking display.** A per-endpoint `showThinking` property (in `endpoints.json`, off by default)
+  that captures and displays a reasoning model's thinking. When on, thinking streams into the TUI transcript
+  under a dim `💭 thinking` header — kept separate from the answer and never sent back to the model — and is
+  surfaced in headless as `assistant_thinking` JSONL events (or on stderr in text mode). `/thinking` (alias
+  `/think`) toggles it live and persists it; the endpoint Add/Edit form has a **Show thinking** checkbox; the
+  sidebar shows a `THINK` line; `--show-thinking` overrides a headless run. `run_started` reports
+  `showThinking`, and `cliOverridesApplied` lists it when the flag drove the value.
+
 ### Changed
 
-- Bumped the PolyPrompt dependency to `2.1.0` for its provider-neutral reasoning-effort support.
+- Bumped the PolyPrompt dependency to `2.2.0` for reasoning-effort control and reasoning ("thinking") capture.
 
 ## v0.7.0 - 2026-08-07
 
