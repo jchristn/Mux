@@ -2459,12 +2459,14 @@ namespace Mux.Cli.App
                 actions.Add(McpMenuAction.Remove);
             }
 
-            SelectModal modal = new SelectModal("MCP servers — Enter to edit", options);
+            // Widen the modal by 25% over TUIKit's default select width (46) so server rows render with room.
+            const int mcpModalWidth = 58;
+            WideSelectModal modal = new WideSelectModal("MCP servers — Enter to edit", options, mcpModalWidth);
             _App.Modals.Push(modal);
             _ = ResolveMcpModalAsync(modal, servers, actions);
         }
 
-        private async Task ResolveMcpModalAsync(SelectModal modal, List<McpServerConfig> servers, List<McpMenuAction> actions)
+        private async Task ResolveMcpModalAsync(WideSelectModal modal, List<McpServerConfig> servers, List<McpMenuAction> actions)
         {
             object? result = await modal.Completion.ConfigureAwait(false);
             int index = result is int value ? value : -1;
