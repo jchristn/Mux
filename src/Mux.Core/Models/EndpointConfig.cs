@@ -25,6 +25,7 @@ namespace Mux.Core.Models
         private bool _AutoApproveTools = false;
         private int? _MaxAgentIterations = null;
         private BackendQuirks? _Quirks = null;
+        private ReasoningEffortConfig? _ReasoningEffort = null;
 
         #endregion
 
@@ -179,6 +180,18 @@ namespace Mux.Core.Models
         {
             get => _Quirks;
             set => _Quirks = value;
+        }
+
+        /// <summary>
+        /// Optional reasoning effort selection for this endpoint. When null (the default), no reasoning
+        /// field is sent and requests are unchanged. A selected level drives provider-appropriate defaults.
+        /// </summary>
+        [JsonPropertyName("reasoningEffort")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public ReasoningEffortConfig? ReasoningEffort
+        {
+            get => _ReasoningEffort;
+            set => _ReasoningEffort = value;
         }
 
         #endregion

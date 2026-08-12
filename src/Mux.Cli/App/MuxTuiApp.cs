@@ -69,6 +69,7 @@ namespace Mux.Cli.App
         private readonly SkillRuntime? _SkillRuntime;
         private string _EndpointName;
         private string _Model;
+        private string _EffortLabel = string.Empty;
         private readonly string _Title;
         private readonly Pane _Conversation;
         private readonly Pane _SidebarPane;
@@ -164,6 +165,7 @@ namespace Mux.Cli.App
             _SkillRuntime = skillRuntime;
             _EndpointName = endpointName ?? string.Empty;
             _Model = model ?? string.Empty;
+            _EffortLabel = InitialEffortLabel(_EndpointName);
             _ShowBoundaries = showBoundaries;
             _Title = string.IsNullOrWhiteSpace(title) ? "mux" : title;
 
@@ -208,6 +210,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.tasks", "Tasks", null, OpenTasksModal, "View", new[] { "tasks", "task", "plan", "todo" }));
+            _Catalog.Add(new CommandDescriptor("mux.effort", "Reasoning effort", null, OpenEffortSelector, "Model", new[] { "effort", "reasoning", "reasoning-effort" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
             _Catalog.Add(new CommandDescriptor("mux.borders", "Toggle boundary lines", null, ToggleBoundaries, "View", new[] { "borders", "boundaries", "boundary", "lines" }));
@@ -486,6 +489,163 @@ namespace Mux.Cli.App
                     {
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// Opens a modal reasoning-effort selector for the active endpoint. The chosen level is persisted to
+        /// endpoints.json and applied to the running session so the next turn uses it.
+        /// </summary>
+        public void OpenEffortSelector()
+        {
+            EndpointConfig? active = LoadActiveEndpoint();
+            ReasoningLevelEnum? current = active?.ReasoningEffort?.Level;
+            int selected = EffortIndexFor(current);
+
+            string[] names = { "Off", "Minimal", "Low", "Medium", "High" };
+            List<string> labels = new List<string>();
+            for (int i = 0; i < names.Length; i++)
+            {
+                string marker = i == selected ? "● " : "  ";
+                labels.Add(marker + names[i]);
+            }
+
+            EffortSelectModal modal = new EffortSelectModal("Reasoning effort — ↑↓ then Enter to apply", labels, selected);
+            _App.Modals.Push(modal);
+            _ = ResolveEffortSelectorAsync(modal, active);
+        }
+
+        private async Task ResolveEffortSelectorAsync(EffortSelectModal modal, EndpointConfig? active)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            if (result is int index && index >= 0 && index <= 4)
+            {
+                ApplyEffort(active, index);
+            }
+        }
+
+        private void ApplyEffort(EndpointConfig? active, int index)
+        {
+            if (active == null)
+            {
+                WriteNotice("No active endpoint to set reasoning effort on");
+                return;
+            }
+
+            ReasoningLevelEnum? level = LevelForEffortIndex(index);
+            if (level.HasValue)
+            {
+                ReasoningEffortConfig config = active.ReasoningEffort?.Clone() ?? new ReasoningEffortConfig();
+                config.Level = level;
+                active.ReasoningEffort = config;
+            }
+            else
+            {
+                active.ReasoningEffort = null;
+            }
+
+            try
+            {
+                List<EndpointConfig> endpoints = LoadEndpointsSafe();
+                endpoints.RemoveAll(e => string.Equals(e.Name, active.Name, StringComparison.OrdinalIgnoreCase));
+                endpoints.Add(active);
+                SettingsLoader.SaveEndpoints(endpoints);
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Save failed: " + ex.Message);
+                return;
+            }
+
+            // Rebuild the running client so the next turn uses the new effort.
+            _OnEndpointSelected?.Invoke(active);
+            lock (_Sync)
+            {
+                _EffortLabel = EffortLabelFor(active);
+            }
+
+            WriteNotice($"Reasoning effort set to {EffortDisplayName(level)}");
+            RefreshSidebar();
+        }
+
+        private EndpointConfig? LoadActiveEndpoint()
+        {
+            string name;
+            lock (_Sync)
+            {
+                name = _EndpointName;
+            }
+
+            foreach (EndpointConfig endpoint in LoadEndpointsSafe())
+            {
+                if (string.Equals(endpoint.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    return endpoint;
+                }
+            }
+
+            return null;
+        }
+
+        private string InitialEffortLabel(string endpointName)
+        {
+            try
+            {
+                foreach (EndpointConfig endpoint in LoadEndpointsSafe())
+                {
+                    if (string.Equals(endpoint.Name, endpointName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return EffortLabelFor(endpoint);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // The sidebar label is cosmetic; never fail construction over it.
+            }
+
+            return string.Empty;
+        }
+
+        private static string EffortLabelFor(EndpointConfig endpoint)
+        {
+            ReasoningLevelEnum? level = endpoint.ReasoningEffort?.Level;
+            return level.HasValue ? ReasoningLevelEnumConverter.ToWire(level.Value) : "off";
+        }
+
+        private static int EffortIndexFor(ReasoningLevelEnum? level)
+        {
+            switch (level)
+            {
+                case ReasoningLevelEnum.Minimal: return 1;
+                case ReasoningLevelEnum.Low: return 2;
+                case ReasoningLevelEnum.Medium: return 3;
+                case ReasoningLevelEnum.High: return 4;
+                default: return 0;
+            }
+        }
+
+        private static ReasoningLevelEnum? LevelForEffortIndex(int index)
+        {
+            switch (index)
+            {
+                case 1: return ReasoningLevelEnum.Minimal;
+                case 2: return ReasoningLevelEnum.Low;
+                case 3: return ReasoningLevelEnum.Medium;
+                case 4: return ReasoningLevelEnum.High;
+                default: return null;
+            }
+        }
+
+        private static string EffortDisplayName(ReasoningLevelEnum? level)
+        {
+            switch (level)
+            {
+                case ReasoningLevelEnum.Minimal: return "Minimal";
+                case ReasoningLevelEnum.Low: return "Low";
+                case ReasoningLevelEnum.Medium: return "Medium";
+                case ReasoningLevelEnum.High: return "High";
+                default: return "Off";
             }
         }
 
@@ -2094,6 +2254,7 @@ namespace Mux.Cli.App
             {
                 _EndpointName = endpoint.Name;
                 _Model = endpoint.Model;
+                _EffortLabel = EffortLabelFor(endpoint);
             }
 
             WriteNotice($"Switched to endpoint {endpoint.Name} ({endpoint.Model})");
@@ -3063,13 +3224,16 @@ namespace Mux.Cli.App
         private void RefreshSidebar()
         {
             string model;
+            string effortLabel;
             ConversationStats stats;
             lock (_Sync)
             {
                 model = _Model;
+                effortLabel = _EffortLabel;
                 stats = CloneStatsNoLock();
             }
 
+            _Sidebar.EffortLabel = effortLabel;
             _Sidebar.Refresh(model, stats);
         }
 

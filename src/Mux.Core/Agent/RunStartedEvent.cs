@@ -3,6 +3,7 @@ namespace Mux.Core.Agent
     using System;
     using System.Collections.Generic;
     using Mux.Core.Enums;
+    using Mux.Core.Models;
 
     /// <summary>
     /// Event emitted when a mux run starts and effective runtime metadata is known.
@@ -38,6 +39,7 @@ namespace Mux.Core.Agent
         private string _CompactionStrategy = "summary";
         private bool _IgnoreCertErrors = false;
         private string _SandboxPosture = "none";
+        private ReasoningEffortConfig? _ReasoningEffort = null;
 
         #endregion
 
@@ -298,6 +300,15 @@ namespace Mux.Core.Agent
         {
             get => _SandboxPosture;
             set => _SandboxPosture = value ?? "none";
+        }
+
+        /// <summary>
+        /// The effective reasoning effort selection for the run, or null when no reasoning field is sent.
+        /// </summary>
+        public ReasoningEffortConfig? ReasoningEffort
+        {
+            get => _ReasoningEffort;
+            set => _ReasoningEffort = value;
         }
 
         #endregion

@@ -77,7 +77,8 @@ Example:
       "headers": {},
       "autoApproveTools": false,
       "maxAgentIterations": null,
-      "quirks": null
+      "quirks": null,
+      "reasoningEffort": { "level": "high" }
     }
   ]
 }
@@ -100,6 +101,7 @@ Fields:
 | `autoApproveTools` | bool | auto-approve tool calls whenever this endpoint is active unless CLI approval flags override it |
 | `maxAgentIterations` | int or null | optional endpoint override for the agent loop guard; `null` inherits `settings.json` |
 | `quirks` | object or null | backend behavior flags |
+| `reasoningEffort` | object or null | optional reasoning effort. Omit (or `null`) to send no reasoning field. A `level` (`minimal`, `low`, `medium`, `high`) drives provider defaults; optional `openAiValue`, `geminiThinkingBudget` (`-1`..`32768`), and `ollamaThink` (`low`/`medium`/`high`/`true`/`false`) override individual per-provider values |
 
 Header values support environment expansion:
 

@@ -68,6 +68,7 @@ namespace Mux.Cli.Commands
                     payload["compactionStrategy"] = startedEvent.CompactionStrategy;
                     payload["ignoreCertErrors"] = startedEvent.IgnoreCertErrors;
                     payload["sandboxPosture"] = startedEvent.SandboxPosture;
+                    payload["reasoningEffort"] = FormatReasoningEffort(startedEvent.ReasoningEffort);
                     payload["mcp"] = new Dictionary<string, object?>
                     {
                         ["supported"] = startedEvent.McpSupported,
@@ -297,6 +298,24 @@ namespace Mux.Cli.Commands
                 TaskPlanChangeKindEnum.PlanCleared => "plan_cleared",
                 _ => changeKind.ToString()
             };
+        }
+
+        private static Dictionary<string, object?>? FormatReasoningEffort(ReasoningEffortConfig? config)
+        {
+            if (config == null || !config.Level.HasValue)
+            {
+                return null;
+            }
+
+            Dictionary<string, object?> result = new Dictionary<string, object?>
+            {
+                ["level"] = ReasoningLevelEnumConverter.ToWire(config.Level.Value)
+            };
+
+            if (!string.IsNullOrWhiteSpace(config.OpenAiValue)) result["openAiValue"] = config.OpenAiValue;
+            if (config.GeminiThinkingBudget.HasValue) result["geminiThinkingBudget"] = config.GeminiThinkingBudget.Value;
+            if (!string.IsNullOrWhiteSpace(config.OllamaThink)) result["ollamaThink"] = config.OllamaThink;
+            return result;
         }
 
         private static object FormatToolCall(ToolCall toolCall)

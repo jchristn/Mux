@@ -15,7 +15,7 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.5.0-blue.svg" alt="v0.5.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.8.0-blue.svg" alt="v0.8.0"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha"></a>
 </p>
 
@@ -143,6 +143,10 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 | `--adapter-type <type>` |  | `ollama`, `openai`, `vllm`, `openai-compatible` |
 | `--temperature <float>` |  | Override temperature |
 | `--max-tokens <int>` |  | Override max output tokens |
+| `--effort <level>` |  | Reasoning effort: `off`, `minimal`, `low`, `medium`, `high` |
+| `--effort-openai-value <str>` |  | Override the OpenAI `reasoning_effort` value |
+| `--effort-gemini-budget <int>` |  | Override the Gemini thinking budget (`-1`..`32768`) |
+| `--effort-ollama-think <val>` |  | Override the Ollama `think` value (`low`/`medium`/`high`/`true`/`false`) |
 | `--max-turns <int>` |  | Override max agent loop iterations (1-100) |
 | `--max-token-budget <int>` |  | Stop with `budget_exceeded` when estimated context tokens exceed this |
 | `--compaction-strategy <mode>` |  | Override compaction strategy: `summary` or `trim` |
@@ -181,6 +185,7 @@ Every command is also reachable by key binding and the `F1` menu (one catalog, t
 /mcp, /mcp-servers, /servers      Open the MCP servers manager (add / edit / remove)
 /skills, /skill                   Open the skills manager (inventory / create / import)
 /prompts                          Open the prompt-profile editor (also Ctrl+P)
+/effort, /reasoning               Set the active endpoint's reasoning effort level
 /sessions                         Browse and resume saved sessions
 /tasks                            View and annotate the focused job's task plan
 /save                             Save the current session
@@ -208,6 +213,31 @@ Any model whose model-plus-endpoint combination is already configured is left ou
 The `/mcp` command (aliases `/mcp-servers`, `/servers`; also on the `F1` menu under **Model**) opens the MCP servers manager, which edits `mcp-servers.json` through the same modal style as the endpoints picker. Each server row shows a live connectivity glyph — `●` online (with its discovered tool count), `○` offline — followed by the server name and transport detail. The list (separated from the actions by a blank row) sits above a **+ Add MCP server…** entry and, when servers exist, a **- Remove MCP server…** entry; selecting a server row opens its **Edit** form. **Add** and **Edit** run a guided form: a **name**, a **transport** (`stdio` or `http`), and the transport-specific fields — **command**, space-separated **args**, and comma-separated `KEY=VALUE` **env** for `stdio`; **url**, **mcp path** (default `/mcp`), and an **auth** scheme for `http`. Only the selected transport's fields are shown, so switching transports never leaves the other transport's stale values behind. For `http`, the auth scheme is **none**, a **bearer token**, or an **API key** sent in a caller-specified header (default `X-API-Key`); the secret is entered masked, persisted in `mcp-servers.json` under the server's `auth` object, and attached to every request to that server (token and key values support `${VAR}` environment-variable expansion, so secrets can live in the environment rather than in plaintext). The form validates that a `stdio` server has a command and an `http` server has a url. **Remove** asks for confirmation.
 
 Configured MCP servers are connected live: on startup mux connects to each server, queries it for its available tools, and both registers those tools as callable (so the model can invoke them, routed back to the owning server) and appends them to the system prompt so the model is explicitly aware of them. Connectivity is re-validated on a periodic timer, and down servers are periodically retried; the manager's glyphs reflect the current state. Adding, editing, or removing a server through the modal reconnects in the background and takes effect on the next turn — no restart required.
+
+### Reasoning Effort
+
+Reasoning-capable models can trade latency and cost against how hard they think. mux carries one choice — a level — and translates it per backend, so picking `high` sends `reasoning_effort: high` to an OpenAI-compatible endpoint, a dynamic thinking budget to Gemini, and `think: high` to Ollama. The level is stored per endpoint in `endpoints.json`; leaving it unset (the default) sends no reasoning field, so existing endpoints behave exactly as before.
+
+`/effort` (alias `/reasoning`; also on the `F1` menu under **Model**) opens a picker — **Off · Minimal · Low · Medium · High** — with the active level marked. Choosing one persists it to the active endpoint and applies it to the next turn; the sidebar shows an `EFFORT` line so the current level stays visible. The endpoint Add/Edit form also carries a **Reasoning effort** field and an advanced **Gemini thinking budget** field for per-endpoint tuning.
+
+Each level's default projection per provider (every value is individually overridable):
+
+| Level | OpenAI `reasoning_effort` | Gemini `thinkingBudget` | Ollama `think` |
+|---|---|---|---|
+| Off | *(omitted)* | *(omitted)* | *(omitted)* |
+| Minimal | `minimal` | `0` | `false` |
+| Low | `low` | `1024` | `low` |
+| Medium | `medium` | `8192` | `medium` |
+| High | `high` | `-1` (dynamic) | `high` |
+
+Headless runs set the level with `--effort <level>` (with `off` forcing it off even when the endpoint sets a level) and tune the per-provider values with `--effort-openai-value`, `--effort-gemini-budget`, and `--effort-ollama-think`. The provider overrides apply only when a level is active. A run reports its effective selection in the `run_started` JSONL event under `reasoningEffort`, and `cliOverridesApplied` lists `reasoningEffort` when a flag drove the value.
+
+```bash
+mux print --yolo --effort high "review this diff and explain the tradeoffs"
+mux print --yolo --effort medium --effort-gemini-budget 16000 "summarize the design doc"
+```
+
+Reasoning effort reaches Gemini as `thinkingConfig` only through mux's native Gemini path; when you reach a Gemini model through an OpenAI-compatible endpoint, the level ships as `reasoning_effort` instead. Backends whose model has no reasoning concept ignore the field.
 
 ### Skills
 
@@ -361,6 +391,7 @@ In `jsonl` mode:
 - `run_started` includes effective non-interactive capability metadata such as `commandName`, `endpointSelectionSource`, `cliOverridesApplied`, built-in tool counts, and MCP support/config status
 - `run_started` also includes loop/context metadata such as `maxIterations`, `contextWindow`, `reservedOutputTokens`, `usableInputLimit`, `warningThresholdTokens`, `tokenEstimationRatio`, and `compactionStrategy`
 - `run_started` includes `ignoreCertErrors` so consumers can detect whether certificate validation was disabled for mux-owned network requests
+- `run_started` includes `reasoningEffort` (the effective level and any per-provider overrides, or `null` when off); `cliOverridesApplied` lists `reasoningEffort` when a `--effort*` flag drove the value
 - `run_completed` also includes `finalEstimatedTokens` and `compactionCount`, and reports `status` `budget_exceeded` when `--max-token-budget` stops the run
 - `error` events keep `code` and also expose `errorCode`, `failureCategory`, and resolved runtime metadata when known (including `budget_exceeded`, classified as `runtime`)
 

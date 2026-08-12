@@ -236,6 +236,18 @@ namespace Mux.Cli.Commands
                     case "--max-tokens":
                         settings.MaxTokens = int.Parse(ReadValue(option, inlineValue, args, ref i), CultureInfo.InvariantCulture);
                         break;
+                    case "--effort":
+                        settings.Effort = ReadEffort(option, ReadValue(option, inlineValue, args, ref i));
+                        break;
+                    case "--effort-openai-value":
+                        settings.EffortOpenAiValue = ReadValue(option, inlineValue, args, ref i);
+                        break;
+                    case "--effort-gemini-budget":
+                        settings.EffortGeminiBudget = int.Parse(ReadValue(option, inlineValue, args, ref i), CultureInfo.InvariantCulture);
+                        break;
+                    case "--effort-ollama-think":
+                        settings.EffortOllamaThink = ReadValue(option, inlineValue, args, ref i);
+                        break;
                     case "-w":
                     case "--working-directory":
                         settings.WorkingDirectory = ReadValue(option, inlineValue, args, ref i);
@@ -364,6 +376,23 @@ namespace Mux.Cli.Commands
                     return false;
                 default:
                     throw new InvalidOperationException($"Option '{option}' expects a boolean value.");
+            }
+        }
+
+        private static string ReadEffort(string option, string value)
+        {
+            string normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
+            switch (normalized)
+            {
+                case "off":
+                case "none":
+                case "minimal":
+                case "low":
+                case "medium":
+                case "high":
+                    return normalized;
+                default:
+                    throw new InvalidOperationException($"Option '{option}' expects one of: off, minimal, low, medium, high.");
             }
         }
 

@@ -19,6 +19,21 @@ namespace Mux.Cli.App
 
         private readonly Pane _Pane;
         private readonly object _Sync = new object();
+        private string _EffortLabel = string.Empty;
+
+        #endregion
+
+        #region Public-Members
+
+        /// <summary>
+        /// The active reasoning-effort label shown in the sidebar (for example "high" or "off"). Empty
+        /// hides the row.
+        /// </summary>
+        public string EffortLabel
+        {
+            get => _EffortLabel;
+            set => _EffortLabel = value ?? string.Empty;
+        }
 
         #endregion
 
@@ -68,6 +83,11 @@ namespace Mux.Cli.App
                 if (stats.TaskTotal > 0)
                 {
                     _Pane.WriteLine(Text.From(Fit(Row("TASKS", stats.TaskCompleted + "/" + stats.TaskTotal))).Dim());
+                }
+
+                if (_EffortLabel.Length > 0)
+                {
+                    _Pane.WriteLine(Text.From(Fit(Row("EFFORT", _EffortLabel))).Dim());
                 }
 
                 _Pane.WriteLine(Text.From(string.Empty));

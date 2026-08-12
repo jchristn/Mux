@@ -130,7 +130,8 @@ namespace Mux.Core.Agent
                 TokenEstimationRatio = _Options.TokenEstimationRatio,
                 CompactionStrategy = _Options.CompactionStrategy,
                 IgnoreCertErrors = _Options.IgnoreCertErrors,
-                SandboxPosture = ToolGovernance.PostureName(_Options.SandboxPosture)
+                SandboxPosture = ToolGovernance.PostureName(_Options.SandboxPosture),
+                ReasoningEffort = _Options.Endpoint.ReasoningEffort
             };
 
             // 3. Enter loop

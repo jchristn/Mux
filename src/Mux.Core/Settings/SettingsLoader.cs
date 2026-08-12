@@ -1024,7 +1024,8 @@ namespace Mux.Core.Settings
                         RequiresToolResultContentAsString = source.Quirks.RequiresToolResultContentAsString,
                         DefaultFinishReason = source.Quirks.DefaultFinishReason,
                         StripRequestFields = new List<string>(source.Quirks.StripRequestFields)
-                    }
+                    },
+                ReasoningEffort = source.ReasoningEffort?.Clone()
             };
         }
 

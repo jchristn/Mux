@@ -60,6 +60,35 @@ namespace Mux.Cli.Commands
         public int? MaxTokens { get; set; }
 
         /// <summary>
+        /// Override the reasoning effort level: off, minimal, low, medium, or high. "off" disables the
+        /// reasoning field even when the endpoint sets a level.
+        /// </summary>
+        [Description("Reasoning effort: off, minimal, low, medium, high.")]
+        [CommandOption("--effort")]
+        public string? Effort { get; set; }
+
+        /// <summary>
+        /// Override the OpenAI reasoning_effort value sent to OpenAI-compatible backends.
+        /// </summary>
+        [Description("Override the OpenAI reasoning_effort value.")]
+        [CommandOption("--effort-openai-value")]
+        public string? EffortOpenAiValue { get; set; }
+
+        /// <summary>
+        /// Override the Gemini thinking-token budget (-1 dynamic, 0 off, or a positive budget).
+        /// </summary>
+        [Description("Override the Gemini thinking budget (-1..32768).")]
+        [CommandOption("--effort-gemini-budget")]
+        public int? EffortGeminiBudget { get; set; }
+
+        /// <summary>
+        /// Override the Ollama think value: low, medium, high, true, or false.
+        /// </summary>
+        [Description("Override the Ollama think value (low/medium/high/true/false).")]
+        [CommandOption("--effort-ollama-think")]
+        public string? EffortOllamaThink { get; set; }
+
+        /// <summary>
         /// The working directory for tool execution.
         /// </summary>
         [Description("Working directory for tool execution.")]

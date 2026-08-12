@@ -65,6 +65,57 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("EndpointConfig", "ReasoningEffortRoundTrips", "Reasoning effort survives a serialization round-trip", (CancellationToken ct) =>
+                    {
+                        EndpointConfig original = new EndpointConfig
+                        {
+                            Name = "reasoning",
+                            AdapterType = AdapterTypeEnum.OpenAi,
+                            BaseUrl = "https://api.openai.com/v1",
+                            Model = "gpt-5",
+                            ReasoningEffort = new ReasoningEffortConfig
+                            {
+                                Level = ReasoningLevelEnum.High,
+                                GeminiThinkingBudget = 16000
+                            }
+                        };
+
+                        string json = JsonSerializer.Serialize(original);
+                        EndpointConfig? deserialized = JsonSerializer.Deserialize<EndpointConfig>(json);
+
+                        MuxAssert.IsNotNull(deserialized, "deserialized");
+                        MuxAssert.IsNotNull(deserialized!.ReasoningEffort, "ReasoningEffort");
+                        MuxAssert.AreEqual(ReasoningLevelEnum.High, deserialized.ReasoningEffort!.Level, "level");
+                        MuxAssert.AreEqual(16000, deserialized.ReasoningEffort!.GeminiThinkingBudget, "budget");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("EndpointConfig", "ReasoningEffortDefaultsToNull", "Reasoning effort defaults to null and is omitted from JSON", (CancellationToken ct) =>
+                    {
+                        EndpointConfig config = new EndpointConfig { Name = "n", BaseUrl = "u", Model = "m" };
+                        MuxAssert.IsNull(config.ReasoningEffort, "default null");
+                        string json = JsonSerializer.Serialize(config);
+                        MuxAssert.IsFalse(json.Contains("reasoningEffort", System.StringComparison.Ordinal), "omitted when null");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("EndpointConfig", "ReasoningEffortOverridesClamp", "Reasoning effort overrides clamp and normalize", (CancellationToken ct) =>
+                    {
+                        ReasoningEffortConfig config = new ReasoningEffortConfig
+                        {
+                            GeminiThinkingBudget = -5,
+                            OpenAiValue = " HIGH ",
+                            OllamaThink = "maybe"
+                        };
+                        MuxAssert.AreEqual(-1, config.GeminiThinkingBudget, "budget clamps to floor");
+                        MuxAssert.AreEqual("high", config.OpenAiValue, "openai value normalized");
+                        MuxAssert.IsNull(config.OllamaThink, "unrecognized ollama think reverts to null");
+
+                        config.GeminiThinkingBudget = 999999;
+                        MuxAssert.AreEqual(32768, config.GeminiThinkingBudget, "budget clamps to ceiling");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("EndpointConfig", "MaxTokensClampedToRange", "MaxTokens values are clamped to range", (CancellationToken ct) =>
                     {
                         EndpointConfig config = new EndpointConfig();

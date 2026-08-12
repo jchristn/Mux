@@ -128,11 +128,19 @@ while a turn is in flight queues it to run when the current turn finishes.
 
 Type a leading `/` in the composer to run a command instead of submitting a prompt. Every command is
 also reachable by key and the menu (one catalog, three surfaces):
-`/endpoint` (`/model`), `/help` (`/?`), `/clear`, `/sidebar`, `/save`, `/sessions`, `/tasks`, `/theme`,
-`/mouse`, `/menu`, `/quit` (`/exit`).
+`/endpoint` (`/model`), `/effort` (`/reasoning`), `/help` (`/?`), `/clear`, `/sidebar`, `/save`,
+`/sessions`, `/tasks`, `/theme`, `/mouse`, `/menu`, `/quit` (`/exit`).
 
 `/theme` opens a theme selector (pick a theme and apply it); the whole UI — including the panes behind
 the text — conforms to the chosen theme.
+
+`/effort` (`/reasoning`) opens a reasoning-effort picker — Off, Minimal, Low, Medium, High — for the
+active endpoint. The choice persists to `endpoints.json` and applies to the next turn, and the sidebar's
+`EFFORT` line shows the active level. Selecting a level drives provider-appropriate defaults: OpenAI
+`reasoning_effort`, a Gemini thinking budget, or the Ollama `think` value. Headless runs set it with
+`--effort <off|minimal|low|medium|high>` and tune the per-provider values with `--effort-openai-value`,
+`--effort-gemini-budget`, and `--effort-ollama-think`. Per-endpoint tuning is also available in the
+endpoint Add/Edit form (a **Reasoning effort** field plus an advanced **Gemini thinking budget** field).
 
 `/help` (`/?`) opens the keybinding/command reference in a modal; `F1` opens the command menu (the same
 catalog as a pick-and-run list). On startup mux shows a splash box, and quitting (`Ctrl+Q` / `/quit`)

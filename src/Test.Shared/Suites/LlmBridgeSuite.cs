@@ -38,6 +38,7 @@ namespace Test.Shared.Suites
                     Case("OllamaBridge", "Ollama adapter maps streaming, tools, usage, and errors", ct => RunAdapterScenariosAsync(AdapterTypeEnum.Ollama, ct)),
                     Case("OllamaBridgeToleratesV1BaseUrl", "Ollama adapter strips a trailing /v1 and reaches the native /api/chat", RunOllamaV1BaseUrlAsync),
                     Case("ConnectionFailureRetriesAndClassifies", "A connection failure retries and surfaces llm_connection_error", RunConnectionFailureAsync),
+                    Case("ReasoningEffortReachesTheWire", "Reasoning effort maps onto the outbound request per adapter", RunReasoningEffortWireAsync),
                 });
         }
 
@@ -118,6 +119,48 @@ namespace Test.Shared.Suites
             MuxAssert.IsNotNull(error, "a connection error is surfaced");
             MuxAssert.AreEqual("llm_connection_error", error!.Code, "connection failure classified as llm_connection_error");
             MuxAssert.IsTrue(retries >= 1, "the connection failure is retried");
+        }
+
+        private static async Task RunReasoningEffortWireAsync(CancellationToken ct)
+        {
+            // OpenAI-compatible: a High level sends reasoning_effort "high".
+            using (LocalLlmTestServer server = LocalLlmTestServer.Start())
+            {
+                EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+                endpoint.ReasoningEffort = new ReasoningEffortConfig { Level = ReasoningLevelEnum.High };
+                using LlmClient client = new LlmClient(endpoint);
+                await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
+                MuxAssert.Contains("\"reasoning_effort\":\"high\"", server.RequestBodies[0], "OpenAI adapter sends reasoning_effort high");
+            }
+
+            // Unset: no reasoning field is sent, so existing requests are byte-for-byte unchanged.
+            using (LocalLlmTestServer server = LocalLlmTestServer.Start())
+            {
+                EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+                using LlmClient client = new LlmClient(endpoint);
+                await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
+                MuxAssert.IsFalse(server.RequestBodies[0].Contains("reasoning_effort", StringComparison.Ordinal), "no reasoning_effort is sent by default");
+            }
+
+            // A Minimal level overrides to reasoning_effort "minimal".
+            using (LocalLlmTestServer server = LocalLlmTestServer.Start())
+            {
+                EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+                endpoint.ReasoningEffort = new ReasoningEffortConfig { Level = ReasoningLevelEnum.Minimal };
+                using LlmClient client = new LlmClient(endpoint);
+                await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
+                MuxAssert.Contains("\"reasoning_effort\":\"minimal\"", server.RequestBodies[0], "OpenAI adapter sends reasoning_effort minimal");
+            }
+
+            // Ollama-native: a Medium level sends think "medium".
+            using (LocalLlmTestServer server = LocalLlmTestServer.Start())
+            {
+                EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.Ollama, server.Endpoint);
+                endpoint.ReasoningEffort = new ReasoningEffortConfig { Level = ReasoningLevelEnum.Medium };
+                using LlmClient client = new LlmClient(endpoint);
+                await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
+                MuxAssert.Contains("\"think\":\"medium\"", server.RequestBodies[0], "Ollama adapter sends think medium");
+            }
         }
 
         #region Helpers

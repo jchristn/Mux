@@ -486,6 +486,12 @@ namespace Mux.Core.Llm
                 MaxTokens = _Endpoint.MaxTokens
             };
 
+            Pp.ReasoningEffort? reasoning = MapReasoningEffort(_Endpoint.ReasoningEffort);
+            if (reasoning != null)
+            {
+                request.ReasoningEffort = reasoning;
+            }
+
             foreach (ConversationMessage message in messages)
             {
                 request.Messages.Add(MapMessage(message));
@@ -501,6 +507,32 @@ namespace Mux.Core.Llm
 
             request.ToolChoice = tools.Count > 0 ? "auto" : "none";
             return request;
+        }
+
+        private static Pp.ReasoningEffort? MapReasoningEffort(ReasoningEffortConfig? config)
+        {
+            if (config == null || !config.Level.HasValue)
+            {
+                return null;
+            }
+
+            Pp.ReasoningEffort effort = new Pp.ReasoningEffort(MapReasoningLevel(config.Level.Value));
+            if (!string.IsNullOrWhiteSpace(config.OpenAiValue)) effort.OpenAiValue = config.OpenAiValue;
+            if (config.GeminiThinkingBudget.HasValue) effort.GeminiThinkingBudget = config.GeminiThinkingBudget.Value;
+            if (!string.IsNullOrWhiteSpace(config.OllamaThink)) effort.OllamaThink = config.OllamaThink;
+            return effort;
+        }
+
+        private static Pp.ReasoningEffortLevel MapReasoningLevel(ReasoningLevelEnum level)
+        {
+            switch (level)
+            {
+                case ReasoningLevelEnum.Minimal: return Pp.ReasoningEffortLevel.Minimal;
+                case ReasoningLevelEnum.Low: return Pp.ReasoningEffortLevel.Low;
+                case ReasoningLevelEnum.Medium: return Pp.ReasoningEffortLevel.Medium;
+                case ReasoningLevelEnum.High: return Pp.ReasoningEffortLevel.High;
+                default: return Pp.ReasoningEffortLevel.Medium;
+            }
         }
 
         private static Pp.ChatMessage MapMessage(ConversationMessage message)

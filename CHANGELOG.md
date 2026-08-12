@@ -2,6 +2,29 @@
 
 All notable changes to mux are documented here.
 
+## v0.8.0 - 2026-08-12
+
+### Added
+
+- **Reasoning effort.** A per-endpoint reasoning level (`minimal`, `low`, `medium`, `high`) that mux
+  translates per backend through PolyPrompt 2.1.0 — OpenAI `reasoning_effort`, Gemini
+  `thinkingConfig` budget, and Ollama `think` — and omits entirely when unset, so existing endpoints are
+  unchanged. Stored in `endpoints.json` under `reasoningEffort`, with optional per-provider overrides
+  (`openAiValue`, `geminiThinkingBudget`, `ollamaThink`).
+- **`/effort` (alias `/reasoning`).** An interactive picker (Off / Minimal / Low / Medium / High) that
+  persists the choice to the active endpoint and applies it to the next turn. The sidebar shows an
+  `EFFORT` line, and the endpoint Add/Edit form gains a **Reasoning effort** field plus an advanced
+  **Gemini thinking budget** field.
+- **Headless flags.** `--effort <off|minimal|low|medium|high>` sets or clears the level (`off` disables
+  even when the endpoint sets a level); `--effort-openai-value`, `--effort-gemini-budget`, and
+  `--effort-ollama-think` override the per-provider values (only when a level is active).
+- **JSONL contract.** `run_started` now includes a `reasoningEffort` object (the effective level and any
+  overrides, or `null`), and `cliOverridesApplied` lists `reasoningEffort` when a flag drove the value.
+
+### Changed
+
+- Bumped the PolyPrompt dependency to `2.1.0` for its provider-neutral reasoning-effort support.
+
 ## v0.7.0 - 2026-08-07
 
 ### Added

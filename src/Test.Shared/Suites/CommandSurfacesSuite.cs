@@ -48,6 +48,18 @@ namespace Test.Shared.Suites
                         }
                     }),
 
+                    Case("SlashResolvesEffort", "The slash parser resolves the reasoning-effort command", async (CancellationToken ct) =>
+                    {
+                        await using (JobManager manager = NewManager())
+                        using (MuxTuiApp app = NewApp(out _, manager))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            SlashCommandParser parser = new SlashCommandParser(app.Catalog);
+                            MuxAssert.AreEqual("mux.effort", parser.Resolve("/effort")?.Id, "effort alias");
+                            MuxAssert.AreEqual("mux.effort", parser.Resolve("/reasoning")?.Id, "reasoning alias");
+                        }
+                    }),
+
                     Case("SlashTryHandleInvokesAndReports", "TryHandle invokes a match and reports unknowns", async (CancellationToken ct) =>
                     {
                         await using (JobManager manager = NewManager())

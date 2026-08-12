@@ -77,6 +77,8 @@ namespace Mux.Cli.Commands
                 settings.Temperature,
                 settings.MaxTokens);
 
+            ApplyReasoningOverride(endpoint, settings);
+
             string workingDirectory = settings.WorkingDirectory ?? Directory.GetCurrentDirectory();
 
             if (!ToolGovernance.TryParsePosture(settings.Sandbox, out SandboxPostureEnum sandboxPosture))
@@ -326,6 +328,7 @@ namespace Mux.Cli.Commands
             if (!string.IsNullOrWhiteSpace(settings.AdapterType)) overrides.Add("adapterType");
             if (settings.Temperature.HasValue) overrides.Add("temperature");
             if (settings.MaxTokens.HasValue) overrides.Add("maxTokens");
+            if (HasReasoningOverride(settings)) overrides.Add("reasoningEffort");
             if (!string.IsNullOrWhiteSpace(settings.WorkingDirectory)) overrides.Add("workingDirectory");
             if (!string.IsNullOrWhiteSpace(settings.SystemPrompt)) overrides.Add("systemPrompt");
             if (!string.IsNullOrWhiteSpace(settings.AppendSystemPrompt)) overrides.Add("appendSystemPrompt");
@@ -341,6 +344,54 @@ namespace Mux.Cli.Commands
             if (settings.IgnoreCertErrors) overrides.Add("ignoreCertErrors");
 
             return overrides;
+        }
+
+        internal static bool HasReasoningOverride(CommonSettings settings)
+        {
+            return !string.IsNullOrWhiteSpace(settings.Effort)
+                || !string.IsNullOrWhiteSpace(settings.EffortOpenAiValue)
+                || settings.EffortGeminiBudget.HasValue
+                || !string.IsNullOrWhiteSpace(settings.EffortOllamaThink);
+        }
+
+        /// <summary>
+        /// Applies any CLI reasoning-effort overrides onto the resolved endpoint. A level flag replaces the
+        /// endpoint's level; "off"/"none" clears it entirely; the per-provider flags override individual
+        /// values but only when a level is active (from config or the flag), so they stay inert otherwise.
+        /// </summary>
+        /// <param name="endpoint">The resolved endpoint to mutate.</param>
+        /// <param name="settings">The CLI settings carrying any effort overrides.</param>
+        internal static void ApplyReasoningOverride(EndpointConfig endpoint, CommonSettings settings)
+        {
+            string? effortFlag = settings.Effort?.Trim().ToLowerInvariant();
+            if (!HasReasoningOverride(settings))
+            {
+                return;
+            }
+
+            if (effortFlag == "off" || effortFlag == "none")
+            {
+                endpoint.ReasoningEffort = null;
+                return;
+            }
+
+            ReasoningEffortConfig config = endpoint.ReasoningEffort?.Clone() ?? new ReasoningEffortConfig();
+
+            if (!string.IsNullOrEmpty(effortFlag)
+                && ReasoningLevelEnumConverter.TryParse(effortFlag, out ReasoningLevelEnum level))
+            {
+                config.Level = level;
+            }
+
+            if (!config.IsActive())
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(settings.EffortOpenAiValue)) config.OpenAiValue = settings.EffortOpenAiValue;
+            if (settings.EffortGeminiBudget.HasValue) config.GeminiThinkingBudget = settings.EffortGeminiBudget;
+            if (!string.IsNullOrWhiteSpace(settings.EffortOllamaThink)) config.OllamaThink = settings.EffortOllamaThink;
+            endpoint.ReasoningEffort = config;
         }
 
         private static List<string> SplitPatterns(string? value)

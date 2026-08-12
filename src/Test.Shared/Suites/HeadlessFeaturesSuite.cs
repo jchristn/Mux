@@ -65,6 +65,39 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("HeadlessFeatures", "EffortFlagsParse", "the reasoning-effort flags parse", (CancellationToken ct) =>
+                    {
+                        PrintSettings settings = CliArgumentParser.ParsePrint(new[]
+                        {
+                            "--effort", "High",
+                            "--effort-openai-value", "high",
+                            "--effort-gemini-budget", "16000",
+                            "--effort-ollama-think", "medium",
+                            "go"
+                        });
+
+                        MuxAssert.AreEqual("high", settings.Effort, "effort normalized to lowercase");
+                        MuxAssert.AreEqual("high", settings.EffortOpenAiValue, "openai value parsed");
+                        MuxAssert.AreEqual(16000, settings.EffortGeminiBudget ?? -1, "gemini budget parsed");
+                        MuxAssert.AreEqual("medium", settings.EffortOllamaThink, "ollama think parsed");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("HeadlessFeatures", "EffortRejectsUnknownLevel", "--effort with an unknown level is rejected", (CancellationToken ct) =>
+                    {
+                        MuxAssert.Throws<InvalidOperationException>(
+                            () => CliArgumentParser.ParsePrint(new[] { "--effort", "banana", "go" }),
+                            "unknown effort level throws");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("HeadlessFeatures", "EffortAcceptsOff", "--effort off parses", (CancellationToken ct) =>
+                    {
+                        PrintSettings settings = CliArgumentParser.ParsePrint(new[] { "--effort", "off", "go" });
+                        MuxAssert.AreEqual("off", settings.Effort, "off parsed");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("HeadlessFeatures", "MaxTurnsRejectsNonInteger", "--max-turns with a non-integer value fails", (CancellationToken ct) =>
                     {
                         MuxAssert.Throws<FormatException>(

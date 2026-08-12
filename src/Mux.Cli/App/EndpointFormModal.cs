@@ -26,9 +26,9 @@ namespace Mux.Cli.App
         private const int PadX = 3;
         private const int PadY = 1;
 
-        // Wide enough to hold the footer hint and the longest field label ("Max agent iterations…") without
-        // truncation on a normal-width terminal; it still shrinks to fit narrower screens in Render.
-        private const int ContentWidth = 54;
+        // Wide enough to hold the footer hint and the longest field label ("Gemini thinking budget…")
+        // without truncation on a normal-width terminal; it still shrinks to fit narrower screens in Render.
+        private const int ContentWidth = 60;
 
         // The local-inference default host. The native Ollama API lives at the root; every other adapter
         // speaks the OpenAI-compatible surface under /v1. These seed the Base URL prefill per adapter.
@@ -55,6 +55,8 @@ namespace Mux.Cli.App
             1,                    // Timeout
             1,                    // Auto-approve tools
             1,                    // Max agent iterations
+            1,                    // Reasoning effort
+            1,                    // Gemini thinking budget
         };
 
         private readonly string _Title;
@@ -72,6 +74,8 @@ namespace Mux.Cli.App
         private readonly TextField _Timeout;
         private readonly Checkbox _AutoApprove;
         private readonly TextField _MaxAgentIterations;
+        private readonly TextField _ReasoningEffort;
+        private readonly TextField _GeminiThinkingBudget;
         private string _Error = string.Empty;
 
         #endregion
@@ -104,6 +108,8 @@ namespace Mux.Cli.App
             _Timeout = new TextField();
             _AutoApprove = new Checkbox("Auto-approve tool calls", source.AutoApproveTools);
             _MaxAgentIterations = new TextField();
+            _ReasoningEffort = new TextField();
+            _GeminiThinkingBudget = new TextField();
 
             if (existing != null)
             {
@@ -133,6 +139,12 @@ namespace Mux.Cli.App
             _MaxAgentIterations.Value = source.MaxAgentIterations.HasValue
                 ? source.MaxAgentIterations.Value.ToString(CultureInfo.InvariantCulture)
                 : string.Empty;
+            _ReasoningEffort.Value = source.ReasoningEffort?.Level.HasValue == true
+                ? ReasoningLevelEnumConverter.ToWire(source.ReasoningEffort.Level!.Value)
+                : string.Empty;
+            _GeminiThinkingBudget.Value = source.ReasoningEffort?.GeminiThinkingBudget.HasValue == true
+                ? source.ReasoningEffort.GeminiThinkingBudget!.Value.ToString(CultureInfo.InvariantCulture)
+                : string.Empty;
 
             _Form = new Form();
             _Form.Add("Name", _Name, () => _Name.Value.Trim().Length == 0 ? "Name is required." : null);
@@ -147,6 +159,8 @@ namespace Mux.Cli.App
             _Form.Add("Timeout (ms)", _Timeout, () => ValidateInt(_Timeout.Value, "Timeout", 10000, int.MaxValue));
             _Form.Add("Auto-approve tools", _AutoApprove);
             _Form.Add("Max agent iterations (blank = global)", _MaxAgentIterations, () => ValidateOptionalInt(_MaxAgentIterations.Value, "Max agent iterations", 1, 100));
+            _Form.Add("Reasoning effort (blank = off)", _ReasoningEffort, () => ValidateOptionalEffort(_ReasoningEffort.Value));
+            _Form.Add("Gemini thinking budget (blank = default)", _GeminiThinkingBudget, () => ValidateOptionalInt(_GeminiThinkingBudget.Value, "Gemini thinking budget", -1, 32768));
         }
 
         #endregion
@@ -270,6 +284,7 @@ namespace Mux.Cli.App
                 TimeoutMs = int.Parse(_Timeout.Value.Trim(), CultureInfo.InvariantCulture),
                 AutoApproveTools = _AutoApprove.Checked,
                 MaxAgentIterations = ParseOptionalInt(_MaxAgentIterations.Value),
+                ReasoningEffort = BuildReasoningConfig(),
 
                 // The quirks object is not editable here; carry it over so an edit never silently resets a
                 // hand-tuned backend behavior profile back to the adapter defaults.
@@ -387,6 +402,50 @@ namespace Mux.Cli.App
             }
 
             return null;
+        }
+
+        private ReasoningEffortConfig? BuildReasoningConfig()
+        {
+            string levelText = _ReasoningEffort.Value.Trim();
+            if (levelText.Length == 0)
+            {
+                return null;
+            }
+
+            if (!ReasoningLevelEnumConverter.TryParse(levelText, out ReasoningLevelEnum level))
+            {
+                return null;
+            }
+
+            // Preserve overrides the form does not surface (OpenAI value, Ollama think) on an edit.
+            ReasoningEffortConfig config = _Existing?.ReasoningEffort?.Clone() ?? new ReasoningEffortConfig();
+            config.Level = level;
+
+            string budgetText = _GeminiThinkingBudget.Value.Trim();
+            if (budgetText.Length > 0
+                && int.TryParse(budgetText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int budget))
+            {
+                config.GeminiThinkingBudget = budget;
+            }
+            else
+            {
+                config.GeminiThinkingBudget = null;
+            }
+
+            return config;
+        }
+
+        private static string? ValidateOptionalEffort(string value)
+        {
+            string trimmed = (value ?? string.Empty).Trim();
+            if (trimmed.Length == 0)
+            {
+                return null;
+            }
+
+            return ReasoningLevelEnumConverter.TryParse(trimmed, out _)
+                ? null
+                : "Reasoning effort must be minimal, low, medium, or high.";
         }
 
         private static string? ValidateOptionalInt(string value, string label, int min, int max)

@@ -68,6 +68,58 @@ namespace Test.Shared.Suites
                         CommandRuntimeResolver.ApplyMuxSettingsOverrides(settings, muxSettings);
                         MuxAssert.IsTrue(muxSettings.IgnoreCertErrors, "IgnoreCertErrors enabled");
                         return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("CommandRuntimeResolver", "EffortFlagSetsEndpointLevel", "--effort sets the endpoint reasoning level", (CancellationToken ct) =>
+                    {
+                        PrintSettings settings = new PrintSettings { Effort = "high" };
+                        EndpointConfig endpoint = new EndpointConfig();
+                        CommandRuntimeResolver.ApplyReasoningOverride(endpoint, settings);
+                        MuxAssert.IsNotNull(endpoint.ReasoningEffort, "ReasoningEffort set");
+                        MuxAssert.AreEqual(ReasoningLevelEnum.High, endpoint.ReasoningEffort!.Level, "level");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("CommandRuntimeResolver", "EffortOffClearsEndpointLevel", "--effort off disables even when the endpoint sets a level", (CancellationToken ct) =>
+                    {
+                        PrintSettings settings = new PrintSettings { Effort = "off" };
+                        EndpointConfig endpoint = new EndpointConfig
+                        {
+                            ReasoningEffort = new ReasoningEffortConfig { Level = ReasoningLevelEnum.High }
+                        };
+                        CommandRuntimeResolver.ApplyReasoningOverride(endpoint, settings);
+                        MuxAssert.IsNull(endpoint.ReasoningEffort, "ReasoningEffort cleared");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("CommandRuntimeResolver", "EffortProviderOverrideAppliesWhenLevelActive", "Provider overrides apply on top of an existing endpoint level", (CancellationToken ct) =>
+                    {
+                        PrintSettings settings = new PrintSettings { EffortGeminiBudget = 16000 };
+                        EndpointConfig endpoint = new EndpointConfig
+                        {
+                            ReasoningEffort = new ReasoningEffortConfig { Level = ReasoningLevelEnum.High }
+                        };
+                        CommandRuntimeResolver.ApplyReasoningOverride(endpoint, settings);
+                        MuxAssert.AreEqual(16000, endpoint.ReasoningEffort!.GeminiThinkingBudget, "budget override");
+                        MuxAssert.AreEqual(ReasoningLevelEnum.High, endpoint.ReasoningEffort!.Level, "level preserved");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("CommandRuntimeResolver", "EffortProviderOverrideInertWithoutLevel", "Provider overrides stay inert with no active level", (CancellationToken ct) =>
+                    {
+                        PrintSettings settings = new PrintSettings { EffortGeminiBudget = 16000 };
+                        EndpointConfig endpoint = new EndpointConfig();
+                        CommandRuntimeResolver.ApplyReasoningOverride(endpoint, settings);
+                        MuxAssert.IsNull(endpoint.ReasoningEffort, "no reasoning config without a level");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("CommandRuntimeResolver", "HasReasoningOverrideDetectsFlags", "HasReasoningOverride reflects the effort flags", (CancellationToken ct) =>
+                    {
+                        MuxAssert.IsFalse(CommandRuntimeResolver.HasReasoningOverride(new PrintSettings()), "none");
+                        MuxAssert.IsTrue(CommandRuntimeResolver.HasReasoningOverride(new PrintSettings { Effort = "low" }), "level flag");
+                        MuxAssert.IsTrue(CommandRuntimeResolver.HasReasoningOverride(new PrintSettings { EffortOllamaThink = "high" }), "provider flag");
+                        return Task.CompletedTask;
                     })
                 });
         }
