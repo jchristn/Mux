@@ -152,6 +152,71 @@ namespace Test.Shared.Suites
                     return Task.CompletedTask;
                 }),
 
+                Case("LoadMcpServersIndependentOfWorkingDirectory", "MCP servers load from the resolved config dir regardless of the process working directory", (string dir, CancellationToken ct) =>
+                {
+                    // Regression: `mux print --working-directory X` must not change whether the config dir's
+                    // mcp-servers.json is discovered. The config dir is resolved from --config-dir /
+                    // MUX_CONFIG_DIR / ~/.mux, never from the working directory (cwd).
+                    File.WriteAllText(
+                        Path.Combine(dir, "mcp-servers.json"),
+                        "{\"servers\":[{\"name\":\"armada\",\"transport\":\"http\",\"url\":\"http://localhost:7891\",\"mcpPath\":\"/mcp\"}]}");
+
+                    string originalCwd = Directory.GetCurrentDirectory();
+                    string otherDir = Path.Combine(Path.GetTempPath(), "mux_wd_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(otherDir);
+                    try
+                    {
+                        List<McpServerConfig> fromOriginal = SettingsLoader.LoadMcpServers();
+                        MuxAssert.AreEqual(1, fromOriginal.Count, "loaded from original cwd");
+
+                        // Changing the process working directory must not affect config-dir resolution.
+                        Directory.SetCurrentDirectory(otherDir);
+                        List<McpServerConfig> fromOther = SettingsLoader.LoadMcpServers();
+                        MuxAssert.AreEqual(1, fromOther.Count, "still loaded after cwd change");
+                        MuxAssert.AreEqual("armada", fromOther[0].Name, "same server name after cwd change");
+                        MuxAssert.AreEqual(McpTransportTypeEnum.Http, fromOther[0].Transport, "same transport after cwd change");
+                    }
+                    finally
+                    {
+                        Directory.SetCurrentDirectory(originalCwd);
+                        try { if (Directory.Exists(otherDir)) Directory.Delete(otherDir, true); } catch (IOException) { }
+                    }
+                    return Task.CompletedTask;
+                }),
+
+                new TestCaseDescriptor("SettingsLoader", "ConfigDirectoryOverrideIsFrozenAgainstWorkingDirectoryChanges", "A pushed config-dir override resolves once and does not drift when the working directory changes", (CancellationToken ct) =>
+                {
+                    // The --config-dir override is captured and normalized to an absolute path at process start
+                    // (before any command runs), so a later working-directory change cannot re-resolve it.
+                    string originalCwd = Directory.GetCurrentDirectory();
+                    string baseA = Path.Combine(Path.GetTempPath(), "mux_cfgA_" + Guid.NewGuid().ToString("N"));
+                    string baseB = Path.Combine(Path.GetTempPath(), "mux_cfgB_" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(baseA);
+                    Directory.CreateDirectory(baseB);
+                    try
+                    {
+                        Directory.SetCurrentDirectory(baseA);
+                        using (SettingsLoader.PushConfigDirectoryOverride("relcfg"))
+                        {
+                            string resolvedInA = SettingsLoader.GetConfigDirectory();
+
+                            Directory.SetCurrentDirectory(baseB);
+                            string resolvedAfterChange = SettingsLoader.GetConfigDirectory();
+                            string wouldBeInBIfBuggy = Path.GetFullPath("relcfg"); // resolves against baseB now
+
+                            MuxAssert.AreEqual(resolvedInA, resolvedAfterChange, "override frozen across cwd change");
+                            MuxAssert.IsFalse(string.Equals(wouldBeInBIfBuggy, resolvedAfterChange, StringComparison.Ordinal), "did not drift to the new working directory");
+                        }
+                    }
+                    finally
+                    {
+                        Directory.SetCurrentDirectory(originalCwd);
+                        try { if (Directory.Exists(baseA)) Directory.Delete(baseA, true); } catch (IOException) { }
+                        try { if (Directory.Exists(baseB)) Directory.Delete(baseB, true); } catch (IOException) { }
+                    }
+                    return Task.CompletedTask;
+                }),
+
                 Case("LoadSettingsValidJsonParsesCorrectly", "A valid settings.json is parsed correctly", (string dir, CancellationToken ct) =>
                 {
                     string json = "{\"systemPromptPath\":\"/tmp/prompt.md\",\"defaultApprovalPolicy\":\"auto\",\"toolTimeoutMs\":60000,\"processTimeoutMs\":240000,\"autoCompactEnabled\":false,\"contextWarningThresholdPercent\":85,\"compactionStrategy\":\"trim\",\"compactionPreserveTurns\":4,\"maxAgentIterations\":50,\"maxConcurrency\":5,\"defaultEnqueueBehavior\":\"queue-after\",\"ignoreCertErrors\":true}";
