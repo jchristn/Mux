@@ -3044,7 +3044,7 @@ namespace Mux.Cli.App
             // The chords are terminal-independent (Ctrl/F1/Esc work everywhere), so the hint is stable
             // across platforms; only the modifier labels adapt (e.g. Alt renders as OPTION on macOS).
             string ctrl = ModifierLabel(KeyModifiers.Ctrl);
-            return $"Type a prompt and press ENTER to send | {ctrl}+J/newline | F1/help | Esc/cancel | {ctrl}-Q/quit";
+            return $"Type a prompt and press ENTER to send | {ctrl}+J/newline | F1/help | F12/mouse | Esc/cancel | {ctrl}-Q/quit";
         }
 
         private static string ModifierLabel(KeyModifiers modifier)
