@@ -15,7 +15,9 @@ namespace Mux.Cli.App
         };
 
         /// <summary>
-        /// Builds the startup splash lines: the wordmark, a tagline with the version, and the copyright.
+        /// Builds the startup splash lines: the wordmark, a tagline with the version, the copyright, and the
+        /// project URL. The splash modal appends its own blank gap before the "press any key" hint, so the URL
+        /// is the final content line here and reads with one blank line above and below it.
         /// </summary>
         /// <param name="version">The product version string.</param>
         /// <returns>The splash content lines.</returns>
@@ -30,6 +32,8 @@ namespace Mux.Cli.App
             lines.Add(string.Empty);
             lines.Add("AI agent for local and remote LLMs  ·  v" + (version ?? string.Empty));
             lines.Add("(c)2026 Joel Christner");
+            lines.Add(string.Empty);
+            lines.Add("https://github.com/jchristn/mux");
             return lines;
         }
     }
