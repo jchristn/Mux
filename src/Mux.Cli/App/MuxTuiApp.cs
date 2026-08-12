@@ -2096,7 +2096,7 @@ namespace Mux.Cli.App
                 _Model = endpoint.Model;
             }
 
-            WriteNotice($"Switched to endpoint {endpoint.Name} ({endpoint.Model}).");
+            WriteNotice($"Switched to endpoint {endpoint.Name} ({endpoint.Model})");
             RefreshFooter();
             RefreshSidebar();
 
@@ -2114,7 +2114,7 @@ namespace Mux.Cli.App
             }
 
             string label = string.IsNullOrWhiteSpace(endpoint.Model) ? endpoint.Name : endpoint.Model;
-            WriteNotice($"Loading model {label} on {endpoint.Name}…");
+            WriteNotice($"Loading model {label} on endpoint {endpoint.Name}");
 
             _ = Task.Run(async () =>
             {
@@ -2123,11 +2123,11 @@ namespace Mux.Cli.App
                     ModelLoadResult result = await _OnValidateModel(endpoint, _Cts.Token).ConfigureAwait(false);
                     if (result.Success)
                     {
-                        PostNotice($"Model {label} loaded successfully on {endpoint.Name}.");
+                        PostNotice($"Model {label} loaded successfully on endpoint {endpoint.Name}");
                     }
                     else
                     {
-                        PostNotice($"Unable to load model {label} on {endpoint.Name}: {result.Error}");
+                        PostNotice($"Unable to load model {label} on endpoint {endpoint.Name}: {result.Error}");
                     }
                 }
                 catch (OperationCanceledException)
@@ -2135,7 +2135,7 @@ namespace Mux.Cli.App
                 }
                 catch (Exception ex)
                 {
-                    PostNotice($"Unable to load model {label} on {endpoint.Name}: {ex.Message}");
+                    PostNotice($"Unable to load model {label} on endpoint {endpoint.Name}: {ex.Message}");
                 }
             });
         }
