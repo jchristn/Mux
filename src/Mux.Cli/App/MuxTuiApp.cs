@@ -1877,6 +1877,22 @@ namespace Mux.Cli.App
             _Conversation.WriteLine(Text.From(text).Dim());
         }
 
+        /// <summary>
+        /// Writes a dim background notice — for example an MCP server connection result — into the transcript.
+        /// Safe to call from a background thread; the conversation view serializes writes with the render loop,
+        /// the same path the streaming agent projector uses.
+        /// </summary>
+        /// <param name="text">The notice text. Ignored when null or empty.</param>
+        public void PostNotice(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return;
+            }
+
+            WriteNotice(text);
+        }
+
         private void OpenCommandMenu()
         {
             List<CommandDescriptor> commands = new List<CommandDescriptor>();

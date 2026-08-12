@@ -282,6 +282,10 @@ CONFIG:
             McpRuntime? mcpRuntime = null;
             SkillRuntime? skillRuntime = null;
 
+            // Set once the interactive shell exists so MCP connection notices raised on the runtime's
+            // background thread can be routed into the transcript. Null before the shell is built.
+            MuxTuiApp? shell = null;
+
             // Re-binds the live MCP tools and the skills runtime (callable tools + prompt awareness) onto the
             // template. Runs at startup, whenever the MCP tool set or the skill set changes, and on profile
             // switch. The template is read per job run, so updates apply to the next submitted turn.
@@ -296,7 +300,11 @@ CONFIG:
                 }
             }
 
-            mcpRuntime = new McpRuntime(SettingsLoader.LoadMcpServers, ApplyTemplate, TimeSpan.FromSeconds(30));
+            mcpRuntime = new McpRuntime(
+                SettingsLoader.LoadMcpServers,
+                ApplyTemplate,
+                TimeSpan.FromSeconds(30),
+                onNotice: message => shell?.PostNotice(message));
 
             if (runtime.MuxSettings.SkillsEnabled)
             {
@@ -349,6 +357,10 @@ CONFIG:
                     showBoundaries: runtime.MuxSettings.ShowBoundaryLines,
                     mcpRuntime: mcpRuntime,
                     skillRuntime: skillRuntime);
+
+                // Expose the shell so MCP connection notices (raised on the runtime's background thread once
+                // Start() is called below) can be written into the transcript.
+                shell = app;
 
                 // Route escalated tool approvals to the shell's modal. The template is captured by
                 // CreateForAgentLoop and read per job run, so setting this before the run loop starts

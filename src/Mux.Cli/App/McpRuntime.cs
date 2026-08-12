@@ -30,6 +30,7 @@ namespace Mux.Cli.App
 
         private readonly Func<List<McpServerConfig>> _LoadConfigs;
         private readonly Action _OnToolsChanged;
+        private readonly Action<string>? _OnNotice;
         private readonly TimeSpan _Interval;
         private readonly SemaphoreSlim _Gate = new SemaphoreSlim(1, 1);
         private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
@@ -44,6 +45,10 @@ namespace Mux.Cli.App
         private Task? _Loop;
         private bool _Disposed;
 
+        // The last connection notice emitted per server, so a periodic reconnect that produces the same
+        // outcome does not repeatedly re-announce it. Keyed by server name; the value is the emitted message.
+        private readonly Dictionary<string, string> _LastNotified = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         #endregion
 
         #region Constructors-and-Factories
@@ -54,12 +59,14 @@ namespace Mux.Cli.App
         /// <param name="loadConfigs">Loads the current MCP server configurations (the source of truth). Must not be null.</param>
         /// <param name="onToolsChanged">Invoked (off the UI thread) after a refresh that changes the discovered tool set. Must not be null.</param>
         /// <param name="interval">The connectivity-validation interval. Defaults to 30 seconds when null.</param>
+        /// <param name="onNotice">Optional callback (invoked off the UI thread) that receives a human-readable notice whenever a server's connect outcome changes — a success with its tool count, or a failure with the transport and error details. Null suppresses notices.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required argument is null.</exception>
-        public McpRuntime(Func<List<McpServerConfig>> loadConfigs, Action onToolsChanged, TimeSpan? interval = null)
+        public McpRuntime(Func<List<McpServerConfig>> loadConfigs, Action onToolsChanged, TimeSpan? interval = null, Action<string>? onNotice = null)
         {
             _LoadConfigs = loadConfigs ?? throw new ArgumentNullException(nameof(loadConfigs));
             _OnToolsChanged = onToolsChanged ?? throw new ArgumentNullException(nameof(onToolsChanged));
             _Interval = interval ?? TimeSpan.FromSeconds(30);
+            _OnNotice = onNotice;
         }
 
         #endregion
@@ -289,6 +296,10 @@ namespace Mux.Cli.App
                 List<ToolDefinition> tools = candidate.GetToolDefinitions();
                 List<McpServerStatus> status = BuildStatus(configs, candidate);
 
+                // Surface a per-server success/failure notice for any server whose outcome changed since we
+                // last announced it. Done before the swap so the message reflects the manager we just built.
+                EmitConnectionNotices(configs, candidate.GetConnectionResults());
+
                 McpToolManager? previous;
                 lock (_Sync)
                 {
@@ -320,6 +331,60 @@ namespace Mux.Cli.App
                 {
                     try { _Gate.Release(); } catch (Exception) { }
                 }
+            }
+        }
+
+        // Emits a notice for each server whose connect outcome changed since it was last announced, and forgets
+        // servers that are no longer configured so re-adding one announces again. No-op when no notice sink is
+        // wired (for example, tests).
+        private void EmitConnectionNotices(List<McpServerConfig> configs, List<McpConnectionResult> results)
+        {
+            if (_OnNotice == null)
+            {
+                return;
+            }
+
+            HashSet<string> configured = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (McpServerConfig config in configs)
+            {
+                configured.Add(config.Name);
+            }
+
+            foreach (McpConnectionResult result in results)
+            {
+                string message = result.Connected
+                    ? $"Connected successfully to MCP server {result.Name}: {result.ToolCount} tools"
+                    : $"Unable to connect to MCP server {result.Name} using {result.Method}: {result.Error}";
+
+                if (_LastNotified.TryGetValue(result.Name, out string? previous) && string.Equals(previous, message, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                _LastNotified[result.Name] = message;
+
+                try
+                {
+                    _OnNotice(message);
+                }
+                catch (Exception)
+                {
+                }
+            }
+
+            // Drop remembered notices for servers that have been removed from the configuration.
+            List<string> stale = new List<string>();
+            foreach (string name in _LastNotified.Keys)
+            {
+                if (!configured.Contains(name))
+                {
+                    stale.Add(name);
+                }
+            }
+
+            foreach (string name in stale)
+            {
+                _LastNotified.Remove(name);
             }
         }
 

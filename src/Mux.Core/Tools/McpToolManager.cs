@@ -23,6 +23,7 @@ namespace Mux.Core.Tools
         private readonly Dictionary<string, IMcpClientConnection> _Clients = new Dictionary<string, IMcpClientConnection>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, string> _ToolToServer = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, List<ToolDefinition>> _ServerTools = new Dictionary<string, List<ToolDefinition>>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, McpConnectionResult> _Results = new Dictionary<string, McpConnectionResult>(StringComparer.OrdinalIgnoreCase);
         private readonly List<McpServerConfig> _Configs;
         private bool _Disposed = false;
 
@@ -59,9 +60,15 @@ namespace Mux.Core.Tools
                 {
                     await ConnectAndDiscoverAsync(config, cancellationToken).ConfigureAwait(false);
                 }
-                catch (Exception)
+                catch (OperationCanceledException)
                 {
-                    // Server failed to connect; skip it and continue with remaining servers.
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // Server failed to connect; record the outcome and continue with remaining servers so
+                    // the shell can surface a per-server failure notice.
+                    RecordFailure(config, ex);
                 }
             }
         }
@@ -249,6 +256,7 @@ namespace Mux.Core.Tools
             }
 
             _ServerTools.Remove(name);
+            _Results.Remove(name);
             _Configs.RemoveAll(config => string.Equals(config.Name, name, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -277,6 +285,29 @@ namespace Mux.Core.Tools
             }
 
             return status;
+        }
+
+        /// <summary>
+        /// Returns the outcome of the most recent connect attempt for every server this manager tried to
+        /// initialize, including servers that failed to connect (with their error details).
+        /// </summary>
+        /// <returns>A detached list of per-server connection results.</returns>
+        public List<McpConnectionResult> GetConnectionResults()
+        {
+            List<McpConnectionResult> results = new List<McpConnectionResult>(_Results.Count);
+            foreach (KeyValuePair<string, McpConnectionResult> kvp in _Results)
+            {
+                results.Add(new McpConnectionResult
+                {
+                    Name = kvp.Value.Name,
+                    Connected = kvp.Value.Connected,
+                    ToolCount = kvp.Value.ToolCount,
+                    Method = kvp.Value.Method,
+                    Error = kvp.Value.Error
+                });
+            }
+
+            return results;
         }
 
         /// <summary>
@@ -319,6 +350,7 @@ namespace Mux.Core.Tools
                     _Clients.Clear();
                     _ToolToServer.Clear();
                     _ServerTools.Clear();
+                    _Results.Clear();
                 }
 
                 _Disposed = true;
@@ -372,6 +404,39 @@ namespace Mux.Core.Tools
             {
                 _ServerTools[config.Name] = new List<ToolDefinition>();
             }
+
+            // The connection itself succeeded (a tools/list failure above still leaves the server usable with
+            // zero tools); record the outcome so the shell can surface a per-server success notice.
+            RecordSuccess(config, _ServerTools[config.Name].Count);
+        }
+
+        private void RecordSuccess(McpServerConfig config, int toolCount)
+        {
+            _Results[config.Name] = new McpConnectionResult
+            {
+                Name = config.Name,
+                Connected = true,
+                ToolCount = toolCount,
+                Method = MethodLabel(config.Transport),
+                Error = null
+            };
+        }
+
+        private void RecordFailure(McpServerConfig config, Exception ex)
+        {
+            _Results[config.Name] = new McpConnectionResult
+            {
+                Name = config.Name,
+                Connected = false,
+                ToolCount = 0,
+                Method = MethodLabel(config.Transport),
+                Error = ex.Message
+            };
+        }
+
+        private static string MethodLabel(McpTransportTypeEnum transport)
+        {
+            return transport == McpTransportTypeEnum.Http ? "http" : "stdio";
         }
 
         private async Task<IMcpClientConnection> ConnectClientAsync(McpServerConfig config, CancellationToken cancellationToken)

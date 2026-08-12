@@ -105,6 +105,41 @@ namespace Test.Shared.Suites
 
                                 MuxAssert.IsTrue(result.Success, "execute success");
                                 MuxAssert.Contains("hello over http", result.Content, "echo content");
+
+                                List<McpConnectionResult> results = manager.GetConnectionResults();
+                                McpConnectionResult? connectionResult = results.FirstOrDefault(r => string.Equals(r.Name, "http-test", StringComparison.OrdinalIgnoreCase));
+                                MuxAssert.IsNotNull(connectionResult, "connection result recorded");
+                                MuxAssert.IsTrue(connectionResult!.Connected, "connection result connected");
+                                MuxAssert.IsTrue(connectionResult.ToolCount >= 1, "connection result tool count");
+                                MuxAssert.AreEqual("http", connectionResult.Method, "connection result method");
+                                MuxAssert.IsNull(connectionResult.Error, "connection result no error");
+                            }
+                        }),
+
+                    new TestCaseDescriptor(
+                        "McpToolManager",
+                        "InitializeAsyncRecordsFailureForUnreachableServer",
+                        "InitializeAsync records a failure result (with transport and error) for a server that cannot connect",
+                        async (CancellationToken ct) =>
+                        {
+                            McpServerConfig config = new McpServerConfig
+                            {
+                                Name = "broken-stdio",
+                                Transport = McpTransportTypeEnum.Stdio,
+                                Command = "mux-nonexistent-command-8f3a2c1e",
+                                Args = new List<string>()
+                            };
+
+                            using (McpToolManager manager = new McpToolManager(new List<McpServerConfig> { config }))
+                            {
+                                await manager.InitializeAsync(ct).ConfigureAwait(false);
+
+                                List<McpConnectionResult> results = manager.GetConnectionResults();
+                                McpConnectionResult? failure = results.FirstOrDefault(r => string.Equals(r.Name, "broken-stdio", StringComparison.OrdinalIgnoreCase));
+                                MuxAssert.IsNotNull(failure, "failure result recorded");
+                                MuxAssert.IsFalse(failure!.Connected, "failure result not connected");
+                                MuxAssert.AreEqual("stdio", failure.Method, "failure result method");
+                                MuxAssert.IsFalse(string.IsNullOrEmpty(failure.Error), "failure result has error details");
                             }
                         })
                 });
