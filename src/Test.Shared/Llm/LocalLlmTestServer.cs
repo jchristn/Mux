@@ -245,6 +245,17 @@ namespace Test.Shared
                     return;
                 }
 
+                if (path == "/v1/models")
+                {
+                    // OpenAI-compatible model-discovery endpoint. Returns a fixed, intentionally unsorted set
+                    // so the model lister's sorting and id extraction can be exercised deterministically.
+                    await WriteJsonAsync(
+                        context,
+                        200,
+                        "{\"object\":\"list\",\"data\":[{\"id\":\"gpt-4o-mini\",\"object\":\"model\"},{\"id\":\"gpt-4o\",\"object\":\"model\"},{\"id\":\"o1-preview\",\"object\":\"model\"}]}").ConfigureAwait(false);
+                    return;
+                }
+
                 if (path == "/api/tags")
                 {
                     // Ollama's model-discovery endpoint. Returns a fixed, intentionally unsorted set so the

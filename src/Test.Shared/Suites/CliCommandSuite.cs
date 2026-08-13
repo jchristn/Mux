@@ -390,6 +390,37 @@ namespace Test.Shared.Suites
                 }));
             }
 
+            foreach (string mode in new[] { "text", "json" })
+            {
+                string m = mode;
+                cases.Add(Case("CommandOutputIsBracketedByBlankLines_" + m, "command output (" + m + ") has a leading and trailing blank line", (CancellationToken ct) =>
+                {
+                    string configDir = CreateTempConfigDirectory(new[]
+                    {
+                        new Dictionary<string, object?> { ["name"] = "only-endpoint", ["adapterType"] = "openai-compatible", ["baseUrl"] = "http://localhost:1234/v1", ["model"] = "model-a", ["isDefault"] = true }
+                    });
+                    try
+                    {
+                        string[] args = m == "json"
+                            ? new[] { "endpoint", "list", "--config-dir", configDir, "--output-format", "json" }
+                            : new[] { "endpoint", "list", "--config-dir", configDir };
+                        CliInvocationResult result = InvokeCli(args);
+                        MuxAssert.AreEqual(0, result.ExitCode, "exit code");
+
+                        string normalized = result.StdOut.Replace("\r\n", "\n");
+                        MuxAssert.IsTrue(normalized.StartsWith("\n", StringComparison.Ordinal), "leading blank line");
+                        MuxAssert.IsTrue(normalized.EndsWith("\n\n", StringComparison.Ordinal), "trailing blank line");
+                        // The bracketing must not swallow the actual payload.
+                        MuxAssert.IsFalse(string.IsNullOrWhiteSpace(normalized), "output present");
+                    }
+                    finally
+                    {
+                        DeleteDir(configDir);
+                    }
+                    return Task.CompletedTask;
+                }));
+            }
+
             return new TestSuiteDescriptor("CliCommand", "End-to-end CLI command behavior", cases);
         }
 

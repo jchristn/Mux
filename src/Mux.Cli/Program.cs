@@ -2,6 +2,7 @@ namespace Mux.Cli
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
     using System.Text.Json;
     using System.Threading;
@@ -84,7 +85,7 @@ USAGE:
     mux --print [OPTIONS] <prompt>       Single-shot mode
     echo ""prompt"" | mux --print          Read prompt from stdin
     mux probe [OPTIONS]                  Validate config and backend access
-    mux endpoint <list|ls|show> [OPTIONS] Inspect configured endpoints
+    mux endpoint <list|ls|show|models> [OPTIONS] Inspect endpoints and enumerate models
 
 OPTIONS:
     -h, --help, /?                       Show this help message and exit
@@ -146,6 +147,8 @@ ENDPOINTS:
     mux endpoint list --output-format json
     mux endpoint ls --output-format json
     mux endpoint show openai-prod --output-format json
+    mux endpoint models --output-format json      Live-enumerate available models per endpoint
+    mux endpoint models openai-prod                Enumerate one endpoint's backend models
 
 EXAMPLES:
     mux                                  Start interactive session (default endpoint)
@@ -198,10 +201,10 @@ CONFIG:
                 {
                     string[] commandArgs = args.Skip(1).ToArray();
                     PrintSettings settings = CliArgumentParser.ParsePrint(commandArgs);
-                    return new PrintCommand()
+                    return RunWrapped(() => new PrintCommand()
                         .ExecuteAsync(new CommandContext("print", args), settings, CancellationToken.None)
                         .GetAwaiter()
-                        .GetResult();
+                        .GetResult());
                 }
 
                 if (args.Any(a => string.Equals(a, "--print", StringComparison.OrdinalIgnoreCase)
@@ -209,40 +212,40 @@ CONFIG:
                 {
                     PrintSettings settings = CliArgumentParser.ParsePrint(args);
                     settings.Print = true;
-                    return new PrintCommand()
+                    return RunWrapped(() => new PrintCommand()
                         .ExecuteAsync(new CommandContext("print", args), settings, CancellationToken.None)
                         .GetAwaiter()
-                        .GetResult();
+                        .GetResult());
                 }
 
                 if (args.Length > 0 && string.Equals(args[0], "probe", StringComparison.OrdinalIgnoreCase))
                 {
                     string[] commandArgs = args.Skip(1).ToArray();
                     ProbeSettings settings = CliArgumentParser.ParseProbe(commandArgs);
-                    return new ProbeCommand()
+                    return RunWrapped(() => new ProbeCommand()
                         .ExecuteAsync(new CommandContext("probe", args), settings, CancellationToken.None)
                         .GetAwaiter()
-                        .GetResult();
+                        .GetResult());
                 }
 
                 if (args.Length > 0 && string.Equals(args[0], "endpoint", StringComparison.OrdinalIgnoreCase))
                 {
                     string[] commandArgs = args.Skip(1).ToArray();
                     EndpointSettings settings = CliArgumentParser.ParseEndpoint(commandArgs);
-                    return new EndpointCommand()
+                    return RunWrapped(() => new EndpointCommand()
                         .ExecuteAsync(new CommandContext("endpoint", args), settings, CancellationToken.None)
                         .GetAwaiter()
-                        .GetResult();
+                        .GetResult());
                 }
 
                 if (args.Length > 0 && string.Equals(args[0], "skill", StringComparison.OrdinalIgnoreCase))
                 {
                     string[] commandArgs = args.Skip(1).ToArray();
                     SkillSettings settings = CliArgumentParser.ParseSkill(commandArgs);
-                    return new Mux.Cli.Commands.SkillCommand()
+                    return RunWrapped(() => new Mux.Cli.Commands.SkillCommand()
                         .ExecuteAsync(new CommandContext("skill", args), settings, CancellationToken.None)
                         .GetAwaiter()
-                        .GetResult();
+                        .GetResult());
                 }
 
                 // Default path: the TUIKit-hosted interactive shell.
@@ -252,6 +255,102 @@ CONFIG:
             {
                 Console.Error.WriteLine(ex.Message);
                 return 1;
+            }
+        }
+
+        /// <summary>
+        /// Runs a non-interactive command bracketed by exactly one blank line before and one blank line
+        /// after its stdout, so command output is always visually separated from the shell prompt. A
+        /// tracking writer observes what the command emits: because some renderers (the table widget) leave
+        /// the cursor mid-line, the trailing block first terminates the last line when needed and then adds
+        /// the blank line, giving every command — table, streamed text, or JSON/JSONL document — the same
+        /// symmetric spacing. JSON and JSONL consumers tolerate the surrounding whitespace. The trailing
+        /// block is emitted even when the command throws.
+        /// </summary>
+        /// <param name="run">The command invocation to execute.</param>
+        /// <returns>The command's exit code.</returns>
+        private static int RunWrapped(Func<int> run)
+        {
+            TextWriter original = Console.Out;
+            OutputSpacingWriter tracker = new OutputSpacingWriter(original);
+            Console.SetOut(tracker);
+            tracker.Write(Environment.NewLine);
+            try
+            {
+                return run();
+            }
+            finally
+            {
+                if (!tracker.LastWriteEndedLine)
+                {
+                    tracker.Write(Environment.NewLine);
+                }
+
+                tracker.Write(Environment.NewLine);
+                tracker.Flush();
+                Console.SetOut(original);
+            }
+        }
+
+        /// <summary>
+        /// A pass-through <see cref="TextWriter"/> that forwards every write to an inner writer while
+        /// remembering whether the most recent write ended on a line break. Used to bracket command output
+        /// with consistent spacing regardless of whether the command's last write terminated its line.
+        /// </summary>
+        private sealed class OutputSpacingWriter : TextWriter
+        {
+            private readonly TextWriter _Inner;
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="OutputSpacingWriter"/> class.
+            /// </summary>
+            /// <param name="inner">The writer to forward output to.</param>
+            public OutputSpacingWriter(TextWriter inner)
+            {
+                _Inner = inner;
+            }
+
+            /// <summary>
+            /// True when the most recently written character was a line feed (or nothing has been written).
+            /// </summary>
+            public bool LastWriteEndedLine { get; private set; } = true;
+
+            /// <inheritdoc />
+            public override System.Text.Encoding Encoding => _Inner.Encoding;
+
+            /// <inheritdoc />
+            public override void Write(char value)
+            {
+                _Inner.Write(value);
+
+                // Ignore carriage returns so a "\r\n" sequence is still recognized as ending a line.
+                if (value != '\r')
+                {
+                    LastWriteEndedLine = value == '\n';
+                }
+            }
+
+            /// <inheritdoc />
+            public override void Write(string? value)
+            {
+                _Inner.Write(value);
+
+                if (string.IsNullOrEmpty(value))
+                {
+                    return;
+                }
+
+                char last = value[value.Length - 1];
+                if (last != '\r')
+                {
+                    LastWriteEndedLine = last == '\n';
+                }
+            }
+
+            /// <inheritdoc />
+            public override void Flush()
+            {
+                _Inner.Flush();
             }
         }
 

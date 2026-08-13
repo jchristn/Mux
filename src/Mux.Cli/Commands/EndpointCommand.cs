@@ -9,6 +9,7 @@ namespace Mux.Cli.Commands
     using Mux.Cli.Rendering;
     using Mux.Core.Models;
     using Mux.Core.Settings;
+    using Mux.Core.Utility;
 
     /// <summary>
     /// Settings for non-interactive endpoint inspection commands.
@@ -50,7 +51,7 @@ namespace Mux.Cli.Commands
     public class EndpointCommand : AsyncCommand<EndpointSettings>
     {
         /// <inheritdoc />
-        public override Task<int> ExecuteAsync(CommandContext context, EndpointSettings settings, CancellationToken cancellationToken)
+        public override async Task<int> ExecuteAsync(CommandContext context, EndpointSettings settings, CancellationToken cancellationToken)
         {
             using IDisposable configScope = SettingsLoader.PushConfigDirectoryOverride(settings.ConfigDir);
 
@@ -62,7 +63,7 @@ namespace Mux.Cli.Commands
             catch (Exception ex)
             {
                 EmitError(settings.OutputFormat, "invalid_argument", ex.Message, SettingsLoader.GetConfigDirectory());
-                return Task.FromResult(1);
+                return 1;
             }
 
             try
@@ -77,18 +78,20 @@ namespace Mux.Cli.Commands
                 {
                     case "list":
                     case "ls":
-                        return Task.FromResult(HandleList(outputFormat, configDirectory, endpoints, muxSettings));
+                        return HandleList(outputFormat, configDirectory, endpoints, muxSettings);
                     case "show":
-                        return Task.FromResult(HandleShow(outputFormat, configDirectory, endpoints, settings.Name, muxSettings));
+                        return HandleShow(outputFormat, configDirectory, endpoints, settings.Name, muxSettings);
+                    case "models":
+                        return await HandleModelsAsync(outputFormat, configDirectory, endpoints, muxSettings, settings.Name, cancellationToken).ConfigureAwait(false);
                     default:
-                        EmitError(outputFormat, "invalid_argument", "Usage: mux endpoint list|ls [--output-format json] or mux endpoint show <name> [--output-format json].", configDirectory);
-                        return Task.FromResult(1);
+                        EmitError(outputFormat, "invalid_argument", "Usage: mux endpoint list|ls [--output-format json], mux endpoint show <name> [--output-format json], or mux endpoint models [name] [--output-format json].", configDirectory);
+                        return 1;
                 }
             }
             catch (Exception ex)
             {
                 EmitError(outputFormat, "endpoint_error", ex.Message, SettingsLoader.GetConfigDirectory());
-                return Task.FromResult(1);
+                return 1;
             }
         }
 
@@ -172,6 +175,117 @@ namespace Mux.Cli.Commands
             }
 
             return 0;
+        }
+
+        private static async Task<int> HandleModelsAsync(
+            OutputFormatEnum outputFormat,
+            string configDirectory,
+            List<EndpointConfig> endpoints,
+            MuxSettings muxSettings,
+            string? endpointName,
+            CancellationToken cancellationToken)
+        {
+            List<EndpointConfig> targets = endpoints;
+            if (!string.IsNullOrWhiteSpace(endpointName))
+            {
+                EndpointConfig? found = endpoints.FirstOrDefault(
+                    endpoint => string.Equals(endpoint.Name, endpointName, StringComparison.OrdinalIgnoreCase));
+
+                if (found == null)
+                {
+                    EmitError(outputFormat, "endpoint_not_found", $"No endpoint named '{endpointName}' was found in {System.IO.Path.Combine(configDirectory, "endpoints.json")}.", configDirectory);
+                    return 1;
+                }
+
+                targets = new List<EndpointConfig> { found };
+            }
+
+            List<EndpointModelListing> listings = new List<EndpointModelListing>();
+            foreach (EndpointConfig endpoint in targets)
+            {
+                EndpointModelListResult result = await EndpointModelLister
+                    .ListModelsAsync(endpoint, muxSettings.IgnoreCertErrors, cancellationToken)
+                    .ConfigureAwait(false);
+
+                listings.Add(new EndpointModelListing
+                {
+                    Name = endpoint.Name,
+                    AdapterType = endpoint.AdapterType.ToString(),
+                    BaseUrl = endpoint.BaseUrl,
+                    ConfiguredModel = endpoint.Model,
+                    IsDefault = endpoint.IsDefault,
+                    Success = result.Success,
+                    Models = result.Models,
+                    ModelCount = result.Models.Count,
+                    ErrorCode = result.ErrorCode,
+                    ErrorMessage = result.ErrorMessage
+                });
+            }
+
+            EndpointModelsResult payload = new EndpointModelsResult
+            {
+                Success = listings.All(listing => listing.Success),
+                ConfigDirectory = configDirectory,
+                Endpoints = listings
+            };
+
+            if (outputFormat == OutputFormatEnum.Json)
+            {
+                Console.WriteLine(StructuredOutputFormatter.FormatObject(payload));
+            }
+            else
+            {
+                WriteModelsTable(listings);
+            }
+
+            // A reachable-but-empty catalog is still a success; only a backend query failure fails the command.
+            return listings.All(listing => listing.Success) ? 0 : 1;
+        }
+
+        private static void WriteModelsTable(List<EndpointModelListing> listings)
+        {
+            Table table = new Table();
+            table.AddColumn("Endpoint");
+            table.AddColumn("Adapter");
+            table.AddColumn("Model");
+            table.AddColumn("Notes");
+
+            foreach (EndpointModelListing listing in listings)
+            {
+                if (!listing.Success)
+                {
+                    table.AddRow(
+                        Markup.Escape(listing.Name),
+                        Markup.Escape(listing.AdapterType),
+                        "[yellow](query failed)[/]",
+                        $"[red]{Markup.Escape(listing.ErrorCode)}: {Markup.Escape(listing.ErrorMessage)}[/]");
+                    continue;
+                }
+
+                if (listing.Models.Count == 0)
+                {
+                    table.AddRow(
+                        Markup.Escape(listing.Name),
+                        Markup.Escape(listing.AdapterType),
+                        "[dim](none advertised)[/]",
+                        string.Empty);
+                    continue;
+                }
+
+                bool first = true;
+                foreach (string model in listing.Models)
+                {
+                    bool isConfigured = string.Equals(model, listing.ConfiguredModel, StringComparison.OrdinalIgnoreCase);
+                    table.AddRow(
+                        first ? Markup.Escape(listing.Name) : string.Empty,
+                        first ? Markup.Escape(listing.AdapterType) : string.Empty,
+                        Markup.Escape(model),
+                        isConfigured ? "[green]configured[/]" : string.Empty);
+                    first = false;
+                }
+            }
+
+            AnsiConsole.Write(table);
         }
 
         private static EndpointInspectionRecord ToInspectionRecord(EndpointConfig endpoint, MuxSettings muxSettings)
@@ -418,5 +532,82 @@ namespace Mux.Cli.Commands
         /// Effective config directory.
         /// </summary>
         public string ConfigDirectory { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Machine-readable payload enumerating the models advertised by each endpoint's backend.
+    /// </summary>
+    public class EndpointModelsResult
+    {
+        /// <summary>
+        /// Whether every enumerated endpoint was queried successfully.
+        /// </summary>
+        public bool Success { get; set; }
+
+        /// <summary>
+        /// The effective config directory used for the enumeration.
+        /// </summary>
+        public string ConfigDirectory { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The per-endpoint model listings.
+        /// </summary>
+        public List<EndpointModelListing> Endpoints { get; set; } = new List<EndpointModelListing>();
+    }
+
+    /// <summary>
+    /// The models advertised by a single endpoint's backend, or the failure encountered while querying it.
+    /// </summary>
+    public class EndpointModelListing
+    {
+        /// <summary>
+        /// Endpoint name.
+        /// </summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Adapter type.
+        /// </summary>
+        public string AdapterType { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Base URL that was queried.
+        /// </summary>
+        public string BaseUrl { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The model currently configured for this endpoint.
+        /// </summary>
+        public string ConfiguredModel { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Whether this is the default endpoint.
+        /// </summary>
+        public bool IsDefault { get; set; }
+
+        /// <summary>
+        /// Whether the backend was queried successfully.
+        /// </summary>
+        public bool Success { get; set; }
+
+        /// <summary>
+        /// The discovered model ids, sorted case-insensitively.
+        /// </summary>
+        public List<string> Models { get; set; } = new List<string>();
+
+        /// <summary>
+        /// The number of discovered models.
+        /// </summary>
+        public int ModelCount { get; set; }
+
+        /// <summary>
+        /// Machine-readable error code when the query failed.
+        /// </summary>
+        public string ErrorCode { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Human-readable error message when the query failed.
+        /// </summary>
+        public string ErrorMessage { get; set; } = string.Empty;
     }
 }

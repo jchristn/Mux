@@ -123,6 +123,9 @@ namespace Test.Shared
                     // Ollama completion-model importer: URL normalization + /api/tags discovery.
                     OllamaImportSuite.Create(),
 
+                    // Live model enumeration: /v1/models discovery + per-adapter dispatch and failure capture.
+                    EndpointModelListerSuite.Create(),
+
                     // Mux.Cli interactive MCP-server management (list / add / edit / remove).
                     McpManagementSuite.Create(),
 
