@@ -78,6 +78,7 @@ namespace Mux.Cli.App
         private readonly Pane _Footer;
         private readonly Pane _QueuePane;
         private readonly TextEditor _Composer;
+        private readonly SubmitKeyResolver _SubmitResolver = new SubmitKeyResolver();
         private readonly SidebarView _Sidebar;
         private readonly MuxCommandCatalog _Catalog;
         private Layout _ExpandedLayout = null!;
@@ -97,7 +98,7 @@ namespace Mux.Cli.App
         private readonly object _ThinkingSync = new object();
         private PaneLineHandle? _ThinkingHandle;
         private CancellationTokenSource? _ThinkingCts;
-        private string? _ThinkingMessage;
+        private ActivityIndicator? _ThinkingIndicator;
         private bool _ThinkingActive;
         private Func<string, bool>? _SlashHandler;
         private bool _ManualCollapsed;
@@ -1175,7 +1176,7 @@ namespace Mux.Cli.App
             {
                 lock (_ThinkingSync)
                 {
-                    return _ThinkingMessage;
+                    return _ThinkingIndicator?.CurrentPhrase;
                 }
             }
         }
@@ -1303,16 +1304,26 @@ namespace Mux.Cli.App
 
         private bool OnKeyFilter(KeyEvent key)
         {
-            // Plain Enter (no modifiers) submits.
-            if (key.Code == KeyCode.Enter && key.Modifiers == KeyModifiers.None)
+            // Submit vs. insert-newline is resolved by TUIKit's SubmitKeyResolver: bare Enter submits,
+            // Shift+Enter and Ctrl+J (the terminal-independent line-feed chord) insert a newline. Ctrl+J is
+            // handled here rather than in the Ctrl switch below.
+            SubmitDecision submit = _SubmitResolver.Resolve(key);
+            if (submit == SubmitDecision.Submit)
             {
                 OnEnter();
                 return true;
             }
 
-            // Shift+Enter (and any other modified Enter, which arrives as a carriage-return character in
-            // the enhanced keyboard protocol) inserts a newline. Alt+Enter is intercepted by Windows
-            // Terminal for the full-screen toggle and never reaches us.
+            if (submit == SubmitDecision.InsertNewline)
+            {
+                _Composer.InsertNewline();
+                RefreshComposerLayout();
+                return true;
+            }
+
+            // Fallback for terminals that deliver a modified Enter as a raw carriage-return or line-feed
+            // character (rune 13/10) rather than a decoded key, which the resolver classifies as Ignore.
+            // Alt+Enter is intercepted by Windows Terminal for the full-screen toggle and never reaches us.
             if (IsCarriageReturn(key))
             {
                 _Composer.InsertNewline();
@@ -1354,10 +1365,7 @@ namespace Mux.Cli.App
 
                 switch (char.ToLowerInvariant((char)key.Rune))
                 {
-                    // Ctrl+J is the terminal-independent "insert newline" chord: it arrives as line feed
-                    // (0x0A), distinct from Enter's carriage return, so it works even where the terminal
-                    // cannot report Shift+Enter (Windows Terminal, macOS Terminal.app, legacy xterm).
-                    case 'j': _Composer.InsertNewline(); RefreshComposerLayout(); return true;
+                    // Ctrl+J (insert newline) is resolved above by SubmitKeyResolver before reaching here.
                     case 'q': RequestQuit(); return true;
                     case 'l': ClearTranscript(); return true;
                     case 'b': ToggleSidebar(); return true;
@@ -1817,15 +1825,21 @@ namespace Mux.Cli.App
 
         private void StartThinking()
         {
-            string message = ThinkingMessages.Next();
+            // TUIKit's ActivityIndicator owns the spinner-and-rotating-phrase state machine (its default
+            // braille frames match mux's). Phrases are shuffled so the sequential rotation still feels
+            // varied, the way mux's per-swap random pick did.
+            ActivityIndicator indicator = new ActivityIndicator
+            {
+                Phrases = ShuffledThinkingPhrases()
+            };
             CancellationTokenSource cts = new CancellationTokenSource();
 
             lock (_ThinkingSync)
             {
-                _ThinkingMessage = message;
+                _ThinkingIndicator = indicator;
                 _ThinkingActive = true;
                 _ThinkingCts = cts;
-                _ThinkingHandle = _Conversation.WriteLine(RenderThinking(0, message));
+                _ThinkingHandle = _Conversation.WriteLine(Text.From(indicator.CurrentLine).Dim());
             }
 
             _ = AnimateThinkingAsync(cts.Token);
@@ -1844,7 +1858,7 @@ namespace Mux.Cli.App
                 _ThinkingActive = false;
                 _ThinkingHandle?.Update(StyledText.Empty);
                 _ThinkingHandle = null;
-                _ThinkingMessage = null;
+                _ThinkingIndicator = null;
                 cts = _ThinkingCts;
                 _ThinkingCts = null;
             }
@@ -1861,32 +1875,23 @@ namespace Mux.Cli.App
 
         private async Task AnimateThinkingAsync(CancellationToken cancellationToken)
         {
-            int tick = 0;
-            int ticksSinceSwap = 0;
-
             try
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     await Task.Delay(130, cancellationToken).ConfigureAwait(false);
-                    tick++;
-                    ticksSinceSwap++;
 
                     lock (_ThinkingSync)
                     {
-                        if (!_ThinkingActive || _ThinkingHandle == null)
+                        if (!_ThinkingActive || _ThinkingHandle == null || _ThinkingIndicator == null)
                         {
                             return;
                         }
 
-                        // Rotate to a new phrase roughly every four seconds — lively but unhurried.
-                        if (ticksSinceSwap >= 30)
-                        {
-                            _ThinkingMessage = ThinkingMessages.Next();
-                            ticksSinceSwap = 0;
-                        }
-
-                        _ThinkingHandle.Update(RenderThinking(tick, _ThinkingMessage ?? "Thinking…"));
+                        // The indicator advances its spinner every tick and rotates the phrase on its own
+                        // schedule (default every 30 ticks ≈ four seconds).
+                        _ThinkingIndicator.Tick();
+                        _ThinkingHandle.Update(Text.From(_ThinkingIndicator.CurrentLine).Dim());
                     }
                 }
             }
@@ -1895,9 +1900,18 @@ namespace Mux.Cli.App
             }
         }
 
-        private static StyledText RenderThinking(int tick, string message)
+        private static string[] ShuffledThinkingPhrases()
         {
-            return Text.From(ThinkingMessages.SpinnerFrame(tick) + " " + message).Dim();
+            List<string> phrases = new List<string>(ThinkingMessages.All);
+            for (int i = phrases.Count - 1; i > 0; i--)
+            {
+                int j = Random.Shared.Next(i + 1);
+                string swap = phrases[i];
+                phrases[i] = phrases[j];
+                phrases[j] = swap;
+            }
+
+            return phrases.ToArray();
         }
 
         private void RouteSlash(string input)
@@ -2122,8 +2136,7 @@ namespace Mux.Cli.App
         private void OpenCommandMenu()
         {
             List<CommandDescriptor> commands = new List<CommandDescriptor>();
-            List<string> chords = new List<string>();
-            List<string> aliasText = new List<string>();
+            List<IReadOnlyList<string>> rows = new List<IReadOnlyList<string>>();
             foreach (CommandDescriptor descriptor in _Catalog.Commands)
             {
                 // The menu-openers (F1 / help) would just reopen the menu from within itself, so omit them.
@@ -2134,10 +2147,11 @@ namespace Mux.Cli.App
                 }
 
                 commands.Add(descriptor);
-                chords.Add(string.IsNullOrEmpty(descriptor.Chord) ? string.Empty : descriptor.Chord);
-                aliasText.Add(descriptor.SlashAliases.Count > 0
+                string chord = string.IsNullOrEmpty(descriptor.Chord) ? string.Empty : descriptor.Chord;
+                string alias = descriptor.SlashAliases.Count > 0
                     ? "/" + string.Join(" /", descriptor.SlashAliases)
-                    : string.Empty);
+                    : string.Empty;
+                rows.Add(new[] { descriptor.Title, chord, alias });
             }
 
             if (commands.Count == 0)
@@ -2145,14 +2159,8 @@ namespace Mux.Cli.App
                 return;
             }
 
-            // Align the chord column and the /slash column each on a single vertical axis across every row.
-            List<string> titles = new List<string>(commands.Count);
-            foreach (CommandDescriptor descriptor in commands)
-            {
-                titles.Add(descriptor.Title);
-            }
-
-            List<string> labels = CommandMenuFormatter.AlignRows(titles, chords, aliasText);
+            // Align the title / chord / slash columns each on a single vertical axis across every row.
+            IReadOnlyList<string> labels = ColumnFormatter.Format(rows, 2);
 
             // Widen the modal by ~50% over the default select width (46) so the three aligned columns fit.
             const int commandMenuWidth = 69;
@@ -2565,13 +2573,13 @@ namespace Mux.Cli.App
             string title = skipped > 0
                 ? $"Import from {normalized} ({skipped} already imported)"
                 : $"Import from {normalized}";
-            MultiSelectModal picker = new MultiSelectModal(
-                title,
-                candidates,
-                "⚠ Select COMPLETION models only — do not select embedding models.");
+            MultiSelectModal<string> picker = new MultiSelectModal<string>(title, candidates)
+            {
+                FooterHint = "⚠ COMPLETION models only · Space toggle · a all · Enter import · Esc cancel"
+            };
             _App.Modals.Push(picker);
             object? pickResult = await picker.Completion.ConfigureAwait(false);
-            if (!(pickResult is List<int> chosen) || chosen.Count == 0)
+            if (!(pickResult is IReadOnlyList<int> chosen) || chosen.Count == 0)
             {
                 return;
             }

@@ -5,6 +5,7 @@ namespace Mux.Cli.App
     using Mux.Core.Enums;
     using Mux.Core.Tasks;
     using TUIKit;
+    using TUIKit.Content;
     using TUIKit.Input;
     using TUIKit.Modals;
     using TUIKit.Widgets;

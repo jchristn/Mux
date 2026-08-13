@@ -8,8 +8,8 @@ namespace Mux.Cli.App
     /// <summary>
     /// A library of light, non-offensive "thinking" phrases shown beneath a submitted prompt while the
     /// model works. The phrases are loaded from an embedded resource; a small built-in set is used if the
-    /// resource is unavailable. <see cref="Next"/> returns a randomly chosen phrase, and
-    /// <see cref="Spinner"/> supplies the animation frames.
+    /// resource is unavailable. <see cref="All"/> supplies the phrase set fed to TUIKit's
+    /// <c>ActivityIndicator</c>, and <see cref="Spinner"/> exposes the braille animation frames.
     /// </summary>
     public static class ThinkingMessages
     {
@@ -51,35 +51,6 @@ namespace Mux.Cli.App
         public static IReadOnlyList<string> Spinner
         {
             get => _Spinner;
-        }
-
-        #endregion
-
-        #region Public-Methods
-
-        /// <summary>
-        /// Returns a randomly chosen thinking phrase.
-        /// </summary>
-        /// <returns>A phrase from <see cref="All"/>.</returns>
-        public static string Next()
-        {
-            if (_All.Count == 0)
-            {
-                return "Thinking…";
-            }
-
-            return _All[Random.Shared.Next(_All.Count)];
-        }
-
-        /// <summary>
-        /// Returns the spinner frame for the given tick.
-        /// </summary>
-        /// <param name="tick">A monotonically increasing counter.</param>
-        /// <returns>The spinner glyph for this tick.</returns>
-        public static string SpinnerFrame(int tick)
-        {
-            int index = ((tick % _Spinner.Length) + _Spinner.Length) % _Spinner.Length;
-            return _Spinner[index];
         }
 
         #endregion

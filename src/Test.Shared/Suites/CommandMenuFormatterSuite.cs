@@ -4,12 +4,14 @@ namespace Test.Shared.Suites
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
-    using Mux.Cli.App;
     using Touchstone.Core;
+    using TUIKit.Content;
 
     /// <summary>
-    /// Touchstone suite for <see cref="CommandMenuFormatter"/>: the command menu's key-chord column and its
-    /// <c>/slash</c> alias column each align on a single vertical axis regardless of title or chord lengths.
+    /// Touchstone suite for the command-menu column alignment, now provided by TUIKit's
+    /// <see cref="ColumnFormatter"/>: the key-chord column and the <c>/slash</c> alias column each align on a
+    /// single vertical axis regardless of title or chord lengths. mux builds the menu rows and delegates the
+    /// aligning to <c>ColumnFormatter.Format</c>, so this guards the behavior mux depends on.
     /// </summary>
     public static class CommandMenuFormatterSuite
     {
@@ -32,7 +34,13 @@ namespace Test.Shared.Suites
                         List<string> chords = new List<string> { "ctrl+q", string.Empty, "f12", string.Empty };
                         List<string> aliases = new List<string> { "/quit /exit /q", "/borders /lines", "/mcp /servers", "/theme" };
 
-                        List<string> rows = CommandMenuFormatter.AlignRows(titles, chords, aliases);
+                        List<IReadOnlyList<string>> cells = new List<IReadOnlyList<string>>();
+                        for (int i = 0; i < titles.Count; i++)
+                        {
+                            cells.Add(new[] { titles[i], chords[i], aliases[i] });
+                        }
+
+                        IReadOnlyList<string> rows = ColumnFormatter.Format(cells, 2);
 
                         // The /slash column starts at the same index on every row.
                         int slashColumn = rows[0].IndexOf('/');

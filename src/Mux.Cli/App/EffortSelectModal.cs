@@ -23,7 +23,7 @@ namespace Mux.Cli.App
         private const int MaxInnerWidth = 60;
 
         private readonly string _Title;
-        private readonly ListView _List = new ListView();
+        private readonly ListView<string> _List = new ListView<string>();
 
         #endregion
 

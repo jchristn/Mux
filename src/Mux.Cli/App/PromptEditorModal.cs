@@ -4,6 +4,7 @@ namespace Mux.Cli.App
     using System.Collections.Generic;
     using Mux.Core.Models;
     using TUIKit;
+    using TUIKit.Content;
     using TUIKit.Input;
     using TUIKit.Modals;
     using TUIKit.Widgets;

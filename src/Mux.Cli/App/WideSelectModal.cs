@@ -17,7 +17,7 @@ namespace Mux.Cli.App
     public sealed class WideSelectModal : Modal
     {
         private readonly string _Title;
-        private readonly ListView _List = new ListView();
+        private readonly ListView<string> _List = new ListView<string>();
         private readonly int _MaxContentWidth;
 
         /// <summary>

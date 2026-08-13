@@ -68,7 +68,7 @@ namespace Mux.Cli.App
         #region Private-Members
 
         private readonly string _Title;
-        private readonly ListView _List = new ListView();
+        private readonly ListView<string> _List = new ListView<string>();
         private readonly int _EndpointCount;
 
         #endregion

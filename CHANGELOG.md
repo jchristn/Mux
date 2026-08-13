@@ -2,6 +2,33 @@
 
 All notable changes to mux are documented here.
 
+## Unreleased
+
+### Added
+
+- **`mux endpoint models [name]`.** Live-enumerates the models each configured endpoint's backend
+  advertises — Ollama via its native `/api/tags`, and OpenAI / vLLM / OpenAI-compatible via
+  `GET /v1/models` (sending the endpoint's configured auth headers) — as a text table or, with
+  `--output-format json`, a machine-readable payload. Query a single endpoint by name or sweep them all;
+  per-endpoint failures are classified (`auth_error`, `backend_unreachable`, `models_endpoint_not_found`,
+  …) and captured rather than aborting the sweep.
+- **Consistent command-output spacing.** The non-interactive commands (`print`, `probe`, `endpoint`,
+  `skill`) now bracket their stdout with exactly one leading and one trailing blank line, so output is
+  always visually separated from the shell prompt. JSON and JSONL consumers are unaffected (surrounding
+  whitespace is tolerated).
+
+### Changed
+
+- **Adopted TUIKit 0.6.0's standardized components.** Bumped the TUIKit dependency `0.5.1 → 0.6.0` and
+  replaced hand-built interactive-UI code with the general-purpose components the framework grew from the
+  same patterns: the footer-hint wrapper (`HintText`), the command-menu column aligner
+  (`ColumnFormatter`), the composer's submit-vs-newline resolver (`SubmitKeyResolver`), the Ollama-import
+  multi-select dialog (`MultiSelectModal<T>`), and the "thinking" spinner-plus-phrase indicator
+  (`ActivityIndicator`). Behavior is unchanged except the Ollama import picker now renders in TUIKit's
+  rounded dialog. The remaining 0.6.0 components were evaluated and either deferred (larger refactors —
+  `DialogModal`, `CommandRegistry`, `StreamingTranscript`) or left as-is where TUIKit has a real gap; the
+  full per-component assessment is in `TUIKIT_0.6.0_ADOPTION.md`.
+
 ## v0.8.0 - 2026-08-12
 
 ### Added
