@@ -123,6 +123,7 @@ You should see `write_file` and `read_file` tool calls, the file created on disk
 ```text
 mux [prompt]                         Interactive REPL (default)
 mux [OPTIONS] [prompt]               Interactive with overrides
+mux --prompt "<prompt>"              Interactive, no splash, runs the prompt first
 mux --print [OPTIONS] <prompt>       Single-shot mode
 echo "prompt" | mux --print          Read prompt from stdin
 mux probe [OPTIONS]                  Validate config and backend access
@@ -137,6 +138,7 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 |---|---|---|
 | `--help` | `-h`, `/?` | Show help and exit |
 | `--version` | `/version` | Show version and exit; bare `mux -v` also prints the version |
+| `--prompt <text>` |  | Interactive only: skip the splash and submit this prompt as the first turn |
 | `--print` | `-p` | Single-shot mode |
 | `--endpoint <name>` | `-e` | Use a named endpoint |
 | `--model <name>` | `-m` | Override model |

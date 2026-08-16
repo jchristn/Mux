@@ -13,7 +13,25 @@ namespace Mux.Cli.Commands
         public static InteractiveSettings ParseInteractive(string[] args)
         {
             InteractiveSettings settings = new InteractiveSettings();
-            ParseCommon(args, settings, null);
+            List<string> positionals = ParseCommon(args, settings, (string option, string? inlineValue, string[] values, ref int index) =>
+            {
+                switch (option)
+                {
+                    case "--prompt":
+                        settings.Prompt = ReadValue(option, inlineValue, values, ref index);
+                        return true;
+                    default:
+                        return false;
+                }
+            });
+
+            // A bare positional prompt (`mux "do the thing"`) seeds interactive mode too, unless --prompt
+            // already supplied one explicitly.
+            if (string.IsNullOrWhiteSpace(settings.Prompt))
+            {
+                settings.Prompt = JoinPositionals(positionals);
+            }
+
             return settings;
         }
 

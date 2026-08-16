@@ -82,6 +82,7 @@ namespace Mux.Cli
 USAGE:
     mux [prompt]                         Interactive REPL (default)
     mux [OPTIONS] [prompt]               Interactive with overrides
+    mux --prompt ""<prompt>""              Interactive, no splash, runs the prompt first
     mux --print [OPTIONS] <prompt>       Single-shot mode
     echo ""prompt"" | mux --print          Read prompt from stdin
     mux probe [OPTIONS]                  Validate config and backend access
@@ -90,6 +91,7 @@ USAGE:
 OPTIONS:
     -h, --help, /?                       Show this help message and exit
         --version, /version, -v          Show version and exit
+        --prompt <text>                  Interactive: skip the splash and submit this prompt as the first turn
     -p, --print                          Single-shot: process prompt, print result, exit
         --output-format <format>         text, json, or jsonl depending on the command
         --input-format <format>          print: text (default) or jsonl (multi-turn stdin records)
@@ -152,6 +154,7 @@ ENDPOINTS:
 
 EXAMPLES:
     mux                                  Start interactive session (default endpoint)
+    mux --prompt ""summarize README.md""   Interactive, skip splash, run the prompt immediately
     mux --endpoint ollama-qwen           Start with specific endpoint
     mux -p --yolo ""read README.md""       Single-shot with auto-approval
     mux print --output-format jsonl --yolo ""read README.md""
@@ -460,10 +463,11 @@ CONFIG:
 
                         ApplyTemplate();
                     },
-                    showSplash: true,
+                    showSplash: string.IsNullOrWhiteSpace(settings.Prompt),
                     showBoundaries: runtime.MuxSettings.ShowBoundaryLines,
                     mcpRuntime: mcpRuntime,
-                    skillRuntime: skillRuntime);
+                    skillRuntime: skillRuntime,
+                    initialPrompt: settings.Prompt);
 
                 // Expose the shell so MCP connection notices (raised on the runtime's background thread once
                 // Start() is called below) can be written into the transcript.

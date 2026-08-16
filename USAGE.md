@@ -10,6 +10,7 @@ Interactive:
 mux
 mux --endpoint ollama-qwen32
 mux --model codellama:34b
+mux --prompt "summarize README.md"   # skip the splash and run this prompt, then stay interactive
 ```
 
 Single-shot:
@@ -151,8 +152,9 @@ kept separate from the answer and never fed back to the model. Headless runs sur
 the answer.
 
 `/help` (`/?`) opens the keybinding/command reference in a modal; `F1` opens the command menu (the same
-catalog as a pick-and-run list). On startup mux shows a splash box, and quitting (`Ctrl+Q` / `/quit`)
-asks for confirmation.
+catalog as a pick-and-run list). On startup mux shows a splash box — pass `--prompt "<text>"` (or a bare
+positional prompt) to skip the splash and submit that prompt as the first turn before dropping into the
+usual interactive shell. Quitting (`Ctrl+Q` / `/quit`) asks for confirmation.
 
 ### Choosing, adding, and removing models/endpoints
 

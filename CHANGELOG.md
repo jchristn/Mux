@@ -6,6 +6,10 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **`--prompt "<text>"` startup prompt.** A new interactive-only option that skips the startup splash and
+  submits the supplied prompt as the first turn, then drops into the usual interactive shell. A bare
+  positional prompt (`mux "do the thing"`) does the same, aligning behavior with the long-documented
+  `mux [prompt]` usage line; an explicit `--prompt` wins over stray positionals.
 - **`mux endpoint models [name]`.** Live-enumerates the models each configured endpoint's backend
   advertises — Ollama via its native `/api/tags`, and OpenAI / vLLM / OpenAI-compatible via
   `GET /v1/models` (sending the endpoint's configured auth headers) — as a text table or, with

@@ -107,6 +107,10 @@ namespace Mux.Cli.App
         private int _ThemeIndex;
         private bool _Disposed;
 
+        // An optional prompt submitted as the first turn once the run loop starts, then cleared. Set from
+        // the CLI --prompt option (or a bare positional prompt), which also suppresses the startup splash.
+        private string? _InitialPrompt;
+
         // Queue processing is paused while the queue-editor modal is open, so a turn finishing mid-edit
         // does not start the next prompt out from under the user. _QueueHeight and _ComposerHeight are the
         // current row counts of the queue strip and the (multi-line) composer, tracked so the layout is
@@ -139,6 +143,7 @@ namespace Mux.Cli.App
         /// <param name="showBoundaries">When true, the shell starts with the dark-grey boundary lines drawn (toggle with <c>/borders</c>).</param>
         /// <param name="mcpRuntime">Optional MCP runtime used to show per-server connectivity in the MCP manager and to trigger a reconnect after edits. Null disables live MCP status.</param>
         /// <param name="skillRuntime">Optional skills runtime used to show skill status in the skills manager and to trigger a re-scan after edits. Null disables the skills manager.</param>
+        /// <param name="initialPrompt">Optional prompt submitted as the first turn once the run loop starts. Null or whitespace submits nothing.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
             ITerminalBackend backend,
@@ -154,7 +159,8 @@ namespace Mux.Cli.App
             bool showSplash = false,
             bool showBoundaries = false,
             McpRuntime? mcpRuntime = null,
-            SkillRuntime? skillRuntime = null)
+            SkillRuntime? skillRuntime = null,
+            string? initialPrompt = null)
         {
             _Backend = backend ?? throw new ArgumentNullException(nameof(backend));
             _JobManager = jobManager ?? throw new ArgumentNullException(nameof(jobManager));
@@ -165,6 +171,7 @@ namespace Mux.Cli.App
             _OnPromptProfileSelected = onPromptProfileSelected;
             _McpRuntime = mcpRuntime;
             _SkillRuntime = skillRuntime;
+            _InitialPrompt = string.IsNullOrWhiteSpace(initialPrompt) ? null : initialPrompt;
             _EndpointName = endpointName ?? string.Empty;
             _Model = model ?? string.Empty;
             _EffortLabel = InitialEffortLabel(_EndpointName);
@@ -480,6 +487,11 @@ namespace Mux.Cli.App
                 Task monitor = MonitorResponsiveAsync(loopCts.Token);
                 try
                 {
+                    // Submit the startup prompt (if any) before entering the loop. Runs on this thread, so it
+                    // is ordered ahead of any input; the echo and thinking indicator buffer into the panes and
+                    // flush on the first rendered frame, exactly as a typed prompt would.
+                    SubmitInitialPrompt();
+
                     await _App.RunAsync(loopCts.Token).ConfigureAwait(false);
                 }
                 finally
@@ -1425,6 +1437,30 @@ namespace Mux.Cli.App
 
             _Composer.Text = string.Empty;
             RefreshComposerLayout();
+            _PromptHistory.Add(prompt);
+
+            if (prompt.TrimStart().StartsWith("/", StringComparison.Ordinal))
+            {
+                RouteSlash(prompt.TrimStart());
+                return;
+            }
+
+            EnqueueOrRun(prompt);
+        }
+
+        /// <summary>
+        /// Submits the startup <see cref="_InitialPrompt"/> as the first turn, then clears it so it runs
+        /// only once. Routes through the same slash-vs-turn logic as a typed prompt. No-op when unset.
+        /// </summary>
+        private void SubmitInitialPrompt()
+        {
+            string? prompt = _InitialPrompt;
+            _InitialPrompt = null;
+            if (string.IsNullOrWhiteSpace(prompt))
+            {
+                return;
+            }
+
             _PromptHistory.Add(prompt);
 
             if (prompt.TrimStart().StartsWith("/", StringComparison.Ordinal))

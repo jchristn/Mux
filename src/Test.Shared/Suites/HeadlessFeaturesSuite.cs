@@ -134,6 +134,35 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("HeadlessFeatures", "InteractivePromptFlagParses", "interactive --prompt seeds the startup prompt", (CancellationToken ct) =>
+                    {
+                        InteractiveSettings settings = CliArgumentParser.ParseInteractive(new[] { "--endpoint", "ollama", "--prompt", "hello there" });
+                        MuxAssert.AreEqual("hello there", settings.Prompt, "--prompt value captured");
+                        MuxAssert.AreEqual("ollama", settings.Endpoint, "other options still parse alongside --prompt");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("HeadlessFeatures", "InteractivePositionalSeedsPrompt", "a bare positional prompt seeds interactive mode", (CancellationToken ct) =>
+                    {
+                        InteractiveSettings settings = CliArgumentParser.ParseInteractive(new[] { "summarize", "the", "readme" });
+                        MuxAssert.AreEqual("summarize the readme", settings.Prompt, "positionals joined into the prompt");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("HeadlessFeatures", "InteractiveExplicitPromptWinsOverPositional", "--prompt takes precedence over positionals", (CancellationToken ct) =>
+                    {
+                        InteractiveSettings settings = CliArgumentParser.ParseInteractive(new[] { "--prompt", "explicit", "stray", "words" });
+                        MuxAssert.AreEqual("explicit", settings.Prompt, "explicit --prompt is not overwritten by positionals");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("HeadlessFeatures", "InteractiveNoPromptIsNull", "interactive with no prompt leaves Prompt null", (CancellationToken ct) =>
+                    {
+                        InteractiveSettings settings = CliArgumentParser.ParseInteractive(new[] { "--endpoint", "ollama" });
+                        MuxAssert.IsNull(settings.Prompt, "no prompt supplied");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("HeadlessFeatures", "MaxTokenBudgetClampsAndClears", "MaxTokenBudget clamps to >=1 and preserves null", (CancellationToken ct) =>
                     {
                         AgentLoopOptions options = new AgentLoopOptions(AgentTestHarness.BuildMockEndpoint("http://localhost:1"));
