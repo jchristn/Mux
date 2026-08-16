@@ -141,6 +141,104 @@ namespace Test.Shared.Suites
                                 MuxAssert.AreEqual("stdio", failure.Method, "failure result method");
                                 MuxAssert.IsFalse(string.IsNullOrEmpty(failure.Error), "failure result has error details");
                             }
+                        }),
+
+                    new TestCaseDescriptor(
+                        "McpToolManager",
+                        "ExecuteAsyncUnknownToolReturnsErrorResult",
+                        "ExecuteAsync returns a failed ToolResult (not an exception) when the tool name is not registered",
+                        async (CancellationToken ct) =>
+                        {
+                            using (McpToolManager manager = new McpToolManager(new List<McpServerConfig>()))
+                            {
+                                using JsonDocument arguments = JsonDocument.Parse("{}");
+                                ToolResult result = await manager.ExecuteAsync("call-x", "ghost.tool", arguments.RootElement, ct).ConfigureAwait(false);
+
+                                MuxAssert.IsNotNull(result, "result not null");
+                                MuxAssert.AreEqual("call-x", result.ToolCallId, "tool call id echoed");
+                                MuxAssert.IsFalse(result.Success, "execute reports failure");
+                                MuxAssert.Contains("unknown_mcp_tool", result.Content, "unknown-tool error code");
+                            }
+                        }),
+
+                    new TestCaseDescriptor(
+                        "McpToolManager",
+                        "AddServerAsyncInvalidHttpUrlThrows",
+                        "AddServerAsync rejects an HTTP server whose URL is not an absolute http(s) URL",
+                        async (CancellationToken ct) =>
+                        {
+                            using (McpToolManager manager = new McpToolManager(new List<McpServerConfig>()))
+                            {
+                                McpServerConfig config = new McpServerConfig
+                                {
+                                    Name = "bad-url",
+                                    Transport = McpTransportTypeEnum.Http,
+                                    Url = "not-an-absolute-url"
+                                };
+
+                                await MuxAssert.ThrowsAsync<InvalidOperationException>(
+                                    () => manager.AddServerAsync(config, ct),
+                                    "invalid http url rejected").ConfigureAwait(false);
+
+                                MuxAssert.IsFalse(manager.GetServerStatus().Any(s => string.Equals(s.Name, "bad-url", StringComparison.OrdinalIgnoreCase)), "no status recorded for rejected server");
+                            }
+                        }),
+
+                    new TestCaseDescriptor(
+                        "McpToolManager",
+                        "AddServerAsyncDuplicateNameThrows",
+                        "AddServerAsync rejects a second server registered under an already-used name",
+                        async (CancellationToken ct) =>
+                        {
+                            using (McpToolManager manager = new McpToolManager(new List<McpServerConfig>()))
+                            using (TestMcpHttpServer server = new TestMcpHttpServer())
+                            {
+                                await server.StartAsync().ConfigureAwait(false);
+
+                                McpServerConfig config = new McpServerConfig
+                                {
+                                    Name = "dupe",
+                                    Transport = McpTransportTypeEnum.Http,
+                                    Url = server.BaseUrl,
+                                    McpPath = server.McpPath
+                                };
+
+                                await manager.AddServerAsync(config, ct).ConfigureAwait(false);
+
+                                await MuxAssert.ThrowsAsync<InvalidOperationException>(
+                                    () => manager.AddServerAsync(config, ct),
+                                    "duplicate server name rejected").ConfigureAwait(false);
+                            }
+                        }),
+
+                    new TestCaseDescriptor(
+                        "McpToolManager",
+                        "RemoveServerAsyncClearsToolsAndStatus",
+                        "RemoveServerAsync disconnects a server and clears its tools and status",
+                        async (CancellationToken ct) =>
+                        {
+                            using (McpToolManager manager = new McpToolManager(new List<McpServerConfig>()))
+                            using (TestMcpHttpServer server = new TestMcpHttpServer())
+                            {
+                                await server.StartAsync().ConfigureAwait(false);
+
+                                McpServerConfig config = new McpServerConfig
+                                {
+                                    Name = "removable",
+                                    Transport = McpTransportTypeEnum.Http,
+                                    Url = server.BaseUrl,
+                                    McpPath = server.McpPath
+                                };
+
+                                await manager.AddServerAsync(config, ct).ConfigureAwait(false);
+                                MuxAssert.IsTrue(manager.HasTool("removable.echo"), "tool registered before removal");
+
+                                await manager.RemoveServerAsync("removable").ConfigureAwait(false);
+
+                                MuxAssert.IsFalse(manager.HasTool("removable.echo"), "tool unregistered after removal");
+                                MuxAssert.IsFalse(manager.GetToolDefinitions().Any(t => t.Name.StartsWith("removable.", StringComparison.Ordinal)), "no definitions remain");
+                                MuxAssert.IsFalse(manager.GetServerStatus().Any(s => string.Equals(s.Name, "removable", StringComparison.OrdinalIgnoreCase)), "no status remains");
+                            }
                         })
                 });
         }

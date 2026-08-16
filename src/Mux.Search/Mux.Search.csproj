@@ -4,6 +4,8 @@
     <Version>0.5.0</Version>
     <Description>Search abstractions and provider clients for mux</Description>
     <PackageId>Mux.Search</PackageId>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
 </Project>

@@ -7,6 +7,8 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mux</ToolCommandName>
     <PackageId>Mux.Cli</PackageId>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageReleaseNotes>0.5.0: Background tasks — the model decomposes a job into a tracked plan of tasks and advances them as it works, with a live in-place checklist in the interactive shell, a TASKS n/m sidebar row, a /tasks viewer for inspecting and hand-annotating the plan, per-job persistence across save/resume, and a task_plan_updated event in the jsonl automation contract. Gated by taskPlanningEnabled; an opt-in orchestration engine (taskParallelismEnabled) runs independent tasks as parallel jobs under the shared write lease. See CHANGELOG.md and BACKGROUND_TASKS.md.</PackageReleaseNotes>
     <NoWarn>$(NoWarn);NU5111</NoWarn>

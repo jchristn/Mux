@@ -4,12 +4,14 @@
     <Version>0.8.0</Version>
     <Description>Core models, agent loop, tools, and LLM client for mux</Description>
     <PackageId>Mux.Core</PackageId>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Playwright" Version="1.59.0" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.62.0" />
     <PackageReference Include="PolyPrompt" Version="2.2.0" />
-    <PackageReference Include="Voltaic" Version="0.5.1" />
+    <PackageReference Include="Voltaic" Version="0.6.0" />
   </ItemGroup>
 
   <ItemGroup>

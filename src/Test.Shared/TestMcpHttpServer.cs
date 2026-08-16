@@ -3,7 +3,6 @@ namespace Test.Shared
     using System;
     using System.Net;
     using System.Net.Sockets;
-    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Voltaic.Mcp;
@@ -59,8 +58,8 @@ namespace Test.Shared
                 },
                 args =>
                 {
-                    string text = args?.TryGetProperty("text", out JsonElement textElement) == true
-                        ? textElement.GetString() ?? string.Empty
+                    string text = args != null && args.ContainsProperty("text")
+                        ? args.GetString("text") ?? string.Empty
                         : string.Empty;
 
                     return (object)new
