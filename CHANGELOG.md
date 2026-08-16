@@ -16,10 +16,11 @@ All notable changes to mux are documented here.
   `--output-format json`, a machine-readable payload. Query a single endpoint by name or sweep them all;
   per-endpoint failures are classified (`auth_error`, `backend_unreachable`, `models_endpoint_not_found`,
   …) and captured rather than aborting the sweep.
-- **Consistent command-output spacing.** The non-interactive commands (`print`, `probe`, `endpoint`,
-  `skill`) now bracket their stdout with exactly one leading and one trailing blank line, so output is
-  always visually separated from the shell prompt. JSON and JSONL consumers are unaffected (surrounding
-  whitespace is tolerated).
+- **Consistent command-output spacing.** The table-rendering commands (`probe`, `endpoint`, `skill`) now
+  bracket their stdout with exactly one leading and one trailing blank line, so output is always visually
+  separated from the shell prompt. JSON and JSONL consumers are unaffected (surrounding whitespace is
+  tolerated). `print` is intentionally excluded — it streams the assistant's answer to stdout terminated
+  by a single newline, with no leading or trailing blank line, so it stays clean for humans and pipes.
 
 ### Changed
 

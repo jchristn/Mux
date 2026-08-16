@@ -204,10 +204,13 @@ CONFIG:
                 {
                     string[] commandArgs = args.Skip(1).ToArray();
                     PrintSettings settings = CliArgumentParser.ParsePrint(commandArgs);
-                    return RunWrapped(() => new PrintCommand()
+
+                    // print is not bracketed with blank lines: it streams the model's answer straight to
+                    // stdout (terminated by a single newline), so it stays clean for humans and pipes alike.
+                    return new PrintCommand()
                         .ExecuteAsync(new CommandContext("print", args), settings, CancellationToken.None)
                         .GetAwaiter()
-                        .GetResult());
+                        .GetResult();
                 }
 
                 if (args.Any(a => string.Equals(a, "--print", StringComparison.OrdinalIgnoreCase)
@@ -215,10 +218,10 @@ CONFIG:
                 {
                     PrintSettings settings = CliArgumentParser.ParsePrint(args);
                     settings.Print = true;
-                    return RunWrapped(() => new PrintCommand()
+                    return new PrintCommand()
                         .ExecuteAsync(new CommandContext("print", args), settings, CancellationToken.None)
                         .GetAwaiter()
-                        .GetResult());
+                        .GetResult();
                 }
 
                 if (args.Length > 0 && string.Equals(args[0], "probe", StringComparison.OrdinalIgnoreCase))
@@ -262,13 +265,14 @@ CONFIG:
         }
 
         /// <summary>
-        /// Runs a non-interactive command bracketed by exactly one blank line before and one blank line
-        /// after its stdout, so command output is always visually separated from the shell prompt. A
-        /// tracking writer observes what the command emits: because some renderers (the table widget) leave
-        /// the cursor mid-line, the trailing block first terminates the last line when needed and then adds
-        /// the blank line, giving every command — table, streamed text, or JSON/JSONL document — the same
-        /// symmetric spacing. JSON and JSONL consumers tolerate the surrounding whitespace. The trailing
-        /// block is emitted even when the command throws.
+        /// Runs a table-rendering command (<c>probe</c>, <c>endpoint</c>, <c>skill</c>) bracketed by exactly
+        /// one blank line before and one blank line after its stdout, so its output is visually separated
+        /// from the shell prompt. A tracking writer observes what the command emits: because some renderers
+        /// (the table widget) leave the cursor mid-line, the trailing block first terminates the last line
+        /// when needed and then adds the blank line, giving each command the same symmetric spacing. JSON and
+        /// JSONL consumers tolerate the surrounding whitespace. The trailing block is emitted even when the
+        /// command throws. <c>print</c> is intentionally not wrapped: it streams the assistant's answer to
+        /// stdout terminated by a single newline, so it stays clean for humans and pipes without extra blanks.
         /// </summary>
         /// <param name="run">The command invocation to execute.</param>
         /// <returns>The command's exit code.</returns>

@@ -50,6 +50,22 @@ namespace Test.Shared.Suites
                     return Task.CompletedTask;
                 }),
 
+                Case("PrintCommandTextOutputHasNoBracketingBlankLines", "print (text) stdout is the answer plus a single terminating newline — no leading or trailing blank line", (CancellationToken ct) =>
+                {
+                    using MockHttpServer server = new MockHttpServer();
+                    server.RegisterStreamingResponse("no-blanks test", new List<string> { "{\"choices\":[{\"delta\":{\"content\":\"Just the answer.\"},\"finish_reason\":\"stop\"}]}" });
+                    server.Start();
+
+                    CliInvocationResult result = InvokeCli(new[] { "print", "--yolo", "--base-url", server.BaseUrl, "--model", "test-model", "--adapter-type", "openai-compatible", "no-blanks test" });
+                    MuxAssert.AreEqual(0, result.ExitCode, "exit code");
+
+                    string normalized = result.StdOut.Replace("\r\n", "\n");
+                    MuxAssert.IsFalse(normalized.StartsWith("\n", StringComparison.Ordinal), "no leading blank line");
+                    MuxAssert.IsFalse(normalized.EndsWith("\n\n", StringComparison.Ordinal), "no trailing blank line");
+                    MuxAssert.AreEqual("Just the answer.\n", normalized, "answer plus a single terminating newline");
+                    return Task.CompletedTask;
+                }),
+
                 Case("PrintCommandCompactionStrategyOverrideIsApplied", "print reflects the compaction-strategy override in runtime metadata", (CancellationToken ct) =>
                 {
                     using MockHttpServer server = new MockHttpServer();
