@@ -72,6 +72,9 @@ test("run aggregates the event stream into a RunResult", async () => {
   assert.equal(result.status, "completed");
   assert.equal(result.sessionId, "gen-sid");
   assert.equal(result.finalEstimatedTokens, 42);
+  assert.equal(result.inputTokens, 11);
+  assert.equal(result.outputTokens, 22);
+  assert.equal(result.totalTokens, 33);
   assert.ok(result.events.some((e: MuxEvent) => e.eventType === "run_started"));
   assert.ok(result.events.some((e: MuxEvent) => e.eventType === "run_completed"));
 });

@@ -105,8 +105,9 @@ A dataclass whose fields map to `mux print` flags (all optional): `mux_path`, `m
 ### `RunResult`
 
 A dataclass: `text`, `session_id`, `status`, `exit_code`, `iterations_completed`, `tool_call_count`,
-`error_count`, `duration_ms`, `final_estimated_tokens`, `stderr`, and the ordered `events` list (each a
-`dict` with an `eventType`).
+`error_count`, `duration_ms`, `final_estimated_tokens`, `input_tokens`, `output_tokens`, `total_tokens`,
+`stderr`, and the ordered `events` list (each a `dict` with an `eventType`). The token fields come from the
+`run_completed` event's `usage` block (provider-reported; `0` when the backend reports none).
 
 ### `Thread`
 

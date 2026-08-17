@@ -104,11 +104,11 @@ namespace Test.Shared.Suites
             JsonDocument started = JsonDocument.Parse(lines[0]);
             JsonDocument completed = JsonDocument.Parse(lines[^1]);
 
-            MuxAssert.AreEqual(1, started.RootElement.GetProperty("contractVersion").GetInt32(), "started contractVersion");
+            MuxAssert.AreEqual(2, started.RootElement.GetProperty("contractVersion").GetInt32(), "started contractVersion");
             MuxAssert.AreEqual("run_started", started.RootElement.GetProperty("eventType").GetString(), "started eventType");
             MuxAssert.AreEqual("print", started.RootElement.GetProperty("commandName").GetString(), "started commandName");
             MuxAssert.IsFalse(started.RootElement.GetProperty("mcp").GetProperty("supported").GetBoolean(), "MCP reported unsupported in print mode");
-            MuxAssert.AreEqual(1, completed.RootElement.GetProperty("contractVersion").GetInt32(), "completed contractVersion");
+            MuxAssert.AreEqual(2, completed.RootElement.GetProperty("contractVersion").GetInt32(), "completed contractVersion");
             MuxAssert.AreEqual("run_completed", completed.RootElement.GetProperty("eventType").GetString(), "completed eventType");
             MuxAssert.AreEqual("completed", completed.RootElement.GetProperty("status").GetString(), "completed status");
         }
@@ -132,7 +132,7 @@ namespace Test.Shared.Suites
             MuxAssert.AreEqual(string.Empty, result.StdErr.Trim(), "stderr");
 
             JsonDocument json = JsonDocument.Parse(result.StdOut);
-            MuxAssert.AreEqual(1, json.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
+            MuxAssert.AreEqual(2, json.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
             MuxAssert.IsTrue(json.RootElement.GetProperty("success").GetBoolean(), "success");
             MuxAssert.AreEqual("test-model", json.RootElement.GetProperty("model").GetString(), "model");
             MuxAssert.AreEqual("probe", json.RootElement.GetProperty("commandName").GetString(), "commandName");

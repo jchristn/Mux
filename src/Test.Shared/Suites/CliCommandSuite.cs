@@ -39,7 +39,7 @@ namespace Test.Shared.Suites
                     JsonDocument first = JsonDocument.Parse(lines[0]);
                     JsonDocument second = JsonDocument.Parse(lines[1]);
                     JsonDocument last = JsonDocument.Parse(lines[^1]);
-                    MuxAssert.AreEqual(1, first.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
+                    MuxAssert.AreEqual(2, first.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
                     MuxAssert.AreEqual("run_started", first.RootElement.GetProperty("eventType").GetString(), "started eventType");
                     MuxAssert.AreEqual("print", first.RootElement.GetProperty("commandName").GetString(), "commandName");
                     MuxAssert.IsFalse(first.RootElement.GetProperty("mcp").GetProperty("supported").GetBoolean(), "mcp supported");
@@ -115,7 +115,7 @@ namespace Test.Shared.Suites
                     MuxAssert.AreEqual(1, result.ExitCode, "exit code");
                     MuxAssert.AreEqual(string.Empty, result.StdErr.Trim(), "stderr");
                     JsonDocument json = JsonDocument.Parse(result.StdOut);
-                    MuxAssert.AreEqual(1, json.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
+                    MuxAssert.AreEqual(2, json.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
                     MuxAssert.AreEqual("error", json.RootElement.GetProperty("eventType").GetString(), "eventType");
                     MuxAssert.AreEqual("unsupported_option", json.RootElement.GetProperty("code").GetString(), "code");
                     MuxAssert.AreEqual("unsupported_option", json.RootElement.GetProperty("errorCode").GetString(), "errorCode");
@@ -131,7 +131,7 @@ namespace Test.Shared.Suites
                     MuxAssert.AreEqual(1, result.ExitCode, "exit code");
                     MuxAssert.AreEqual(string.Empty, result.StdErr.Trim(), "stderr");
                     JsonDocument json = JsonDocument.Parse(result.StdOut);
-                    MuxAssert.AreEqual(1, json.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
+                    MuxAssert.AreEqual(2, json.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
                     MuxAssert.AreEqual("error", json.RootElement.GetProperty("eventType").GetString(), "eventType");
                     MuxAssert.AreEqual("unsupported_option", json.RootElement.GetProperty("code").GetString(), "code");
                     MuxAssert.AreEqual("unsupported_option", json.RootElement.GetProperty("errorCode").GetString(), "errorCode");
@@ -150,7 +150,7 @@ namespace Test.Shared.Suites
                     string? errorLine = Array.Find(lines, line => line.Contains("\"eventType\":\"error\"", StringComparison.Ordinal));
                     MuxAssert.IsNotNull(errorLine, "error line");
                     JsonDocument errorJson = JsonDocument.Parse(errorLine!);
-                    MuxAssert.AreEqual(1, errorJson.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
+                    MuxAssert.AreEqual(2, errorJson.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
                     MuxAssert.AreEqual("error", errorJson.RootElement.GetProperty("eventType").GetString(), "eventType");
                     MuxAssert.AreEqual("llm_connection_error", errorJson.RootElement.GetProperty("code").GetString(), "code");
                     MuxAssert.AreEqual("llm_connection_error", errorJson.RootElement.GetProperty("errorCode").GetString(), "errorCode");
@@ -196,7 +196,7 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(1, result.ExitCode, "exit code");
                         MuxAssert.AreEqual(string.Empty, result.StdErr.Trim(), "stderr");
                         JsonDocument json = JsonDocument.Parse(result.StdOut);
-                        MuxAssert.AreEqual(1, json.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
+                        MuxAssert.AreEqual(2, json.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
                         MuxAssert.IsFalse(json.RootElement.GetProperty("success").GetBoolean(), "success");
                         MuxAssert.AreEqual("endpoint_not_found", json.RootElement.GetProperty("errorCode").GetString(), "errorCode");
                         MuxAssert.AreEqual("configuration", json.RootElement.GetProperty("failureCategory").GetString(), "failureCategory");
@@ -218,7 +218,7 @@ namespace Test.Shared.Suites
                     MuxAssert.AreEqual(0, result.ExitCode, "exit code");
                     MuxAssert.AreEqual(string.Empty, result.StdErr.Trim(), "stderr");
                     JsonDocument json = JsonDocument.Parse(result.StdOut);
-                    MuxAssert.AreEqual(1, json.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
+                    MuxAssert.AreEqual(2, json.RootElement.GetProperty("contractVersion").GetInt32(), "contractVersion");
                     MuxAssert.IsTrue(json.RootElement.GetProperty("success").GetBoolean(), "success");
                     MuxAssert.AreEqual("test-model", json.RootElement.GetProperty("model").GetString(), "model");
                     MuxAssert.Contains("ok", json.RootElement.GetProperty("responsePreview").GetString()?.ToLowerInvariant(), "responsePreview");

@@ -37,6 +37,7 @@ namespace Test.Shared
                     ToolUseSuite.Create(),
                     PrintModeSuite.Create(),
                     HeadlessFeaturesSuite.Create(),
+                    HeadlessOutputModesSuite.Create(),
                     ToolGovernanceSuite.Create(),
                     Phase4FeaturesSuite.Create(),
                     InputFormatSuite.Create(),

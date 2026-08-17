@@ -17,7 +17,7 @@ namespace Mux.Cli.Commands
     {
         #region Private-Members
 
-        private const int StructuredOutputContractVersion = 1;
+        private const int StructuredOutputContractVersion = 2;
 
         private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
         {
@@ -30,9 +30,21 @@ namespace Mux.Cli.Commands
         #region Public-Methods
 
         /// <summary>
-        /// Serializes an <see cref="AgentEvent"/> into a JSONL-safe line.
+        /// Serializes an <see cref="AgentEvent"/> into a JSONL-safe line, including run statistics.
         /// </summary>
         public static string FormatEvent(AgentEvent agentEvent)
+        {
+            return FormatEvent(agentEvent, includeStats: true);
+        }
+
+        /// <summary>
+        /// Serializes an <see cref="AgentEvent"/> into a JSONL-safe line. When <paramref name="includeStats"/>
+        /// is false, the terminal <c>run_completed</c> event omits its run-metrics block and the
+        /// <c>usage</c> object, keeping only identity and status fields.
+        /// </summary>
+        /// <param name="agentEvent">The event to serialize.</param>
+        /// <param name="includeStats">Whether to include run metrics and token usage on the run summary event.</param>
+        public static string FormatEvent(AgentEvent agentEvent, bool includeStats)
         {
             Dictionary<string, object?> payload = new Dictionary<string, object?>
             {
@@ -153,13 +165,17 @@ namespace Mux.Cli.Commands
                     payload["runId"] = runCompletedEvent.RunId;
                     payload["sessionId"] = runCompletedEvent.SessionId;
                     payload["status"] = runCompletedEvent.Status;
-                    payload["iterationsCompleted"] = runCompletedEvent.IterationsCompleted;
-                    payload["toolCallCount"] = runCompletedEvent.ToolCallCount;
-                    payload["errorCount"] = runCompletedEvent.ErrorCount;
-                    payload["assistantTextChars"] = runCompletedEvent.AssistantTextChars;
-                    payload["durationMs"] = runCompletedEvent.DurationMs;
-                    payload["finalEstimatedTokens"] = runCompletedEvent.FinalEstimatedTokens;
-                    payload["compactionCount"] = runCompletedEvent.CompactionCount;
+                    if (includeStats)
+                    {
+                        payload["iterationsCompleted"] = runCompletedEvent.IterationsCompleted;
+                        payload["toolCallCount"] = runCompletedEvent.ToolCallCount;
+                        payload["errorCount"] = runCompletedEvent.ErrorCount;
+                        payload["assistantTextChars"] = runCompletedEvent.AssistantTextChars;
+                        payload["durationMs"] = runCompletedEvent.DurationMs;
+                        payload["finalEstimatedTokens"] = runCompletedEvent.FinalEstimatedTokens;
+                        payload["compactionCount"] = runCompletedEvent.CompactionCount;
+                        payload["usage"] = FormatUsage(runCompletedEvent);
+                    }
                     if (runCompletedEvent.TaskSummary != null)
                     {
                         payload["taskSummary"] = FormatTaskSummary(runCompletedEvent.TaskSummary);
@@ -194,19 +210,40 @@ namespace Mux.Cli.Commands
         /// <returns>A compact, single-line JSON object.</returns>
         public static string FormatRunSummary(RunCompletedEvent? completed, string? resultText, string? sessionId)
         {
+            return FormatRunSummary(completed, resultText, sessionId, includeStats: true);
+        }
+
+        /// <summary>
+        /// Serializes a single-object run summary for <c>print --output-format json</c>. When
+        /// <paramref name="includeStats"/> is false, the run-metrics block and the <c>usage</c> object are
+        /// omitted, leaving only <c>contractVersion</c>, <c>result</c>, <c>sessionId</c>, and <c>status</c>
+        /// (plus <c>taskSummary</c> when the run had a task plan).
+        /// </summary>
+        /// <param name="completed">The terminal run-completed event, or null when the run produced none.</param>
+        /// <param name="resultText">The accumulated final assistant response text. Null is treated as empty.</param>
+        /// <param name="sessionId">The persisted session id, or null/empty when the run was not persisted.</param>
+        /// <param name="includeStats">Whether to include run metrics and token usage.</param>
+        /// <returns>A compact, single-line JSON object.</returns>
+        public static string FormatRunSummary(RunCompletedEvent? completed, string? resultText, string? sessionId, bool includeStats)
+        {
             Dictionary<string, object?> payload = new Dictionary<string, object?>
             {
                 ["contractVersion"] = StructuredOutputContractVersion,
                 ["result"] = RedactString(resultText),
                 ["sessionId"] = string.IsNullOrEmpty(sessionId) ? string.Empty : sessionId,
-                ["status"] = completed?.Status ?? "unknown",
-                ["iterationsCompleted"] = completed?.IterationsCompleted ?? 0,
-                ["toolCallCount"] = completed?.ToolCallCount ?? 0,
-                ["errorCount"] = completed?.ErrorCount ?? 0,
-                ["durationMs"] = completed?.DurationMs ?? 0,
-                ["finalEstimatedTokens"] = completed?.FinalEstimatedTokens ?? 0,
-                ["compactionCount"] = completed?.CompactionCount ?? 0
+                ["status"] = completed?.Status ?? "unknown"
             };
+
+            if (includeStats)
+            {
+                payload["iterationsCompleted"] = completed?.IterationsCompleted ?? 0;
+                payload["toolCallCount"] = completed?.ToolCallCount ?? 0;
+                payload["errorCount"] = completed?.ErrorCount ?? 0;
+                payload["durationMs"] = completed?.DurationMs ?? 0;
+                payload["finalEstimatedTokens"] = completed?.FinalEstimatedTokens ?? 0;
+                payload["compactionCount"] = completed?.CompactionCount ?? 0;
+                payload["usage"] = FormatUsage(completed);
+            }
 
             if (completed?.TaskSummary != null)
             {
@@ -214,6 +251,33 @@ namespace Mux.Cli.Commands
             }
 
             return JsonSerializer.Serialize(payload, _JsonOptions);
+        }
+
+        /// <summary>
+        /// Formats the human-readable, single-line token/statistics footer written to stderr after a
+        /// <c>--output-format text</c> run when <c>--stats</c> is requested. Never touches stdout, so the
+        /// answer stream stays clean for pipes.
+        /// </summary>
+        /// <param name="completed">The terminal run-completed event, or null when the run produced none.</param>
+        /// <returns>A one-line summary suitable for stderr.</returns>
+        public static string FormatTextStatsFooter(RunCompletedEvent? completed)
+        {
+            if (completed == null)
+            {
+                return "mux: no run statistics available.";
+            }
+
+            return string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "mux: tokens input={0} output={1} total={2} (est {3}) | duration={4}ms | turns={5} | tools={6} | errors={7}",
+                completed.InputTokens,
+                completed.OutputTokens,
+                completed.TotalTokens,
+                completed.FinalEstimatedTokens,
+                completed.DurationMs,
+                completed.IterationsCompleted,
+                completed.ToolCallCount,
+                completed.ErrorCount);
         }
 
         /// <summary>
@@ -261,6 +325,17 @@ namespace Mux.Cli.Commands
                 ["note"] = task.Note == null ? null : RedactString(task.Note),
                 ["durationMs"] = task.DurationMs,
                 ["failureMessage"] = task.FailureMessage == null ? null : RedactString(task.FailureMessage)
+            };
+        }
+
+        private static Dictionary<string, object?> FormatUsage(RunCompletedEvent? completed)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["inputTokens"] = completed?.InputTokens ?? 0,
+                ["outputTokens"] = completed?.OutputTokens ?? 0,
+                ["totalTokens"] = completed?.TotalTokens ?? 0,
+                ["estimatedTokens"] = completed?.FinalEstimatedTokens ?? 0
             };
         }
 

@@ -149,6 +149,18 @@ export interface HeartbeatEvent extends MuxEventBase {
   stepNumber: number;
 }
 
+/** Provider-reported token usage for a run (present on `run_completed` unless `--no-stats` was used). */
+export interface MuxUsage {
+  /** Prompt/input tokens consumed. */
+  inputTokens: number;
+  /** Completion/output tokens generated. */
+  outputTokens: number;
+  /** Total tokens as reported by the provider. */
+  totalTokens: number;
+  /** mux's own heuristic estimate of the final context size. */
+  estimatedTokens: number;
+}
+
 /** The terminal event summarizing the run. */
 export interface RunCompletedEvent extends MuxEventBase {
   eventType: "run_completed";
@@ -162,6 +174,8 @@ export interface RunCompletedEvent extends MuxEventBase {
   durationMs: number;
   finalEstimatedTokens: number;
   compactionCount: number;
+  /** Token usage; omitted when the run used `--no-stats`. */
+  usage?: MuxUsage;
 }
 
 /** Any event not otherwise typed (forward-compatible with new event types in a known contract version). */
@@ -201,6 +215,12 @@ export interface RunResult {
   durationMs: number;
   /** Estimated tokens in the final conversation state. */
   finalEstimatedTokens: number;
+  /** Provider-reported prompt/input tokens (0 when unreported or `--no-stats` was used). */
+  inputTokens: number;
+  /** Provider-reported completion/output tokens. */
+  outputTokens: number;
+  /** Provider-reported total tokens. */
+  totalTokens: number;
   /** Captured stderr (progress/errors in text mode; usually empty in jsonl mode). */
   stderr: string;
   /** Every event observed during the run, in order. */
@@ -265,6 +285,9 @@ export class Mux {
       errorCount: completed?.errorCount ?? 0,
       durationMs: completed?.durationMs ?? 0,
       finalEstimatedTokens: completed?.finalEstimatedTokens ?? 0,
+      inputTokens: completed?.usage?.inputTokens ?? 0,
+      outputTokens: completed?.usage?.outputTokens ?? 0,
+      totalTokens: completed?.usage?.totalTokens ?? 0,
       stderr,
       events,
     };

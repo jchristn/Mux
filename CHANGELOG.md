@@ -6,6 +6,17 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **Headless output modes, token usage, and a stats toggle for `mux print`.** The four output shapes are now
+  first-class and fully documented: **streamed text** (`--output-format text`, default), **buffered text**
+  (`--output-format text --buffer`, alias `--no-stream`), **streamed JSONL** (`--output-format jsonl`), and
+  **buffered JSON** (`--output-format json`). Two new flags cut across them: `--buffer`/`--no-stream` holds
+  text output and emits it in one write instead of streaming; `--stats`/`--no-stats` includes or omits run
+  statistics and provider-reported token usage. Structured output (`json`/`jsonl`) includes stats by default;
+  text output never carries them on stdout, and `--stats` surfaces a one-line `mux: tokens …` footer on
+  **stderr** so stdout stays exactly the answer. The `json` summary object and the `jsonl` `run_completed`
+  event now carry a `usage` object (`inputTokens`, `outputTokens`, `totalTokens`, `estimatedTokens`);
+  provider counts come straight from the backend's usage metadata. The TypeScript and Python SDKs expose the
+  new usage fields on their aggregated result.
 - **`--prompt "<text>"` startup prompt.** A new interactive-only option that skips the startup splash and
   submits the supplied prompt as the first turn, then drops into the usual interactive shell. A bare
   positional prompt (`mux "do the thing"`) does the same, aligning behavior with the long-documented
@@ -24,6 +35,10 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- **Automation contract bumped to `contractVersion` 2.** The `json` run summary and the `jsonl`
+  `run_completed` event gained the `usage` token block, and `--no-stats` can now strip the run-metrics and
+  `usage` fields entirely. The change is additive for default consumers (stats stay on by default), but the
+  version bump signals the new fields to SDKs and downstream parsers.
 - **Adopted TUIKit 0.6.0's standardized components.** Bumped the TUIKit dependency `0.5.1 → 0.6.0` and
   replaced hand-built interactive-UI code with the general-purpose components the framework grew from the
   same patterns: the footer-hint wrapper (`HintText`), the command-menu column aligner

@@ -35,7 +35,7 @@ def emit(obj):
 
 
 emit({
-    "contractVersion": 1,
+    "contractVersion": 2,
     "eventType": "run_started",
     "timestampUtc": stamp,
     "runId": "run-fake",
@@ -53,12 +53,12 @@ emit({
     "mcp": {"supported": False, "configured": False, "serverCount": 0},
 })
 
-emit({"contractVersion": 1, "eventType": "assistant_text", "timestampUtc": stamp, "text": "hello "})
-emit({"contractVersion": 1, "eventType": "assistant_text", "timestampUtc": stamp, "text": "world"})
+emit({"contractVersion": 2, "eventType": "assistant_text", "timestampUtc": stamp, "text": "hello "})
+emit({"contractVersion": 2, "eventType": "assistant_text", "timestampUtc": stamp, "text": "world"})
 
 if exit_code != 0:
     emit({
-        "contractVersion": 1,
+        "contractVersion": 2,
         "eventType": "error",
         "timestampUtc": stamp,
         "code": "print_error",
@@ -68,7 +68,7 @@ if exit_code != 0:
     })
 
 emit({
-    "contractVersion": 1,
+    "contractVersion": 2,
     "eventType": "run_completed",
     "timestampUtc": stamp,
     "runId": "run-fake",
@@ -81,6 +81,7 @@ emit({
     "durationMs": 5,
     "finalEstimatedTokens": 42,
     "compactionCount": 0,
+    "usage": {"inputTokens": 11, "outputTokens": 22, "totalTokens": 33, "estimatedTokens": 42},
 })
 
 sys.exit(exit_code)

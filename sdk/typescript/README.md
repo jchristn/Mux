@@ -107,8 +107,9 @@ Shared options applied to every call; any field is overridable per call.
 ### `mux.run(prompt, overrides?): Promise<RunResult>`
 
 Runs to completion and returns the aggregated result: `text`, `sessionId`, `status`, `exitCode`,
-`iterationsCompleted`, `toolCallCount`, `errorCount`, `durationMs`, `finalEstimatedTokens`, `stderr`, and
-the full ordered `events` array.
+`iterationsCompleted`, `toolCallCount`, `errorCount`, `durationMs`, `finalEstimatedTokens`, `inputTokens`,
+`outputTokens`, `totalTokens`, `stderr`, and the full ordered `events` array. The token fields come from the
+`run_completed` event's `usage` block (provider-reported; `0` when the backend reports none).
 
 ### `mux.runStreamed(prompt, overrides?): AsyncGenerator<MuxEvent>`
 

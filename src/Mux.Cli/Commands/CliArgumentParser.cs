@@ -67,6 +67,16 @@ namespace Mux.Cli.Commands
                     case "--output-schema":
                         settings.OutputSchema = ReadValue(option, inlineValue, values, ref index);
                         return true;
+                    case "--stats":
+                        settings.Stats = ReadBool(option, inlineValue, defaultValue: true);
+                        return true;
+                    case "--no-stats":
+                        settings.Stats = false;
+                        return true;
+                    case "--buffer":
+                    case "--no-stream":
+                        settings.Buffer = ReadBool(option, inlineValue, defaultValue: true);
+                        return true;
                     default:
                         return false;
                 }

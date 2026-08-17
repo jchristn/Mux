@@ -175,6 +175,8 @@ Use `mux print` as the preferred non-interactive entrypoint in scripts and autom
 | `--yolo` |  | Auto-approve tool calls |
 | `--approval-policy <policy>` |  | interactive: `ask`, `auto`, or `deny`; print/probe: `auto` or `deny` |
 | `--output-format <format>` |  | `text`, `json`, or `jsonl` depending on the command |
+| `--stats` / `--no-stats` |  | print: include or omit run statistics and token usage (default: off for `text`, on for `json`/`jsonl`) |
+| `--buffer` | `--no-stream` | print: hold `text` output and emit it once at the end instead of streaming |
 | `--no-mcp` |  | Interactive only: skip MCP server initialization |
 | `--ignore-cert-errors` | `--insecure` | Disable TLS certificate validation for mux-owned network requests |
 | `--verbose` | `-v` | Extra progress to stderr in text mode |
@@ -358,6 +360,53 @@ Use `mux print` as the non-interactive entrypoint:
 mux print --output-format jsonl --yolo "implement the feature described in TASK.md"
 ```
 
+### Output Modes
+
+`mux print` produces exactly **four output shapes**, chosen by `--output-format` and `--buffer`, each
+optionally carrying token statistics via `--stats` / `--no-stats`:
+
+| Mode | Command | Streaming | Carries stats? |
+|---|---|---|---|
+| **Streamed text** | `--output-format text` *(default)* | yes — as produced, to `stdout` | no on `stdout`; `--stats` adds a one-line footer to **stderr** |
+| **Buffered text** | `--output-format text --buffer` | no — whole answer in one write | no on `stdout`; `--stats` adds a footer to **stderr** |
+| **Streamed JSONL** | `--output-format jsonl` | yes — one JSON event per line | **yes by default**; `--no-stats` drops the `usage`/metrics block |
+| **Buffered JSON** | `--output-format json` | no — one JSON object at the end | **yes by default**; `--no-stats` drops the `usage`/metrics block |
+
+The rules that make this predictable:
+
+- **Text output never carries statistics on `stdout`.** `stdout` is exactly the assistant's answer, so it
+  stays clean for pipes. `--stats` surfaces token counts as a single `mux: tokens …` line on **stderr**.
+- **`json` and `jsonl` include statistics by default.** `--no-stats` strips the `usage` object and the
+  run-metrics fields, leaving `result`/`status`/`sessionId`/`contractVersion`.
+- **`--buffer` (alias `--no-stream`) applies to `text` only.** `json` is always buffered; `jsonl` is always
+  streamed. There is no "text with stats on stdout" — that shape does not exist by design.
+
+One copy-paste line per mode:
+
+```bash
+# 1. Streamed text (default) — the answer streams to stdout, nothing else
+mux print --yolo "summarize README.md"
+
+# 2. Buffered text, with a token/stats footer on stderr
+mux print --output-format text --buffer --stats --yolo "summarize README.md"
+
+# 3. Streamed JSONL events (usage rides on the terminal run_completed event)
+mux print --output-format jsonl --yolo "summarize README.md"
+
+# 4. Buffered JSON, one object, stats omitted
+mux print --output-format json --no-stats --yolo "summarize README.md" | jq '.result'
+```
+
+**Token usage (contract v2).** When stats are included, the `json` summary object and the `jsonl`
+`run_completed` event carry a `usage` object:
+
+```json
+"usage": { "inputTokens": 1234, "outputTokens": 567, "totalTokens": 1801, "estimatedTokens": 1750 }
+```
+
+`inputTokens`/`outputTokens`/`totalTokens` are provider-reported (`0` when the backend reports none);
+`estimatedTokens` is mux's own heuristic and mirrors the top-level `finalEstimatedTokens`.
+
 If you need a clean final-response artifact for an orchestrator, add:
 
 ```bash
@@ -374,8 +423,11 @@ mux print --output-format json --yolo "summarize README.md" | jq '.result'
 
 `json` emits exactly one object at the end of the run — `result`, `status`, `sessionId`,
 `iterationsCompleted`, `toolCallCount`, `errorCount`, `durationMs`, `finalEstimatedTokens`,
-`compactionCount`, optional `taskSummary`, and `contractVersion` — with the same secret redaction as the
-`jsonl` stream. Failures still report on `stderr` with a non-zero exit code rather than a summary object.
+`compactionCount`, a `usage` object (`inputTokens`/`outputTokens`/`totalTokens`/`estimatedTokens`),
+optional `taskSummary`, and `contractVersion` — with the same secret redaction as the `jsonl` stream.
+Add `--no-stats` to drop the `usage` object and the run-metrics fields, keeping only `result`, `status`,
+`sessionId`, and `contractVersion`. Failures still report on `stderr` with a non-zero exit code rather than
+a summary object.
 
 Print runs can be resumed non-interactively. Capture the `sessionId` from one run and continue it in the
 next:
@@ -410,7 +462,8 @@ In `jsonl` mode:
 - `run_started` includes `ignoreCertErrors` so consumers can detect whether certificate validation was disabled for mux-owned network requests
 - `run_started` includes `reasoningEffort` (the effective level and any per-provider overrides, or `null` when off); `cliOverridesApplied` lists `reasoningEffort` when a `--effort*` flag drove the value
 - `run_started` includes `showThinking`; when thinking is enabled, the model's reasoning streams as `assistant_thinking` events, and `cliOverridesApplied` lists `showThinking` when `--show-thinking` drove it
-- `run_completed` also includes `finalEstimatedTokens` and `compactionCount`, and reports `status` `budget_exceeded` when `--max-token-budget` stops the run
+- `run_completed` also includes `finalEstimatedTokens`, `compactionCount`, and a `usage` object (`inputTokens`/`outputTokens`/`totalTokens`/`estimatedTokens`), and reports `status` `budget_exceeded` when `--max-token-budget` stops the run
+- `--no-stats` drops the run-metrics block and the `usage` object from `run_completed` (and from the `json` summary), leaving identity/status fields; `--stats` forces stats on. Structured output includes stats by default, so this only matters when you opt out
 - `error` events keep `code` and also expose `errorCode`, `failureCategory`, and resolved runtime metadata when known (including `budget_exceeded`, classified as `runtime`)
 
 Event types currently emitted:

@@ -1,6 +1,6 @@
 {
   "name": "@mux/sdk",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "description": "Thin TypeScript driver for the mux CLI: spawns `mux print --output-format jsonl` and yields typed events.",
   "type": "module",
   "main": "./dist/index.js",

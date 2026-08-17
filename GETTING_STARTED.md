@@ -105,6 +105,35 @@ Structured automation:
 mux print --output-format jsonl --yolo "read README.md"
 ```
 
+### Choosing an output mode
+
+`mux print` has four output shapes. Pick by whether you want **text or structured JSON**, and **streamed or
+all-at-once**. Token statistics are optional on each:
+
+```bash
+# Streamed text (default): the answer streams to stdout, nothing else.
+mux print --yolo "read README.md and summarize it"
+
+# Buffered text: same answer, emitted once at the end instead of streaming.
+mux print --output-format text --buffer --yolo "read README.md and summarize it"
+
+# Streamed JSONL: one JSON event per line; the final run_completed event carries token usage.
+mux print --output-format jsonl --yolo "read README.md and summarize it"
+
+# Buffered JSON: a single JSON object at the end with result + usage.
+mux print --output-format json --yolo "read README.md and summarize it" | jq
+```
+
+Rules worth knowing up front:
+
+- **Text answers stay clean on `stdout`** — they never include statistics inline. Add `--stats` to print a
+  one-line token summary to **stderr** (`stdout` remains exactly the answer, safe to pipe).
+- **`json` and `jsonl` include token usage by default**; add `--no-stats` to omit it.
+- `--buffer` (alias `--no-stream`) only affects `text`; `json` is always one object, `jsonl` always streams.
+
+See the [Output Modes](README.md#output-modes) section of the README for the full matrix and the `usage`
+JSON shape.
+
 Health check:
 
 ```bash

@@ -65,6 +65,9 @@ class RunTests(unittest.TestCase):
         self.assertEqual(result.status, "completed")
         self.assertEqual(result.session_id, "gen-sid")
         self.assertEqual(result.final_estimated_tokens, 42)
+        self.assertEqual(result.input_tokens, 11)
+        self.assertEqual(result.output_tokens, 22)
+        self.assertEqual(result.total_tokens, 33)
         self.assertTrue(any(e["eventType"] == "run_completed" for e in result.events))
 
     def test_run_streamed_order(self):

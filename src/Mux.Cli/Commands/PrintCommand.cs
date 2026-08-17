@@ -89,6 +89,23 @@ namespace Mux.Cli.Commands
         [CommandOption("--output-schema")]
         public string? OutputSchema { get; set; }
 
+        /// <summary>
+        /// Tri-state control over run statistics and token usage in the output. Null selects the per-format
+        /// default (off for text, on for json/jsonl); true forces stats on (adding a stderr footer in text
+        /// mode); false forces them off. Set by <c>--stats</c> / <c>--no-stats</c>.
+        /// </summary>
+        [Description("Include (--stats) or omit (--no-stats) run statistics and token usage.")]
+        [CommandOption("--stats")]
+        public bool? Stats { get; set; }
+
+        /// <summary>
+        /// Hold text output until the run completes and emit it in one write, instead of streaming it as it
+        /// is produced. Applies to <c>--output-format text</c> only. Set by <c>--buffer</c> / <c>--no-stream</c>.
+        /// </summary>
+        [Description("Buffer text output and emit it once at the end instead of streaming.")]
+        [CommandOption("--buffer")]
+        public bool Buffer { get; set; }
+
         #endregion
     }
 
@@ -119,6 +136,10 @@ namespace Mux.Cli.Commands
                 EmitBootstrapError(settings, ex.Message);
                 return 1;
             }
+
+            // Collapse output-format + --buffer + --stats/--no-stats into the concrete streaming/stats
+            // decisions the run loop acts on. See HeadlessOutputPlan for the mode matrix.
+            HeadlessOutputPlan plan = HeadlessOutputPlan.Resolve(outputFormat, settings.Stats, settings.Buffer);
 
             // Input format: text (default, one prompt) or jsonl (multi-turn records on stdin).
             bool jsonlInput;
@@ -366,7 +387,7 @@ namespace Mux.Cli.Commands
                             turnCount++;
                             loopOptions.ConversationHistory = history;
                             PrintTurnResult turn = await RunTurnAsync(
-                                turnPrompt, loopOptions, runtime, outputFormat, outputSchemaJson, sessionId, settings.Verbose, cts.Token).ConfigureAwait(false);
+                                turnPrompt, loopOptions, runtime, plan, outputSchemaJson, sessionId, settings.Verbose, cts.Token).ConfigureAwait(false);
 
                             if (turn.ExitCode != 0)
                             {
@@ -388,7 +409,7 @@ namespace Mux.Cli.Commands
                     {
                         loopOptions.ConversationHistory = history;
                         PrintTurnResult turn = await RunTurnAsync(
-                            prompt, loopOptions, runtime, outputFormat, outputSchemaJson, sessionId, settings.Verbose, cts.Token).ConfigureAwait(false);
+                            prompt, loopOptions, runtime, plan, outputSchemaJson, sessionId, settings.Verbose, cts.Token).ConfigureAwait(false);
                         exitCode = turn.ExitCode;
                         latestConversation = turn.FinalConversation;
                         lastAssistantText = turn.AssistantText;
@@ -474,7 +495,7 @@ namespace Mux.Cli.Commands
             string prompt,
             AgentLoopOptions loopOptions,
             ResolvedRuntime runtime,
-            OutputFormatEnum outputFormat,
+            HeadlessOutputPlan plan,
             string? outputSchemaJson,
             string sessionId,
             bool verbose,
@@ -500,16 +521,16 @@ namespace Mux.Cli.Commands
                         completedForSummary = runCompletedForSummary;
                     }
 
-                    if (outputFormat == OutputFormatEnum.Jsonl)
+                    if (plan.Format == OutputFormatEnum.Jsonl)
                     {
-                        Console.WriteLine(StructuredOutputFormatter.FormatEvent(agentEvent));
+                        Console.WriteLine(StructuredOutputFormatter.FormatEvent(agentEvent, plan.IncludeStats));
                     }
 
                     switch (agentEvent)
                     {
                         case AssistantTextEvent textEvent:
                             finalAssistantResponse.Append(textEvent.Text);
-                            if (outputFormat == OutputFormatEnum.Text)
+                            if (plan.Format == OutputFormatEnum.Text && plan.Streamed)
                             {
                                 Console.Write(textEvent.Text);
                             }
@@ -518,7 +539,7 @@ namespace Mux.Cli.Commands
                         case AssistantThinkingEvent thinkingEvent:
                             // Thinking is display-only: never part of the final response, and in text mode it
                             // goes to stderr so stdout stays the answer (and --output-last-message is clean).
-                            if (outputFormat == OutputFormatEnum.Text)
+                            if (plan.Format == OutputFormatEnum.Text)
                             {
                                 Console.Error.Write(thinkingEvent.Text);
                             }
@@ -526,14 +547,14 @@ namespace Mux.Cli.Commands
 
                         case HeartbeatEvent heartbeatEvent:
                             stepCount = heartbeatEvent.StepNumber;
-                            if (outputFormat == OutputFormatEnum.Text)
+                            if (plan.Format == OutputFormatEnum.Text)
                             {
                                 Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Working... (step {heartbeatEvent.StepNumber})"));
                             }
                             break;
 
                         case ContextStatusEvent contextStatusEvent:
-                            if (outputFormat == OutputFormatEnum.Text)
+                            if (plan.Format == OutputFormatEnum.Text)
                             {
                                 string contextLine =
                                     $"Context usage: est. {contextStatusEvent.EstimatedTokens} / {contextStatusEvent.UsableInputLimit} tokens | {contextStatusEvent.RemainingTokens} remaining.";
@@ -549,7 +570,7 @@ namespace Mux.Cli.Commands
                             break;
 
                         case ContextCompactedEvent contextCompactedEvent:
-                            if (outputFormat == OutputFormatEnum.Text)
+                            if (plan.Format == OutputFormatEnum.Text)
                             {
                                 Console.Error.WriteLine(
                                     ConsoleMessageStyler.Notification(
@@ -558,7 +579,7 @@ namespace Mux.Cli.Commands
                             break;
 
                         case ErrorEvent errorEvent:
-                            if (outputFormat == OutputFormatEnum.Text)
+                            if (plan.Format == OutputFormatEnum.Text)
                             {
                                 Console.Error.WriteLine(ConsoleMessageStyler.Failure($"Error: {errorEvent.Code}: {errorEvent.Message}"));
                                 CertificateWarningHint.WriteIfNeeded(
@@ -574,7 +595,7 @@ namespace Mux.Cli.Commands
 
                         case ToolCallProposedEvent proposedEvent:
                             stepCount++;
-                            if (outputFormat == OutputFormatEnum.Text)
+                            if (plan.Format == OutputFormatEnum.Text)
                             {
                                 Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Working... (step {stepCount})"));
                                 if (verbose)
@@ -588,7 +609,7 @@ namespace Mux.Cli.Commands
                             }
                             if (runtime.ApprovalPolicy == ApprovalPolicyEnum.Deny)
                             {
-                                if (outputFormat == OutputFormatEnum.Text)
+                                if (plan.Format == OutputFormatEnum.Text)
                                 {
                                     Console.Error.WriteLine(
                                         ConsoleMessageStyler.Failure(
@@ -601,7 +622,7 @@ namespace Mux.Cli.Commands
                             break;
 
                         case ToolCallCompletedEvent completedEvent:
-                            if (outputFormat == OutputFormatEnum.Text)
+                            if (plan.Format == OutputFormatEnum.Text)
                             {
                                 if (verbose)
                                 {
@@ -651,7 +672,7 @@ namespace Mux.Cli.Commands
                     if (schemaViolation != null)
                     {
                         EmitRuntimeError(
-                            outputFormat,
+                            plan.Format,
                             CreateRuntimeError("schema_validation_failed", $"Output did not conform to --output-schema: {schemaViolation}", runtime),
                             runtime.MuxSettings.IgnoreCertErrors);
                         exitCode = 1;
@@ -659,15 +680,28 @@ namespace Mux.Cli.Commands
                     }
                 }
 
-                if (outputFormat == OutputFormatEnum.Text)
+                if (plan.Format == OutputFormatEnum.Text)
                 {
+                    // Buffered text withholds the answer until the run is done, then emits it in one write.
+                    if (!plan.Streamed)
+                    {
+                        Console.Write(finalAssistantResponse.ToString());
+                    }
+
                     Console.WriteLine();
+
+                    // Text output never carries stats inline; --stats surfaces them as a one-line stderr
+                    // footer so stdout stays exactly the answer.
+                    if (plan.EmitTextStatsFooter)
+                    {
+                        Console.Error.WriteLine(StructuredOutputFormatter.FormatTextStatsFooter(completedForSummary));
+                    }
                 }
 
-                if (outputFormat == OutputFormatEnum.Json && !schemaFailed)
+                if (plan.Format == OutputFormatEnum.Json && !schemaFailed)
                 {
                     Console.WriteLine(StructuredOutputFormatter.FormatRunSummary(
-                        completedForSummary, finalAssistantResponse.ToString(), sessionId));
+                        completedForSummary, finalAssistantResponse.ToString(), sessionId, plan.IncludeStats));
                 }
 
                 finalConversation = new List<ConversationMessage>(agentLoop.FinalConversation);

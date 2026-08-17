@@ -242,10 +242,28 @@ mux> search the web for mux GitHub releases, then retrieve the most relevant res
 - `json`: a single summary object on stdout at the end of the run
 - `jsonl`: one structured event per stdout line
 
+These give four output shapes when combined with `--buffer`:
+
+| Mode | Flags | Streaming | Stats |
+|---|---|---|---|
+| Streamed text | `--output-format text` (default) | yes | never on stdout; `--stats` → stderr footer |
+| Buffered text | `--output-format text --buffer` | no | never on stdout; `--stats` → stderr footer |
+| Streamed JSONL | `--output-format jsonl` | yes | on by default; `--no-stats` omits |
+| Buffered JSON | `--output-format json` | no | on by default; `--no-stats` omits |
+
+Two flags control statistics and buffering:
+- `--stats` / `--no-stats`: include or omit run statistics and the token `usage` block. Default is **off for
+  `text`** (where stats can only appear as an opt-in one-line `mux: tokens …` footer on **stderr**, never on
+  stdout) and **on for `json`/`jsonl`**.
+- `--buffer` (alias `--no-stream`): for `text`, hold the answer and emit it in one write at the end instead of
+  streaming it. Ignored for `json` (always buffered) and `jsonl` (always streamed).
+
 The `json` object carries `result`, `status`, `sessionId`, `iterationsCompleted`, `toolCallCount`,
-`errorCount`, `durationMs`, `finalEstimatedTokens`, `compactionCount`, an optional `taskSummary`, and
-`contractVersion`, with the same secret redaction as the `jsonl` stream. A failed run reports on `stderr`
-with a non-zero exit code rather than emitting a summary object.
+`errorCount`, `durationMs`, `finalEstimatedTokens`, `compactionCount`, a `usage` object
+(`inputTokens`/`outputTokens`/`totalTokens`/`estimatedTokens`), an optional `taskSummary`, and
+`contractVersion`, with the same secret redaction as the `jsonl` stream. With `--no-stats` the run-metrics
+fields and `usage` are omitted, leaving `result`, `status`, `sessionId`, and `contractVersion`. A failed run
+reports on `stderr` with a non-zero exit code rather than emitting a summary object.
 
 `mux print --output-last-message <path>` optionally writes only the final assistant response text to a file. If the run fails, mux does not create the file.
 
@@ -308,6 +326,7 @@ Depending on the event, additional fields may include:
 - `reason`
 - `finalEstimatedTokens`
 - `compactionCount`
+- `usage` (on `run_completed`: `inputTokens`, `outputTokens`, `totalTokens`, `estimatedTokens`)
 - `builtInToolCount`
 - `effectiveToolCount`
 - `ignoreCertErrors`
@@ -341,9 +360,9 @@ mux print --output-format jsonl --yolo "read README.md"
 Example JSONL lines:
 
 ```json
-{"contractVersion":1,"eventType":"run_started","timestampUtc":"2026-03-31T20:00:00Z","runId":"...","endpointName":"ollama-local","model":"qwen2.5-coder:7b","maxIterations":50}
-{"contractVersion":1,"eventType":"assistant_text","timestampUtc":"2026-03-31T20:00:01Z","text":"Here is the summary..."}
-{"contractVersion":1,"eventType":"run_completed","timestampUtc":"2026-03-31T20:00:02Z","runId":"...","status":"completed","durationMs":1042}
+{"contractVersion":2,"eventType":"run_started","timestampUtc":"2026-03-31T20:00:00Z","runId":"...","endpointName":"ollama-local","model":"qwen2.5-coder:7b","maxIterations":50}
+{"contractVersion":2,"eventType":"assistant_text","timestampUtc":"2026-03-31T20:00:01Z","text":"Here is the summary..."}
+{"contractVersion":2,"eventType":"run_completed","timestampUtc":"2026-03-31T20:00:02Z","runId":"...","status":"completed","durationMs":1042,"usage":{"inputTokens":1234,"outputTokens":567,"totalTokens":1801,"estimatedTokens":1750}}
 ```
 
 Notes:
@@ -353,8 +372,9 @@ Notes:
 - `run_started.mcp.supported` is `false` in `print` unless `--mcp-config` is supplied; with it, `mcp.configured`/`mcp.serverCount` reflect the loaded servers
 - `run_started` and `run_completed` carry `sessionId` (empty when the run is not associated with a persisted session)
 - `run_completed.status` is `completed`, `completed_with_errors`, `max_iterations_reached`, or `budget_exceeded`; the matching `error` event code `budget_exceeded` is classified as `runtime`
-- `run_started` now includes `maxIterations`, context-budget metadata, and `ignoreCertErrors`, and `run_completed` includes `finalEstimatedTokens` plus `compactionCount`
-- `context_status` and `context_compacted` are additive event types within `contractVersion = 1`; consumers should ignore unknown event types in a known contract version
+- `run_started` now includes `maxIterations`, context-budget metadata, and `ignoreCertErrors`, and `run_completed` includes `finalEstimatedTokens`, `compactionCount`, and a `usage` object (`inputTokens`/`outputTokens`/`totalTokens`/`estimatedTokens`)
+- `--no-stats` omits the run-metrics fields and the `usage` object from `run_completed` (and from the `json` summary); `--stats` forces them on. Structured output includes them by default
+- `context_status` and `context_compacted` are additive event types; consumers should ignore unknown event types in a known contract version
 - `error` events retain `code` for backward compatibility and also expose `errorCode` plus `failureCategory`
 - `contractVersion` is shared across `print` JSONL events and `probe` JSON payloads
 
@@ -777,7 +797,10 @@ Recommendations:
 
 ## Contract Compatibility
 
-Structured non-interactive output uses a shared `contractVersion`.
+Structured non-interactive output uses a shared `contractVersion`, currently **`2`**. Version `2` added the
+token `usage` object to the `json` run summary and the `jsonl` `run_completed` event, and introduced the
+`--stats` / `--no-stats` toggle (stats remain on by default for `json`/`jsonl`, so existing consumers keep
+working).
 
 Compatibility rules:
 - additive fields are non-breaking within a contract version

@@ -205,7 +205,7 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("\"result\":\"the answer\"", json, "result present");
                         MuxAssert.Contains("\"status\":\"completed\"", json, "status present");
                         MuxAssert.Contains("\"sessionId\":\"sess-1\"", json, "sessionId present");
-                        MuxAssert.Contains("\"contractVersion\":1", json, "contractVersion present");
+                        MuxAssert.Contains("\"contractVersion\":2", json, "contractVersion present");
                         MuxAssert.Contains("\"iterationsCompleted\":3", json, "iterationsCompleted present");
                         return Task.CompletedTask;
                     }),

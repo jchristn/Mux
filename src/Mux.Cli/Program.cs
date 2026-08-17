@@ -94,6 +94,8 @@ OPTIONS:
         --prompt <text>                  Interactive: skip the splash and submit this prompt as the first turn
     -p, --print                          Single-shot: process prompt, print result, exit
         --output-format <format>         text, json, or jsonl depending on the command
+        --stats, --no-stats              print: include or omit run statistics and token usage
+        --buffer, --no-stream            print: buffer text output and emit it once at the end (text only)
         --input-format <format>          print: text (default) or jsonl (multi-turn stdin records)
         --config-dir <path>              Override active config directory
 

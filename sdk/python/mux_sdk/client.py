@@ -68,6 +68,12 @@ class RunResult:
     error_count: int
     duration_ms: int
     final_estimated_tokens: int
+    #: Provider-reported prompt/input tokens for the run (0 when the provider reported none or ``--no-stats`` was used).
+    input_tokens: int
+    #: Provider-reported completion/output tokens for the run.
+    output_tokens: int
+    #: Provider-reported total tokens for the run.
+    total_tokens: int
     stderr: str
     events: List[Dict[str, Any]]
 
@@ -190,6 +196,8 @@ class Mux:
 
         summary = completed or {}
         session = summary.get("sessionId") or (started or {}).get("sessionId", "")
+        # The usage block is present on run_completed unless the run used --no-stats; default to zeros.
+        usage = summary.get("usage") or {}
 
         return RunResult(
             text=text,
@@ -201,6 +209,9 @@ class Mux:
             error_count=summary.get("errorCount", 0),
             duration_ms=summary.get("durationMs", 0),
             final_estimated_tokens=summary.get("finalEstimatedTokens", 0),
+            input_tokens=usage.get("inputTokens", 0),
+            output_tokens=usage.get("outputTokens", 0),
+            total_tokens=usage.get("totalTokens", 0),
             stderr="".join(stderr_chunks),
             events=events,
         )
