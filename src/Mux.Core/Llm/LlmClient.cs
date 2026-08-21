@@ -131,7 +131,23 @@ namespace Mux.Core.Llm
             if (tools == null) throw new ArgumentNullException(nameof(tools));
 
             Pp.ToolChatRequest request = BuildRequest(messages, tools);
-            Pp.ToolChatResponse response = await _Client.ToolChatAsync(request, cancellationToken).ConfigureAwait(false);
+
+            Pp.ToolChatResponse response;
+            for (int attempt = 0; ; attempt++)
+            {
+                response = await _Client.ToolChatAsync(request, cancellationToken).ConfigureAwait(false);
+
+                // Retry only transport-level failures (connection refused, reset, DNS, TLS), which
+                // PolyPrompt surfaces as an unsuccessful response with no HTTP status. An HTTP error
+                // status is a definitive answer and is left for the caller to handle.
+                if (response.Success || !IsTransportFailure(response.StatusCode) || attempt >= MaxRetries)
+                {
+                    break;
+                }
+
+                _OnRetry?.Invoke(attempt + 1, MaxRetries, string.IsNullOrEmpty(response.Error) ? "connection error" : response.Error);
+                await Task.Delay(RetryBackoff(attempt), cancellationToken).ConfigureAwait(false);
+            }
 
             if (!response.Success)
             {
@@ -161,37 +177,54 @@ namespace Mux.Core.Llm
         /// <returns>A <see cref="ModelLoadResult"/> describing success or the failure details.</returns>
         public async Task<ModelLoadResult> LoadModelAsync(CancellationToken cancellationToken)
         {
-            try
+            Pp.ToolChatRequest request = new Pp.ToolChatRequest
             {
-                Pp.ToolChatRequest request = new Pp.ToolChatRequest
+                Model = string.IsNullOrWhiteSpace(_Endpoint.Model) ? null : _Endpoint.Model,
+                MaxTokens = 1,
+                ToolChoice = "none"
+            };
+
+            // A single minimal user message keeps the request valid across providers that reject an empty
+            // messages array while still asking for essentially no generation (max 1 token).
+            request.Messages.Add(Pp.ChatMessage.User("."));
+
+            string failureDetail = "no response";
+            for (int attempt = 0; ; attempt++)
+            {
+                bool transportFailure = false;
+
+                try
                 {
-                    Model = string.IsNullOrWhiteSpace(_Endpoint.Model) ? null : _Endpoint.Model,
-                    MaxTokens = 1,
-                    ToolChoice = "none"
-                };
+                    Pp.ToolChatResponse response = await _Client.ToolChatAsync(request, cancellationToken).ConfigureAwait(false);
 
-                // A single minimal user message keeps the request valid across providers that reject an empty
-                // messages array while still asking for essentially no generation (max 1 token).
-                request.Messages.Add(Pp.ChatMessage.User("."));
+                    if (response.Success)
+                    {
+                        return ModelLoadResult.Ok();
+                    }
 
-                Pp.ToolChatResponse response = await _Client.ToolChatAsync(request, cancellationToken).ConfigureAwait(false);
+                    string status = response.StatusCode.HasValue ? $"status {response.StatusCode.Value}" : "no response";
+                    failureDetail = string.IsNullOrWhiteSpace(response.Error) ? status : $"{status}: {response.Error}";
 
-                if (response.Success)
+                    // Only transport-level failures (no HTTP status) are transient; an HTTP error status
+                    // is a definitive answer and should not be retried.
+                    transportFailure = IsTransportFailure(response.StatusCode);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    return ModelLoadResult.Ok();
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    failureDetail = ex.Message;
+                    transportFailure = true;
                 }
 
-                string status = response.StatusCode.HasValue ? $"status {response.StatusCode.Value}" : "no response";
-                string detail = string.IsNullOrWhiteSpace(response.Error) ? status : $"{status}: {response.Error}";
-                return ModelLoadResult.Fail(detail);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                return ModelLoadResult.Fail(ex.Message);
+                if (!transportFailure || attempt >= MaxRetries)
+                {
+                    return ModelLoadResult.Fail(failureDetail);
+                }
+
+                await Task.Delay(RetryBackoff(attempt), cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -283,6 +316,10 @@ namespace Mux.Core.Llm
                 {
                     break;
                 }
+
+                // Space retries apart so a transient connection failure has time to clear; immediate
+                // back-to-back attempts would all fail against the same brief condition.
+                await Task.Delay(RetryBackoff(attempt), cancellationToken).ConfigureAwait(false);
             }
 
             if (startupError != null)
@@ -465,7 +502,25 @@ namespace Mux.Core.Llm
         private static bool IsNetworkFailure(Pp.ToolChatStreamingResponse response)
         {
             // A transport-level failure carries no HTTP status; an HTTP error status (4xx/5xx) does.
-            return !response.StatusCode.HasValue || response.StatusCode.Value == 0;
+            return IsTransportFailure(response.StatusCode);
+        }
+
+        private static bool IsTransportFailure(int? statusCode)
+        {
+            // A transport-level failure (connection refused, reset, DNS, TLS) carries no HTTP status;
+            // an HTTP error status (4xx/5xx) is a definitive answer from the endpoint, not transient.
+            return !statusCode.HasValue || statusCode.Value == 0;
+        }
+
+        private static TimeSpan RetryBackoff(int attempt)
+        {
+            // Exponential backoff (100ms, 200ms, 400ms, ...) capped at 500ms. Enough to ride out a
+            // transient connection refusal or reset — a momentarily saturated loopback listener under
+            // load, or a local model still warming — without materially delaying feedback from an
+            // endpoint that is genuinely unreachable.
+            int shift = Math.Min(attempt, 3);
+            int milliseconds = Math.Min(100 * (1 << shift), 500);
+            return TimeSpan.FromMilliseconds(milliseconds);
         }
 
         private void RecordUsage(Pp.ToolChatStreamingResponse response)

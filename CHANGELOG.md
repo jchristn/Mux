@@ -54,6 +54,17 @@ All notable changes to mux are documented here.
   dialog, and the reorderable/action lists), and `Home`/`End` jump to the top and bottom of scrollable
   views. The change is additive with no API breaks; the project builds clean on net8.0 and net10.0.
 
+### Fixed
+
+- **Retry transient connection failures with backoff.** LLM requests now ride out a momentary connection
+  refusal or reset (a local model still warming, or a busy loopback listener under load) instead of failing
+  the run. Streaming turns already retried but hammered back-to-back with no delay; they now space attempts
+  with exponential backoff (100ms → 500ms, capped). The non-streaming path used by `mux probe` and the
+  interactive endpoint model-load probe previously made a single attempt with no retry — both now retry
+  transport-level failures the same way. HTTP error statuses (4xx/5xx) remain definitive and are not retried.
+  This also removes intermittent CI failures in the in-process CLI test suites, where dense back-to-back mock
+  servers occasionally triggered a transient loopback refusal.
+
 ## v0.8.0 - 2026-08-12
 
 ### Added
