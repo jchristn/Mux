@@ -17,7 +17,7 @@
   <ItemGroup>
     <!-- TUIKit (pinned, exact) drives the interactive UI. Source lives at C:\Code\TUIKit for reference
          only; always consume the published NuGet package, never a project reference. -->
-    <PackageReference Include="TUIKit" Version="0.6.0" />
+    <PackageReference Include="TUIKit" Version="0.8.1" />
   </ItemGroup>
 
   <ItemGroup>
