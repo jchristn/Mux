@@ -48,6 +48,11 @@ All notable changes to mux are documented here.
   rounded dialog. The remaining 0.6.0 components were evaluated and either deferred (larger refactors —
   `DialogModal`, `CommandRegistry`, `StreamingTranscript`) or left as-is where TUIKit has a real gap; the
   full per-component assessment is in `TUIKIT_0.6.0_ADOPTION.md`.
+- **Bumped TUIKit `0.8.1 → 0.8.2`.** The interactive selection surfaces now support page and jump
+  navigation for free: `PageUp`/`PageDown` move by a viewport height and `Home`/`End` jump to the first
+  and last row across every list-backed picker (single-select modals, the multi-select Ollama-import
+  dialog, and the reorderable/action lists), and `Home`/`End` jump to the top and bottom of scrollable
+  views. The change is additive with no API breaks; the project builds clean on net8.0 and net10.0.
 
 ## v0.8.0 - 2026-08-12
 
