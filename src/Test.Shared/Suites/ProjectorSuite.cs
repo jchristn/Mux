@@ -206,6 +206,39 @@ namespace Test.Shared.Suites
                         MuxAssert.IsFalse(text.Contains("TASKS", StringComparison.Ordinal), "no tasks row");
                     }),
 
+                    Case("HeartbeatReArmsWaitStateBetweenToolBatches", "The model-working signal fires on each heartbeat and re-arms model-responded for the next step", async (CancellationToken ct) =>
+                    {
+                        Pane pane = new Pane("t");
+                        AgentEventProjector projector = new AgentEventProjector(pane);
+                        int responded = 0;
+                        int working = 0;
+                        projector.ModelResponded += () => responded++;
+                        projector.ModelWorking += () => working++;
+
+                        // A two-step turn: text + tool call, heartbeat, then a second text + tool call,
+                        // heartbeat, then completion. Each step's first output should re-fire ModelResponded,
+                        // and each heartbeat should fire ModelWorking so the shell can resume its indicator.
+                        await projector.ProjectAsync(
+                            Script(
+                                new AgentEvent[]
+                                {
+                                    Text("first"),
+                                    Proposed("t1", "list_directory"),
+                                    CompletedTool("t1", "list_directory", true, 1),
+                                    Heartbeat(1),
+                                    Text("second"),
+                                    Proposed("t2", "list_directory"),
+                                    CompletedTool("t2", "list_directory", true, 1),
+                                    Heartbeat(2),
+                                    Completed()
+                                },
+                                ct),
+                            ct).ConfigureAwait(false);
+
+                        MuxAssert.AreEqual(2, working, "ModelWorking fired once per heartbeat");
+                        MuxAssert.AreEqual(2, responded, "ModelResponded re-armed and fired once per step");
+                    }),
+
                     Case("EmptyStreamProducesNoLines", "A stream with only run completion writes nothing", async (CancellationToken ct) =>
                     {
                         IReadOnlyList<string> lines = await ProjectAsync(ct, Completed());
@@ -274,6 +307,11 @@ namespace Test.Shared.Suites
                 Result = new ToolResult { ToolCallId = id, Success = success, Content = success ? "ok" : "err" },
                 ElapsedMs = elapsedMs
             };
+        }
+
+        private static HeartbeatEvent Heartbeat(int step)
+        {
+            return new HeartbeatEvent { StepNumber = step };
         }
 
         private static RunCompletedEvent Completed()

@@ -1527,8 +1527,10 @@ namespace Mux.Cli.App
             long[] ttft = { -1 };
             projector.FirstTokenReceived += () => ttft[0] = stopwatch.ElapsedMilliseconds;
 
-            // Dismiss the thinking indicator the instant the model produces output.
+            // Dismiss the thinking indicator the instant the model produces output, and bring it back
+            // whenever the model resumes work after a step's tool calls so a busy turn never looks stalled.
             projector.ModelResponded += StopThinking;
+            projector.ModelWorking += StartThinking;
 
             lock (_Sync)
             {
@@ -1872,6 +1874,14 @@ namespace Mux.Cli.App
 
             lock (_ThinkingSync)
             {
+                // Idempotent: a second start while one is already running (e.g. a heartbeat arriving before
+                // the prior indicator was dismissed) keeps the existing indicator rather than leaking it.
+                if (_ThinkingActive)
+                {
+                    cts.Dispose();
+                    return;
+                }
+
                 _ThinkingIndicator = indicator;
                 _ThinkingActive = true;
                 _ThinkingCts = cts;

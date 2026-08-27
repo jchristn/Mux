@@ -62,10 +62,18 @@ namespace Mux.Cli.App
         public event Action? FirstTokenReceived;
 
         /// <summary>
-        /// Raised once, when the run produces its first observable output (assistant text, a tool call,
-        /// or an error). Used by the shell to dismiss the "thinking" indicator the moment results begin.
+        /// Raised when the run produces observable output (assistant text, a tool call, or an error) after
+        /// a quiet stretch. Used by the shell to dismiss the "thinking" indicator the moment results begin.
+        /// Re-armed by <see cref="ModelWorking"/>, so it fires again once the model resumes after tool calls.
         /// </summary>
         public event Action? ModelResponded;
+
+        /// <summary>
+        /// Raised when the model goes back to work with nothing yet to show — after a step's tool calls
+        /// complete and before the next model response streams (the per-step heartbeat). Used by the shell
+        /// to bring the "thinking" indicator back so a working turn never looks stalled between tool runs.
+        /// </summary>
+        public event Action? ModelWorking;
 
         #endregion
 
@@ -163,6 +171,14 @@ namespace Mux.Cli.App
                 case TaskPlanUpdatedEvent taskPlanEvent:
                     FinalizeAssistantBlock();
                     ProjectTaskPlan(taskPlanEvent);
+                    break;
+
+                case HeartbeatEvent:
+                    // A step's tool calls are done and the model is about to be called again. Re-arm the
+                    // "responded" latch and signal the shell to resume its wait-state indicator, so the gap
+                    // between tools finishing and the next response streaming does not look stalled.
+                    _ModelResponded = false;
+                    ModelWorking?.Invoke();
                     break;
 
                 case RunCompletedEvent runCompleted:
