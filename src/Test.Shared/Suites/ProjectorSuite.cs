@@ -110,6 +110,57 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("✗", Join(lines), "failure mark");
                     }),
 
+                    Case("FailedToolShowsReasonLine", "A failed tool renders why it failed on an attached line", async (CancellationToken ct) =>
+                    {
+                        IReadOnlyList<string> lines = await ProjectAsync(
+                            ct,
+                            Proposed("t1", "isis_memory_upsert"),
+                            CompletedToolContent("t1", "isis_memory_upsert", false, "{\"error\":\"invalid_argument\",\"message\":\"scope 'AgentMemory' does not exist\"}"),
+                            Completed());
+                        string joined = Join(lines);
+                        MuxAssert.Contains("✗", joined, "failure mark");
+                        MuxAssert.Contains("invalid_argument", joined, "error code surfaced");
+                        MuxAssert.Contains("scope 'AgentMemory' does not exist", joined, "failure detail surfaced");
+                    }),
+
+                    Case("SuccessfulToolShowsNoReasonLine", "A successful tool renders no attached reason line", async (CancellationToken ct) =>
+                    {
+                        IReadOnlyList<string> lines = await ProjectAsync(
+                            ct,
+                            Proposed("t1", "read_file"),
+                            CompletedTool("t1", "read_file", true, 4),
+                            Completed());
+                        MuxAssert.IsFalse(Join(lines).Contains("↳", StringComparison.Ordinal), "no reason line on success");
+                    }),
+
+                    Case("ToolFailureReasonExtractsMuxAndMcpAndRawShapes", "The failure-reason extractor handles mux, MCP, raw, and empty payloads", async (CancellationToken ct) =>
+                    {
+                        await Task.CompletedTask.ConfigureAwait(false);
+
+                        MuxAssert.AreEqual(
+                            "permission_denied: access is denied",
+                            ToolFailureReason.Describe("{\"error\":\"permission_denied\",\"message\":\"access is denied\"}"),
+                            "mux error+message joined");
+
+                        MuxAssert.AreEqual(
+                            "not_found",
+                            ToolFailureReason.Describe("{\"error\":\"not_found\"}"),
+                            "error alone");
+
+                        MuxAssert.AreEqual(
+                            "the tenant is required",
+                            ToolFailureReason.Describe("{\"content\":[{\"type\":\"text\",\"text\":\"the tenant is required\"}],\"isError\":true}"),
+                            "MCP content text extracted");
+
+                        MuxAssert.AreEqual(
+                            "boom happened",
+                            ToolFailureReason.Describe("boom\nhappened"),
+                            "raw non-JSON collapsed to one line");
+
+                        MuxAssert.IsTrue(ToolFailureReason.Describe(null) == null, "null content yields no reason");
+                        MuxAssert.IsTrue(ToolFailureReason.Describe("   ") == null, "blank content yields no reason");
+                    }),
+
                     Case("OrphanCompletedToolWritesOwnLine", "A completed event without a prior proposal still renders", async (CancellationToken ct) =>
                     {
                         IReadOnlyList<string> lines = await ProjectAsync(ct, CompletedTool("t9", "glob", true, 1), Completed());
@@ -312,6 +363,17 @@ namespace Test.Shared.Suites
         private static HeartbeatEvent Heartbeat(int step)
         {
             return new HeartbeatEvent { StepNumber = step };
+        }
+
+        private static ToolCallCompletedEvent CompletedToolContent(string id, string name, bool success, string content)
+        {
+            return new ToolCallCompletedEvent
+            {
+                ToolCallId = id,
+                ToolName = name,
+                Result = new ToolResult { ToolCallId = id, Success = success, Content = content },
+                ElapsedMs = 1
+            };
         }
 
         private static RunCompletedEvent Completed()

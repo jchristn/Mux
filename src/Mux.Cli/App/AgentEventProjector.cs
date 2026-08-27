@@ -337,10 +337,22 @@ namespace Mux.Cli.App
                 && line.Update(styled))
             {
                 _ToolLines.Remove(completedEvent.ToolCallId);
-                return;
+            }
+            else
+            {
+                _Pane.WriteLine(styled);
             }
 
-            _Pane.WriteLine(styled);
+            if (!success)
+            {
+                // Surface why the call failed on an attached, subordinate line so the failure can be
+                // diagnosed from the transcript instead of showing only the bare "✗".
+                string? reason = ToolFailureReason.Describe(completedEvent.Result?.Content);
+                if (!string.IsNullOrEmpty(reason))
+                {
+                    _Pane.WriteLine(Text.From("    ↳ " + reason).Red().Dim());
+                }
+            }
         }
 
         private void ProjectTaskPlan(TaskPlanUpdatedEvent taskPlanEvent)
