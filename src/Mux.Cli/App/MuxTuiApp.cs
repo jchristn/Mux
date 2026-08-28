@@ -1606,6 +1606,8 @@ namespace Mux.Cli.App
                 }
             }
 
+            WriteEmptyTurnNoticeIfNeeded(projector);
+
             UpdateQueueStrip();
             RefreshSidebar();
             RefreshFooter();
@@ -1614,6 +1616,30 @@ namespace Mux.Cli.App
             if (next != null)
             {
                 RunTurn(next);
+            }
+        }
+
+        // When a turn ends with no assistant answer and no error or cancellation, the model finished
+        // without a final response — commonly an empty completion after tool calls, which the agent loop
+        // treats as "done" and stops on. Without this the transcript renders nothing after the last tool
+        // line and the shell looks frozen even though it is idle; surface the outcome instead. When the
+        // model's reasoning is hidden (THINK off), its answer may have gone only to the reasoning channel,
+        // so point at that lever.
+        private void WriteEmptyTurnNoticeIfNeeded(AgentEventProjector projector)
+        {
+            if (!string.IsNullOrEmpty(projector.CapturedAssistantText)
+                || projector.RenderedError
+                || projector.WasCancelled)
+            {
+                return;
+            }
+
+            _Conversation.WriteLine(Text.From("⚠ The model ended the turn without a final response.").Yellow());
+
+            if (string.Equals(_ThinkingLabel, "off", StringComparison.OrdinalIgnoreCase))
+            {
+                _Conversation.WriteLine(Text.From(
+                    "  It may have replied only in its reasoning, which is hidden while THINK is off for this endpoint — enable it and retry to see the model's steps.").Dim());
             }
         }
 

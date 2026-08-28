@@ -35,6 +35,8 @@ namespace Mux.Cli.App
         private readonly List<PaneLineHandle> _TaskLines = new List<PaneLineHandle>();
         private bool _FirstTokenSeen;
         private bool _ModelResponded;
+        private bool _RenderedError;
+        private bool _WasCancelled;
         private RunCompletedEvent? _LastRunCompleted;
 
         #endregion
@@ -97,6 +99,24 @@ namespace Mux.Cli.App
             get => _LastRunCompleted;
         }
 
+        /// <summary>
+        /// Whether an error event was rendered during the run. When true the failure is already visible in
+        /// the transcript, so the shell should not add a separate "no response" notice.
+        /// </summary>
+        public bool RenderedError
+        {
+            get => _RenderedError;
+        }
+
+        /// <summary>
+        /// Whether the run ended because it was cancelled. When true a cancellation notice was rendered, so
+        /// the shell should not treat the empty result as an unexplained silent turn.
+        /// </summary>
+        public bool WasCancelled
+        {
+            get => _WasCancelled;
+        }
+
         #endregion
 
         #region Public-Methods
@@ -124,6 +144,7 @@ namespace Mux.Cli.App
             }
             catch (OperationCanceledException)
             {
+                _WasCancelled = true;
                 FinalizeAssistantBlock();
                 _Pane.WriteLine(Text.From("(cancelled)").Dim());
             }
@@ -165,6 +186,7 @@ namespace Mux.Cli.App
 
                 case ErrorEvent errorEvent:
                     FinalizeAssistantBlock();
+                    _RenderedError = true;
                     _Pane.WriteLine(Text.From($"Error [{errorEvent.Code}]: {errorEvent.Message}").Red());
                     break;
 

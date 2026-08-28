@@ -9,6 +9,7 @@ namespace Test.Shared.Suites
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
+    using Mux.Core.Models;
     using Touchstone.Core;
     using TUIKit.Input;
     using TUIKit.Terminal;
@@ -365,6 +366,50 @@ namespace Test.Shared.Suites
                         }
                     }),
 
+                    // ---- Empty-turn notice ----
+                    Case("EmptyTurnAfterToolsShowsNoResponseNotice", "A turn that ends after tool calls with no answer surfaces a no-response notice", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EmptyAfterToolRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            Feed(backend, app, "inspect and act" + "\r");
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+
+                            string transcript = Join(app.TranscriptSnapshot());
+                            MuxAssert.Contains("without a final response", transcript, "no-response notice shown");
+                            MuxAssert.Contains("list_directory", transcript, "the tool that did run is still shown");
+                        }
+                    }),
+
+                    Case("NormalTurnShowsNoEmptyNotice", "A turn that produces an answer shows no no-response notice", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            Feed(backend, app, "hello" + "\r");
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+
+                            MuxAssert.IsFalse(Join(app.TranscriptSnapshot()).Contains("without a final response", StringComparison.Ordinal), "no notice when the model answered");
+                        }
+                    }),
+
+                    Case("ErrorTurnShowsNoEmptyNotice", "A turn that fails with an error shows the error, not the no-response notice", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(ErrorRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            Feed(backend, app, "do it" + "\r");
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+
+                            string transcript = Join(app.TranscriptSnapshot());
+                            MuxAssert.Contains("kaboom", transcript, "the error is shown");
+                            MuxAssert.IsFalse(transcript.Contains("without a final response", StringComparison.Ordinal), "no no-response notice when an error was shown");
+                        }
+                    }),
+
                     // ---- Slash routing ----
                     Case("SlashInputRoutesToHandler", "A leading slash routes to the slash handler, not a job", async (CancellationToken ct) =>
                     {
@@ -464,6 +509,29 @@ namespace Test.Shared.Suites
         {
             await Task.CompletedTask.ConfigureAwait(false);
             yield return new AssistantTextEvent { Text = "Echo: " + prompt };
+            yield return CompletedEvent();
+        }
+
+        // A run that proposes and completes a tool call but never emits assistant text, then completes —
+        // the empty-completion-after-tools case where the model stops mid-task without a final answer.
+        private static async IAsyncEnumerable<AgentEvent> EmptyAfterToolRunner(Job job, string prompt, [EnumeratorCancellation] CancellationToken ct)
+        {
+            await Task.CompletedTask.ConfigureAwait(false);
+            yield return new ToolCallProposedEvent { ToolCall = new ToolCall { Id = "t1", Name = "list_directory", Arguments = "{}" } };
+            yield return new ToolCallCompletedEvent
+            {
+                ToolCallId = "t1",
+                ToolName = "list_directory",
+                Result = new ToolResult { ToolCallId = "t1", Success = true, Content = "ok" },
+                ElapsedMs = 1
+            };
+            yield return CompletedEvent();
+        }
+
+        private static async IAsyncEnumerable<AgentEvent> ErrorRunner(Job job, string prompt, [EnumeratorCancellation] CancellationToken ct)
+        {
+            await Task.CompletedTask.ConfigureAwait(false);
+            yield return new ErrorEvent { Code = "boom", Message = "kaboom" };
             yield return CompletedEvent();
         }
 
