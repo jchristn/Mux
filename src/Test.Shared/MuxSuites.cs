@@ -106,6 +106,9 @@ namespace Test.Shared
                     // Mux.Cli command surfaces: slash / keybinding / menu (M10).
                     CommandSurfacesSuite.Create(),
 
+                    // Mux.Cli global settings editor: /settings modal + persist/apply round trip.
+                    SettingsSuite.Create(),
+
                     // Mux.Cli modals: approval + jobs (M11).
                     ModalsSuite.Create(),
 

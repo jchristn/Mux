@@ -450,7 +450,15 @@ CONFIG:
                     sessionStore,
                     runtime.Endpoint.Name,
                     runtime.Endpoint.Model,
-                    onEndpointSelected: (EndpointConfig endpoint) => template.Endpoint = endpoint,
+                    onEndpointSelected: (EndpointConfig endpoint) =>
+                    {
+                        template.Endpoint = endpoint;
+
+                        // Re-resolve the iteration cap for the newly selected endpoint so a per-model
+                        // override (or its absence, falling back to the global default) takes effect on the
+                        // next turn rather than staying pinned to whatever the startup endpoint resolved to.
+                        template.MaxIterations = template.MuxSettings.GetEffectiveMaxAgentIterations(endpoint);
+                    },
                     onValidateModel: (EndpointConfig endpoint, CancellationToken ct) =>
                         LlmClient.LoadModelAsync(endpoint, runtime.MuxSettings.IgnoreCertErrors, ct),
                     onPromptProfileSelected: (PromptProfile profile) =>
@@ -468,6 +476,23 @@ CONFIG:
                         }
 
                         ApplyTemplate();
+                    },
+                    onSettingsChanged: (MuxSettings changed) =>
+                    {
+                        // Apply the values the agent loop reads per turn from the template. The template is
+                        // read per job run, so these take effect on the next submitted turn. Fields not on
+                        // the template (concurrency, tool/process timeouts baked into tool instances, skills
+                        // and task-planning wiring) are persisted and apply on next launch.
+                        template.MuxSettings = changed;
+                        template.MaxIterations = changed.GetEffectiveMaxAgentIterations(template.Endpoint);
+                        template.MaxTokenBudget = changed.MaxTokenBudget;
+                        template.TokenEstimationRatio = changed.TokenEstimationRatio;
+                        template.ContextWindowSafetyMarginPercent = changed.ContextWindowSafetyMarginPercent;
+                        template.AutoCompactEnabled = changed.AutoCompactEnabled;
+                        template.ContextWarningThresholdPercent = changed.ContextWarningThresholdPercent;
+                        template.CompactionStrategy = changed.CompactionStrategy;
+                        template.CompactionPreserveTurns = changed.CompactionPreserveTurns;
+                        template.IgnoreCertErrors = changed.IgnoreCertErrors;
                     },
                     showSplash: string.IsNullOrWhiteSpace(settings.Prompt),
                     showBoundaries: runtime.MuxSettings.ShowBoundaryLines,

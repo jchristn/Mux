@@ -6,6 +6,17 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **`/settings` global settings editor.** A new interactive command (aliases `/config`, `/preferences`,
+  `/prefs`; also in the `F1` menu) opens a scrolling form over `settings.json` covering every scalar/boolean
+  setting: the agent-loop run limits (**max agent iterations** — the 1–100 cap on model turns per run — and
+  the optional **max token budget**), max concurrency, the default approval and enqueue behaviors, tool and
+  process timeouts, the context and compaction tuning, the skills and task-planning toggles, and the
+  cert-error and boundary-line flags. Saving persists to `settings.json` and applies the run-affecting values
+  (iteration cap, token budget, compaction, context tuning, cert errors) to the next turn; concurrency and
+  startup-only wiring apply on the next launch. The editor sets the **global** defaults — a per-model
+  iteration override still lives in the endpoint Add/Edit form and wins for that endpoint. Switching
+  endpoints now also re-resolves the effective iteration cap so a per-model override takes effect on the next
+  turn instead of staying pinned to the startup endpoint's value.
 - **Headless output modes, token usage, and a stats toggle for `mux print`.** The four output shapes are now
   first-class and fully documented: **streamed text** (`--output-format text`, default), **buffered text**
   (`--output-format text --buffer`, alias `--no-stream`), **streamed JSONL** (`--output-format jsonl`), and

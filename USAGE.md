@@ -129,8 +129,9 @@ while a turn is in flight queues it to run when the current turn finishes.
 
 Type a leading `/` in the composer to run a command instead of submitting a prompt. Every command is
 also reachable by key and the menu (one catalog, three surfaces):
-`/endpoint` (`/model`), `/effort` (`/reasoning`), `/help` (`/?`), `/clear`, `/sidebar`, `/save`,
-`/sessions`, `/tasks`, `/theme`, `/mouse`, `/menu`, `/quit` (`/exit`).
+`/endpoint` (`/model`), `/effort` (`/reasoning`), `/settings` (`/config`, `/preferences`, `/prefs`),
+`/help` (`/?`), `/clear`, `/sidebar`, `/save`, `/sessions`, `/tasks`, `/theme`, `/mouse`, `/menu`,
+`/quit` (`/exit`).
 
 `/theme` opens a theme selector (pick a theme and apply it); the whole UI — including the panes behind
 the text — conforms to the chosen theme.
@@ -150,6 +151,16 @@ to the next turn; the sidebar's `THINK` line shows `on`/`off`, and the endpoint 
 kept separate from the answer and never fed back to the model. Headless runs surface it with
 `--show-thinking`: as `assistant_thinking` events in `jsonl`, or on stderr in `text` mode so stdout stays
 the answer.
+
+`/settings` (`/config`, `/preferences`, `/prefs`) opens a global settings editor over `settings.json`.
+It covers the agent-loop run limits — **max agent iterations** (the 1–100 cap on model turns per run; each
+iteration may issue several tool calls) and an optional **max token budget** — plus max concurrency, the
+default approval and enqueue behaviors, tool/process timeouts, the context and compaction tuning, the
+skills and task-planning toggles, and the cert-error and boundary-line flags. Save (Enter) persists to
+`settings.json`; the run-affecting values (iteration cap, token budget, compaction, context tuning, cert
+errors) apply on the next turn, while concurrency and startup-only wiring apply on the next launch. This
+editor sets the **global** defaults — a per-model iteration override lives in the endpoint Add/Edit form
+(the **Max agent iterations (blank = global)** field) and wins over the global value for that endpoint.
 
 `/help` (`/?`) opens the keybinding/command reference in a modal; `F1` opens the command menu (the same
 catalog as a pick-and-run list). On startup mux shows a splash box — pass `--prompt "<text>"` (or a bare

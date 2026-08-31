@@ -65,6 +65,7 @@ namespace Mux.Cli.App
         private readonly Action<EndpointConfig>? _OnEndpointSelected;
         private readonly Func<EndpointConfig, CancellationToken, Task<ModelLoadResult>>? _OnValidateModel;
         private readonly Action<PromptProfile>? _OnPromptProfileSelected;
+        private readonly Action<MuxSettings>? _OnSettingsChanged;
         private readonly McpRuntime? _McpRuntime;
         private readonly SkillRuntime? _SkillRuntime;
         private string _EndpointName;
@@ -139,6 +140,7 @@ namespace Mux.Cli.App
         /// <param name="onEndpointSelected">Optional callback invoked when the user switches endpoints, so the caller can apply it to future runs. Null disables live switching.</param>
         /// <param name="onValidateModel">Optional callback invoked (in the background) after an endpoint switch to load/validate the newly selected model. Returns the load outcome so the shell can surface a notice. Null disables the model-load probe.</param>
         /// <param name="onPromptProfileSelected">Optional callback invoked when the user applies a prompt profile, so the caller can substitute placeholders and apply it to future runs. Null disables live prompt switching.</param>
+        /// <param name="onSettingsChanged">Optional callback invoked when the user saves global settings, so the caller can apply the run-affecting values (iteration cap, token budget, compaction, context tuning) to future runs. Null disables live settings application; the change is still persisted.</param>
         /// <param name="showSplash">When true, opens the startup splash modal.</param>
         /// <param name="showBoundaries">When true, the shell starts with the dark-grey boundary lines drawn (toggle with <c>/borders</c>).</param>
         /// <param name="mcpRuntime">Optional MCP runtime used to show per-server connectivity in the MCP manager and to trigger a reconnect after edits. Null disables live MCP status.</param>
@@ -156,6 +158,7 @@ namespace Mux.Cli.App
             Action<EndpointConfig>? onEndpointSelected = null,
             Func<EndpointConfig, CancellationToken, Task<ModelLoadResult>>? onValidateModel = null,
             Action<PromptProfile>? onPromptProfileSelected = null,
+            Action<MuxSettings>? onSettingsChanged = null,
             bool showSplash = false,
             bool showBoundaries = false,
             McpRuntime? mcpRuntime = null,
@@ -169,6 +172,7 @@ namespace Mux.Cli.App
             _OnEndpointSelected = onEndpointSelected;
             _OnValidateModel = onValidateModel;
             _OnPromptProfileSelected = onPromptProfileSelected;
+            _OnSettingsChanged = onSettingsChanged;
             _McpRuntime = mcpRuntime;
             _SkillRuntime = skillRuntime;
             _InitialPrompt = string.IsNullOrWhiteSpace(initialPrompt) ? null : initialPrompt;
@@ -221,6 +225,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.tasks", "Tasks", null, OpenTasksModal, "View", new[] { "tasks", "task", "plan", "todo" }));
             _Catalog.Add(new CommandDescriptor("mux.effort", "Reasoning effort", null, OpenEffortSelector, "Model", new[] { "effort", "reasoning", "reasoning-effort" }));
+            _Catalog.Add(new CommandDescriptor("mux.settings", "Settings", null, OpenSettingsModal, "Model", new[] { "settings", "config", "preferences", "prefs" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
             _Catalog.Add(new CommandDescriptor("mux.borders", "Toggle boundary lines", null, ToggleBoundaries, "View", new[] { "borders", "boundaries", "boundary", "lines" }));
@@ -581,6 +586,67 @@ namespace Mux.Cli.App
             }
 
             WriteNotice($"Reasoning effort set to {EffortDisplayName(level)}");
+            RefreshSidebar();
+        }
+
+        /// <summary>
+        /// Opens the global settings editor. The current <see cref="MuxSettings"/> are loaded fresh from
+        /// disk, edited in the modal, then persisted to <c>settings.json</c> and applied to the running
+        /// session (via the settings-changed callback) so the run-affecting values take effect on the next
+        /// turn. Per-model overrides continue to live in the endpoint editor, not here.
+        /// </summary>
+        public void OpenSettingsModal()
+        {
+            MuxSettings settings;
+            try
+            {
+                settings = SettingsLoader.LoadSettings();
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Unable to load settings: " + ex.Message);
+                return;
+            }
+
+            SettingsFormModal modal = new SettingsFormModal("Settings", settings);
+            _App.Modals.Push(modal);
+            _ = ResolveSettingsModalAsync(modal);
+        }
+
+        private async Task ResolveSettingsModalAsync(SettingsFormModal modal)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            if (result is not MuxSettings updated)
+            {
+                return;
+            }
+
+            try
+            {
+                SettingsLoader.SaveSettings(updated);
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Save failed: " + ex.Message);
+                return;
+            }
+
+            // Apply the run-affecting values to the live template so the next turn uses them.
+            _OnSettingsChanged?.Invoke(updated);
+
+            // Reflect the boundary-line choice immediately: it drives the layout, which is owned here rather
+            // than by the agent-loop template. This mirrors ToggleBoundaries so /settings and /borders agree.
+            lock (_Sync)
+            {
+                if (_ShowBoundaries != updated.ShowBoundaryLines)
+                {
+                    _ShowBoundaries = updated.ShowBoundaryLines;
+                    RebuildLayoutNoLock();
+                }
+            }
+
+            WriteNotice("Settings saved. Some changes apply on the next turn; concurrency and startup-only options apply on next launch.");
+            RefreshFooter();
             RefreshSidebar();
         }
 

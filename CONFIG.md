@@ -189,7 +189,12 @@ Notes:
 
 ## `settings.json`
 
-Global mux settings.
+Global mux settings. Edit them in the interactive shell with the **`/settings`** command (aliases
+`/config`, `/preferences`, `/prefs`; also in the `F1` menu): a scrolling form covers every scalar/boolean
+field below. Saving persists here; the run-affecting values (iteration cap, token budget, compaction,
+context tuning, cert errors) apply on the next turn, while concurrency and startup-only wiring apply on the
+next launch. Per-model overrides (such as an endpoint's own `maxAgentIterations`) stay in the endpoint
+Add/Edit form and win over the global value for that endpoint.
 
 Example:
 
