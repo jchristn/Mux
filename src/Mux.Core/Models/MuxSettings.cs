@@ -32,6 +32,7 @@ namespace Mux.Core.Models
         private bool _TaskPlanningEnabled = true;
         private bool _TaskParallelismEnabled = false;
         private ExternalSearchSettings _ExternalSearch = new ExternalSearchSettings();
+        private RestServerSettings _Rest = new RestServerSettings();
 
         #endregion
 
@@ -304,6 +305,17 @@ namespace Mux.Core.Models
         {
             get => _ExternalSearch;
             set => _ExternalSearch = value ?? new ExternalSearchSettings();
+        }
+
+        /// <summary>
+        /// Configuration for the optional local REST server and system-tray agent. Opt-in; never started by a
+        /// plain interactive or headless run.
+        /// </summary>
+        [JsonPropertyName("rest")]
+        public RestServerSettings Rest
+        {
+            get => _Rest;
+            set => _Rest = value ?? new RestServerSettings();
         }
 
         #endregion

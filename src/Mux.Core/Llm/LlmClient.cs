@@ -11,7 +11,9 @@ namespace Mux.Core.Llm
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Settings;
     using Mux.Core.Utility;
+    using PolyPrompt.Auth;
     using PolyPrompt.Clients;
     using SyslogLogging;
     using Pp = PolyPrompt.Models;
@@ -694,6 +696,11 @@ namespace Mux.Core.Llm
         private static CompletionClientBase CreateClient(EndpointConfig endpoint, HttpClient httpClient)
         {
             CompletionClientBase client;
+
+            // API keys and cloud coordinates may be stored as ${VAR} references; resolve them the same way
+            // header values are resolved so the client receives literal secrets.
+            string? apiKey = ResolveConfigValue(endpoint.ApiKey);
+
             switch (endpoint.AdapterType)
             {
                 case AdapterTypeEnum.Ollama:
@@ -704,10 +711,76 @@ namespace Mux.Core.Llm
                     // here the way OpenAiClient tolerates a base URL that already ends in /v1.
                     client = new OllamaClient(NormalizeOllamaBaseUrl(endpoint.BaseUrl), apiKey: null, logging: SilentLogging, httpClient: httpClient);
                     break;
+                case AdapterTypeEnum.Anthropic:
+                    // Anthropic authenticates with an API key sent as x-api-key; PolyPrompt's client attaches
+                    // it to the injected transport. A blank base URL falls back to the public API root.
+                    client = new AnthropicClient(
+                        DefaultIfBlank(endpoint.BaseUrl, "https://api.anthropic.com"),
+                        apiKey,
+                        SilentLogging,
+                        httpClient);
+                    break;
+                case AdapterTypeEnum.Gemini:
+                    // Gemini (AI Studio) carries the API key in the request URL, so it must be passed to the
+                    // client rather than supplied as a header.
+                    client = new GeminiClient(
+                        DefaultIfBlank(endpoint.BaseUrl, "https://generativelanguage.googleapis.com"),
+                        apiKey,
+                        SilentLogging,
+                        httpClient);
+                    break;
+                case AdapterTypeEnum.AzureOpenAi:
+                    // Azure routes by resource endpoint + deployment (the model), keyed by an api-key header.
+                    if (string.IsNullOrWhiteSpace(endpoint.BaseUrl))
+                        throw new InvalidOperationException($"Endpoint '{endpoint.Name}' (azure-openai) requires a baseUrl set to the Azure resource endpoint, e.g. https://my-resource.openai.azure.com.");
+                    if (string.IsNullOrWhiteSpace(endpoint.Model))
+                        throw new InvalidOperationException($"Endpoint '{endpoint.Name}' (azure-openai) requires a model set to the Azure deployment name.");
+                    client = new AzureOpenAiClient(
+                        endpoint.BaseUrl,
+                        endpoint.Model,
+                        apiKey ?? string.Empty,
+                        string.IsNullOrWhiteSpace(endpoint.ApiVersion) ? null : ResolveConfigValue(endpoint.ApiVersion),
+                        SilentLogging,
+                        httpClient);
+                    break;
+                case AdapterTypeEnum.Vertex:
+                {
+                    // Vertex needs an explicit project and region; credentials come from Application Default
+                    // Credentials (GOOGLE_APPLICATION_CREDENTIALS or the metadata server), not from config.
+                    string project = ResolveConfigValue(endpoint.Project) ?? string.Empty;
+                    string region = ResolveConfigValue(endpoint.Region) ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(project) || string.IsNullOrWhiteSpace(region))
+                        throw new InvalidOperationException($"Endpoint '{endpoint.Name}' (vertex) requires both 'project' and 'region'. Credentials come from Application Default Credentials (set GOOGLE_APPLICATION_CREDENTIALS).");
+                    client = new VertexAiClient(
+                        project,
+                        region,
+                        new AdcCredential(),
+                        DefaultIfBlankOrNull(endpoint.BaseUrl),
+                        SilentLogging,
+                        httpClient);
+                    break;
+                }
+                case AdapterTypeEnum.Bedrock:
+                {
+                    // Bedrock needs a region; AWS credentials are resolved from the standard AWS_* environment
+                    // variables and SigV4-signed per request by PolyPrompt.
+                    string region = ResolveConfigValue(endpoint.Region) ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(region))
+                        throw new InvalidOperationException($"Endpoint '{endpoint.Name}' (bedrock) requires a 'region'. Credentials come from the AWS environment (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN).");
+                    client = new BedrockClient(
+                        new EnvironmentAwsCredential(region),
+                        region,
+                        SilentLogging,
+                        httpClient,
+                        DefaultIfBlankOrNull(endpoint.BaseUrl));
+                    break;
+                }
                 case AdapterTypeEnum.OpenAi:
                 case AdapterTypeEnum.Vllm:
                 case AdapterTypeEnum.OpenAiCompatible:
                 default:
+                    // The OpenAI family authenticates via Headers (e.g. Authorization: Bearer ${KEY}), which
+                    // mux applies to the injected transport, so no api key is passed to the client.
                     client = new OpenAiClient(endpoint.BaseUrl, apiKey: null, logging: SilentLogging, httpClient: httpClient);
                     break;
             }
@@ -719,6 +792,26 @@ namespace Mux.Core.Llm
 
             client.TimeoutMs = endpoint.TimeoutMs > 0 ? endpoint.TimeoutMs : 120000;
             return client;
+        }
+
+        private static string? ResolveConfigValue(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            return SettingsLoader.ExpandEnvironmentVariables(value);
+        }
+
+        private static string DefaultIfBlank(string? value, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(value) ? fallback : value!;
+        }
+
+        private static string? DefaultIfBlankOrNull(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? null : value;
         }
 
         private static string NormalizeOllamaBaseUrl(string? baseUrl)

@@ -27,6 +27,10 @@ namespace Mux.Core.Models
         private BackendQuirks? _Quirks = null;
         private ReasoningEffortConfig? _ReasoningEffort = null;
         private bool _ShowThinking = false;
+        private string? _ApiKey = null;
+        private string? _Region = null;
+        private string? _Project = null;
+        private string? _ApiVersion = null;
 
         #endregion
 
@@ -204,6 +208,57 @@ namespace Mux.Core.Models
         {
             get => _ShowThinking;
             set => _ShowThinking = value;
+        }
+
+        /// <summary>
+        /// Optional API key for adapters that authenticate with a key passed to the client rather than a raw
+        /// header: <c>anthropic</c> (<c>x-api-key</c>), <c>gemini</c> (URL key), and <c>azure-openai</c>
+        /// (<c>api-key</c> header). Accepts a literal value or a <c>${VAR}</c> environment reference. The
+        /// OpenAI-family adapters continue to authenticate via <see cref="Headers"/>. Ignored by adapters that
+        /// resolve credentials from the environment (<c>vertex</c>, <c>bedrock</c>).
+        /// </summary>
+        [JsonPropertyName("apiKey")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ApiKey
+        {
+            get => _ApiKey;
+            set => _ApiKey = value;
+        }
+
+        /// <summary>
+        /// Cloud region for adapters that require one: <c>vertex</c> (e.g. <c>us-central1</c>) and
+        /// <c>bedrock</c> (e.g. <c>us-east-1</c>). Accepts a literal value or a <c>${VAR}</c> reference.
+        /// </summary>
+        [JsonPropertyName("region")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Region
+        {
+            get => _Region;
+            set => _Region = value;
+        }
+
+        /// <summary>
+        /// Google Cloud project id, required by the <c>vertex</c> adapter. Accepts a literal value or a
+        /// <c>${VAR}</c> reference.
+        /// </summary>
+        [JsonPropertyName("project")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Project
+        {
+            get => _Project;
+            set => _Project = value;
+        }
+
+        /// <summary>
+        /// Optional Azure OpenAI <c>api-version</c> for the <c>azure-openai</c> adapter. When null, PolyPrompt's
+        /// default API version is used.
+        /// </summary>
+        [JsonPropertyName("apiVersion")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ApiVersion
+        {
+            get => _ApiVersion;
+            set => _ApiVersion = value;
         }
 
         #endregion

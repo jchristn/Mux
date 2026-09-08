@@ -57,7 +57,8 @@ namespace Mux.Cli
                 || a == "-p"
                 || a == "print"
                 || a == "probe"
-                || a == "endpoint");
+                || a == "endpoint"
+                || a == "serve");
 
             if (!isNonInteractiveCommand && !Console.IsOutputRedirected)
             {
@@ -252,6 +253,15 @@ CONFIG:
                     SkillSettings settings = CliArgumentParser.ParseSkill(commandArgs);
                     return RunWrapped(() => new Mux.Cli.Commands.SkillCommand()
                         .ExecuteAsync(new CommandContext("skill", args), settings, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult());
+                }
+
+                if (args.Length > 0 && string.Equals(args[0], "serve", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] commandArgs = args.Skip(1).ToArray();
+                    return RunWrapped(() => new Mux.Cli.Commands.ServeCommand()
+                        .RunAsync(commandArgs, CancellationToken.None)
                         .GetAwaiter()
                         .GetResult());
                 }

@@ -14,6 +14,7 @@
     <ProjectReference Include="..\Mux.Core\Mux.Core.csproj" />
     <ProjectReference Include="..\Mux.Cli\Mux.Cli.csproj" />
     <ProjectReference Include="..\Mux.Search\Mux.Search.csproj" />
+    <ProjectReference Include="..\Mux.Server\Mux.Server.csproj" />
   </ItemGroup>
 
 </Project>

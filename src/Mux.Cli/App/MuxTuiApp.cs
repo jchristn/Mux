@@ -492,6 +492,12 @@ namespace Mux.Cli.App
                 Task monitor = MonitorResponsiveAsync(loopCts.Token);
                 try
                 {
+                    // Warm the starting endpoint's model on launch — the same load/validate step an endpoint
+                    // switch performs — so lazily loading backends (Ollama) are pulled into memory and hosted
+                    // credentials/URLs are validated before the first turn. Runs in the background and surfaces
+                    // its outcome as a notice, exactly like a switch.
+                    WarmInitialModel();
+
                     // Submit the startup prompt (if any) before entering the loop. Runs on this thread, so it
                     // is ordered ahead of any input; the echo and thinking indicator buffer into the panes and
                     // flush on the first rendered frame, exactly as a typed prompt would.
@@ -2470,6 +2476,22 @@ namespace Mux.Cli.App
             RefreshSidebar();
 
             ValidateSwitchedModel(endpoint);
+        }
+
+        // Warm the active endpoint's model once at startup, mirroring what an endpoint switch does. Resolves
+        // the active endpoint from config by name and defers to the shared validate/warm path.
+        private void WarmInitialModel()
+        {
+            if (_OnValidateModel == null)
+            {
+                return;
+            }
+
+            EndpointConfig? active = LoadActiveEndpoint();
+            if (active != null)
+            {
+                ValidateSwitchedModel(active);
+            }
         }
 
         // After an endpoint switch, load/validate the newly selected model in the background — for lazily

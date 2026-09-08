@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <Version>0.9.0</Version>
+    <Description>Optional local REST + WebSocket server (Watson 7) exposing mux over loopback</Description>
+    <PackageId>Mux.Server</PackageId>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Watson" Version="7.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\assets\icon-black.png" LogicalName="Mux.Server.logo-black.png" />
+    <EmbeddedResource Include="..\..\assets\icon-white.png" LogicalName="Mux.Server.logo-white.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mux.Core\Mux.Core.csproj" />
+  </ItemGroup>
+
+</Project>

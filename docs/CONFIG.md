@@ -90,9 +90,9 @@ Fields:
 | Field | Type | Notes |
 |---|---|---|
 | `name` | string | unique endpoint name |
-| `adapterType` | string | `ollama`, `openai`, `vllm`, or `openai-compatible` |
-| `baseUrl` | string | API root URL. For `openai`/`openai-compatible`/`vllm`, mux appends `/v1/chat/completions` (a base already ending in `/v1` is fine). For `ollama`, mux uses Ollama's native API root, usually `http://localhost:11434` — a trailing `/v1` is stripped for this adapter |
-| `model` | string | model identifier sent to the backend |
+| `adapterType` | string | `ollama`, `openai`, `vllm`, `openai-compatible`, `anthropic`, `gemini`, `azure-openai`, `vertex`, or `bedrock` |
+| `baseUrl` | string | API root URL. For `openai`/`openai-compatible`/`vllm`, mux appends `/v1/chat/completions` (a base already ending in `/v1` is fine). For `ollama`, mux uses Ollama's native API root, usually `http://localhost:11434` — a trailing `/v1` is stripped for this adapter. For `anthropic`/`gemini`, optional — blank uses the provider's public API root. For `azure-openai`, **required** — the Azure resource endpoint (e.g. `https://my-resource.openai.azure.com`). For `vertex`/`bedrock`, optional — blank derives the regional host from `region` |
+| `model` | string | model identifier sent to the backend. For `azure-openai`, this is the **deployment name** |
 | `isDefault` | bool | preferred default endpoint |
 | `maxTokens` | int | max output tokens |
 | `temperature` | number | sampling temperature |
@@ -104,6 +104,10 @@ Fields:
 | `quirks` | object or null | backend behavior flags |
 | `reasoningEffort` | object or null | optional reasoning effort. Omit (or `null`) to send no reasoning field. A `level` (`minimal`, `low`, `medium`, `high`) drives provider defaults; optional `openAiValue`, `geminiThinkingBudget` (`-1`..`32768`), and `ollamaThink` (`low`/`medium`/`high`/`true`/`false`) override individual per-provider values |
 | `showThinking` | bool | whether the model's reasoning ("thinking") is captured and displayed when this endpoint is active. Defaults to false; toggle live with `/thinking` or override a headless run with `--show-thinking` |
+| `apiKey` | string or null | API key for adapters that pass a key to the client rather than a raw header: `anthropic` (`x-api-key`), `gemini` (URL key), and `azure-openai` (`api-key` header). Literal value or a `${VAR}` reference. Ignored by the OpenAI family (use `headers`) and by `vertex`/`bedrock` (environment credentials) |
+| `region` | string or null | cloud region for `vertex` (e.g. `us-central1`) and `bedrock` (e.g. `us-east-1`). Literal or `${VAR}` |
+| `project` | string or null | Google Cloud project id, required by `vertex`. Literal or `${VAR}` |
+| `apiVersion` | string or null | optional Azure OpenAI `api-version` for `azure-openai`; `null` uses PolyPrompt's default |
 
 Header values support environment expansion:
 
@@ -114,6 +118,28 @@ Header values support environment expansion:
   }
 }
 ```
+
+### Frontier and cloud provider adapters
+
+mux reaches these through PolyPrompt's native clients (PolyPrompt 2.5.0+):
+
+```json
+{
+  "endpoints": [
+    { "name": "claude", "adapterType": "anthropic", "model": "claude-opus-4-8", "apiKey": "${ANTHROPIC_API_KEY}" },
+    { "name": "gemini", "adapterType": "gemini", "model": "gemini-2.5-pro", "apiKey": "${GEMINI_API_KEY}" },
+    { "name": "azure", "adapterType": "azure-openai", "baseUrl": "https://my-resource.openai.azure.com",
+      "model": "my-gpt4o-deployment", "apiKey": "${AZURE_OPENAI_API_KEY}", "apiVersion": "2024-10-21" },
+    { "name": "vertex", "adapterType": "vertex", "model": "gemini-2.5-pro", "project": "my-gcp-project", "region": "us-central1" },
+    { "name": "bedrock", "adapterType": "bedrock", "model": "anthropic.claude-3-5-sonnet-20241022-v2:0", "region": "us-east-1" }
+  ]
+}
+```
+
+Credential notes:
+- `anthropic` / `gemini` / `azure-openai` — set `apiKey` (literal or `${VAR}`).
+- `vertex` — credentials come from **Application Default Credentials**; set `GOOGLE_APPLICATION_CREDENTIALS` (a service-account key file) or run on GCP with a metadata server. `project` and `region` are required.
+- `bedrock` — credentials come from the **AWS environment** (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`), SigV4-signed per request. `region` is required.
 
 Interactive endpoint management:
 - `/endpoint`, `/endpoint list`, `/endpoint ls`, `/model`, `/model list`, or `/model ls` show saved endpoints and highlight the current session endpoint
@@ -400,3 +426,33 @@ Common CLI overrides:
 - `--working-directory`
 
 These override config values after endpoint selection.
+
+## REST server & tray agent (`settings.json` `rest`)
+
+mux v0.9.0 adds an opt-in local REST + WebSocket server and a system-tray agent. Configure them under the
+`rest` block:
+
+```json
+{
+  "rest": {
+    "enabled": false,
+    "hostname": "127.0.0.1",
+    "port": 8710,
+    "ssl": false,
+    "apiKey": null,
+    "corsAllowOrigin": "*"
+  }
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `enabled` | bool | Whether the tray agent auto-starts the server. `mux serve` starts it regardless. Default false. |
+| `hostname` | string | Bind host. Default `127.0.0.1` (loopback). |
+| `port` | int | Bind port, clamped 1-65535. Default 8710. |
+| `ssl` | bool | Bind with SSL. Default false. |
+| `apiKey` | string or null | Local API key; auto-generated on first `mux serve` when blank. Literal or `${VAR}`. |
+| `corsAllowOrigin` | string | `Access-Control-Allow-Origin` value. Default `*`. |
+
+Environment overrides: `MUX_REST_HOST`, `MUX_REST_PORT`, `MUX_REST_APIKEY`. The server is **opt-in** and never
+starts from a plain `mux`/`mux print` run. Full reference: [REST_API.md](REST_API.md).

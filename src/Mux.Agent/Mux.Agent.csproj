@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <Version>0.9.0</Version>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!--
+      No XAML is authored (the Avalonia app is entirely code), so disable the Avalonia XAML compilation
+      task; it otherwise races on the intermediate assembly when net8.0 and net10.0 build in parallel. The
+      tray icon is embedded as a plain resource and loaded from a manifest stream instead.
+    -->
+    <EnableAvaloniaXamlCompilation>false</EnableAvaloniaXamlCompilation>
+    <Description>mux tray agent: cross-platform system-tray host for the optional local REST server.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\assets\icon-black.png" LogicalName="Mux.Agent.logo-black.png" />
+    <EmbeddedResource Include="..\..\assets\icon-white.png" LogicalName="Mux.Agent.logo-white.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mux.Core\Mux.Core.csproj" />
+    <ProjectReference Include="..\Mux.Server\Mux.Server.csproj" />
+  </ItemGroup>
+
+</Project>

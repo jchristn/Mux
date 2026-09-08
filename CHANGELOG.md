@@ -2,10 +2,43 @@
 
 All notable changes to mux are documented here.
 
-## Unreleased
+## v0.9.0 (2026-09-07)
 
 ### Added
 
+- **Local REST server & system-tray agent (opt-in).** A new `mux serve` command starts a loopback-bound
+  (`127.0.0.1`), token-guarded REST + WebSocket server (Watson 7) over mux's existing in-process services —
+  it never auto-starts from a plain `mux`/`mux print` run. Routes: `GET /v1.0/api/health` (anonymous),
+  `GET /v1.0/api/endpoints` and `GET /v1.0/api/sessions` (API-key gated, secrets never surfaced), plus a
+  `GET /v1.0/ws` WebSocket that announces connection with the JSONL-style event envelope. Auth is a single
+  local API key sent as `Authorization: Bearer <key>` or `X-Api-Key`, auto-generated and persisted on first
+  serve (or disabled with `--no-auth`). A new cross-platform (Windows/macOS/Linux) **Avalonia system-tray
+  agent** (`Mux.Agent`) hosts the server in the background and offers **About**, **Launch Mux**, and **Exit**;
+  a single-instance lock prevents duplicate agents. New `rest` settings block in `settings.json`
+  (`enabled`/`hostname`/`port` [default 8710]/`ssl`/`apiKey`/`corsAllowOrigin`) with `MUX_REST_HOST`,
+  `MUX_REST_PORT`, and `MUX_REST_APIKEY` overrides and `--host`/`--port`/`--api-key`/`--no-auth` flags. New
+  projects `Mux.Server` and `Mux.Agent`; see `docs/REST_API.md` and `MUX_COMPARISON.md`. OpenAPI document
+  generation and run-driving routes are documented follow-ups.
+- **Web dashboard at `/dashboard`.** The REST server now serves a self-contained single-page dashboard
+  (inlined CSS/JS/logos, no external assets) with three surfaces: a **Wilson-style chat** over any configured
+  endpoint (endpoint picker, user/assistant bubbles, markdown + code blocks, new-chat), a **form-based
+  Settings editor** over `settings.json` (agent/context/features/REST groups, masked secrets, restart-required
+  hints), and a **Server Info** view (health/version/uptime + endpoints), with a persisted light/dark theme
+  using the `assets/` logos. Backed by new routes `POST /v1.0/api/chat` (plain, tool-free completion via the
+  LLM client) and `GET`/`PUT /v1.0/api/settings` (secrets masked; the REST key changes only when a new value
+  is supplied). Streaming chat (SSE) and OpenAPI generation are documented follow-ups.
+- **Tray agent startup scripts.** `scripts/{windows,linux,macos}/run-at-startup` and `remove-from-startup`
+  register/unregister the tray agent to launch at login (Windows HKCU `Run` key; Linux systemd `--user`
+  service or `autostart` desktop entry; macOS launchd LaunchAgent). The agent runs the local REST server.
+- **Startup model warming.** The interactive shell now warms/validates the active endpoint's model at launch
+  (the same background load an endpoint switch performs — pulling lazily loading Ollama models into memory and
+  confirming hosted credentials/URLs), instead of only on switch. Surfaced as a "Loading model … / loaded"
+  notice.
+- **Theme-aware, full-size tray icon.** The tray agent now uses the high-resolution `assets/` PNG logos and
+  picks the white glyph on a dark taskbar and the black glyph on a light one, updating live on OS theme change.
+- **Dependencies updated to latest:** Voltaic 0.6.0 → 0.7.1, TUIKit 0.8.2 → 0.10.1, Avalonia 11.3.20 → 12.1.2
+  (tray agent), and NUnit3TestAdapter 6.2.0 → 6.3.0 (PolyPrompt 2.5.0, Watson 7.1.1, and Playwright 1.62.0 are
+  already latest). Full self-test suite green after the upgrades.
 - **`/settings` global settings editor.** A new interactive command (aliases `/config`, `/preferences`,
   `/prefs`; also in the `F1` menu) opens a scrolling form over `settings.json` covering every scalar/boolean
   setting: the agent-loop run limits (**max agent iterations** — the 1–100 cap on model turns per run — and

@@ -1026,7 +1026,11 @@ namespace Mux.Core.Settings
                         StripRequestFields = new List<string>(source.Quirks.StripRequestFields)
                     },
                 ReasoningEffort = source.ReasoningEffort?.Clone(),
-                ShowThinking = source.ShowThinking
+                ShowThinking = source.ShowThinking,
+                ApiKey = source.ApiKey,
+                Region = source.Region,
+                Project = source.Project,
+                ApiVersion = source.ApiVersion
             };
         }
 

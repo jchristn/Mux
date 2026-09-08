@@ -24,7 +24,7 @@ namespace Mux.Core.Enums
 
             if (!TryParse(value, out AdapterTypeEnum result))
             {
-                throw new JsonException($"Unknown adapter type: '{value}'. Expected: ollama, openai, vllm, openai-compatible.");
+                throw new JsonException($"Unknown adapter type: '{value}'. Expected: ollama, openai, vllm, openai-compatible, anthropic, gemini, azure-openai, vertex, bedrock.");
             }
 
             return result;
@@ -64,6 +64,26 @@ namespace Mux.Core.Enums
                 case "openaicompatible":
                     result = AdapterTypeEnum.OpenAiCompatible;
                     return true;
+                case "anthropic":
+                case "claude":
+                    result = AdapterTypeEnum.Anthropic;
+                    return true;
+                case "gemini":
+                case "google":
+                    result = AdapterTypeEnum.Gemini;
+                    return true;
+                case "azure":
+                case "azureopenai":
+                    result = AdapterTypeEnum.AzureOpenAi;
+                    return true;
+                case "vertex":
+                case "vertexai":
+                    result = AdapterTypeEnum.Vertex;
+                    return true;
+                case "bedrock":
+                case "awsbedrock":
+                    result = AdapterTypeEnum.Bedrock;
+                    return true;
                 default:
                     return false;
             }
@@ -80,6 +100,11 @@ namespace Mux.Core.Enums
                 AdapterTypeEnum.OpenAi => "openai",
                 AdapterTypeEnum.Vllm => "vllm",
                 AdapterTypeEnum.OpenAiCompatible => "openai-compatible",
+                AdapterTypeEnum.Anthropic => "anthropic",
+                AdapterTypeEnum.Gemini => "gemini",
+                AdapterTypeEnum.AzureOpenAi => "azure-openai",
+                AdapterTypeEnum.Vertex => "vertex",
+                AdapterTypeEnum.Bedrock => "bedrock",
                 _ => value.ToString()
             };
 
