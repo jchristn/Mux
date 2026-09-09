@@ -6,6 +6,15 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!--
+      Run the per-TFM test hosts (net8.0, net10.0) sequentially rather than in parallel.
+      These suites spin up loopback HttpListener mock servers; running both TFM hosts at
+      once doubles loopback/port contention on CI runners and pushes transient connection
+      failures past the client's retry budget, flaking network-dependent cases such as the
+      probe contract test. The console runner (Test.Automated) already runs the same suites
+      one TFM at a time and stays reliable — this mirrors that behavior for `dotnet test`.
+    -->
+    <TestTfmsInParallel>false</TestTfmsInParallel>
   </PropertyGroup>
 
   <ItemGroup>
