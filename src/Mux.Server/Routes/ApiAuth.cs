@@ -5,8 +5,7 @@ namespace Mux.Server.Routes
 
     /// <summary>
     /// Single-local-key authentication. When no key is configured the server runs open (dev/no-auth mode);
-    /// otherwise the request must present the key as <c>Authorization: Bearer &lt;key&gt;</c> or
-    /// <c>X-Api-Key: &lt;key&gt;</c>.
+    /// otherwise the request must present the key as a bearer token: <c>Authorization: Bearer &lt;key&gt;</c>.
     /// </summary>
     internal static class ApiAuth
     {
@@ -20,14 +19,11 @@ namespace Mux.Server.Routes
         {
             if (string.IsNullOrEmpty(apiKey)) return true;
 
-            string? provided = ctx.Request.Headers["X-Api-Key"];
-            if (string.IsNullOrEmpty(provided))
+            string? provided = null;
+            string? auth = ctx.Request.Headers["Authorization"];
+            if (!string.IsNullOrEmpty(auth) && auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {
-                string? auth = ctx.Request.Headers["Authorization"];
-                if (!string.IsNullOrEmpty(auth) && auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                {
-                    provided = auth.Substring("Bearer ".Length).Trim();
-                }
+                provided = auth.Substring("Bearer ".Length).Trim();
             }
 
             if (!string.IsNullOrEmpty(provided) && string.Equals(provided, apiKey, StringComparison.Ordinal))

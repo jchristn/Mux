@@ -104,7 +104,7 @@ namespace Test.Shared.Suites
 
                             // Endpoints with the key -> 200 and the endpoint name.
                             using HttpRequestMessage keyed = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/v1.0/api/endpoints");
-                            keyed.Headers.Add("X-Api-Key", "testkey123");
+                            keyed.Headers.Add("Authorization", "Bearer testkey123");
                             HttpResponseMessage withKey = http.SendAsync(keyed).GetAwaiter().GetResult();
                             string endpointsBody = withKey.Content.ReadAsStringAsync().GetAwaiter().GetResult();
                             MuxAssert.AreEqual(200, (int)withKey.StatusCode, "EndpointsKeyStatus");
@@ -122,7 +122,7 @@ namespace Test.Shared.Suites
 
                             // Settings (authed) returns the masked DTO.
                             using HttpRequestMessage settingsReq = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/v1.0/api/settings");
-                            settingsReq.Headers.Add("X-Api-Key", "testkey123");
+                            settingsReq.Headers.Add("Authorization", "Bearer testkey123");
                             HttpResponseMessage settingsRes = http.SendAsync(settingsReq).GetAwaiter().GetResult();
                             string settingsBody = settingsRes.Content.ReadAsStringAsync().GetAwaiter().GetResult();
                             MuxAssert.AreEqual(200, (int)settingsRes.StatusCode, "SettingsStatus");
@@ -130,7 +130,7 @@ namespace Test.Shared.Suites
 
                             // Chat against an unknown endpoint -> 404 (routing + parsing without a live model).
                             using HttpRequestMessage chatReq = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/v1.0/api/chat");
-                            chatReq.Headers.Add("X-Api-Key", "testkey123");
+                            chatReq.Headers.Add("Authorization", "Bearer testkey123");
                             chatReq.Content = new StringContent("{\"endpoint\":\"nope\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}", System.Text.Encoding.UTF8, "application/json");
                             HttpResponseMessage chatRes = http.SendAsync(chatReq).GetAwaiter().GetResult();
                             MuxAssert.AreEqual(404, (int)chatRes.StatusCode, "ChatUnknownEndpointStatus");

@@ -73,6 +73,94 @@ namespace Mux.Server.Models
 
         /// <summary>UTC last-updated time.</summary>
         public DateTime UpdatedUtc { get; set; } = DateTime.MinValue;
+
+        /// <summary>Number of messages in the session's focused conversation.</summary>
+        public int MessageCount { get; set; } = 0;
+    }
+
+    /// <summary>The Home/Overview aggregate: counts, the default endpoint, environment facts, recent sessions, and derived notices. Computed from config files, health, and the session store — no telemetry or database.</summary>
+    public class OverviewDto
+    {
+        /// <summary>Product version.</summary>
+        public string Version { get; set; } = string.Empty;
+
+        /// <summary>Active configuration directory.</summary>
+        public string ConfigDir { get; set; } = string.Empty;
+
+        /// <summary>Server uptime, formatted.</summary>
+        public string Uptime { get; set; } = string.Empty;
+
+        /// <summary>Whether the REST API requires an API key.</summary>
+        public bool AuthEnabled { get; set; }
+
+        /// <summary>Configured endpoint count.</summary>
+        public int Endpoints { get; set; }
+
+        /// <summary>The default endpoint's name, or null.</summary>
+        public string? DefaultEndpoint { get; set; }
+
+        /// <summary>The default endpoint's adapter type, or null.</summary>
+        public string? DefaultAdapter { get; set; }
+
+        /// <summary>The default endpoint's model, or null.</summary>
+        public string? DefaultModel { get; set; }
+
+        /// <summary>Configured MCP server count.</summary>
+        public int McpServers { get; set; }
+
+        /// <summary>Prompt profile count.</summary>
+        public int Prompts { get; set; }
+
+        /// <summary>The active prompt profile name, or null.</summary>
+        public string? ActivePrompt { get; set; }
+
+        /// <summary>Subagent count.</summary>
+        public int Subagents { get; set; }
+
+        /// <summary>Total skills discovered.</summary>
+        public int SkillsTotal { get; set; }
+
+        /// <summary>Enabled skills.</summary>
+        public int SkillsEnabled { get; set; }
+
+        /// <summary>Skills that fail validation.</summary>
+        public int SkillsInvalid { get; set; }
+
+        /// <summary>Event hook count.</summary>
+        public int Hooks { get; set; }
+
+        /// <summary>Custom command count.</summary>
+        public int Commands { get; set; }
+
+        /// <summary>Keybinding override count.</summary>
+        public int Keybindings { get; set; }
+
+        /// <summary>Saved session count.</summary>
+        public int Sessions { get; set; }
+
+        /// <summary>Total messages across all saved sessions.</summary>
+        public int TotalMessages { get; set; }
+
+        /// <summary>The most recently updated sessions.</summary>
+        public List<SessionSummary> RecentSessions { get; set; } = new List<SessionSummary>();
+
+        /// <summary>Derived, human-readable next-step and health notices.</summary>
+        public List<OverviewNotice> Notices { get; set; } = new List<OverviewNotice>();
+    }
+
+    /// <summary>A derived notice on the overview: a severity plus a short message.</summary>
+    public class OverviewNotice
+    {
+        /// <summary>Severity: info, warning, or success.</summary>
+        public string Level { get; set; } = "info";
+
+        /// <summary>The message text.</summary>
+        public string Text { get; set; } = string.Empty;
+
+        /// <summary>Create a notice.</summary>
+        /// <param name="level">Severity.</param>
+        /// <param name="text">Message.</param>
+        public OverviewNotice(string level, string text) { Level = level; Text = text; }
     }
 
     /// <summary>

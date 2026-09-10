@@ -15,6 +15,15 @@ namespace Mux.Cli.App
         };
 
         /// <summary>
+        /// The ASCII-art wordmark rows on their own, without the tagline/copyright/URL splash text.
+        /// </summary>
+        /// <returns>The wordmark lines.</returns>
+        public static IReadOnlyList<string> WordmarkLines()
+        {
+            return (string[])Art.Clone();
+        }
+
+        /// <summary>
         /// Builds the startup splash lines: the wordmark, a tagline with the version, the copyright, and the
         /// project URL. The splash modal appends its own blank gap before the "press any key" hint, so the URL
         /// is the final content line here and reads with one blank line above and below it.

@@ -9,6 +9,7 @@ namespace Mux.Core.Agent
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Mux.Core.Models;
+    using Mux.Core.Subagents;
     using Mux.Core.Tasks;
     using Mux.Core.Tools;
 
@@ -60,6 +61,8 @@ namespace Mux.Core.Agent
         private List<string>? _AllowedTools = null;
         private List<string>? _DeniedTools = null;
         private List<string>? _AdditionalDirectories = null;
+        private SubagentRegistry? _Subagents = null;
+        private ISubagentExecutor? _SubagentExecutor = null;
 
         #endregion
 
@@ -486,6 +489,28 @@ namespace Mux.Core.Agent
         {
             get => _AdditionalDirectories;
             set => _AdditionalDirectories = value;
+        }
+
+        /// <summary>
+        /// The registry of subagents available to this run. When set alongside
+        /// <see cref="SubagentExecutor"/> and non-empty, the <c>spawn_subagent</c> tool is offered to the
+        /// model so it can delegate scoped sub-tasks. Null (the default) disables subagent delegation.
+        /// </summary>
+        public SubagentRegistry? Subagents
+        {
+            get => _Subagents;
+            set => _Subagents = value;
+        }
+
+        /// <summary>
+        /// The executor that runs a delegated subagent. Required (together with a non-empty
+        /// <see cref="Subagents"/>) for the <c>spawn_subagent</c> tool to be registered. Null (the default)
+        /// disables subagent delegation.
+        /// </summary>
+        public ISubagentExecutor? SubagentExecutor
+        {
+            get => _SubagentExecutor;
+            set => _SubagentExecutor = value;
         }
 
         #endregion

@@ -176,13 +176,17 @@ namespace Mux.Server
             new SessionRoutes(apiKey, _SessionStore).Register(app);
             new ChatRoutes(apiKey, _EndpointsProvider).Register(app);
             new SettingsRoutes(apiKey).Register(app);
+            new McpRoutes(apiKey).Register(app);
+            new ConfigRoutes(apiKey).Register(app);
+            new SkillRoutes(apiKey).Register(app);
+            new OverviewRoutes(apiKey, _EndpointsProvider, _SessionStore, _Version, _StartUtc).Register(app);
         }
 
         private void ApplyCors(HttpContextBase ctx)
         {
             ctx.Response.Headers.Add("Access-Control-Allow-Origin", _Settings.CorsAllowOrigin);
             ctx.Response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD");
-            ctx.Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Api-Key");
+            ctx.Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
         }
 
         private async Task DefaultRouteAsync(HttpContextBase ctx)

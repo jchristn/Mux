@@ -183,7 +183,22 @@ namespace Test.Shared
                     TaskModalSuite.Create(),
 
                     // Background tasks: orchestrated parallel execution over the job manager (M8).
-                    TaskOrchestratorSuite.Create()
+                    TaskOrchestratorSuite.Create(),
+
+                    // Subagents: registry, spawn_subagent tool, and subagents.json persistence.
+                    SubagentSuite.Create(),
+
+                    // Session sharing: local Markdown/HTML export renderer.
+                    SessionExporterSuite.Create(),
+
+                    // Custom keybindings: catalog overrides + keybindings.json persistence.
+                    KeybindingSuite.Create(),
+
+                    // Undo/redo: git-checkpoint capture, restore, and history.
+                    CheckpointSuite.Create(),
+
+                    // Plugin system: event hooks, custom commands, and hooks.json persistence.
+                    PluginSuite.Create()
                 };
             }
         }

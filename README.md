@@ -62,6 +62,11 @@
 - Skills: versioned Markdown-plus-code capabilities in `~/.mux/skills` that turn a request into a fixed, deterministic procedure; author, inventory, and manage them in-app with `/skills` (or the `mux skill` verb), and a curated default set ships on first run
 - TUIKit interactive UI (`v0.8.2`): a full-screen shell with per-job transcripts, a job sidebar, a multi-line composer, slash commands / key bindings / menu over one command catalog, an interactive tool-approval modal, and autosaved resumable sessions. Multiple prompts run as concurrent background jobs (a single-writer lease serializes file edits); enqueue-while-busy lets you start a new job or append to the focused one. See `USAGE.md`.
 - Background tasks: for a large request the model lays out the work as a tracked plan of tasks and advances them as it goes; the interactive shell draws a live checklist that updates in place (pending → running → done), the sidebar shows `TASKS n/m`, `/tasks` opens a viewer to inspect and hand-annotate the plan, and the plan persists across save/resume. A `task_plan_updated` event is emitted in `jsonl` mode for orchestrators. See `USAGE.md`
+- Subagents: define named subagents in `~/.mux/subagents.json` and the model can delegate a scoped sub-task to one with the `spawn_subagent` tool; each runs in an isolated conversation (its own system prompt, endpoint, and tool allow-list) and returns only its final answer, keeping the primary agent's context clean
+- Local session export: `/export` (or `mux export <id>`) renders a session to a self-contained HTML file and Markdown — server-free, no network
+- Custom keybindings: rebind or unbind any command's key chord in `~/.mux/keybindings.json`
+- Undo/redo: in a git repository, mux snapshots the working tree before each turn so `/undo` and `/redo` roll a turn's file changes back and forward (git plumbing only — your branch, history, and stash are untouched)
+- Plugin system: out-of-process event hooks (`session-start`, `user-prompt-submit`, `session-end`) and custom `/<name>` slash commands configured in `~/.mux/hooks.json`; inspect with `mux plugin list`
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Local REST server & tray agent (`v0.9.0`, opt-in): `mux serve` starts a loopback-bound, token-guarded REST + WebSocket API (Watson 7) over mux's in-process services; a cross-platform Avalonia system-tray agent hosts it in the background with **About / Launch Mux / Exit**. Never auto-starts from a plain run. See `docs/REST_API.md`
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
@@ -197,6 +202,8 @@ Every command is also reachable by key binding and the `F1` menu (one catalog, t
 /sessions                         Browse and resume saved sessions
 /tasks                            View and annotate the focused job's task plan
 /save                             Save the current session
+/export, /share                   Export the session to HTML + Markdown (server-free)
+/undo, /redo                      Roll the working tree back/forward a turn (git repos)
 /theme                            Open the theme selector
 /sidebar                          Toggle the sidebar
 /borders                          Toggle the boundary lines (off by default)

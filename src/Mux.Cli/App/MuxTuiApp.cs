@@ -62,6 +62,10 @@ namespace Mux.Cli.App
         private readonly JobManager _JobManager;
         private readonly ApprovalPolicyEnum _ApprovalPolicy;
         private readonly SessionStore? _Store;
+        private readonly Mux.Core.Checkpoints.CheckpointManager? _CheckpointManager;
+        private readonly Mux.Core.Plugins.PluginRegistry? _PluginRegistry;
+        private readonly Mux.Core.Plugins.HookRunner _HookRunner = new Mux.Core.Plugins.HookRunner();
+        private readonly string _HookWorkingDirectory;
         private readonly Action<EndpointConfig>? _OnEndpointSelected;
         private readonly Func<EndpointConfig, CancellationToken, Task<ModelLoadResult>>? _OnValidateModel;
         private readonly Action<PromptProfile>? _OnPromptProfileSelected;
@@ -146,6 +150,9 @@ namespace Mux.Cli.App
         /// <param name="mcpRuntime">Optional MCP runtime used to show per-server connectivity in the MCP manager and to trigger a reconnect after edits. Null disables live MCP status.</param>
         /// <param name="skillRuntime">Optional skills runtime used to show skill status in the skills manager and to trigger a re-scan after edits. Null disables the skills manager.</param>
         /// <param name="initialPrompt">Optional prompt submitted as the first turn once the run loop starts. Null or whitespace submits nothing.</param>
+        /// <param name="checkpointManager">Optional per-turn git checkpoint manager enabling <c>/undo</c> and <c>/redo</c>. Null disables undo/redo (for example outside a git repository).</param>
+        /// <param name="pluginRegistry">Optional plugin registry supplying event hooks and custom slash commands. Null disables the plugin surface.</param>
+        /// <param name="workingDirectory">The working directory used for hooks, custom commands, and session export. Null uses the process current directory.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
             ITerminalBackend backend,
@@ -163,8 +170,14 @@ namespace Mux.Cli.App
             bool showBoundaries = false,
             McpRuntime? mcpRuntime = null,
             SkillRuntime? skillRuntime = null,
-            string? initialPrompt = null)
+            string? initialPrompt = null,
+            Mux.Core.Checkpoints.CheckpointManager? checkpointManager = null,
+            Mux.Core.Plugins.PluginRegistry? pluginRegistry = null,
+            string? workingDirectory = null)
         {
+            _CheckpointManager = checkpointManager;
+            _PluginRegistry = pluginRegistry;
+            _HookWorkingDirectory = string.IsNullOrWhiteSpace(workingDirectory) ? Directory.GetCurrentDirectory() : workingDirectory;
             _Backend = backend ?? throw new ArgumentNullException(nameof(backend));
             _JobManager = jobManager ?? throw new ArgumentNullException(nameof(jobManager));
             _ApprovalPolicy = approvalPolicy;
@@ -218,6 +231,9 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.clear", "Clear transcript", "ctrl+l", ClearTranscript, "View", new[] { "clear" }));
             _Catalog.Add(new CommandDescriptor("mux.sidebar.toggle", "Toggle sidebar", "ctrl+b", ToggleSidebar, "View", new[] { "sidebar" }));
             _Catalog.Add(new CommandDescriptor("mux.save", "Save session", "ctrl+s", SaveSession, "Session", new[] { "save" }));
+            _Catalog.Add(new CommandDescriptor("mux.export", "Export session", null, ExportSession, "Session", new[] { "export", "share" }));
+            _Catalog.Add(new CommandDescriptor("mux.undo", "Undo last turn's changes", null, UndoLastTurn, "Session", new[] { "undo" }));
+            _Catalog.Add(new CommandDescriptor("mux.redo", "Redo undone changes", null, RedoLastUndo, "Session", new[] { "redo" }));
             _Catalog.Add(new CommandDescriptor("mux.queue", "Edit queue", "ctrl+g", OpenQueueEditor, "Session", new[] { "queue", "edit queue", "pending" }));
             _Catalog.Add(new CommandDescriptor("mux.prompts", "Prompts", "ctrl+p", OpenPromptEditor, "Model", new[] { "prompts", "prompt", "system prompt" }));
             _Catalog.Add(new CommandDescriptor("mux.mcp", "MCP servers", null, OpenMcpModal, "Model", new[] { "mcp", "mcp-servers", "mcpservers", "servers" }));
@@ -232,6 +248,29 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.thinking", "Toggle thinking display", null, ToggleThinking, "View", new[] { "thinking", "think", "reasoning-display" }));
             _Catalog.Add(new CommandDescriptor("mux.menu", "Command menu", "f1", OpenCommandMenu, "Help", new[] { "menu" }));
             _Catalog.Add(new CommandDescriptor("mux.help", "Help", null, OpenCommandMenu, "Help", new[] { "help", "?" }));
+
+            // Register user-authored custom commands (~/.mux/hooks.json) as slash commands on the same
+            // catalog, so /<name> runs the external command out-of-process and surfaces its output.
+            if (_PluginRegistry != null)
+            {
+                foreach (Mux.Core.Plugins.CustomCommandDefinition custom in _PluginRegistry.Commands)
+                {
+                    Mux.Core.Plugins.CustomCommandDefinition captured = custom;
+                    string commandTitle = string.IsNullOrWhiteSpace(captured.Description) ? ("/" + captured.Name) : captured.Description;
+                    _Catalog.Add(new CommandDescriptor(
+                        "plugin." + captured.Name,
+                        commandTitle,
+                        null,
+                        () => RunCustomCommand(captured),
+                        "Plugin",
+                        new[] { captured.Name }));
+                }
+            }
+
+            // Apply user keybinding overrides (~/.mux/keybindings.json) before wiring the surfaces so the
+            // key bindings, menu, and footer all reflect the customized chords. An unparseable chord is
+            // dropped rather than allowed to crash the shell.
+            _Catalog.ApplyOverrides(LoadValidatedKeybindingOverrides());
             _Catalog.ApplyTo(_App);
             _MenuBar = MenuBarBuilder.Build(_Catalog);
             _SlashHandler = new SlashCommandParser(_Catalog).TryHandle;
@@ -256,6 +295,13 @@ namespace Mux.Cli.App
             if (showSplash)
             {
                 _App.Modals.Push(new MuxBoxModal("mux", MuxBanner.SplashLines(Defaults.ProductVersion), "press any key to start", centered: true));
+            }
+
+            // Fire session-start hooks in the background so a slow hook never delays the shell coming up.
+            // Their output is posted into the transcript as it completes.
+            if (_PluginRegistry != null && _PluginRegistry.HooksFor(Mux.Core.Plugins.HookEventEnum.SessionStart).Count > 0)
+            {
+                _ = FireLifecycleHooksAsync(Mux.Core.Plugins.HookEventEnum.SessionStart, "{\"event\":\"session-start\"}");
             }
         }
 
@@ -1546,6 +1592,16 @@ namespace Mux.Cli.App
 
         private void EnqueueOrRun(string prompt)
         {
+            // Fire user-prompt-submit hooks before the prompt is accepted. A blocking hook that exits
+            // non-zero vetoes the submission; any hook stdout is surfaced. Only runs when such hooks exist.
+            if (_PluginRegistry != null && _PluginRegistry.HooksFor(Mux.Core.Plugins.HookEventEnum.UserPromptSubmit).Count > 0)
+            {
+                if (!PassesPromptSubmitHooks(prompt))
+                {
+                    return;
+                }
+            }
+
             bool startNow;
             lock (_Sync)
             {
@@ -1579,6 +1635,21 @@ namespace Mux.Cli.App
 
         private void RunTurn(string prompt)
         {
+            // Record a per-turn workspace checkpoint before the turn can mutate any files, so /undo can
+            // roll the working tree back to this point. Best-effort and only active when checkpointing was
+            // enabled (a git work tree); a failure here must never block the turn.
+            if (_CheckpointManager != null)
+            {
+                try
+                {
+                    _CheckpointManager.RecordAsync(Truncate(prompt, 60), _Cts.Token).GetAwaiter().GetResult();
+                }
+                catch (Exception)
+                {
+                    // Checkpointing is advisory; ignore failures (e.g. transient git errors).
+                }
+            }
+
             // Echo the prompt into the transcript when the turn actually starts, so the transcript shows
             // real turns in order rather than prompts that are still waiting in the queue.
             EchoPrompt(prompt);
@@ -2173,6 +2244,284 @@ namespace Mux.Cli.App
             }
 
             _ = SaveWithNoticeAsync();
+        }
+
+        /// <summary>
+        /// Exports the current session to a self-contained HTML file and a Markdown file in the working
+        /// directory, then posts a notice with the paths. Server-free: it renders the in-memory snapshot
+        /// directly, so it works even when session persistence is disabled.
+        /// </summary>
+        private void ExportSession()
+        {
+            try
+            {
+                SessionSnapshot snapshot = BuildSnapshot();
+                string stem = SanitizeFileStem(!string.IsNullOrWhiteSpace(snapshot.Title) ? snapshot.Title : snapshot.Id);
+                if (string.IsNullOrWhiteSpace(stem))
+                {
+                    stem = "mux-session";
+                }
+
+                string directory = System.IO.Directory.GetCurrentDirectory();
+                string htmlPath = System.IO.Path.Combine(directory, stem + ".html");
+                string mdPath = System.IO.Path.Combine(directory, stem + ".md");
+
+                System.IO.File.WriteAllText(htmlPath, SessionExporter.ToHtml(snapshot));
+                System.IO.File.WriteAllText(mdPath, SessionExporter.ToMarkdown(snapshot));
+
+                WriteNotice("✓ Exported session to " + htmlPath + " and " + mdPath);
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Export failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Loads user keybinding overrides and drops any whose chord cannot be parsed, so a typo in
+        /// keybindings.json disables that one binding rather than crashing startup. A null/empty chord is a
+        /// valid "unbind" instruction and is kept.
+        /// </summary>
+        /// <returns>The validated override map (command id to chord, or null to unbind).</returns>
+        private static Dictionary<string, string?> LoadValidatedKeybindingOverrides()
+        {
+            Dictionary<string, string?> raw = SettingsLoader.LoadKeybindings();
+            Dictionary<string, string?> valid = new Dictionary<string, string?>(StringComparer.Ordinal);
+
+            foreach (KeyValuePair<string, string?> entry in raw)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Value))
+                {
+                    // An explicit unbind.
+                    valid[entry.Key] = null;
+                    continue;
+                }
+
+                try
+                {
+                    KeyChord.Parse(entry.Value);
+                    valid[entry.Key] = entry.Value;
+                }
+                catch (Exception)
+                {
+                    // Unparseable chord: skip this override, leaving the command's built-in chord intact.
+                }
+            }
+
+            return valid;
+        }
+
+        /// <summary>
+        /// Runs the user-prompt-submit hooks synchronously and returns whether the prompt may proceed.
+        /// Surfaces hook stdout as notices; a blocking hook that vetoes writes a warning and returns false.
+        /// </summary>
+        /// <param name="prompt">The submitted prompt.</param>
+        /// <returns>True to accept the prompt; false when a hook vetoed it.</returns>
+        private bool PassesPromptSubmitHooks(string prompt)
+        {
+            try
+            {
+                string payload = System.Text.Json.JsonSerializer.Serialize(new { @event = "user-prompt-submit", prompt });
+                IReadOnlyList<Mux.Core.Plugins.HookRunResult> results = _HookRunner
+                    .RunAsync(_PluginRegistry!, Mux.Core.Plugins.HookEventEnum.UserPromptSubmit, payload, _HookWorkingDirectory, _Cts.Token)
+                    .GetAwaiter()
+                    .GetResult();
+
+                foreach (Mux.Core.Plugins.HookRunResult result in results)
+                {
+                    if (!string.IsNullOrEmpty(result.StdOut))
+                    {
+                        WriteNotice("[hook " + result.HookName + "] " + result.StdOut);
+                    }
+                }
+
+                if (Mux.Core.Plugins.HookRunner.WasVetoed(results))
+                {
+                    WriteNotice("⚠ Prompt blocked by a hook.");
+                    return false;
+                }
+
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                return true;
+            }
+            catch (Exception)
+            {
+                // A hook failure must never wedge submission; accept the prompt.
+                return true;
+            }
+        }
+
+        private async Task FireLifecycleHooksAsync(Mux.Core.Plugins.HookEventEnum hookEvent, string payload)
+        {
+            if (_PluginRegistry == null)
+            {
+                return;
+            }
+
+            try
+            {
+                IReadOnlyList<Mux.Core.Plugins.HookRunResult> results = await _HookRunner
+                    .RunAsync(_PluginRegistry, hookEvent, payload, _HookWorkingDirectory, _Cts.Token)
+                    .ConfigureAwait(false);
+
+                foreach (Mux.Core.Plugins.HookRunResult result in results)
+                {
+                    if (!result.Started)
+                    {
+                        PostNotice("[hook " + result.HookName + "] failed to start: " + result.StdErr);
+                    }
+                    else if (!string.IsNullOrEmpty(result.StdOut))
+                    {
+                        PostNotice("[hook " + result.HookName + "] " + result.StdOut);
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        private void RunCustomCommand(Mux.Core.Plugins.CustomCommandDefinition definition)
+        {
+            WriteNotice("running /" + definition.Name + "…");
+            _ = RunCustomCommandAsync(definition);
+        }
+
+        private async Task RunCustomCommandAsync(Mux.Core.Plugins.CustomCommandDefinition definition)
+        {
+            try
+            {
+                Mux.Core.Plugins.HookRunResult result = await new Mux.Core.Plugins.CustomCommandRunner()
+                    .RunAsync(definition, _HookWorkingDirectory, _Cts.Token)
+                    .ConfigureAwait(false);
+
+                if (!result.Started)
+                {
+                    PostNotice("/" + definition.Name + " failed to start: " + result.StdErr);
+                    return;
+                }
+
+                if (!string.IsNullOrEmpty(result.StdOut))
+                {
+                    PostNotice(result.StdOut);
+                }
+
+                if (!string.IsNullOrEmpty(result.StdErr))
+                {
+                    PostNotice(result.StdErr);
+                }
+
+                if (result.ExitCode != 0)
+                {
+                    PostNotice("/" + definition.Name + " exited with code " + result.ExitCode + ".");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                PostNotice("/" + definition.Name + " failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Restores the working tree to the state before the most recent turn, if checkpointing is active.
+        /// </summary>
+        private void UndoLastTurn()
+        {
+            if (_CheckpointManager == null)
+            {
+                WriteNotice("Undo is unavailable (not a git repository).");
+                return;
+            }
+
+            try
+            {
+                Mux.Core.Checkpoints.Checkpoint? restored = _CheckpointManager.UndoAsync(_Cts.Token).GetAwaiter().GetResult();
+                if (restored == null)
+                {
+                    WriteNotice("Nothing to undo.");
+                    return;
+                }
+
+                WriteNotice("✓ Undid \"" + restored.Label + "\" — working tree restored. Use /redo to reapply.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Undo failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Re-applies the most recently undone change, if checkpointing is active.
+        /// </summary>
+        private void RedoLastUndo()
+        {
+            if (_CheckpointManager == null)
+            {
+                WriteNotice("Redo is unavailable (not a git repository).");
+                return;
+            }
+
+            try
+            {
+                Mux.Core.Checkpoints.Checkpoint? restored = _CheckpointManager.RedoAsync(_Cts.Token).GetAwaiter().GetResult();
+                if (restored == null)
+                {
+                    WriteNotice("Nothing to redo.");
+                    return;
+                }
+
+                WriteNotice("✓ Redid \"" + restored.Label + "\" — working tree reapplied.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Redo failed: " + ex.Message);
+            }
+        }
+
+        private static string Truncate(string value, int maxLength)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
+            {
+                return value ?? string.Empty;
+            }
+
+            return value.Substring(0, maxLength) + "…";
+        }
+
+        private static string SanitizeFileStem(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            char[] invalid = System.IO.Path.GetInvalidFileNameChars();
+            System.Text.StringBuilder builder = new System.Text.StringBuilder(value.Length);
+            foreach (char c in value.Trim())
+            {
+                bool bad = c == ' ';
+                foreach (char inv in invalid)
+                {
+                    if (c == inv)
+                    {
+                        bad = true;
+                        break;
+                    }
+                }
+
+                builder.Append(bad ? '-' : c);
+            }
+
+            return builder.ToString();
         }
 
         private async Task SaveWithNoticeAsync()

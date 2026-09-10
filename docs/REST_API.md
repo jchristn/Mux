@@ -59,14 +59,15 @@ Environment overrides: `MUX_REST_HOST`, `MUX_REST_PORT`, `MUX_REST_APIKEY`. CLI 
 
 ## Authentication
 
-Unless `--no-auth` is set, every route except `/v1.0/api/health` requires the API key, sent as either:
+Unless `--no-auth` is set, every route except `/v1.0/api/health` requires the API key, sent as a **bearer
+token**:
 
 ```
 Authorization: Bearer <key>
-X-Api-Key: <key>
 ```
 
-A missing or wrong key returns `401`.
+A missing or wrong key returns `401`. (Earlier builds also accepted an `X-Api-Key` header; the server now
+standardizes on the bearer token only.)
 
 ## Endpoints
 
@@ -76,8 +77,22 @@ All paths are versioned under `/v1.0/api`.
 |---|---|---|---|
 | GET | `/v1.0/api/health` | none | Status, product version, pid, uptime. |
 | GET | `/v1.0/api/endpoints` | key | Configured endpoints (name, adapter type, base URL, model, default). **No secrets.** |
+| GET | `/v1.0/api/endpoints/detail` | key | Full endpoint fields for editing, **secrets masked** (`apiKeySet` flag; header/key values blanked). |
+| PUT | `/v1.0/api/endpoints` | key | Replace the endpoint collection (`{ "items": [ … ] }`). A blank secret preserves the stored one. |
+| DELETE | `/v1.0/api/endpoints?name=<name>` | key | Delete an endpoint. |
+| GET/PUT/DELETE | `/v1.0/api/mcp-servers` | key | CRUD over MCP servers (auth secret masked/preserved). DELETE takes `?name=`. |
+| GET/PUT | `/v1.0/api/prompts` | key | Prompt profiles (name, active, system prompt). |
+| GET/PUT | `/v1.0/api/subagents` | key | Subagent definitions. |
+| GET/PUT | `/v1.0/api/hooks` | key | Plugin config: `{ "hooks": [ … ], "commands": [ … ] }`. |
+| GET/PUT | `/v1.0/api/keybindings` | key | Command-id → chord overrides. |
+| GET | `/v1.0/api/skills` | key | Skills list (name, description, enabled, valid, command count). |
+| GET | `/v1.0/api/skills/detail?id=<id>` | key | One skill with its `SKILL.md` body. |
+| PUT | `/v1.0/api/skills/enabled` | key | Toggle enablement: `{ "id": "<id>", "enabled": true }`. |
+| DELETE | `/v1.0/api/skills?id=<id>` | key | Delete a skill folder. |
 | GET | `/v1.0/api/sessions` | key | Persisted sessions (id, title, endpoint, model, timestamps). |
-| POST | `/v1.0/api/chat` | key | Plain (tool-free) chat completion against a configured endpoint. Body: `{ "endpoint": "<name>", "messages": [{ "role": "user", "content": "…" }] }` → `{ "role": "assistant", "content": "…", "endpoint", "model" }`. |
+| GET | `/v1.0/api/sessions/export?id=<id>&format=md\|html` | key | Render a session → `{ "format", "filename", "content" }` for download. |
+| DELETE | `/v1.0/api/sessions?id=<id>` | key | Delete a session. |
+| POST | `/v1.0/api/chat` | key | Plain (tool-free) chat completion against a configured endpoint. Body: `{ "endpoint": "<name>", "messages": [{ "role": "user", "content": "…" }] }` → `{ "role": "assistant", "content": "…", "endpoint", "model", "stats": { "ttftMs", "streamingMs", "totalMs", "inputTokens", "outputTokens", "totalTokens" } }`. |
 | GET | `/v1.0/api/settings` | key | Editable settings subset, **secrets masked** (`rest.apiKeySet` instead of the key). |
 | PUT | `/v1.0/api/settings` | key | Update settings (validated/clamped, written to `settings.json`). The REST API key changes only when a non-blank `rest.apiKey` is supplied. |
 | GET | `/dashboard` | none¹ | The web dashboard (HTML). |
@@ -91,9 +106,14 @@ its own API calls are authenticated. Do not expose a non-loopback `hostname` wit
 `GET /dashboard` serves a self-contained single-page dashboard (no external assets — CSS/JS/logos are
 inlined). It provides:
 
-- **Chat** — a Wilson-style chat over any configured endpoint (endpoint picker, message bubbles, markdown +
-  code blocks, new-chat). Backed by `POST /v1.0/api/chat` (non-streaming; a streaming SSE variant is a
-  planned follow-up).
+- **Chat** — chat over any configured endpoint (endpoint picker, message bubbles, markdown + code blocks,
+  new-chat), with a per-message **(i)** hover showing time-to-first-token, streaming time, and token counts.
+  Backed by `POST /v1.0/api/chat`.
+- **Configuration** — full-width management tables with custom modal add/edit forms and icon row actions
+  (no browser dialogs) for **Endpoints, MCP Servers, Prompts, Subagents, Hooks & custom commands, Keybindings,
+  and Skills** (enable/disable/view/delete). Secrets are never shown; leave a secret blank to keep it. Backed
+  by the CRUD routes above.
+- **Sessions** — browse saved sessions, export any to HTML/Markdown (client-side download), or delete.
 - **Settings** — a form-based editor over `settings.json` (agent, context, features, REST server) with masked
   secrets and per-group "restart required" hints. Backed by `GET`/`PUT /v1.0/api/settings`.
 - **Server Info** — health/version/uptime and the configured endpoints.
@@ -109,7 +129,7 @@ it hosts).
 curl http://127.0.0.1:8710/v1.0/api/health
 
 # Endpoints (authenticated)
-curl -H "X-Api-Key: <key>" http://127.0.0.1:8710/v1.0/api/endpoints
+curl -H "Authorization: Bearer <key>" http://127.0.0.1:8710/v1.0/api/endpoints
 
 # Sessions
 curl -H "Authorization: Bearer <key>" http://127.0.0.1:8710/v1.0/api/sessions

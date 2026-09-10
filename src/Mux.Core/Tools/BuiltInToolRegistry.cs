@@ -8,6 +8,7 @@ namespace Mux.Core.Tools
     using System.Threading.Tasks;
     using Mux.Core.Models;
     using Mux.Core.Search;
+    using Mux.Core.Subagents;
     using Mux.Core.Tasks;
     using Mux.Core.Tools.Tools;
 
@@ -35,7 +36,16 @@ namespace Mux.Core.Tools
         /// <param name="taskPlan">The per-job task plan the task tools write to, or null when no plan is
         /// bound to this run. The task tools are registered only when
         /// <see cref="MuxSettings.TaskPlanningEnabled"/> is true.</param>
-        public BuiltInToolRegistry(MuxSettings? muxSettings = null, TaskPlan? taskPlan = null)
+        /// <param name="subagents">The registry of available subagents, or null when subagent delegation is
+        /// not active for the run.</param>
+        /// <param name="subagentExecutor">The executor that runs a delegated subagent, or null when subagent
+        /// delegation is not active. The <c>spawn_subagent</c> tool is registered only when both
+        /// <paramref name="subagents"/> (non-empty) and this executor are supplied.</param>
+        public BuiltInToolRegistry(
+            MuxSettings? muxSettings = null,
+            TaskPlan? taskPlan = null,
+            SubagentRegistry? subagents = null,
+            ISubagentExecutor? subagentExecutor = null)
         {
             RegisterTool(new ReadFileTool(), ToolMutationKind.ReadOnly);
             RegisterTool(new WriteFileTool(), ToolMutationKind.Mutating);
@@ -59,6 +69,15 @@ namespace Mux.Core.Tools
             {
                 RegisterTool(new PlanTasksTool(taskPlan), ToolMutationKind.ReadOnly);
                 RegisterTool(new UpdateTaskTool(taskPlan), ToolMutationKind.ReadOnly);
+            }
+
+            // spawn_subagent is classified ReadOnly with respect to the workspace write lease: the parent
+            // tool call must not hold the lease while the child runs, or the child's own mutating tools
+            // would deadlock waiting for a lease their own ancestor holds. The child's tool calls serialize
+            // through the lease themselves.
+            if (subagents != null && subagentExecutor != null && subagents.Count > 0)
+            {
+                RegisterTool(new SpawnSubagentTool(subagents, subagentExecutor), ToolMutationKind.ReadOnly);
             }
         }
 

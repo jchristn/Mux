@@ -5,6 +5,7 @@ namespace Mux.Cli.Commands
     using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Cli.App;
     using Mux.Core.Models;
     using Mux.Core.Settings;
     using Mux.Core.Sessions;
@@ -103,6 +104,7 @@ namespace Mux.Cli.Commands
                 return 1;
             }
 
+            foreach (string line in MuxBanner.WordmarkLines()) Console.WriteLine(line);
             Console.WriteLine();
             Console.WriteLine("mux server listening on " + server.BaseUrl);
             Console.WriteLine("  health:    " + server.BaseUrl + "/v1.0/api/health");
@@ -114,7 +116,7 @@ namespace Mux.Cli.Commands
             else
             {
                 Console.WriteLine("  api key:   " + apiKey);
-                Console.WriteLine("             send as 'Authorization: Bearer <key>' or 'X-Api-Key: <key>'");
+                Console.WriteLine("             send as 'Authorization: Bearer <key>'");
             }
             Console.WriteLine();
             Console.WriteLine("Press Ctrl+C to stop.");

@@ -58,7 +58,9 @@ namespace Mux.Cli
                 || a == "print"
                 || a == "probe"
                 || a == "endpoint"
-                || a == "serve");
+                || a == "serve"
+                || a == "export"
+                || a == "plugin");
 
             if (!isNonInteractiveCommand && !Console.IsOutputRedirected)
             {
@@ -88,6 +90,8 @@ USAGE:
     echo ""prompt"" | mux --print          Read prompt from stdin
     mux probe [OPTIONS]                  Validate config and backend access
     mux endpoint <list|ls|show|models> [OPTIONS] Inspect endpoints and enumerate models
+    mux export <id> [OPTIONS]            Export a saved session to Markdown or HTML
+    mux plugin list [OPTIONS]            List configured event hooks and custom commands
 
 OPTIONS:
     -h, --help, /?                       Show this help message and exit
@@ -154,6 +158,15 @@ ENDPOINTS:
     mux endpoint show openai-prod --output-format json
     mux endpoint models --output-format json      Live-enumerate available models per endpoint
     mux endpoint models openai-prod                Enumerate one endpoint's backend models
+
+EXPORT (local, server-free session sharing):
+    mux export --list                              List saved session ids
+    mux export <id> --format html --output out.html
+    mux export <id> --format md                    Render Markdown to stdout
+
+PLUGIN (event hooks + custom commands from ~/.mux/hooks.json):
+    mux plugin list                                Show configured hooks and custom commands
+    mux plugin list --output-format json
 
 EXAMPLES:
     mux                                  Start interactive session (default endpoint)
@@ -261,6 +274,24 @@ CONFIG:
                 {
                     string[] commandArgs = args.Skip(1).ToArray();
                     return RunWrapped(() => new Mux.Cli.Commands.ServeCommand()
+                        .RunAsync(commandArgs, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult());
+                }
+
+                if (args.Length > 0 && string.Equals(args[0], "export", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] commandArgs = args.Skip(1).ToArray();
+                    return new Mux.Cli.Commands.ExportCommand()
+                        .RunAsync(commandArgs, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+
+                if (args.Length > 0 && string.Equals(args[0], "plugin", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] commandArgs = args.Skip(1).ToArray();
+                    return RunWrapped(() => new Mux.Cli.Commands.PluginCommand()
                         .RunAsync(commandArgs, CancellationToken.None)
                         .GetAwaiter()
                         .GetResult());
@@ -394,6 +425,31 @@ CONFIG:
             }
 
             AgentLoopOptions template = BuildInteractiveTemplate(runtime, settings, effectivePolicy, null);
+
+            // Subagent delegation: load the user-authored subagents and, when any are valid, offer the
+            // spawn_subagent tool. The executor runs each subagent as an isolated nested agent loop off the
+            // live template, and resolves a subagent's optional endpoint override against endpoints.json.
+            List<EndpointConfig> subagentEndpoints = SettingsLoader.LoadEndpoints();
+            Mux.Core.Subagents.SubagentRegistry subagentRegistry =
+                new Mux.Core.Subagents.SubagentRegistry(SettingsLoader.LoadSubagents());
+            if (subagentRegistry.Count > 0)
+            {
+                template.Subagents = subagentRegistry;
+                template.SubagentExecutor = new Mux.Core.Subagents.AgentLoopSubagentExecutor(
+                    () => template,
+                    (string name) =>
+                    {
+                        try
+                        {
+                            return SettingsLoader.ResolveEndpoint(subagentEndpoints, name, null, null, null, null, null);
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            return null;
+                        }
+                    });
+            }
+
             JobManager jobManager = JobManager.CreateForAgentLoop(template, runtime.MuxSettings.MaxConcurrency);
 
             // The built-in tool set fills {ToolDescriptions}; MCP tools are appended on top of the resulting
@@ -447,6 +503,30 @@ CONFIG:
                     : $"{runtime.Endpoint.Name} · {runtime.Endpoint.Model}";
 
                 SessionStore sessionStore = new SessionStore();
+
+                // Per-turn undo/redo is available only inside a git work tree. Probe once at startup; when
+                // the working directory is a repository, hand the shell a checkpoint manager so each turn is
+                // snapshotted and /undo and /redo work. Outside a repo the shell reports the feature off.
+                Mux.Core.Checkpoints.CheckpointManager? checkpointManager = null;
+                try
+                {
+                    Mux.Core.Checkpoints.GitCheckpointService checkpointService =
+                        new Mux.Core.Checkpoints.GitCheckpointService(runtime.WorkingDirectory);
+                    if (checkpointService.IsRepositoryAsync(CancellationToken.None).GetAwaiter().GetResult())
+                    {
+                        checkpointManager = new Mux.Core.Checkpoints.CheckpointManager(checkpointService);
+                    }
+                }
+                catch (Exception)
+                {
+                    // git unavailable or probe failed; leave undo/redo disabled.
+                }
+
+                // Load the plugin registry (event hooks + custom slash commands) once. The shell registers
+                // the custom commands, fires session-start hooks in the background, and gates prompt
+                // submission on user-prompt-submit hooks.
+                Mux.Core.Plugins.PluginRegistry pluginRegistry =
+                    new Mux.Core.Plugins.PluginRegistry(SettingsLoader.LoadPluginConfig());
 
                 // Baseline bind (wires the executor and leaves the prompt at its MCP-free base until the
                 // first MCP discovery completes).
@@ -508,7 +588,10 @@ CONFIG:
                     showBoundaries: runtime.MuxSettings.ShowBoundaryLines,
                     mcpRuntime: mcpRuntime,
                     skillRuntime: skillRuntime,
-                    initialPrompt: settings.Prompt);
+                    initialPrompt: settings.Prompt,
+                    checkpointManager: checkpointManager,
+                    pluginRegistry: pluginRegistry,
+                    workingDirectory: runtime.WorkingDirectory);
 
                 // Expose the shell so MCP connection notices (raised on the runtime's background thread once
                 // Start() is called below) can be written into the transcript.
@@ -525,6 +608,23 @@ CONFIG:
 
                 using CancellationTokenSource cts = new CancellationTokenSource();
                 app.RunAsync(cts.Token).GetAwaiter().GetResult();
+
+                // Fire session-end hooks best-effort on a clean exit so cleanup plugins run.
+                if (pluginRegistry.HooksFor(Mux.Core.Plugins.HookEventEnum.SessionEnd).Count > 0)
+                {
+                    try
+                    {
+                        new Mux.Core.Plugins.HookRunner()
+                            .RunAsync(pluginRegistry, Mux.Core.Plugins.HookEventEnum.SessionEnd, "{\"event\":\"session-end\"}", runtime.WorkingDirectory, CancellationToken.None)
+                            .GetAwaiter()
+                            .GetResult();
+                    }
+                    catch (Exception)
+                    {
+                        // Session-end hooks are advisory; never fail the exit path.
+                    }
+                }
+
                 return 0;
             }
             finally

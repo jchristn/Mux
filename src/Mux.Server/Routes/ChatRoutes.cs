@@ -93,15 +93,58 @@ namespace Mux.Server.Routes
                 try
                 {
                     using LlmClient client = new LlmClient(endpoint, ignoreCertErrors);
-                    ConversationMessage reply = await client.SendAsync(messages, new List<ToolDefinition>(), req.Http.Token).ConfigureAwait(false);
 
+                    // Drive the streaming API so we can measure real time-to-first-token and streaming
+                    // duration, then return the buffered text plus stats in a single JSON reply (no SSE
+                    // needed on the wire). Token counts come from the provider-reported usage recorded at
+                    // the end of the stream.
+                    System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    long ttftMs = -1;
+                    System.Text.StringBuilder content = new System.Text.StringBuilder();
+                    string? errorMessage = null;
+
+                    await foreach (Mux.Core.Agent.AgentEvent agentEvent in client.StreamAsync(messages, new List<ToolDefinition>(), req.Http.Token).ConfigureAwait(false))
+                    {
+                        if (agentEvent is Mux.Core.Agent.AssistantTextEvent textEvent)
+                        {
+                            if (ttftMs < 0)
+                            {
+                                ttftMs = stopwatch.ElapsedMilliseconds;
+                            }
+
+                            content.Append(textEvent.Text);
+                        }
+                        else if (agentEvent is Mux.Core.Agent.ErrorEvent errorEvent)
+                        {
+                            errorMessage = errorEvent.Message;
+                        }
+                    }
+
+                    long totalMs = stopwatch.ElapsedMilliseconds;
+
+                    if (errorMessage != null && content.Length == 0)
+                    {
+                        req.Http.Response.StatusCode = 502;
+                        return (object)new ApiError("UpstreamError", "The model backend failed: " + errorMessage);
+                    }
+
+                    Mux.Core.Llm.LlmUsage? usage = client.LastUsage;
                     req.Http.Response.StatusCode = 200;
                     return (object)new ChatReply
                     {
                         Role = "assistant",
-                        Content = reply.Content ?? string.Empty,
+                        Content = content.ToString(),
                         Endpoint = endpoint.Name,
-                        Model = endpoint.Model
+                        Model = endpoint.Model,
+                        Stats = new ChatStats
+                        {
+                            TtftMs = ttftMs,
+                            StreamingMs = ttftMs >= 0 ? System.Math.Max(0, totalMs - ttftMs) : 0,
+                            TotalMs = totalMs,
+                            InputTokens = usage?.InputTokens ?? 0,
+                            OutputTokens = usage?.OutputTokens ?? 0,
+                            TotalTokens = usage?.TotalTokens ?? 0
+                        }
                     };
                 }
                 catch (Exception ex)

@@ -64,6 +64,46 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
+        /// Applies user keybinding overrides, rebinding or unbinding commands by id. Each entry rebuilds
+        /// the matching command with the overriding chord so every downstream surface — key bindings, the
+        /// menu bar, and the footer hints — reflects the change. A null or empty chord unbinds the command;
+        /// an id with no matching command is ignored. Call before <see cref="ApplyTo"/>.
+        /// </summary>
+        /// <param name="overrides">A map of command id to chord (null/empty to unbind). Null is a no-op.</param>
+        public void ApplyOverrides(IReadOnlyDictionary<string, string?>? overrides)
+        {
+            if (overrides == null)
+            {
+                return;
+            }
+
+            foreach (KeyValuePair<string, string?> entry in overrides)
+            {
+                if (string.IsNullOrEmpty(entry.Key) || !_ById.TryGetValue(entry.Key, out CommandDescriptor? existing))
+                {
+                    continue;
+                }
+
+                CommandDescriptor rebound = new CommandDescriptor(
+                    existing.Id,
+                    existing.Title,
+                    entry.Value,
+                    existing.Handler,
+                    existing.Category,
+                    existing.SlashAliases);
+
+                // Replace in place so the command keeps its catalog position (menu order, footer order).
+                int index = _Commands.IndexOf(existing);
+                if (index >= 0)
+                {
+                    _Commands[index] = rebound;
+                }
+
+                _ById[rebound.Id] = rebound;
+            }
+        }
+
+        /// <summary>
         /// Registers every command's handler by id, and binds each command's key chord when present.
         /// </summary>
         /// <param name="application">The application to wire. Must not be null.</param>

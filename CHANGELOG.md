@@ -2,6 +2,79 @@
 
 All notable changes to mux are documented here.
 
+## Unreleased
+
+### Added
+
+- **Subagents (delegated, isolated sub-tasks).** Define named subagents in `~/.mux/subagents.json` (name,
+  description, system prompt, optional endpoint override, tool allow-list, and iteration cap) and the model
+  can hand a self-contained sub-task to one with the new `spawn_subagent` tool. A subagent runs as a nested
+  agent loop in an **isolated conversation** — it never sees or mutates the parent's history — and returns
+  only its final answer, keeping the primary agent's context clean. It cannot spawn further subagents, never
+  carries the parent's task plan, and `spawn_subagent` does not hold the workspace write lease (so a
+  delegated task's own mutating tools serialize normally). The tool is offered only when a valid subagent is
+  defined. New `Mux.Core/Subagents` (`SubagentDefinition`, `SubagentRegistry`, `ISubagentExecutor`,
+  `AgentLoopSubagentExecutor`, `SubagentResult`). A curated **default set covering the product lifecycle** —
+  `product-manager`, `architect`, `software-engineer`, `test-engineer`, `ux-engineer`, `experience-evaluator`,
+  `code-reviewer`, `devops-engineer` — is seeded into `subagents.json`, each tool-scoped to its role (review/
+  planning personas are read-only). Seeding is manifest-tracked so new defaults appear on upgrade without
+  resurrecting ones the user deleted or overwriting edits.
+- **Local session export / sharing.** `/export` (`/share`) in the shell writes the current session to a
+  self-contained HTML file and a Markdown file in the working directory — no server, no network. A new
+  `mux export <id>` CLI verb renders a saved session (`--format md|html`, `--output <path>`, `--list`). The
+  HTML is a single file with inline styles, no external requests, and all dynamic text escaped. New
+  `Mux.Core/Sessions/SessionExporter`.
+- **Custom keybindings.** `~/.mux/keybindings.json` overrides the key chord bound to any command by id
+  (rebind, or `null` to unbind). Overrides flow through every surface — key bindings, menu bar, footer — and
+  an unparseable chord is ignored so a typo never breaks startup.
+- **Undo/redo via git checkpoints.** In a git repository, mux snapshots the working tree before each turn;
+  `/undo` rolls back the last turn's file changes and `/redo` re-applies them. Snapshots capture tracked and
+  untracked (non-ignored) files (reverting edits, restoring deletions, removing new files) using git plumbing
+  only — the branch, history, stash, and staged index are never touched. Its reach is the git working tree;
+  it cannot reverse effects outside it. New `Mux.Core/Checkpoints` (`GitCheckpointService`,
+  `CheckpointManager`, `Checkpoint`).
+- **Plugin system: out-of-process hooks and custom commands.** `~/.mux/hooks.json` configures event hooks
+  (`session-start`, `user-prompt-submit` — vetoable by a blocking hook — and `session-end`) and custom
+  `/<name>` slash commands. Hooks receive the event payload on stdin and their stdout is surfaced into the
+  transcript; everything runs as a literal argument vector, never through a shell. New `mux plugin list` verb
+  and `Mux.Core/Plugins` (`HookRunner`, `PluginRegistry`, `CustomCommandRunner`, config models).
+- New Touchstone suites for all of the above (`Subagent`, `SessionExporter`, `Keybinding`, `Checkpoint`,
+  `Plugin`), run under all three runners on `net8.0` and `net10.0`.
+
+### Web dashboard (`mux serve`)
+
+- **Internationalization (11 languages).** The dashboard ships a first-class i18n runtime — a `t(key)`
+  lookup with per-locale inline catalogs for **English (default), Spanish, Portuguese, French, Italian,
+  German, Mandarin Chinese, Arabic, Russian, Malay, and Hindi**. A topbar language picker persists the
+  choice in `localStorage` and falls back to English for any missing string; **Arabic switches the page to
+  RTL** (`dir="rtl"` with mirrored accents), and counts/dates format via the browser's `Intl`. The primary
+  chrome — navigation, view titles, table headers, row-action menus, empty states, toolbar/pagination,
+  toasts, confirmations, the Home overview, chat, and settings section headers — is fully localized. (Long
+  help-text tooltips and form-field labels remain English for now and fall back cleanly.)
+- **Full configuration management.** The dashboard now manages every mux config surface, not just settings:
+  **Endpoints, MCP servers, prompts, subagents, hooks & custom commands, keybindings, skills** (enable/
+  disable/view/delete), and **sessions** (browse, export to HTML/Markdown, delete). Each is a full-width
+  table with icon row-actions and custom modal add/edit forms — no browser `alert`/`confirm` dialogs. Secrets
+  (endpoint API keys/headers, MCP auth) are never sent to the client and are preserved when left blank. New
+  REST routes back each domain (see `docs/REST_API.md`).
+- **Per-turn chat stats.** Assistant messages show an **(i)** hover with time-to-first-token, streaming time,
+  total latency, and provider token counts (the chat route now streams server-side to measure them).
+- **Markdown rendering fixed** — code blocks preserve their line breaks and escaping, and lists, headings,
+  blockquotes, and inline formatting render correctly (the previous renderer mangled code blocks and ignored
+  lists).
+- **Bearer-only auth.** The REST server and dashboard standardize on `Authorization: Bearer <key>`; the
+  `X-Api-Key` header is no longer accepted (**breaking change** for any external client that used it).
+- Polish: GitHub and theme controls are now icons; consistent table/modal styling across the app.
+- **Dashboard UX pass.** Config surfaces are full-width tables where each row opens its edit modal on click
+  and exposes a single **⋮ action menu** (Edit/Delete, plus view/enable for skills and view/export for
+  sessions) that overlays the table and stays within the viewport (flips up near the bottom, clamps
+  horizontally). Add/edit use custom modals with section grouping and **conditional fields** (MCP shows only
+  the selected transport's fields; endpoints show only the active adapter's auth fields), never browser
+  dialogs. Event Hooks and Custom Commands are now separate pages. Sessions can be **previewed in a modal**
+  (rendered Markdown, or HTML in a sandboxed iframe) as well as downloaded. Server health/version/uptime moved
+  to a topbar status pill and the standalone Server Info tab was removed. Helpful empty states, auto-focus,
+  and refined styling throughout.
+
 ## v0.9.0 (2026-09-07)
 
 ### Added

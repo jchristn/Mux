@@ -77,7 +77,7 @@ namespace Mux.Core.Models
         }
 
         /// <summary>
-        /// The API key required on requests (as <c>Authorization: Bearer &lt;key&gt;</c> or <c>X-Api-Key</c>).
+        /// The API key required on requests (as a bearer token: <c>Authorization: Bearer &lt;key&gt;</c>).
         /// When null or blank, <c>mux serve</c> auto-generates one on first start and persists it. Supports a
         /// literal value or a <c>${VAR}</c> environment reference.
         /// </summary>

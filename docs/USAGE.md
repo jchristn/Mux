@@ -130,8 +130,12 @@ while a turn is in flight queues it to run when the current turn finishes.
 Type a leading `/` in the composer to run a command instead of submitting a prompt. Every command is
 also reachable by key and the menu (one catalog, three surfaces):
 `/endpoint` (`/model`), `/effort` (`/reasoning`), `/settings` (`/config`, `/preferences`, `/prefs`),
-`/help` (`/?`), `/clear`, `/sidebar`, `/save`, `/sessions`, `/tasks`, `/theme`, `/mouse`, `/menu`,
-`/quit` (`/exit`).
+`/help` (`/?`), `/clear`, `/sidebar`, `/save`, `/export` (`/share`), `/undo`, `/redo`, `/sessions`,
+`/tasks`, `/theme`, `/mouse`, `/menu`, `/quit` (`/exit`). Any custom commands from `hooks.json` also
+appear here as `/<name>`.
+
+Key chords for these commands can be rebound in `~/.mux/keybindings.json` — see
+[CONFIG.md](CONFIG.md#keybindingsjson-custom-key-chords). `/help` lists the current command ids.
 
 `/theme` opens a theme selector (pick a theme and apply it); the whole UI — including the panes behind
 the text — conforms to the chosen theme.
@@ -192,6 +196,30 @@ The session autosaves at each turn boundary. `Ctrl+S` / `/save` saves on demand;
 resumes saved sessions (under `~/.mux/sessions`). A resumed session shows the completed conversation
 read-only and marks an interrupted turn as re-run-required — it never silently re-runs it.
 
+### Exporting / sharing a session
+
+`/export` (`/share`) writes the current session to a self-contained **HTML** file and a **Markdown**
+file in the working directory — a local, server-free way to share a transcript. The HTML is a single
+file with inline styles and no external requests. From the command line, `mux export <session-id>`
+renders a saved session; `--format md|html` picks the format, `--output <path>` writes to a file (else
+stdout), and `mux export --list` lists saved session ids. Titles work in place of ids.
+
+```bash
+mux export --list
+mux export my-session --format html --output session.html
+mux export "Refactor auth" --format md > transcript.md
+```
+
+### Undo / redo (git checkpoints)
+
+When the working directory is a git repository, mux snapshots the working tree before each turn, so
+`/undo` rolls the tree back to the state before the last turn and `/redo` re-applies it. A snapshot
+captures tracked and untracked (non-ignored) files: undo reverts modifications, restores deletions, and
+removes files created during the turn. It uses git plumbing only — it never touches your branch, commit
+history, stash, or staged index. Its reach is the git working tree: it cannot reverse effects outside it
+(spawned processes, network calls, `.gitignore`d files). Outside a git repository the commands report the
+feature is unavailable.
+
 ### Background tasks
 
 For a request that spans several steps or files, the model decomposes the work into a plan of tasks
@@ -209,6 +237,26 @@ Interactively, the model works one job's plan at a time (it keeps a single task 
 checklist tracks progress rather than fanning out to concurrent jobs. The opt-in `taskParallelismEnabled`
 (default off) gates the `TaskOrchestrator` engine, which runs a task DAG as parallel jobs under the shared
 write lease for programmatic orchestration; it is not yet wired into the interactive submit path.
+
+### Subagents
+
+Define named subagents in `~/.mux/subagents.json` (see
+[CONFIG.md](CONFIG.md#subagentsjson-subagent-delegation)) and the model can delegate a self-contained
+sub-task to one via the `spawn_subagent` tool. A subagent runs in an **isolated conversation** — it never
+sees or mutates the parent's history — and returns only its final answer, so delegating focused work (a
+review, a scoped search, a mechanical change) keeps the primary agent's context clean. Each subagent can
+have its own system prompt, endpoint, tool allow-list, and iteration cap; the tool is offered only when
+at least one valid subagent is defined. A subagent cannot spawn further subagents.
+
+### Plugins: hooks and custom commands
+
+The plugin system extends mux with out-of-process **event hooks** and **custom slash commands**,
+configured in `~/.mux/hooks.json` (see [CONFIG.md](CONFIG.md#hooksjson-plugin-system-hooks--custom-commands)).
+Hooks run on `session-start`, `user-prompt-submit` (which a blocking hook can veto to refuse a prompt),
+and `session-end`; the event payload arrives on the hook's stdin and its stdout is surfaced into the
+transcript. Custom commands register as `/<name>` and run an external command, posting its output. Both
+run as a literal argument vector — never through a shell. Inspect what is configured with
+`mux plugin list` (add `--output-format json` for machine-readable output).
 
 ## Built-In Process Execution
 

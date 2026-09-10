@@ -50,6 +50,9 @@ If the directory does not exist, `mux` creates it. If `endpoints.json` is missin
 | `skills/` | User-authored skills, one folder per skill (`SKILL.md` plus optional `scripts/` and `resources/`); seeded with a curated default set on first run | Created on demand |
 | `skills.json` | Per-skill enablement and pinning, kept separate from each `SKILL.md` so toggling a skill never rewrites it | No |
 | `sessions/` | Saved interactive sessions (one JSON file per session); the shell autosaves here at each turn boundary and `/sessions` browses/resumes them | Created on demand |
+| `subagents.json` | Named subagents the model can delegate scoped sub-tasks to via `spawn_subagent`; seeded with an example on first run | No |
+| `keybindings.json` | User overrides for command key chords (rebind or unbind); seeded empty on first run | No |
+| `hooks.json` | Event hooks and custom slash commands run out-of-process (the plugin system); seeded empty on first run | No |
 
 For current non-interactive orchestration paths:
 - `settings.json` is optional
@@ -456,3 +459,107 @@ mux v0.9.0 adds an opt-in local REST + WebSocket server and a system-tray agent.
 
 Environment overrides: `MUX_REST_HOST`, `MUX_REST_PORT`, `MUX_REST_APIKEY`. The server is **opt-in** and never
 starts from a plain `mux`/`mux print` run. Full reference: [REST_API.md](REST_API.md).
+
+## `subagents.json` (subagent delegation)
+
+Subagents are named personas the model can delegate a self-contained sub-task to via the
+`spawn_subagent` tool. Each runs in an **isolated conversation** — it never sees or mutates the
+parent's history — so delegating focused work (a review, a scoped search, a mechanical change) keeps
+the primary agent's context clean and lets a cheaper or more specialized model do the work. The tool is
+offered to the model only when at least one valid subagent is defined.
+
+```json
+{
+  "subagents": [
+    {
+      "name": "reviewer",
+      "description": "Reviews a diff or file for bugs and risks; read-only.",
+      "systemPrompt": "You are a meticulous code reviewer. Inspect the described files and report concrete bugs and risks. Do not modify any files.",
+      "endpointName": null,
+      "allowedTools": ["read_file", "grep", "glob", "list_directory", "file_metadata"],
+      "maxIterations": null
+    }
+  ]
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | Unique name the model selects by; empty names are dropped. |
+| `description` | string | Shown to the model in the `spawn_subagent` schema so it can pick the right one. |
+| `systemPrompt` | string | Fully replaces the parent's system prompt for the isolated child run; required. |
+| `endpointName` | string or null | Endpoint the subagent runs under; `null` inherits the parent's endpoint. |
+| `allowedTools` | string[] | Tool-name globs the child is limited to; empty inherits the parent's tool policy. A tight list is the main way to constrain a delegated task. |
+| `maxIterations` | int or null | Agent-loop cap for the child; `null` inherits the parent's cap. |
+
+A subagent cannot itself spawn subagents, and it never carries the parent's task plan. `spawn_subagent`
+does not hold the workspace write lease, so a delegated task's own mutating tools serialize normally.
+
+## `keybindings.json` (custom key chords)
+
+Overrides the default key chord bound to any command, by command id. A chord uses TUIKit syntax
+(`"ctrl+k"`, `"f5"`); `null` unbinds the command's default chord. An unparseable chord is ignored (the
+built-in binding stays), so a typo never breaks startup. The override applies to every surface — key
+bindings, the menu bar, and footer hints. Run `/help` (or press `F1`) to see the current command ids and
+their chords.
+
+```json
+{
+  "bindings": {
+    "mux.clear": "ctrl+k",
+    "mux.save": null
+  }
+}
+```
+
+Common command ids: `mux.quit`, `mux.endpoint`, `mux.clear`, `mux.sidebar.toggle`, `mux.save`,
+`mux.export`, `mux.undo`, `mux.redo`, `mux.queue`, `mux.prompts`, `mux.menu`.
+
+## `hooks.json` (plugin system: hooks & custom commands)
+
+The plugin system extends mux with **out-of-process** event hooks and custom slash commands — no code is
+loaded into the mux process. Both are launched as a literal argument vector (never through a shell), so
+arguments are passed verbatim with no interpolation.
+
+```json
+{
+  "hooks": [
+    {
+      "name": "notify-start",
+      "event": "session-start",
+      "command": "notify-send",
+      "args": ["mux session started"],
+      "blocking": false,
+      "timeoutMs": 15000
+    },
+    {
+      "name": "block-secrets",
+      "event": "user-prompt-submit",
+      "command": "python3",
+      "args": ["/home/me/.mux/guard.py"],
+      "blocking": true,
+      "timeoutMs": 5000
+    }
+  ],
+  "commands": [
+    { "name": "deploy", "description": "Run the deploy script", "command": "bash", "args": ["scripts/deploy.sh"], "timeoutMs": 60000 }
+  ]
+}
+```
+
+**Hooks** run when a lifecycle event fires. Supported events:
+
+| Event | When it fires | Vetoable |
+|---|---|---|
+| `session-start` | Once when the interactive shell starts | No |
+| `user-prompt-submit` | When a prompt is submitted, before the turn runs | Yes |
+| `session-end` | Once on a clean exit | No |
+
+The event payload is delivered to the hook as a JSON document on **stdin**; the hook's **stdout** is
+surfaced into the transcript. For a vetoable event, a hook with `"blocking": true` that exits non-zero
+**blocks** the action (the prompt is refused). A hook whose command cannot start is treated as absent, so
+a typo never wedges the session. `timeoutMs` is clamped to `100-600000` (default 15000).
+
+**Custom commands** register as `/<name>` on the interactive command surface. Invoking one runs the
+command out-of-process in the working directory and posts its output into the transcript. `timeoutMs`
+defaults to 30000. Inspect the configured hooks and commands with `mux plugin list`.

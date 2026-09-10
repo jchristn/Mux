@@ -27,6 +27,32 @@ namespace Mux.Server.Models
     }
 
     /// <summary>
+    /// Per-turn statistics for a dashboard chat reply: latency broken into time-to-first-token and
+    /// streaming duration, plus provider-reported token counts by type. Values are zero when the provider
+    /// or transport did not report them (for example a backend that does not stream token-by-token).
+    /// </summary>
+    public class ChatStats
+    {
+        /// <summary>Milliseconds from request send to the first streamed token (−1 when no token streamed).</summary>
+        public long TtftMs { get; set; }
+
+        /// <summary>Milliseconds spent streaming, from the first token to completion.</summary>
+        public long StreamingMs { get; set; }
+
+        /// <summary>Total wall-clock milliseconds for the turn.</summary>
+        public long TotalMs { get; set; }
+
+        /// <summary>Provider-reported prompt/input tokens (0 when unreported).</summary>
+        public int InputTokens { get; set; }
+
+        /// <summary>Provider-reported completion/output tokens (0 when unreported).</summary>
+        public int OutputTokens { get; set; }
+
+        /// <summary>Provider-reported total tokens (0 when unreported).</summary>
+        public int TotalTokens { get; set; }
+    }
+
+    /// <summary>
     /// A dashboard chat reply.
     /// </summary>
     public class ChatReply
@@ -42,5 +68,8 @@ namespace Mux.Server.Models
 
         /// <summary>Model the reply came from.</summary>
         public string Model { get; set; } = string.Empty;
+
+        /// <summary>Per-turn timing and token statistics.</summary>
+        public ChatStats Stats { get; set; } = new ChatStats();
     }
 }

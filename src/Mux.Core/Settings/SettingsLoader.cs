@@ -10,6 +10,8 @@ namespace Mux.Core.Settings
     using System.Threading;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Plugins;
+    using Mux.Core.Subagents;
 
     /// <summary>
     /// Loads and resolves mux configuration from disk and environment.
@@ -119,6 +121,33 @@ namespace Mux.Core.Settings
                 File.WriteAllText(settingsPath, defaultSettingsJson);
             }
 
+            string hooksPath = Path.Combine(configDir, "hooks.json");
+            if (!File.Exists(hooksPath))
+            {
+                // Seed an empty plugin config. Hooks and custom commands are inert until the user adds
+                // entries here, so seeding never changes behavior on upgrade.
+                string defaultHooks = JsonSerializer.Serialize(new PluginConfig(), _JsonWriteOptions);
+                File.WriteAllText(hooksPath, defaultHooks);
+            }
+
+            string keybindingsPath = Path.Combine(configDir, "keybindings.json");
+            if (!File.Exists(keybindingsPath))
+            {
+                // Seed an empty override map. Every command keeps its built-in chord until the user adds an
+                // entry here (command id -> chord, or null to unbind), so upgrades never change existing keys.
+                KeybindingsFile keybindingsRoot = new KeybindingsFile
+                {
+                    Bindings = new Dictionary<string, string?>(StringComparer.Ordinal)
+                };
+
+                string defaultKeybindings = JsonSerializer.Serialize(keybindingsRoot, _JsonWriteOptions);
+                File.WriteAllText(keybindingsPath, defaultKeybindings);
+            }
+
+            // Seed the curated lifecycle subagents, tracking seeded names in a manifest so a default the
+            // user deletes is not resurrected and existing (same-named or customized) subagents are kept.
+            SeedDefaultSubagents(configDir);
+
             string promptsPath = Path.Combine(configDir, "prompts.json");
             if (!File.Exists(promptsPath))
             {
@@ -143,6 +172,78 @@ namespace Mux.Core.Settings
             string skillsDir = Path.Combine(configDir, "skills");
             Directory.CreateDirectory(skillsDir);
             Mux.Core.Skills.DefaultSkillLibrary.SeedNewInto(skillsDir);
+        }
+
+        /// <summary>
+        /// Seeds the curated default subagents into <c>subagents.json</c>, adding only defaults not already
+        /// present and never before seeded (tracked in <c>subagents.seeded.json</c>). This lets new defaults
+        /// appear on upgrade without resurrecting a default the user deleted or overwriting their edits.
+        /// </summary>
+        /// <param name="configDir">The active configuration directory.</param>
+        private static void SeedDefaultSubagents(string configDir)
+        {
+            string subagentsPath = Path.Combine(configDir, "subagents.json");
+            string manifestPath = Path.Combine(configDir, "subagents.seeded.json");
+
+            List<SubagentDefinition> existing = new List<SubagentDefinition>();
+            if (File.Exists(subagentsPath))
+            {
+                try
+                {
+                    existing = JsonSerializer.Deserialize<SubagentsFile>(ReadAllTextShared(subagentsPath), _JsonOptions)?.Subagents ?? new List<SubagentDefinition>();
+                }
+                catch (Exception)
+                {
+                    existing = new List<SubagentDefinition>();
+                }
+            }
+
+            HashSet<string> seeded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (File.Exists(manifestPath))
+            {
+                try
+                {
+                    foreach (string name in JsonSerializer.Deserialize<List<string>>(ReadAllTextShared(manifestPath), _JsonOptions) ?? new List<string>())
+                    {
+                        seeded.Add(name);
+                    }
+                }
+                catch (Exception)
+                {
+                }
+            }
+
+            HashSet<string> present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (SubagentDefinition definition in existing)
+            {
+                present.Add(definition.Name);
+            }
+
+            bool changed = false;
+            List<string> defaultNames = new List<string>();
+            foreach (SubagentDefinition def in DefaultSubagents.Build())
+            {
+                defaultNames.Add(def.Name);
+                if (!seeded.Contains(def.Name) && !present.Contains(def.Name))
+                {
+                    existing.Add(def);
+                    present.Add(def.Name);
+                    changed = true;
+                }
+            }
+
+            if (changed || !File.Exists(subagentsPath))
+            {
+                File.WriteAllText(subagentsPath, JsonSerializer.Serialize(new SubagentsFile { Subagents = existing }, _JsonWriteOptions));
+            }
+
+            try
+            {
+                File.WriteAllText(manifestPath, JsonSerializer.Serialize(defaultNames, _JsonWriteOptions));
+            }
+            catch (Exception)
+            {
+            }
         }
 
         /// <summary>
@@ -487,6 +588,156 @@ namespace Mux.Core.Settings
             }
 
             return file.Servers;
+        }
+
+        /// <summary>
+        /// Loads the plugin configuration (event hooks and custom commands) from <c>~/.mux/hooks.json</c>.
+        /// </summary>
+        /// <returns>The plugin configuration, or an empty configuration when the file is absent or unreadable.</returns>
+        public static PluginConfig LoadPluginConfig()
+        {
+            string filePath = Path.Combine(GetConfigDirectory(), "hooks.json");
+            if (!File.Exists(filePath))
+            {
+                return new PluginConfig();
+            }
+
+            try
+            {
+                string json = ReadAllTextShared(filePath);
+                return JsonSerializer.Deserialize<PluginConfig>(json, _JsonOptions) ?? new PluginConfig();
+            }
+            catch (JsonException)
+            {
+                return new PluginConfig();
+            }
+            catch (IOException)
+            {
+                return new PluginConfig();
+            }
+        }
+
+        /// <summary>
+        /// Saves the plugin configuration to <c>~/.mux/hooks.json</c>.
+        /// </summary>
+        /// <param name="config">The plugin configuration to persist. Must not be null.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="config"/> is null.</exception>
+        public static void SavePluginConfig(PluginConfig config)
+        {
+            if (config == null)
+            {
+                throw new ArgumentNullException(nameof(config));
+            }
+
+            EnsureConfigDirectory();
+            string json = JsonSerializer.Serialize(config, _JsonWriteOptions);
+            WriteAllTextAtomic(Path.Combine(GetConfigDirectory(), "hooks.json"), json);
+        }
+
+        /// <summary>
+        /// Loads user keybinding overrides from <c>~/.mux/keybindings.json</c>. The file maps a command id
+        /// to a chord string (TUIKit syntax, for example <c>"ctrl+k"</c>); a null or empty value unbinds the
+        /// command's default chord. Unknown ids are returned as-is and ignored by the catalog when applied.
+        /// </summary>
+        /// <returns>The command-id-to-chord overrides, or an empty map when the file is absent or unreadable.</returns>
+        public static Dictionary<string, string?> LoadKeybindings()
+        {
+            string filePath = Path.Combine(GetConfigDirectory(), "keybindings.json");
+            if (!File.Exists(filePath))
+            {
+                return new Dictionary<string, string?>(StringComparer.Ordinal);
+            }
+
+            try
+            {
+                string json = ReadAllTextShared(filePath);
+                KeybindingsFile? file = JsonSerializer.Deserialize<KeybindingsFile>(json, _JsonOptions);
+                Dictionary<string, string?> result = new Dictionary<string, string?>(StringComparer.Ordinal);
+                if (file?.Bindings != null)
+                {
+                    foreach (KeyValuePair<string, string?> entry in file.Bindings)
+                    {
+                        if (!string.IsNullOrWhiteSpace(entry.Key))
+                        {
+                            result[entry.Key] = entry.Value;
+                        }
+                    }
+                }
+
+                return result;
+            }
+            catch (JsonException)
+            {
+                return new Dictionary<string, string?>(StringComparer.Ordinal);
+            }
+            catch (IOException)
+            {
+                return new Dictionary<string, string?>(StringComparer.Ordinal);
+            }
+        }
+
+        /// <summary>
+        /// Saves user keybinding overrides to <c>~/.mux/keybindings.json</c>.
+        /// </summary>
+        /// <param name="bindings">The command-id-to-chord overrides to persist. Must not be null.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="bindings"/> is null.</exception>
+        public static void SaveKeybindings(Dictionary<string, string?> bindings)
+        {
+            if (bindings == null)
+            {
+                throw new ArgumentNullException(nameof(bindings));
+            }
+
+            EnsureConfigDirectory();
+            KeybindingsFile file = new KeybindingsFile { Bindings = bindings };
+            string json = JsonSerializer.Serialize(file, _JsonWriteOptions);
+            WriteAllTextAtomic(Path.Combine(GetConfigDirectory(), "keybindings.json"), json);
+        }
+
+        /// <summary>
+        /// Loads the subagent definitions from <c>~/.mux/subagents.json</c>.
+        /// </summary>
+        /// <returns>The subagent definitions, or an empty list when the file does not exist or cannot be read.</returns>
+        public static List<SubagentDefinition> LoadSubagents()
+        {
+            string filePath = Path.Combine(GetConfigDirectory(), "subagents.json");
+            if (!File.Exists(filePath))
+            {
+                return new List<SubagentDefinition>();
+            }
+
+            try
+            {
+                string json = ReadAllTextShared(filePath);
+                SubagentsFile? file = JsonSerializer.Deserialize<SubagentsFile>(json, _JsonOptions);
+                return file?.Subagents ?? new List<SubagentDefinition>();
+            }
+            catch (JsonException)
+            {
+                return new List<SubagentDefinition>();
+            }
+            catch (IOException)
+            {
+                return new List<SubagentDefinition>();
+            }
+        }
+
+        /// <summary>
+        /// Saves subagent definitions to <c>~/.mux/subagents.json</c>.
+        /// </summary>
+        /// <param name="subagents">The subagent definitions to persist. Must not be null.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="subagents"/> is null.</exception>
+        public static void SaveSubagents(List<SubagentDefinition> subagents)
+        {
+            if (subagents == null)
+            {
+                throw new ArgumentNullException(nameof(subagents));
+            }
+
+            EnsureConfigDirectory();
+            SubagentsFile file = new SubagentsFile { Subagents = subagents };
+            string json = JsonSerializer.Serialize(file, _JsonWriteOptions);
+            WriteAllTextAtomic(Path.Combine(GetConfigDirectory(), "subagents.json"), json);
         }
 
         /// <summary>
@@ -1056,6 +1307,30 @@ namespace Mux.Core.Settings
             /// </summary>
             [JsonPropertyName("skills")]
             public List<SkillIndexEntry>? Skills { get; set; }
+        }
+
+        /// <summary>
+        /// Wrapper class for (de)serializing the keybindings JSON file.
+        /// </summary>
+        private class KeybindingsFile
+        {
+            /// <summary>
+            /// The command-id-to-chord overrides. A null value unbinds the default chord.
+            /// </summary>
+            [JsonPropertyName("bindings")]
+            public Dictionary<string, string?>? Bindings { get; set; }
+        }
+
+        /// <summary>
+        /// Wrapper class for (de)serializing the subagents JSON file.
+        /// </summary>
+        private class SubagentsFile
+        {
+            /// <summary>
+            /// The subagent definitions.
+            /// </summary>
+            [JsonPropertyName("subagents")]
+            public List<SubagentDefinition>? Subagents { get; set; }
         }
 
         #endregion

@@ -49,7 +49,7 @@ namespace Mux.Core.Agent
             _Options = options ?? throw new ArgumentNullException(nameof(options));
             _LlmClient = new LlmClient(options.Endpoint, options.IgnoreCertErrors);
             _LlmClient.OnRetry = options.OnRetry;
-            _ToolRegistry = new BuiltInToolRegistry(options.MuxSettings, options.TaskPlan);
+            _ToolRegistry = new BuiltInToolRegistry(options.MuxSettings, options.TaskPlan, options.Subagents, options.SubagentExecutor);
             _ApprovalRouter = new ApprovalRouter(options.ApprovalPolicy, options.AutoSafeApprovalAllowlist);
         }
 
