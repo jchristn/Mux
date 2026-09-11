@@ -92,6 +92,7 @@ namespace Test.Shared
                     ConversationServiceSuite.Create(),
                     WorkspaceSuite.Create(),
                     CodeTokenizerSuite.Create(),
+                    DesktopPreferencesSuite.Create(),
 
                     CommandRuntimeResolverSuite.Create(),
                     EndpointCommandParserSuite.Create(),

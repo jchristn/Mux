@@ -121,6 +121,11 @@ namespace Mux.Desktop.Shell
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             FlowDirection = localization.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
 
+            // Apply the persisted theme before the first layout so there is no flash of the default.
+            string savedMode = new DesktopPreferencesStore(configDirectory).Load().ThemeMode;
+            AppTheme.Set(ResolveThemeVariant(savedMode));
+            _Theme = AppTheme.Current;
+
             Background = _Theme.Surface;
             Content = BuildLayout();
             PopulateModelPicker();
@@ -555,9 +560,15 @@ namespace Mux.Desktop.Shell
 
         private void SetThemeMode(string mode)
         {
+            bool dark = ResolveThemeVariant(mode);
+            ApplyThemeDark(dark);
+            SaveThemeMode();
+        }
+
+        private bool ResolveThemeVariant(string mode)
+        {
             _ThemeMode = mode;
 
-            bool dark;
             if (string.Equals(mode, "system", StringComparison.OrdinalIgnoreCase))
             {
                 if (Application.Current != null)
@@ -571,18 +582,28 @@ namespace Mux.Desktop.Shell
                     }
                 }
 
-                dark = ResolveSystemDark();
-            }
-            else
-            {
-                dark = string.Equals(mode, "dark", StringComparison.OrdinalIgnoreCase);
-                if (Application.Current != null)
-                {
-                    Application.Current.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
-                }
+                return ResolveSystemDark();
             }
 
-            ApplyThemeDark(dark);
+            bool dark = string.Equals(mode, "dark", StringComparison.OrdinalIgnoreCase);
+            if (Application.Current != null)
+            {
+                Application.Current.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
+            }
+
+            return dark;
+        }
+
+        private void SaveThemeMode()
+        {
+            try
+            {
+                new DesktopPreferencesStore(_ConfigDirectory).Save(new DesktopPreferences { ThemeMode = _ThemeMode });
+            }
+            catch (Exception)
+            {
+                // Best-effort; a failed write just means the choice is not remembered.
+            }
         }
 
         private void OnActualThemeVariantChanged(object? sender, EventArgs e)
