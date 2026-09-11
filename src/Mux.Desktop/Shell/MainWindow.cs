@@ -18,6 +18,7 @@ namespace Mux.Desktop.Shell
     using Avalonia.Threading;
     using Mux.Core.Agent;
     using Mux.Core.Enums;
+    using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
@@ -48,6 +49,8 @@ namespace Mux.Desktop.Shell
         private AppTheme _Theme = AppTheme.Current;
         private StackPanel _ThreadListPanel = null!;
         private ComboBox _ModelPicker = null!;
+        private TextBlock _ModelStatus = null!;
+        private int _ModelValidationSeq;
         private TextBlock _TitleText = null!;
         private StackPanel _Transcript = null!;
         private ScrollViewer _TranscriptScroll = null!;
@@ -654,6 +657,10 @@ namespace Mux.Desktop.Shell
 
             StackPanel right = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
 
+            _ModelStatus = new TextBlock { Text = string.Empty, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+            _ModelStatus.Tip("Whether the selected endpoint responded when it was last checked (validated when you switch models).");
+            right.Children.Add(_ModelStatus);
+
             _ModelPicker = new ComboBox { MinWidth = 200, BorderBrush = _Theme.Border };
             _ModelPicker.Tip("The endpoint and model this conversation sends to. Manage the list under Manage ▸ Endpoints.");
             _ModelPicker.ItemTemplate = new FuncDataTemplate<EndpointConfig>(
@@ -855,6 +862,54 @@ namespace Mux.Desktop.Shell
             if (_ModelPicker.SelectedItem is EndpointConfig endpoint)
             {
                 _Runner.EndpointName = endpoint.Name;
+                _ = ValidateModelAsync(endpoint);
+            }
+        }
+
+        private async Task ValidateModelAsync(EndpointConfig endpoint)
+        {
+            int seq = ++_ModelValidationSeq;
+            _ModelStatus.Foreground = _Theme.Muted;
+            _ModelStatus.Text = "checking…";
+
+            bool ignoreCert = false;
+            try
+            {
+                ignoreCert = SettingsLoader.LoadSettings().IgnoreCertErrors;
+            }
+            catch (Exception)
+            {
+                // Use the default on any settings read failure.
+            }
+
+            ModelLoadResult result;
+            try
+            {
+                using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                result = await LlmClient.LoadModelAsync(endpoint, ignoreCert, cts.Token);
+            }
+            catch (Exception exception)
+            {
+                result = ModelLoadResult.Fail(exception.Message);
+            }
+
+            // Ignore a stale result if the user switched models again while this was in flight.
+            if (seq != _ModelValidationSeq)
+            {
+                return;
+            }
+
+            if (result.Success)
+            {
+                _ModelStatus.Foreground = _Theme.Success;
+                _ModelStatus.Text = "✓ ready";
+                _ModelStatus.Tip("The selected endpoint responded when it was last checked.");
+            }
+            else
+            {
+                _ModelStatus.Foreground = _Theme.Error;
+                _ModelStatus.Text = "✗ unreachable";
+                _ModelStatus.Tip("The selected endpoint did not respond: " + (result.Error ?? "unknown error"));
             }
         }
 
