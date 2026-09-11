@@ -52,9 +52,11 @@ namespace Mux.Desktop.Views
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
             Button cancel = new Button { Content = "Cancel" };
+            cancel.Tip("Close without creating a skill.");
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
             Button ok = new Button { Content = "Create", Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip("Create the skill folder and its SKILL.md.");
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -64,22 +66,22 @@ namespace Mux.Desktop.Views
             root.Children.Add(_Error);
 
             StackPanel form = new StackPanel { Spacing = 10, Margin = new Thickness(0, 0, 14, 0) };
-            form.Children.Add(Field("Id (lowercase, hyphen-separated)", _Id));
-            form.Children.Add(Field("Title", _Title));
-            form.Children.Add(Field("Description", _Description));
-            form.Children.Add(Field("Interpreter", _Interpreter));
-            form.Children.Add(_Mutating);
+            form.Children.Add(Field("Id (lowercase, hyphen-separated)", _Id, "The skill's folder name and unique id, e.g. my-skill. Lowercase letters, digits, and hyphens only."));
+            form.Children.Add(Field("Title", _Title, "A human-readable title shown in the skills list."));
+            form.Children.Add(Field("Description", _Description, "What the skill does; this is how the model decides when to use it."));
+            form.Children.Add(Field("Interpreter", _Interpreter, "The interpreter its commands run under (e.g. bash, python)."));
+            form.Children.Add(_Mutating.Tip("Check if this skill can modify the workspace, so its commands require approval."));
             root.Children.Add(new ScrollViewer { Content = form });
             return root;
         }
 
-        private Control Field(string label, Control control)
+        private Control Field(string label, Control control, string tip)
         {
             StackPanel panel = new StackPanel { Spacing = 4 };
             panel.Children.Add(new TextBlock { Text = label, Foreground = AppTheme.Current.Text, FontWeight = FontWeight.SemiBold });
             control.HorizontalAlignment = HorizontalAlignment.Stretch;
             panel.Children.Add(control);
-            return panel;
+            return panel.Tip(tip);
         }
 
         private void Ok()

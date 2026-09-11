@@ -51,10 +51,10 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<PricingRow>>
             {
-                new TableColumn<PricingRow>("Model", r => r.Model, new GridLength(3, GridUnitType.Star), r => r.Model),
-                new TableColumn<PricingRow>("Input $/Mtok", r => Money(r.Pricing.InputPerMTok), new GridLength(1.5, GridUnitType.Star), r => r.Pricing.InputPerMTok),
-                new TableColumn<PricingRow>("Cached $/Mtok", r => Money(r.Pricing.CachedInputPerMTok), new GridLength(1.5, GridUnitType.Star), r => r.Pricing.CachedInputPerMTok),
-                new TableColumn<PricingRow>("Output $/Mtok", r => Money(r.Pricing.OutputPerMTok), new GridLength(1.5, GridUnitType.Star), r => r.Pricing.OutputPerMTok)
+                new TableColumn<PricingRow>("Model", r => r.Model, new GridLength(3, GridUnitType.Star), r => r.Model, tooltip: "The model id these rates apply to when computing usage cost."),
+                new TableColumn<PricingRow>("Input $/Mtok", r => Money(r.Pricing.InputPerMTok), new GridLength(1.5, GridUnitType.Star), r => r.Pricing.InputPerMTok, tooltip: "US dollars per million prompt (input) tokens."),
+                new TableColumn<PricingRow>("Cached $/Mtok", r => Money(r.Pricing.CachedInputPerMTok), new GridLength(1.5, GridUnitType.Star), r => r.Pricing.CachedInputPerMTok, tooltip: "US dollars per million cached-input tokens (usually cheaper than fresh input)."),
+                new TableColumn<PricingRow>("Output $/Mtok", r => Money(r.Pricing.OutputPerMTok), new GridLength(1.5, GridUnitType.Star), r => r.Pricing.OutputPerMTok, tooltip: "US dollars per million generated (output) tokens.")
             };
         }
 
@@ -82,6 +82,7 @@ namespace Mux.Desktop.Views
             header.Children.Add(title);
 
             Button add = new Button { Content = "＋  Add model", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
+            add.Tip("Add pricing for a model so usage cost can be computed for it.");
             add.Click += (sender, args) => OnAdd();
             DockPanel.SetDock(add, Dock.Right);
             header.Children.Add(add);

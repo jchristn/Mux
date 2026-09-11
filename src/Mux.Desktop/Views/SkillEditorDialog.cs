@@ -70,9 +70,11 @@ namespace Mux.Desktop.Views
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
             Button cancel = new Button { Content = "Cancel" };
+            cancel.Tip("Close without writing changes to SKILL.md.");
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
             Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip("Write the edited SKILL.md back to disk.");
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -81,6 +83,7 @@ namespace Mux.Desktop.Views
             DockPanel.SetDock(_Error, Dock.Bottom);
             root.Children.Add(_Error);
 
+            _Editor.Tip("The skill's SKILL.md: YAML front-matter (name, description, commands) followed by the skill's markdown instructions.");
             root.Children.Add(new Border
             {
                 BorderBrush = theme.Border,

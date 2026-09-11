@@ -77,9 +77,11 @@ namespace Mux.Desktop.Views
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
             Button cancel = new Button { Content = "Cancel" };
+            cancel.Tip("Discard changes and close.");
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
             Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip("Validate and save this MCP server.");
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -89,29 +91,29 @@ namespace Mux.Desktop.Views
             root.Children.Add(_Error);
 
             StackPanel form = new StackPanel { Spacing = 10, Margin = new Thickness(0, 0, 14, 0) };
-            form.Children.Add(Row("Name", _Name));
-            form.Children.Add(Row("Transport", _Transport));
-            form.Children.Add(Row("Command (stdio)", _Command));
-            form.Children.Add(Row("Args (one per line)", _Args));
-            form.Children.Add(Row("Env (KEY=VALUE per line)", _Env));
-            form.Children.Add(Row("URL (http)", _Url));
-            form.Children.Add(Row("MCP path (http)", _McpPath));
-            form.Children.Add(Row("Authentication", _AuthType));
-            form.Children.Add(Row("Bearer token", _BearerToken));
-            form.Children.Add(Row("API key header", _ApiKeyHeader));
-            form.Children.Add(Row("API key value", _ApiKeyValue));
+            form.Children.Add(Row("Name", _Name, "A unique name for this server; its tools are namespaced under it."));
+            form.Children.Add(Row("Transport", _Transport, "stdio launches a local process and talks over stdin/stdout; http connects to a URL."));
+            form.Children.Add(Row("Command (stdio)", _Command, "The executable to launch for a stdio server (e.g. npx, uvx, python)."));
+            form.Children.Add(Row("Args (one per line)", _Args, "Arguments passed to the command, one per line."));
+            form.Children.Add(Row("Env (KEY=VALUE per line)", _Env, "Environment variables for the launched process, one KEY=VALUE per line."));
+            form.Children.Add(Row("URL (http)", _Url, "The base URL of an HTTP MCP server."));
+            form.Children.Add(Row("MCP path (http)", _McpPath, "The request path appended to the URL (defaults to /mcp)."));
+            form.Children.Add(Row("Authentication", _AuthType, "How HTTP requests authenticate: none, a bearer token, or an API key header."));
+            form.Children.Add(Row("Bearer token", _BearerToken, "Sent as “Authorization: Bearer <token>”. Used only for bearer authentication."));
+            form.Children.Add(Row("API key header", _ApiKeyHeader, "The header name carrying the API key (e.g. X-API-Key). Used only for API-key auth."));
+            form.Children.Add(Row("API key value", _ApiKeyValue, "The secret API key sent in the header above. Used only for API-key auth."));
 
             root.Children.Add(new ScrollViewer { Content = form, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto });
             return root;
         }
 
-        private Control Row(string label, Control control)
+        private Control Row(string label, Control control, string tip)
         {
             StackPanel panel = new StackPanel { Spacing = 4 };
             panel.Children.Add(new TextBlock { Text = label, Foreground = AppTheme.Current.Text, FontWeight = FontWeight.SemiBold });
             control.HorizontalAlignment = HorizontalAlignment.Stretch;
             panel.Children.Add(control);
-            return panel;
+            return panel.Tip(tip);
         }
 
         private void Ok()

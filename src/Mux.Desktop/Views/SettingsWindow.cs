@@ -123,9 +123,11 @@ namespace Mux.Desktop.Views
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 14, 0, 0) };
             buttons.Children.Add(_Status);
             Button close = new Button { Content = "Close" };
+            close.Tip("Close this window. Unsaved changes are discarded.");
             close.Click += (sender, args) => Close();
             buttons.Children.Add(close);
             Button save = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
+            save.Tip("Write these settings to settings.json.");
             save.Click += (sender, args) => Save();
             buttons.Children.Add(save);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -134,39 +136,39 @@ namespace Mux.Desktop.Views
             StackPanel form = new StackPanel { Spacing = 8, Margin = new Thickness(0, 14, 14, 0) };
 
             form.Children.Add(Section("General"));
-            form.Children.Add(LabeledRow("Theme", _ThemeSelector));
-            form.Children.Add(LabeledRow("Default approval policy", _ApprovalPolicy));
-            form.Children.Add(LabeledRow("Max agent iterations (1–100)", _MaxIterations));
-            form.Children.Add(LabeledRow("Max token budget (blank = off)", _MaxTokenBudget));
-            form.Children.Add(LabeledRow("System prompt path (blank = default)", _SystemPromptPath));
+            form.Children.Add(LabeledRow("Theme", _ThemeSelector, "Light or dark appearance for the whole app; applies immediately."));
+            form.Children.Add(LabeledRow("Default approval policy", _ApprovalPolicy, "Stored default for how tool calls are approved (ask / auto / deny). The desktop app still auto-runs only read-only tools."));
+            form.Children.Add(LabeledRow("Max agent iterations (1–100)", _MaxIterations, "Hard cap on agent-loop turns before a run is forced to stop."));
+            form.Children.Add(LabeledRow("Max token budget (blank = off)", _MaxTokenBudget, "Optional ceiling on estimated working-context tokens per run; the run stops cleanly if exceeded."));
+            form.Children.Add(LabeledRow("System prompt path (blank = default)", _SystemPromptPath, "Path to a custom system-prompt file. Blank uses the built-in persona."));
 
             form.Children.Add(Section("Context & compaction"));
-            form.Children.Add(_AutoCompact);
-            form.Children.Add(LabeledRow("Compaction strategy", _CompactionStrategy));
-            form.Children.Add(LabeledRow("Preserve recent turns (1–10)", _CompactionPreserveTurns));
-            form.Children.Add(LabeledRow("Context warning threshold % (50–95)", _ContextWarningThreshold));
-            form.Children.Add(LabeledRow("Context safety margin % (5–50)", _ContextSafetyMargin));
-            form.Children.Add(LabeledRow("Token estimation ratio (2.0–6.0)", _TokenEstimationRatio));
+            form.Children.Add(_AutoCompact.Tip("Automatically summarize or trim old history before a run when the prompt would overflow the context window."));
+            form.Children.Add(LabeledRow("Compaction strategy", _CompactionStrategy, "How history is shrunk: “summary” replaces old turns with a summary; “trim” drops the oldest turns."));
+            form.Children.Add(LabeledRow("Preserve recent turns (1–10)", _CompactionPreserveTurns, "How many of the most recent user-led turns compaction always keeps verbatim."));
+            form.Children.Add(LabeledRow("Context warning threshold % (50–95)", _ContextWarningThreshold, "The share of the usable input budget at which mux starts warning about context pressure."));
+            form.Children.Add(LabeledRow("Context safety margin % (5–50)", _ContextSafetyMargin, "Portion of the context window held in reserve so responses have room to generate."));
+            form.Children.Add(LabeledRow("Token estimation ratio (2.0–6.0)", _TokenEstimationRatio, "Characters-per-token estimate used for quick token counts before a call."));
 
             form.Children.Add(Section("Jobs & concurrency"));
-            form.Children.Add(LabeledRow("Max concurrency (1–32)", _MaxConcurrency));
-            form.Children.Add(LabeledRow("Default enqueue behavior", _EnqueueBehavior));
-            form.Children.Add(_TaskPlanning);
-            form.Children.Add(_TaskParallelism);
+            form.Children.Add(LabeledRow("Max concurrency (1–32)", _MaxConcurrency, "The most jobs allowed to run at the same time."));
+            form.Children.Add(LabeledRow("Default enqueue behavior", _EnqueueBehavior, "What happens when you submit while a job is busy: ask, run now, queue after, or add to the focused job."));
+            form.Children.Add(_TaskPlanning.Tip("Let the model break a job into a tracked plan of tasks with the plan/update-task tools."));
+            form.Children.Add(_TaskParallelism.Tip("Allow dependency-ready tasks to fan out as their own concurrent jobs (needs task planning on)."));
 
             form.Children.Add(Section("Tools & network"));
-            form.Children.Add(LabeledRow("Tool timeout (ms, 1000–300000)", _ToolTimeout));
-            form.Children.Add(LabeledRow("Process timeout (ms, 1000–600000)", _ProcessTimeout));
-            form.Children.Add(_IgnoreCertErrors);
-            form.Children.Add(_ShowBoundaryLines);
+            form.Children.Add(LabeledRow("Tool timeout (ms, 1000–300000)", _ToolTimeout, "How long a single tool call may run before it is cancelled."));
+            form.Children.Add(LabeledRow("Process timeout (ms, 1000–600000)", _ProcessTimeout, "How long a spawned command process may run before it is killed."));
+            form.Children.Add(_IgnoreCertErrors.Tip("Skip TLS certificate validation for mux's own network calls — only for enterprise proxies that intercept TLS."));
+            form.Children.Add(_ShowBoundaryLines.Tip("Draw dark-grey boundary rules in the interactive terminal shell (TUI only)."));
 
             form.Children.Add(Section("Skills"));
-            form.Children.Add(_SkillsEnabled);
-            form.Children.Add(LabeledRow("Skill refresh interval (s, min 5)", _SkillRefreshInterval));
-            form.Children.Add(LabeledRow("Skills directory (blank = default)", _SkillsDirectory));
+            form.Children.Add(_SkillsEnabled.Tip("Load user-authored skills and expose them to the model."));
+            form.Children.Add(LabeledRow("Skill refresh interval (s, min 5)", _SkillRefreshInterval, "How often the shell re-scans the skills directory for changes."));
+            form.Children.Add(LabeledRow("Skills directory (blank = default)", _SkillsDirectory, "Override the skills folder (e.g. a shared library). Blank uses ~/.mux/skills."));
 
             form.Children.Add(Section("Telemetry"));
-            form.Children.Add(_Telemetry);
+            form.Children.Add(_Telemetry.Tip("Record token/latency/cost history to a local SQLite database that powers the Usage dashboard."));
 
             form.Children.Add(new TextBlock
             {
@@ -193,7 +195,7 @@ namespace Mux.Desktop.Views
             };
         }
 
-        private static Control LabeledRow(string label, Control control)
+        private static Control LabeledRow(string label, Control control, string tip)
         {
             DockPanel row = new DockPanel();
             TextBlock text = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Width = 280, Foreground = AppTheme.Current.Text };
@@ -201,7 +203,7 @@ namespace Mux.Desktop.Views
             row.Children.Add(text);
             control.HorizontalAlignment = HorizontalAlignment.Stretch;
             row.Children.Add(control);
-            return row;
+            return row.Tip(tip);
         }
 
         private void Save()

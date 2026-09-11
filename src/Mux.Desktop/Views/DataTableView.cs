@@ -122,6 +122,8 @@ namespace Mux.Desktop.Views
                     headerControl = new TextBlock { Text = column.Header, Foreground = theme.Muted, FontWeight = FontWeight.SemiBold };
                 }
 
+                string headerTip = column.Tooltip ?? (column.SortKey != null ? "Click to sort by " + column.Header : column.Header);
+                headerControl.Tip(headerTip);
                 Grid.SetColumn(headerControl, c);
                 _HeaderGrid.Children.Add(headerControl);
             }
@@ -238,6 +240,7 @@ namespace Mux.Desktop.Views
                 VerticalAlignment = VerticalAlignment.Center
             };
             actionsButton.Flyout = BuildFlyout(row, theme);
+            actionsButton.Tip("Actions for this row (or right-click the row)");
             Grid.SetColumn(actionsButton, _Columns.Count);
             grid.Children.Add(actionsButton);
 
@@ -252,6 +255,7 @@ namespace Mux.Desktop.Views
 
             if (_OnRowActivated != null)
             {
+                rowBorder.Tip("Click to open this row for editing; right-click for more actions");
                 rowBorder.Tapped += (sender, args) =>
                 {
                     // A click on the ⋯ actions button opens its menu; don't also activate the row.
@@ -278,6 +282,11 @@ namespace Mux.Desktop.Views
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 Margin = new Thickness(0, 0, 10, 0)
             };
+
+            if (!string.IsNullOrEmpty(text))
+            {
+                label.Tip(text);
+            }
 
             if (string.IsNullOrEmpty(badge))
             {

@@ -70,9 +70,11 @@ namespace Mux.Desktop.Views
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
             Button cancel = new Button { Content = "Cancel" };
+            cancel.Tip("Discard changes and close.");
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
             Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip("Save this prompt profile.");
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -82,22 +84,22 @@ namespace Mux.Desktop.Views
             root.Children.Add(_Error);
 
             StackPanel form = new StackPanel { Spacing = 10, Margin = new Thickness(0, 0, 14, 0) };
-            form.Children.Add(Field("Name", _Name));
-            form.Children.Add(_IsActive);
-            form.Children.Add(Field("System prompt", _SystemPrompt));
-            form.Children.Add(Field("Tools-disabled prompt", _ToolsDisabled));
-            form.Children.Add(Field("Compaction prompt", _Compaction));
+            form.Children.Add(Field("Name", _Name, "A short name for this profile, shown in the profiles list."));
+            form.Children.Add(_IsActive.Tip("Make this the profile that drives the agent's persona for new runs."));
+            form.Children.Add(Field("System prompt", _SystemPrompt, "The main persona and instructions sent to the model at the start of every conversation."));
+            form.Children.Add(Field("Tools-disabled prompt", _ToolsDisabled, "An alternative system prompt used when tools are turned off for a run."));
+            form.Children.Add(Field("Compaction prompt", _Compaction, "The instruction used to summarize old history when compacting the conversation."));
 
             root.Children.Add(new ScrollViewer { Content = form });
             return root;
         }
 
-        private Control Field(string label, Control control)
+        private Control Field(string label, Control control, string tip)
         {
             StackPanel panel = new StackPanel { Spacing = 4 };
             panel.Children.Add(new TextBlock { Text = label, FontWeight = FontWeight.SemiBold, Foreground = AppTheme.Current.Text });
             panel.Children.Add(control);
-            return panel;
+            return panel.Tip(tip);
         }
 
         private void Ok()

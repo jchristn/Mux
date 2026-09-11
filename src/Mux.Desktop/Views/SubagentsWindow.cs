@@ -45,11 +45,11 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<SubagentDefinition>>
             {
-                new TableColumn<SubagentDefinition>("Name", s => string.IsNullOrEmpty(s.Name) ? "(unnamed)" : s.Name, new GridLength(2, GridUnitType.Star), s => s.Name),
-                new TableColumn<SubagentDefinition>("Description", s => string.IsNullOrEmpty(s.Description) ? "—" : s.Description, new GridLength(3, GridUnitType.Star)),
-                new TableColumn<SubagentDefinition>("Endpoint", s => string.IsNullOrEmpty(s.EndpointName) ? "default" : s.EndpointName, new GridLength(1.5, GridUnitType.Star), s => s.EndpointName ?? string.Empty),
-                new TableColumn<SubagentDefinition>("Tools", s => s.AllowedTools.Count == 0 ? "all" : s.AllowedTools.Count.ToString(), new GridLength(1, GridUnitType.Star), s => s.AllowedTools.Count),
-                new TableColumn<SubagentDefinition>("Max iters", s => s.MaxIterations?.ToString() ?? "—", new GridLength(1, GridUnitType.Star), s => s.MaxIterations ?? 0)
+                new TableColumn<SubagentDefinition>("Name", s => string.IsNullOrEmpty(s.Name) ? "(unnamed)" : s.Name, new GridLength(2, GridUnitType.Star), s => s.Name, tooltip: "The subagent's name, used when the agent delegates work to it."),
+                new TableColumn<SubagentDefinition>("Description", s => string.IsNullOrEmpty(s.Description) ? "—" : s.Description, new GridLength(3, GridUnitType.Star), tooltip: "What this subagent is for; helps the model decide when to delegate to it."),
+                new TableColumn<SubagentDefinition>("Endpoint", s => string.IsNullOrEmpty(s.EndpointName) ? "default" : s.EndpointName, new GridLength(1.5, GridUnitType.Star), s => s.EndpointName ?? string.Empty, tooltip: "The endpoint this subagent runs on, or “default” to inherit the main conversation's."),
+                new TableColumn<SubagentDefinition>("Tools", s => s.AllowedTools.Count == 0 ? "all" : s.AllowedTools.Count.ToString(), new GridLength(1, GridUnitType.Star), s => s.AllowedTools.Count, tooltip: "How many tools this subagent may use (“all” means no restriction)."),
+                new TableColumn<SubagentDefinition>("Max iters", s => s.MaxIterations?.ToString() ?? "—", new GridLength(1, GridUnitType.Star), s => s.MaxIterations ?? 0, tooltip: "The subagent's agent-loop iteration cap (“—” inherits the global setting).")
             };
         }
 
@@ -72,6 +72,7 @@ namespace Mux.Desktop.Views
             header.Children.Add(title);
 
             Button add = new Button { Content = "＋  Add subagent", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
+            add.Tip("Define a new subagent the model can delegate scoped tasks to.");
             add.Click += (sender, args) => OnAdd();
             DockPanel.SetDock(add, Dock.Right);
             header.Children.Add(add);

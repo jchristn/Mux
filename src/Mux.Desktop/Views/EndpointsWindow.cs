@@ -50,11 +50,11 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<EndpointConfig>>
             {
-                new TableColumn<EndpointConfig>("Name", e => e.Name, new GridLength(2, GridUnitType.Star), e => e.Name, e => e.IsDefault ? "default" : null),
-                new TableColumn<EndpointConfig>("Adapter", e => e.AdapterType.ToString(), new GridLength(1.2, GridUnitType.Star), e => e.AdapterType.ToString()),
-                new TableColumn<EndpointConfig>("Model", e => string.IsNullOrEmpty(e.Model) ? "—" : e.Model, new GridLength(2, GridUnitType.Star), e => e.Model),
-                new TableColumn<EndpointConfig>("Base URL", e => e.BaseUrl, new GridLength(2.5, GridUnitType.Star), e => e.BaseUrl),
-                new TableColumn<EndpointConfig>("Context", e => e.ContextWindow.ToString("N0"), new GridLength(1, GridUnitType.Star), e => e.ContextWindow)
+                new TableColumn<EndpointConfig>("Name", e => e.Name, new GridLength(2, GridUnitType.Star), e => e.Name, e => e.IsDefault ? "default" : null, tooltip: "The endpoint's display name. The green “default” badge marks the endpoint new conversations use."),
+                new TableColumn<EndpointConfig>("Adapter", e => e.AdapterType.ToString(), new GridLength(1.2, GridUnitType.Star), e => e.AdapterType.ToString(), tooltip: "The provider protocol this endpoint speaks (OpenAI, Ollama, Anthropic, and so on)."),
+                new TableColumn<EndpointConfig>("Model", e => string.IsNullOrEmpty(e.Model) ? "—" : e.Model, new GridLength(2, GridUnitType.Star), e => e.Model, tooltip: "The model identifier requests are sent to."),
+                new TableColumn<EndpointConfig>("Base URL", e => e.BaseUrl, new GridLength(2.5, GridUnitType.Star), e => e.BaseUrl, tooltip: "The server address requests are sent to."),
+                new TableColumn<EndpointConfig>("Context", e => e.ContextWindow.ToString("N0"), new GridLength(1, GridUnitType.Star), e => e.ContextWindow, tooltip: "The model's context window size, in tokens.")
             };
         }
 
@@ -84,6 +84,7 @@ namespace Mux.Desktop.Views
             header.Children.Add(title);
 
             Button add = new Button { Content = "＋  Add endpoint", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
+            add.Tip("Add a new model endpoint (provider, URL, model, and generation settings).");
             add.Click += (sender, args) => OnAdd();
             DockPanel.SetDock(add, Dock.Right);
             header.Children.Add(add);

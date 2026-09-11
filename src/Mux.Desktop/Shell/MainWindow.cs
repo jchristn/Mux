@@ -200,44 +200,44 @@ namespace Mux.Desktop.Shell
             bool conversationsExpanded = expanded && _ConversationsOpen;
 
             StackPanel top = new StackPanel { Spacing = 2 };
-            top.Children.Add(NavItem(_SidebarCollapsed ? "»" : "«", "Toggle sidebar", ToggleSidebarCollapse, accent: false));
-            top.Children.Add(NavItem(_SidebarCollapsed ? "＋" : "＋   " + _Localization.Get(StringKeys.NewConversation), "New conversation", () => _ = NewChatAsync(), accent: true));
+            top.Children.Add(NavItem(_SidebarCollapsed ? "»" : "«", _SidebarCollapsed ? "Expand the sidebar back to full width." : "Collapse the sidebar to just icons to make more room for the conversation.", ToggleSidebarCollapse, accent: false));
+            top.Children.Add(NavItem(_SidebarCollapsed ? "＋" : "＋   " + _Localization.Get(StringKeys.NewConversation), "Start a new, empty conversation.", () => _ = NewChatAsync(), accent: true));
             if (!conversationsExpanded)
             {
-                top.Children.Add(NavItem(_SidebarCollapsed ? "🗂" : "🗂   Conversations      ▸", "Conversations", ToggleConversations, accent: false));
+                top.Children.Add(NavItem(_SidebarCollapsed ? "🗂" : "🗂   Conversations      ▸", "Show your saved conversations to switch between or manage them.", ToggleConversations, accent: false));
             }
 
             DockPanel.SetDock(top, Dock.Top);
             panel.Children.Add(top);
 
             StackPanel bottom = new StackPanel { Spacing = 2 };
-            bottom.Children.Add(NavItem(_SidebarCollapsed ? "📊" : "📊   Usage", "Usage", OpenUsageWindow, accent: false));
+            bottom.Children.Add(NavItem(_SidebarCollapsed ? "📊" : "📊   Usage", "Open the usage dashboard: token totals, cost, latency charts, and per-call history.", OpenUsageWindow, accent: false));
             if (_ManageOpen && expanded)
             {
                 StackPanel manageGroup = new StackPanel { Spacing = 2 };
-                manageGroup.Children.Add(NavItem("🛠   Manage           ▾", "Manage", ToggleManage, accent: false));
-                manageGroup.Children.Add(ManageDrawerItem("🔌   Endpoints", "Endpoints", OpenEndpointsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🧩   MCP servers", "MCP servers", OpenMcpServersWindow));
-                manageGroup.Children.Add(ManageDrawerItem("📝   Prompts", "Prompt profiles", OpenPromptsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("✨   Skills", "Skills", OpenSkillsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🤖   Subagents", "Subagents", OpenSubagentsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("💲   Pricing", "Model pricing", OpenPricingWindow));
+                manageGroup.Children.Add(NavItem("🛠   Manage           ▾", "Hide the configuration managers.", ToggleManage, accent: false));
+                manageGroup.Children.Add(ManageDrawerItem("🔌   Endpoints", "Add, edit, and choose the default model endpoint.", OpenEndpointsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🧩   MCP servers", "Manage MCP servers that extend the agent with external tools.", OpenMcpServersWindow));
+                manageGroup.Children.Add(ManageDrawerItem("📝   Prompts", "Manage prompt profiles (system, tools-disabled, and compaction prompts).", OpenPromptsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("✨   Skills", "Install, edit, and enable user skills.", OpenSkillsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🤖   Subagents", "Define subagents the model can delegate scoped tasks to.", OpenSubagentsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("💲   Pricing", "Edit per-model token rates used to compute usage cost.", OpenPricingWindow));
                 bottom.Children.Add(HighlightBlock(manageGroup));
             }
             else
             {
-                bottom.Children.Add(NavItem(_SidebarCollapsed ? "🛠" : "🛠   Manage           ▸", "Manage", ToggleManage, accent: false));
+                bottom.Children.Add(NavItem(_SidebarCollapsed ? "🛠" : "🛠   Manage           ▸", "Show the configuration managers: endpoints, MCP, prompts, skills, subagents, and pricing.", ToggleManage, accent: false));
             }
 
-            bottom.Children.Add(NavItem(_SidebarCollapsed ? "⚙" : "⚙   Settings", "Settings", OpenSettingsWindow, accent: false));
-            bottom.Children.Add(NavItem(_SidebarCollapsed ? "ⓘ" : "ⓘ   About", "About", OpenAboutWindow, accent: false));
+            bottom.Children.Add(NavItem(_SidebarCollapsed ? "⚙" : "⚙   Settings", "Open application settings (approval, context, jobs, tools, skills, telemetry).", OpenSettingsWindow, accent: false));
+            bottom.Children.Add(NavItem(_SidebarCollapsed ? "ⓘ" : "ⓘ   About", "About mux — version and project information.", OpenAboutWindow, accent: false));
             DockPanel.SetDock(bottom, Dock.Bottom);
             panel.Children.Add(bottom);
 
             if (conversationsExpanded)
             {
                 DockPanel conversations = new DockPanel();
-                Button conversationsToggle = NavItem("🗂   Conversations      ▾", "Conversations", ToggleConversations, accent: false);
+                Button conversationsToggle = NavItem("🗂   Conversations      ▾", "Hide your saved conversations.", ToggleConversations, accent: false);
                 DockPanel.SetDock(conversationsToggle, Dock.Top);
                 conversations.Children.Add(conversationsToggle);
                 conversations.Children.Add(BuildThreadListControl());
@@ -293,7 +293,7 @@ namespace Mux.Desktop.Shell
                 Padding = new Thickness(10, 8, 10, 8),
                 Margin = new Thickness(0, 0, 0, 2)
             };
-            ToolTip.SetTip(button, tooltip);
+            button.Tip(tooltip);
             button.Click += (sender, args) => onClick();
             return button;
         }
@@ -312,7 +312,7 @@ namespace Mux.Desktop.Shell
                 Margin = new Thickness(0, 0, 0, 1),
                 FontSize = 13
             };
-            ToolTip.SetTip(button, tooltip);
+            button.Tip(tooltip);
             button.Click += (sender, args) => onClick();
             return button;
         }
@@ -331,6 +331,12 @@ namespace Mux.Desktop.Shell
             else
             {
                 _ManageOpen = !_ManageOpen;
+            }
+
+            // Accordion: only one section is expanded at a time.
+            if (_ManageOpen)
+            {
+                _ConversationsOpen = false;
             }
 
             if (_SidebarHost != null)
@@ -369,6 +375,12 @@ namespace Mux.Desktop.Shell
                 _ConversationsOpen = !_ConversationsOpen;
             }
 
+            // Accordion: only one section is expanded at a time.
+            if (_ConversationsOpen)
+            {
+                _ManageOpen = false;
+            }
+
             if (_SidebarHost != null)
             {
                 _SidebarHost.Child = BuildSidebarContent();
@@ -388,7 +400,31 @@ namespace Mux.Desktop.Shell
                 return;
             }
 
-            new UsageDashboardWindow(new UsageAnalyticsService(_UsageQuery, true)).Show(this);
+            _ = OpenUsageWindowAsync();
+        }
+
+        private async Task OpenUsageWindowAsync()
+        {
+            Dictionary<string, string> titles = new Dictionary<string, string>(StringComparer.Ordinal);
+            try
+            {
+                IReadOnlyList<ThreadSummary> threads = await _Threads.ListAsync(CancellationToken.None);
+                foreach (ThreadSummary thread in threads)
+                {
+                    titles[thread.Id] = DisplayTitle(thread.Title);
+                }
+            }
+            catch (Exception)
+            {
+                // Fall back to raw session ids if the thread list cannot be read.
+            }
+
+            string? Resolve(string? sessionId)
+            {
+                return sessionId != null && titles.TryGetValue(sessionId, out string? title) ? title : null;
+            }
+
+            new UsageDashboardWindow(new UsageAnalyticsService(_UsageQuery!, true), Resolve).Show(this);
         }
 
         private void OpenEndpointsWindow()
@@ -507,12 +543,14 @@ namespace Mux.Desktop.Shell
             {
                 _TitleText.Text = "mux";
             }
+            _TitleText.Tip("The current conversation's title (auto-generated from your first message; rename it from the conversation list).");
             DockPanel.SetDock(_TitleText, Dock.Left);
             header.Children.Add(_TitleText);
 
             StackPanel right = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
 
             _ModelPicker = new ComboBox { MinWidth = 200, BorderBrush = _Theme.Border };
+            _ModelPicker.Tip("The endpoint and model this conversation sends to. Manage the list under Manage ▸ Endpoints.");
             _ModelPicker.ItemTemplate = new FuncDataTemplate<EndpointConfig>(
                 (item, scope) => new TextBlock { Text = item != null ? item.Name : string.Empty },
                 supportsRecycling: true);
@@ -539,11 +577,13 @@ namespace Mux.Desktop.Shell
                 Foreground = _Theme.Text,
                 BorderBrush = _Theme.Border
             };
+            _Composer.Tip("Type your message. Enter sends; Shift+Enter, Ctrl+Enter, or Ctrl+J insert a new line. Type /? for commands.");
             // Handle keys on the tunnel route so this runs BEFORE the TextBox's own Enter handling; otherwise
             // the TextBox inserts a newline and marks the event handled before we ever see plain Enter.
             _Composer.AddHandler(InputElement.KeyDownEvent, OnComposerKeyDown, RoutingStrategies.Tunnel);
 
             _SendButton = AccentButton("Send");
+            _SendButton.Tip("Send your message (Enter). While the model is responding this becomes Stop to cancel the turn.");
             _SendButton.VerticalAlignment = VerticalAlignment.Bottom;
             _SendButton.Padding = new Thickness(18, 8, 18, 8);
             _SendButton.Margin = new Thickness(8, 0, 0, 0);

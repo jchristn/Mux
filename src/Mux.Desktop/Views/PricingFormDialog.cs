@@ -57,17 +57,19 @@ namespace Mux.Desktop.Views
         {
             AppTheme theme = AppTheme.Current;
             StackPanel form = new StackPanel { Margin = new Thickness(24), Spacing = 10 };
-            form.Children.Add(Field("Model", _Model));
-            form.Children.Add(Field("Input $/Mtok", _Input));
-            form.Children.Add(Field("Cached input $/Mtok", _Cached));
-            form.Children.Add(Field("Output $/Mtok", _Output));
+            form.Children.Add(Field("Model", _Model, "The model id these rates apply to (must match the model name in usage records)."));
+            form.Children.Add(Field("Input $/Mtok", _Input, "US dollars per million prompt (input) tokens."));
+            form.Children.Add(Field("Cached input $/Mtok", _Cached, "US dollars per million cached-input tokens."));
+            form.Children.Add(Field("Output $/Mtok", _Output, "US dollars per million generated (output) tokens."));
             form.Children.Add(_Error);
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
             Button cancel = new Button { Content = "Cancel" };
+            cancel.Tip("Discard changes and close.");
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
             Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip("Save these rates for the model.");
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             form.Children.Add(buttons);
@@ -75,13 +77,13 @@ namespace Mux.Desktop.Views
             return form;
         }
 
-        private Control Field(string label, Control control)
+        private Control Field(string label, Control control, string tip)
         {
             StackPanel panel = new StackPanel { Spacing = 4 };
             panel.Children.Add(new TextBlock { Text = label, Foreground = AppTheme.Current.Text, FontWeight = FontWeight.SemiBold });
             control.HorizontalAlignment = HorizontalAlignment.Stretch;
             panel.Children.Add(control);
-            return panel;
+            return panel.Tip(tip);
         }
 
         private void Ok()

@@ -22,7 +22,8 @@ namespace Mux.Desktop.Views
         /// <param name="sortKey">Optional projection to a sortable key; null makes the column non-sortable.</param>
         /// <param name="badge">Optional projection to inline badge text; null or empty draws no badge.</param>
         /// <param name="foreground">Optional projection to a cell foreground brush; null uses the default text color.</param>
-        public TableColumn(string header, Func<TRow, string> text, GridLength width, Func<TRow, IComparable>? sortKey = null, Func<TRow, string?>? badge = null, Func<TRow, IBrush?>? foreground = null)
+        /// <param name="tooltip">Optional descriptive tooltip for the column header.</param>
+        public TableColumn(string header, Func<TRow, string> text, GridLength width, Func<TRow, IComparable>? sortKey = null, Func<TRow, string?>? badge = null, Func<TRow, IBrush?>? foreground = null, string? tooltip = null)
         {
             Header = header ?? string.Empty;
             Text = text ?? throw new ArgumentNullException(nameof(text));
@@ -30,6 +31,7 @@ namespace Mux.Desktop.Views
             SortKey = sortKey;
             Badge = badge;
             Foreground = foreground;
+            Tooltip = tooltip;
         }
 
         /// <summary>The column header text.</summary>
@@ -46,6 +48,9 @@ namespace Mux.Desktop.Views
 
         /// <summary>Optional projection to a cell foreground brush; null uses the default text color.</summary>
         public Func<TRow, IBrush?>? Foreground { get; }
+
+        /// <summary>Optional descriptive tooltip for the column header.</summary>
+        public string? Tooltip { get; }
 
         /// <summary>The column width.</summary>
         public GridLength Width { get; }

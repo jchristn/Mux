@@ -38,11 +38,13 @@ namespace Mux.Desktop.Views
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
             Button cancel = new Button { Content = "Cancel" };
+            cancel.Tip("Dismiss without making any change.");
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
 
             Button confirm = new Button { Content = confirmLabel, Foreground = AppTheme.Current.AccentText };
             confirm.Background = destructive ? AppTheme.Current.Error : AppTheme.Current.AccentButton;
+            confirm.Tip(destructive ? "Confirm — this cannot be undone." : "Confirm this action.");
             confirm.Click += (sender, args) => Close(true);
             buttons.Children.Add(confirm);
 

@@ -43,9 +43,11 @@ namespace Mux.Desktop.Views
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
             Button cancel = new Button { Content = "Cancel" };
+            cancel.Tip("Dismiss without saving your entry.");
             cancel.Click += (sender, args) => Close(null);
             buttons.Children.Add(cancel);
             Button ok = new Button { Content = "OK", Background = AppTheme.Current.AccentButton, Foreground = AppTheme.Current.AccentText };
+            ok.Tip("Accept the entered value (or press Enter).");
             ok.Click += (sender, args) => Submit();
             buttons.Children.Add(ok);
             panel.Children.Add(buttons);

@@ -79,9 +79,11 @@ namespace Mux.Desktop.Views
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
             Button cancel = new Button { Content = "Cancel" };
+            cancel.Tip("Discard changes and close.");
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
             Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip("Save this subagent definition.");
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -91,23 +93,23 @@ namespace Mux.Desktop.Views
             root.Children.Add(_Error);
 
             StackPanel form = new StackPanel { Spacing = 10, Margin = new Thickness(0, 0, 14, 0) };
-            form.Children.Add(Field("Name", _Name));
-            form.Children.Add(Field("Description", _Description));
-            form.Children.Add(Field("Endpoint", _Endpoint));
-            form.Children.Add(Field("System prompt", _SystemPrompt));
-            form.Children.Add(Field("Allowed tools (one per line; blank = all)", _AllowedTools));
-            form.Children.Add(Field("Max iterations (blank = default)", _MaxIterations));
+            form.Children.Add(Field("Name", _Name, "The subagent's name, referenced when the main agent delegates to it."));
+            form.Children.Add(Field("Description", _Description, "What this subagent does; helps the model decide when to hand work to it."));
+            form.Children.Add(Field("Endpoint", _Endpoint, "The endpoint this subagent runs on, or inherit the main conversation's default."));
+            form.Children.Add(Field("System prompt", _SystemPrompt, "The persona and instructions this subagent runs with."));
+            form.Children.Add(Field("Allowed tools (one per line; blank = all)", _AllowedTools, "Restrict which tools this subagent may use, one tool name per line. Blank allows all."));
+            form.Children.Add(Field("Max iterations (blank = default)", _MaxIterations, "Cap on this subagent's agent-loop turns. Blank uses the global setting."));
 
             root.Children.Add(new ScrollViewer { Content = form });
             return root;
         }
 
-        private Control Field(string label, Control control)
+        private Control Field(string label, Control control, string tip)
         {
             StackPanel panel = new StackPanel { Spacing = 4 };
             panel.Children.Add(new TextBlock { Text = label, FontWeight = FontWeight.SemiBold, Foreground = AppTheme.Current.Text });
             panel.Children.Add(control);
-            return panel;
+            return panel.Tip(tip);
         }
 
         private void Ok()

@@ -19,13 +19,25 @@ namespace Mux.Desktop.Views
     /// </summary>
     public sealed class UsageDashboardWindow : Window
     {
-        private const string TableColumns = "150,*,70,70,90,90,70";
+        private const string TableColumns = "150,1.2*,1.6*,66,66,86,86,72";
         private const double PlotHeight = 270;
         private static readonly IBrush PromptColor = new SolidColorBrush(Color.Parse("#4c8bf5"));
         private static readonly IBrush CachedColor = new SolidColorBrush(Color.Parse("#3fb950"));
         private static readonly IBrush OutputColor = new SolidColorBrush(Color.Parse("#d29922"));
         private static readonly IBrush P99Color = new SolidColorBrush(Color.Parse("#dc2626"));
-        private static readonly string[] Headers = { "When", "Endpoint", "In", "Out", "Latency", "Cost", "Status" };
+        private static readonly string[] Headers = { "When", "Endpoint", "Conversation", "In", "Out", "Latency", "Cost", "Status" };
+
+        private static readonly string[] HeaderTips =
+        {
+            "When the call happened (your local time).",
+            "The endpoint the call was sent to.",
+            "The conversation (session) the call belongs to.",
+            "Prompt (input) tokens sent.",
+            "Generated (output) tokens received.",
+            "Total round-trip time for the call.",
+            "Estimated US-dollar cost from the pricing table.",
+            "Whether the call succeeded or the error code."
+        };
 
         private readonly IUsageAnalyticsService _Analytics;
         private readonly WrapPanel _KpiStrip = new WrapPanel { Orientation = Orientation.Horizontal };
@@ -41,6 +53,7 @@ namespace Mux.Desktop.Views
 
         private UsageRange _Range = UsageRange.Day;
         private ChartMetric _Metric = ChartMetric.Tokens;
+        private readonly Func<string?, string?>? _ConversationName;
         private int _SortColumn;
         private bool _SortDescending = true;
 
@@ -48,11 +61,13 @@ namespace Mux.Desktop.Views
         /// Instantiate the usage window.
         /// </summary>
         /// <param name="analytics">The usage analytics service. Required.</param>
+        /// <param name="conversationNameResolver">Optional map from a session id to a conversation title.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="analytics"/> is null.</exception>
-        public UsageDashboardWindow(IUsageAnalyticsService analytics)
+        public UsageDashboardWindow(IUsageAnalyticsService analytics, Func<string?, string?>? conversationNameResolver = null)
         {
             ArgumentNullException.ThrowIfNull(analytics);
             _Analytics = analytics;
+            _ConversationName = conversationNameResolver;
 
             AppTheme theme = AppTheme.Current;
 
@@ -105,14 +120,15 @@ namespace Mux.Desktop.Views
         {
             DockPanel header = new DockPanel();
             TextBlock title = new TextBlock { Text = "Usage", FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
+            title.Tip("Token, cost, latency, and per-call telemetry for the selected time range.");
             DockPanel.SetDock(title, Dock.Left);
             header.Children.Add(title);
 
             StackPanel ranges = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Right };
-            ranges.Children.Add(RangeButton("Hour", UsageRange.Hour, theme));
-            ranges.Children.Add(RangeButton("Day", UsageRange.Day, theme));
-            ranges.Children.Add(RangeButton("Week", UsageRange.Week, theme));
-            ranges.Children.Add(RangeButton("Month", UsageRange.Month, theme));
+            ranges.Children.Add(RangeButton("Hour", UsageRange.Hour, theme).Tip("Show usage from the last hour."));
+            ranges.Children.Add(RangeButton("Day", UsageRange.Day, theme).Tip("Show usage from the last day."));
+            ranges.Children.Add(RangeButton("Week", UsageRange.Week, theme).Tip("Show usage from the last week."));
+            ranges.Children.Add(RangeButton("Month", UsageRange.Month, theme).Tip("Show usage from the last month."));
             DockPanel.SetDock(ranges, Dock.Right);
             header.Children.Add(ranges);
             return header;
@@ -140,17 +156,18 @@ namespace Mux.Desktop.Views
         {
             _MetricTabs.Children.Clear();
             _MetricButtons.Clear();
-            AddMetricTab("Tokens", ChartMetric.Tokens, theme);
-            AddMetricTab("Cost", ChartMetric.Cost, theme);
-            AddMetricTab("Latency", ChartMetric.Latency, theme);
-            AddMetricTab("TTFT", ChartMetric.Ttft, theme);
-            AddMetricTab("Streaming", ChartMetric.Streaming, theme);
-            AddMetricTab("Throughput", ChartMetric.Throughput, theme);
+            AddMetricTab("Tokens", ChartMetric.Tokens, theme, "Chart prompt/cached/output tokens per time bucket (stacked).");
+            AddMetricTab("Cost", ChartMetric.Cost, theme, "Chart estimated US-dollar cost per time bucket.");
+            AddMetricTab("Latency", ChartMetric.Latency, theme, "Chart total response time distribution (min–max, avg, p95, p99).");
+            AddMetricTab("TTFT", ChartMetric.Ttft, theme, "Chart time-to-first-token distribution per time bucket.");
+            AddMetricTab("Streaming", ChartMetric.Streaming, theme, "Chart streaming (generation) time distribution per time bucket.");
+            AddMetricTab("Throughput", ChartMetric.Throughput, theme, "Chart output tokens-per-second distribution per time bucket.");
         }
 
-        private void AddMetricTab(string label, ChartMetric metric, AppTheme theme)
+        private void AddMetricTab(string label, ChartMetric metric, AppTheme theme, string tip)
         {
             Button button = new Button { Content = label, BorderBrush = theme.Border, Padding = new Thickness(12, 6, 12, 6) };
+            button.Tip(tip);
             _MetricButtons[metric] = button;
             ApplyTabStyle(button, metric == _Metric, theme);
             button.Click += (sender, args) =>
@@ -192,6 +209,7 @@ namespace Mux.Desktop.Views
                     Padding = new Thickness(4, 2, 4, 2),
                     HorizontalContentAlignment = HorizontalAlignment.Left
                 };
+                cell.Tip((i < HeaderTips.Length ? HeaderTips[i] : Headers[i]) + " Click to sort.");
                 cell.Click += (sender, args) => SortBy(column, theme);
                 Grid.SetColumn(cell, i);
                 _EventsHeader.Children.Add(cell);
@@ -256,15 +274,15 @@ namespace Mux.Desktop.Views
         private void RenderKpis(UsageMetrics metrics, AppTheme theme)
         {
             _KpiStrip.Children.Clear();
-            _KpiStrip.Children.Add(Kpi("Total tokens", metrics.TotalTokens.ToString("#,##0"), theme));
-            _KpiStrip.Children.Add(Kpi("Cost", "$" + metrics.CostUsd.ToString("0.0000"), theme));
-            _KpiStrip.Children.Add(Kpi("Calls", metrics.Calls.ToString("#,##0"), theme));
-            _KpiStrip.Children.Add(Kpi("Error rate", (metrics.ErrorRate * 100).ToString("0.#") + "%", theme));
-            _KpiStrip.Children.Add(Kpi("Avg TTFT", metrics.AvgTtftMs.ToString("#,##0") + " ms", theme));
-            _KpiStrip.Children.Add(Kpi("Avg latency", metrics.AvgTotalMs.ToString("#,##0") + " ms", theme));
+            _KpiStrip.Children.Add(Kpi("Total tokens", metrics.TotalTokens.ToString("#,##0"), "Sum of prompt, cached, and output tokens across every call in this range.", theme));
+            _KpiStrip.Children.Add(Kpi("Cost", "$" + metrics.CostUsd.ToString("0.0000"), "Estimated total US-dollar cost, computed from the pricing table.", theme));
+            _KpiStrip.Children.Add(Kpi("Calls", metrics.Calls.ToString("#,##0"), "Number of model calls recorded in this range.", theme));
+            _KpiStrip.Children.Add(Kpi("Error rate", (metrics.ErrorRate * 100).ToString("0.#") + "%", "Share of calls in this range that failed.", theme));
+            _KpiStrip.Children.Add(Kpi("Avg TTFT", metrics.AvgTtftMs.ToString("#,##0") + " ms", "Average time to first token — how quickly responses start streaming.", theme));
+            _KpiStrip.Children.Add(Kpi("Avg latency", metrics.AvgTotalMs.ToString("#,##0") + " ms", "Average total round-trip time per call.", theme));
         }
 
-        private Control Kpi(string label, string value, AppTheme theme)
+        private Control Kpi(string label, string value, string tip, AppTheme theme)
         {
             StackPanel content = new StackPanel { Spacing = 2 };
             content.Children.Add(new TextBlock { Text = label.ToUpperInvariant(), Foreground = theme.Muted, FontSize = 10, FontWeight = FontWeight.SemiBold });
@@ -280,7 +298,7 @@ namespace Mux.Desktop.Views
                 Margin = new Thickness(0, 0, 10, 10),
                 MinWidth = 130,
                 Child = content
-            };
+            }.Tip(tip);
         }
 
         private Control BuildChart(AppTheme theme)
@@ -722,10 +740,11 @@ namespace Mux.Desktop.Views
                 Grid line = new Grid { Margin = new Thickness(2, 3, 2, 3), ColumnDefinitions = new ColumnDefinitions(TableColumns) };
                 AddDataCell(line, 0, DateTimeOffset.FromUnixTimeMilliseconds(row.TimestampUnixMs).LocalDateTime.ToString("MMM d HH:mm:ss"), theme);
                 AddDataCell(line, 1, row.EndpointName, theme);
-                AddDataCell(line, 2, row.InputTokens.ToString("#,##0"), theme);
-                AddDataCell(line, 3, row.OutputTokens.ToString("#,##0"), theme);
-                AddDataCell(line, 4, row.TotalMs.HasValue ? row.TotalMs.Value.ToString("#,##0") + " ms" : "—", theme);
-                AddDataCell(line, 5, "$" + row.CostUsd.ToString("0.0000"), theme);
+                AddDataCell(line, 2, ConversationLabel(row), theme);
+                AddDataCell(line, 3, row.InputTokens.ToString("#,##0"), theme);
+                AddDataCell(line, 4, row.OutputTokens.ToString("#,##0"), theme);
+                AddDataCell(line, 5, row.TotalMs.HasValue ? row.TotalMs.Value.ToString("#,##0") + " ms" : "—", theme);
+                AddDataCell(line, 6, "$" + row.CostUsd.ToString("0.0000"), theme);
 
                 TextBlock status = new TextBlock
                 {
@@ -734,7 +753,8 @@ namespace Mux.Desktop.Views
                     FontSize = 12,
                     Margin = new Thickness(4, 2, 4, 2)
                 };
-                Grid.SetColumn(status, 6);
+                status.Tip(row.Success ? "The call succeeded." : "The call failed" + (string.IsNullOrEmpty(row.ErrorCode) ? "." : ": " + row.ErrorCode));
+                Grid.SetColumn(status, 7);
                 line.Children.Add(status);
 
                 _EventsList.Children.Add(line);
@@ -750,7 +770,7 @@ namespace Mux.Desktop.Views
             }
         }
 
-        private static int CompareByColumn(UsageEventRow a, UsageEventRow b, int column)
+        private int CompareByColumn(UsageEventRow a, UsageEventRow b, int column)
         {
             switch (column)
             {
@@ -759,18 +779,36 @@ namespace Mux.Desktop.Views
                 case 1:
                     return string.Compare(a.EndpointName, b.EndpointName, StringComparison.OrdinalIgnoreCase);
                 case 2:
-                    return a.InputTokens.CompareTo(b.InputTokens);
+                    return string.Compare(ConversationLabel(a), ConversationLabel(b), StringComparison.OrdinalIgnoreCase);
                 case 3:
-                    return a.OutputTokens.CompareTo(b.OutputTokens);
+                    return a.InputTokens.CompareTo(b.InputTokens);
                 case 4:
-                    return (a.TotalMs ?? 0).CompareTo(b.TotalMs ?? 0);
+                    return a.OutputTokens.CompareTo(b.OutputTokens);
                 case 5:
-                    return a.CostUsd.CompareTo(b.CostUsd);
+                    return (a.TotalMs ?? 0).CompareTo(b.TotalMs ?? 0);
                 case 6:
+                    return a.CostUsd.CompareTo(b.CostUsd);
+                case 7:
                     return a.Success.CompareTo(b.Success);
                 default:
                     return 0;
             }
+        }
+
+        private string ConversationLabel(UsageEventRow row)
+        {
+            string? resolved = _ConversationName?.Invoke(row.SessionId);
+            if (!string.IsNullOrWhiteSpace(resolved))
+            {
+                return resolved!;
+            }
+
+            if (string.IsNullOrEmpty(row.SessionId))
+            {
+                return "—";
+            }
+
+            return row.SessionId!.Length > 8 ? row.SessionId!.Substring(0, 8) : row.SessionId!;
         }
 
         private static void AddDataCell(Grid grid, int column, string text, AppTheme theme)
@@ -783,6 +821,11 @@ namespace Mux.Desktop.Views
                 Margin = new Thickness(4, 2, 4, 2),
                 TextTrimming = TextTrimming.CharacterEllipsis
             };
+            if (!string.IsNullOrEmpty(text))
+            {
+                cell.Tip(text);
+            }
+
             Grid.SetColumn(cell, column);
             grid.Children.Add(cell);
         }

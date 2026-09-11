@@ -64,11 +64,11 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<McpServerConfig>>
             {
-                new TableColumn<McpServerConfig>("", StatusGlyph, new GridLength(28), null, null, StatusBrush),
-                new TableColumn<McpServerConfig>("Name", s => s.Name, new GridLength(2, GridUnitType.Star), s => s.Name),
-                new TableColumn<McpServerConfig>("Transport", s => s.Transport.ToString(), new GridLength(1, GridUnitType.Star), s => s.Transport.ToString()),
-                new TableColumn<McpServerConfig>("Target", DescribeTarget, new GridLength(3, GridUnitType.Star), DescribeTarget),
-                new TableColumn<McpServerConfig>("Auth", s => s.Auth.Type.ToString(), new GridLength(1, GridUnitType.Star), s => s.Auth.Type.ToString())
+                new TableColumn<McpServerConfig>("", StatusGlyph, new GridLength(28), null, null, StatusBrush, tooltip: "Connectivity, probed when this window opens: green ✓ = reachable, red ✗ = failed, … = checking."),
+                new TableColumn<McpServerConfig>("Name", s => s.Name, new GridLength(2, GridUnitType.Star), s => s.Name, tooltip: "The MCP server's unique name, used to reference its tools."),
+                new TableColumn<McpServerConfig>("Transport", s => s.Transport.ToString(), new GridLength(1, GridUnitType.Star), s => s.Transport.ToString(), tooltip: "How mux connects: stdio launches a local process; http connects to a URL."),
+                new TableColumn<McpServerConfig>("Target", DescribeTarget, new GridLength(3, GridUnitType.Star), DescribeTarget, tooltip: "The launch command (stdio) or endpoint URL (http) this server uses."),
+                new TableColumn<McpServerConfig>("Auth", s => s.Auth.Type.ToString(), new GridLength(1, GridUnitType.Star), s => s.Auth.Type.ToString(), tooltip: "The authentication scheme sent with HTTP requests (none, bearer token, or API key header).")
             };
         }
 
@@ -129,6 +129,7 @@ namespace Mux.Desktop.Views
             header.Children.Add(title);
 
             Button add = new Button { Content = "＋  Add server", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
+            add.Tip("Add a new MCP server to extend the agent with external tools.");
             add.Click += (sender, args) => OnAdd();
             DockPanel.SetDock(add, Dock.Right);
             header.Children.Add(add);

@@ -48,8 +48,8 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<PromptProfile>>
             {
-                new TableColumn<PromptProfile>("Name", p => string.IsNullOrEmpty(p.Name) ? "(unnamed)" : p.Name, new GridLength(2, GridUnitType.Star), p => p.Name, p => p.IsActive ? "active" : null),
-                new TableColumn<PromptProfile>("System prompt", p => Preview(p.SystemPrompt), new GridLength(4, GridUnitType.Star))
+                new TableColumn<PromptProfile>("Name", p => string.IsNullOrEmpty(p.Name) ? "(unnamed)" : p.Name, new GridLength(2, GridUnitType.Star), p => p.Name, p => p.IsActive ? "active" : null, tooltip: "The profile's name. The green “active” badge marks the profile currently driving the agent's persona."),
+                new TableColumn<PromptProfile>("System prompt", p => Preview(p.SystemPrompt), new GridLength(4, GridUnitType.Star), tooltip: "A preview of this profile's system prompt (the persona and instructions sent to the model).")
             };
         }
 
@@ -90,6 +90,7 @@ namespace Mux.Desktop.Views
             header.Children.Add(title);
 
             Button add = new Button { Content = "＋  Add profile", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
+            add.Tip("Add a new prompt profile (a named system/tools-disabled/compaction prompt set).");
             add.Click += (sender, args) => OnAdd();
             DockPanel.SetDock(add, Dock.Right);
             header.Children.Add(add);

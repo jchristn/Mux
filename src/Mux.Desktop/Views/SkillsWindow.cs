@@ -52,10 +52,10 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<SkillStatus>>
             {
-                new TableColumn<SkillStatus>("Title", s => string.IsNullOrEmpty(s.Title) ? s.Name : s.Title, new GridLength(2.5, GridUnitType.Star), s => s.Title, s => s.Enabled ? "enabled" : null),
-                new TableColumn<SkillStatus>("Id", s => s.Name, new GridLength(2, GridUnitType.Star), s => s.Name),
-                new TableColumn<SkillStatus>("Commands", s => s.CommandCount.ToString(), new GridLength(1, GridUnitType.Star), s => s.CommandCount),
-                new TableColumn<SkillStatus>("Status", s => s.Valid ? "valid" : "invalid", new GridLength(1.4, GridUnitType.Star), s => s.Valid ? 1 : 0)
+                new TableColumn<SkillStatus>("Title", s => string.IsNullOrEmpty(s.Title) ? s.Name : s.Title, new GridLength(2.5, GridUnitType.Star), s => s.Title, s => s.Enabled ? "enabled" : null, tooltip: "The skill's human-readable title. The green “enabled” badge marks skills exposed to the model."),
+                new TableColumn<SkillStatus>("Id", s => s.Name, new GridLength(2, GridUnitType.Star), s => s.Name, tooltip: "The skill's folder id under the skills directory."),
+                new TableColumn<SkillStatus>("Commands", s => s.CommandCount.ToString(), new GridLength(1, GridUnitType.Star), s => s.CommandCount, tooltip: "How many commands this skill defines."),
+                new TableColumn<SkillStatus>("Status", s => s.Valid ? "valid" : "invalid", new GridLength(1.4, GridUnitType.Star), s => s.Valid ? 1 : 0, tooltip: "Whether the skill's SKILL.md parses correctly. Invalid skills cannot be enabled.")
             };
         }
 
@@ -89,6 +89,7 @@ namespace Mux.Desktop.Views
             headerRow.Children.Add(titleBlock);
 
             Button add = new Button { Content = "＋  Add skill", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Padding = new Thickness(12, 6, 12, 6) };
+            add.Tip("Scaffold a new skill (creates a SKILL.md folder under the skills directory).");
             add.Click += (sender, args) => OnAdd();
             DockPanel.SetDock(add, Dock.Right);
             headerRow.Children.Add(add);

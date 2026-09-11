@@ -91,9 +91,11 @@ namespace Mux.Desktop.Views
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 14, 0, 0) };
             Button cancel = new Button { Content = "Cancel" };
+            cancel.Tip("Discard changes and close.");
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
             Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip("Validate and save this endpoint.");
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -111,23 +113,23 @@ namespace Mux.Desktop.Views
                 grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
             }
 
-            Place(grid, Field("Name", _Name), 0, 0);
-            Place(grid, Field("Adapter", _Adapter), 0, 1);
-            Place(grid, Field("Base URL", _BaseUrl), 1, 0);
-            Place(grid, Field("Model", _Model), 1, 1);
-            Place(grid, Field("API key (optional)", _ApiKey), 2, 0);
-            Place(grid, Field("Reasoning effort", _ReasoningEffort), 2, 1);
-            Place(grid, Field("Max output tokens", _MaxTokens), 3, 0);
-            Place(grid, Field("Temperature (0.0–2.0)", _Temperature), 3, 1);
-            Place(grid, Field("Context window", _ContextWindow), 4, 0);
-            Place(grid, Field("Timeout (ms)", _Timeout), 4, 1);
-            Place(grid, Field("Max agent iterations (blank = global)", _MaxAgentIterations), 5, 0);
-            Place(grid, Field("Gemini thinking budget (blank = default)", _GeminiThinkingBudget), 5, 1);
+            Place(grid, Field("Name", _Name, "A unique, human-readable name for this endpoint (shown in the model picker)."), 0, 0);
+            Place(grid, Field("Adapter", _Adapter, "The provider protocol to speak: OpenAI, Ollama, Anthropic, Gemini, and so on."), 0, 1);
+            Place(grid, Field("Base URL", _BaseUrl, "The server address requests are sent to, e.g. http://localhost:11434 for Ollama."), 1, 0);
+            Place(grid, Field("Model", _Model, "The exact model identifier the provider expects (e.g. gpt-4o, llama3.1)."), 1, 1);
+            Place(grid, Field("API key (optional)", _ApiKey, "Secret key sent to authenticate. Leave blank for local servers that need none."), 2, 0);
+            Place(grid, Field("Reasoning effort", _ReasoningEffort, "How hard reasoning models think. “(off)” sends no reasoning field."), 2, 1);
+            Place(grid, Field("Max output tokens", _MaxTokens, "Upper bound on tokens the model may generate per response (1024–131072)."), 3, 0);
+            Place(grid, Field("Temperature (0.0–2.0)", _Temperature, "Sampling randomness: lower is more focused/deterministic, higher is more creative."), 3, 1);
+            Place(grid, Field("Context window", _ContextWindow, "The model's total token budget for prompt + response; drives compaction."), 4, 0);
+            Place(grid, Field("Timeout (ms)", _Timeout, "How long to wait for a single request before giving up (minimum 10000 ms)."), 4, 1);
+            Place(grid, Field("Max agent iterations (blank = global)", _MaxAgentIterations, "Cap on agent-loop turns for this endpoint. Blank inherits the global setting."), 5, 0);
+            Place(grid, Field("Gemini thinking budget (blank = default)", _GeminiThinkingBudget, "Gemini-only thinking token budget. -1 = dynamic, 0 = off. Blank uses the default."), 5, 1);
 
             StackPanel checks = new StackPanel { Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
-            checks.Children.Add(_IsDefault);
-            checks.Children.Add(_AutoApprove);
-            checks.Children.Add(_ShowThinking);
+            checks.Children.Add(_IsDefault.Tip("Make this the endpoint new conversations use by default."));
+            checks.Children.Add(_AutoApprove.Tip("Let this endpoint's tool calls run without the approval prompt (use with care)."));
+            checks.Children.Add(_ShowThinking.Tip("Stream the model's reasoning into the thinking panel when it emits any."));
             Grid.SetRow(checks, 6);
             Grid.SetColumn(checks, 0);
             Grid.SetColumnSpan(checks, 2);
@@ -144,13 +146,13 @@ namespace Mux.Desktop.Views
             grid.Children.Add(field);
         }
 
-        private Control Field(string label, Control control)
+        private Control Field(string label, Control control, string tip)
         {
             StackPanel panel = new StackPanel { Spacing = 4 };
             panel.Children.Add(new TextBlock { Text = label, Foreground = AppTheme.Current.Text, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.NoWrap });
             control.HorizontalAlignment = HorizontalAlignment.Stretch;
             panel.Children.Add(control);
-            return panel;
+            return panel.Tip(tip);
         }
 
         private void Ok()
