@@ -1038,8 +1038,24 @@ var IC={
  del:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>',
  view:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
  dl:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>',
- power:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/><path d="M12 2v10"/></svg>'
+ power:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/><path d="M12 2v10"/></svg>',
+ reload:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>'
 };
+/* Turn the text "Reload"/"Refresh" list buttons into compact icon buttons. Done in JS (not the static
+   markup) so the icon is applied uniformly and the i18n pass can't overwrite it: data-i18n is removed so
+   a later language switch won't restore the text label. The button id, handlers, and title tooltip are
+   left intact, and the current label becomes the accessible name. */
+function iconizeRefreshButtons(){
+  Array.prototype.forEach.call(document.querySelectorAll("button"),function(b){
+    var id=b.id||"";
+    if(!(/_reload$/.test(id)||id==="usage_refresh"||id==="reloadSettingsBtn"))return;
+    if(!b.getAttribute("aria-label"))b.setAttribute("aria-label",(b.textContent||"Reload").trim());
+    b.removeAttribute("data-i18n");
+    b.classList.remove("btn","secondary");
+    b.classList.add("iconbtn","icononly");
+    b.innerHTML=IC.reload;
+  });
+}
 function openModal(title,bodyHtml,buttons,wide){
   el("modalTitle").textContent=title;el("modalBody").innerHTML=bodyHtml;
   el("modalBox").className="modal"+(wide?(wide===true?" wide":" "+wide):"");
@@ -1745,6 +1761,7 @@ el("serverUrl").textContent=location.host;
 el("langSel").value=LOCALE;
 el("langSel").addEventListener("change",function(){setLocale(el("langSel").value);});
 applyI18n();
+iconizeRefreshButtons();
 document.title="mux · "+viewTitle("home");
 loadStatus();setInterval(loadStatus,15000);
 loadEndpoints();
