@@ -15,6 +15,7 @@ namespace Mux.Agent
     public sealed class AgentHost
     {
         private MuxServer? _Server;
+        private Mux.Core.Telemetry.UsageTelemetry? _Telemetry;
 
         /// <summary>
         /// The base URL the server is listening on, or an empty string before start.
@@ -138,12 +139,22 @@ namespace Mux.Agent
             rest.ApiKey = key;
 
             string sessionsDir = Path.Combine(SettingsLoader.GetConfigDirectory(), "sessions");
+
+            // Open the shared usage-telemetry store and hand the server a query service (so the dashboard's
+            // charts and KPIs are populated) and a recorder (so the agent's own chat calls are captured).
+            // Without this the agent served an empty dashboard even though `mux serve` did not. Best-effort:
+            // a disabled/unopenable store yields empty data and a no-op recorder.
+            _Telemetry?.Dispose();
+            _Telemetry = Mux.Core.Telemetry.UsageTelemetry.Create(settings, SettingsLoader.GetConfigDirectory(), null);
+
             _Server = new MuxServer(
                 rest,
                 Defaults.ProductVersion,
                 new SessionStore(sessionsDir),
                 () => SettingsLoader.LoadEndpoints(),
-                logger: null);
+                logger: null,
+                usageQuery: _Telemetry.CreateQueryService(() => SettingsLoader.LoadPricing()),
+                usageRecorder: _Telemetry.Recorder);
 
             _Server.Start();
             BaseUrl = _Server.BaseUrl;
@@ -196,6 +207,16 @@ namespace Mux.Agent
                 // Best-effort shutdown.
             }
             _Server = null;
+
+            try
+            {
+                _Telemetry?.Dispose(); // flush and close the usage store
+            }
+            catch (Exception)
+            {
+                // Best-effort shutdown.
+            }
+            _Telemetry = null;
         }
     }
 }

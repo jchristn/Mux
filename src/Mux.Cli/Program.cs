@@ -74,6 +74,11 @@ namespace Mux.Cli
                 }
 
                 Console.WriteLine();
+
+                // Bring up the background tray agent (REST server + dashboard) if it is not already running,
+                // so the dashboard and usage telemetry are available while the interactive session runs.
+                // Best-effort: never blocks or fails startup.
+                AgentLauncher.EnsureRunning();
             }
 
             return Dispatch(args);

@@ -85,9 +85,9 @@ body{background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
 .sidebar{background:var(--sidebar);color:var(--sidebar-text);display:flex;flex-direction:column;overflow-y:auto}
 .brand{display:flex;align-items:center;gap:10px;padding:16px 18px;font-weight:700;font-size:18px}
 .brand img{width:26px;height:26px;border-radius:5px;background:#fff;padding:2px}
-.nav-group{padding:8px 10px}
+.nav-group{padding:4px 10px}
 .nav-label{color:var(--sidebar-muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:8px 10px 4px}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:6px;color:var(--sidebar-text);cursor:pointer;font-size:14px;user-select:none}
+.nav-item{display:flex;align-items:center;gap:10px;padding:5px 12px;border-radius:6px;color:var(--sidebar-text);cursor:pointer;font-size:14px;user-select:none}
 .nav-item:hover{background:rgba(255,255,255,.06)}
 .nav-item.active{background:var(--accent);color:#fff}
 .sidebar-foot{margin-top:auto;padding:12px 18px;color:var(--sidebar-muted);font-size:12px}
@@ -206,10 +206,10 @@ table.grid td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-
 :root[data-theme="dark"]{--shadow:0 1px 2px rgba(0,0,0,.3),0 6px 22px rgba(0,0,0,.35)}
 body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 .brand{font-size:17px}.brand img{box-shadow:0 1px 3px rgba(0,0,0,.25)}
-.nav-item{margin:1px 0;transition:background .12s,color .12s;border:none;background:none;width:100%;font-family:inherit;font-size:14px;text-align:left}
+.nav-item{margin:0;transition:background .12s,color .12s;border:none;background:none;width:100%;font-family:inherit;font-size:14px;text-align:left}
 .nav-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .nav-item.active{background:rgba(255,255,255,.09);color:#fff;position:relative}
-.nav-item.active::before{content:"";position:absolute;left:-10px;top:7px;bottom:7px;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
+.nav-item.active::before{content:"";position:absolute;left:-10px;top:4px;bottom:4px;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
 .topbar h1{font-size:15px}
 .btn{border-radius:7px;box-shadow:var(--shadow);transition:background .12s,transform .05s,box-shadow .12s;font-weight:550}
 .btn:active{transform:translateY(1px)}
