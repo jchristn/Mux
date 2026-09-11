@@ -97,12 +97,137 @@ namespace Mux.Desktop.Shell
                 return AppendBlockquote(panel, lines, i, theme);
             }
 
+            if (trimmed.Contains('|') && i + 1 < lines.Length && IsTableSeparator(lines[i + 1]))
+            {
+                return AppendTable(panel, lines, i, theme);
+            }
+
             if (IsListItem(trimmed))
             {
                 return AppendList(panel, lines, i, theme);
             }
 
             return AppendParagraph(panel, lines, i, theme);
+        }
+
+        private static bool IsTableSeparator(string line)
+        {
+            string t = line.Trim();
+            if (t.Length == 0 || t.IndexOf('|') < 0)
+            {
+                return false;
+            }
+
+            foreach (string cell in SplitTableRow(t))
+            {
+                string c = cell.Trim();
+                if (c.Length == 0)
+                {
+                    return false;
+                }
+
+                foreach (char ch in c)
+                {
+                    if (ch != '-' && ch != ':')
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        private static string[] SplitTableRow(string line)
+        {
+            string t = line.Trim();
+            if (t.StartsWith("|", StringComparison.Ordinal))
+            {
+                t = t.Substring(1);
+            }
+
+            if (t.EndsWith("|", StringComparison.Ordinal))
+            {
+                t = t.Substring(0, t.Length - 1);
+            }
+
+            string[] cells = t.Split('|');
+            for (int i = 0; i < cells.Length; i++)
+            {
+                cells[i] = cells[i].Trim();
+            }
+
+            return cells;
+        }
+
+        private static int AppendTable(StackPanel panel, string[] lines, int start, AppTheme theme)
+        {
+            string[] header = SplitTableRow(lines[start]);
+            int columns = header.Length;
+
+            List<string[]> body = new List<string[]>();
+            int i = start + 2; // header row + separator row
+            while (i < lines.Length)
+            {
+                string t = lines[i].Trim();
+                if (t.Length == 0 || t.IndexOf('|') < 0)
+                {
+                    break;
+                }
+
+                body.Add(SplitTableRow(lines[i]));
+                i++;
+            }
+
+            Grid grid = new Grid();
+            for (int c = 0; c < columns; c++)
+            {
+                grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            }
+
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            for (int r = 0; r < body.Count; r++)
+            {
+                grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            }
+
+            AddTableRow(grid, 0, header, columns, theme, header: true);
+            for (int r = 0; r < body.Count; r++)
+            {
+                AddTableRow(grid, r + 1, body[r], columns, theme, header: false);
+            }
+
+            panel.Children.Add(new Border
+            {
+                BorderBrush = theme.Border,
+                BorderThickness = new Thickness(1, 1, 0, 0),
+                Margin = new Thickness(0, 2, 0, 2),
+                Child = grid
+            });
+
+            return i;
+        }
+
+        private static void AddTableRow(Grid grid, int row, string[] cells, int columns, AppTheme theme, bool header)
+        {
+            for (int c = 0; c < columns; c++)
+            {
+                string text = c < cells.Length ? cells[c] : string.Empty;
+                SelectableTextBlock cell = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, Foreground = theme.Text, FontWeight = header ? FontWeight.SemiBold : FontWeight.Normal };
+                AppendInlines(cell.Inlines!, text, theme);
+
+                Border border = new Border
+                {
+                    BorderBrush = theme.Border,
+                    BorderThickness = new Thickness(0, 0, 1, 1),
+                    Background = header ? theme.SurfaceAlt : Brushes.Transparent,
+                    Padding = new Thickness(8, 4, 8, 4),
+                    Child = cell
+                };
+                Grid.SetRow(border, row);
+                Grid.SetColumn(border, c);
+                grid.Children.Add(border);
+            }
         }
 
         private static int AppendCodeBlock(StackPanel panel, string[] lines, int start, AppTheme theme)

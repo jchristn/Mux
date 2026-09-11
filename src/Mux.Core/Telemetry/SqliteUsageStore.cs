@@ -235,6 +235,24 @@ WHERE id IN (
         }
 
         /// <summary>
+        /// Deletes telemetry rows that have no associated conversation (a null or empty <c>session_id</c>).
+        /// Every event recorded going forward carries a conversation id, so this only clears legacy or
+        /// stray rows.
+        /// </summary>
+        /// <param name="token">A token to cancel the operation.</param>
+        /// <returns>The number of rows deleted.</returns>
+        /// <exception cref="SqliteException">Thrown when the delete fails.</exception>
+        public async Task<int> DeleteOrphansAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            await using SqliteConnection connection = await OpenConnectionAsync(token).ConfigureAwait(false);
+            await using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM usage_events WHERE session_id IS NULL OR TRIM(session_id) = '';";
+            return await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Fetches aggregate rows grouped by (bucket, model, adapter, endpoint, command, call-kind) for a
         /// filter. When <paramref name="bucketMs"/> is 0 the rows are not time-bucketed (a single bucket of
         /// 0). The query service rolls these up into summaries, time series, and breakdowns.

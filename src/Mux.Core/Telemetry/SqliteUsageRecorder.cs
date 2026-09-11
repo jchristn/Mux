@@ -29,6 +29,7 @@ namespace Mux.Core.Telemetry
         private readonly Channel<UsageEvent> _Channel;
         private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
         private readonly Task _WriterLoop;
+        private readonly Task _MaintenanceLoop;
         private long _DroppedCount = 0;
         private long _PendingCount = 0;
         private int _LastPruneDayNumber = -1;
@@ -72,6 +73,7 @@ namespace Mux.Core.Telemetry
             };
             _Channel = Channel.CreateBounded<UsageEvent>(options);
             _WriterLoop = Task.Run(() => WriterLoopAsync(_Cts.Token));
+            _MaintenanceLoop = Task.Run(() => MaintenanceLoopAsync(_Cts.Token));
         }
 
         #endregion
@@ -83,6 +85,15 @@ namespace Mux.Core.Telemetry
         {
             if (usageEvent == null || _Disposed)
             {
+                return;
+            }
+
+            // Every telemetry entry must be tied to a conversation. Drop (and count) any event without a
+            // session id rather than persist an orphan that cannot be attributed to a conversation.
+            if (string.IsNullOrWhiteSpace(usageEvent.SessionId))
+            {
+                Interlocked.Increment(ref _DroppedCount);
+                Log("usage event dropped: no session id");
                 return;
             }
 
@@ -133,6 +144,7 @@ namespace Mux.Core.Telemetry
             }
 
             _Disposed = true;
+            _Cts.Cancel();
             _Channel.Writer.TryComplete();
 
             try
@@ -142,6 +154,15 @@ namespace Mux.Core.Telemetry
             catch (Exception ex)
             {
                 Log("usage recorder shutdown error: " + ex.Message);
+            }
+
+            try
+            {
+                await _MaintenanceLoop.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Log("usage maintenance shutdown error: " + ex.Message);
             }
 
             _Cts.Dispose();
@@ -258,6 +279,41 @@ namespace Mux.Core.Telemetry
             catch (Exception ex)
             {
                 Log("usage recorder prune failed: " + ex.Message);
+            }
+        }
+
+        // Runs independently of write activity so retention is enforced even while the app sits idle: purges
+        // any orphaned (no-conversation) rows once at startup, then prunes past the retention window hourly.
+        private async Task MaintenanceLoopAsync(CancellationToken token)
+        {
+            try
+            {
+                try
+                {
+                    await _Store.DeleteOrphansAsync(token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    Log("usage orphan purge failed: " + ex.Message);
+                }
+
+                while (!token.IsCancellationRequested)
+                {
+                    await MaybePruneAsync(token).ConfigureAwait(false);
+                    await Task.Delay(TimeSpan.FromHours(1), token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Shutdown requested.
+            }
+            catch (Exception ex)
+            {
+                Log("usage maintenance loop error: " + ex.Message);
             }
         }
 

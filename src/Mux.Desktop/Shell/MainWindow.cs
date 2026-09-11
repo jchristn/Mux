@@ -11,6 +11,7 @@ namespace Mux.Desktop.Shell
     using Avalonia.Controls.Primitives;
     using Avalonia.Controls.Templates;
     using Avalonia.Input;
+    using Avalonia.Input.Platform;
     using Avalonia.Interactivity;
     using Avalonia.Layout;
     using Avalonia.Media;
@@ -64,6 +65,7 @@ namespace Mux.Desktop.Shell
         private ConversationService? _Conversation;
         private TextBlock? _StreamingBlock;
         private Border? _AssistantBorder;
+        private Border? _AssistantContentHost;
         private CollapsibleSection? _ThinkingSection;
         private TextBlock? _ThinkingText;
         private Border? _PendingBubble;
@@ -1675,7 +1677,9 @@ namespace Mux.Desktop.Shell
         private TextBlock AddAssistantBubble()
         {
             SelectableTextBlock content = new SelectableTextBlock { Text = string.Empty, Foreground = _Theme.Text, TextWrapping = TextWrapping.Wrap };
-            Border bubble = NewAssistantBorder(content);
+            Border host = new Border { Child = content };
+            _AssistantContentHost = host;
+            Border bubble = NewAssistantBorder(host, () => _StreamingBlock?.Text ?? content.Text ?? string.Empty);
             _AssistantBorder = bubble;
             _Transcript.Children.Add(bubble);
             _TranscriptScroll.ScrollToEnd();
@@ -1694,12 +1698,48 @@ namespace Mux.Desktop.Shell
                 body = new SelectableTextBlock { Text = content, Foreground = _Theme.Text, TextWrapping = TextWrapping.Wrap };
             }
 
-            _Transcript.Children.Add(NewAssistantBorder(body));
+            _Transcript.Children.Add(NewAssistantBorder(new Border { Child = body }, () => content));
             _TranscriptScroll.ScrollToEnd();
         }
 
-        private Border NewAssistantBorder(Control child)
+        private Border NewAssistantBorder(Control content, Func<string> rawTextProvider)
         {
+            Button copy = new Button
+            {
+                Content = "⧉",
+                Background = Brushes.Transparent,
+                Foreground = _Theme.Muted,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(4, 0, 4, 0),
+                FontSize = 13,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, -4, -6, 0)
+            };
+            copy.Tip("Copy this response to the clipboard.");
+            copy.Click += async (sender, args) =>
+            {
+                try
+                {
+                    IClipboard? clipboard = TopLevel.GetTopLevel(copy)?.Clipboard;
+                    if (clipboard != null)
+                    {
+                        await clipboard.SetTextAsync(rawTextProvider() ?? string.Empty);
+                        copy.Content = "✓";
+                        await Task.Delay(1200);
+                        copy.Content = "⧉";
+                    }
+                }
+                catch (Exception)
+                {
+                    // Best-effort copy.
+                }
+            };
+
+            Grid layout = new Grid();
+            layout.Children.Add(content);
+            layout.Children.Add(copy);
+
             return new Border
             {
                 Background = _Theme.AssistantBubble,
@@ -1709,18 +1749,19 @@ namespace Mux.Desktop.Shell
                 Padding = new Thickness(14, 10, 14, 10),
                 Margin = new Thickness(0, 0, 60, 0),
                 HorizontalAlignment = HorizontalAlignment.Left,
-                Child = child
+                Child = layout
             };
         }
 
         // Replace the streamed plain-text block with rendered Markdown once the answer is complete.
         private void FinalizeAssistantBubble()
         {
-            if (_AssistantBorder != null && _StreamingBlock != null)
+            if (_AssistantContentHost != null && _StreamingBlock != null)
             {
                 try
                 {
-                    _AssistantBorder.Child = MarkdownRenderer.Render(_StreamingBlock.Text, _Theme);
+                    // Replace only the content (not the whole bubble) so the copy icon stays in place.
+                    _AssistantContentHost.Child = MarkdownRenderer.Render(_StreamingBlock.Text, _Theme);
                 }
                 catch (Exception)
                 {
@@ -1729,6 +1770,7 @@ namespace Mux.Desktop.Shell
             }
 
             _AssistantBorder = null;
+            _AssistantContentHost = null;
             _StreamingBlock = null;
         }
 

@@ -105,6 +105,22 @@ namespace Test.Shared.Suites
                         // A distinct store instance on the same path stands in for a second process.
                         using SqliteUsageStore second = new SqliteUsageStore(store.DatabasePath, 90, 5_000_000);
                         MuxAssert.AreEqual(1L, await second.CountAsync(ct).ConfigureAwait(false), "second store sees shared row");
+                    }),
+
+                    StoreCase("DeleteOrphansRemovesRowsWithoutSession", "Rows without a conversation id are purged; others remain", async (SqliteUsageStore store, CancellationToken ct) =>
+                    {
+                        UsageEvent withSession = MakeEvent(1_000, "openai", "gpt");
+                        withSession.SessionId = "sess-x";
+                        UsageEvent blankSession = MakeEvent(2_000, "openai", "gpt");
+                        blankSession.SessionId = "   ";
+                        UsageEvent nullSession = MakeEvent(3_000, "openai", "gpt");
+
+                        await store.InsertBatchAsync(new List<UsageEvent> { withSession, blankSession, nullSession }, ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(3L, await store.CountAsync(ct).ConfigureAwait(false), "all three inserted");
+
+                        int deleted = await store.DeleteOrphansAsync(ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(2, deleted, "the null and blank session rows are deleted");
+                        MuxAssert.AreEqual(1L, await store.CountAsync(ct).ConfigureAwait(false), "only the row with a session id remains");
                     })
                 });
         }

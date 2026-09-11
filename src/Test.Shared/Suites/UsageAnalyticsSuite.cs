@@ -123,6 +123,8 @@ namespace Test.Shared.Suites
                 EndpointName = endpoint,
                 AdapterType = "test",
                 Model = model,
+                // Every recorded event must carry a conversation id or the recorder drops it.
+                SessionId = "test-session",
                 InputTokens = inputTokens,
                 OutputTokens = outputTokens,
                 TotalTokens = inputTokens + outputTokens,

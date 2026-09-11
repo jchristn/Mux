@@ -1615,12 +1615,16 @@ function wireUsageHover(buckets,cfg,rangeId){
     tip.style.left=Math.round(tx)+"px";tip.style.top=Math.round(ty)+"px";});
 }
 /* History table — the shared data grid (sort/filter/paginate/columns), row-click opens a detail modal. */
-var _uhist=[],_uhistTotal=0;
+var _uhist=[],_uhistTotal=0,_sessTitles={};
+function sessName(id){if(!id)return "—";return _sessTitles[id]||(id.length>8?id.slice(0,8):id);}
 function loadUsageHistory(){_reload["usage_history_list"]=loadUsageHistory;gridLoading("usage_history_list");
-  api("/v1.0/api/usage/events?"+usageQuery("&page=1&pageSize=500")).then(function(pg){_uhist=(pg&&pg.Items)||[];_uhistTotal=(pg&&pg.TotalCount)||0;renderUsageHistory();}).catch(function(e){gridError("usage_history_list",e.message);});}
+  api("/v1.0/api/sessions").then(function(r){var it=(r&&r.Items)||[];_sessTitles={};it.forEach(function(s){_sessTitles[s.Id]=s.Title||s.Id;});}).catch(function(){}).then(function(){
+    return api("/v1.0/api/usage/events?"+usageQuery("&page=1&pageSize=500"));
+  }).then(function(pg){_uhist=(pg&&pg.Items)||[];_uhistTotal=(pg&&pg.TotalCount)||0;renderUsageHistory();}).catch(function(e){gridError("usage_history_list",e.message);});}
 function renderUsageHistory(){
   renderGrid("usage_history_list",[
     {h:"When",tip:"Call completion time",get:function(r){return esc(fmtWhen(r.TimestampUnixMs));}},
+    {h:"Conversation",tip:"The conversation this call belongs to",get:function(r){return esc(sessName(r.SessionId));}},
     {h:"Endpoint",get:function(r){return esc(r.EndpointName);}},
     {h:"In",mono:true,tip:"Input tokens",get:function(r){return fmtTok(r.InputTokens);}},
     {h:"Cached",mono:true,tip:"Cache-read tokens",get:function(r){return fmtTok(r.CachedTokens);}},
