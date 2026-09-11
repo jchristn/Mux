@@ -46,7 +46,7 @@ namespace Mux.Desktop.Shell
         private readonly UsageQueryService? _UsageQuery;
 
         private AppTheme _Theme = AppTheme.Current;
-        private ListBox _ThreadList = null!;
+        private StackPanel _ThreadListPanel = null!;
         private ComboBox _ModelPicker = null!;
         private TextBlock _TitleText = null!;
         private StackPanel _Transcript = null!;
@@ -70,10 +70,11 @@ namespace Mux.Desktop.Shell
         private int _LastEstimatedTokens;
         private CancellationTokenSource? _TurnCts;
         private string _CurrentThreadId = string.Empty;
+        private string _ThemeMode = "dark";
+        private bool _ThemeSubscribed;
         private string _CurrentTitle = string.Empty;
         private bool _CurrentTitlePinned;
         private DateTime _CurrentCreatedUtc;
-        private bool _SuppressThreadSelection;
         private bool _SidebarCollapsed;
         private bool _ConversationsOpen = true;
         private bool _ManageOpen;
@@ -148,6 +149,7 @@ namespace Mux.Desktop.Shell
                 new PaletteCommand("Skills", "Manage installed skills", OpenSkillsWindow),
                 new PaletteCommand("Subagents", "Manage subagent definitions", OpenSubagentsWindow),
                 new PaletteCommand("Model pricing", "Edit model pricing", OpenPricingWindow),
+                new PaletteCommand("Web search providers", "Configure web search", OpenSearchProvidersWindow),
                 new PaletteCommand("Settings", "Open settings", OpenSettingsWindow),
                 new PaletteCommand("About", "About mux", OpenAboutWindow)
             };
@@ -200,44 +202,45 @@ namespace Mux.Desktop.Shell
             bool conversationsExpanded = expanded && _ConversationsOpen;
 
             StackPanel top = new StackPanel { Spacing = 2 };
-            top.Children.Add(NavItem(_SidebarCollapsed ? "»" : "«", _SidebarCollapsed ? "Expand the sidebar back to full width." : "Collapse the sidebar to just icons to make more room for the conversation.", ToggleSidebarCollapse, accent: false));
-            top.Children.Add(NavItem(_SidebarCollapsed ? "＋" : "＋   " + _Localization.Get(StringKeys.NewConversation), "Start a new, empty conversation.", () => _ = NewChatAsync(), accent: true));
+            top.Children.Add(NavItem(_SidebarCollapsed ? "»" : "«", null, _SidebarCollapsed ? "Expand the sidebar back to full width." : "Collapse the sidebar to just icons to make more room for the conversation.", ToggleSidebarCollapse, accent: false));
+            top.Children.Add(NavItem("＋", _Localization.Get(StringKeys.NewConversation), "Start a new, empty conversation.", () => _ = NewChatAsync(), accent: true));
             if (!conversationsExpanded)
             {
-                top.Children.Add(NavItem(_SidebarCollapsed ? "🗂" : "🗂   Conversations      ▸", "Show your saved conversations to switch between or manage them.", ToggleConversations, accent: false));
+                top.Children.Add(NavItem("🗂", "Conversations", "Show your saved conversations to switch between or manage them.", ToggleConversations, accent: false, chevron: "▸"));
             }
 
             DockPanel.SetDock(top, Dock.Top);
             panel.Children.Add(top);
 
             StackPanel bottom = new StackPanel { Spacing = 2 };
-            bottom.Children.Add(NavItem(_SidebarCollapsed ? "📊" : "📊   Usage", "Open the usage dashboard: token totals, cost, latency charts, and per-call history.", OpenUsageWindow, accent: false));
+            bottom.Children.Add(NavItem("📊", "Usage", "Open the usage dashboard: token totals, cost, latency charts, and per-call history.", OpenUsageWindow, accent: false));
             if (_ManageOpen && expanded)
             {
                 StackPanel manageGroup = new StackPanel { Spacing = 2 };
-                manageGroup.Children.Add(NavItem("🛠   Manage           ▾", "Hide the configuration managers.", ToggleManage, accent: false));
-                manageGroup.Children.Add(ManageDrawerItem("🔌   Endpoints", "Add, edit, and choose the default model endpoint.", OpenEndpointsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🧩   MCP servers", "Manage MCP servers that extend the agent with external tools.", OpenMcpServersWindow));
-                manageGroup.Children.Add(ManageDrawerItem("📝   Prompts", "Manage prompt profiles (system, tools-disabled, and compaction prompts).", OpenPromptsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("✨   Skills", "Install, edit, and enable user skills.", OpenSkillsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🤖   Subagents", "Define subagents the model can delegate scoped tasks to.", OpenSubagentsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("💲   Pricing", "Edit per-model token rates used to compute usage cost.", OpenPricingWindow));
+                manageGroup.Children.Add(NavItem("🛠", "Manage", "Hide the configuration managers.", ToggleManage, accent: false, chevron: "▾"));
+                manageGroup.Children.Add(ManageDrawerItem("🔌", "Endpoints", "Add, edit, and choose the default model endpoint.", OpenEndpointsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🧩", "MCP servers", "Manage MCP servers that extend the agent with external tools.", OpenMcpServersWindow));
+                manageGroup.Children.Add(ManageDrawerItem("📝", "Prompts", "Manage prompt profiles (system, tools-disabled, and compaction prompts).", OpenPromptsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("✨", "Skills", "Install, edit, and enable user skills.", OpenSkillsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🤖", "Subagents", "Define subagents the model can delegate scoped tasks to.", OpenSubagentsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("💲", "Pricing", "Edit per-model token rates used to compute usage cost.", OpenPricingWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🔎", "Search", "Configure external web-search providers.", OpenSearchProvidersWindow));
                 bottom.Children.Add(HighlightBlock(manageGroup));
             }
             else
             {
-                bottom.Children.Add(NavItem(_SidebarCollapsed ? "🛠" : "🛠   Manage           ▸", "Show the configuration managers: endpoints, MCP, prompts, skills, subagents, and pricing.", ToggleManage, accent: false));
+                bottom.Children.Add(NavItem("🛠", "Manage", "Show the configuration managers: endpoints, MCP, prompts, skills, subagents, and pricing.", ToggleManage, accent: false, chevron: "▸"));
             }
 
-            bottom.Children.Add(NavItem(_SidebarCollapsed ? "⚙" : "⚙   Settings", "Open application settings (approval, context, jobs, tools, skills, telemetry).", OpenSettingsWindow, accent: false));
-            bottom.Children.Add(NavItem(_SidebarCollapsed ? "ⓘ" : "ⓘ   About", "About mux — version and project information.", OpenAboutWindow, accent: false));
+            bottom.Children.Add(NavItem("⚙", "Settings", "Open application settings (approval, context, jobs, tools, skills, telemetry).", OpenSettingsWindow, accent: false));
+            bottom.Children.Add(NavItem("ⓘ", "About", "About mux — version and project information.", OpenAboutWindow, accent: false));
             DockPanel.SetDock(bottom, Dock.Bottom);
             panel.Children.Add(bottom);
 
             if (conversationsExpanded)
             {
                 DockPanel conversations = new DockPanel();
-                Button conversationsToggle = NavItem("🗂   Conversations      ▾", "Hide your saved conversations.", ToggleConversations, accent: false);
+                Button conversationsToggle = NavItem("🗂", "Conversations", "Hide your saved conversations.", ToggleConversations, accent: false, chevron: "▾");
                 DockPanel.SetDock(conversationsToggle, Dock.Top);
                 conversations.Children.Add(conversationsToggle);
                 conversations.Children.Add(BuildThreadListControl());
@@ -265,27 +268,96 @@ namespace Mux.Desktop.Shell
 
         private Control BuildThreadListControl()
         {
-            _ThreadList = new ListBox { Background = Brushes.Transparent, Padding = new Thickness(0), Margin = new Thickness(0, 4, 0, 0) };
-            _ThreadList.Styles.Add(new Style(x => x.OfType<ListBoxItem>())
-            {
-                Setters =
-                {
-                    // Match the "Manage" drawer items: left indent 22, tight vertical padding.
-                    new Setter(TemplatedControl.PaddingProperty, new Thickness(22, 2, 10, 2)),
-                    new Setter(Layoutable.MinHeightProperty, 0.0)
-                }
-            });
-            _ThreadList.ItemTemplate = new FuncDataTemplate<ThreadSummary>(BuildThreadRow, supportsRecycling: false);
-            _ThreadList.SelectionChanged += OnThreadSelected;
+            // Conversations render as buttons styled exactly like the Manage drawer items, so their hover and
+            // selection highlighting match, rather than a ListBox's distinct item chrome.
+            _ThreadListPanel = new StackPanel { Spacing = 1, Margin = new Thickness(0, 4, 0, 0) };
             _ = LoadThreadsAsync();
-            return _ThreadList;
+            return new ScrollViewer { Content = _ThreadListPanel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         }
 
-        private Button NavItem(string content, string tooltip, Action onClick, bool accent)
+        private Button ConversationButton(ThreadSummary item)
+        {
+            bool selected = string.Equals(item.Id, _CurrentThreadId, StringComparison.Ordinal);
+            Button button = new Button
+            {
+                Content = new TextBlock { Text = DisplayTitle(item), TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center },
+                Tag = item.Id,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Background = selected ? _Theme.AccentButton : Brushes.Transparent,
+                Foreground = selected ? _Theme.AccentText : _Theme.Muted,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(18, 4, 10, 4),
+                FontSize = 13
+            };
+            button.Tip("Open this conversation. Right-click to rename, export, or delete it.");
+
+            ContextMenu menu = new ContextMenu();
+            MenuItem rename = new MenuItem { Header = "Rename" };
+            rename.Click += (sender, args) => _ = RenameThreadAsync(item.Id, item.Title);
+            menu.Items.Add(rename);
+            MenuItem export = new MenuItem { Header = "Export" };
+            export.Click += (sender, args) => _ = ExportThreadAsync(item.Id, DisplayTitle(item));
+            menu.Items.Add(export);
+            menu.Items.Add(new Separator());
+            MenuItem delete = new MenuItem { Header = "Delete", Foreground = _Theme.Error };
+            delete.Click += (sender, args) => _ = DeleteThreadAsync(item.Id, DisplayTitle(item));
+            menu.Items.Add(delete);
+            button.ContextMenu = menu;
+
+            button.Click += (sender, args) =>
+            {
+                if (!string.Equals(item.Id, _CurrentThreadId, StringComparison.Ordinal))
+                {
+                    _ = OpenThreadAsync(item.Id);
+                }
+            };
+            return button;
+        }
+
+        private void RefreshThreadSelection()
+        {
+            if (_ThreadListPanel == null)
+            {
+                return;
+            }
+
+            foreach (Control child in _ThreadListPanel.Children)
+            {
+                if (child is Button button && button.Tag is string id)
+                {
+                    bool selected = string.Equals(id, _CurrentThreadId, StringComparison.Ordinal);
+                    button.Background = selected ? _Theme.AccentButton : Brushes.Transparent;
+                    button.Foreground = selected ? _Theme.AccentText : _Theme.Muted;
+                }
+            }
+        }
+
+        // A consistent nav row: a fixed-width, centre-aligned icon slot (so every icon shares one horizontal
+        // centrepoint) followed by the label and an optional chevron sitting just after it (not a cavern).
+        private Control BuildNavContent(string icon, string? label, string? chevron)
+        {
+            if (_SidebarCollapsed || string.IsNullOrEmpty(label))
+            {
+                return new TextBlock { Text = icon, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            }
+
+            StackPanel row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+            row.Children.Add(new TextBlock { Text = icon, Width = 22, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+            row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+            if (!string.IsNullOrEmpty(chevron))
+            {
+                row.Children.Add(new TextBlock { Text = chevron, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.65 });
+            }
+
+            return row;
+        }
+
+        private Button NavItem(string icon, string? label, string tooltip, Action onClick, bool accent, string? chevron = null)
         {
             Button button = new Button
             {
-                Content = content,
+                Content = BuildNavContent(icon, label, chevron),
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = _SidebarCollapsed ? HorizontalAlignment.Center : HorizontalAlignment.Left,
                 Background = accent ? _Theme.AccentButton : Brushes.Transparent,
@@ -299,17 +371,17 @@ namespace Mux.Desktop.Shell
             return button;
         }
 
-        private Button ManageDrawerItem(string content, string tooltip, Action onClick)
+        private Button ManageDrawerItem(string icon, string label, string tooltip, Action onClick)
         {
             Button button = new Button
             {
-                Content = content,
+                Content = BuildNavContent(icon, label, null),
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 Background = Brushes.Transparent,
                 Foreground = _Theme.Muted,
                 BorderThickness = new Thickness(0),
-                Padding = new Thickness(22, 6, 10, 6),
+                Padding = new Thickness(18, 6, 10, 6),
                 Margin = new Thickness(0, 0, 0, 1),
                 FontSize = 13
             };
@@ -390,7 +462,7 @@ namespace Mux.Desktop.Shell
 
         private void OpenSettingsWindow()
         {
-            _ = new SettingsWindow(SetThemeDark).ShowDialog(this);
+            _ = new SettingsWindow(SetThemeMode, _ThemeMode).ShowDialog(this);
         }
 
         private void OpenUsageWindow()
@@ -458,6 +530,11 @@ namespace Mux.Desktop.Shell
             _ = new PricingWindow().ShowDialog(this);
         }
 
+        private void OpenSearchProvidersWindow()
+        {
+            _ = new SearchProvidersWindow().ShowDialog(this);
+        }
+
         private void OpenAboutWindow()
         {
             _ = new AboutWindow(_Localization).ShowDialog(this);
@@ -476,7 +553,52 @@ namespace Mux.Desktop.Shell
             }
         }
 
-        private void SetThemeDark(bool dark)
+        private void SetThemeMode(string mode)
+        {
+            _ThemeMode = mode;
+
+            bool dark;
+            if (string.Equals(mode, "system", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Application.Current != null)
+                {
+                    // Let Avalonia follow the OS; we then mirror the resolved variant into our palette.
+                    Application.Current.RequestedThemeVariant = ThemeVariant.Default;
+                    if (!_ThemeSubscribed)
+                    {
+                        Application.Current.ActualThemeVariantChanged += OnActualThemeVariantChanged;
+                        _ThemeSubscribed = true;
+                    }
+                }
+
+                dark = ResolveSystemDark();
+            }
+            else
+            {
+                dark = string.Equals(mode, "dark", StringComparison.OrdinalIgnoreCase);
+                if (Application.Current != null)
+                {
+                    Application.Current.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
+                }
+            }
+
+            ApplyThemeDark(dark);
+        }
+
+        private void OnActualThemeVariantChanged(object? sender, EventArgs e)
+        {
+            if (string.Equals(_ThemeMode, "system", StringComparison.OrdinalIgnoreCase))
+            {
+                ApplyThemeDark(ResolveSystemDark());
+            }
+        }
+
+        private static bool ResolveSystemDark()
+        {
+            return Application.Current == null || Application.Current.ActualThemeVariant == ThemeVariant.Dark;
+        }
+
+        private void ApplyThemeDark(bool dark)
         {
             if (dark == _Theme.IsDark)
             {
@@ -484,47 +606,7 @@ namespace Mux.Desktop.Shell
             }
 
             AppTheme.Set(dark);
-            if (Application.Current != null)
-            {
-                Application.Current.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
-            }
-
             RebuildContent();
-        }
-
-        private Control BuildThreadRow(ThreadSummary? item, INameScope scope)
-        {
-            // Anchor on the "Manage" drawer item look: same font size, muted color, no extra margin.
-            TextBlock label = new TextBlock
-            {
-                Text = DisplayTitle(item),
-                Foreground = _Theme.Muted,
-                FontSize = 13,
-                TextTrimming = TextTrimming.CharacterEllipsis
-            };
-
-            if (item != null)
-            {
-                ContextMenu menu = new ContextMenu();
-
-                MenuItem rename = new MenuItem { Header = "Rename" };
-                rename.Click += (sender, args) => _ = RenameThreadAsync(item.Id, item.Title);
-                menu.Items.Add(rename);
-
-                MenuItem export = new MenuItem { Header = "Export" };
-                export.Click += (sender, args) => _ = ExportThreadAsync(item.Id, DisplayTitle(item));
-                menu.Items.Add(export);
-
-                menu.Items.Add(new Separator());
-
-                MenuItem delete = new MenuItem { Header = "Delete" };
-                delete.Click += (sender, args) => _ = DeleteThreadAsync(item.Id, DisplayTitle(item));
-                menu.Items.Add(delete);
-
-                label.ContextMenu = menu;
-            }
-
-            return label;
         }
 
         private Control BuildChatColumn()
@@ -719,46 +801,33 @@ namespace Mux.Desktop.Shell
 
         private async Task LoadThreadsAsync()
         {
-            try
-            {
-                IReadOnlyList<ThreadSummary> threads = await _Threads.ListAsync(CancellationToken.None);
-                _SuppressThreadSelection = true;
-                _ThreadList.ItemsSource = threads;
-                RestoreThreadSelection(threads);
-                _SuppressThreadSelection = false;
-            }
-            catch (Exception)
-            {
-                _SuppressThreadSelection = false;
-            }
-        }
-
-        private void RestoreThreadSelection(IReadOnlyList<ThreadSummary> threads)
-        {
-            foreach (ThreadSummary summary in threads)
-            {
-                if (string.Equals(summary.Id, _CurrentThreadId, StringComparison.Ordinal))
-                {
-                    _ThreadList.SelectedItem = summary;
-                    return;
-                }
-            }
-        }
-
-        // ---- event handlers ----------------------------------------------------------------------
-
-        private void OnThreadSelected(object? sender, SelectionChangedEventArgs e)
-        {
-            if (_SuppressThreadSelection)
+            if (_ThreadListPanel == null)
             {
                 return;
             }
 
-            if (_ThreadList.SelectedItem is ThreadSummary summary && !string.Equals(summary.Id, _CurrentThreadId, StringComparison.Ordinal))
+            try
             {
-                _ = OpenThreadAsync(summary.Id);
+                IReadOnlyList<ThreadSummary> threads = await _Threads.ListAsync(CancellationToken.None);
+                _ThreadListPanel.Children.Clear();
+                if (threads.Count == 0)
+                {
+                    _ThreadListPanel.Children.Add(new TextBlock { Text = "No conversations yet.", Foreground = _Theme.Muted, FontSize = 12, Margin = new Thickness(18, 4, 10, 4) });
+                    return;
+                }
+
+                foreach (ThreadSummary summary in threads)
+                {
+                    _ThreadListPanel.Children.Add(ConversationButton(summary));
+                }
+            }
+            catch (Exception)
+            {
+                // Best-effort; the list stays as-is on failure.
             }
         }
+
+        // ---- event handlers ----------------------------------------------------------------------
 
         private void OnModelSelected(object? sender, SelectionChangedEventArgs e)
         {
@@ -815,6 +884,7 @@ namespace Mux.Desktop.Shell
             }
 
             _CurrentThreadId = snapshot.Id;
+            RefreshThreadSelection();
             _Runner.SessionId = snapshot.Id;
             _LastEstimatedTokens = 0;
             _CurrentTitle = snapshot.Title;
@@ -970,6 +1040,10 @@ namespace Mux.Desktop.Shell
                 case "/pricing":
                     OpenPricingWindow();
                     break;
+                case "/search":
+                case "/websearch":
+                    OpenSearchProvidersWindow();
+                    break;
                 case "/new":
                     _ = NewChatAsync();
                     break;
@@ -1023,6 +1097,7 @@ namespace Mux.Desktop.Shell
             card.Children.Add(CommandRow("/skills", "Manage installed skills"));
             card.Children.Add(CommandRow("/subagents", "Manage subagent definitions"));
             card.Children.Add(CommandRow("/pricing", "Edit model pricing"));
+            card.Children.Add(CommandRow("/search", "Configure web search providers"));
             card.Children.Add(CommandRow("/commands", "Open the command palette (Ctrl+K)"));
             card.Children.Add(CommandRow("/new", "Start a new conversation"));
             card.Children.Add(CommandRow("/help", "Show this menu"));

@@ -19,7 +19,7 @@ namespace Mux.Desktop.Views
     public sealed class SettingsWindow : Window
     {
         private readonly MuxSettings _Settings;
-        private readonly Action<bool>? _OnThemeSelected;
+        private readonly Action<string>? _OnThemeMode;
 
         private readonly ComboBox _ThemeSelector = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly ComboBox _ApprovalPolicy = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -55,8 +55,9 @@ namespace Mux.Desktop.Views
         /// <summary>
         /// Instantiate the settings window, loading current values.
         /// </summary>
-        /// <param name="onThemeSelected">Invoked when the theme selector changes (dark = true).</param>
-        public SettingsWindow(Action<bool>? onThemeSelected = null)
+        /// <param name="onThemeMode">Invoked when the theme selector changes with "system", "light", or "dark".</param>
+        /// <param name="currentThemeMode">The current theme mode to preselect ("system", "light", or "dark").</param>
+        public SettingsWindow(Action<string>? onThemeMode = null, string currentThemeMode = "dark")
         {
             Title = "Settings";
             Icon = IconResources.LoadWindowIcon();
@@ -68,16 +69,16 @@ namespace Mux.Desktop.Views
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = AppTheme.Current.Surface;
 
-            _OnThemeSelected = onThemeSelected;
+            _OnThemeMode = onThemeMode;
             _Settings = SettingsLoader.LoadSettings();
 
-            _ThemeSelector.ItemsSource = new List<string> { "Light", "Dark" };
-            _ThemeSelector.SelectedItem = AppTheme.Current.IsDark ? "Dark" : "Light";
+            _ThemeSelector.ItemsSource = new List<string> { "System", "Light", "Dark" };
+            _ThemeSelector.SelectedItem = ThemeModeLabel(currentThemeMode);
             _ThemeSelector.SelectionChanged += (sender, args) =>
             {
                 if (_ThemeSelector.SelectedItem is string variant)
                 {
-                    _OnThemeSelected?.Invoke(string.Equals(variant, "Dark", StringComparison.Ordinal));
+                    _OnThemeMode?.Invoke(variant.ToLowerInvariant());
                 }
             };
 
@@ -136,7 +137,7 @@ namespace Mux.Desktop.Views
             StackPanel form = new StackPanel { Spacing = 8, Margin = new Thickness(0, 14, 14, 0) };
 
             form.Children.Add(Section("General"));
-            form.Children.Add(LabeledRow("Theme", _ThemeSelector, "Light or dark appearance for the whole app; applies immediately."));
+            form.Children.Add(LabeledRow("Theme", _ThemeSelector, "Appearance for the whole app; applies immediately. “System” follows your OS light/dark setting and tracks changes to it."));
             form.Children.Add(LabeledRow("Default approval policy", _ApprovalPolicy, "Stored default for how tool calls are approved (ask / auto / deny). The desktop app still auto-runs only read-only tools."));
             form.Children.Add(LabeledRow("Max agent iterations (1–100)", _MaxIterations, "Hard cap on agent-loop turns before a run is forced to stop."));
             form.Children.Add(LabeledRow("Max token budget (blank = off)", _MaxTokenBudget, "Optional ceiling on estimated working-context tokens per run; the run stops cleanly if exceeded."));
@@ -273,6 +274,19 @@ namespace Mux.Desktop.Views
             if (int.TryParse((box.Text ?? string.Empty).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
             {
                 assign(value);
+            }
+        }
+
+        private static string ThemeModeLabel(string? mode)
+        {
+            switch ((mode ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "system":
+                    return "System";
+                case "light":
+                    return "Light";
+                default:
+                    return "Dark";
             }
         }
 
