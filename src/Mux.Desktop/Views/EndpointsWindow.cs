@@ -62,7 +62,8 @@ namespace Mux.Desktop.Views
         {
             List<TableRowAction<EndpointConfig>> actions = new List<TableRowAction<EndpointConfig>>
             {
-                new TableRowAction<EndpointConfig>("Edit", e => OnEdit(e))
+                new TableRowAction<EndpointConfig>("Edit", e => OnEdit(e)),
+                new TableRowAction<EndpointConfig>("Import models…", e => OnImport(e))
             };
 
             if (!endpoint.IsDefault)
@@ -128,6 +129,57 @@ namespace Mux.Desktop.Views
             {
                 Persist(endpoint);
             }
+        }
+
+        private async void OnImport(EndpointConfig source)
+        {
+            HashSet<string> existingModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (EndpointConfig existing in _Endpoints)
+            {
+                if (!string.IsNullOrEmpty(existing.Model))
+                {
+                    existingModels.Add(existing.Model);
+                }
+            }
+
+            List<string>? selected = await new ImportModelsDialog(source, existingModels).ShowDialog<List<string>?>(this);
+            if (selected == null || selected.Count == 0)
+            {
+                return;
+            }
+
+            foreach (string model in selected)
+            {
+                _Endpoints.Add(new EndpointConfig
+                {
+                    Name = UniqueName(model),
+                    AdapterType = source.AdapterType,
+                    BaseUrl = source.BaseUrl,
+                    Model = model,
+                    ApiKey = source.ApiKey,
+                    Temperature = source.Temperature,
+                    MaxTokens = source.MaxTokens,
+                    ContextWindow = source.ContextWindow,
+                    TimeoutMs = source.TimeoutMs,
+                    IsDefault = false
+                });
+            }
+
+            Persist(null);
+        }
+
+        private string UniqueName(string baseName)
+        {
+            string candidate = string.IsNullOrWhiteSpace(baseName) ? "endpoint" : baseName;
+            string name = candidate;
+            int suffix = 2;
+            while (_Endpoints.Exists(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                name = candidate + " (" + suffix + ")";
+                suffix++;
+            }
+
+            return name;
         }
 
         private async void OnDelete(EndpointConfig endpoint)
