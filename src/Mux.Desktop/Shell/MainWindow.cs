@@ -265,12 +265,13 @@ namespace Mux.Desktop.Shell
 
         private Control BuildThreadListControl()
         {
-            _ThreadList = new ListBox { Background = Brushes.Transparent, Margin = new Thickness(6, 6, 0, 0) };
+            _ThreadList = new ListBox { Background = Brushes.Transparent, Padding = new Thickness(0), Margin = new Thickness(0, 4, 0, 0) };
             _ThreadList.Styles.Add(new Style(x => x.OfType<ListBoxItem>())
             {
                 Setters =
                 {
-                    new Setter(TemplatedControl.PaddingProperty, new Thickness(8, 4, 8, 4)),
+                    // Match the "Manage" drawer items: left indent 22, tight vertical padding.
+                    new Setter(TemplatedControl.PaddingProperty, new Thickness(22, 2, 10, 2)),
                     new Setter(Layoutable.MinHeightProperty, 0.0)
                 }
             });
@@ -493,11 +494,12 @@ namespace Mux.Desktop.Shell
 
         private Control BuildThreadRow(ThreadSummary? item, INameScope scope)
         {
+            // Anchor on the "Manage" drawer item look: same font size, muted color, no extra margin.
             TextBlock label = new TextBlock
             {
                 Text = DisplayTitle(item),
-                Foreground = _Theme.Text,
-                Margin = new Thickness(2, 3, 2, 3),
+                Foreground = _Theme.Muted,
+                FontSize = 13,
                 TextTrimming = TextTrimming.CharacterEllipsis
             };
 
