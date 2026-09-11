@@ -130,17 +130,28 @@ namespace Test.Shared
 
         private async Task WaitForHealthAsync()
         {
-            using HttpClient client = new HttpClient();
+            // Short per-request timeout so a single stalled connect cannot eat the whole budget, and a
+            // generous overall budget so a slow or heavily loaded CI runner (where process/port setup can
+            // lag by many seconds) does not fail spuriously. Any HTTP response — even 404/405 — means the
+            // listener is accepting connections, which is all "started" requires here.
+            using HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
 
-            for (int i = 0; i < 50; i++)
+            DateTime deadline = DateTime.UtcNow.AddSeconds(30);
+            while (DateTime.UtcNow < deadline)
             {
+                // If the server task already failed (e.g. the port was taken between GetFreePort and bind),
+                // surface its real error immediately instead of waiting out the full budget on a vague timeout.
+                if (_RunTask != null && _RunTask.IsFaulted)
+                {
+                    throw new InvalidOperationException(
+                        "The HTTP MCP test server failed to start at " + BaseUrl + ".",
+                        _RunTask.Exception?.GetBaseException());
+                }
+
                 try
                 {
                     using HttpResponseMessage response = await client.GetAsync(BaseUrl, _Cts.Token).ConfigureAwait(false);
-                    if (response.IsSuccessStatusCode)
-                    {
-                        return;
-                    }
+                    return;
                 }
                 catch (HttpRequestException)
                 {
@@ -152,7 +163,11 @@ namespace Test.Shared
                 await Task.Delay(100, _Cts.Token).ConfigureAwait(false);
             }
 
-            throw new InvalidOperationException("Timed out waiting for the HTTP MCP test server to start.");
+            string detail = _RunTask != null && _RunTask.IsFaulted
+                ? " Server task error: " + (_RunTask.Exception?.GetBaseException().Message ?? "unknown")
+                : string.Empty;
+            throw new InvalidOperationException(
+                "Timed out after 30s waiting for the HTTP MCP test server to start at " + BaseUrl + "." + detail);
         }
 
         private static int GetFreePort()
