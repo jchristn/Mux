@@ -67,6 +67,18 @@ namespace Mux.Core.Telemetry
         /// <summary>Mean output tokens per second.</summary>
         public double AvgTokensPerSec { get; set; }
 
+        /// <summary>Distribution (min/avg/p95/p99/max) of total request duration in ms across the calls.</summary>
+        public UsageDistribution TotalMsDist { get; set; } = new UsageDistribution();
+
+        /// <summary>Distribution (min/avg/p95/p99/max) of time-to-first-token in ms across the calls.</summary>
+        public UsageDistribution TtftMsDist { get; set; } = new UsageDistribution();
+
+        /// <summary>Distribution (min/avg/p95/p99/max) of streaming duration in ms across the calls.</summary>
+        public UsageDistribution StreamMsDist { get; set; } = new UsageDistribution();
+
+        /// <summary>Distribution (min/avg/p95/p99/max) of output tokens/sec across the calls.</summary>
+        public UsageDistribution ThroughputDist { get; set; } = new UsageDistribution();
+
         #endregion
 
         #region Constructors-and-Factories

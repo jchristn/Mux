@@ -317,6 +317,13 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 .uplot .utip i{width:9px;height:9px;border-radius:2px;display:inline-block;flex:none}
 .uplot .utip b{font-variant-numeric:tabular-nums;font-weight:700}
 .uplot .utip .tr.tot{margin-top:3px;padding-top:3px;border-top:1px solid var(--line)}
+.uplot .ucwick,.uplot .uccap{stroke-width:1.3;vector-effect:non-scaling-stroke;opacity:.55}
+.uplot .ucbox{opacity:.55}
+.uplot .ucbox:hover{opacity:.8}
+.uplot .ucavg{stroke:var(--text);stroke-width:1.6;vector-effect:non-scaling-stroke;opacity:.85}
+.uplot .ucp99{stroke:#dc2626;stroke-width:1.3;vector-effect:non-scaling-stroke;opacity:.9}
+.chartlegend i.line{width:14px;height:3px;border-radius:2px}
+.chartlegend i.avgl{background:var(--text);opacity:.85}
 .ux{grid-column:2;grid-row:2;position:relative;height:15px;margin-top:6px}
 .ux span{position:absolute;transform:translateX(-50%);font-size:10.5px;color:var(--muted);white-space:nowrap}
 .chartempty{height:415px;display:flex;align-items:center;justify-content:center}
@@ -1424,7 +1431,7 @@ function renderHome(d){
   el("home_quick").innerHTML='<button class="btn" data-goto="chat">💬 '+esc(t("quick.newchat"))+'</button><button class="btn secondary" data-action="addendpoint">🔌 '+esc(t("quick.addep"))+'</button><button class="btn secondary" data-goto="sessions">🗂️ '+esc(t("quick.sessions"))+'</button><button class="btn secondary" data-goto="settings">⚙️ '+esc(t("quick.settings"))+'</button>';
 }
 /* ================= Usage analytics ================= */
-var usageState={range:"day",endpoint:"",model:"",tab:"tokens",buckets:[],wired:false};
+var usageState={range:"day",endpoint:"",model:"",tab:"tokens",buckets:[],summary:null,wired:false};
 function fmtTok(n){n=n||0;if(n>=1e6)return (n/1e6).toFixed(n>=1e7?0:1)+"M";if(n>=1e3)return (n/1e3).toFixed(n>=1e4?0:1)+"k";return ""+Math.round(n);}
 function fmtUsd(n){n=n||0;if(n===0)return "$0";if(n<0.01)return "$"+n.toFixed(4);if(n<1)return "$"+n.toFixed(3);return "$"+n.toFixed(2);}
 function fmtMs(n){n=Math.round(n||0);if(n>=1000)return (n/1000).toFixed(2)+"s";return n+"ms";}
@@ -1443,39 +1450,45 @@ function loadUsage(){
 function fillUsageSelect(id,vals,cur,allLabel){var s=el(id);if(!s)return;var o='<option value="">'+esc(allLabel)+'</option>';(vals||[]).forEach(function(v){o+='<option value="'+esc(v)+'"'+(v===cur?" selected":"")+'>'+esc(v)+'</option>';});s.innerHTML=o;s.value=cur||"";}
 function wireUsage(){
   Array.prototype.forEach.call(document.querySelectorAll("#us_range button"),function(b){b.addEventListener("click",function(){usageState.range=b.dataset.range;Array.prototype.forEach.call(document.querySelectorAll("#us_range button"),function(x){x.classList.toggle("active",x===b);});refreshUsage();});});
-  Array.prototype.forEach.call(document.querySelectorAll("#us_tabs button"),function(b){b.addEventListener("click",function(){usageState.tab=b.dataset.tab;Array.prototype.forEach.call(document.querySelectorAll("#us_tabs button"),function(x){x.classList.toggle("active",x===b);});drawUsageChart();});});
+  Array.prototype.forEach.call(document.querySelectorAll("#us_tabs button"),function(b){b.addEventListener("click",function(){usageState.tab=b.dataset.tab;Array.prototype.forEach.call(document.querySelectorAll("#us_tabs button"),function(x){x.classList.toggle("active",x===b);});drawUsageChart();renderUsageKpis();});});
   el("us_endpoint").addEventListener("change",function(){usageState.endpoint=this.value;refreshUsage();});
   el("us_model").addEventListener("change",function(){usageState.model=this.value;refreshUsage();});
 }
 function refreshUsage(){
   el("us_kpis").innerHTML='<div class="empty"><div class="spinner"></div></div>';
   el("us_chart").innerHTML='<div class="chartempty"><div class="spinner"></div></div>';
-  api("/v1.0/api/usage/summary?"+usageQuery()).then(renderUsageKpis).catch(function(){el("us_kpis").innerHTML="";});
+  api("/v1.0/api/usage/summary?"+usageQuery()).then(function(s){usageState.summary=s;renderUsageKpis();}).catch(function(){usageState.summary=null;el("us_kpis").innerHTML="";});
   api("/v1.0/api/usage/timeseries?"+usageQuery()).then(function(r){usageState.buckets=r.Items||[];drawUsageChart();}).catch(function(){usageState.buckets=[];drawUsageChart();});
   loadUsageHistory();
 }
-function renderUsageKpis(s){
-  var m=s.Metrics||{};
-  var cards=[["Total tokens",fmtTok(m.TotalTokens)],["Cost",fmtUsd(m.CostUsd)],["Calls",""+(m.Calls||0)],["Error rate",fmtPct(m.ErrorRate)],["Cache hit",fmtPct(m.CacheHitRate)],["Avg TTFT",fmtMs(m.AvgTtftMs)],["p95 latency",fmtMs(m.P95TotalMs)],["Avg tok/s",(m.AvgTokensPerSec||0).toFixed(1)]];
+/* KPI cards track the selected chart: distribution tabs (latency/ttft/stream/throughput) show that
+   metric's min/avg/p95/p99/max; the tokens and cost tabs show their own summaries. */
+function renderUsageKpis(){
+  var s=usageState.summary;if(!s){el("us_kpis").innerHTML="";return;}
+  var m=s.Metrics||{},cfg=CHART_TABS[usageState.tab]||CHART_TABS.tokens,cards;
+  if(cfg.kind==="dist"){
+    var d=cfg.d(m)||{},f=cfg.fmt;
+    cards=[["Min",f(d.Min||0)],["Avg",f(d.Avg||0)],["p95",f(d.P95||0)],["p99",f(d.P99||0)],["Max",f(d.Max||0)],["Samples",""+(d.Count||0)]];
+  }else if(usageState.tab==="cost"){
+    cards=[["Cost",fmtUsd(m.CostUsd)],["Calls",""+(m.Calls||0)],["Avg cost/call",fmtUsd(m.Calls>0?(m.CostUsd/m.Calls):0)],["Error rate",fmtPct(m.ErrorRate)]];
+  }else{
+    cards=[["Total tokens",fmtTok(m.TotalTokens)],["Prompt",fmtTok(Math.max(0,(m.InputTokens||0)-(m.CachedTokens||0)))],["Cached",fmtTok(m.CachedTokens)],["Output",fmtTok(m.OutputTokens)],["Cost",fmtUsd(m.CostUsd)],["Calls",""+(m.Calls||0)],["Cache hit",fmtPct(m.CacheHitRate)],["Error rate",fmtPct(m.ErrorRate)]];
+  }
   el("us_kpis").innerHTML=cards.map(function(c){return '<div class="kpi"><span class="kv">'+esc(c[1])+'</span><span class="kl">'+esc(c[0])+'</span></div>';}).join("");
 }
-/* One full-width bar chart per tab. Latency/TTFT stack avg + p95 + p99 tail segments so the bar top is p99. */
+/* Tokens and cost are additive totals, drawn as stacked/solid bars. Latency, TTFT, streaming, and
+   throughput are distributions, drawn as candlestick/box marks: a min–max wick, an avg–p95 box, and an
+   avg line plus a p99 tick, so each time slice shows the spread of its calls rather than one number. */
 var CHART_TABS={
-  tokens:{fmt:fmtTok,note:cachedNote,series:[
+  tokens:{kind:"bar",fmt:fmtTok,note:cachedNote,series:[
     {n:"Prompt",c:"#2563eb",g:function(m){var v=(m.InputTokens||0)-(m.CachedTokens||0);return v<0?0:v;}},
     {n:"Cached",c:"#16a34a",g:function(m){return m.CachedTokens||0;}},
     {n:"Output",c:"#d97706",g:function(m){return m.OutputTokens||0;}}]},
-  cost:{fmt:fmtUsd,series:[{n:"Cost",c:"#7c3aed",g:function(m){return m.CostUsd||0;}}]},
-  latency:{fmt:fmtMs,series:[
-    {n:"avg",c:"#2563eb",g:function(m){return m.AvgTotalMs||0;}},
-    {n:"p95",c:"#d97706",g:function(m){return Math.max(0,(m.P95TotalMs||0)-(m.AvgTotalMs||0));},tg:function(m){return m.P95TotalMs||0;}},
-    {n:"p99",c:"#dc2626",g:function(m){return Math.max(0,(m.P99TotalMs||0)-(m.P95TotalMs||0));},tg:function(m){return m.P99TotalMs||0;}}]},
-  ttft:{fmt:fmtMs,series:[
-    {n:"avg",c:"#2563eb",g:function(m){return m.AvgTtftMs||0;}},
-    {n:"p95",c:"#d97706",g:function(m){return Math.max(0,(m.P95TtftMs||0)-(m.AvgTtftMs||0));},tg:function(m){return m.P95TtftMs||0;}},
-    {n:"p99",c:"#dc2626",g:function(m){return Math.max(0,(m.P99TtftMs||0)-(m.P95TtftMs||0));},tg:function(m){return m.P99TtftMs||0;}}]},
-  stream:{fmt:fmtMs,series:[{n:"streaming",c:"#0891b2",g:function(m){return m.AvgStreamMs||0;}}]},
-  throughput:{fmt:function(v){return (v||0).toFixed(0)+" tok/s";},series:[{n:"tok/s",c:"#16a34a",g:function(m){return m.AvgTokensPerSec||0;}}]}
+  cost:{kind:"bar",fmt:fmtUsd,series:[{n:"Cost",c:"#7c3aed",g:function(m){return m.CostUsd||0;}}]},
+  latency:{kind:"dist",fmt:fmtMs,c:"#2563eb",d:function(m){return m.TotalMsDist||{};}},
+  ttft:{kind:"dist",fmt:fmtMs,c:"#7c3aed",d:function(m){return m.TtftMsDist||{};}},
+  stream:{kind:"dist",fmt:fmtMs,c:"#0891b2",d:function(m){return m.StreamMsDist||{};}},
+  throughput:{kind:"dist",fmt:function(v){return (v||0).toFixed(0)+" tok/s";},c:"#16a34a",d:function(m){return m.ThroughputDist||{};}}
 };
 function cachedNote(buckets){var any=buckets.some(function(b){return (b.Metrics&&b.Metrics.CachedTokens)>0;});return any?"":"Prompt shows the uncached portion; cached tokens stack on top. Cache metrics populate when the provider reports them.";}
 function drawUsageChart(){
@@ -1483,7 +1496,8 @@ function drawUsageChart(){
   if(!buckets||!buckets.length){host.innerHTML='<div class="chartempty"><div class="empty"><div class="eicon">📉</div><div>No usage recorded in this window yet.</div></div></div>';return;}
   var cfg=CHART_TABS[usageState.tab]||CHART_TABS.tokens;
   var note=(typeof cfg.note==="function")?cfg.note(buckets):(cfg.note||"");
-  host.innerHTML=barChart(buckets,cfg,usageState.range)+legendHtml(cfg)+(note?'<div class="chartnote">'+esc(note)+'</div>':"");
+  var body=(cfg.kind==="dist")?distChart(buckets,cfg,usageState.range):barChart(buckets,cfg,usageState.range);
+  host.innerHTML=body+legendHtml(cfg)+(note?'<div class="chartnote">'+esc(note)+'</div>':"");
   wireUsageHover(buckets,cfg,usageState.range);
 }
 function niceMax(v){if(v<=0)return 1;var p=Math.pow(10,Math.floor(Math.log(v)/Math.LN10));var f=v/p;var nf=f<=1?1:(f<=2?2:(f<=5?5:10));return nf*p;}
@@ -1491,7 +1505,18 @@ function fmtBucketLabel(ms,rangeId){var d=new Date(ms);
   if(rangeId==="hour"||rangeId==="day")return d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
   if(rangeId==="week")return d.toLocaleDateString([],{weekday:"short"})+" "+d.toLocaleTimeString([],{hour:"numeric"});
   return d.toLocaleDateString([],{month:"short",day:"numeric"});}
-function legendHtml(cfg){var h='<div class="chartlegend">';cfg.series.forEach(function(sr){h+='<span><i style="background:'+sr.c+'"></i>'+esc(sr.n)+'</span>';});return h+'</div>';}
+function legendHtml(cfg){
+  var h='<div class="chartlegend">';
+  if(cfg.kind==="dist"){
+    h+='<span><i style="background:'+cfg.c+';opacity:.55"></i>avg–p95</span>';
+    h+='<span><i class="line" style="background:'+cfg.c+';opacity:.5"></i>min–max</span>';
+    h+='<span><i class="line avgl"></i>avg</span>';
+    h+='<span><i class="line" style="background:#dc2626"></i>p99</span>';
+  }else{
+    cfg.series.forEach(function(sr){h+='<span><i style="background:'+sr.c+'"></i>'+esc(sr.n)+'</span>';});
+  }
+  return h+'</div>';
+}
 /* SVG draws only bars + gridlines in a 1000x100 stretched viewBox; axis labels are crisp HTML positioned
    around the plot (so their size is fixed regardless of chart width). */
 function barChart(buckets,cfg,rangeId){
@@ -1510,10 +1535,47 @@ function barChart(buckets,cfg,rangeId){
   for(i=0;i<n;i+=step){var pct=(n<=1?50:((i+0.5)/n)*100);xl+='<span style="left:'+pct.toFixed(2)+'%">'+esc(fmtBucketLabel(buckets[i].BucketStartUnixMs,rangeId))+'</span>';}
   return '<div class="uframe"><div class="uy">'+yl+'</div><div class="uplot">'+svg+'<div class="utip" id="us_tip"></div></div><div class="ux">'+xl+'</div></div>';
 }
-/* Custom hover tooltip: maps the cursor's x-fraction to a bucket, lists every series value for it, and is
-   clamped so the box always stays fully inside the plot area (never spilling outside the chart). */
+/* Distribution ("candlestick") chart: one mark per bucket — a thin min–max wick with end caps, a filled
+   avg–p95 box, an avg line, and a p99 tick — so the spread of each time slice's calls is visible. Same
+   stretched 1000x100 viewBox as the bar chart; strokes use non-scaling-stroke to stay a constant width. */
+function distChart(buckets,cfg,rangeId){
+  var n=buckets.length,i;
+  var mx=0;buckets.forEach(function(b){var d=cfg.d(b.Metrics||{})||{};if((d.Max||0)>mx)mx=d.Max||0;});
+  var ymax=niceMax(mx);
+  var VW=1000,VH=100,slot=VW/Math.max(1,n),bw=Math.max(2,slot*(n>60?0.5:0.42));
+  function Y(v){var y=VH-((v||0)/ymax)*VH;return y<0?0:(y>VH?VH:y);}
+  var svg='<svg viewBox="0 0 '+VW+' '+VH+'" preserveAspectRatio="none">';
+  for(i=1;i<4;i++){var gy=VH-(i/4)*VH;svg+='<line class="ugrid" x1="0" y1="'+gy.toFixed(2)+'" x2="'+VW+'" y2="'+gy.toFixed(2)+'"/>';}
+  buckets.forEach(function(b,bi){var d=cfg.d(b.Metrics||{})||{};if(!(d.Count>0))return;
+    var bx=bi*slot+(slot-bw)/2,cx=bx+bw/2,xr=bx+bw;
+    var yMin=Y(d.Min),yMax=Y(d.Max),yAvg=Y(d.Avg),yP95=Y(d.P95),yP99=Y(d.P99);
+    var capL=bx+bw*0.22,capR=bx+bw*0.78;
+    svg+='<line class="ucwick" x1="'+cx.toFixed(2)+'" y1="'+yMax.toFixed(2)+'" x2="'+cx.toFixed(2)+'" y2="'+yMin.toFixed(2)+'" stroke="'+cfg.c+'"/>';
+    svg+='<line class="uccap" x1="'+capL.toFixed(2)+'" y1="'+yMax.toFixed(2)+'" x2="'+capR.toFixed(2)+'" y2="'+yMax.toFixed(2)+'" stroke="'+cfg.c+'"/>';
+    svg+='<line class="uccap" x1="'+capL.toFixed(2)+'" y1="'+yMin.toFixed(2)+'" x2="'+capR.toFixed(2)+'" y2="'+yMin.toFixed(2)+'" stroke="'+cfg.c+'"/>';
+    var boxH=Math.max(0.6,yAvg-yP95);
+    svg+='<rect class="ucbox" x="'+bx.toFixed(2)+'" y="'+yP95.toFixed(2)+'" width="'+bw.toFixed(2)+'" height="'+boxH.toFixed(2)+'" fill="'+cfg.c+'"/>';
+    svg+='<line class="ucavg" x1="'+bx.toFixed(2)+'" y1="'+yAvg.toFixed(2)+'" x2="'+xr.toFixed(2)+'" y2="'+yAvg.toFixed(2)+'"/>';
+    svg+='<line class="ucp99" x1="'+bx.toFixed(2)+'" y1="'+yP99.toFixed(2)+'" x2="'+xr.toFixed(2)+'" y2="'+yP99.toFixed(2)+'"/>';});
+  svg+='</svg>';
+  var yl='';for(i=4;i>=0;i--)yl+='<span>'+esc(cfg.fmt(ymax*i/4))+'</span>';
+  var step=Math.max(1,Math.ceil(n/8)),xl='';
+  for(i=0;i<n;i+=step){var pct=(n<=1?50:((i+0.5)/n)*100);xl+='<span style="left:'+pct.toFixed(2)+'%">'+esc(fmtBucketLabel(buckets[i].BucketStartUnixMs,rangeId))+'</span>';}
+  return '<div class="uframe"><div class="uy">'+yl+'</div><div class="uplot">'+svg+'<div class="utip" id="us_tip"></div></div><div class="ux">'+xl+'</div></div>';
+}
+/* Custom hover tooltip: maps the cursor's x-fraction to a bucket, lists its values, and is clamped so the
+   box always stays fully inside the plot area (never spilling outside the chart). */
 function usageTipHtml(b,cfg,rangeId){
-  var m=b.Metrics||{},h='<div class="tt">'+esc(fmtBucketLabel(b.BucketStartUnixMs,rangeId))+'</div>',total=0,additive=cfg.series.length>1;
+  var m=b.Metrics||{},h='<div class="tt">'+esc(fmtBucketLabel(b.BucketStartUnixMs,rangeId))+'</div>';
+  if(cfg.kind==="dist"){
+    var d=cfg.d(m)||{},f=cfg.fmt;
+    if(!(d.Count>0)){h+='<div class="tr"><span class="tk">No calls</span></div>';return h;}
+    [["Max",d.Max],["p99",d.P99],["p95",d.P95],["Avg",d.Avg],["Min",d.Min]].forEach(function(r){
+      h+='<div class="tr"><span class="tk">'+r[0]+'</span><b>'+esc(f(r[1]||0))+'</b></div>';});
+    h+='<div class="tr tot"><span class="tk">Samples</span><b>'+(d.Count||0)+'</b></div>';
+    return h;
+  }
+  var total=0,additive=cfg.series.length>1;
   cfg.series.forEach(function(sr){
     var seg=Math.max(0,sr.g(m)||0);total+=seg;if(sr.tg)additive=false;
     var val=sr.tg?sr.tg(m):seg;

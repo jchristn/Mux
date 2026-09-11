@@ -18,6 +18,16 @@ namespace Mux.Core.Telemetry
         /// <summary>The total request duration in milliseconds, or null.</summary>
         public long? TotalMs { get; set; }
 
+        /// <summary>The streaming duration (first token to last) in milliseconds, or null.</summary>
+        public long? StreamMs { get; set; }
+
+        /// <summary>
+        /// Output tokens per second for this call, recomputed as output tokens over the streaming window
+        /// (not the historically stored value, which counted prompt+output over the whole runtime), or null
+        /// when the streaming window or output count is unavailable.
+        /// </summary>
+        public double? ThroughputPerSec { get; set; }
+
         #endregion
 
         #region Constructors-and-Factories

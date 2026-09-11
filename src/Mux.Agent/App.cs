@@ -58,6 +58,10 @@ namespace Mux.Agent
             launch.Click += OnLaunch;
             menu.Items.Add(launch);
 
+            NativeMenuItem dashboard = new NativeMenuItem("Launch Dashboard");
+            dashboard.Click += OnLaunchDashboard;
+            menu.Items.Add(dashboard);
+
             menu.Items.Add(new NativeMenuItemSeparator());
 
             NativeMenuItem exit = new NativeMenuItem("Exit");
@@ -72,7 +76,7 @@ namespace Mux.Agent
 
             // Keep the tray glyph readable when the OS switches between light and dark: dark icon on a light
             // taskbar, white icon on a dark taskbar.
-            IPlatformSettings? platformSettings = PlatformSettings;
+            IPlatformSettings? platformSettings = CurrentPlatformSettings;
             if (platformSettings != null)
             {
                 platformSettings.ColorValuesChanged += (sender, args) =>
@@ -119,7 +123,7 @@ namespace Mux.Agent
             }
         }
 
-        private static IPlatformSettings? PlatformSettings
+        private static IPlatformSettings? CurrentPlatformSettings
         {
             get
             {
@@ -130,13 +134,18 @@ namespace Mux.Agent
 
         private void OnAbout(object? sender, EventArgs e)
         {
-            AboutWindow window = new AboutWindow(_Host?.BaseUrl ?? string.Empty);
+            AboutWindow window = new AboutWindow();
             window.Show();
         }
 
         private void OnLaunch(object? sender, EventArgs e)
         {
             _Host?.LaunchMux();
+        }
+
+        private void OnLaunchDashboard(object? sender, EventArgs e)
+        {
+            _Host?.LaunchDashboard();
         }
 
         private void OnExit(object? sender, EventArgs e)

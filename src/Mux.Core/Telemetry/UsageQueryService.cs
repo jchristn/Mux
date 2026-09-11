@@ -298,6 +298,8 @@ namespace Mux.Core.Telemetry
         {
             List<double> ttft = new List<double>();
             List<double> total = new List<double>();
+            List<double> stream = new List<double>();
+            List<double> throughput = new List<double>();
 
             foreach (UsageLatencySample sample in samples)
             {
@@ -310,17 +312,42 @@ namespace Mux.Core.Telemetry
                 {
                     total.Add(sample.TotalMs.Value);
                 }
+
+                if (sample.StreamMs.HasValue)
+                {
+                    stream.Add(sample.StreamMs.Value);
+                }
+
+                if (sample.ThroughputPerSec.HasValue)
+                {
+                    throughput.Add(sample.ThroughputPerSec.Value);
+                }
             }
 
-            ttft.Sort();
-            total.Sort();
+            // Build the five-number summaries (each sorts its list in place).
+            metrics.TtftMsDist = UsageDistribution.From(ttft, Percentile);
+            metrics.TotalMsDist = UsageDistribution.From(total, Percentile);
+            metrics.StreamMsDist = UsageDistribution.From(stream, Percentile);
+            metrics.ThroughputDist = UsageDistribution.From(throughput, Percentile);
 
             metrics.P50TtftMs = Percentile(ttft, 0.50);
-            metrics.P95TtftMs = Percentile(ttft, 0.95);
-            metrics.P99TtftMs = Percentile(ttft, 0.99);
+            metrics.P95TtftMs = metrics.TtftMsDist.P95;
+            metrics.P99TtftMs = metrics.TtftMsDist.P99;
             metrics.P50TotalMs = Percentile(total, 0.50);
-            metrics.P95TotalMs = Percentile(total, 0.95);
-            metrics.P99TotalMs = Percentile(total, 0.99);
+            metrics.P95TotalMs = metrics.TotalMsDist.P95;
+            metrics.P99TotalMs = metrics.TotalMsDist.P99;
+
+            // Prefer the sample-derived streaming/throughput means so the KPI cards match the recomputed,
+            // corrected throughput (the roll-up's AvgTokensPerSec came from the stale stored column).
+            if (metrics.StreamMsDist.Count > 0)
+            {
+                metrics.AvgStreamMs = metrics.StreamMsDist.Avg;
+            }
+
+            if (metrics.ThroughputDist.Count > 0)
+            {
+                metrics.AvgTokensPerSec = metrics.ThroughputDist.Avg;
+            }
         }
 
         private static double Percentile(List<double> sorted, double p)

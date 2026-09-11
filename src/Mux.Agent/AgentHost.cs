@@ -22,6 +22,101 @@ namespace Mux.Agent
         public string BaseUrl { get; private set; } = string.Empty;
 
         /// <summary>
+        /// Whether the background REST server is currently running.
+        /// </summary>
+        public bool IsRunning
+        {
+            get => _Server != null && !string.IsNullOrEmpty(BaseUrl);
+        }
+
+        /// <summary>
+        /// Ensures the background REST server is running, starting it if it is not (for example when the
+        /// initial start failed to bind). Idempotent and best-effort; never throws.
+        /// </summary>
+        public void EnsureStarted()
+        {
+            if (IsRunning)
+            {
+                return;
+            }
+
+            // Clear any half-started server before retrying so a new bind does not race a stale instance.
+            Stop();
+            try
+            {
+                Start();
+            }
+            catch (Exception)
+            {
+                // Best-effort; the tray stays up even if the server cannot bind.
+            }
+        }
+
+        /// <summary>
+        /// Ensures the server is serving (starting it if needed) and opens the web dashboard in the default
+        /// browser. Best-effort; never throws.
+        /// </summary>
+        public void LaunchDashboard()
+        {
+            EnsureStarted();
+
+            // Prefer the URL this agent bound. If binding failed because another process (a standalone
+            // `mux serve`) already owns the port, the dashboard is still being served there — fall back to
+            // the configured host/port so the browser opens the right place either way.
+            string url = !string.IsNullOrEmpty(BaseUrl) ? BaseUrl : ConfiguredBaseUrl();
+            if (!string.IsNullOrEmpty(url))
+            {
+                OpenUrl(url.TrimEnd('/') + "/dashboard");
+            }
+        }
+
+        private static string ConfiguredBaseUrl()
+        {
+            try
+            {
+                RestServerSettings rest = SettingsLoader.LoadSettings().Rest;
+                string scheme = rest.Ssl ? "https" : "http";
+                return scheme + "://" + rest.Hostname + ":" + rest.Port;
+            }
+            catch (Exception)
+            {
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Opens a URL in the operating system's default browser. Best-effort; never throws.
+        /// </summary>
+        /// <param name="url">The URL to open. Ignored when null or blank.</param>
+        public static void OpenUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                return;
+            }
+
+            try
+            {
+                if (OperatingSystem.IsWindows())
+                {
+                    Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+                }
+                else if (OperatingSystem.IsMacOS())
+                {
+                    Process.Start(new ProcessStartInfo { FileName = "open", Arguments = url, UseShellExecute = false });
+                }
+                else
+                {
+                    Process.Start(new ProcessStartInfo { FileName = "xdg-open", Arguments = url, UseShellExecute = false });
+                }
+            }
+            catch (Exception)
+            {
+                // Best-effort; nothing to do if no browser handler is available.
+            }
+        }
+
+        /// <summary>
         /// Start the background REST server.
         /// </summary>
         public void Start()

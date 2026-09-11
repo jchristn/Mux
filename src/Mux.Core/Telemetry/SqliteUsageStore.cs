@@ -314,22 +314,34 @@ WHERE id IN (
             string bucketExpr = bucketMs > 0 ? "(ts_utc / " + bucketMs.ToString(CultureInfo.InvariantCulture) + ") * " + bucketMs.ToString(CultureInfo.InvariantCulture) : "0";
 
             System.Text.StringBuilder sql = new System.Text.StringBuilder();
-            sql.Append("SELECT ").Append(bucketExpr).Append(" AS bucket, ttft_ms, total_ms FROM usage_events");
+            sql.Append("SELECT ").Append(bucketExpr).Append(" AS bucket, ttft_ms, total_ms, stream_ms, output_tokens FROM usage_events");
 
             await using SqliteConnection connection = await OpenConnectionAsync(token).ConfigureAwait(false);
             await using SqliteCommand command = connection.CreateCommand();
-            AppendWhere(sql, command, filter, "(ttft_ms IS NOT NULL OR total_ms IS NOT NULL)");
+            AppendWhere(sql, command, filter, "(ttft_ms IS NOT NULL OR total_ms IS NOT NULL OR stream_ms IS NOT NULL)");
             command.CommandText = sql.ToString();
 
             List<UsageLatencySample> samples = new List<UsageLatencySample>();
             await using SqliteDataReader reader = (SqliteDataReader)await command.ExecuteReaderAsync(token).ConfigureAwait(false);
             while (await reader.ReadAsync(token).ConfigureAwait(false))
             {
+                long? streamMs = reader.IsDBNull(3) ? (long?)null : reader.GetInt64(3);
+                long outputTokens = reader.IsDBNull(4) ? 0L : reader.GetInt64(4);
+
+                // Recompute throughput as output tokens over the streaming window rather than trusting the
+                // stored tokens_per_sec column (which historically divided prompt+output by the whole runtime
+                // and read far too high). This corrects existing rows on read.
+                double? throughput = (streamMs.HasValue && streamMs.Value > 0 && outputTokens > 0)
+                    ? outputTokens / (streamMs.Value / 1000.0)
+                    : (double?)null;
+
                 samples.Add(new UsageLatencySample
                 {
                     BucketStartUnixMs = reader.GetInt64(0),
                     TimeToFirstTokenMs = reader.IsDBNull(1) ? (long?)null : reader.GetInt64(1),
-                    TotalMs = reader.IsDBNull(2) ? (long?)null : reader.GetInt64(2)
+                    TotalMs = reader.IsDBNull(2) ? (long?)null : reader.GetInt64(2),
+                    StreamMs = streamMs,
+                    ThroughputPerSec = throughput
                 });
             }
 
