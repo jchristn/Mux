@@ -269,10 +269,15 @@ namespace Mux.Cli.Commands
                 }
             }
 
+            // Durable usage telemetry for the one-shot run. Best-effort; disposed below to flush events.
+            Mux.Core.Telemetry.UsageTelemetry usageTelemetry = Mux.Core.Telemetry.UsageTelemetry.Create(
+                runtime.MuxSettings, runtime.Metadata.ConfigDirectory, null);
+
             AgentLoopOptions loopOptions = new AgentLoopOptions(runtime.Endpoint)
             {
                 MuxSettings = runtime.MuxSettings,
                 IgnoreCertErrors = runtime.MuxSettings.IgnoreCertErrors,
+                UsageRecorder = usageTelemetry.Recorder,
                 SystemPrompt = effectiveSystemPrompt,
                 ApprovalPolicy = runtime.ApprovalPolicy,
                 WorkingDirectory = runtime.WorkingDirectory,
@@ -457,6 +462,9 @@ namespace Mux.Cli.Commands
                 finally
                 {
                     mcpRuntime?.Dispose();
+
+                    // Flush and close usage telemetry so the one-shot run's events are written before exit.
+                    usageTelemetry.Dispose();
                 }
             }
 

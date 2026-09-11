@@ -33,6 +33,7 @@ namespace Mux.Core.Models
         private bool _TaskParallelismEnabled = false;
         private ExternalSearchSettings _ExternalSearch = new ExternalSearchSettings();
         private RestServerSettings _Rest = new RestServerSettings();
+        private TelemetrySettings _Telemetry = new TelemetrySettings();
 
         #endregion
 
@@ -316,6 +317,17 @@ namespace Mux.Core.Models
         {
             get => _Rest;
             set => _Rest = value ?? new RestServerSettings();
+        }
+
+        /// <summary>
+        /// Configuration for durable usage telemetry (token/latency/cost history persisted to a local
+        /// SQLite database and surfaced in the TUI and dashboard). Enabled by default.
+        /// </summary>
+        [JsonPropertyName("telemetry")]
+        public TelemetrySettings Telemetry
+        {
+            get => _Telemetry;
+            set => _Telemetry = value ?? new TelemetrySettings();
         }
 
         #endregion

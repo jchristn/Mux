@@ -288,6 +288,47 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 /* home / overview */
 .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px;margin-bottom:20px}
+.useg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.useg button{border:none;background:var(--panel);color:var(--text);padding:6px 13px;font-size:13px;cursor:pointer;font-family:inherit}
+.useg button+button{border-left:1px solid var(--line)}
+.useg button.active{background:var(--accent);color:#fff}
+.usebar{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center;margin:0 0 18px}
+.usebar>label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-left:8px}
+.usebar>label:first-child{margin-left:0}
+.usebar select{min-width:132px}
+.chartpanel{border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+.ustabs{display:flex;gap:2px;border-bottom:1px solid var(--line);padding:8px 10px 0;flex-wrap:wrap;background:var(--panel-2)}
+.ustabs button{border:none;background:none;color:var(--muted);padding:9px 16px;font-size:13.5px;cursor:pointer;font-family:inherit;border-radius:7px 7px 0 0;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ustabs button:hover{color:var(--text)}
+.ustabs button.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
+.chartbody{padding:16px 18px 12px}
+.uframe{display:grid;grid-template-columns:54px 1fr;grid-template-rows:230px auto;column-gap:8px}
+.uy{grid-column:1;grid-row:1;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;font-size:10.5px;color:var(--muted);font-family:monospace;line-height:1;padding:1px 0}
+.uplot{grid-column:2;grid-row:1;position:relative;border-left:1px solid var(--line);border-bottom:1px solid var(--line)}
+.uplot svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.uplot .ugrid{stroke:var(--line);stroke-width:1;opacity:.45;vector-effect:non-scaling-stroke}
+.uplot .ubar{opacity:.9}
+.uplot .ubar:hover{opacity:1}
+.ux{grid-column:2;grid-row:2;position:relative;height:15px;margin-top:6px}
+.ux span{position:absolute;transform:translateX(-50%);font-size:10.5px;color:var(--muted);white-space:nowrap}
+.chartempty{height:250px;display:flex;align-items:center;justify-content:center}
+.chartlegend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;margin:13px 2px 0;color:var(--muted)}
+.chartlegend span{display:inline-flex;align-items:center;gap:6px}
+.chartlegend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.chartnote{font-size:11px;color:var(--muted);margin:9px 2px 0}
+.ubadge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.ubadge.ok{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
+.ubadge.err{background:color-mix(in srgb,var(--danger) 18%,transparent);color:var(--danger)}
+.udetail{display:flex;flex-direction:column;gap:15px}
+.udetail-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:-2px}
+.udetail-hd .mdl{font-family:monospace;font-size:15px;font-weight:600;color:var(--text)}
+.udetail-hd .when{font-size:12px;color:var(--muted)}
+.udetail-sec{border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.udetail-sec h5{margin:0;padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);background:var(--panel-2);border-bottom:1px solid var(--line);font-weight:600}
+.udetail-kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:1px;background:var(--line)}
+.udetail-kv>div{background:var(--panel);padding:8px 12px}
+.udetail-kv .k{font-size:11px;color:var(--muted);margin-bottom:3px}
+.udetail-kv .v{font-family:monospace;font-size:13px;color:var(--text);word-break:break-word}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;cursor:pointer;text-align:left;box-shadow:var(--shadow);transition:transform .1s,border-color .12s;display:flex;flex-direction:column;gap:5px;font-family:inherit}
 .kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
 .kpi .kv{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
@@ -370,6 +411,11 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
       <button class="nav-item" data-view="commands" title="Manage custom /slash commands backed by external programs">⚡ <span data-i18n="nav.commands">Commands</span></button>
       <button class="nav-item" data-view="keybindings" title="Override the keyboard shortcuts for mux commands">⌨️ <span data-i18n="nav.keybindings">Keybindings</span></button>
       <button class="nav-item" data-view="skills" title="Manage skills: reusable Markdown-plus-code capabilities">🛠️ <span data-i18n="nav.skills">Skills</span></button>
+    </nav>
+    <nav class="nav-group" aria-label="Observability">
+      <div class="nav-label" data-i18n="grp.observability">Observability</div>
+      <button class="nav-item" data-view="usage" title="Usage analytics: token spend, cost, latency, and time-to-first-token over time">📊 <span data-i18n="nav.usage">Usage</span></button>
+      <button class="nav-item" data-view="pricing" title="Edit per-model pricing used to derive usage cost">💲 <span data-i18n="nav.pricing">Pricing</span></button>
     </nav>
     <nav class="nav-group" aria-label="System">
       <div class="nav-label" data-i18n="grp.system">System</div>
@@ -490,6 +536,43 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
       <div id="sessions_list"></div></div></div>
 
     <!-- Settings -->
+    <!-- Usage --><div class="view" id="view-usage"><div class="padw">
+      <div class="pagehead"><div class="desc">Token usage, cost, latency, and time-to-first-token across your model calls. Reads the shared usage database (<code>~/.mux/usage.db</code>) written by every mux instance.</div>
+        <div class="row"><button class="btn secondary" id="usage_refresh" title="Reload usage data for the current window">Refresh</button></div></div>
+      <div class="usebar">
+        <label>Range</label>
+        <div class="useg" id="us_range">
+          <button data-range="hour" title="Last hour">Hour</button>
+          <button data-range="day" class="active" title="Last 24 hours">Day</button>
+          <button data-range="week" title="Last 7 days">Week</button>
+          <button data-range="month" title="Last 30 days">Month</button>
+        </div>
+        <label>Endpoint</label><select id="us_endpoint" title="Filter to one endpoint"><option value="">All endpoints</option></select>
+        <label>Model</label><select id="us_model" title="Filter to one model"><option value="">All models</option></select>
+      </div>
+      <div id="us_disabled" style="display:none" class="empty"><div class="eicon">📊</div><div>Usage telemetry is disabled or empty. Run a turn in the CLI, or enable telemetry in settings.</div></div>
+      <div class="kpis" id="us_kpis"></div>
+      <div class="chartpanel">
+        <div class="ustabs" id="us_tabs">
+          <button data-tab="tokens" class="active">Tokens</button>
+          <button data-tab="cost">Cost</button>
+          <button data-tab="latency">Latency</button>
+          <button data-tab="ttft">TTFT</button>
+          <button data-tab="stream">Streaming</button>
+          <button data-tab="throughput">Throughput</button>
+        </div>
+        <div class="chartbody" id="us_chart"></div>
+      </div>
+      <div class="pagehead" style="margin-top:28px"><div class="desc">Per-call history for the selected window. Click a row to inspect it; sort, filter, and choose columns from the table controls.</div></div>
+      <div id="usage_history_list"></div>
+    </div></div>
+
+    <!-- Pricing --><div class="view" id="view-pricing"><div class="padw">
+      <div class="pagehead"><div class="desc">Per-model rates in <code>pricing.json</code>, in US dollars per million tokens. Cost is derived from these at read time, so correcting a rate re-values history. Unknown models cost nothing until you add a rate.</div>
+        <div class="row"><button class="btn secondary" id="pricing_reload" title="Reload pricing from disk, discarding unsaved changes">Reload</button><button class="btn" id="pricing_add" title="Add a model rate">+ <span>Add model</span></button></div></div>
+      <div id="pricing_list"></div>
+    </div></div>
+
     <div class="view" id="view-settings">
       <div class="pad">
         <div class="card">
@@ -547,7 +630,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 var API_KEY="__MUX_API_KEY__";
 var I18N={
 en:{
-"nav.home":"Home","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"MCP Servers","nav.prompts":"Prompts","nav.subagents":"Subagents","nav.hooks":"Hooks","nav.commands":"Commands","nav.keybindings":"Keybindings","nav.skills":"Skills","nav.sessions":"Sessions","nav.settings":"Settings",
+"nav.home":"Home","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"MCP Servers","nav.prompts":"Prompts","nav.subagents":"Subagents","nav.hooks":"Hooks","nav.commands":"Commands","nav.keybindings":"Keybindings","nav.skills":"Skills","nav.sessions":"Sessions","nav.settings":"Settings","grp.observability":"Observability","nav.usage":"Usage","nav.pricing":"Pricing",
 "grp.config":"Configuration","grp.system":"System",
 "vt.mcp":"MCP Servers","vt.hooks":"Event Hooks","vt.commands":"Custom Commands",
 "act.reload":"Reload","act.save":"Save","act.cancel":"Cancel","act.close":"Close","act.delete":"Delete","act.edit":"Edit","act.duplicate":"Duplicate","act.viewjson":"View JSON","act.copyjson":"Copy JSON","act.copy":"Copy","act.retry":"Retry","act.view":"View","act.enable":"Enable","act.disable":"Disable","act.confirm":"Confirm","act.savesettings":"Save settings","act.allsessions":"All sessions",
@@ -1332,7 +1415,154 @@ function renderHome(d){
   el("home_recent").innerHTML=rs.length?rs.map(function(s){return '<div class="recent-item"><div class="rt"><div class="rtitle">'+esc(s.Title||s.Id)+'</div><div class="rmeta">'+esc(s.Model||"")+' · '+s.MessageCount+' '+esc(t("home.msg"))+' · '+fmtWhen(s.UpdatedUtc)+'</div></div><button class="minibtn" data-viewses="'+esc(s.Id)+'" title="Preview this session">'+esc(t("act.view"))+'</button></div>';}).join(""):'<div class="empty" style="padding:22px">'+esc(t("empty.sessions"))+'</div>';
   el("home_quick").innerHTML='<button class="btn" data-goto="chat">💬 '+esc(t("quick.newchat"))+'</button><button class="btn secondary" data-action="addendpoint">🔌 '+esc(t("quick.addep"))+'</button><button class="btn secondary" data-goto="sessions">🗂️ '+esc(t("quick.sessions"))+'</button><button class="btn secondary" data-goto="settings">⚙️ '+esc(t("quick.settings"))+'</button>';
 }
-var VIEW_LOADERS={home:loadHome,endpoints:loadEndpointsAdmin,mcp:loadMcp,prompts:loadPrompts,subagents:loadSubagents,hooks:loadHooks,commands:loadHooks,keybindings:loadKeybindings,skills:loadSkills,sessions:loadSessions,settings:loadSettings};
+/* ================= Usage analytics ================= */
+var usageState={range:"day",endpoint:"",model:"",tab:"tokens",buckets:[],wired:false};
+function fmtTok(n){n=n||0;if(n>=1e6)return (n/1e6).toFixed(n>=1e7?0:1)+"M";if(n>=1e3)return (n/1e3).toFixed(n>=1e4?0:1)+"k";return ""+Math.round(n);}
+function fmtUsd(n){n=n||0;if(n===0)return "$0";if(n<0.01)return "$"+n.toFixed(4);if(n<1)return "$"+n.toFixed(3);return "$"+n.toFixed(2);}
+function fmtMs(n){n=Math.round(n||0);if(n>=1000)return (n/1000).toFixed(2)+"s";return n+"ms";}
+function fmtPct(n){return ((n||0)*100).toFixed(1)+"%";}
+function fmtWhen(ms){try{return new Date(ms).toLocaleString();}catch(e){return ""+ms;}}
+function usageQuery(extra){var p="range="+usageState.range;if(usageState.endpoint)p+="&endpoint="+encodeURIComponent(usageState.endpoint);if(usageState.model)p+="&model="+encodeURIComponent(usageState.model);if(extra)p+=extra;return p;}
+function loadUsage(){
+  if(!usageState.wired){wireUsage();usageState.wired=true;}
+  api("/v1.0/api/usage/filters").then(function(f){
+    el("us_disabled").style.display=f.Enabled?"none":"";
+    fillUsageSelect("us_endpoint",f.Endpoints,usageState.endpoint,"All endpoints");
+    fillUsageSelect("us_model",f.Models,usageState.model,"All models");
+  }).catch(function(){});
+  refreshUsage();
+}
+function fillUsageSelect(id,vals,cur,allLabel){var s=el(id);if(!s)return;var o='<option value="">'+esc(allLabel)+'</option>';(vals||[]).forEach(function(v){o+='<option value="'+esc(v)+'"'+(v===cur?" selected":"")+'>'+esc(v)+'</option>';});s.innerHTML=o;s.value=cur||"";}
+function wireUsage(){
+  Array.prototype.forEach.call(document.querySelectorAll("#us_range button"),function(b){b.addEventListener("click",function(){usageState.range=b.dataset.range;Array.prototype.forEach.call(document.querySelectorAll("#us_range button"),function(x){x.classList.toggle("active",x===b);});refreshUsage();});});
+  Array.prototype.forEach.call(document.querySelectorAll("#us_tabs button"),function(b){b.addEventListener("click",function(){usageState.tab=b.dataset.tab;Array.prototype.forEach.call(document.querySelectorAll("#us_tabs button"),function(x){x.classList.toggle("active",x===b);});drawUsageChart();});});
+  el("us_endpoint").addEventListener("change",function(){usageState.endpoint=this.value;refreshUsage();});
+  el("us_model").addEventListener("change",function(){usageState.model=this.value;refreshUsage();});
+}
+function refreshUsage(){
+  el("us_kpis").innerHTML='<div class="empty"><div class="spinner"></div></div>';
+  el("us_chart").innerHTML='<div class="chartempty"><div class="spinner"></div></div>';
+  api("/v1.0/api/usage/summary?"+usageQuery()).then(renderUsageKpis).catch(function(){el("us_kpis").innerHTML="";});
+  api("/v1.0/api/usage/timeseries?"+usageQuery()).then(function(r){usageState.buckets=r.Items||[];drawUsageChart();}).catch(function(){usageState.buckets=[];drawUsageChart();});
+  loadUsageHistory();
+}
+function renderUsageKpis(s){
+  var m=s.Metrics||{};
+  var cards=[["Total tokens",fmtTok(m.TotalTokens)],["Cost",fmtUsd(m.CostUsd)],["Calls",""+(m.Calls||0)],["Error rate",fmtPct(m.ErrorRate)],["Cache hit",fmtPct(m.CacheHitRate)],["Avg TTFT",fmtMs(m.AvgTtftMs)],["p95 latency",fmtMs(m.P95TotalMs)],["Avg tok/s",(m.AvgTokensPerSec||0).toFixed(1)]];
+  el("us_kpis").innerHTML=cards.map(function(c){return '<div class="kpi"><span class="kv">'+esc(c[1])+'</span><span class="kl">'+esc(c[0])+'</span></div>';}).join("");
+}
+/* One full-width bar chart per tab. Latency/TTFT stack avg + p95 + p99 tail segments so the bar top is p99. */
+var CHART_TABS={
+  tokens:{fmt:fmtTok,note:cachedNote,series:[
+    {n:"Prompt",c:"#2563eb",g:function(m){var v=(m.InputTokens||0)-(m.CachedTokens||0);return v<0?0:v;}},
+    {n:"Cached",c:"#16a34a",g:function(m){return m.CachedTokens||0;}},
+    {n:"Output",c:"#d97706",g:function(m){return m.OutputTokens||0;}}]},
+  cost:{fmt:fmtUsd,series:[{n:"Cost",c:"#7c3aed",g:function(m){return m.CostUsd||0;}}]},
+  latency:{fmt:fmtMs,series:[
+    {n:"avg",c:"#2563eb",g:function(m){return m.AvgTotalMs||0;}},
+    {n:"p95",c:"#d97706",g:function(m){return Math.max(0,(m.P95TotalMs||0)-(m.AvgTotalMs||0));},tg:function(m){return m.P95TotalMs||0;}},
+    {n:"p99",c:"#dc2626",g:function(m){return Math.max(0,(m.P99TotalMs||0)-(m.P95TotalMs||0));},tg:function(m){return m.P99TotalMs||0;}}]},
+  ttft:{fmt:fmtMs,series:[
+    {n:"avg",c:"#2563eb",g:function(m){return m.AvgTtftMs||0;}},
+    {n:"p95",c:"#d97706",g:function(m){return Math.max(0,(m.P95TtftMs||0)-(m.AvgTtftMs||0));},tg:function(m){return m.P95TtftMs||0;}},
+    {n:"p99",c:"#dc2626",g:function(m){return Math.max(0,(m.P99TtftMs||0)-(m.P95TtftMs||0));},tg:function(m){return m.P99TtftMs||0;}}]},
+  stream:{fmt:fmtMs,series:[{n:"streaming",c:"#0891b2",g:function(m){return m.AvgStreamMs||0;}}]},
+  throughput:{fmt:function(v){return (v||0).toFixed(0)+" tok/s";},series:[{n:"tok/s",c:"#16a34a",g:function(m){return m.AvgTokensPerSec||0;}}]}
+};
+function cachedNote(buckets){var any=buckets.some(function(b){return (b.Metrics&&b.Metrics.CachedTokens)>0;});return any?"":"Prompt shows the uncached portion; cached tokens stack on top. Cache metrics populate when the provider reports them.";}
+function drawUsageChart(){
+  var host=el("us_chart"),buckets=usageState.buckets;
+  if(!buckets||!buckets.length){host.innerHTML='<div class="chartempty"><div class="empty"><div class="eicon">📉</div><div>No usage recorded in this window yet.</div></div></div>';return;}
+  var cfg=CHART_TABS[usageState.tab]||CHART_TABS.tokens;
+  var note=(typeof cfg.note==="function")?cfg.note(buckets):(cfg.note||"");
+  host.innerHTML=barChart(buckets,cfg,usageState.range)+legendHtml(cfg)+(note?'<div class="chartnote">'+esc(note)+'</div>':"");
+}
+function niceMax(v){if(v<=0)return 1;var p=Math.pow(10,Math.floor(Math.log(v)/Math.LN10));var f=v/p;var nf=f<=1?1:(f<=2?2:(f<=5?5:10));return nf*p;}
+function fmtBucketLabel(ms,rangeId){var d=new Date(ms);
+  if(rangeId==="hour"||rangeId==="day")return d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+  if(rangeId==="week")return d.toLocaleDateString([],{weekday:"short"})+" "+d.toLocaleTimeString([],{hour:"numeric"});
+  return d.toLocaleDateString([],{month:"short",day:"numeric"});}
+function legendHtml(cfg){var h='<div class="chartlegend">';cfg.series.forEach(function(sr){h+='<span><i style="background:'+sr.c+'"></i>'+esc(sr.n)+'</span>';});return h+'</div>';}
+/* SVG draws only bars + gridlines in a 1000x100 stretched viewBox; axis labels are crisp HTML positioned
+   around the plot (so their size is fixed regardless of chart width). */
+function barChart(buckets,cfg,rangeId){
+  var n=buckets.length;
+  var mx=0;buckets.forEach(function(b){var m=b.Metrics||{};var s=0;cfg.series.forEach(function(sr){s+=Math.max(0,sr.g(m)||0);});if(s>mx)mx=s;});
+  var ymax=niceMax(mx);
+  var VW=1000,VH=100,slot=VW/Math.max(1,n),bw=Math.max(0.5,slot*(n>60?0.82:0.66)),i;
+  var svg='<svg viewBox="0 0 '+VW+' '+VH+'" preserveAspectRatio="none">';
+  for(i=1;i<4;i++){var gy=VH-(i/4)*VH;svg+='<line class="ugrid" x1="0" y1="'+gy.toFixed(2)+'" x2="'+VW+'" y2="'+gy.toFixed(2)+'"/>';}
+  buckets.forEach(function(b,bi){var m=b.Metrics||{},bx=bi*slot+(slot-bw)/2,acc=0;
+    cfg.series.forEach(function(sr){var v=Math.max(0,sr.g(m)||0);if(v<=0)return;var hh=(v/ymax)*VH,by=VH-acc-hh;acc+=hh;
+      var tv=sr.tg?sr.tg(m):v;
+      svg+='<rect class="ubar" x="'+bx.toFixed(2)+'" y="'+by.toFixed(2)+'" width="'+bw.toFixed(2)+'" height="'+hh.toFixed(2)+'" fill="'+sr.c+'"><title>'+esc(fmtBucketLabel(b.BucketStartUnixMs,rangeId)+" · "+sr.n+": "+cfg.fmt(tv))+'</title></rect>';});});
+  svg+='</svg>';
+  var yl='';for(i=4;i>=0;i--)yl+='<span>'+esc(cfg.fmt(ymax*i/4))+'</span>';
+  var step=Math.max(1,Math.ceil(n/8)),xl='';
+  for(i=0;i<n;i+=step){var pct=(n<=1?50:((i+0.5)/n)*100);xl+='<span style="left:'+pct.toFixed(2)+'%">'+esc(fmtBucketLabel(buckets[i].BucketStartUnixMs,rangeId))+'</span>';}
+  return '<div class="uframe"><div class="uy">'+yl+'</div><div class="uplot">'+svg+'</div><div class="ux">'+xl+'</div></div>';
+}
+/* History table — the shared data grid (sort/filter/paginate/columns), row-click opens a detail modal. */
+var _uhist=[],_uhistTotal=0;
+function loadUsageHistory(){_reload["usage_history_list"]=loadUsageHistory;gridLoading("usage_history_list");
+  api("/v1.0/api/usage/events?"+usageQuery("&page=1&pageSize=500")).then(function(pg){_uhist=(pg&&pg.Items)||[];_uhistTotal=(pg&&pg.TotalCount)||0;renderUsageHistory();}).catch(function(e){gridError("usage_history_list",e.message);});}
+function renderUsageHistory(){
+  renderGrid("usage_history_list",[
+    {h:"When",tip:"Call completion time",get:function(r){return esc(fmtWhen(r.TimestampUnixMs));}},
+    {h:"Endpoint",get:function(r){return esc(r.EndpointName);}},
+    {h:"In",mono:true,tip:"Input tokens",get:function(r){return fmtTok(r.InputTokens);}},
+    {h:"Cached",mono:true,tip:"Cache-read tokens",get:function(r){return fmtTok(r.CachedTokens);}},
+    {h:"Out",mono:true,tip:"Output tokens",get:function(r){return fmtTok(r.OutputTokens);}},
+    {h:"TTFT",mono:true,tip:"Time to first token",get:function(r){return r.TimeToFirstTokenMs!=null?fmtMs(r.TimeToFirstTokenMs):"—";}},
+    {h:"Latency",mono:true,tip:"Total request duration",get:function(r){return r.TotalMs!=null?fmtMs(r.TotalMs):"—";}},
+    {h:"tok/s",mono:true,tip:"Output throughput",get:function(r){return r.TokensPerSecond!=null?r.TokensPerSecond.toFixed(0):"—";}},
+    {h:"Cost",mono:true,get:function(r){return fmtUsd(r.CostUsd);}},
+    {h:"Status",get:function(r){return r.Success?'<span class="ubadge ok">ok</span>':'<span class="ubadge err">'+esc(r.ErrorCode||"error")+'</span>';}}
+  ],_uhist,{icon:"🗒️",msg:"No calls recorded in this window."});
+}
+function delUsageRow(i){var r=_uhist[i];if(!r)return;confirmModal("Delete this usage record? This cannot be undone.",function(){
+  api("/v1.0/api/usage/events?id="+encodeURIComponent(r.Id),"DELETE").then(function(){toast(t("toast.deleted"));refreshUsage();}).catch(function(e){toast(e.message,true);});});}
+function viewUsageRow(i){var r=_uhist[i];if(!r)return;
+  function sec(title,pairs){var h='<div class="udetail-sec"><h5>'+esc(title)+'</h5><div class="udetail-kv">';pairs.forEach(function(kv){h+='<div><div class="k">'+esc(kv[0])+'</div><div class="v">'+esc(""+kv[1])+'</div></div>';});return h+'</div></div>';}
+  var badge=r.Success?'<span class="ubadge ok">success</span>':'<span class="ubadge err">'+esc(r.ErrorCode||"error")+'</span>';
+  var body='<div class="udetail">'+
+    '<div class="udetail-hd"><div><div class="mdl">'+esc(r.Model)+'</div><div class="when">'+esc(fmtWhen(r.TimestampUnixMs))+'</div></div>'+badge+'</div>'+
+    sec("Identity",[["Endpoint",r.EndpointName],["Provider",r.AdapterType||"—"],["Call kind",r.CallKind],["Command",r.Command||"—"],["Session",r.SessionId||"—"],["Host",r.BaseHost||"—"]])+
+    sec("Tokens",[["Input",fmtTok(r.InputTokens)],["Cached",fmtTok(r.CachedTokens)],["Output",fmtTok(r.OutputTokens)],["Reasoning",fmtTok(r.ReasoningTokens)],["Total",fmtTok(r.TotalTokens)]])+
+    sec("Timing",[["Time to first token",r.TimeToFirstTokenMs!=null?fmtMs(r.TimeToFirstTokenMs):"—"],["Streaming time",r.StreamingMs!=null?fmtMs(r.StreamingMs):"—"],["Total latency",r.TotalMs!=null?fmtMs(r.TotalMs):"—"],["Throughput",r.TokensPerSecond!=null?(r.TokensPerSecond.toFixed(1)+" tok/s"):"—"],["Finish reason",r.FinishReason||"—"]])+
+    sec("Cost",[["Derived cost",fmtUsd(r.CostUsd)]])+
+  '</div>';
+  openModal("Call details",body,[{label:t("act.viewjson"),onClick:function(){viewJson("Usage event",r);}},{label:t("act.close"),primary:true,onClick:closeModal}],true);
+}
+/* ================= Pricing ================= */
+var _pr2=[],_prVersion="";
+function loadPricing(){_reload["pricing_list"]=loadPricing;gridLoading("pricing_list");
+  api("/v1.0/api/usage/pricing").then(function(tb){_prVersion=(tb&&tb.version)||"";_pr2=[];var models=(tb&&tb.models)||{};
+    for(var k in models){if(Object.prototype.hasOwnProperty.call(models,k)){var m=models[k]||{};_pr2.push({Model:k,Input:m.inputPerMTok||0,Cached:m.cachedInputPerMTok||0,Output:m.outputPerMTok||0});}}
+    _pr2.sort(function(a,b){return a.Model<b.Model?-1:(a.Model>b.Model?1:0);});renderPricing();
+  }).catch(function(e){gridError("pricing_list",e.message);});}
+function renderPricing(){renderGrid("pricing_list",[
+  {h:"Model",mono:true,get:function(r){return esc(r.Model);}},
+  {h:"Input $/Mtok",mono:true,tip:"USD per million uncached prompt tokens",get:function(r){return "$"+(+r.Input).toFixed(2);}},
+  {h:"Cached $/Mtok",mono:true,tip:"USD per million cache-read tokens",get:function(r){return "$"+(+r.Cached).toFixed(2);}},
+  {h:"Output $/Mtok",mono:true,tip:"USD per million completion tokens",get:function(r){return "$"+(+r.Output).toFixed(2);}}
+],_pr2,{icon:"💲",msg:"No model rates yet. Unknown models cost nothing until you add a rate.",add:"+ Add model"});}
+function prFields(isEdit){return [
+  {id:"Model",label:"Model",disabled:isEdit,tip:"The model identifier as reported by the provider — the same value as the endpoint's model field."},
+  {id:"Input",label:"Input rate",sub:"(USD / Mtok)",type:"number",step:"0.01",tip:"Price per million uncached prompt tokens."},
+  {id:"Cached",label:"Cached input rate",sub:"(USD / Mtok)",type:"number",step:"0.01",tip:"Price per million cache-read prompt tokens — usually a fraction of the input rate."},
+  {id:"Output",label:"Output rate",sub:"(USD / Mtok)",type:"number",step:"0.01",tip:"Price per million completion tokens."}];}
+function openPr(i,prefill){var isEdit=i>=0,e=isEdit?_pr2[i]:(prefill||{Input:0,Cached:0,Output:0});
+  formModal(isEdit?"Edit model pricing":"Add model pricing",prFields(isEdit),e,function(v){
+    if(!v.Model){toast(t("toast.nameReq"),true);return;}
+    var list=_pr2.slice();
+    if(isEdit)list[i]=v;else{for(var j=0;j<list.length;j++){if((""+list[j].Model).toLowerCase()===(""+v.Model).toLowerCase()){toast('"'+v.Model+'" already has a rate.',true);return;}}list.push(v);}
+    savePricingList(list);});}
+function delPr(i){var m=_pr2[i];if(!m)return;confirmModal('Remove pricing for "'+m.Model+'"?',function(){var list=_pr2.slice();list.splice(i,1);savePricingList(list);});}
+function savePricingList(list){var models={};list.forEach(function(r){if(r.Model)models[r.Model]={inputPerMTok:+r.Input||0,cachedInputPerMTok:+r.Cached||0,outputPerMTok:+r.Output||0};});
+  busyModal(true);api("/v1.0/api/usage/pricing","PUT",{version:_prVersion,models:models}).then(function(tb){_prVersion=(tb&&tb.version)||_prVersion;closeModal();loadPricing();toast(t("toast.saved"));}).catch(function(e){toast(e.message,true);}).finally(function(){busyModal(false);});
+}
+var VIEW_LOADERS={home:loadHome,endpoints:loadEndpointsAdmin,mcp:loadMcp,prompts:loadPrompts,subagents:loadSubagents,hooks:loadHooks,commands:loadHooks,keybindings:loadKeybindings,skills:loadSkills,sessions:loadSessions,usage:loadUsage,pricing:loadPricing,settings:loadSettings};
 function loadStatus(){api("/v1.0/api/health").then(function(h){
   var p=el("statusPill");if(p){p.textContent=(h.Status||"—");p.className="badge status"+(h.Status==="healthy"?" ok":"");}
   var v=el("badgeVersion");if(v)v.textContent=h.Version?("v"+h.Version):"";
@@ -1389,6 +1619,7 @@ on("hooks_add",function(){openHook(-1);});on("hooks_reload",loadHooks);
 on("cmds_add",function(){openCmd(-1);});on("commands_reload",loadHooks);
 on("keybindings_add",function(){openKb(-1);});on("keybindings_reload",loadKeybindings);
 on("skills_add",function(){openSk(null);});on("skills_reload",loadSkills);on("sessions_reload",loadSessions);
+on("usage_refresh",refreshUsage);on("pricing_add",function(){openPr(-1);});on("pricing_reload",loadPricing);
 /* row context-menus + row-click-to-edit + empty-state add */
 wireTable("endpoints_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openEp(i);}},{label:t("act.duplicate"),run:function(){openEp(-1,dupOf(_ep[i],"Name"));}},{label:t("act.viewjson"),run:function(){viewJson("Endpoint · "+_ep[i].Name,_ep[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delEp(_ep[i].Name);}}];},row:function(i){openEp(i);},add:function(){openEp(-1);}});
 wireTable("mcp_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openMcp(i);}},{label:t("act.duplicate"),run:function(){openMcp(-1,dupOf(_mcp[i],"Name"));}},{label:t("act.viewjson"),run:function(){viewJson("MCP server · "+_mcp[i].Name,_mcp[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delMcp(_mcp[i].Name);}}];},row:function(i){openMcp(i);},add:function(){openMcp(-1);}});
@@ -1399,6 +1630,8 @@ wireTable("cmds_list",{menu:function(i){return [{label:t("act.edit"),run:functio
 wireTable("keybindings_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openKb(i);}},{label:t("act.duplicate"),run:function(){openKb(-1,dupOf(_kb[i],"CommandId"));}},{label:t("act.viewjson"),run:function(){viewJson("Keybinding · "+_kb[i].CommandId,_kb[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delKb(i);}}];},row:function(i){openKb(i);},add:function(){openKb(-1);}});
 wireTable("skills_list",{menu:function(i){var s=_sk[i];return [{label:t("act.edit"),run:function(){openSk(s.Name);}},{label:t("act.view"),run:function(){viewSk(s.Name);}},{label:s.Enabled?t("act.disable"):t("act.enable"),run:function(){toggleSk(s.Name);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delSk(s.Name);}}];},row:function(i){var s=_sk[i];if(s)openSk(s.Name);},add:function(){openSk(null);}});
 wireTable("sessions_list",{menu:function(i){var id=_se[i].Id;return [{label:"View Markdown",run:function(){viewSe(id,"md");}},{label:"View HTML",run:function(){viewSe(id,"html");}},{sep:true},{label:"Download Markdown",run:function(){exportSe(id,"md");}},{label:"Download HTML",run:function(){exportSe(id,"html");}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delSe(id);}}];},row:function(i){viewSe(_se[i].Id,"md");}});
+wireTable("usage_history_list",{menu:function(i){return [{label:t("act.view"),run:function(){viewUsageRow(i);}},{label:t("act.viewjson"),run:function(){viewJson("Usage event",_uhist[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delUsageRow(i);}}];},row:function(i){viewUsageRow(i);}});
+wireTable("pricing_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openPr(i);}},{label:t("act.duplicate"),run:function(){openPr(-1,{Model:"",Input:_pr2[i].Input,Cached:_pr2[i].Cached,Output:_pr2[i].Output});}},{label:t("act.viewjson"),run:function(){viewJson("Pricing · "+_pr2[i].Model,_pr2[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delPr(i);}}];},row:function(i){openPr(i);},add:function(){openPr(-1);}});
 var comp=el("composer");
 comp.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat();}});
 comp.addEventListener("input",function(){comp.style.height="44px";comp.style.height=Math.min(comp.scrollHeight,180)+"px";});

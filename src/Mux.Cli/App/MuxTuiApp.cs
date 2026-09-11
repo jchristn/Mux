@@ -48,7 +48,7 @@ namespace Mux.Cli.App
         private const string QueueRegion = "queue";
         private const int MaxQueueStripRows = 7;
         private const int MaxComposerRows = 8;
-        private const string PromptText = "mux> ";
+        private const string PromptText = "> ";
         private const int SidebarWidth = 24;
 
         // A one-column gutter kept clear between the transcript (and queue strip) on the left and the
@@ -62,6 +62,8 @@ namespace Mux.Cli.App
         private readonly JobManager _JobManager;
         private readonly ApprovalPolicyEnum _ApprovalPolicy;
         private readonly SessionStore? _Store;
+        private readonly Mux.Core.Telemetry.UsageQueryService? _UsageQuery;
+        private readonly Mux.Core.Telemetry.PricingTable _Pricing = new Mux.Core.Telemetry.PricingTable();
         private readonly Mux.Core.Checkpoints.CheckpointManager? _CheckpointManager;
         private readonly Mux.Core.Plugins.PluginRegistry? _PluginRegistry;
         private readonly Mux.Core.Plugins.HookRunner _HookRunner = new Mux.Core.Plugins.HookRunner();
@@ -127,6 +129,12 @@ namespace Mux.Cli.App
         private static readonly Theme MuxTheme = CreateTheme();
         private static readonly Theme[] _Themes = { MuxTheme, Theme.Dark, Theme.Light, Theme.HighContrast };
 
+        // The input rectangle (the "> " prompt marker plus the composer) sits on a fixed dark grey so it
+        // reads as a distinct input affordance regardless of the active theme; the light-grey foreground
+        // (palette 7, the mux text color) keeps typed text legible against it.
+        private static readonly CellStyle InputSurface =
+            CellStyle.Default.WithForeground(Color.FromPalette(7)).WithBackground(Color.FromRgb(0x2A, 0x2A, 0x2A));
+
         #endregion
 
         #region Constructors-and-Factories
@@ -153,6 +161,7 @@ namespace Mux.Cli.App
         /// <param name="checkpointManager">Optional per-turn git checkpoint manager enabling <c>/undo</c> and <c>/redo</c>. Null disables undo/redo (for example outside a git repository).</param>
         /// <param name="pluginRegistry">Optional plugin registry supplying event hooks and custom slash commands. Null disables the plugin surface.</param>
         /// <param name="workingDirectory">The working directory used for hooks, custom commands, and session export. Null uses the process current directory.</param>
+        /// <param name="usageQuery">Optional usage-telemetry query service backing the <c>/usage</c> view. Null disables it (the command reports telemetry unavailable).</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
             ITerminalBackend backend,
@@ -173,10 +182,13 @@ namespace Mux.Cli.App
             string? initialPrompt = null,
             Mux.Core.Checkpoints.CheckpointManager? checkpointManager = null,
             Mux.Core.Plugins.PluginRegistry? pluginRegistry = null,
-            string? workingDirectory = null)
+            string? workingDirectory = null,
+            Mux.Core.Telemetry.UsageQueryService? usageQuery = null)
         {
             _CheckpointManager = checkpointManager;
             _PluginRegistry = pluginRegistry;
+            _UsageQuery = usageQuery;
+            try { _Pricing = Mux.Core.Settings.SettingsLoader.LoadPricing(); } catch (Exception) { _Pricing = new Mux.Core.Telemetry.PricingTable(); }
             _HookWorkingDirectory = string.IsNullOrWhiteSpace(workingDirectory) ? Directory.GetCurrentDirectory() : workingDirectory;
             _Backend = backend ?? throw new ArgumentNullException(nameof(backend));
             _JobManager = jobManager ?? throw new ArgumentNullException(nameof(jobManager));
@@ -209,7 +221,7 @@ namespace Mux.Cli.App
             _PromptLabel = new Pane(PromptLabelRegion);
             _Footer = new Pane(FooterRegion);
             _QueuePane = new Pane(QueueRegion);
-            _Composer = new TextEditor { IsFocused = true };
+            _Composer = new TextEditor { IsFocused = true, NormalStyle = InputSurface };
             _Sidebar = new SidebarView(_SidebarPane);
 
             _PromptLabel.WriteLine(Text.From(PromptText).Green().Bold());
@@ -240,6 +252,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.tasks", "Tasks", null, OpenTasksModal, "View", new[] { "tasks", "task", "plan", "todo" }));
+            _Catalog.Add(new CommandDescriptor("mux.usage", "Usage", null, OpenUsageView, "View", new[] { "usage", "stats", "spend" }));
             _Catalog.Add(new CommandDescriptor("mux.effort", "Reasoning effort", null, OpenEffortSelector, "Model", new[] { "effort", "reasoning", "reasoning-effort" }));
             _Catalog.Add(new CommandDescriptor("mux.settings", "Settings", null, OpenSettingsModal, "Model", new[] { "settings", "config", "preferences", "prefs" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme", null, OpenThemeSelector, "View", new[] { "theme" }));
@@ -912,7 +925,9 @@ namespace Mux.Cli.App
             CellStyle background = theme.Text;
             _Conversation.Background = background;
             _SidebarPane.Background = background;
-            _PromptLabel.Background = background;
+            // The prompt marker shares the composer's dark-grey input surface, not the theme background, so
+            // the "> " label and the composer read as one continuous input rectangle across theme switches.
+            _PromptLabel.Background = InputSurface;
             _Footer.Background = background;
         }
 
@@ -2198,8 +2213,8 @@ namespace Mux.Cli.App
 
         private void EchoPrompt(string prompt)
         {
-            // "mux> <prompt>" with a leading blank line; "mux>" in green, the prompt in grey. A multi-line
-            // prompt keeps its newlines: the first line follows the "mux>" marker and each subsequent line
+            // "> <prompt>" with a leading blank line; ">" in green, the prompt in grey. A multi-line
+            // prompt keeps its newlines: the first line follows the ">" marker and each subsequent line
             // is indented to align under it. The thinking indicator is shown directly beneath the prompt.
             _Conversation.WriteLine(Text.From(string.Empty));
 
@@ -2655,8 +2670,19 @@ namespace Mux.Cli.App
             // Align the title / chord / slash columns each on a single vertical axis across every row.
             IReadOnlyList<string> labels = ColumnFormatter.Format(rows, 2);
 
-            // Widen the modal by ~50% over the default select width (46) so the three aligned columns fit.
-            const int commandMenuWidth = 69;
+            // Size the modal to the widest formatted row so the aligned title / chord / slash columns are
+            // never clipped (long command titles used to overrun a fixed width). The modal clamps this down
+            // to the terminal width when it renders, so an over-wide value is safe on a narrow terminal.
+            int commandMenuWidth = 46;
+            foreach (string label in labels)
+            {
+                if (label.Length > commandMenuWidth)
+                {
+                    commandMenuWidth = label.Length;
+                }
+            }
+
+            commandMenuWidth += 2; // a little breathing room inside the box
             WideSelectModal modal = new WideSelectModal("Commands — ↑↓ then Enter to run", labels, commandMenuWidth);
             _App.Modals.Push(modal);
             _ = ResolveCommandMenuAsync(modal, commands);
@@ -3251,17 +3277,22 @@ namespace Mux.Cli.App
                 actions.Add(McpMenuAction.None);
             }
 
+            // Remember the add/remove row indices so '+'/'-' can jump straight to them (the row prefixes
+            // advertise those keys, so a bare keypress must work, not only Enter on the row).
+            Dictionary<char, int> hotkeys = new Dictionary<char, int>();
+            hotkeys['+'] = options.Count;
             options.Add("+ Add MCP server…");
             actions.Add(McpMenuAction.Add);
             if (servers.Count > 0)
             {
+                hotkeys['-'] = options.Count;
                 options.Add("- Remove MCP server…");
                 actions.Add(McpMenuAction.Remove);
             }
 
             // Widen the modal by 25% over TUIKit's default select width (46) so server rows render with room.
             const int mcpModalWidth = 58;
-            WideSelectModal modal = new WideSelectModal("MCP servers — Enter to edit", options, mcpModalWidth);
+            WideSelectModal modal = new WideSelectModal("MCP servers — Enter edit · +/- add/remove", options, mcpModalWidth, hotkeys);
             _App.Modals.Push(modal);
             _ = ResolveMcpModalAsync(modal, servers, actions);
         }
@@ -3765,13 +3796,13 @@ namespace Mux.Cli.App
             _Conversation.Clear();
         }
 
-        private void SetFooterHint(string hint)
+        private void SetFooterHint(StyledText hint)
         {
             // A blank spacer line sits above the hint (the footer region is two rows) so the transcript
             // never butts directly into the prompt area.
             _Footer.Clear();
             _Footer.WriteLine(Text.From(string.Empty));
-            _Footer.WriteLine(Text.From(hint).Dim());
+            _Footer.WriteLine(hint);
         }
 
         private void RefreshFooter()
@@ -3779,12 +3810,33 @@ namespace Mux.Cli.App
             SetFooterHint(BuildFooterHint());
         }
 
-        private static string BuildFooterHint()
+        private static StyledText BuildFooterHint()
         {
             // The chords are terminal-independent (Ctrl/F1/Esc work everywhere), so the hint is stable
             // across platforms; only the modifier labels adapt (e.g. Alt renders as OPTION on macOS).
+            // Each hint draws its key chord in the accent color and its label dimmed — the same treatment
+            // Armor's shortcut bar uses — with a two-space gap between hints instead of a divider glyph.
             string ctrl = ModifierLabel(KeyModifiers.Ctrl);
-            return $"Type a prompt and press ENTER to send | {ctrl}+J/newline | F1/help | F12/mouse | Esc/cancel | {ctrl}-Q/quit";
+            // Indent by the prompt-marker width so the hint aligns under the composer's typed text (which
+            // begins after the "> " marker) rather than under the marker itself.
+            StyledText hint = Text.From(new string(' ', PromptText.Length) + "Type a prompt and press ENTER").Dim();
+            hint = AppendFooterHint(hint, ctrl + "+J", "newline");
+            hint = AppendFooterHint(hint, "F1", "help");
+            hint = AppendFooterHint(hint, "F12", "mouse");
+            hint = AppendFooterHint(hint, "Esc", "cancel");
+            hint = AppendFooterHint(hint, ctrl + "-Q", "quit");
+            return hint;
+        }
+
+        // Appends "  <chord> <label>" to the footer hint, the chord in the accent color and the label
+        // dimmed. Two spaces separate hints; a single space separates a chord from its label (the color
+        // change keeps the two readable without a divider glyph), matching Armor's shortcut bar.
+        private static StyledText AppendFooterHint(StyledText hint, string chord, string label)
+        {
+            return hint
+                .Append(Text.From("  ").Dim())
+                .Append(Text.From(chord).Green().Bold())
+                .Append(Text.From(" " + label).Dim());
         }
 
         private static string ModifierLabel(KeyModifiers modifier)
@@ -3798,6 +3850,126 @@ namespace Mux.Cli.App
                 case KeyModifiers.Shift: return "SHIFT";
                 default: return string.Empty;
             }
+        }
+
+        private void OpenUsageView()
+        {
+            List<string> lines = BuildUsageLines();
+            _App.Modals.Push(new MuxBoxModal("Usage", lines, "Enter / Esc to close", centered: false));
+        }
+
+        private List<string> BuildUsageLines()
+        {
+            List<string> lines = new List<string>();
+            if (_UsageQuery == null)
+            {
+                lines.Add("Usage telemetry is disabled.");
+                lines.Add("Enable it with telemetry.enabled in settings.json.");
+                return lines;
+            }
+
+            try
+            {
+                long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                long day = 24L * 60L * 60L * 1000L;
+                Mux.Core.Telemetry.UsageSummary today = _UsageQuery.GetSummaryAsync(WindowFilter(now, day), _Cts.Token).GetAwaiter().GetResult();
+                Mux.Core.Telemetry.UsageSummary week = _UsageQuery.GetSummaryAsync(WindowFilter(now, 7L * day), _Cts.Token).GetAwaiter().GetResult();
+                List<Mux.Core.Telemetry.UsageBreakdownRow> topModels = _UsageQuery.GetBreakdownAsync("model", WindowFilter(now, 7L * day), _Cts.Token).GetAwaiter().GetResult();
+
+                lines.Add("Last 24 hours");
+                AddSummaryLines(lines, today.Metrics);
+                lines.Add(string.Empty);
+                lines.Add("Last 7 days");
+                AddSummaryLines(lines, week.Metrics);
+
+                if (topModels.Count > 0)
+                {
+                    lines.Add(string.Empty);
+                    lines.Add("Top models (7d) by cost");
+                    int shown = 0;
+                    foreach (Mux.Core.Telemetry.UsageBreakdownRow row in topModels)
+                    {
+                        if (shown >= 5)
+                        {
+                            break;
+                        }
+
+                        shown++;
+                        lines.Add("  " + row.Value + "   " + UsdShort(row.Metrics.CostUsd) + "   " + TokShort(row.Metrics.TotalTokens) + " tok");
+                    }
+                }
+
+                lines.Add(string.Empty);
+                lines.Add("Reads the shared usage database (all mux instances).");
+            }
+            catch (Exception ex)
+            {
+                lines.Clear();
+                lines.Add("Failed to read usage telemetry:");
+                lines.Add(ex.Message);
+            }
+
+            return lines;
+        }
+
+        private static void AddSummaryLines(List<string> lines, Mux.Core.Telemetry.UsageMetrics m)
+        {
+            lines.Add("  Tokens   " + TokShort(m.TotalTokens) + "  (in " + TokShort(m.InputTokens) + " / out " + TokShort(m.OutputTokens) + ")");
+            lines.Add("  Cost     " + UsdShort(m.CostUsd));
+            lines.Add("  Calls    " + m.Calls + "   Errors " + m.Errors);
+            lines.Add("  TTFT     avg " + MsShort(m.AvgTtftMs) + "   p95 " + MsShort(m.P95TtftMs));
+            lines.Add("  Latency  avg " + MsShort(m.AvgTotalMs) + "   p95 " + MsShort(m.P95TotalMs));
+            lines.Add("  Speed    " + m.AvgTokensPerSec.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " tok/s");
+        }
+
+        private static Mux.Core.Telemetry.UsageFilter WindowFilter(long nowMs, long spanMs)
+        {
+            return new Mux.Core.Telemetry.UsageFilter { FromUnixMs = nowMs - spanMs, ToUnixMs = nowMs };
+        }
+
+        private static string TokShort(long n)
+        {
+            if (n >= 1_000_000)
+            {
+                return (n / 1_000_000.0).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "M";
+            }
+
+            if (n >= 1000)
+            {
+                return (n / 1000.0).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "k";
+            }
+
+            return n.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static string UsdShort(double cost)
+        {
+            if (cost <= 0)
+            {
+                return "$0";
+            }
+
+            if (cost < 0.01)
+            {
+                return "$" + cost.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            return "$" + cost.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static string MsShort(double ms)
+        {
+            if (ms <= 0)
+            {
+                return "—";
+            }
+
+            if (ms >= 1000)
+            {
+                return (ms / 1000.0).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "s";
+            }
+
+            return Math.Round(ms).ToString(System.Globalization.CultureInfo.InvariantCulture) + "ms";
         }
 
         private void RefreshSidebar()
@@ -3816,6 +3988,7 @@ namespace Mux.Cli.App
 
             _Sidebar.EffortLabel = effortLabel;
             _Sidebar.ThinkingLabel = thinkingLabel;
+            stats.SessionCostUsd = _Pricing.ComputeCostUsd(model, stats.InputTokens, stats.CachedTokens, stats.OutputTokens);
             _Sidebar.Refresh(model, stats);
         }
 

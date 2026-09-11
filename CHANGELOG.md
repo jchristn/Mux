@@ -6,6 +6,28 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **Usage telemetry (durable, cross-process).** Every model call is recorded to a local SQLite database
+  (`~/.mux/usage.db`, WAL mode — no external process) with token counts, time-to-first-token, streaming
+  time, total latency, throughput, finish reason, and success, tagged by endpoint, model, provider,
+  command, session, and call kind (primary/compaction/subagent/chat). Multiple mux instances write the
+  same database concurrently and safely. The `mux serve` dashboard gains **Usage** (KPI strip; token, cost,
+  latency/TTFT/streaming/throughput charts over hour/day/week/month with endpoint/model filters; and a
+  paginated per-call history) and **Pricing** (a form editor over `pricing.json`) pages, backed by new
+  `GET /v1.0/api/usage/{summary,timeseries,breakdown,events,filters,pricing}` and `PUT
+  /v1.0/api/usage/pricing` routes. The TUI adds a `/usage` (`/stats`, `/spend`) command showing a
+  24h/7d summary from the shared store and a live session-cost line in the sidebar. Cost is derived at read
+  time from a seeded, user-editable, manifest-tracked `pricing.json` so a rate fix re-values history.
+  Capture is best-effort and never affects a run; disable with `telemetry.enabled` or `MUX_TELEMETRY_ENABLED`.
+  Cached- and reasoning-token accounting flows through when the provider reports it (PolyPrompt 2.6.0). New
+  `Mux.Core/Telemetry` (`SqliteUsageStore`, `SqliteUsageRecorder`, `UsageQueryService`, `PricingTable`, and
+  the `UsageTelemetry` facade). The dashboard Usage page renders full-width, tabbed SVG charts (with axes,
+  gridlines, and hover tooltips) and a full-featured history table, and the Pricing page uses the same
+  data-grid and modal workflow as the rest of the dashboard. Also fixes a latent bug where `settings.json`'s
+  `rest` and `maxTokenBudget` sections were silently dropped on every load/save round-trip.
+- **Postman collection.** A documented collection covering the full REST surface, organized into
+  per-resource folders with variables and collection/folder/request-level documentation, plus a companion
+  environment, under `assets/postman/`.
+
 - **Subagents (delegated, isolated sub-tasks).** Define named subagents in `~/.mux/subagents.json` (name,
   description, system prompt, optional endpoint override, tool allow-list, and iteration cap) and the model
   can hand a self-contained sub-task to one with the new `spawn_subagent` tool. A subagent runs as a nested

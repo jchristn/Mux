@@ -133,9 +133,9 @@ namespace Test.Shared.Suites
                             MuxAssert.AreEqual("this\nis\na\ntest", manager.Jobs[0].Prompt, "prompt keeps newlines");
 
                             string transcript = Join(app.TranscriptSnapshot());
-                            MuxAssert.Contains("mux> this", transcript, "first line after the marker");
-                            MuxAssert.Contains("     is", transcript, "second line indented under the marker");
-                            MuxAssert.Contains("     test", transcript, "last line indented");
+                            MuxAssert.Contains("> this", transcript, "first line after the marker");
+                            MuxAssert.Contains("  is", transcript, "second line indented under the marker");
+                            MuxAssert.Contains("  test", transcript, "last line indented");
                             MuxAssert.IsFalse(transcript.Contains("thisisatest"), "lines are not flattened");
                             await app.DrainProjectorsAsync().ConfigureAwait(false);
                         }

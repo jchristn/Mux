@@ -9,8 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.11" />
+    <!-- Pin the native SQLite bundle to a patched build; the version Microsoft.Data.Sqlite pulls
+         transitively (2.1.10) carries advisory GHSA-2m69-gcr7-jv3q. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.13" />
     <PackageReference Include="Microsoft.Playwright" Version="1.62.0" />
-    <PackageReference Include="PolyPrompt" Version="2.5.0" />
+    <PackageReference Include="PolyPrompt" Version="2.6.0" />
     <PackageReference Include="Voltaic" Version="0.7.1" />
   </ItemGroup>
 

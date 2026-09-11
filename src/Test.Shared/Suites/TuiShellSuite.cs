@@ -47,7 +47,7 @@ namespace Test.Shared.Suites
                             MuxAssert.Contains("mux v" + Mux.Core.Settings.Defaults.ProductVersion, transcript, "header brand + version");
                             // The prompt/newline/quit guidance renders in the footer, not the transcript header.
                             MuxAssert.Contains("Type a prompt", footer, "footer prompt hint");
-                            MuxAssert.Contains("CTRL-Q/quit", footer, "footer quit hint");
+                            MuxAssert.Contains("CTRL-Q quit", footer, "footer quit hint");
                         }
                     }),
 
@@ -254,7 +254,7 @@ namespace Test.Shared.Suites
                             MuxAssert.AreEqual(jobId, app.FocusedJobId, "turn is current");
 
                             string transcript = Join(app.TranscriptSnapshot());
-                            MuxAssert.Contains("mux> hi", transcript, "prompt echoed with mux> prefix");
+                            MuxAssert.Contains("> hi", transcript, "prompt echoed with > prefix");
 
                             await app.DrainProjectorsAsync().ConfigureAwait(false);
                         }

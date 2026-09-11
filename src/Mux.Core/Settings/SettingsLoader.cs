@@ -172,6 +172,10 @@ namespace Mux.Core.Settings
             string skillsDir = Path.Combine(configDir, "skills");
             Directory.CreateDirectory(skillsDir);
             Mux.Core.Skills.DefaultSkillLibrary.SeedNewInto(skillsDir);
+
+            // Seed the curated default model pricing (used to derive usage cost), tracking seeded model
+            // names in a manifest so user edits/deletions survive and only genuinely new defaults appear.
+            SeedDefaultPricing(configDir);
         }
 
         /// <summary>
@@ -235,6 +239,84 @@ namespace Mux.Core.Settings
             if (changed || !File.Exists(subagentsPath))
             {
                 File.WriteAllText(subagentsPath, JsonSerializer.Serialize(new SubagentsFile { Subagents = existing }, _JsonWriteOptions));
+            }
+
+            try
+            {
+                File.WriteAllText(manifestPath, JsonSerializer.Serialize(defaultNames, _JsonWriteOptions));
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Seeds the curated default model pricing into <c>pricing.json</c>, adding only models not already
+        /// present and never before seeded (tracked in <c>pricing.seeded.json</c>). This lets new default
+        /// rates appear on upgrade without resurrecting a model the user deleted or overwriting edited rates.
+        /// </summary>
+        /// <param name="configDir">The active configuration directory.</param>
+        private static void SeedDefaultPricing(string configDir)
+        {
+            string pricingPath = Path.Combine(configDir, "pricing.json");
+            string manifestPath = Path.Combine(configDir, "pricing.seeded.json");
+
+            Mux.Core.Telemetry.PricingTable existing = new Mux.Core.Telemetry.PricingTable();
+            if (File.Exists(pricingPath))
+            {
+                try
+                {
+                    existing = JsonSerializer.Deserialize<Mux.Core.Telemetry.PricingTable>(ReadAllTextShared(pricingPath), _JsonOptions) ?? new Mux.Core.Telemetry.PricingTable();
+                }
+                catch (Exception)
+                {
+                    existing = new Mux.Core.Telemetry.PricingTable();
+                }
+            }
+
+            HashSet<string> seeded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (File.Exists(manifestPath))
+            {
+                try
+                {
+                    foreach (string name in JsonSerializer.Deserialize<List<string>>(ReadAllTextShared(manifestPath), _JsonOptions) ?? new List<string>())
+                    {
+                        seeded.Add(name);
+                    }
+                }
+                catch (Exception)
+                {
+                }
+            }
+
+            bool changed = false;
+            List<string> defaultNames = new List<string>();
+            Mux.Core.Telemetry.PricingTable defaults = Mux.Core.Telemetry.DefaultPricing.Build();
+
+            if (string.IsNullOrEmpty(existing.Version))
+            {
+                existing.Version = defaults.Version;
+            }
+
+            foreach (KeyValuePair<string, Mux.Core.Telemetry.ModelPricing> entry in defaults.Models)
+            {
+                defaultNames.Add(entry.Key);
+                if (!seeded.Contains(entry.Key) && !existing.Models.ContainsKey(entry.Key))
+                {
+                    existing.Models[entry.Key] = entry.Value;
+                    changed = true;
+                }
+            }
+
+            if (changed || !File.Exists(pricingPath))
+            {
+                try
+                {
+                    File.WriteAllText(pricingPath, JsonSerializer.Serialize(existing, _JsonWriteOptions));
+                }
+                catch (Exception)
+                {
+                }
             }
 
             try
@@ -741,6 +823,52 @@ namespace Mux.Core.Settings
         }
 
         /// <summary>
+        /// Loads the model pricing table from <c>~/.mux/pricing.json</c>. When the file is missing or
+        /// unreadable, returns the curated defaults so cost is always computable.
+        /// </summary>
+        /// <returns>The loaded (or default) <see cref="Mux.Core.Telemetry.PricingTable"/>. Never null.</returns>
+        public static Mux.Core.Telemetry.PricingTable LoadPricing()
+        {
+            string filePath = Path.Combine(GetConfigDirectory(), "pricing.json");
+            if (!File.Exists(filePath))
+            {
+                return Mux.Core.Telemetry.DefaultPricing.Build();
+            }
+
+            try
+            {
+                string json = ReadAllTextShared(filePath);
+                Mux.Core.Telemetry.PricingTable? table = JsonSerializer.Deserialize<Mux.Core.Telemetry.PricingTable>(json, _JsonOptions);
+                return table ?? Mux.Core.Telemetry.DefaultPricing.Build();
+            }
+            catch (JsonException)
+            {
+                return Mux.Core.Telemetry.DefaultPricing.Build();
+            }
+            catch (IOException)
+            {
+                return Mux.Core.Telemetry.DefaultPricing.Build();
+            }
+        }
+
+        /// <summary>
+        /// Saves the model pricing table to <c>~/.mux/pricing.json</c>.
+        /// </summary>
+        /// <param name="table">The pricing table to persist.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="table"/> is null.</exception>
+        public static void SavePricing(Mux.Core.Telemetry.PricingTable table)
+        {
+            if (table == null)
+            {
+                throw new ArgumentNullException(nameof(table));
+            }
+
+            EnsureConfigDirectory();
+            string json = JsonSerializer.Serialize(table, _JsonWriteOptions);
+            WriteAllTextAtomic(Path.Combine(GetConfigDirectory(), "pricing.json"), json);
+        }
+
+        /// <summary>
         /// Saves MCP server configurations to <c>~/.mux/mcp-servers.json</c>.
         /// </summary>
         /// <param name="servers">The MCP server configurations to persist.</param>
@@ -1144,6 +1272,7 @@ namespace Mux.Core.Settings
                 CompactionStrategy = settings.CompactionStrategy,
                 CompactionPreserveTurns = settings.CompactionPreserveTurns,
                 MaxAgentIterations = settings.MaxAgentIterations,
+                MaxTokenBudget = settings.MaxTokenBudget,
                 MaxConcurrency = settings.MaxConcurrency,
                 DefaultEnqueueBehavior = settings.DefaultEnqueueBehavior,
                 IgnoreCertErrors = settings.IgnoreCertErrors,
@@ -1153,10 +1282,51 @@ namespace Mux.Core.Settings
                 SkillsDirectory = settings.SkillsDirectory,
                 TaskPlanningEnabled = settings.TaskPlanningEnabled,
                 TaskParallelismEnabled = settings.TaskParallelismEnabled,
-                ExternalSearch = NormalizeExternalSearchSettings(settings.ExternalSearch)
+                ExternalSearch = NormalizeExternalSearchSettings(settings.ExternalSearch),
+                Rest = NormalizeRestServerSettings(settings.Rest),
+                Telemetry = NormalizeTelemetrySettings(settings.Telemetry)
             };
 
             return normalized;
+        }
+
+        private static TelemetrySettings NormalizeTelemetrySettings(TelemetrySettings? settings)
+        {
+            if (settings == null)
+            {
+                return new TelemetrySettings();
+            }
+
+            // Re-run the validating setters on a fresh instance so a hand-edited settings.json is clamped
+            // (retention range, max-rows floor) the same way a freshly loaded one is.
+            return new TelemetrySettings
+            {
+                Enabled = settings.Enabled,
+                RetentionDays = settings.RetentionDays,
+                DatabasePath = settings.DatabasePath,
+                PricingEnabled = settings.PricingEnabled,
+                MaxRows = settings.MaxRows
+            };
+        }
+
+        private static RestServerSettings NormalizeRestServerSettings(RestServerSettings? settings)
+        {
+            if (settings == null)
+            {
+                return new RestServerSettings();
+            }
+
+            // Re-run the validating setters on a fresh instance so a hand-edited settings.json is
+            // clamped/normalized (port range, blank-host fallback) the same way a freshly loaded one is.
+            return new RestServerSettings
+            {
+                Enabled = settings.Enabled,
+                Hostname = settings.Hostname,
+                Port = settings.Port,
+                Ssl = settings.Ssl,
+                ApiKey = settings.ApiKey,
+                CorsAllowOrigin = settings.CorsAllowOrigin
+            };
         }
 
         private static void ApplyEnvironmentOverrides(MuxSettings settings)
@@ -1165,6 +1335,12 @@ namespace Mux.Core.Settings
             if (TryParseBooleanEnvironmentValue(ignoreCertErrorsValue, out bool ignoreCertErrors))
             {
                 settings.IgnoreCertErrors = ignoreCertErrors;
+            }
+
+            string? telemetryEnabledValue = Environment.GetEnvironmentVariable("MUX_TELEMETRY_ENABLED");
+            if (TryParseBooleanEnvironmentValue(telemetryEnabledValue, out bool telemetryEnabled))
+            {
+                settings.Telemetry.Enabled = telemetryEnabled;
             }
         }
 

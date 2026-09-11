@@ -633,23 +633,14 @@ The sidebar layout, widths, and formatting (`FormatTokens`) are unchanged.
 
 ---
 
-## 12. Watson operational telemetry
+## 12. Watson operational telemetry — out of scope (decided)
 
-Separate from the usage store, and required by `TELEMETRY_REQUIREMENTS.md` for the server itself:
-
-- In `MuxServer.Start`, confirm `WebserverSettings.Telemetry.Enable` (Watson's default) and expose the
-  in-process Prometheus scrape at `/metrics` gated behind a setting
-  (`Telemetry.Prometheus.Enable`), so the `mux serve` HTTP layer is observable with zero extra
-  infrastructure. This gives the four HTTP metrics and `watson.*` server metrics for free.
-- The full Prometheus/Grafana/Tempo `compose.yaml` stack the requirements describe is written for a
-  Dockerised service. mux is a single distributed binary, not a container deployment, so the compose
-  stack is **out of scope** for this plan and flagged as a conflict in §16: the in-process `/metrics`
-  endpoint is the proportionate answer, and anyone running mux behind their own Prometheus can scrape
-  it. This is called out rather than silently skipped, per the cross-document rule.
-
-The operational metrics and the usage store never mix: per-call token/session/model data stays in
-SQLite (high-cardinality, durable, product analytics); aggregate HTTP health stays on Watson's meter
-(low-cardinality, ephemeral, operational).
+Dropped by decision. The operational-observability side of `TELEMETRY_REQUIREMENTS.md` (Watson meter →
+Prometheus → Grafana, the `compose.yaml` stack) is **not** part of this work: mux is a single
+distributed binary, not a Dockerised service, and the maintainer has chosen to set that requirement
+aside for this feature. The durable usage store below is the whole of the telemetry deliverable. If
+operational HTTP metrics are ever wanted, Watson's in-process `/metrics` scrape is the proportionate
+add — but it is explicitly not built here.
 
 ---
 
@@ -718,19 +709,19 @@ Phased so each phase is independently testable and the capture path lands before
 
 - **SQLite reverses `archive/MUX_COMPARISON.md`.** Confirmed intentional for the analytics workload;
   documented in §2. Raise if the maintainer wants the reversal recorded more prominently.
-- **Cached / reasoning tokens need a PolyPrompt upgrade** (§5.3). Until then those series are present
-  but zero. Is a PolyPrompt change in appetite, or do we ship with the columns dormant?
+- **Cached / reasoning tokens** — RESOLVED. PolyPrompt 2.6.0 shipped the fields from
+  `CACHED_TOKENS.md`; `LlmClient.RecordUsage` maps and normalizes them (per-provider subset-vs-additional
+  cached semantics), so the cached series and cache-hit rate now populate from real provider data.
 - **`project` column granularity** — working-directory basename (readable, local-only) vs a stable hash
   (leak-proof if the data is ever exported). Defaulting to basename; confirm.
 - **`mux probe` recording** — capture model-load latency as `call_kind = probe`, or exclude probes from
   analytics? Defaulting to capture, since load latency is genuinely useful.
 - **NativeAOT** — `Microsoft.Data.Sqlite` complicates AOT. mux does not ship AOT today; revisit if that
   changes.
-- **Pre-existing `Rest` omission in `NormalizeSettingsForPersistence`** — a latent settings-drop bug in
-  the same method this plan edits. Fix in the same pass, or leave it alone and only add `Telemetry`?
-- **Grafana/Prometheus/Tempo compose stack** (§12) is out of scope for a non-Dockerised CLI; the
-  in-process `/metrics` endpoint is the proportionate substitute. Confirm that satisfies the operational
-  side of `TELEMETRY_REQUIREMENTS.md` for this product shape.
+- **Pre-existing `Rest` omission in `NormalizeSettingsForPersistence`** — FIXED. Both `Rest` and
+  `MaxTokenBudget` were being dropped on every settings round-trip; a `NormalizeRestServerSettings`
+  helper and the two missing initializer lines are in.
+- **`TELEMETRY_REQUIREMENTS.md` operational stack** — out of scope by decision (see §12). Not built.
 
 The design's load-bearing claim is the one worth proving first: that many mux instances can write to a
 single WAL database on a local disk with no clobbering and no coordination file. `UsageConcurrencySuite`

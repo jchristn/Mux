@@ -9,6 +9,7 @@ namespace Mux.Server.Routes
     using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Settings;
+    using Mux.Core.Telemetry;
     using Mux.Server.Models;
     using WatsonWebserver;
 
@@ -25,16 +26,19 @@ namespace Mux.Server.Routes
 
         private readonly string? _ApiKey;
         private readonly Func<List<EndpointConfig>> _EndpointsProvider;
+        private readonly IUsageRecorder? _UsageRecorder;
 
         /// <summary>
         /// Instantiate.
         /// </summary>
         /// <param name="apiKey">Configured API key, or null for no-auth.</param>
         /// <param name="endpointsProvider">Callback returning the configured endpoints.</param>
-        public ChatRoutes(string? apiKey, Func<List<EndpointConfig>> endpointsProvider)
+        /// <param name="usageRecorder">Optional recorder so the server's chat calls are captured. Null skips recording.</param>
+        public ChatRoutes(string? apiKey, Func<List<EndpointConfig>> endpointsProvider, IUsageRecorder? usageRecorder = null)
         {
             _ApiKey = apiKey;
             _EndpointsProvider = endpointsProvider ?? throw new ArgumentNullException(nameof(endpointsProvider));
+            _UsageRecorder = usageRecorder;
         }
 
         /// <summary>
@@ -129,6 +133,34 @@ namespace Mux.Server.Routes
                     }
 
                     Mux.Core.Llm.LlmUsage? usage = client.LastUsage;
+
+                    // Record durable usage telemetry for the server's own chat call (best-effort).
+                    if (_UsageRecorder != null)
+                    {
+                        LlmCallMetrics? call = client.LastCall;
+                        UsageEvent usageEvent = new UsageEvent
+                        {
+                            CallKind = UsageCallKindEnum.Chat,
+                            Command = "serve",
+                            EndpointName = endpoint.Name,
+                            AdapterType = endpoint.AdapterType.ToString(),
+                            Model = string.IsNullOrEmpty(call?.Model) ? endpoint.Model : call!.Model!,
+                            BaseHost = TryHost(endpoint.BaseUrl),
+                            InputTokens = usage?.InputTokens ?? 0,
+                            CachedTokens = usage?.CachedTokens ?? 0,
+                            OutputTokens = usage?.OutputTokens ?? 0,
+                            ReasoningTokens = usage?.ReasoningTokens ?? 0,
+                            TotalTokens = usage?.TotalTokens ?? 0,
+                            TimeToFirstTokenMs = call?.TimeToFirstTokenMs ?? (ttftMs >= 0 ? ttftMs : (long?)null),
+                            StreamingMs = call?.StreamingMs ?? (ttftMs >= 0 ? System.Math.Max(0, totalMs - ttftMs) : (long?)null),
+                            TotalMs = call?.TotalMs ?? totalMs,
+                            TokensPerSecond = call?.TokensPerSecond,
+                            FinishReason = call?.FinishReason,
+                            Success = errorMessage == null
+                        };
+                        _UsageRecorder.Record(usageEvent);
+                    }
+
                     req.Http.Response.StatusCode = 200;
                     return (object)new ChatReply
                     {
@@ -153,6 +185,16 @@ namespace Mux.Server.Routes
                     return (object)new ApiError("UpstreamError", "The model backend failed: " + ex.Message);
                 }
             });
+        }
+
+        private static string? TryHost(string? baseUrl)
+        {
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                return null;
+            }
+
+            return Uri.TryCreate(baseUrl, UriKind.Absolute, out Uri? uri) && !string.IsNullOrEmpty(uri.Host) ? uri.Host : null;
         }
 
         private static RoleEnum ParseRole(string? role)

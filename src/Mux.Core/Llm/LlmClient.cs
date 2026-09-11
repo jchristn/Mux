@@ -39,6 +39,7 @@ namespace Mux.Core.Llm
         private readonly LlmUsage _CumulativeUsage = new LlmUsage();
         private Action<int, int, string>? _OnRetry = null;
         private LlmUsage? _LastUsage = null;
+        private LlmCallMetrics? _LastCall = null;
         private bool _Disposed = false;
 
         #endregion
@@ -102,6 +103,17 @@ namespace Mux.Core.Llm
         public LlmUsage? LastUsage
         {
             get => _LastUsage;
+        }
+
+        /// <summary>
+        /// Performance metrics (token usage plus time-to-first-token, streaming time, total runtime, and
+        /// throughput) for the most recent streaming call, or null when no streaming call has completed.
+        /// Populated from the provider response; timing fields are null when the provider did not report
+        /// them. Read by callers that persist usage telemetry.
+        /// </summary>
+        public LlmCallMetrics? LastCall
+        {
+            get => _LastCall;
         }
 
         /// <summary>
@@ -528,19 +540,61 @@ namespace Mux.Core.Llm
         private void RecordUsage(Pp.ToolChatStreamingResponse response)
         {
             Pp.ChatStreamingUsage? usage = response.Usage;
-            int input = usage?.PromptTokens ?? 0;
+            int promptReported = usage?.PromptTokens ?? 0;
             int output = usage?.CompletionTokens ?? 0;
-            int total = usage?.TotalTokens ?? (input + output);
+            int cacheRead = usage?.CachedPromptTokens ?? 0;
+            int cacheCreate = usage?.CacheCreationTokens ?? 0;
+            int reasoning = usage?.ReasoningTokens ?? 0;
+
+            // Normalize cached-token semantics to a single convention: mux's InputTokens is always the FULL
+            // input count and CachedTokens is the cache-read subset of it. PolyPrompt reports cache buckets
+            // provider-native (per its CACHED_TOKENS.md Option A): OpenAI/Gemini fold cached reads into
+            // PromptTokens, whereas Anthropic/Bedrock report them as additional. Add the additional buckets
+            // for the latter so token totals and cost are consistent across providers. Cache-creation tokens
+            // fall into the (uncached) input bucket and bill at the input rate; the cache-read bucket bills at
+            // the cached rate. Reasoning tokens are already counted inside CompletionTokens for billing and
+            // are surfaced separately for display only.
+            bool cachedIsAdditional = _Endpoint.AdapterType == AdapterTypeEnum.Anthropic
+                || _Endpoint.AdapterType == AdapterTypeEnum.Bedrock;
+            int input = cachedIsAdditional ? promptReported + cacheRead + cacheCreate : promptReported;
+            int total = input + output;
 
             LlmUsage record = new LlmUsage
             {
                 InputTokens = input,
                 OutputTokens = output,
+                CachedTokens = cacheRead,
+                ReasoningTokens = reasoning,
                 TotalTokens = total
             };
 
             _LastUsage = record;
             _CumulativeUsage.Add(record);
+
+            _LastCall = new LlmCallMetrics
+            {
+                Usage = record,
+                TimeToFirstTokenMs = response.TimeToFirstTokenMs >= 0 ? response.TimeToFirstTokenMs : (long?)null,
+                StreamingMs = ComputeStreamingMs(response),
+                TotalMs = response.OverallRuntimeMs >= 0 ? response.OverallRuntimeMs : (long?)null,
+                TokensPerSecond = response.OverallTokensPerSecond > 0 ? response.OverallTokensPerSecond : (double?)null,
+                FinishReason = string.IsNullOrEmpty(response.FinishReason) ? null : response.FinishReason,
+                Model = string.IsNullOrEmpty(response.Model) ? null : response.Model,
+                Success = response.Success
+            };
+        }
+
+        private static long? ComputeStreamingMs(Pp.ToolChatStreamingResponse response)
+        {
+            // Streaming duration is first-token to last-token. Both timings use -1 as the "unreported"
+            // sentinel; only compute when both are present and ordered.
+            if (response.TimeToFirstTokenMs < 0 || response.TimeToLastTokenMs < 0)
+            {
+                return null;
+            }
+
+            long delta = response.TimeToLastTokenMs - response.TimeToFirstTokenMs;
+            return delta >= 0 ? delta : (long?)null;
         }
 
         private Pp.ToolChatRequest BuildRequest(List<ConversationMessage> messages, List<ToolDefinition> tools)

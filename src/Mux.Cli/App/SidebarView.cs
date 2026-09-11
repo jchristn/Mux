@@ -119,6 +119,13 @@ namespace Mux.Cli.App
                 _Pane.WriteLine(Text.From(Fit(Row("In tok", FormatTokens(stats.InputTokens)))));
                 _Pane.WriteLine(Text.From(Fit(Row("Out tok", FormatTokens(stats.OutputTokens)))));
                 _Pane.WriteLine(Text.From(Fit(Row("Cached", FormatTokens(stats.CachedTokens)))));
+
+                // Only surface cost once there is spend to show, so a zero-cost session (local models, or
+                // before any priced tokens) does not carry a "$—" row.
+                if (stats.SessionCostUsd > 0)
+                {
+                    _Pane.WriteLine(Text.From(Fit(Row("Cost", FormatUsd(stats.SessionCostUsd)))));
+                }
             }
         }
 
@@ -129,6 +136,21 @@ namespace Mux.Cli.App
         private static long AverageTtft(ConversationStats stats)
         {
             return stats.TtftSamples > 0 ? stats.SessionTtftMs / stats.TtftSamples : -1;
+        }
+
+        private static string FormatUsd(double cost)
+        {
+            if (cost <= 0)
+            {
+                return "—";
+            }
+
+            if (cost < 0.01)
+            {
+                return "$" + cost.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            return "$" + cost.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
         }
 
         private static string Row(string label, string value)

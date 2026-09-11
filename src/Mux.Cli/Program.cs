@@ -64,7 +64,16 @@ namespace Mux.Cli
 
             if (!isNonInteractiveCommand && !Console.IsOutputRedirected)
             {
+                // Printed to the normal screen (before the TUI switches to its alternate screen) so the
+                // wordmark stays in the terminal scrollback after mux exits. Blank lines fence the art.
                 Console.WriteLine($"mux v{Defaults.ProductVersion} - AI agent for local and remote LLMs");
+                Console.WriteLine();
+                foreach (string row in MuxBanner.WordmarkLines())
+                {
+                    Console.WriteLine(row);
+                }
+
+                Console.WriteLine();
             }
 
             return Dispatch(args);
@@ -426,6 +435,13 @@ CONFIG:
 
             AgentLoopOptions template = BuildInteractiveTemplate(runtime, settings, effectivePolicy, null);
 
+            // Durable usage telemetry: one store/recorder per process, shared by every job (and, through
+            // the template, by subagents). Best-effort — a disabled or unopenable store yields a no-op
+            // recorder and never affects the run. Disposed in the finally below to flush buffered events.
+            Mux.Core.Telemetry.UsageTelemetry usageTelemetry = Mux.Core.Telemetry.UsageTelemetry.Create(
+                runtime.MuxSettings, runtime.Metadata.ConfigDirectory, null);
+            template.UsageRecorder = usageTelemetry.Recorder;
+
             // Subagent delegation: load the user-authored subagents and, when any are valid, offer the
             // spawn_subagent tool. The executor runs each subagent as an isolated nested agent loop off the
             // live template, and resolves a subagent's optional endpoint override against endpoints.json.
@@ -591,7 +607,8 @@ CONFIG:
                     initialPrompt: settings.Prompt,
                     checkpointManager: checkpointManager,
                     pluginRegistry: pluginRegistry,
-                    workingDirectory: runtime.WorkingDirectory);
+                    workingDirectory: runtime.WorkingDirectory,
+                    usageQuery: usageTelemetry.CreateQueryService(() => SettingsLoader.LoadPricing()));
 
                 // Expose the shell so MCP connection notices (raised on the runtime's background thread once
                 // Start() is called below) can be written into the transcript.
@@ -632,6 +649,9 @@ CONFIG:
                 skillRuntime?.Dispose();
                 mcpRuntime.Dispose();
                 jobManager.DisposeAsync().AsTask().GetAwaiter().GetResult();
+
+                // Flush and close usage telemetry last so any events enqueued during the final turns land.
+                usageTelemetry.Dispose();
             }
         }
 

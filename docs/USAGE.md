@@ -131,8 +131,8 @@ Type a leading `/` in the composer to run a command instead of submitting a prom
 also reachable by key and the menu (one catalog, three surfaces):
 `/endpoint` (`/model`), `/effort` (`/reasoning`), `/settings` (`/config`, `/preferences`, `/prefs`),
 `/help` (`/?`), `/clear`, `/sidebar`, `/save`, `/export` (`/share`), `/undo`, `/redo`, `/sessions`,
-`/tasks`, `/theme`, `/mouse`, `/menu`, `/quit` (`/exit`). Any custom commands from `hooks.json` also
-appear here as `/<name>`.
+`/tasks`, `/usage` (`/stats`, `/spend`), `/theme`, `/mouse`, `/menu`, `/quit` (`/exit`). Any custom
+commands from `hooks.json` also appear here as `/<name>`.
 
 Key chords for these commands can be rebound in `~/.mux/keybindings.json` — see
 [CONFIG.md](CONFIG.md#keybindingsjson-custom-key-chords). `/help` lists the current command ids.
@@ -232,6 +232,21 @@ the session and restored on resume.
 keys annotate the highlighted task: `c` complete, `i` in progress, `b` blocked, `k` skipped, `p` pending,
 `n` edit note. Those manual edits change the same plan the model works from, so they persist and update the
 sidebar. Turn the feature off with `taskPlanningEnabled: false` in `settings.json`.
+
+### Usage analytics
+
+Every model call — interactive, `print`, subagent, or dashboard chat — is recorded to a local SQLite
+database (`~/.mux/usage.db`) with its token counts, time-to-first-token, streaming time, latency, and
+throughput. The sidebar shows the running session cost (once there is spend), and `/usage` (`/stats`,
+`/spend`) opens a summary of the last 24 hours and 7 days — tokens, cost, calls, error rate, average and
+p95 TTFT/latency, and the top models by spend — read from the shared database, so it reflects every mux
+instance on the machine, not just the current one.
+
+For charts over time (token usage by type, cost, latency/TTFT percentiles, streaming time, throughput) with
+endpoint and model filters, plus a paginated per-call history, run `mux serve` and open the dashboard's
+**Usage** page; edit per-model rates on its **Pricing** page. Cost is derived from `pricing.json` at read
+time, so correcting a rate re-values history. Disable capture with `telemetry.enabled: false` (or the
+`MUX_TELEMETRY_ENABLED` environment variable). See [CONFIG.md](CONFIG.md#usage-telemetry-settingsjson-telemetry).
 
 Interactively, the model works one job's plan at a time (it keeps a single task `in_progress`), so the
 checklist tracks progress rather than fanning out to concurrent jobs. The opt-in `taskParallelismEnabled`

@@ -57,8 +57,8 @@ namespace Test.Shared.Suites
                             string footer = app.RenderRegion("footer", 120, 2);
                             string[] rows = footer.Replace("\r\n", "\n").Split('\n');
                             MuxAssert.AreEqual(string.Empty, rows[0].Trim(), "blank spacer above the hint");
-                            MuxAssert.Contains("CTRL+J/newline", rows[1], "hint on the second row");
-                            MuxAssert.Contains("CTRL-Q/quit", rows[1], "quit hint on the second row");
+                            MuxAssert.Contains("CTRL+J newline", rows[1], "hint on the second row");
+                            MuxAssert.Contains("CTRL-Q quit", rows[1], "quit hint on the second row");
                         }
                     }),
 

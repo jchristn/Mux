@@ -198,7 +198,13 @@ namespace Test.Shared
                     CheckpointSuite.Create(),
 
                     // Plugin system: event hooks, custom commands, and hooks.json persistence.
-                    PluginSuite.Create()
+                    PluginSuite.Create(),
+
+                    // Usage telemetry: SQLite store schema, inserts, retention, and concurrent writers.
+                    UsageStoreSuite.Create(),
+
+                    // Usage telemetry: live REST endpoints over a seeded store.
+                    UsageRoutesSuite.Create()
                 };
             }
         }

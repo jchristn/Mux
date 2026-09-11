@@ -7,6 +7,7 @@ namespace Mux.Core.Subagents
     using System.Threading.Tasks;
     using Mux.Core.Agent;
     using Mux.Core.Models;
+    using Mux.Core.Telemetry;
 
     /// <summary>
     /// The production <see cref="ISubagentExecutor"/>: runs each subagent as a nested <see cref="AgentLoop"/>
@@ -87,7 +88,9 @@ namespace Mux.Core.Subagents
                 SandboxPosture = parent.SandboxPosture,
                 DeniedTools = parent.DeniedTools == null ? null : new List<string>(parent.DeniedTools),
                 AdditionalDirectories = parent.AdditionalDirectories == null ? null : new List<string>(parent.AdditionalDirectories),
-                MaxTokenBudget = parent.MaxTokenBudget
+                MaxTokenBudget = parent.MaxTokenBudget,
+                UsageRecorder = parent.UsageRecorder,
+                UsageCallKind = UsageCallKindEnum.Subagent
             };
 
             // A subagent's allow-list, when present, tightly scopes the child's tools; otherwise it inherits

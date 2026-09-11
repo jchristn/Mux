@@ -815,7 +815,9 @@ namespace Mux.Core.Jobs
                 ExternalToolExecutor = templateOptions.ExternalToolExecutor,
                 OnRetry = templateOptions.OnRetry,
                 MuxSettings = templateOptions.MuxSettings,
-                IgnoreCertErrors = templateOptions.IgnoreCertErrors
+                IgnoreCertErrors = templateOptions.IgnoreCertErrors,
+                UsageRecorder = templateOptions.UsageRecorder,
+                UsageCallKind = templateOptions.UsageCallKind
             };
 
             return options;

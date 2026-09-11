@@ -17,6 +17,19 @@ namespace Mux.Core.Llm
         public int OutputTokens { get; set; }
 
         /// <summary>
+        /// Cached/cache-read prompt tokens reported by the provider (a subset of the prompt that was
+        /// served from the provider's prompt cache). Remains zero for providers or library versions that
+        /// do not report cache usage.
+        /// </summary>
+        public int CachedTokens { get; set; }
+
+        /// <summary>
+        /// Reasoning/thinking tokens reported by the provider for models that bill them separately.
+        /// Remains zero when the provider does not report a reasoning-token count.
+        /// </summary>
+        public int ReasoningTokens { get; set; }
+
+        /// <summary>
         /// Total tokens (input + output) as reported by the provider.
         /// </summary>
         public int TotalTokens { get; set; }
@@ -35,6 +48,8 @@ namespace Mux.Core.Llm
 
             InputTokens += other.InputTokens;
             OutputTokens += other.OutputTokens;
+            CachedTokens += other.CachedTokens;
+            ReasoningTokens += other.ReasoningTokens;
             TotalTokens += other.TotalTokens;
         }
     }

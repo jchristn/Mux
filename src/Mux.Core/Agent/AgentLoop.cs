@@ -14,6 +14,7 @@ namespace Mux.Core.Agent
     using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Settings;
+    using Mux.Core.Telemetry;
     using Mux.Core.Tools;
 
     /// <summary>
@@ -32,6 +33,7 @@ namespace Mux.Core.Agent
         private LlmClient _LlmClient;
         private BuiltInToolRegistry _ToolRegistry;
         private IApprovalRouter _ApprovalRouter;
+        private IUsageRecorder _UsageRecorder;
         private bool _Disposed = false;
         private List<ConversationMessage> _FinalConversation = new List<ConversationMessage>();
 
@@ -51,6 +53,7 @@ namespace Mux.Core.Agent
             _LlmClient.OnRetry = options.OnRetry;
             _ToolRegistry = new BuiltInToolRegistry(options.MuxSettings, options.TaskPlan, options.Subagents, options.SubagentExecutor);
             _ApprovalRouter = new ApprovalRouter(options.ApprovalPolicy, options.AutoSafeApprovalAllowlist);
+            _UsageRecorder = options.UsageRecorder ?? NullUsageRecorder.Instance;
         }
 
         #endregion
@@ -135,6 +138,9 @@ namespace Mux.Core.Agent
                 ShowThinking = _Options.Endpoint.ShowThinking
             };
 
+            // Track the most recent per-call metrics so each iteration records only its own fresh call.
+            LlmCallMetrics? previousCall = _LlmClient.LastCall;
+
             // 3. Enter loop
             for (int step = 0; step < _Options.MaxIterations; step++)
             {
@@ -188,6 +194,7 @@ namespace Mux.Core.Agent
                 // 3a. Stream LLM response, yielding text events immediately
                 StringBuilder assistantTextBuilder = new StringBuilder();
                 List<ToolCall> proposedToolCalls = new List<ToolCall>();
+                string? streamErrorCode = null;
 
                 await foreach (AgentEvent streamEvent in _LlmClient
                     .StreamAsync(conversation, allTools, cancellationToken)
@@ -208,13 +215,22 @@ namespace Mux.Core.Agent
                     else
                     {
                         // Yield error events and others immediately
-                        if (streamEvent is ErrorEvent)
+                        if (streamEvent is ErrorEvent errorEvent)
                         {
                             errorCount++;
+                            streamErrorCode = errorEvent.Code;
                         }
                         yield return streamEvent;
                     }
                 }
+
+                // Record durable usage telemetry for this model call. Only fresh metrics (a call that
+                // actually completed this iteration) are attached; a stream that errored before completing
+                // is recorded as a failed call with its error code.
+                LlmCallMetrics? completedCall = _LlmClient.LastCall;
+                bool isFreshCall = completedCall != null && !ReferenceEquals(completedCall, previousCall);
+                RecordCallUsage(runId, iterationCount, isFreshCall ? completedCall : null, streamErrorCode);
+                previousCall = completedCall;
 
                 // Add assistant message to conversation history
                 string assistantText = assistantTextBuilder.ToString();
@@ -847,6 +863,87 @@ namespace Mux.Core.Agent
                 failureMessage = ex.Message;
                 return false;
             }
+        }
+
+        private void RecordCallUsage(string runId, int iteration, LlmCallMetrics? metrics, string? errorCode)
+        {
+            // Nothing worth recording: no completed call this iteration and no error to note. (The
+            // compaction sidecar uses the non-streaming path, which reports no usage, so its spend is not
+            // captured here — a known gap pending a provider-library change.)
+            bool errored = !string.IsNullOrEmpty(errorCode);
+            if (metrics == null && !errored)
+            {
+                return;
+            }
+
+            UsageEvent usageEvent = new UsageEvent
+            {
+                RunId = runId,
+                SessionId = string.IsNullOrEmpty(_Options.SessionId) ? null : _Options.SessionId,
+                JobId = string.IsNullOrEmpty(_Options.JobId) ? null : _Options.JobId,
+                CallKind = _Options.UsageCallKind,
+                Command = string.IsNullOrEmpty(_Options.CommandName) ? null : _Options.CommandName,
+                EndpointName = _Options.Endpoint.Name,
+                AdapterType = _Options.Endpoint.AdapterType.ToString(),
+                Model = !string.IsNullOrEmpty(metrics?.Model) ? metrics!.Model! : _Options.Endpoint.Model,
+                BaseHost = ExtractHost(_Options.Endpoint.BaseUrl),
+                Project = ExtractProject(_Options.WorkingDirectory),
+                Iteration = iteration,
+                Success = !errored && (metrics?.Success ?? false),
+                ErrorCode = errored ? errorCode : null
+            };
+
+            if (metrics != null)
+            {
+                LlmUsage usage = metrics.Usage;
+                usageEvent.InputTokens = usage.InputTokens;
+                usageEvent.CachedTokens = usage.CachedTokens;
+                usageEvent.OutputTokens = usage.OutputTokens;
+                usageEvent.ReasoningTokens = usage.ReasoningTokens;
+                usageEvent.TotalTokens = usage.TotalTokens;
+                usageEvent.TimeToFirstTokenMs = metrics.TimeToFirstTokenMs;
+                usageEvent.StreamingMs = metrics.StreamingMs;
+                usageEvent.TotalMs = metrics.TotalMs;
+                usageEvent.TokensPerSecond = metrics.TokensPerSecond;
+                usageEvent.FinishReason = metrics.FinishReason;
+            }
+
+            // Best-effort: the recorder never throws, but guard anyway so a telemetry fault cannot break a run.
+            try
+            {
+                _UsageRecorder.Record(usageEvent);
+            }
+            catch (Exception)
+            {
+                // Intentionally swallowed — usage recording must never affect the agent loop.
+            }
+        }
+
+        private static string? ExtractHost(string? baseUrl)
+        {
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                return null;
+            }
+
+            if (Uri.TryCreate(baseUrl, UriKind.Absolute, out Uri? uri) && !string.IsNullOrEmpty(uri.Host))
+            {
+                return uri.Host;
+            }
+
+            return null;
+        }
+
+        private static string? ExtractProject(string? workingDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(workingDirectory))
+            {
+                return null;
+            }
+
+            string trimmed = workingDirectory.TrimEnd('/', '\\');
+            string name = System.IO.Path.GetFileName(trimmed);
+            return string.IsNullOrEmpty(name) ? null : name;
         }
 
         private string GenerateCompactionSummary(List<ConversationMessage> messagesToCompact, CancellationToken cancellationToken)

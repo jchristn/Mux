@@ -460,6 +460,57 @@ mux v0.9.0 adds an opt-in local REST + WebSocket server and a system-tray agent.
 Environment overrides: `MUX_REST_HOST`, `MUX_REST_PORT`, `MUX_REST_APIKEY`. The server is **opt-in** and never
 starts from a plain `mux`/`mux print` run. Full reference: [REST_API.md](REST_API.md).
 
+## Usage telemetry (`settings.json` `telemetry`)
+
+Every model call is recorded to a local SQLite database (`~/.mux/usage.db` by default) — token counts,
+time-to-first-token, streaming time, total latency, throughput, finish reason, and success — tagged with the
+endpoint, model, command, session, and call kind. The store is written concurrently by every mux instance
+(WAL mode, no external process) and read by the TUI `/usage` view and the `mux serve` dashboard. Capture is
+best-effort: a telemetry fault never affects a run.
+
+```json
+{
+  "telemetry": {
+    "enabled": true,
+    "retentionDays": 90,
+    "databasePath": null,
+    "pricingEnabled": true,
+    "maxRows": 5000000
+  }
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `enabled` | bool | Whether usage is captured/persisted. Default true. When false, no database is opened and the dashboard/`/usage` show an empty state. |
+| `retentionDays` | int | Days of history to keep; rows older are pruned on open and daily. Clamped 0-3650; 0 keeps forever. Default 90. |
+| `databasePath` | string or null | Override for the database file. Blank resolves to `usage.db` under the config directory. |
+| `pricingEnabled` | bool | Whether derived cost is shown (from `pricing.json`). Default true. |
+| `maxRows` | int | Secondary retention guard: max rows regardless of age. Floored at 1000. Default 5,000,000. |
+
+Environment override: `MUX_TELEMETRY_ENABLED` (`1`/`true`/`0`/`false`) toggles capture without editing the file.
+
+## Model pricing (`pricing.json`)
+
+Cost is derived at read time from a user-editable pricing table, so a rate correction re-values history. A
+curated set of defaults is seeded on first run and manifest-tracked (`pricing.seeded.json`) so upgrades add
+new model defaults without resurrecting rows you deleted or overwriting edited rates. Unknown models cost
+nothing until you add a rate (edit this file or use the dashboard **Pricing** page).
+
+```json
+{
+  "version": "2026-09",
+  "models": {
+    "claude-opus-4-8": { "inputPerMTok": 15.0, "cachedInputPerMTok": 1.5, "outputPerMTok": 75.0 },
+    "gpt-4o":          { "inputPerMTok": 2.5,  "cachedInputPerMTok": 1.25, "outputPerMTok": 10.0 }
+  }
+}
+```
+
+Rates are US dollars per million tokens: `inputPerMTok` (uncached prompt), `cachedInputPerMTok` (cache-read),
+and `outputPerMTok` (completion). Cost for a call is `(input − cached)·input + cached·cachedInput + output·output`.
+Local models (Ollama, vLLM) have no default entry and cost 0.
+
 ## `subagents.json` (subagent delegation)
 
 Subagents are named personas the model can delegate a self-contained sub-task to via the

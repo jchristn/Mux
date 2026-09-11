@@ -69,6 +69,7 @@
 - Plugin system: out-of-process event hooks (`session-start`, `user-prompt-submit`, `session-end`) and custom `/<name>` slash commands configured in `~/.mux/hooks.json`; inspect with `mux plugin list`
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Local REST server & tray agent (`v0.9.0`, opt-in): `mux serve` starts a loopback-bound, token-guarded REST + WebSocket API (Watson 7) over mux's in-process services; a cross-platform Avalonia system-tray agent hosts it in the background with **About / Launch Mux / Exit**. Never auto-starts from a plain run. See `docs/REST_API.md`
+- Usage analytics: every model call is recorded to a local SQLite database (`~/.mux/usage.db`, multi-process safe, no external service) — tokens, cost, time-to-first-token, streaming time, latency, and throughput. See it via `/usage` and the live sidebar cost in the TUI, or the **Usage** and **Pricing** pages on the `mux serve` dashboard (charts over time with endpoint/model filters). Cost derives from an editable `pricing.json`. See `docs/CONFIG.md`
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
 - Health checks: `mux probe` validates config, backend reachability, auth, and model access
 - Endpoint & model inspection: `mux endpoint list`/`show` report the configured endpoints, and `mux endpoint models` live-enumerates the models each backend advertises (Ollama `/api/tags`, OpenAI-compatible `/v1/models`) — as a table or `--output-format json`

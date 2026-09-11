@@ -1,0 +1,199 @@
+{
+  "info": {
+    "name": "mux REST API",
+    "_postman_id": "a1b2c3d4-0009-4a1b-9f00-muxrestapi0001",
+    "description": "Postman collection for the optional local **mux** REST + WebSocket server (`mux serve`).\n\nThe server is opt-in, binds to loopback (`127.0.0.1`) by default, and — unless started with `--no-auth` — requires a local API key sent as a bearer token. It exposes mux's in-process services (endpoints, MCP servers, prompts, subagents, hooks, keybindings, skills, sessions, chat, settings) plus durable **usage telemetry** and **pricing**.\n\n## Getting started\n1. Start the server: `mux serve` (it prints the base URL and, on first run, an auto-generated API key). Or `mux serve --no-auth` for keyless local use.\n2. Set the collection variables: **baseUrl** (default `http://127.0.0.1:8710`) and **apiKey** (the printed key; leave blank when using `--no-auth`).\n3. Collection-level auth applies a bearer token from **apiKey** to every request except those in the **Health** folder, which is anonymous.\n\nAll paths are versioned under `/v1.0/api`. Full reference: `docs/REST_API.md`. Loopback uses `127.0.0.1` deliberately (on Windows `localhost` resolves IPv6 `::1` first and stalls).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{apiKey}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8710", "type": "string", "description": "Scheme, host, and port the server listens on. Uses 127.0.0.1 (not localhost) to avoid Windows IPv6 first-resolution latency." },
+    { "key": "apiKey", "value": "", "type": "string", "description": "Local bearer API key printed by `mux serve`. Leave blank when the server runs with --no-auth." },
+    { "key": "endpointName", "value": "openai-prod", "type": "string", "description": "An endpoint name used by the delete/chat examples." },
+    { "key": "sessionId", "value": "", "type": "string", "description": "A saved session id, used by the session export/delete examples." },
+    { "key": "skillId", "value": "", "type": "string", "description": "A skill id, used by the skill detail/enable/delete examples." }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Liveness and version. The only anonymous surface — no API key required, so this folder overrides the collection bearer auth with `noauth`.",
+      "auth": { "type": "noauth" },
+      "item": [
+        {
+          "name": "Get health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/v1.0/api/health", "host": ["{{baseUrl}}"], "path": ["v1.0","api","health"] },
+            "description": "Returns `{ Status, Product, Version, Pid, StartedUtc, Uptime, TimestampUtc }`. `Status` is `healthy` while the server is up. Use this for readiness probes; it never requires auth."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Endpoints",
+      "description": "The model endpoints in `endpoints.json` — the local and cloud LLMs mux can talk to. Secrets (API keys, header values) are never returned; a blank secret on write preserves the stored value. Edits are applied as a whole-collection PUT.",
+      "item": [
+        {
+          "name": "List endpoints (summary)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/v1.0/api/endpoints", "host": ["{{baseUrl}}"], "path": ["v1.0","api","endpoints"] },
+            "description": "Lightweight list for pickers: `{ Items: [ { Name, AdapterType, BaseUrl, Model, IsDefault } ], Count }`. No secrets."
+          }
+        },
+        {
+          "name": "List endpoints (detail)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/v1.0/api/endpoints/detail", "host": ["{{baseUrl}}"], "path": ["v1.0","api","endpoints","detail"] },
+            "description": "Full editable fields for each endpoint with secrets masked (`ApiKeySet` boolean instead of the key; header values blanked). Use this as the source for the PUT round-trip."
+          }
+        },
+        {
+          "name": "Save endpoints",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1.0/api/endpoints", "host": ["{{baseUrl}}"], "path": ["v1.0","api","endpoints"] },
+            "body": { "mode": "raw", "raw": "{\n  \"items\": [\n    {\n      \"name\": \"openai-prod\",\n      \"adapterType\": \"openai\",\n      \"baseUrl\": \"https://api.openai.com/v1\",\n      \"model\": \"gpt-4o\",\n      \"isDefault\": true,\n      \"maxTokens\": 8192,\n      \"temperature\": 0.1,\n      \"contextWindow\": 128000,\n      \"timeoutMs\": 120000,\n      \"apiKey\": \"\",\n      \"headers\": []\n    }\n  ]\n}" },
+            "description": "Replaces the whole endpoint collection. Send the full list (the dashboard edits client-side, then PUTs everything). A blank `apiKey` (or blank header value) preserves the stored secret; a non-blank value overwrites it. Returns the saved, masked list."
+          }
+        },
+        {
+          "name": "Delete endpoint",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/v1.0/api/endpoints?name={{endpointName}}", "host": ["{{baseUrl}}"], "path": ["v1.0","api","endpoints"], "query": [{ "key": "name", "value": "{{endpointName}}", "description": "The endpoint name to delete." }] },
+            "description": "Deletes one endpoint by name. Returns the remaining masked list."
+          }
+        }
+      ]
+    },
+    {
+      "name": "MCP Servers",
+      "description": "MCP tool servers in `mcp-servers.json` that expose extra tools to the agent. Auth secrets are masked/preserved on the same blank-keeps-stored convention as endpoints.",
+      "item": [
+        {
+          "name": "List MCP servers",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/mcp-servers", "host": ["{{baseUrl}}"], "path": ["v1.0","api","mcp-servers"] }, "description": "Returns the configured MCP servers with any auth secret masked." }
+        },
+        {
+          "name": "Save MCP servers",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1.0/api/mcp-servers", "host": ["{{baseUrl}}"], "path": ["v1.0","api","mcp-servers"] },
+            "body": { "mode": "raw", "raw": "{\n  \"items\": []\n}" },
+            "description": "Replaces the whole MCP-server collection. Blank auth secret preserves the stored value."
+          }
+        },
+        {
+          "name": "Delete MCP server",
+          "request": { "method": "DELETE", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/mcp-servers?name=my-server", "host": ["{{baseUrl}}"], "path": ["v1.0","api","mcp-servers"], "query": [{ "key": "name", "value": "my-server" }] }, "description": "Deletes one MCP server by name." }
+        }
+      ]
+    },
+    {
+      "name": "Prompts",
+      "description": "System-prompt profiles in `prompts.json`. A blank system prompt inherits the built-in default.",
+      "item": [
+        { "name": "Get prompts", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/prompts", "host": ["{{baseUrl}}"], "path": ["v1.0","api","prompts"] }, "description": "Returns the prompt profiles (name, active flag, system prompt)." } },
+        { "name": "Save prompts", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": { "raw": "{{baseUrl}}/v1.0/api/prompts", "host": ["{{baseUrl}}"], "path": ["v1.0","api","prompts"] }, "body": { "mode": "raw", "raw": "{\n  \"items\": [\n    { \"name\": \"Default\", \"isActive\": true, \"systemPrompt\": \"\" }\n  ]\n}" }, "description": "Replaces the prompt-profile collection." } }
+      ]
+    },
+    {
+      "name": "Subagents",
+      "description": "Subagent definitions in `subagents.json` the model can delegate scoped tasks to via the `spawn_subagent` tool.",
+      "item": [
+        { "name": "Get subagents", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/subagents", "host": ["{{baseUrl}}"], "path": ["v1.0","api","subagents"] }, "description": "Returns the subagent definitions." } },
+        { "name": "Save subagents", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": { "raw": "{{baseUrl}}/v1.0/api/subagents", "host": ["{{baseUrl}}"], "path": ["v1.0","api","subagents"] }, "body": { "mode": "raw", "raw": "{\n  \"items\": []\n}" }, "description": "Replaces the subagent collection." } }
+      ]
+    },
+    {
+      "name": "Hooks & Commands",
+      "description": "The plugin config in `hooks.json`: out-of-process event hooks and custom `/slash` commands. Saved together as one object.",
+      "item": [
+        { "name": "Get hooks & commands", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/hooks", "host": ["{{baseUrl}}"], "path": ["v1.0","api","hooks"] }, "description": "Returns `{ hooks: [...], commands: [...] }`." } },
+        { "name": "Save hooks & commands", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": { "raw": "{{baseUrl}}/v1.0/api/hooks", "host": ["{{baseUrl}}"], "path": ["v1.0","api","hooks"] }, "body": { "mode": "raw", "raw": "{\n  \"hooks\": [],\n  \"commands\": []\n}" }, "description": "Replaces the plugin config." } }
+      ]
+    },
+    {
+      "name": "Keybindings",
+      "description": "Command-id → key-chord overrides in `keybindings.json`. A blank chord unbinds the command.",
+      "item": [
+        { "name": "Get keybindings", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/keybindings", "host": ["{{baseUrl}}"], "path": ["v1.0","api","keybindings"] }, "description": "Returns the command-id → chord override map." } },
+        { "name": "Save keybindings", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": { "raw": "{{baseUrl}}/v1.0/api/keybindings", "host": ["{{baseUrl}}"], "path": ["v1.0","api","keybindings"] }, "body": { "mode": "raw", "raw": "{\n  \"items\": []\n}" }, "description": "Replaces the keybinding overrides." } }
+      ]
+    },
+    {
+      "name": "Skills",
+      "description": "Skills under the skills directory — versioned Markdown-plus-code capabilities. List, inspect, toggle enablement, or delete.",
+      "item": [
+        { "name": "List skills", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/skills", "host": ["{{baseUrl}}"], "path": ["v1.0","api","skills"] }, "description": "Returns each skill's name, description, enabled/valid flags, and command count." } },
+        { "name": "Get skill detail", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/skills/detail?id={{skillId}}", "host": ["{{baseUrl}}"], "path": ["v1.0","api","skills","detail"], "query": [{ "key": "id", "value": "{{skillId}}" }] }, "description": "Returns one skill with its `SKILL.md` body." } },
+        { "name": "Set skill enabled", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": { "raw": "{{baseUrl}}/v1.0/api/skills/enabled", "host": ["{{baseUrl}}"], "path": ["v1.0","api","skills","enabled"] }, "body": { "mode": "raw", "raw": "{\n  \"id\": \"{{skillId}}\",\n  \"enabled\": true\n}" }, "description": "Enables or disables a skill by id." } },
+        { "name": "Delete skill", "request": { "method": "DELETE", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/skills?id={{skillId}}", "host": ["{{baseUrl}}"], "path": ["v1.0","api","skills"], "query": [{ "key": "id", "value": "{{skillId}}" }] }, "description": "Deletes a skill folder by id." } }
+      ]
+    },
+    {
+      "name": "Sessions",
+      "description": "Persisted chat sessions under `~/.mux/sessions`. List, export to HTML/Markdown, or delete.",
+      "item": [
+        { "name": "List sessions", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/sessions", "host": ["{{baseUrl}}"], "path": ["v1.0","api","sessions"] }, "description": "Returns saved sessions (id, title, endpoint, model, timestamps)." } },
+        { "name": "Export session", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/sessions/export?id={{sessionId}}&format=md", "host": ["{{baseUrl}}"], "path": ["v1.0","api","sessions","export"], "query": [{ "key": "id", "value": "{{sessionId}}" }, { "key": "format", "value": "md", "description": "md or html" }] }, "description": "Renders a session to `{ format, filename, content }` for download." } },
+        { "name": "Delete session", "request": { "method": "DELETE", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/sessions?id={{sessionId}}", "host": ["{{baseUrl}}"], "path": ["v1.0","api","sessions"], "query": [{ "key": "id", "value": "{{sessionId}}" }] }, "description": "Deletes a session by id." } }
+      ]
+    },
+    {
+      "name": "Chat",
+      "description": "A plain, tool-free chat completion against a configured endpoint — for the dashboard chat surface. It does not run the agent loop or expose tools.",
+      "item": [
+        {
+          "name": "Chat completion",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/v1.0/api/chat", "host": ["{{baseUrl}}"], "path": ["v1.0","api","chat"] },
+            "body": { "mode": "raw", "raw": "{\n  \"endpoint\": \"{{endpointName}}\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Say hello in one word.\" }\n  ]\n}" },
+            "description": "Streams the completion server-side and returns the buffered result plus timing: `{ role, content, endpoint, model, stats: { ttftMs, streamingMs, totalMs, inputTokens, outputTokens, totalTokens } }`. This call is also recorded to usage telemetry (call kind `chat`)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "description": "The editable settings subset over `settings.json`. Secrets are masked (for example `rest.apiKeySet` instead of the key); the REST API key changes only when a non-blank `rest.apiKey` is supplied.",
+      "item": [
+        { "name": "Get settings", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/settings", "host": ["{{baseUrl}}"], "path": ["v1.0","api","settings"] }, "description": "Returns the current settings with secrets masked." } },
+        { "name": "Save settings", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": { "raw": "{{baseUrl}}/v1.0/api/settings", "host": ["{{baseUrl}}"], "path": ["v1.0","api","settings"] }, "body": { "mode": "raw", "raw": "{\n  \"telemetry\": { \"enabled\": true, \"retentionDays\": 90 }\n}" }, "description": "Updates settings (validated/clamped, written to settings.json). Send only the fields you intend to change." } }
+      ]
+    },
+    {
+      "name": "Usage Telemetry",
+      "description": "Read-only analytics over the shared usage database (`~/.mux/usage.db`), written by every mux instance on the machine. Every query accepts a time window as explicit `from`/`to` (Unix epoch **milliseconds**) or a `range` keyword (`hour`|`day`|`week`|`month`|`all`), plus optional `endpoint`, `model`, and `callKind` filters. When telemetry is disabled these endpoints return empty results (and `/filters` reports `Enabled: false`).\n\nEvery `Metrics` object carries: `Calls`, `Errors`, `ErrorRate`, `InputTokens`, `CachedTokens`, `OutputTokens`, `TotalTokens`, `CostUsd`, `CacheHitRate`, `AvgTtftMs`, `P50/P95/P99TtftMs`, `AvgTotalMs`, `P50/P95/P99TotalMs`, `AvgStreamMs`, `AvgTokensPerSec`.",
+      "item": [
+        { "name": "Summary", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/usage/summary?range=day", "host": ["{{baseUrl}}"], "path": ["v1.0","api","usage","summary"], "query": [{ "key": "range", "value": "day" }, { "key": "endpoint", "value": "", "disabled": true }, { "key": "model", "value": "", "disabled": true }, { "key": "callKind", "value": "", "description": "primary|compaction|subagent|chat|probe", "disabled": true }] }, "description": "Window KPI summary: `{ FromUnixMs, ToUnixMs, Metrics }`. Backs the dashboard KPI strip and the TUI /usage view." } },
+        { "name": "Time series", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/usage/timeseries?range=day&bucket=hour", "host": ["{{baseUrl}}"], "path": ["v1.0","api","usage","timeseries"], "query": [{ "key": "range", "value": "day" }, { "key": "bucket", "value": "hour", "description": "hour or day" }, { "key": "endpoint", "value": "", "disabled": true }, { "key": "model", "value": "", "disabled": true }] }, "description": "Bucketed series for charting: `{ Items: [ { BucketStartUnixMs, Metrics } ], Count }`." } },
+        { "name": "Breakdown", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/usage/breakdown?dimension=model&range=week", "host": ["{{baseUrl}}"], "path": ["v1.0","api","usage","breakdown"], "query": [{ "key": "dimension", "value": "model", "description": "model|endpoint|provider|command" }, { "key": "range", "value": "week" }] }, "description": "Totals grouped by a dimension, sorted by cost: `{ Items: [ { Dimension, Value, Metrics } ], Count }`." } },
+        { "name": "Events (history)", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/usage/events?range=day&page=1&pageSize=25", "host": ["{{baseUrl}}"], "path": ["v1.0","api","usage","events"], "query": [{ "key": "range", "value": "day" }, { "key": "page", "value": "1" }, { "key": "pageSize", "value": "25", "description": "1-500" }, { "key": "success", "value": "", "description": "true|false", "disabled": true }, { "key": "endpoint", "value": "", "disabled": true }, { "key": "model", "value": "", "disabled": true }] }, "description": "Paginated raw per-call history (newest first) with derived `CostUsd` per row: `{ Items, TotalCount, PageNumber, PageSize }`." } },
+        { "name": "Delete event", "request": { "method": "DELETE", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/usage/events?id=1", "host": ["{{baseUrl}}"], "path": ["v1.0","api","usage","events"], "query": [{ "key": "id", "value": "1", "description": "The usage-event row id to delete (from an events row's Id)." }] }, "description": "Deletes one recorded call by its row id. Returns `{ Deleted: <count> }`." } },
+        { "name": "Filters", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/usage/filters", "host": ["{{baseUrl}}"], "path": ["v1.0","api","usage","filters"] }, "description": "Distinct endpoints and models seen in the store, for filter controls, plus `{ Enabled }` (false when telemetry is disabled)." } }
+      ]
+    },
+    {
+      "name": "Pricing",
+      "description": "The user-editable model pricing table in `pricing.json` used to derive usage cost at read time. **Note:** unlike most mux DTOs, pricing serializes camelCase (`version`, `models`, `inputPerMTok`, `cachedInputPerMTok`, `outputPerMTok`).",
+      "item": [
+        { "name": "Get pricing", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/v1.0/api/usage/pricing", "host": ["{{baseUrl}}"], "path": ["v1.0","api","usage","pricing"] }, "description": "Returns `{ version, models: { \"<model>\": { inputPerMTok, cachedInputPerMTok, outputPerMTok } } }` (curated defaults when the file is absent)." } },
+        { "name": "Save pricing", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": { "raw": "{{baseUrl}}/v1.0/api/usage/pricing", "host": ["{{baseUrl}}"], "path": ["v1.0","api","usage","pricing"] }, "body": { "mode": "raw", "raw": "{\n  \"version\": \"2026-09\",\n  \"models\": {\n    \"gpt-4o\": { \"inputPerMTok\": 2.5, \"cachedInputPerMTok\": 1.25, \"outputPerMTok\": 10.0 },\n    \"claude-opus-4-8\": { \"inputPerMTok\": 15.0, \"cachedInputPerMTok\": 1.5, \"outputPerMTok\": 75.0 }\n  }\n}" }, "description": "Replaces the whole pricing table. Rates are USD per million tokens. Returns the saved table. A rate change re-values historical cost immediately (cost is computed at read time)." } }
+      ]
+    }
+  ]
+}

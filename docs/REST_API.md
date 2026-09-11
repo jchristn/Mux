@@ -95,6 +95,14 @@ All paths are versioned under `/v1.0/api`.
 | POST | `/v1.0/api/chat` | key | Plain (tool-free) chat completion against a configured endpoint. Body: `{ "endpoint": "<name>", "messages": [{ "role": "user", "content": "…" }] }` → `{ "role": "assistant", "content": "…", "endpoint", "model", "stats": { "ttftMs", "streamingMs", "totalMs", "inputTokens", "outputTokens", "totalTokens" } }`. |
 | GET | `/v1.0/api/settings` | key | Editable settings subset, **secrets masked** (`rest.apiKeySet` instead of the key). |
 | PUT | `/v1.0/api/settings` | key | Update settings (validated/clamped, written to `settings.json`). The REST API key changes only when a non-blank `rest.apiKey` is supplied. |
+| GET | `/v1.0/api/usage/summary` | key | Window KPI summary. Query: `from`/`to` (epoch ms) or `range=hour\|day\|week\|month\|all`, plus `endpoint`, `model`, `callKind`. Returns `{ FromUnixMs, ToUnixMs, Metrics }`. |
+| GET | `/v1.0/api/usage/timeseries` | key | Dense, evenly-spaced series for charting. Granularity is derived from the range — hour = 60×1-min, day = 96×15-min, week = 84×2-hour, month = 60×12-hour — and empty slices are zero-filled. Returns `{ Items: [ { BucketStartUnixMs, Metrics } ], Count }`. |
+| GET | `/v1.0/api/usage/breakdown` | key | Totals grouped by `dimension=model\|endpoint\|provider\|command`, sorted by cost. Returns `{ Items: [ { Dimension, Value, Metrics } ], Count }`. |
+| GET | `/v1.0/api/usage/events` | key | Paginated raw call history (newest first). Query: window filters + `success`, `page`, `pageSize`. Returns `{ Items: [ … per-call rows with CostUsd … ], TotalCount, PageNumber, PageSize }`. |
+| DELETE | `/v1.0/api/usage/events?id=<id>` | key | Delete one recorded call by its row id. Returns `{ Deleted: <count> }`. |
+| GET | `/v1.0/api/usage/filters` | key | Distinct endpoints/models for filter controls plus `{ Enabled }` (false when telemetry is off). |
+| GET | `/v1.0/api/usage/pricing` | key | The model pricing table from `pricing.json` (`{ version, models }`). |
+| PUT | `/v1.0/api/usage/pricing` | key | Replace the pricing table. Returns the saved table. |
 | GET | `/dashboard` | none¹ | The web dashboard (HTML). |
 | GET | `/v1.0/ws` | (WebSocket) | Live event stream; first frame is `server.connected`. |
 
@@ -116,11 +124,31 @@ inlined). It provides:
 - **Sessions** — browse saved sessions, export any to HTML/Markdown (client-side download), or delete.
 - **Settings** — a form-based editor over `settings.json` (agent, context, features, REST server) with masked
   secrets and per-group "restart required" hints. Backed by `GET`/`PUT /v1.0/api/settings`.
+- **Usage** — token, cost, latency, TTFT, streaming-time, and throughput analytics over selectable time
+  ranges (hour/day/week/month) with endpoint/model filters, a KPI strip, inline SVG charts, and a paginated
+  per-call history table. Backed by the `GET /v1.0/api/usage/*` routes.
+- **Pricing** — a form-based editor over `pricing.json` (per-model input/cached/output rates in USD per
+  million tokens) used to derive usage cost. Backed by `GET`/`PUT /v1.0/api/usage/pricing`.
 - **Server Info** — health/version/uptime and the configured endpoints.
 - Light/dark theme (persisted), using the mux logos from `assets/`.
 
+The usage routes read a shared local SQLite database (`~/.mux/usage.db`) written by every mux instance on
+the machine, so the dashboard reflects CLI activity too. When telemetry is disabled the query routes return
+empty results with `Enabled: false`. Every usage `Metrics` object carries: `Calls`, `Errors`, `ErrorRate`,
+`InputTokens`, `CachedTokens`, `OutputTokens`, `TotalTokens`, `CostUsd`, `CacheHitRate`, `AvgTtftMs`,
+`P50/P95/P99TtftMs`, `AvgTotalMs`, `P50/P95/P99TotalMs`, `AvgStreamMs`, and `AvgTokensPerSec`.
+
 Open it at `http://127.0.0.1:<port>/dashboard` after `mux serve` (or launch the tray agent and open the URL
 it hosts).
+
+### Postman collection
+
+A documented Postman collection covering the full API surface lives at
+`assets/postman/mux.postman_collection.json`, with a companion environment at
+`assets/postman/mux.postman_environment.json`. Import both, set the `baseUrl` and `apiKey` variables
+(leave `apiKey` blank when the server runs with `--no-auth`), and the collection-level bearer auth applies
+the key to every request except Health. Requests are grouped into folders by resource, each with
+collection-, folder-, and request-level documentation and example bodies.
 
 ### Examples
 

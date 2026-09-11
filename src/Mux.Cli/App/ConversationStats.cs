@@ -44,6 +44,10 @@ namespace Mux.Cli.App
         /// <summary>Session cached prompt tokens reported by the provider (0 when unavailable).</summary>
         public long CachedTokens { get; set; }
 
+        /// <summary>Estimated session cost in US dollars, derived from session tokens and the pricing
+        /// table for the active model (0 when the model is unpriced or pricing is disabled).</summary>
+        public double SessionCostUsd { get; set; }
+
         /// <summary>The number of tasks in the focused job's plan (0 when the job has no plan).</summary>
         public int TaskTotal { get; set; }
 

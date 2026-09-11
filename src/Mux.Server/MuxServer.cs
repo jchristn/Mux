@@ -32,6 +32,8 @@ namespace Mux.Server
         private readonly SessionStore _SessionStore;
         private readonly Func<List<EndpointConfig>> _EndpointsProvider;
         private readonly Action<string>? _Logger;
+        private readonly Mux.Core.Telemetry.UsageQueryService? _UsageQuery;
+        private readonly Mux.Core.Telemetry.IUsageRecorder? _UsageRecorder;
         private readonly DateTime _StartUtc = DateTime.UtcNow;
         private readonly CancellationTokenSource _TokenSource = new CancellationTokenSource();
 
@@ -66,18 +68,26 @@ namespace Mux.Server
         /// <param name="sessionStore">Session store to read persisted sessions from.</param>
         /// <param name="endpointsProvider">Callback returning the configured endpoints.</param>
         /// <param name="logger">Optional log sink for Watson events.</param>
+        /// <param name="usageQuery">Optional usage-telemetry query service backing the dashboard's usage
+        /// pages. Null disables the query endpoints (they return empty results with an enabled=false signal).</param>
+        /// <param name="usageRecorder">Optional usage recorder so the server's own chat calls are captured.
+        /// Null skips recording server-side calls.</param>
         public MuxServer(
             RestServerSettings settings,
             string version,
             SessionStore sessionStore,
             Func<List<EndpointConfig>> endpointsProvider,
-            Action<string>? logger = null)
+            Action<string>? logger = null,
+            Mux.Core.Telemetry.UsageQueryService? usageQuery = null,
+            Mux.Core.Telemetry.IUsageRecorder? usageRecorder = null)
         {
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Version = version ?? string.Empty;
             _SessionStore = sessionStore ?? throw new ArgumentNullException(nameof(sessionStore));
             _EndpointsProvider = endpointsProvider ?? throw new ArgumentNullException(nameof(endpointsProvider));
             _Logger = logger;
+            _UsageQuery = usageQuery;
+            _UsageRecorder = usageRecorder;
         }
 
         #endregion
@@ -174,12 +184,13 @@ namespace Mux.Server
             new HealthRoutes(_Version, _StartUtc).Register(app);
             new EndpointRoutes(apiKey, _EndpointsProvider).Register(app);
             new SessionRoutes(apiKey, _SessionStore).Register(app);
-            new ChatRoutes(apiKey, _EndpointsProvider).Register(app);
+            new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder).Register(app);
             new SettingsRoutes(apiKey).Register(app);
             new McpRoutes(apiKey).Register(app);
             new ConfigRoutes(apiKey).Register(app);
             new SkillRoutes(apiKey).Register(app);
             new OverviewRoutes(apiKey, _EndpointsProvider, _SessionStore, _Version, _StartUtc).Register(app);
+            new UsageRoutes(apiKey, _UsageQuery).Register(app);
         }
 
         private void ApplyCors(HttpContextBase ctx)

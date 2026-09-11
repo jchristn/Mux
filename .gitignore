@@ -7,3 +7,8 @@ obj/
 *.db
 *.log
 *.nupkg
+
+# Stray test/tool artifacts
+/artifact.txt
+/src/artifact.txt
+/artifacts/

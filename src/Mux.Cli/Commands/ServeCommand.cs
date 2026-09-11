@@ -87,12 +87,21 @@ namespace Mux.Cli.Commands
             string sessionsDir = Path.Combine(SettingsLoader.GetConfigDirectory(), "sessions");
             SessionStore sessionStore = new SessionStore(sessionsDir);
 
+            // Usage telemetry: open the shared store (written by every mux instance) so the dashboard can
+            // query it, and hand the server a recorder so its own chat calls are captured too. Best-effort —
+            // a disabled/unopenable store yields empty dashboard data and a no-op recorder.
+            using Mux.Core.Telemetry.UsageTelemetry usageTelemetry = Mux.Core.Telemetry.UsageTelemetry.Create(
+                settings, SettingsLoader.GetConfigDirectory(), null);
+            Mux.Core.Telemetry.UsageQueryService? usageQuery = usageTelemetry.CreateQueryService(() => SettingsLoader.LoadPricing());
+
             using MuxServer server = new MuxServer(
                 rest,
                 Defaults.ProductVersion,
                 sessionStore,
                 () => SettingsLoader.LoadEndpoints(),
-                logger: null);
+                logger: null,
+                usageQuery: usageQuery,
+                usageRecorder: usageTelemetry.Recorder);
 
             try
             {

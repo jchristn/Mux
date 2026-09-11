@@ -19,6 +19,7 @@ namespace Mux.Cli.App
         private readonly string _Title;
         private readonly ListView<string> _List = new ListView<string>();
         private readonly int _MaxContentWidth;
+        private readonly IReadOnlyDictionary<char, int>? _Hotkeys;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WideSelectModal"/> class.
@@ -26,9 +27,15 @@ namespace Mux.Cli.App
         /// <param name="title">The box title. Must not be null.</param>
         /// <param name="options">The options. Must not be null or empty.</param>
         /// <param name="maxContentWidth">The maximum inner content width in columns (clamped to at least 4).</param>
+        /// <param name="hotkeys">
+        /// Optional map from a character to the option index it selects, so a single keypress can close the
+        /// modal on a specific row (for example '+'/'-' to jump to add/remove rows) instead of arrowing to it.
+        /// The character is matched with Ctrl/Alt/Super excluded (Shift is allowed, so shifted glyphs like '+'
+        /// work). Null disables hotkeys.
+        /// </param>
         /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
         /// <exception cref="ArgumentException">Thrown when <paramref name="options"/> is empty.</exception>
-        public WideSelectModal(string title, IReadOnlyList<string> options, int maxContentWidth)
+        public WideSelectModal(string title, IReadOnlyList<string> options, int maxContentWidth, IReadOnlyDictionary<char, int>? hotkeys = null)
         {
             _Title = title ?? throw new ArgumentNullException(nameof(title));
             if (options == null) throw new ArgumentNullException(nameof(options));
@@ -42,6 +49,7 @@ namespace Mux.Cli.App
 
             _List.SetItems(copy);
             _MaxContentWidth = Math.Max(4, maxContentWidth);
+            _Hotkeys = hotkeys;
         }
 
         /// <inheritdoc/>
@@ -56,6 +64,18 @@ namespace Mux.Cli.App
             if (key.Code == KeyCode.Escape)
             {
                 RequestClose(-1);
+                return true;
+            }
+
+            // A configured hotkey closes the modal on its mapped row (Ctrl/Alt/Super excluded so chords still
+            // reach the list; Shift allowed so shifted glyphs such as '+' match).
+            if (_Hotkeys != null
+                && key.Code == KeyCode.Character
+                && (key.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Alt | KeyModifiers.Super)) == 0
+                && key.Rune > 0 && key.Rune <= char.MaxValue
+                && _Hotkeys.TryGetValue((char)key.Rune, out int hotIndex))
+            {
+                Close(hotIndex);
                 return true;
             }
 

@@ -11,6 +11,7 @@ namespace Mux.Core.Agent
     using Mux.Core.Models;
     using Mux.Core.Subagents;
     using Mux.Core.Tasks;
+    using Mux.Core.Telemetry;
     using Mux.Core.Tools;
 
     /// <summary>
@@ -63,6 +64,8 @@ namespace Mux.Core.Agent
         private List<string>? _AdditionalDirectories = null;
         private SubagentRegistry? _Subagents = null;
         private ISubagentExecutor? _SubagentExecutor = null;
+        private IUsageRecorder? _UsageRecorder = null;
+        private UsageCallKindEnum _UsageCallKind = UsageCallKindEnum.Primary;
 
         #endregion
 
@@ -511,6 +514,28 @@ namespace Mux.Core.Agent
         {
             get => _SubagentExecutor;
             set => _SubagentExecutor = value;
+        }
+
+        /// <summary>
+        /// Optional sink for durable usage telemetry. When set, the loop records one usage event per model
+        /// call (tokens, time-to-first-token, streaming time, total runtime) tagged with this run's
+        /// endpoint, session, command, and job context. Null (the default) disables recording; the loop
+        /// falls back to a no-op recorder so recording is always safe to call.
+        /// </summary>
+        public IUsageRecorder? UsageRecorder
+        {
+            get => _UsageRecorder;
+            set => _UsageRecorder = value;
+        }
+
+        /// <summary>
+        /// The call-kind classification stamped on usage telemetry recorded by this loop. Defaults to
+        /// <see cref="UsageCallKindEnum.Primary"/>; a subagent loop sets <see cref="UsageCallKindEnum.Subagent"/>.
+        /// </summary>
+        public UsageCallKindEnum UsageCallKind
+        {
+            get => _UsageCallKind;
+            set => _UsageCallKind = value;
         }
 
         #endregion
