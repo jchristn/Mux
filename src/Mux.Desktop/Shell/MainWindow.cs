@@ -75,6 +75,8 @@ namespace Mux.Desktop.Shell
         private string _CurrentThreadId = string.Empty;
         private string _ThemeMode = "dark";
         private bool _ThemeSubscribed;
+        private readonly PromptHistory _PromptHistory = new PromptHistory();
+        private bool _SuppressHistoryReset;
         private string _CurrentTitle = string.Empty;
         private bool _CurrentTitlePinned;
         private DateTime _CurrentCreatedUtc;
@@ -123,6 +125,8 @@ namespace Mux.Desktop.Shell
             MinHeight = 520;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             FlowDirection = localization.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+
+            _PromptHistory.Load(new PromptHistoryStore(configDirectory).Load());
 
             // Apply the persisted theme before the first layout so there is no flash of the default.
             string savedMode = new DesktopPreferencesStore(configDirectory).Load().ThemeMode;
@@ -689,10 +693,18 @@ namespace Mux.Desktop.Shell
                 Foreground = _Theme.Text,
                 BorderBrush = _Theme.Border
             };
-            _Composer.Tip("Type your message. Enter sends; Shift+Enter, Ctrl+Enter, or Ctrl+J insert a new line. Type /? for commands.");
+            _Composer.Tip("Type your message. Enter sends; Shift+Enter, Ctrl+Enter, or Ctrl+J insert a new line. Up/Down at the edges recall previous prompts. Type /? for commands.");
             // Handle keys on the tunnel route so this runs BEFORE the TextBox's own Enter handling; otherwise
             // the TextBox inserts a newline and marks the event handled before we ever see plain Enter.
             _Composer.AddHandler(InputElement.KeyDownEvent, OnComposerKeyDown, RoutingStrategies.Tunnel);
+            // Any manual edit ends history navigation so the next Up starts from the edited draft.
+            _Composer.TextChanged += (sender, args) =>
+            {
+                if (!_SuppressHistoryReset)
+                {
+                    _PromptHistory.ResetCursor();
+                }
+            };
 
             _SendButton = AccentButton("Send");
             _SendButton.Tip("Send your message (Enter). While the model is responding this becomes Stop to cancel the turn.");
@@ -936,6 +948,53 @@ namespace Mux.Desktop.Shell
                 e.Handled = true;
                 InsertComposerNewline();
             }
+            else if (e.Key == Key.Up && !ctrl && !shift && CaretAtStart())
+            {
+                if (_PromptHistory.TryPrevious(_Composer.Text ?? string.Empty, out string recalled))
+                {
+                    e.Handled = true;
+                    SetComposerFromHistory(recalled);
+                }
+            }
+            else if (e.Key == Key.Down && !ctrl && !shift && _PromptHistory.IsNavigating && CaretAtEnd())
+            {
+                if (_PromptHistory.TryNext(out string recalled))
+                {
+                    e.Handled = true;
+                    SetComposerFromHistory(recalled);
+                }
+            }
+        }
+
+        private void RecordPrompt(string prompt)
+        {
+            _PromptHistory.Add(prompt);
+            try
+            {
+                new PromptHistoryStore(_ConfigDirectory).Save(_PromptHistory.Entries);
+            }
+            catch (Exception)
+            {
+                // Best-effort; history recall just won't survive a restart.
+            }
+        }
+
+        private bool CaretAtStart()
+        {
+            return _Composer.CaretIndex <= 0;
+        }
+
+        private bool CaretAtEnd()
+        {
+            return _Composer.CaretIndex >= (_Composer.Text ?? string.Empty).Length;
+        }
+
+        private void SetComposerFromHistory(string text)
+        {
+            _SuppressHistoryReset = true;
+            _Composer.Text = text;
+            _Composer.CaretIndex = text.Length;
+            _SuppressHistoryReset = false;
         }
 
         private void OnSend(object? sender, RoutedEventArgs e)
@@ -993,6 +1052,8 @@ namespace Mux.Desktop.Shell
             {
                 return;
             }
+
+            RecordPrompt(prompt);
 
             if (prompt.StartsWith("/", StringComparison.Ordinal))
             {

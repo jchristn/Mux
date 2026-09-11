@@ -93,6 +93,7 @@ namespace Test.Shared
                     WorkspaceSuite.Create(),
                     CodeTokenizerSuite.Create(),
                     DesktopPreferencesSuite.Create(),
+                    PromptHistorySuite.Create(),
 
                     CommandRuntimeResolverSuite.Create(),
                     EndpointCommandParserSuite.Create(),
