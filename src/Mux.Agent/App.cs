@@ -89,7 +89,7 @@ namespace Mux.Agent
             }
         }
 
-        private static WindowIcon? LoadIcon()
+        internal static WindowIcon? LoadIcon()
         {
             // The taskbar/notification area follows the OS theme. Use the white glyph on a dark taskbar and the
             // black glyph on a light one. Load the full-resolution PNG (not the tiny .ico) so the icon renders

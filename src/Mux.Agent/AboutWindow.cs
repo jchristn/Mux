@@ -30,6 +30,7 @@ namespace Mux.Agent
         public AboutWindow()
         {
             Title = "About mux";
+            Icon = App.LoadIcon(); // the mux wordmark glyph, matching the tray icon (theme-aware; null is fine)
             Width = 440;
             Height = 300;
             CanResize = false;
