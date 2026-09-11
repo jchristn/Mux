@@ -302,16 +302,24 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 .ustabs button:hover{color:var(--text)}
 .ustabs button.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
 .chartbody{padding:16px 18px 12px}
-.uframe{display:grid;grid-template-columns:54px 1fr;grid-template-rows:230px auto;column-gap:8px}
+.uframe{display:grid;grid-template-columns:54px 1fr;grid-template-rows:382px auto;column-gap:8px}
 .uy{grid-column:1;grid-row:1;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;font-size:10.5px;color:var(--muted);font-family:monospace;line-height:1;padding:1px 0}
 .uplot{grid-column:2;grid-row:1;position:relative;border-left:1px solid var(--line);border-bottom:1px solid var(--line)}
 .uplot svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 .uplot .ugrid{stroke:var(--line);stroke-width:1;opacity:.45;vector-effect:non-scaling-stroke}
 .uplot .ubar{opacity:.9}
 .uplot .ubar:hover{opacity:1}
+.uplot .utip{position:absolute;z-index:6;pointer-events:none;left:0;top:0;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:11.5px;line-height:1.5;color:var(--text);box-shadow:0 6px 22px rgba(0,0,0,.38);white-space:nowrap;opacity:0;transition:opacity .08s;max-width:75%}
+.uplot .utip.on{opacity:1}
+.uplot .utip .tt{color:var(--muted);font-weight:600;margin-bottom:4px}
+.uplot .utip .tr{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.uplot .utip .tk{display:inline-flex;align-items:center;gap:6px}
+.uplot .utip i{width:9px;height:9px;border-radius:2px;display:inline-block;flex:none}
+.uplot .utip b{font-variant-numeric:tabular-nums;font-weight:700}
+.uplot .utip .tr.tot{margin-top:3px;padding-top:3px;border-top:1px solid var(--line)}
 .ux{grid-column:2;grid-row:2;position:relative;height:15px;margin-top:6px}
 .ux span{position:absolute;transform:translateX(-50%);font-size:10.5px;color:var(--muted);white-space:nowrap}
-.chartempty{height:250px;display:flex;align-items:center;justify-content:center}
+.chartempty{height:415px;display:flex;align-items:center;justify-content:center}
 .chartlegend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;margin:13px 2px 0;color:var(--muted)}
 .chartlegend span{display:inline-flex;align-items:center;gap:6px}
 .chartlegend i{width:10px;height:10px;border-radius:2px;display:inline-block}
@@ -1476,6 +1484,7 @@ function drawUsageChart(){
   var cfg=CHART_TABS[usageState.tab]||CHART_TABS.tokens;
   var note=(typeof cfg.note==="function")?cfg.note(buckets):(cfg.note||"");
   host.innerHTML=barChart(buckets,cfg,usageState.range)+legendHtml(cfg)+(note?'<div class="chartnote">'+esc(note)+'</div>':"");
+  wireUsageHover(buckets,cfg,usageState.range);
 }
 function niceMax(v){if(v<=0)return 1;var p=Math.pow(10,Math.floor(Math.log(v)/Math.LN10));var f=v/p;var nf=f<=1?1:(f<=2?2:(f<=5?5:10));return nf*p;}
 function fmtBucketLabel(ms,rangeId){var d=new Date(ms);
@@ -1494,13 +1503,38 @@ function barChart(buckets,cfg,rangeId){
   for(i=1;i<4;i++){var gy=VH-(i/4)*VH;svg+='<line class="ugrid" x1="0" y1="'+gy.toFixed(2)+'" x2="'+VW+'" y2="'+gy.toFixed(2)+'"/>';}
   buckets.forEach(function(b,bi){var m=b.Metrics||{},bx=bi*slot+(slot-bw)/2,acc=0;
     cfg.series.forEach(function(sr){var v=Math.max(0,sr.g(m)||0);if(v<=0)return;var hh=(v/ymax)*VH,by=VH-acc-hh;acc+=hh;
-      var tv=sr.tg?sr.tg(m):v;
-      svg+='<rect class="ubar" x="'+bx.toFixed(2)+'" y="'+by.toFixed(2)+'" width="'+bw.toFixed(2)+'" height="'+hh.toFixed(2)+'" fill="'+sr.c+'"><title>'+esc(fmtBucketLabel(b.BucketStartUnixMs,rangeId)+" · "+sr.n+": "+cfg.fmt(tv))+'</title></rect>';});});
+      svg+='<rect class="ubar" x="'+bx.toFixed(2)+'" y="'+by.toFixed(2)+'" width="'+bw.toFixed(2)+'" height="'+hh.toFixed(2)+'" fill="'+sr.c+'"/>';});});
   svg+='</svg>';
   var yl='';for(i=4;i>=0;i--)yl+='<span>'+esc(cfg.fmt(ymax*i/4))+'</span>';
   var step=Math.max(1,Math.ceil(n/8)),xl='';
   for(i=0;i<n;i+=step){var pct=(n<=1?50:((i+0.5)/n)*100);xl+='<span style="left:'+pct.toFixed(2)+'%">'+esc(fmtBucketLabel(buckets[i].BucketStartUnixMs,rangeId))+'</span>';}
-  return '<div class="uframe"><div class="uy">'+yl+'</div><div class="uplot">'+svg+'</div><div class="ux">'+xl+'</div></div>';
+  return '<div class="uframe"><div class="uy">'+yl+'</div><div class="uplot">'+svg+'<div class="utip" id="us_tip"></div></div><div class="ux">'+xl+'</div></div>';
+}
+/* Custom hover tooltip: maps the cursor's x-fraction to a bucket, lists every series value for it, and is
+   clamped so the box always stays fully inside the plot area (never spilling outside the chart). */
+function usageTipHtml(b,cfg,rangeId){
+  var m=b.Metrics||{},h='<div class="tt">'+esc(fmtBucketLabel(b.BucketStartUnixMs,rangeId))+'</div>',total=0,additive=cfg.series.length>1;
+  cfg.series.forEach(function(sr){
+    var seg=Math.max(0,sr.g(m)||0);total+=seg;if(sr.tg)additive=false;
+    var val=sr.tg?sr.tg(m):seg;
+    h+='<div class="tr"><span class="tk"><i style="background:'+sr.c+'"></i>'+esc(sr.n)+'</span><b>'+esc(cfg.fmt(val))+'</b></div>';});
+  if(additive)h+='<div class="tr tot"><span class="tk">Total</span><b>'+esc(cfg.fmt(total))+'</b></div>';
+  return h;
+}
+function wireUsageHover(buckets,cfg,rangeId){
+  var host=el("us_chart"),plot=host?host.querySelector(".uplot"):null,tip=el("us_tip"),n=buckets.length;
+  if(!plot||!tip||!n)return;
+  function hide(){tip.classList.remove("on");}
+  plot.addEventListener("mouseleave",hide);
+  plot.addEventListener("mousemove",function(ev){
+    var r=plot.getBoundingClientRect(),x=ev.clientX-r.left,y=ev.clientY-r.top;
+    if(x<0||y<0||x>r.width||y>r.height){hide();return;}
+    var idx=Math.floor((x/r.width)*n);if(idx<0)idx=0;if(idx>=n)idx=n-1;
+    tip.innerHTML=usageTipHtml(buckets[idx],cfg,rangeId);tip.classList.add("on");
+    var pad=8,tw=tip.offsetWidth,th=tip.offsetHeight;
+    var tx=x+14;if(tx+tw>r.width-pad)tx=x-14-tw;if(tx<pad)tx=pad;if(tx+tw>r.width-pad)tx=Math.max(pad,r.width-pad-tw);
+    var ty=y-th-12;if(ty<pad)ty=y+16;if(ty+th>r.height-pad)ty=Math.max(pad,r.height-pad-th);
+    tip.style.left=Math.round(tx)+"px";tip.style.top=Math.round(ty)+"px";});
 }
 /* History table — the shared data grid (sort/filter/paginate/columns), row-click opens a detail modal. */
 var _uhist=[],_uhistTotal=0;

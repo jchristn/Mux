@@ -571,13 +571,24 @@ namespace Mux.Core.Llm
             _LastUsage = record;
             _CumulativeUsage.Add(record);
 
+            long? streamingMs = ComputeStreamingMs(response);
+
+            // Generation throughput = output tokens over the streaming window (first token → last token).
+            // We compute it here rather than using the SDK's OverallTokensPerSecond, which divides prompt +
+            // output tokens by the whole runtime (including time-to-first-token); for a large prompt answered
+            // quickly that reads as many hundreds of tok/s, far above the real token-generation rate. When
+            // the streaming window is unknown (e.g. a non-streamed response) throughput is left unreported.
+            double? tokensPerSecond = (streamingMs.HasValue && streamingMs.Value > 0 && output > 0)
+                ? output / (streamingMs.Value / 1000.0)
+                : (double?)null;
+
             _LastCall = new LlmCallMetrics
             {
                 Usage = record,
                 TimeToFirstTokenMs = response.TimeToFirstTokenMs >= 0 ? response.TimeToFirstTokenMs : (long?)null,
-                StreamingMs = ComputeStreamingMs(response),
+                StreamingMs = streamingMs,
                 TotalMs = response.OverallRuntimeMs >= 0 ? response.OverallRuntimeMs : (long?)null,
-                TokensPerSecond = response.OverallTokensPerSecond > 0 ? response.OverallTokensPerSecond : (double?)null,
+                TokensPerSecond = tokensPerSecond,
                 FinishReason = string.IsNullOrEmpty(response.FinishReason) ? null : response.FinishReason,
                 Model = string.IsNullOrEmpty(response.Model) ? null : response.Model,
                 Success = response.Success
