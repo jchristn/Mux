@@ -1,0 +1,168 @@
+namespace Mux.Desktop.Views
+{
+    using System;
+    using System.Collections.Generic;
+    using System.IO;
+    using Avalonia;
+    using Avalonia.Controls;
+    using Avalonia.Layout;
+    using Avalonia.Media;
+    using Mux.Core.Models;
+    using Mux.Core.Settings;
+    using Mux.Core.Skills;
+
+    /// <summary>
+    /// A manager for installed skills (parity with the TUI's <c>/skills</c>): a sortable table with a green
+    /// <c>enabled</c> badge and per-row actions (enable/disable, edit its <c>SKILL.md</c>, delete), plus an
+    /// "Add skill" scaffold. Discovers from the resolved skills directory via <see cref="SkillLoader"/> and
+    /// mutates via <see cref="SkillManager"/>.
+    /// </summary>
+    public sealed class SkillsWindow : Window
+    {
+        private readonly string _SkillsDirectory;
+        private readonly bool _SkillsEnabled;
+        private readonly DataTableView<SkillStatus> _Table;
+
+        /// <summary>
+        /// Instantiate the skills manager.
+        /// </summary>
+        public SkillsWindow()
+        {
+            MuxSettings settings = SettingsLoader.LoadSettings();
+            _SkillsEnabled = settings.SkillsEnabled;
+            _SkillsDirectory = SettingsLoader.ResolveSkillsDirectory(settings);
+
+            AppTheme theme = AppTheme.Current;
+
+            Title = "Skills";
+            Icon = IconResources.LoadWindowIcon();
+            Width = 1350;
+            Height = 725;
+            MinWidth = 720;
+            MinHeight = 360;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            Background = theme.Surface;
+
+            _Table = new DataTableView<SkillStatus>(BuildColumns(), BuildActions, OnEdit);
+            Content = BuildLayout(theme);
+            Reload();
+        }
+
+        private static List<TableColumn<SkillStatus>> BuildColumns()
+        {
+            return new List<TableColumn<SkillStatus>>
+            {
+                new TableColumn<SkillStatus>("Title", s => string.IsNullOrEmpty(s.Title) ? s.Name : s.Title, new GridLength(2.5, GridUnitType.Star), s => s.Title, s => s.Enabled ? "enabled" : null),
+                new TableColumn<SkillStatus>("Id", s => s.Name, new GridLength(2, GridUnitType.Star), s => s.Name),
+                new TableColumn<SkillStatus>("Commands", s => s.CommandCount.ToString(), new GridLength(1, GridUnitType.Star), s => s.CommandCount),
+                new TableColumn<SkillStatus>("Status", s => s.Valid ? "valid" : "invalid", new GridLength(1.4, GridUnitType.Star), s => s.Valid ? 1 : 0)
+            };
+        }
+
+        private IReadOnlyList<TableRowAction<SkillStatus>> BuildActions(SkillStatus status)
+        {
+            List<TableRowAction<SkillStatus>> actions = new List<TableRowAction<SkillStatus>>();
+            if (status.Valid)
+            {
+                actions.Add(new TableRowAction<SkillStatus>(status.Enabled ? "Disable" : "Enable", s => OnToggle(s)));
+            }
+
+            actions.Add(new TableRowAction<SkillStatus>("Edit", s => OnEdit(s)));
+            actions.Add(new TableRowAction<SkillStatus>("Delete", s => OnDelete(s), destructive: true));
+            return actions;
+        }
+
+        private Control BuildLayout(AppTheme theme)
+        {
+            DockPanel root = new DockPanel { Margin = new Thickness(20) };
+
+            DockPanel headerRow = new DockPanel();
+            StackPanel titleBlock = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+            titleBlock.Children.Add(new TextBlock { Text = "Skills", FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text });
+            titleBlock.Children.Add(new TextBlock { Text = _SkillsDirectory, Foreground = theme.Muted, FontSize = 11, TextWrapping = TextWrapping.Wrap });
+            if (!_SkillsEnabled)
+            {
+                titleBlock.Children.Add(new TextBlock { Text = "Skills are disabled in Settings — enable \"Load user skills\" to use them.", Foreground = new SolidColorBrush(Color.Parse("#bf8700")), FontSize = 12 });
+            }
+
+            DockPanel.SetDock(titleBlock, Dock.Left);
+            headerRow.Children.Add(titleBlock);
+
+            Button add = new Button { Content = "＋  Add skill", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Padding = new Thickness(12, 6, 12, 6) };
+            add.Click += (sender, args) => OnAdd();
+            DockPanel.SetDock(add, Dock.Right);
+            headerRow.Children.Add(add);
+
+            DockPanel.SetDock(headerRow, Dock.Top);
+            root.Children.Add(headerRow);
+
+            _Table.Margin = new Thickness(0, 14, 0, 0);
+            root.Children.Add(_Table);
+            return root;
+        }
+
+        private void Reload()
+        {
+            try
+            {
+                SkillLoader loader = new SkillLoader(_SkillsDirectory);
+                _Table.SetRows(new SkillCatalog(loader.Discover()).GetStatus());
+            }
+            catch (Exception)
+            {
+                _Table.SetRows(new List<SkillStatus>());
+            }
+        }
+
+        private void OnToggle(SkillStatus status)
+        {
+            try
+            {
+                new SkillManager(_SkillsDirectory).SetEnabled(status.Name, !status.Enabled);
+            }
+            catch (Exception)
+            {
+                // Best-effort.
+            }
+
+            Reload();
+        }
+
+        private async void OnAdd()
+        {
+            if (await new SkillScaffoldDialog(_SkillsDirectory).ShowDialog<bool>(this))
+            {
+                Reload();
+            }
+        }
+
+        private async void OnEdit(SkillStatus status)
+        {
+            string path = Path.Combine(_SkillsDirectory, status.Name, "SKILL.md");
+            if (await new SkillEditorDialog(path, status.Name).ShowDialog<bool>(this))
+            {
+                Reload();
+            }
+        }
+
+        private async void OnDelete(SkillStatus status)
+        {
+            bool confirmed = await new ConfirmDialog("Delete skill", "Delete skill \"" + status.Name + "\" from disk?", "Delete", destructive: true).ShowDialog<bool>(this);
+            if (!confirmed)
+            {
+                return;
+            }
+
+            try
+            {
+                new SkillManager(_SkillsDirectory).Remove(status.Name);
+            }
+            catch (Exception)
+            {
+                // Best-effort.
+            }
+
+            Reload();
+        }
+    }
+}

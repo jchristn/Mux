@@ -8,6 +8,15 @@
     <Authors>jchristn</Authors>
     <Company>Joel Christner</Company>
     <Copyright>(c)2026 Joel Christner</Copyright>
+    <!-- Shared package + repository metadata. These only take effect when a project is packed
+         (dotnet pack); non-packable projects (exe/test) ignore them. Individual packable projects
+         (Mux.Core, Mux.Search) add their own PackageId, Description, tags, README, and icon. -->
+    <PackageProjectUrl>https://github.com/jchristn/Mux</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jchristn/Mux</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

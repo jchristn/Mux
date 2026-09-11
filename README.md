@@ -15,7 +15,7 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.9.0-blue.svg" alt="v0.9.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.10.0-blue.svg" alt="v0.10.0"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha"></a>
 </p>
 
@@ -70,6 +70,8 @@
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Local REST server & tray agent (`v0.9.0`, opt-in): `mux serve` starts a loopback-bound, token-guarded REST + WebSocket API (Watson 7) over mux's in-process services; a cross-platform Avalonia system-tray agent hosts it in the background with **About / Launch Mux / Exit**. Never auto-starts from a plain run. See `docs/REST_API.md`
 - Usage analytics: every model call is recorded to a local SQLite database (`~/.mux/usage.db`, multi-process safe, no external service) — tokens, cost, time-to-first-token, streaming time, latency, and throughput. See it via `/usage` and the live sidebar cost in the TUI, or the **Usage** and **Pricing** pages on the `mux serve` dashboard (charts over time with endpoint/model filters). Cost derives from an editable `pricing.json`. See `docs/CONFIG.md`
+- Desktop app (`v0.10.0`, in progress): `mux Desktop` is a cross-platform Avalonia client that will reach full parity with the TUI and the `mux serve` dashboard's monitoring/reporting, with first-class conversations/threads and localization. It links `Mux.Core` in-process. The foundation (app shell, splash, About/Help, single-instance, i18n scaffold) is in `src/Mux.Desktop`; launch it with `run-desktop.bat` / `run-desktop.sh`. See `DESKTOP_APP.md`
+- Engine as a library: `Mux.Core` (and `Mux.Search`) publish to NuGet with a symbol package, so you can build your own experiences on the mux engine (`AgentLoop`, `SessionStore`, `McpToolManager`, `UsageQueryService`, `SettingsLoader`)
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
 - Health checks: `mux probe` validates config, backend reachability, auth, and model access
 - Endpoint & model inspection: `mux endpoint list`/`show` report the configured endpoints, and `mux endpoint models` live-enumerates the models each backend advertises (Ollama `/api/tags`, OpenAI-compatible `/v1/models`) — as a table or `--output-format json`

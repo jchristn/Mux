@@ -2,10 +2,20 @@
 
   <PropertyGroup>
     <Version>0.5.0</Version>
-    <Description>Search abstractions and provider clients for mux</Description>
+    <Title>Mux.Search</Title>
     <PackageId>Mux.Search</PackageId>
+    <Description>Web-search abstractions and provider clients (Tavily, You.com) for mux and Mux.Core.</Description>
+    <PackageTags>mux;web-search;tavily;you;search</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="PACKAGE.md" Pack="true" PackagePath="README.md" />
+    <None Include="..\..\assets\icon-black.png" Pack="true" PackagePath="icon.png" />
+  </ItemGroup>
 
 </Project>

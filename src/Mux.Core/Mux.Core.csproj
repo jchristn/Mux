@@ -1,12 +1,23 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>0.9.0</Version>
-    <Description>Core models, agent loop, tools, and LLM client for mux</Description>
+    <Version>0.10.0</Version>
+    <Title>Mux.Core</Title>
     <PackageId>Mux.Core</PackageId>
+    <Description>The mux engine: agent loop with streaming events, built-in tools, MCP client, skills, subagents, session persistence, checkpoints, approval/sandbox governance, and usage telemetry — backend-agnostic across Ollama, OpenAI, Azure, Anthropic, Gemini, Vertex, Bedrock, and any OpenAI-compatible API. Build your own experiences on top of mux.</Description>
+    <PackageTags>mux;ai;agent;llm;openai;ollama;anthropic;gemini;mcp;coding-agent;tools</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Packaged into the NuGet package root (README rendered on nuget.org, icon as the package icon). -->
+    <None Include="PACKAGE.md" Pack="true" PackagePath="README.md" />
+    <None Include="..\..\assets\icon-black.png" Pack="true" PackagePath="icon.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.11" />
@@ -16,6 +27,8 @@
     <PackageReference Include="Microsoft.Playwright" Version="1.62.0" />
     <PackageReference Include="PolyPrompt" Version="2.6.0" />
     <PackageReference Include="Voltaic" Version="0.7.1" />
+    <!-- SourceLink is bundled in the .NET 8+ SDK; PublishRepositoryUrl/EmbedUntrackedSources
+         (in Directory.Build.props) drive the source-linked .snupkg with no extra package. -->
   </ItemGroup>
 
   <ItemGroup>

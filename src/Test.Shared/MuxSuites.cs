@@ -81,6 +81,18 @@ namespace Test.Shared
                     RestServerSettingsSuite.Create(),
                     MuxServerRouteSuite.Create(),
                     SessionTitleHelperSuite.Create(),
+
+                    // Mux.Desktop.Core logic suites (localization, formatters, thread/usage/conversation services).
+                    DesktopLocalizationSuite.Create(),
+                    DesktopFormattersSuite.Create(),
+                    ThreadServiceSuite.Create(),
+                    UsageWindowSuite.Create(),
+                    UsageAnalyticsSuite.Create(),
+                    TurnProjectionSuite.Create(),
+                    ConversationServiceSuite.Create(),
+                    WorkspaceSuite.Create(),
+                    CodeTokenizerSuite.Create(),
+
                     CommandRuntimeResolverSuite.Create(),
                     EndpointCommandParserSuite.Create(),
                     StructuredOutputFormatterSuite.Create(),

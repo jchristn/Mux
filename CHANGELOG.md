@@ -2,10 +2,32 @@
 
 All notable changes to mux are documented here.
 
-## Unreleased
+## 0.10.0
 
 ### Added
 
+- **mux Desktop (Avalonia) — foundation.** A new cross-platform desktop front end (`src/Mux.Desktop`) that
+  will reach full parity with the interactive TUI and the `mux serve` dashboard's monitoring/reporting, add
+  first-class conversations/threads, and localize the UI. This release lays the foundation: the Avalonia app
+  shell (conversation sidebar, header, workspace), a startup **splash screen**, an **About / Help** window
+  (modeled on the tray agent's About window), a single-instance lock, and an internationalization scaffold.
+  It links `Mux.Core` in-process (the REST API is not used for agentic work). Conversation/thread management
+  is functional today — the sidebar lists your saved sessions and **New conversation** creates one (threads
+  are ordinary mux sessions, shared with the TUI). The UI-framework-agnostic logic lives in a separate,
+  Avalonia-free **`Mux.Desktop.Core`** library (localization, formatters, and the thread/usage/conversation
+  services over `Mux.Core`, plus a `TurnProjection` event accumulator), covered by passing Touchstone suites
+  in `Test.Shared`. As part of this work, `SessionTitleHelper` moved into `Mux.Core.Sessions` so both front
+  ends share it. The shell is a Claude/Codex-style chat: a conversation sidebar, a header model/endpoint
+  picker, a streaming transcript, and a composer. Sending a message drives the mux agent in-process
+  (`AgentLoopTurnRunner` → `AgentLoop`) under an auto-safe approval policy (read-only tools auto-approve;
+  mutating tools prompt), streams the reply, and persists the conversation. Like the TUI, the desktop app
+  brings up the tray agent at startup (opt out with `MUX_AGENT_AUTOSTART=0`). See `DESKTOP_APP.md` (plan) and
+  `docs/DESKTOP.md` (guide). Launch it with `run-desktop.bat` / `run-desktop.sh`.
+- **`Mux.Core` published to NuGet.** `Mux.Core` (and its `Mux.Search` dependency) now carry full package
+  metadata — MIT license, project/repository URLs, README, icon, tags — and produce a symbol package
+  (`.snupkg`) with SourceLink, so others can build their own experiences on top of the mux engine.
+- **Version bump to 0.10.0** across `Mux.Core`, `Mux.Cli`, `Mux.Agent`, `Mux.Server`, `Mux.Desktop`, and
+  `Defaults.ProductVersion`.
 - **Usage telemetry (durable, cross-process).** Every model call is recorded to a local SQLite database
   (`~/.mux/usage.db`, WAL mode — no external process) with token counts, time-to-first-token, streaming
   time, total latency, throughput, finish reason, and success, tagged by endpoint, model, provider,

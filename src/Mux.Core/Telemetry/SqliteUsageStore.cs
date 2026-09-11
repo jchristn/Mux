@@ -675,6 +675,12 @@ WHERE id IN (
                     command.Parameters.AddWithValue("$fmodel", filter.Model);
                 }
 
+                if (!string.IsNullOrWhiteSpace(filter.SessionId))
+                {
+                    conditions.Add("session_id = $fsession");
+                    command.Parameters.AddWithValue("$fsession", filter.SessionId);
+                }
+
                 if (filter.CallKind.HasValue)
                 {
                     conditions.Add("call_kind = $kind");

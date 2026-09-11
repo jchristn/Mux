@@ -3,7 +3,7 @@ namespace Test.Shared.Suites
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
-    using Mux.Cli.Commands;
+    using Mux.Core.Sessions;
     using Touchstone.Core;
 
     /// <summary>

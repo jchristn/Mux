@@ -31,6 +31,12 @@ namespace Mux.Core.Telemetry
         public string? Model { get; set; }
 
         /// <summary>
+        /// An optional session-id constraint. Null (the default) matches all sessions. Used to scope usage
+        /// metrics to a single conversation.
+        /// </summary>
+        public string? SessionId { get; set; }
+
+        /// <summary>
         /// An optional call-kind constraint. Null (the default) matches all kinds.
         /// </summary>
         public UsageCallKindEnum? CallKind { get; set; }
