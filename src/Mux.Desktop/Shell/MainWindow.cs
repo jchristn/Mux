@@ -55,6 +55,7 @@ namespace Mux.Desktop.Shell
         private StackPanel _Transcript = null!;
         private ScrollViewer _TranscriptScroll = null!;
         private StackPanel _EmptyState = null!;
+        private StackPanel _OverviewHost = null!;
         private TextBox _Composer = null!;
         private Button _SendButton = null!;
 
@@ -757,6 +758,10 @@ namespace Mux.Desktop.Shell
                 TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center
             });
+
+            _OverviewHost = new StackPanel { Spacing = 12, Margin = new Thickness(0, 18, 0, 0), HorizontalAlignment = HorizontalAlignment.Center, MinWidth = 520 };
+            _EmptyState.Children.Add(_OverviewHost);
+            _ = PopulateOverviewAsync();
 
             _Transcript = new StackPanel { Margin = new Thickness(24, 16, 24, 16), Spacing = 14 };
             _TranscriptScroll = new ScrollViewer { HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Content = _Transcript };
@@ -1678,7 +1683,122 @@ namespace Mux.Desktop.Shell
 
         private void UpdateEmptyState()
         {
-            _EmptyState.IsVisible = _Transcript.Children.Count == 0;
+            bool empty = _Transcript.Children.Count == 0;
+            if (empty && !_EmptyState.IsVisible)
+            {
+                _ = PopulateOverviewAsync();
+            }
+
+            _EmptyState.IsVisible = empty;
+        }
+
+        private async Task PopulateOverviewAsync()
+        {
+            if (_OverviewHost == null)
+            {
+                return;
+            }
+
+            _OverviewHost.Children.Clear();
+
+            // Configuration snapshot.
+            try
+            {
+                List<EndpointConfig> endpoints = SettingsLoader.LoadEndpoints();
+                MuxSettings settings = SettingsLoader.LoadSettings();
+                int mcpCount = SettingsLoader.LoadMcpServers().Count;
+
+                EndpointConfig? def = null;
+                foreach (EndpointConfig endpoint in endpoints)
+                {
+                    if (endpoint.IsDefault)
+                    {
+                        def = endpoint;
+                        break;
+                    }
+                }
+
+                if (def == null && endpoints.Count > 0)
+                {
+                    def = endpoints[0];
+                }
+
+                WrapPanel stats = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
+                stats.Children.Add(StatPill("Endpoints", endpoints.Count.ToString(), "Configured model endpoints. Manage under Manage ▸ Endpoints."));
+                stats.Children.Add(StatPill("Default model", def != null ? (string.IsNullOrEmpty(def.Model) ? def.Name : def.Model) : "none", "The endpoint new conversations use."));
+                stats.Children.Add(StatPill("MCP servers", mcpCount.ToString(), "Configured MCP tool servers."));
+                stats.Children.Add(StatPill("Skills", settings.SkillsEnabled ? "on" : "off", "Whether user skills are loaded."));
+                stats.Children.Add(StatPill("Telemetry", settings.Telemetry.Enabled ? "on" : "off", "Whether usage analytics are recorded."));
+                _OverviewHost.Children.Add(stats);
+            }
+            catch (Exception)
+            {
+                // Skip the config snapshot on any read failure.
+            }
+
+            // Recent conversations.
+            try
+            {
+                IReadOnlyList<ThreadSummary> threads = await _Threads.ListAsync(CancellationToken.None);
+                if (threads.Count > 0)
+                {
+                    StackPanel recent = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Stretch };
+                    recent.Children.Add(new TextBlock { Text = "Recent conversations", FontWeight = FontWeight.SemiBold, Foreground = _Theme.Text, Margin = new Thickness(2, 6, 0, 2) });
+
+                    int shown = 0;
+                    foreach (ThreadSummary summary in threads)
+                    {
+                        if (shown >= 5)
+                        {
+                            break;
+                        }
+
+                        recent.Children.Add(RecentConversationRow(summary));
+                        shown++;
+                    }
+
+                    _OverviewHost.Children.Add(recent);
+                }
+            }
+            catch (Exception)
+            {
+                // Skip recent conversations on failure.
+            }
+        }
+
+        private Control StatPill(string label, string value, string tip)
+        {
+            StackPanel content = new StackPanel { Spacing = 1 };
+            content.Children.Add(new TextBlock { Text = label.ToUpperInvariant(), Foreground = _Theme.Muted, FontSize = 10, FontWeight = FontWeight.SemiBold });
+            content.Children.Add(new TextBlock { Text = value, Foreground = _Theme.Text, FontSize = 15, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
+
+            return new Border
+            {
+                Background = _Theme.SurfaceAlt,
+                BorderBrush = _Theme.Border,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(14, 8, 14, 8),
+                Margin = new Thickness(0, 0, 8, 8),
+                MinWidth = 120,
+                Child = content
+            }.Tip(tip);
+        }
+
+        private Control RecentConversationRow(ThreadSummary summary)
+        {
+            Button button = new Button
+            {
+                Content = new TextBlock { Text = DisplayTitle(summary), TextTrimming = TextTrimming.CharacterEllipsis, Foreground = _Theme.Muted, FontSize = 13 },
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(8, 4, 8, 4)
+            };
+            button.Tip("Open this conversation.");
+            button.Click += (sender, args) => _ = OpenThreadAsync(summary.Id);
+            return button;
         }
 
         private void InsertComposerNewline()
