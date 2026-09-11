@@ -30,6 +30,7 @@ namespace Mux.Core.Telemetry
         private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
         private readonly Task _WriterLoop;
         private long _DroppedCount = 0;
+        private long _PendingCount = 0;
         private int _LastPruneDayNumber = -1;
         private bool _Disposed = false;
 
@@ -90,7 +91,11 @@ namespace Mux.Core.Telemetry
                 usageEvent.TimestampUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             }
 
-            if (!_Channel.Writer.TryWrite(usageEvent))
+            if (_Channel.Writer.TryWrite(usageEvent))
+            {
+                Interlocked.Increment(ref _PendingCount);
+            }
+            else
             {
                 Interlocked.Increment(ref _DroppedCount);
             }
@@ -99,10 +104,14 @@ namespace Mux.Core.Telemetry
         /// <inheritdoc />
         public async Task FlushAsync(CancellationToken token)
         {
-            // Best-effort: wait for the buffer to drain, bounded so a wedged writer cannot hang a caller.
+            // Best-effort: wait until every enqueued event has been durably written (not merely dequeued),
+            // bounded so a wedged writer cannot hang a caller. Draining the channel's queue is not enough:
+            // the writer removes a batch from the channel (dropping its Count to zero) before the async
+            // SQLite insert completes, so a Count-only wait can return before the rows are visible to a new
+            // query connection. _PendingCount is only decremented once the batch has been persisted.
             for (int i = 0; i < 200; i++)
             {
-                if (_Channel.Reader.Count == 0)
+                if (Interlocked.Read(ref _PendingCount) <= 0)
                 {
                     return;
                 }
@@ -219,6 +228,12 @@ namespace Mux.Core.Telemetry
             catch (Exception ex)
             {
                 Log("usage recorder insert failed (" + batch.Count + " events dropped): " + ex.Message);
+            }
+            finally
+            {
+                // These events are now durably written (or dropped after a failure): either way they are no
+                // longer pending, so FlushAsync callers waiting on _PendingCount can proceed.
+                Interlocked.Add(ref _PendingCount, -batch.Count);
             }
         }
 
