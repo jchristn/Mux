@@ -170,6 +170,7 @@ namespace Mux.Desktop.Shell
                 new PaletteCommand("Subagents", "Manage subagent definitions", OpenSubagentsWindow),
                 new PaletteCommand("Model pricing", "Edit model pricing", OpenPricingWindow),
                 new PaletteCommand("Web search providers", "Configure web search", OpenSearchProvidersWindow),
+                new PaletteCommand("Reasoning effort", "Set the current model's reasoning effort", OpenEffortPicker),
                 new PaletteCommand("Settings", "Open settings", OpenSettingsWindow),
                 new PaletteCommand("About", "About mux", OpenAboutWindow)
             };
@@ -596,6 +597,36 @@ namespace Mux.Desktop.Shell
         private void OpenSearchProvidersWindow()
         {
             _ = new SearchProvidersWindow().ShowDialog(this);
+        }
+
+        private async void OpenEffortPicker()
+        {
+            if (!(_ModelPicker.SelectedItem is EndpointConfig selected))
+            {
+                AddNotice("Select an endpoint first to change its reasoning effort.", isError: false);
+                return;
+            }
+
+            List<EndpointConfig> endpoints = SettingsLoader.LoadEndpoints();
+            EndpointConfig? target = endpoints.Find(e => string.Equals(e.Name, selected.Name, StringComparison.OrdinalIgnoreCase));
+            if (target == null)
+            {
+                return;
+            }
+
+            if (await new ReasoningEffortDialog(target).ShowDialog<bool>(this))
+            {
+                try
+                {
+                    SettingsLoader.SaveEndpoints(endpoints);
+                }
+                catch (Exception)
+                {
+                    // Best-effort.
+                }
+
+                PopulateModelPicker();
+            }
         }
 
         private void OpenAboutWindow()
@@ -1242,6 +1273,9 @@ namespace Mux.Desktop.Shell
                 case "/websearch":
                     OpenSearchProvidersWindow();
                     break;
+                case "/effort":
+                    OpenEffortPicker();
+                    break;
                 case "/new":
                     _ = NewChatAsync();
                     break;
@@ -1296,6 +1330,7 @@ namespace Mux.Desktop.Shell
             card.Children.Add(CommandRow("/subagents", "Manage subagent definitions"));
             card.Children.Add(CommandRow("/pricing", "Edit model pricing"));
             card.Children.Add(CommandRow("/search", "Configure web search providers"));
+            card.Children.Add(CommandRow("/effort", "Set the model's reasoning effort"));
             card.Children.Add(CommandRow("/commands", "Open the command palette (Ctrl+K)"));
             card.Children.Add(CommandRow("/new", "Start a new conversation"));
             card.Children.Add(CommandRow("/help", "Show this menu"));
