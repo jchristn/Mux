@@ -20,6 +20,9 @@ namespace Mux.Desktop.Views
     public sealed class UsageDashboardWindow : Window
     {
         private const string TableColumns = "150,1.2*,1.6*,66,66,86,86,72";
+
+        // Upper bound on events pulled for client-side filtering/aggregation. Generous for a desktop view.
+        private const int MaxEvents = 20000;
         private const double PlotHeight = 270;
         private static readonly IBrush PromptColor = new SolidColorBrush(Color.Parse("#4c8bf5"));
         private static readonly IBrush CachedColor = new SolidColorBrush(Color.Parse("#3fb950"));
@@ -49,11 +52,15 @@ namespace Mux.Desktop.Views
         private readonly Dictionary<UsageRange, Button> _RangeButtons = new Dictionary<UsageRange, Button>();
         private readonly Dictionary<ChartMetric, Button> _MetricButtons = new Dictionary<ChartMetric, Button>();
         private readonly List<UsageBucket> _Series = new List<UsageBucket>();
+        private readonly List<UsageEventRow> _AllEvents = new List<UsageEventRow>();
         private readonly List<UsageEventRow> _Events = new List<UsageEventRow>();
+        private readonly TextBox _EndpointFilter = new TextBox { Width = 210, PlaceholderText = "Endpoint contains…" };
+        private readonly TextBox _ConversationFilter = new TextBox { Width = 230, PlaceholderText = "Conversation contains…" };
 
         private UsageRange _Range = UsageRange.Day;
         private ChartMetric _Metric = ChartMetric.Tokens;
         private readonly Func<string?, string?>? _ConversationName;
+        private bool _LoadTruncated;
         private int _SortColumn;
         private bool _SortDescending = true;
 
@@ -90,7 +97,7 @@ namespace Mux.Desktop.Views
             Grid grid = new Grid
             {
                 Margin = new Thickness(20),
-                RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,*")
+                RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto,*")
             };
 
             AddRow(grid, 0, BuildHeader(theme));
@@ -103,17 +110,43 @@ namespace Mux.Desktop.Views
 
             AddRow(grid, 3, _ChartHost);
 
+            AddRow(grid, 4, BuildFilterBar(theme));
+
             _Status.Foreground = theme.Muted;
-            _Status.Margin = new Thickness(2, 12, 0, 6);
-            AddRow(grid, 4, _Status);
+            _Status.Margin = new Thickness(2, 8, 0, 6);
+            AddRow(grid, 5, _Status);
 
             BuildEventsHeader(theme);
-            AddRow(grid, 5, new Border { BorderBrush = theme.Border, BorderThickness = new Thickness(0, 0, 0, 1), Child = _EventsHeader });
+            AddRow(grid, 6, new Border { BorderBrush = theme.Border, BorderThickness = new Thickness(0, 0, 0, 1), Child = _EventsHeader });
 
             ScrollViewer scroll = new ScrollViewer { Content = _EventsList, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
-            AddRow(grid, 6, scroll);
+            AddRow(grid, 7, scroll);
 
             return grid;
+        }
+
+        private Control BuildFilterBar(AppTheme theme)
+        {
+            StackPanel bar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 10, 0, 0) };
+            bar.Children.Add(new TextBlock { Text = "Filter", VerticalAlignment = VerticalAlignment.Center, Foreground = theme.Muted, FontSize = 12, FontWeight = FontWeight.SemiBold });
+
+            _EndpointFilter.Tip("Show only calls whose endpoint name contains this text. Filters the table and recomputes the KPIs and charts above.");
+            _EndpointFilter.TextChanged += (sender, args) => ApplyFilters(AppTheme.Current);
+            bar.Children.Add(_EndpointFilter);
+
+            _ConversationFilter.Tip("Show only calls whose conversation name contains this text. Filters the table and recomputes the KPIs and charts above.");
+            _ConversationFilter.TextChanged += (sender, args) => ApplyFilters(AppTheme.Current);
+            bar.Children.Add(_ConversationFilter);
+
+            Button clear = new Button { Content = "Clear", Padding = new Thickness(10, 4, 10, 4) };
+            clear.Tip("Clear both filters and show all loaded calls.");
+            clear.Click += (sender, args) =>
+            {
+                _EndpointFilter.Text = string.Empty;
+                _ConversationFilter.Text = string.Empty;
+            };
+            bar.Children.Add(clear);
+            return bar;
         }
 
         private Control BuildHeader(AppTheme theme)
@@ -244,31 +277,172 @@ namespace Mux.Desktop.Views
                 _EventsList.Children.Clear();
                 _Series.Clear();
                 _Events.Clear();
+                _AllEvents.Clear();
                 return;
             }
 
             try
             {
-                UsageSummary summary = await _Analytics.GetSummaryAsync(_Range, null, null, CancellationToken.None);
-                List<UsageBucket> series = await _Analytics.GetTimeseriesAsync(_Range, null, null, CancellationToken.None);
-                UsageEventPage page = await _Analytics.GetEventsAsync(_Range, null, null, null, 1, 200, CancellationToken.None);
-
-                RenderKpis(summary.Metrics, theme);
-
-                _Series.Clear();
-                _Series.AddRange(series);
-                _ChartHost.Child = BuildChart(theme);
-
-                _Events.Clear();
-                _Events.AddRange(page.Items);
-                RenderEvents(theme);
-
-                _Status.Text = "Showing " + page.Items.Count + " of " + page.TotalCount + " calls in the last " + _Range.ToString().ToLowerInvariant() + ".";
+                // Fetch every call in the range, then filter and aggregate on the client so the table, KPIs,
+                // and charts all reflect the endpoint/conversation filters consistently.
+                UsageEventPage page = await _Analytics.GetEventsAsync(_Range, null, null, null, 1, MaxEvents, CancellationToken.None);
+                _AllEvents.Clear();
+                _AllEvents.AddRange(page.Items);
+                _LoadTruncated = page.TotalCount > _AllEvents.Count;
+                ApplyFilters(theme);
             }
             catch (Exception ex)
             {
                 _Status.Text = "Could not load usage: " + ex.Message;
             }
+        }
+
+        private void ApplyFilters(AppTheme theme)
+        {
+            if (!_Analytics.IsEnabled)
+            {
+                return;
+            }
+
+            string endpointFilter = (_EndpointFilter.Text ?? string.Empty).Trim();
+            string conversationFilter = (_ConversationFilter.Text ?? string.Empty).Trim();
+
+            _Events.Clear();
+            foreach (UsageEventRow row in _AllEvents)
+            {
+                if (endpointFilter.Length > 0 && (row.EndpointName ?? string.Empty).IndexOf(endpointFilter, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    continue;
+                }
+
+                if (conversationFilter.Length > 0 && ConversationLabel(row).IndexOf(conversationFilter, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    continue;
+                }
+
+                _Events.Add(row);
+            }
+
+            RenderKpis(ComputeMetrics(_Events), theme);
+
+            _Series.Clear();
+            _Series.AddRange(ComputeSeries(_Events));
+            _ChartHost.Child = BuildChart(theme);
+
+            RenderEvents(theme);
+
+            bool filtered = endpointFilter.Length > 0 || conversationFilter.Length > 0;
+            string scope = filtered ? " of " + _AllEvents.Count + " loaded" : string.Empty;
+            string truncated = _LoadTruncated ? " (most recent " + _AllEvents.Count + " loaded)" : string.Empty;
+            _Status.Text = "Showing " + _Events.Count + scope + " call" + (_Events.Count == 1 ? string.Empty : "s")
+                + " in the last " + _Range.ToString().ToLowerInvariant() + (filtered ? ", filtered" : string.Empty) + "." + truncated;
+        }
+
+        private static UsageMetrics ComputeMetrics(List<UsageEventRow> events)
+        {
+            UsageMetrics metrics = new UsageMetrics { Calls = events.Count };
+            long errors = 0;
+            List<double> ttft = new List<double>();
+            List<double> latency = new List<double>();
+            List<double> streaming = new List<double>();
+            List<double> throughput = new List<double>();
+
+            foreach (UsageEventRow row in events)
+            {
+                if (!row.Success)
+                {
+                    errors++;
+                }
+
+                metrics.InputTokens += row.InputTokens;
+                metrics.CachedTokens += row.CachedTokens;
+                metrics.OutputTokens += row.OutputTokens;
+                metrics.TotalTokens += row.TotalTokens;
+                metrics.CostUsd += row.CostUsd;
+
+                if (row.TimeToFirstTokenMs.HasValue)
+                {
+                    ttft.Add(row.TimeToFirstTokenMs.Value);
+                }
+
+                if (row.TotalMs.HasValue)
+                {
+                    latency.Add(row.TotalMs.Value);
+                }
+
+                if (row.StreamingMs.HasValue)
+                {
+                    streaming.Add(row.StreamingMs.Value);
+                }
+
+                if (row.TokensPerSecond.HasValue)
+                {
+                    throughput.Add(row.TokensPerSecond.Value);
+                }
+            }
+
+            metrics.Errors = errors;
+            metrics.ErrorRate = metrics.Calls > 0 ? (double)errors / metrics.Calls : 0.0;
+            metrics.CacheHitRate = metrics.InputTokens > 0 ? (double)metrics.CachedTokens / metrics.InputTokens : 0.0;
+
+            metrics.TtftMsDist = UsageDistribution.From(ttft, Percentile);
+            metrics.TotalMsDist = UsageDistribution.From(latency, Percentile);
+            metrics.StreamMsDist = UsageDistribution.From(streaming, Percentile);
+            metrics.ThroughputDist = UsageDistribution.From(throughput, Percentile);
+
+            metrics.AvgTtftMs = metrics.TtftMsDist.Avg;
+            metrics.P95TtftMs = metrics.TtftMsDist.P95;
+            metrics.P99TtftMs = metrics.TtftMsDist.P99;
+            metrics.AvgTotalMs = metrics.TotalMsDist.Avg;
+            metrics.P95TotalMs = metrics.TotalMsDist.P95;
+            metrics.P99TotalMs = metrics.TotalMsDist.P99;
+            metrics.AvgStreamMs = metrics.StreamMsDist.Avg;
+            metrics.AvgTokensPerSec = metrics.ThroughputDist.Avg;
+            return metrics;
+        }
+
+        private List<UsageBucket> ComputeSeries(List<UsageEventRow> events)
+        {
+            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            UsageWindow window = UsageWindow.Compute(_Range, now);
+            int count = Math.Max(1, window.BucketCount);
+
+            List<List<UsageEventRow>> grouped = new List<List<UsageEventRow>>(count);
+            for (int i = 0; i < count; i++)
+            {
+                grouped.Add(new List<UsageEventRow>());
+            }
+
+            foreach (UsageEventRow row in events)
+            {
+                long offset = row.TimestampUnixMs - window.FromUnixMs;
+                int index = window.BucketMs > 0 ? (int)(offset / window.BucketMs) : 0;
+                index = Math.Clamp(index, 0, count - 1);
+                grouped[index].Add(row);
+            }
+
+            List<UsageBucket> series = new List<UsageBucket>(count);
+            for (int i = 0; i < count; i++)
+            {
+                series.Add(new UsageBucket
+                {
+                    BucketStartUnixMs = window.FromUnixMs + (i * window.BucketMs),
+                    Metrics = ComputeMetrics(grouped[i])
+                });
+            }
+
+            return series;
+        }
+
+        private static double Percentile(List<double> sortedValues, double quantile)
+        {
+            if (sortedValues.Count == 0)
+            {
+                return 0.0;
+            }
+
+            int index = (int)Math.Round(quantile * (sortedValues.Count - 1));
+            return sortedValues[Math.Clamp(index, 0, sortedValues.Count - 1)];
         }
 
         private void RenderKpis(UsageMetrics metrics, AppTheme theme)
