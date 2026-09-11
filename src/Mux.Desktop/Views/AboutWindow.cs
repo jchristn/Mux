@@ -1,6 +1,7 @@
 namespace Mux.Desktop.Views
 {
     using System;
+    using System.Runtime.InteropServices;
     using Avalonia;
     using Avalonia.Controls;
     using Avalonia.Input;
@@ -37,8 +38,8 @@ namespace Mux.Desktop.Views
 
             Title = localization.Get(StringKeys.AboutHelp);
             Icon = IconResources.LoadWindowIcon();
-            Width = 520;
-            Height = 460;
+            Width = 560;
+            Height = 620;
             CanResize = false;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = theme.Surface;
@@ -122,6 +123,30 @@ namespace Mux.Desktop.Views
                 HorizontalAlignment = HorizontalAlignment.Center
             });
 
+            panel.Children.Add(new Border
+            {
+                BorderBrush = theme.Border,
+                BorderThickness = new Thickness(0, 1, 0, 0),
+                Margin = new Thickness(0, 12, 0, 6),
+                Width = 380
+            });
+
+            StackPanel diagnostics = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
+            diagnostics.Children.Add(new TextBlock
+            {
+                Text = "Diagnostics",
+                Foreground = theme.Text,
+                FontWeight = FontWeight.SemiBold,
+                TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+            diagnostics.Children.Add(DiagnosticRow("Version", Defaults.ProductVersion, "The mux product version this desktop app was built from.", theme));
+            diagnostics.Children.Add(DiagnosticRow("Config directory", SafeConfigDirectory(), "Where mux reads and writes its settings, endpoints, and telemetry (set MUX_CONFIG_DIR to override).", theme));
+            diagnostics.Children.Add(DiagnosticRow("Runtime", RuntimeInformation.FrameworkDescription, "The .NET runtime hosting the app.", theme));
+            diagnostics.Children.Add(DiagnosticRow("OS", RuntimeInformation.OSDescription.Trim(), "The operating system and version.", theme));
+            diagnostics.Children.Add(DiagnosticRow("Architecture", RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(), "The process CPU architecture.", theme));
+            panel.Children.Add(diagnostics);
+
             panel.Children.Add(new TextBlock
             {
                 Text = "(c)2026 Joel Christner",
@@ -133,6 +158,33 @@ namespace Mux.Desktop.Views
             });
 
             Content = panel;
+        }
+
+        private static Control DiagnosticRow(string label, string value, string tip, AppTheme theme)
+        {
+            StackPanel row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center };
+            row.Children.Add(new TextBlock { Text = label, Foreground = theme.Muted, FontSize = 12, FontWeight = FontWeight.SemiBold });
+            row.Children.Add(new TextBlock
+            {
+                Text = value,
+                Foreground = theme.Text,
+                FontSize = 12,
+                MaxWidth = 360,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+            return row.Tip(tip + "  (" + value + ")");
+        }
+
+        private static string SafeConfigDirectory()
+        {
+            try
+            {
+                return SettingsLoader.GetConfigDirectory();
+            }
+            catch (Exception)
+            {
+                return "(unavailable)";
+            }
         }
     }
 }
