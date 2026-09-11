@@ -110,7 +110,7 @@ namespace Mux.Core.Settings
                 };
 
                 string defaultEndpoints = JsonSerializer.Serialize(root, _JsonWriteOptions);
-                File.WriteAllText(endpointsPath, defaultEndpoints);
+                WriteAllTextAtomic(endpointsPath, defaultEndpoints);
             }
 
             string settingsPath = Path.Combine(configDir, "settings.json");
@@ -118,7 +118,7 @@ namespace Mux.Core.Settings
             {
                 MuxSettings defaultSettings = NormalizeSettingsForPersistence(new MuxSettings());
                 string defaultSettingsJson = JsonSerializer.Serialize(defaultSettings, _JsonWriteOptions);
-                File.WriteAllText(settingsPath, defaultSettingsJson);
+                WriteAllTextAtomic(settingsPath, defaultSettingsJson);
             }
 
             string hooksPath = Path.Combine(configDir, "hooks.json");
@@ -127,7 +127,7 @@ namespace Mux.Core.Settings
                 // Seed an empty plugin config. Hooks and custom commands are inert until the user adds
                 // entries here, so seeding never changes behavior on upgrade.
                 string defaultHooks = JsonSerializer.Serialize(new PluginConfig(), _JsonWriteOptions);
-                File.WriteAllText(hooksPath, defaultHooks);
+                WriteAllTextAtomic(hooksPath, defaultHooks);
             }
 
             string keybindingsPath = Path.Combine(configDir, "keybindings.json");
@@ -141,7 +141,7 @@ namespace Mux.Core.Settings
                 };
 
                 string defaultKeybindings = JsonSerializer.Serialize(keybindingsRoot, _JsonWriteOptions);
-                File.WriteAllText(keybindingsPath, defaultKeybindings);
+                WriteAllTextAtomic(keybindingsPath, defaultKeybindings);
             }
 
             // Seed the curated lifecycle subagents, tracking seeded names in a manifest so a default the
@@ -163,7 +163,7 @@ namespace Mux.Core.Settings
                 };
 
                 string defaultPrompts = JsonSerializer.Serialize(promptsRoot, _JsonWriteOptions);
-                File.WriteAllText(promptsPath, defaultPrompts);
+                WriteAllTextAtomic(promptsPath, defaultPrompts);
             }
 
             // Seed on every run, not just first creation, so defaults shipped in a later release appear on
@@ -413,6 +413,15 @@ namespace Mux.Core.Settings
             }
 
             string json = ReadAllTextShared(filePath);
+
+            // Tolerate an empty/whitespace read: even with atomic writes, a reader can momentarily observe a
+            // just-created or being-replaced file as empty, and Deserialize throws "no JSON tokens" on "".
+            // An empty file simply means "no endpoints yet".
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return new List<EndpointConfig>();
+            }
+
             EndpointsFile? file = JsonSerializer.Deserialize<EndpointsFile>(json, _JsonOptions);
             if (file == null || file.Endpoints == null)
             {
