@@ -115,17 +115,22 @@ namespace Mux.Cli.Commands
 
             foreach (string line in MuxBanner.WordmarkLines()) Console.WriteLine(line);
             Console.WriteLine();
+            // Two-space indent, each label padded to the widest one ("dashboard"/"websocket") so every colon
+            // lines up in the same column with a space on either side of it.
+            const int labelWidth = 9;
+            string valueIndent = new string(' ', 2 + labelWidth + 3); // aligns continuation lines under the values
             Console.WriteLine("mux server listening on " + server.BaseUrl);
-            Console.WriteLine("  health:    " + server.BaseUrl + "/v1.0/api/health");
-            Console.WriteLine("  websocket: " + server.BaseUrl.Replace("http", "ws") + "/v1.0/ws");
+            Console.WriteLine("  " + "dashboard".PadRight(labelWidth) + " : " + server.BaseUrl + "/dashboard");
+            Console.WriteLine("  " + "health".PadRight(labelWidth) + " : " + server.BaseUrl + "/v1.0/api/health");
+            Console.WriteLine("  " + "websocket".PadRight(labelWidth) + " : " + server.BaseUrl.Replace("http", "ws") + "/v1.0/ws");
             if (noAuth)
             {
-                Console.WriteLine("  auth:      disabled (--no-auth)");
+                Console.WriteLine("  " + "auth".PadRight(labelWidth) + " : disabled (--no-auth)");
             }
             else
             {
-                Console.WriteLine("  api key:   " + apiKey);
-                Console.WriteLine("             send as 'Authorization: Bearer <key>'");
+                Console.WriteLine("  " + "api key".PadRight(labelWidth) + " : " + apiKey);
+                Console.WriteLine(valueIndent + "send as 'Authorization: Bearer <key>'");
             }
             Console.WriteLine();
             Console.WriteLine("Press Ctrl+C to stop.");

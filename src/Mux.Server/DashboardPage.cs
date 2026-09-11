@@ -170,7 +170,7 @@ table.info td:first-child{color:var(--muted);width:180px}
 /* full-width config pages */
 .padw{padding:22px 26px}
 .pagehead{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap}
-.pagehead .desc{color:var(--muted);font-size:13px;max-width:60ch}
+.pagehead .desc{color:var(--muted);font-size:13px;flex:1;min-width:0}
 /* data tables */
 table.grid{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 table.grid th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--panel-2)}
@@ -210,7 +210,7 @@ body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 .nav-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .nav-item.active{background:rgba(255,255,255,.09);color:#fff;position:relative}
 .nav-item.active::before{content:"";position:absolute;left:-10px;top:4px;bottom:4px;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
-.topbar h1{font-size:15px}
+.topbar h1{font-size:17px}
 .btn{border-radius:7px;box-shadow:var(--shadow);transition:background .12s,transform .05s,box-shadow .12s;font-weight:550}
 .btn:active{transform:translateY(1px)}
 .btn.secondary{box-shadow:none}
