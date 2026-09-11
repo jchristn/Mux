@@ -147,6 +147,7 @@ namespace Mux.Desktop.Shell
                 new PaletteCommand("Prompt profiles", "Manage prompt profiles", OpenPromptsWindow),
                 new PaletteCommand("Skills", "Manage installed skills", OpenSkillsWindow),
                 new PaletteCommand("Subagents", "Manage subagent definitions", OpenSubagentsWindow),
+                new PaletteCommand("Model pricing", "Edit model pricing", OpenPricingWindow),
                 new PaletteCommand("Settings", "Open settings", OpenSettingsWindow),
                 new PaletteCommand("About", "About mux", OpenAboutWindow)
             };
@@ -220,6 +221,7 @@ namespace Mux.Desktop.Shell
                 manageGroup.Children.Add(ManageDrawerItem("📝   Prompts", "Prompt profiles", OpenPromptsWindow));
                 manageGroup.Children.Add(ManageDrawerItem("✨   Skills", "Skills", OpenSkillsWindow));
                 manageGroup.Children.Add(ManageDrawerItem("🤖   Subagents", "Subagents", OpenSubagentsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("💲   Pricing", "Model pricing", OpenPricingWindow));
                 bottom.Children.Add(HighlightBlock(manageGroup));
             }
             else
@@ -412,6 +414,11 @@ namespace Mux.Desktop.Shell
         private void OpenSubagentsWindow()
         {
             _ = new SubagentsWindow().ShowDialog(this);
+        }
+
+        private void OpenPricingWindow()
+        {
+            _ = new PricingWindow().ShowDialog(this);
         }
 
         private void OpenAboutWindow()
@@ -918,6 +925,9 @@ namespace Mux.Desktop.Shell
                 case "/palette":
                     OpenCommandPalette();
                     break;
+                case "/pricing":
+                    OpenPricingWindow();
+                    break;
                 case "/new":
                     _ = NewChatAsync();
                     break;
@@ -970,6 +980,7 @@ namespace Mux.Desktop.Shell
             card.Children.Add(CommandRow("/prompt", "Manage prompt profiles"));
             card.Children.Add(CommandRow("/skills", "Manage installed skills"));
             card.Children.Add(CommandRow("/subagents", "Manage subagent definitions"));
+            card.Children.Add(CommandRow("/pricing", "Edit model pricing"));
             card.Children.Add(CommandRow("/commands", "Open the command palette (Ctrl+K)"));
             card.Children.Add(CommandRow("/new", "Start a new conversation"));
             card.Children.Add(CommandRow("/help", "Show this menu"));
