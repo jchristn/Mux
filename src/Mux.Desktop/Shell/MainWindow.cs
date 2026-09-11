@@ -23,6 +23,7 @@ namespace Mux.Desktop.Shell
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
     using Mux.Core.Telemetry;
+    using Mux.Core.Utility;
     using Mux.Desktop.Conversation;
     using Mux.Desktop.I18n;
     using Mux.Desktop.Services;
@@ -56,6 +57,7 @@ namespace Mux.Desktop.Shell
         private ScrollViewer _TranscriptScroll = null!;
         private StackPanel _EmptyState = null!;
         private StackPanel _OverviewHost = null!;
+        private TextBlock _QuipText = null!;
         private TextBox _Composer = null!;
         private Button _SendButton = null!;
 
@@ -256,6 +258,23 @@ namespace Mux.Desktop.Shell
                 Button conversationsToggle = NavItem("🗂", "Conversations", "Hide your saved conversations.", ToggleConversations, accent: false, chevron: "▾");
                 DockPanel.SetDock(conversationsToggle, Dock.Top);
                 conversations.Children.Add(conversationsToggle);
+
+                Button bulkDelete = new Button
+                {
+                    Content = "🗑   Delete multiple",
+                    Foreground = _Theme.Error,
+                    Background = Brushes.Transparent,
+                    BorderThickness = new Thickness(0),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Left,
+                    Padding = new Thickness(18, 4, 10, 4),
+                    FontSize = 12
+                };
+                bulkDelete.Tip("Select several conversations and delete them all at once.");
+                bulkDelete.Click += (sender, args) => _ = OpenBulkDeleteAsync();
+                DockPanel.SetDock(bulkDelete, Dock.Top);
+                conversations.Children.Add(bulkDelete);
+
                 conversations.Children.Add(BuildThreadListControl());
                 panel.Children.Add(HighlightBlock(conversations));
             }
@@ -401,6 +420,32 @@ namespace Mux.Desktop.Shell
             button.Tip(tooltip);
             button.Click += (sender, args) => onClick();
             return button;
+        }
+
+        private async Task OpenBulkDeleteAsync()
+        {
+            List<string>? deleted = await new BulkDeleteConversationsWindow(_Threads).ShowDialog<List<string>?>(this);
+            if (deleted == null || deleted.Count == 0)
+            {
+                return;
+            }
+
+            if (deleted.Contains(_CurrentThreadId))
+            {
+                if (_Conversation != null)
+                {
+                    _Conversation.Event -= OnConversationEvent;
+                    _Conversation = null;
+                }
+
+                _CurrentThreadId = string.Empty;
+                _CurrentTitle = string.Empty;
+                _Transcript.Children.Clear();
+                _TitleText.Text = "mux";
+                UpdateEmptyState();
+            }
+
+            await LoadThreadsAsync();
         }
 
         private void ToggleManage()
@@ -740,15 +785,18 @@ namespace Mux.Desktop.Shell
         private Control BuildTranscriptArea()
         {
             _EmptyState = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Spacing = 8 };
-            _EmptyState.Children.Add(new TextBlock
+            _QuipText = new TextBlock
             {
-                Text = _Localization.Get(StringKeys.EmptyStateTitle),
-                FontSize = 20,
-                FontWeight = FontWeight.SemiBold,
+                Text = WelcomeQuips.Next(),
+                FontSize = 40,
+                FontWeight = FontWeight.Bold,
                 Foreground = _Theme.Text,
                 TextAlignment = TextAlignment.Center,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 640,
                 HorizontalAlignment = HorizontalAlignment.Center
-            });
+            };
+            _EmptyState.Children.Add(_QuipText);
             _EmptyState.Children.Add(new TextBlock
             {
                 Text = "Type a message below and press Enter, or start a new conversation.",
@@ -1609,7 +1657,7 @@ namespace Mux.Desktop.Shell
 
         private void AddUserBubble(string text)
         {
-            TextBlock content = new TextBlock { Text = text, Foreground = _Theme.Text, TextWrapping = TextWrapping.Wrap };
+            SelectableTextBlock content = new SelectableTextBlock { Text = text, Foreground = _Theme.Text, TextWrapping = TextWrapping.Wrap };
             Border bubble = new Border
             {
                 Background = _Theme.UserBubble,
@@ -1626,7 +1674,7 @@ namespace Mux.Desktop.Shell
 
         private TextBlock AddAssistantBubble()
         {
-            TextBlock content = new TextBlock { Text = string.Empty, Foreground = _Theme.Text, TextWrapping = TextWrapping.Wrap };
+            SelectableTextBlock content = new SelectableTextBlock { Text = string.Empty, Foreground = _Theme.Text, TextWrapping = TextWrapping.Wrap };
             Border bubble = NewAssistantBorder(content);
             _AssistantBorder = bubble;
             _Transcript.Children.Add(bubble);
@@ -1636,7 +1684,17 @@ namespace Mux.Desktop.Shell
 
         private void AddAssistantMarkdownBubble(string content)
         {
-            _Transcript.Children.Add(NewAssistantBorder(MarkdownRenderer.Render(content, _Theme)));
+            Control body;
+            try
+            {
+                body = MarkdownRenderer.Render(content, _Theme);
+            }
+            catch (Exception)
+            {
+                body = new SelectableTextBlock { Text = content, Foreground = _Theme.Text, TextWrapping = TextWrapping.Wrap };
+            }
+
+            _Transcript.Children.Add(NewAssistantBorder(body));
             _TranscriptScroll.ScrollToEnd();
         }
 
@@ -1660,7 +1718,14 @@ namespace Mux.Desktop.Shell
         {
             if (_AssistantBorder != null && _StreamingBlock != null)
             {
-                _AssistantBorder.Child = MarkdownRenderer.Render(_StreamingBlock.Text, _Theme);
+                try
+                {
+                    _AssistantBorder.Child = MarkdownRenderer.Render(_StreamingBlock.Text, _Theme);
+                }
+                catch (Exception)
+                {
+                    // Keep the raw, already-selectable streamed text if Markdown rendering ever fails.
+                }
             }
 
             _AssistantBorder = null;
@@ -1697,6 +1762,11 @@ namespace Mux.Desktop.Shell
             if (_OverviewHost == null)
             {
                 return;
+            }
+
+            if (_QuipText != null)
+            {
+                _QuipText.Text = WelcomeQuips.Next();
             }
 
             _OverviewHost.Children.Clear();

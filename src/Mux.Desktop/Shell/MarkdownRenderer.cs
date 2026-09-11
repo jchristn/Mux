@@ -38,57 +38,71 @@ namespace Mux.Desktop.Shell
             int i = 0;
             while (i < lines.Length)
             {
-                string line = lines[i];
-                string trimmed = line.TrimStart();
-
-                if (FenceLength(trimmed) > 0)
+                int before = i;
+                try
                 {
-                    i = AppendCodeBlock(panel, lines, i, theme);
-                    continue;
+                    i = RenderBlock(panel, lines, i, theme);
+                }
+                catch (Exception)
+                {
+                    // A single malformed block must never drop the whole answer to raw text: degrade just
+                    // this line to selectable plain text and keep rendering the rest as Markdown.
+                    panel.Children.Add(new SelectableTextBlock { Text = lines[before], TextWrapping = TextWrapping.Wrap, Foreground = theme.Text });
+                    i = before + 1;
                 }
 
-                if (trimmed.StartsWith("<details", StringComparison.OrdinalIgnoreCase))
+                if (i <= before)
                 {
-                    i = AppendDetails(panel, lines, i, theme);
-                    continue;
+                    i = before + 1;
                 }
-
-                if (trimmed.Length == 0)
-                {
-                    i++;
-                    continue;
-                }
-
-                if (IsHorizontalRule(trimmed))
-                {
-                    panel.Children.Add(new Border { Height = 1, Background = theme.Border, Margin = new Thickness(0, 4, 0, 4) });
-                    i++;
-                    continue;
-                }
-
-                if (trimmed.StartsWith("#", StringComparison.Ordinal))
-                {
-                    panel.Children.Add(BuildHeading(trimmed, theme));
-                    i++;
-                    continue;
-                }
-
-                if (trimmed.StartsWith(">", StringComparison.Ordinal))
-                {
-                    i = AppendBlockquote(panel, lines, i, theme);
-                    continue;
-                }
-
-                if (IsListItem(trimmed))
-                {
-                    i = AppendList(panel, lines, i, theme);
-                    continue;
-                }
-
-                i = AppendParagraph(panel, lines, i, theme);
             }
 
             return panel;
+        }
+
+        private static int RenderBlock(StackPanel panel, string[] lines, int i, AppTheme theme)
+        {
+            string line = lines[i];
+            string trimmed = line.TrimStart();
+
+            if (FenceLength(trimmed) > 0)
+            {
+                return AppendCodeBlock(panel, lines, i, theme);
+            }
+
+            if (trimmed.StartsWith("<details", StringComparison.OrdinalIgnoreCase))
+            {
+                return AppendDetails(panel, lines, i, theme);
+            }
+
+            if (trimmed.Length == 0)
+            {
+                return i + 1;
+            }
+
+            if (IsHorizontalRule(trimmed))
+            {
+                panel.Children.Add(new Border { Height = 1, Background = theme.Border, Margin = new Thickness(0, 4, 0, 4) });
+                return i + 1;
+            }
+
+            if (trimmed.StartsWith("#", StringComparison.Ordinal))
+            {
+                panel.Children.Add(BuildHeading(trimmed, theme));
+                return i + 1;
+            }
+
+            if (trimmed.StartsWith(">", StringComparison.Ordinal))
+            {
+                return AppendBlockquote(panel, lines, i, theme);
+            }
+
+            if (IsListItem(trimmed))
+            {
+                return AppendList(panel, lines, i, theme);
+            }
+
+            return AppendParagraph(panel, lines, i, theme);
         }
 
         private static int AppendCodeBlock(StackPanel panel, string[] lines, int start, AppTheme theme)
@@ -244,7 +258,7 @@ namespace Mux.Desktop.Shell
                 DockPanel.SetDock(bullet, Dock.Left);
                 row.Children.Add(bullet);
 
-                TextBlock body = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = theme.Text };
+                SelectableTextBlock body = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, Foreground = theme.Text };
                 AppendInlines(body.Inlines!, content, theme);
                 row.Children.Add(body);
 
@@ -284,7 +298,7 @@ namespace Mux.Desktop.Shell
                 i++;
             }
 
-            TextBlock paragraph = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = theme.Text };
+            SelectableTextBlock paragraph = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, Foreground = theme.Text };
             AppendInlines(paragraph.Inlines!, text.ToString(), theme);
             panel.Children.Add(paragraph);
             return i;
@@ -301,7 +315,7 @@ namespace Mux.Desktop.Shell
             string text = trimmed.Substring(level).Trim();
             double size = level <= 1 ? 19 : level == 2 ? 16.5 : 14.5;
 
-            TextBlock heading = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = theme.Text, FontWeight = FontWeight.SemiBold, FontSize = size, Margin = new Thickness(0, 4, 0, 0) };
+            SelectableTextBlock heading = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, Foreground = theme.Text, FontWeight = FontWeight.SemiBold, FontSize = size, Margin = new Thickness(0, 4, 0, 0) };
             AppendInlines(heading.Inlines!, text, theme);
             return heading;
         }

@@ -4026,6 +4026,7 @@ namespace Mux.Cli.App
         private void WriteHeader()
         {
             _Conversation.WriteLine(Text.From("mux v" + Defaults.ProductVersion).Cyan().Bold());
+            _Conversation.WriteLine(Text.From(Mux.Core.Utility.WelcomeQuips.Next()).Green().Bold());
         }
 
         #endregion
