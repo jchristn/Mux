@@ -84,6 +84,9 @@ namespace Mux.Desktop.Shell
         private bool _SuppressHistoryReset;
         private string _CurrentTitle = string.Empty;
         private bool _CurrentTitlePinned;
+        private bool _TitleSummarized;
+
+        private const int TitleSummaryThreshold = 250;
         private DateTime _CurrentCreatedUtc;
         private bool _SidebarCollapsed;
         private bool _ConversationsOpen = true;
@@ -703,7 +706,7 @@ namespace Mux.Desktop.Shell
             {
                 _TitleText.Text = "mux";
             }
-            _TitleText.Tip("The current conversation's title (auto-generated from your first message; rename it from the conversation list).");
+            _TitleText.Tip("The current conversation's title. It starts from your first message and is replaced with an AI summary once the conversation grows; rename it from the conversation list.");
             DockPanel.SetDock(_TitleText, Dock.Left);
             header.Children.Add(_TitleText);
 
@@ -1079,6 +1082,9 @@ namespace Mux.Desktop.Shell
             _LastEstimatedTokens = 0;
             _CurrentTitle = snapshot.Title;
             _CurrentTitlePinned = snapshot.TitlePinned;
+            // Treat an already-substantial conversation as already titled so we don't re-summarize on reopen;
+            // a short one may still cross the threshold and get an AI title as it grows.
+            _TitleSummarized = ConversationCharCount(snapshot.ConversationHistory) >= TitleSummaryThreshold;
             _CurrentCreatedUtc = snapshot.CreatedUtc == default ? DateTime.UtcNow : snapshot.CreatedUtc;
             _TitleText.Text = DisplayTitle(snapshot.Title);
 
@@ -1453,7 +1459,8 @@ namespace Mux.Desktop.Shell
                 return;
             }
 
-            if (!_CurrentTitlePinned)
+            // Until the conversation is substantial, use a quick heuristic title (the first user message).
+            if (!_CurrentTitlePinned && !_TitleSummarized)
             {
                 string firstUser = FirstUserMessage(_Conversation.History);
                 if (!string.IsNullOrWhiteSpace(firstUser))
@@ -1483,6 +1490,56 @@ namespace Mux.Desktop.Shell
             {
                 // Best-effort persistence.
             }
+
+            // Once the conversation crosses the threshold, replace the heuristic title with an AI summary
+            // of the whole conversation (once). This becomes the session name in the nav.
+            if (!_CurrentTitlePinned && !_TitleSummarized && ConversationCharCount(_Conversation.History) >= TitleSummaryThreshold)
+            {
+                _TitleSummarized = true;
+                _ = GenerateAndApplyTitleAsync(_CurrentThreadId, new List<ConversationMessage>(_Conversation.History));
+            }
+        }
+
+        private static int ConversationCharCount(IReadOnlyList<ConversationMessage>? history)
+        {
+            if (history == null)
+            {
+                return 0;
+            }
+
+            int total = 0;
+            foreach (ConversationMessage message in history)
+            {
+                if (!string.IsNullOrEmpty(message.Content))
+                {
+                    total += message.Content!.Length;
+                }
+            }
+
+            return total;
+        }
+
+        private async Task GenerateAndApplyTitleAsync(string threadId, List<ConversationMessage> history)
+        {
+            string? title = await _Runner.GenerateTitleAsync(history, CancellationToken.None);
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                return;
+            }
+
+            // Only apply while the same, unpinned conversation is still open.
+            if (!string.Equals(threadId, _CurrentThreadId, StringComparison.Ordinal) || _CurrentTitlePinned)
+            {
+                return;
+            }
+
+            _CurrentTitle = title!;
+            _TitleText.Text = DisplayTitle(title!);
+
+            // Persist the summarized title (PersistCurrentAsync no longer overwrites it since _TitleSummarized
+            // is set) and refresh the nav so the session shows its new name.
+            await PersistCurrentAsync();
+            await LoadThreadsAsync();
         }
 
         // ---- thread actions ----------------------------------------------------------------------
@@ -1713,8 +1770,8 @@ namespace Mux.Desktop.Shell
                 Padding = new Thickness(4, 0, 4, 0),
                 FontSize = 13,
                 HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, -4, -6, 0)
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Margin = new Thickness(0, 0, -6, -6)
             };
             copy.Tip("Copy this response to the clipboard.");
             copy.Click += async (sender, args) =>
