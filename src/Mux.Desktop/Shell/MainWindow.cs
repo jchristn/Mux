@@ -68,7 +68,7 @@ namespace Mux.Desktop.Shell
         private Button _RedoButton = null!;
 
         private CheckpointManager? _Checkpoints;
-        private bool _CheckpointProbed;
+        private Task? _CheckpointProbe;
         private ConversationService? _Conversation;
         private TextBlock? _StreamingBlock;
         private Border? _AssistantBorder;
@@ -158,6 +158,10 @@ namespace Mux.Desktop.Shell
             PopulateModelPicker();
 
             AddHandler(InputElement.KeyDownEvent, OnGlobalKeyDown, RoutingStrategies.Tunnel);
+
+            // Probe for a git work tree in the background so the undo/redo buttons appear immediately in a
+            // repository (they stay disabled until the first per-turn checkpoint is recorded).
+            _ = EnsureCheckpointManagerAsync();
         }
 
         private void OnGlobalKeyDown(object? sender, KeyEventArgs e)
@@ -682,14 +686,15 @@ namespace Mux.Desktop.Shell
             return button;
         }
 
-        private async Task EnsureCheckpointManagerAsync()
+        private Task EnsureCheckpointManagerAsync()
         {
-            if (_CheckpointProbed)
-            {
-                return;
-            }
+            // Probe exactly once and share the same task with every caller, so a turn that awaits the probe
+            // always sees the completed result (not an in-flight probe kicked off elsewhere).
+            return _CheckpointProbe ??= ProbeCheckpointsAsync();
+        }
 
-            _CheckpointProbed = true;
+        private async Task ProbeCheckpointsAsync()
+        {
             try
             {
                 GitCheckpointService service = new GitCheckpointService(_Runner.WorkingDirectory);
@@ -722,6 +727,7 @@ namespace Mux.Desktop.Shell
 
         private async Task UndoLastTurnAsync()
         {
+            await EnsureCheckpointManagerAsync();
             if (_Checkpoints == null)
             {
                 AddNotice("Undo is unavailable (not a git repository).", isError: false);
@@ -755,6 +761,7 @@ namespace Mux.Desktop.Shell
 
         private async Task RedoLastUndoAsync()
         {
+            await EnsureCheckpointManagerAsync();
             if (_Checkpoints == null)
             {
                 AddNotice("Redo is unavailable (not a git repository).", isError: false);
