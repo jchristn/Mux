@@ -53,6 +53,7 @@ namespace Mux.Desktop.Shell
         private StackPanel _ThreadListPanel = null!;
         private ComboBox _ModelPicker = null!;
         private TextBlock _ModelStatus = null!;
+        private TextBlock _ContextIndicator = null!;
         private int _ModelValidationSeq;
         private TextBlock _TitleText = null!;
         private StackPanel _Transcript = null!;
@@ -745,6 +746,10 @@ namespace Mux.Desktop.Shell
 
             StackPanel right = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
 
+            _ContextIndicator = new TextBlock { Text = string.Empty, FontSize = 12, Foreground = _Theme.Muted, VerticalAlignment = VerticalAlignment.Center };
+            right.Children.Add(_ContextIndicator);
+            UpdateContextIndicator();
+
             _ModelStatus = new TextBlock { Text = string.Empty, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
             _ModelStatus.Tip("Whether the selected endpoint responded when it was last checked (validated when you switch models).");
             right.Children.Add(_ModelStatus);
@@ -979,6 +984,7 @@ namespace Mux.Desktop.Shell
             if (_ModelPicker.SelectedItem is EndpointConfig endpoint)
             {
                 _Runner.EndpointName = endpoint.Name;
+                UpdateContextIndicator();
                 _ = ValidateModelAsync(endpoint);
             }
         }
@@ -1127,6 +1133,7 @@ namespace Mux.Desktop.Shell
             RefreshThreadSelection();
             _Runner.SessionId = snapshot.Id;
             _LastEstimatedTokens = 0;
+            UpdateContextIndicator();
             _CurrentTitle = snapshot.Title;
             _CurrentTitlePinned = snapshot.TitlePinned;
             // Treat an already-substantial conversation as already titled so we don't re-summarize on reopen;
@@ -1464,6 +1471,26 @@ namespace Mux.Desktop.Shell
             return _ModelPicker.SelectedItem is EndpointConfig endpoint ? endpoint.ContextWindow : 0;
         }
 
+        private void UpdateContextIndicator()
+        {
+            if (_ContextIndicator == null)
+            {
+                return;
+            }
+
+            int window = SelectedContextWindow();
+            if (_LastEstimatedTokens <= 0 || window <= 0)
+            {
+                _ContextIndicator.Text = string.Empty;
+                return;
+            }
+
+            double fraction = Math.Min(1.0, (double)_LastEstimatedTokens / window);
+            _ContextIndicator.Text = "ctx " + (fraction * 100).ToString("0") + "%";
+            _ContextIndicator.Foreground = fraction >= 0.9 ? _Theme.Error : fraction >= 0.75 ? new SolidColorBrush(Color.Parse("#bf8700")) : _Theme.Muted;
+            _ContextIndicator.Tip("Estimated context used: about " + _LastEstimatedTokens.ToString("N0") + " of " + window.ToString("N0") + " tokens (" + (fraction * 100).ToString("0") + "%). Use /compact to free up room.");
+        }
+
         private void ApplyEventToUi(AgentEvent agentEvent)
         {
             switch (agentEvent)
@@ -1509,6 +1536,7 @@ namespace Mux.Desktop.Shell
                     _LastEstimatedTokens = runCompleted.FinalEstimatedTokens;
                     FinalizeAssistantBubble();
                     AddTurnInfo(runCompleted);
+                    UpdateContextIndicator();
                     break;
                 default:
                     break;
