@@ -7,10 +7,6 @@ namespace Mux.Cli.App
     /// </summary>
     public static class MuxBanner
     {
-        // Classic logo, kept for easy revert:
-        //     " _____ _ _ _ _",
-        //     "|     | | |_'_|",
-        //     "|_|_|_|___|_,_|"
         private static readonly string[] Art =
         {
             "▄▄   ▄▄ ▄▄ ▄▄ ▄▄ ▄▄",

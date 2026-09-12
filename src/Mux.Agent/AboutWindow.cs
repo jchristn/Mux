@@ -19,10 +19,6 @@ namespace Mux.Agent
 
         // The mux ASCII-art wordmark (matches the TUI splash), as a single block so its internal alignment
         // is preserved while the block itself is centered.
-        // Classic logo, kept for easy revert:
-        //     " _____ _ _ _ _\n" +
-        //     "|     | | |_'_|\n" +
-        //     "|_|_|_|___|_,_|";
         private const string Wordmark =
             "▄▄   ▄▄ ▄▄ ▄▄ ▄▄ ▄▄\n" +
             "██▀▄▀██ ██ ██ ▀█▄█▀\n" +

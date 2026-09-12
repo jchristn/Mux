@@ -20,10 +20,6 @@ namespace Mux.Desktop.Views
         private const string RepositoryUrl = "https://github.com/jchristn/Mux";
 
         // The mux ASCII-art wordmark (matches the TUI splash and the tray agent).
-        // Classic logo, kept for easy revert:
-        //     " _____ _ _ _ _\n" +
-        //     "|     | | |_'_|\n" +
-        //     "|_|_|_|___|_,_|";
         private const string Wordmark =
             "▄▄   ▄▄ ▄▄ ▄▄ ▄▄ ▄▄\n" +
             "██▀▄▀██ ██ ██ ▀█▄█▀\n" +
