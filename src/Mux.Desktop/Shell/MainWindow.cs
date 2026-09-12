@@ -251,7 +251,22 @@ namespace Mux.Desktop.Shell
 
             StackPanel top = new StackPanel { Spacing = 2 };
             top.Children.Add(NavItem(_SidebarCollapsed ? "»" : "«", null, _SidebarCollapsed ? "Expand the sidebar back to full width." : "Collapse the sidebar to just icons to make more room for the conversation.", ToggleSidebarCollapse, accent: false));
-            top.Children.Add(NavItem("＋", _Localization.Get(StringKeys.NewConversation), "Start a new, empty conversation.", () => _ = NewChatAsync(), accent: true));
+            if (expanded)
+            {
+                // New + a compact refresh icon that reloads the saved-conversation list.
+                DockPanel newRow = new DockPanel();
+                Button refreshThreads = HeaderGlyphButton("⟳", "Refresh the conversation list.");
+                refreshThreads.Foreground = _Theme.Text;
+                refreshThreads.Click += (sender, args) => _ = LoadThreadsAsync();
+                DockPanel.SetDock(refreshThreads, Dock.Right);
+                newRow.Children.Add(refreshThreads);
+                newRow.Children.Add(NavItem("＋", "New", "Start a new, empty conversation.", () => _ = NewChatAsync(), accent: true));
+                top.Children.Add(newRow);
+            }
+            else
+            {
+                top.Children.Add(NavItem("＋", null, "Start a new, empty conversation.", () => _ = NewChatAsync(), accent: true));
+            }
             if (!conversationsExpanded)
             {
                 top.Children.Add(NavItem("🗂", "Conversations", "Show your saved conversations to switch between or manage them.", ToggleConversations, accent: false, chevron: "▸"));
@@ -1566,7 +1581,7 @@ namespace Mux.Desktop.Shell
                 e.Handled = true;
                 InsertComposerNewline();
             }
-            else if (e.Key == Key.Up && !ctrl && !shift && CaretAtStart())
+            else if (e.Key == Key.Up && !ctrl && !shift && (_PromptHistory.IsNavigating || CaretOnFirstLine()))
             {
                 if (_PromptHistory.TryPrevious(_Composer.Text ?? string.Empty, out string recalled))
                 {
@@ -1574,7 +1589,7 @@ namespace Mux.Desktop.Shell
                     SetComposerFromHistory(recalled);
                 }
             }
-            else if (e.Key == Key.Down && !ctrl && !shift && _PromptHistory.IsNavigating && CaretAtEnd())
+            else if (e.Key == Key.Down && !ctrl && !shift && _PromptHistory.IsNavigating && CaretOnLastLine())
             {
                 if (_PromptHistory.TryNext(out string recalled))
                 {
@@ -1597,14 +1612,29 @@ namespace Mux.Desktop.Shell
             }
         }
 
-        private bool CaretAtStart()
+        // History recall triggers only when the caret is on the first/last line so Up/Down still move
+        // between lines of a multi-line draft; a single-line (or partial) prompt is always on both.
+        private bool CaretOnFirstLine()
         {
-            return _Composer.CaretIndex <= 0;
+            string text = _Composer.Text ?? string.Empty;
+            int caret = Math.Max(0, Math.Min(_Composer.CaretIndex, text.Length));
+            return text.Substring(0, caret).IndexOf('\n') < 0;
         }
 
-        private bool CaretAtEnd()
+        private bool CaretOnLastLine()
         {
-            return _Composer.CaretIndex >= (_Composer.Text ?? string.Empty).Length;
+            string text = _Composer.Text ?? string.Empty;
+            int caret = Math.Max(0, Math.Min(_Composer.CaretIndex, text.Length));
+            return text.Substring(caret).IndexOf('\n') < 0;
+        }
+
+        // Scroll the transcript to the bottom after the next layout pass. Calling ScrollToEnd synchronously
+        // right after appending/growing content scrolls to the stale extent (the new content has not been
+        // measured yet), so streaming text appears to stop following; posting at Background priority runs the
+        // scroll after layout so it tracks the growing content.
+        private void ScrollTranscriptToEnd()
+        {
+            Dispatcher.UIThread.Post(() => _TranscriptScroll.ScrollToEnd(), DispatcherPriority.Background);
         }
 
         private void SetComposerFromHistory(string text)
@@ -1994,7 +2024,7 @@ namespace Mux.Desktop.Shell
                 HorizontalAlignment = HorizontalAlignment.Left,
                 Child = card
             });
-            _TranscriptScroll.ScrollToEnd();
+            ScrollTranscriptToEnd();
             UpdateEmptyState();
         }
 
@@ -2073,6 +2103,7 @@ namespace Mux.Desktop.Shell
                     {
                         _ThinkingText.Text += thinking.Text;
                     }
+                    ScrollTranscriptToEnd();
                     break;
                 case AssistantTextEvent text:
                     if (_TurnTtftMs == null && _TurnStopwatch != null)
@@ -2085,7 +2116,7 @@ namespace Mux.Desktop.Shell
                     {
                         _StreamingBlock.Text += text.Text;
                     }
-                    _TranscriptScroll.ScrollToEnd();
+                    ScrollTranscriptToEnd();
                     break;
                 case ContextCompactedEvent compacted:
                     AddNotice("🗜 Context automatically compacted (" + compacted.MessagesBefore + " → " + compacted.MessagesAfter + " messages) to stay within the model's window.", isError: false);
@@ -2124,7 +2155,7 @@ namespace Mux.Desktop.Shell
             }
 
             _Transcript.Children.Add(card.Root);
-            _TranscriptScroll.ScrollToEnd();
+            ScrollTranscriptToEnd();
             UpdateEmptyState();
         }
 
@@ -2161,7 +2192,7 @@ namespace Mux.Desktop.Shell
             ToolTip.SetTip(info, tip);
 
             _Transcript.Children.Add(info);
-            _TranscriptScroll.ScrollToEnd();
+            ScrollTranscriptToEnd();
         }
 
         private async Task PersistCurrentAsync()
@@ -2360,7 +2391,7 @@ namespace Mux.Desktop.Shell
                 Child = _PendingText
             };
             _Transcript.Children.Add(_PendingBubble);
-            _TranscriptScroll.ScrollToEnd();
+            ScrollTranscriptToEnd();
 
             _QuipIndex = 0;
             _QuipTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.2) };
@@ -2455,7 +2486,7 @@ namespace Mux.Desktop.Shell
                 Child = content
             };
             _Transcript.Children.Add(bubble);
-            _TranscriptScroll.ScrollToEnd();
+            ScrollTranscriptToEnd();
         }
 
         private TextBlock AddAssistantBubble()
@@ -2466,7 +2497,7 @@ namespace Mux.Desktop.Shell
             Border bubble = NewAssistantBorder(host, () => _StreamingBlock?.Text ?? content.Text ?? string.Empty);
             _AssistantBorder = bubble;
             _Transcript.Children.Add(bubble);
-            _TranscriptScroll.ScrollToEnd();
+            ScrollTranscriptToEnd();
             return content;
         }
 
@@ -2483,7 +2514,7 @@ namespace Mux.Desktop.Shell
             }
 
             _Transcript.Children.Add(NewAssistantBorder(new Border { Child = body }, () => content));
-            _TranscriptScroll.ScrollToEnd();
+            ScrollTranscriptToEnd();
         }
 
         private Border NewAssistantBorder(Control content, Func<string> rawTextProvider)
@@ -2568,7 +2599,7 @@ namespace Mux.Desktop.Shell
                 FontFamily = new FontFamily("Cascadia Mono,Consolas,Menlo,monospace"),
                 TextWrapping = TextWrapping.Wrap
             });
-            _TranscriptScroll.ScrollToEnd();
+            ScrollTranscriptToEnd();
             UpdateEmptyState();
         }
 
@@ -2608,7 +2639,7 @@ namespace Mux.Desktop.Shell
                 _TaskPlanBody.Children.Add(row);
             }
 
-            _TranscriptScroll.ScrollToEnd();
+            ScrollTranscriptToEnd();
         }
 
         private static string TaskGlyph(AgentTaskStatusEnum status)

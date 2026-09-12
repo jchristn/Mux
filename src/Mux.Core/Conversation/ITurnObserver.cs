@@ -7,7 +7,7 @@ namespace Mux.Core.Conversation
     /// <see cref="AgentEvent"/> stream onto its own surface (a TUIKit pane, an Avalonia transcript, etc.);
     /// the accumulation of run-level state (captured text, completion summary, error/cancel flags, timing
     /// signals) is handled separately by <see cref="TurnProjection"/> so it need not be reimplemented per
-    /// front end. The driver (the TUI projector today, <see cref="ConversationController"/> once turns are
+    /// front end. The driver (the TUI projector today, the conversation controller once turns are
     /// centralized) ingests each event into a <see cref="TurnProjection"/> and hands the same event to the
     /// observer for rendering, then calls <see cref="OnCompleted"/> or <see cref="OnCancelled"/> when the
     /// stream ends. Implementations carry no thread guarantee; each front end marshals to its own dispatcher.

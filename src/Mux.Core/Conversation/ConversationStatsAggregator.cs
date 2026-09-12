@@ -9,7 +9,7 @@ namespace Mux.Core.Conversation
     /// shell's per-turn bookkeeping: <see cref="RecordTurn"/> folds one completed turn's timing and token
     /// counts into the running session totals, and <see cref="Snapshot"/> renders the current totals into a
     /// carrier the UI reads (filling task counts and cost). The aggregator itself is not thread-safe; the
-    /// owner (typically <see cref="ConversationController"/>) serializes access under its own lock.
+    /// owner (typically the conversation controller) serializes access under its own lock.
     /// </summary>
     public sealed class ConversationStatsAggregator
     {
@@ -24,7 +24,6 @@ namespace Mux.Core.Conversation
         private int _TtftSamples;
         private long _InputTokens;
         private long _OutputTokens;
-        private long _CachedTokens;
 
         #endregion
 
@@ -105,7 +104,7 @@ namespace Mux.Core.Conversation
                 TtftSamples = _TtftSamples,
                 InputTokens = _InputTokens,
                 OutputTokens = _OutputTokens,
-                CachedTokens = _CachedTokens,
+                CachedTokens = 0,
                 TaskTotal = taskTotal,
                 TaskCompleted = taskCompleted
             };
