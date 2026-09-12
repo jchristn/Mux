@@ -1080,12 +1080,56 @@ function deleteConvo(id){
   });
 }
 
-var CHAT_HELP="**Chat commands**\n\n- `/?` or `/help` — show this list of commands\n- `/new` or `/clear` — start a new conversation\n\n_Type a message and press Enter to chat with your model._";
+var CHAT_HELP="**Chat commands**\n\n"+
+"- `/?`, `/help` — show this list\n"+
+"- `/new`, `/clear` — start a new conversation\n"+
+"- `/context`, `/stats` — show the last turn's timing and tokens\n"+
+"- `/usage` — open usage analytics\n"+
+"- `/endpoints`, `/models` — manage model endpoints\n"+
+"- `/mcp` — manage MCP servers\n"+
+"- `/prompts` — manage prompt profiles\n"+
+"- `/skills` — manage skills\n"+
+"- `/subagents` — manage subagents\n"+
+"- `/pricing` — edit model pricing\n"+
+"- `/plugins`, `/hooks` — manage hooks\n"+
+"- `/commands` — manage custom commands\n"+
+"- `/keybindings` — edit keybindings\n"+
+"- `/sessions` — browse saved sessions\n"+
+"- `/settings` — open settings";
+function showChatStats(){
+  var last=null;
+  for(var i=messages.length-1;i>=0;i--){if(messages[i].role==="assistant"&&messages[i].stats){last=messages[i];break;}}
+  if(!last){toast("No completed turns yet.",true);return;}
+  var s=last.stats;
+  var body="**Last turn**\n\n"+
+    "- Model: `"+(last.model||currentModel||"—")+"`\n"+
+    "- Time to first token: "+(s.TtftMs>=0?s.TtftMs+" ms":"—")+"\n"+
+    "- Streaming: "+(s.StreamingMs||0)+" ms\n"+
+    "- Total: "+(s.TotalMs||0)+" ms\n"+
+    "- Tokens — in: "+(s.InputTokens||0)+", out: "+(s.OutputTokens||0)+", total: "+(s.TotalTokens||0);
+  messages.push({role:"assistant",content:body,local:true});renderMessages();
+}
 function handleChatCommand(text){
-  var cmd=text.slice(1).trim().toLowerCase();
-  if(cmd==="?"||cmd==="help"){messages.push({role:"assistant",content:CHAT_HELP,local:true});renderMessages();return;}
-  if(cmd==="new"||cmd==="clear"){newChat();return;}
-  toast("Unknown command: "+text+" (try /?)",true);
+  var raw=text.trim();var sp=raw.indexOf(" ");if(sp>0)raw=raw.slice(0,sp);
+  var cmd=raw.slice(1).toLowerCase();
+  switch(cmd){
+    case "?": case "help": case "menu": messages.push({role:"assistant",content:CHAT_HELP,local:true});renderMessages();return;
+    case "new": case "clear": newChat();return;
+    case "context": case "stats": showChatStats();return;
+    case "usage": switchView("usage");return;
+    case "endpoints": case "endpoint": case "models": case "model": switchView("endpoints");return;
+    case "mcp": case "mcps": switchView("mcp");return;
+    case "prompt": case "prompts": switchView("prompts");return;
+    case "skill": case "skills": switchView("skills");return;
+    case "subagent": case "subagents": case "agents": switchView("subagents");return;
+    case "pricing": switchView("pricing");return;
+    case "plugin": case "plugins": case "hooks": switchView("hooks");return;
+    case "commands": switchView("commands");return;
+    case "keys": case "keybindings": case "shortcuts": switchView("keybindings");return;
+    case "sessions": switchView("sessions");return;
+    case "settings": switchView("settings");return;
+    default: toast("Unknown command: "+text+" (try /?)",true);
+  }
 }
 function sendChat(){
   if(busy)return;
@@ -1098,13 +1142,13 @@ function sendChat(){
   messages.push({role:"user",content:text});
   el("composer").value="";el("composer").style.height="44px";
   var typing={role:"assistant",content:"",typing:true};
-  messages.push(typing);renderMessages();busy=true;el("sendBtn").textContent="■";el("sendBtn").title="Stop the response";
+  messages.push(typing);renderMessages();busy=true;el("sendBtn").textContent="■";el("sendBtn").title="Stop the response";el("sendBtn").style.background="#e5534b";
   var payload={endpoint:endpoint,messages:messages.filter(function(m){return !m.typing&&!m.local;}).map(function(m){return {role:m.role,content:m.content};})};
   streamChat(payload,typing);
 }
 
 var currentAbort=null;
-function endChat(){busy=false;currentAbort=null;el("sendBtn").textContent="➤";el("sendBtn").title="Send";}
+function endChat(){busy=false;currentAbort=null;el("sendBtn").textContent="➤";el("sendBtn").title="Send";el("sendBtn").style.background="";}
 // Stop the in-flight response. Abort the stream and drop the incomplete turn (both the empty assistant
 // bubble and the user prompt that started it) so the model history stays clean — matching the TUI/desktop.
 function stopChat(){if(currentAbort){try{currentAbort.abort();}catch(e){}}}
