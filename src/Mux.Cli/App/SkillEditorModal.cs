@@ -21,6 +21,7 @@ namespace Mux.Cli.App
 
         private readonly string _Title;
         private readonly TextEditor _Editor = new TextEditor { IsFocused = true };
+        private Rect _EditorRect;
 
         #endregion
 
@@ -70,6 +71,19 @@ namespace Mux.Cli.App
         }
 
         /// <inheritdoc/>
+        public override bool HandleMouse(MouseEvent mouse)
+        {
+            if (mouse != null && _EditorRect.Width > 0
+                && mouse.X >= _EditorRect.X && mouse.X < _EditorRect.X + _EditorRect.Width
+                && mouse.Y >= _EditorRect.Y && mouse.Y < _EditorRect.Y + _EditorRect.Height)
+            {
+                _Editor.HandleMouse(new MouseEvent(mouse.Kind, mouse.Button, mouse.X - _EditorRect.X, mouse.Y - _EditorRect.Y, mouse.Modifiers, mouse.ClickCount));
+            }
+
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override void Render(ISurface surface)
         {
             if (surface == null) throw new ArgumentNullException(nameof(surface));
@@ -98,6 +112,7 @@ namespace Mux.Cli.App
 
             // The TextEditor renders into a BufferSurface, so render it into a buffer and copy the cells into
             // the modal box (the same pattern the prompt editor uses).
+            _EditorRect = new Rect(contentX, contentTop, contentWidth, editorHeight);
             CellBuffer buffer = new CellBuffer(contentWidth, editorHeight);
             _Editor.Render(new BufferSurface(buffer));
             for (int y = 0; y < editorHeight; y++)

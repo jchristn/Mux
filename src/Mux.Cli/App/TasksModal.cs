@@ -28,6 +28,7 @@ namespace Mux.Cli.App
         private readonly TextField _Editor = new TextField();
         private List<AgentTask> _Tasks;
         private int _Selected;
+        private int _ListTop = -1;
         private bool _EditingNote;
 
         #endregion
@@ -49,6 +50,22 @@ namespace Mux.Cli.App
         #endregion
 
         #region Public-Methods
+
+        /// <inheritdoc/>
+        /// <inheritdoc/>
+        public override bool HandleMouse(MouseEvent mouse)
+        {
+            if (mouse != null && !_EditingNote && mouse.Kind == MouseEventKind.Press && mouse.Button == MouseButton.Left && _ListTop >= 0)
+            {
+                int index = mouse.Y - _ListTop;
+                if (index >= 0 && index < _Tasks.Count)
+                {
+                    _Selected = index;
+                }
+            }
+
+            return true;
+        }
 
         /// <inheritdoc/>
         public override bool HandleKey(KeyEvent key)
@@ -122,6 +139,7 @@ namespace Mux.Cli.App
             }
 
             row++; // blank separator before the task list
+            _ListTop = row;
 
             if (_Tasks.Count == 0)
             {
