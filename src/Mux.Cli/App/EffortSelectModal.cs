@@ -24,6 +24,7 @@ namespace Mux.Cli.App
 
         private readonly string _Title;
         private readonly ListView<string> _List = new ListView<string>();
+        private Rect _ListRect;
 
         #endregion
 
@@ -80,6 +81,34 @@ namespace Mux.Cli.App
         }
 
         /// <inheritdoc/>
+        public override bool HandleMouse(MouseEvent mouse)
+        {
+            if (mouse == null || _ListRect.Width <= 0)
+            {
+                return true;
+            }
+
+            MouseEvent local = new MouseEvent(mouse.Kind, mouse.Button, mouse.X - _ListRect.X, mouse.Y - _ListRect.Y, mouse.Modifiers, mouse.ClickCount);
+
+            if (mouse.Kind == MouseEventKind.Wheel)
+            {
+                _List.HandleMouse(local);
+                return true;
+            }
+
+            if (mouse.Kind == MouseEventKind.Press
+                && mouse.Button == MouseButton.Left
+                && mouse.X >= _ListRect.X && mouse.X < _ListRect.X + _ListRect.Width
+                && mouse.Y >= _ListRect.Y && mouse.Y < _ListRect.Y + _ListRect.Height
+                && _List.HandleMouse(local))
+            {
+                Close(_List.SelectedIndex);
+            }
+
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override void Render(ISurface surface)
         {
             if (surface == null) throw new ArgumentNullException(nameof(surface));
@@ -113,9 +142,10 @@ namespace Mux.Cli.App
 
             int contentX = x + 1 + pad.Left;
             int listTop = y + 1 + pad.Top;
+            _ListRect = new Rect(contentX, listTop, innerWidth, listHeight);
             if (surface is BufferSurface buffer)
             {
-                _List.Render(buffer.CreateView(new Rect(contentX, listTop, innerWidth, listHeight)));
+                _List.Render(buffer.CreateView(_ListRect));
             }
 
             int hintRow = listTop + listHeight + 1;

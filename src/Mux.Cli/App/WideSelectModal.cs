@@ -20,6 +20,7 @@ namespace Mux.Cli.App
         private readonly ListView<string> _List = new ListView<string>();
         private readonly int _MaxContentWidth;
         private readonly IReadOnlyDictionary<char, int>? _Hotkeys;
+        private Rect _ListRect;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WideSelectModal"/> class.
@@ -84,6 +85,35 @@ namespace Mux.Cli.App
         }
 
         /// <inheritdoc/>
+        public override bool HandleMouse(MouseEvent mouse)
+        {
+            if (mouse == null || _ListRect.Width <= 0)
+            {
+                return true;
+            }
+
+            MouseEvent local = new MouseEvent(mouse.Kind, mouse.Button, mouse.X - _ListRect.X, mouse.Y - _ListRect.Y, mouse.Modifiers, mouse.ClickCount);
+
+            if (mouse.Kind == MouseEventKind.Wheel)
+            {
+                _List.HandleMouse(local);
+                return true;
+            }
+
+            // A left click on a row selects it and activates it, the same as pressing Enter.
+            if (mouse.Kind == MouseEventKind.Press
+                && mouse.Button == MouseButton.Left
+                && mouse.X >= _ListRect.X && mouse.X < _ListRect.X + _ListRect.Width
+                && mouse.Y >= _ListRect.Y && mouse.Y < _ListRect.Y + _ListRect.Height
+                && _List.HandleMouse(local))
+            {
+                Close(_List.SelectedIndex);
+            }
+
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override void Render(ISurface surface)
         {
             if (surface == null)
@@ -104,8 +134,9 @@ namespace Mux.Cli.App
             surface.Fill(box, Cell.Blank(CellStyle.Default));
             surface.DrawBox(box, CellStyle.Default.WithForeground(Color.FromPalette(6)), _Title);
 
+            _ListRect = new Rect(x + 1 + pad.Left, y + 1 + pad.Top, innerWidth, innerHeight);
             if (surface is BufferSurface buffer)
-                _List.Render(buffer.CreateView(new Rect(x + 1 + pad.Left, y + 1 + pad.Top, innerWidth, innerHeight)));
+                _List.Render(buffer.CreateView(_ListRect));
         }
     }
 }
