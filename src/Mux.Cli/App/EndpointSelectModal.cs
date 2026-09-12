@@ -26,7 +26,12 @@ namespace Mux.Cli.App
         /// <summary>
         /// The remove shortcut (d or Delete): remove the highlighted endpoint directly.
         /// </summary>
-        Remove
+        Remove,
+
+        /// <summary>
+        /// The validate shortcut (v): probe the highlighted endpoint and show the result.
+        /// </summary>
+        Validate
     }
 
     /// <summary>
@@ -136,6 +141,12 @@ namespace Mux.Cli.App
                     return true;
                 }
 
+                if (key.Rune == 'v' || key.Rune == 'V')
+                {
+                    Close(new EndpointModalResult(_List.SelectedIndex, EndpointModalActivationEnum.Validate));
+                    return true;
+                }
+
                 if (key.Rune == 'd' || key.Rune == 'D')
                 {
                     Close(new EndpointModalResult(_List.SelectedIndex, EndpointModalActivationEnum.Remove));
@@ -155,7 +166,7 @@ namespace Mux.Cli.App
 
             Padding pad = ContentPadding;
             int hintRows = 2; // blank separator + hint line
-            int innerWidth = Math.Min(56, surface.Size.Width - 2 - pad.Horizontal);
+            int innerWidth = Math.Min(64, surface.Size.Width - 2 - pad.Horizontal);
             int listHeight = Math.Min(_List.Items.Count, surface.Size.Height - 2 - pad.Vertical - hintRows);
             if (innerWidth < 4 || listHeight < 1)
                 return;
@@ -178,7 +189,7 @@ namespace Mux.Cli.App
             surface.DrawText(
                 contentX,
                 hintRow,
-                Trim("↑↓ move · Enter switch · e edit · d/Del remove", innerWidth),
+                Trim("↑↓ move · Enter switch · e edit · v validate · d/Del remove", innerWidth),
                 CellStyle.Default.WithForeground(Color.FromPalette(8)));
         }
 

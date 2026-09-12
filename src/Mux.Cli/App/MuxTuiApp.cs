@@ -2887,6 +2887,16 @@ namespace Mux.Cli.App
                 return;
             }
 
+            if (choice.Activation == EndpointModalActivationEnum.Validate)
+            {
+                if (index < endpoints.Count)
+                {
+                    await ValidateEndpointAsync(endpoints[index]).ConfigureAwait(false);
+                }
+
+                return;
+            }
+
             switch (actions[index])
             {
                 case EndpointMenuAction.Switch:
@@ -2908,6 +2918,107 @@ namespace Mux.Cli.App
                 default:
                     break;
             }
+        }
+
+        // Probe the highlighted endpoint's model on demand (the 'v' shortcut in the endpoints list) and present
+        // the outcome in a result window — success, a reachable-but-failed validation, or an unreachable error.
+        private async Task ValidateEndpointAsync(EndpointConfig endpoint)
+        {
+            if (_OnValidateModel == null)
+            {
+                _App.Modals.Push(new MuxBoxModal("Endpoint validation", new List<string> { "Model validation is not available." }));
+                return;
+            }
+
+            string label = string.IsNullOrWhiteSpace(endpoint.Model) ? endpoint.Name : endpoint.Model;
+            WriteNotice($"Validating endpoint {endpoint.Name} ({label})…");
+
+            ModelLoadResult result;
+            try
+            {
+                result = await _OnValidateModel(endpoint, _Cts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                result = ModelLoadResult.Fail(ex.Message);
+            }
+
+            _App.Modals.Push(new MuxBoxModal($"Validate: {endpoint.Name}", BuildValidationLines(endpoint, result)));
+        }
+
+        private static List<string> BuildValidationLines(EndpointConfig endpoint, ModelLoadResult result)
+        {
+            const int wrapWidth = 60;
+            string label = string.IsNullOrWhiteSpace(endpoint.Model) ? endpoint.Name : endpoint.Model;
+            List<string> lines = new List<string>();
+
+            if (result.Success)
+            {
+                lines.Add($"✓ {label} is ready.");
+                lines.Add(string.Empty);
+                lines.Add("The endpoint responded successfully.");
+            }
+            else if (result.Reachable)
+            {
+                lines.Add($"⚠ {endpoint.Name} is reachable, but the validation");
+                lines.Add("   request did not succeed:");
+                lines.Add(string.Empty);
+                lines.AddRange(WrapText(result.Error ?? "unknown error", wrapWidth));
+                lines.Add(string.Empty);
+                lines.Add("Normal chats may still work — for example, a");
+                lines.Add("reasoning model that answers slowly.");
+            }
+            else
+            {
+                lines.Add($"✗ {endpoint.Name} is unreachable:");
+                lines.Add(string.Empty);
+                lines.AddRange(WrapText(result.Error ?? "unknown error", wrapWidth));
+            }
+
+            return lines;
+        }
+
+        private static List<string> WrapText(string text, int width)
+        {
+            List<string> lines = new List<string>();
+            if (string.IsNullOrEmpty(text) || width <= 0)
+            {
+                if (!string.IsNullOrEmpty(text))
+                {
+                    lines.Add(text);
+                }
+
+                return lines;
+            }
+
+            string current = string.Empty;
+            foreach (string word in text.Split(' '))
+            {
+                if (current.Length == 0)
+                {
+                    current = word;
+                }
+                else if (current.Length + 1 + word.Length <= width)
+                {
+                    current += " " + word;
+                }
+                else
+                {
+                    lines.Add(current);
+                    current = word;
+                }
+            }
+
+            if (current.Length > 0)
+            {
+                lines.Add(current);
+            }
+
+            return lines;
         }
 
         private void SwitchEndpoint(EndpointConfig endpoint)
