@@ -2,8 +2,6 @@
   <img src="assets/logo-grey.png" width="360" alt="mux">
 </p>
 
-<h1 align="center">mux</h1>
-
 <p align="center">
   <em>Your AI agent, your models, your infrastructure.</em>
 </p>
