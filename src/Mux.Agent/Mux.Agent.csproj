@@ -14,6 +14,7 @@
     -->
     <EnableAvaloniaXamlCompilation>false</EnableAvaloniaXamlCompilation>
     <Description>mux tray agent: cross-platform system-tray host for the optional local REST server.</Description>
+    <ApplicationIcon>..\..\assets\icon-green.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,7 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="..\..\assets\icon-grey.png" LogicalName="Mux.Agent.logo-grey.png" />
+    <EmbeddedResource Include="..\..\assets\icon-green.png" LogicalName="Mux.Agent.logo-green.png" />
   </ItemGroup>
 
   <ItemGroup>

@@ -56,7 +56,7 @@ namespace Mux.Desktop
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine("mux desktop error: " + ex.Message);
+                Console.WriteLine("mux desktop error:" + Environment.NewLine + ex.ToString());
                 return 2;
             }
         }

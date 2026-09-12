@@ -1727,7 +1727,9 @@ namespace Mux.Desktop.Shell
 
         private int SelectedContextWindow()
         {
-            return _ModelPicker.SelectedItem is EndpointConfig endpoint ? endpoint.ContextWindow : 0;
+            // _ModelPicker is assigned partway through BuildHeader, but UpdateContextIndicator() runs earlier
+            // in the same pass, so guard against the picker not existing yet (and having no selection).
+            return _ModelPicker?.SelectedItem is EndpointConfig endpoint ? endpoint.ContextWindow : 0;
         }
 
         private void UpdateContextIndicator()

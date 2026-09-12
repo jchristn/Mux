@@ -91,10 +91,10 @@ namespace Mux.Agent
 
         internal static WindowIcon? LoadIcon()
         {
-            // A single grey glyph is used for the taskbar/notification icon on both light and dark taskbars,
+            // A single green glyph is used for the taskbar/notification icon on both light and dark taskbars,
             // matching the rest of the app. Load the full-resolution PNG (not the tiny .ico) so it renders
             // crisp and full-size rather than small and blurry.
-            string resource = "Mux.Agent.logo-grey.png";
+            string resource = "Mux.Agent.logo-green.png";
             try
             {
                 Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource);
