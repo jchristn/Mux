@@ -1,6 +1,7 @@
 namespace Test.Shared
 {
     using System;
+    using System.Collections.Generic;
     using System.Net;
     using System.Net.Sockets;
     using System.Threading;
@@ -14,8 +15,16 @@ namespace Test.Shared
     {
         #region Private-Members
 
-        private readonly McpHttpServer _Server;
-        private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
+        // Number of independent start attempts (each on a freshly chosen free port) before giving up.
+        private const int _MaxStartAttempts = 5;
+
+        // Per-attempt budget for the listener to begin accepting connections. Kept modest because a
+        // genuinely-bound listener answers the health probe almost immediately; the retry loop, not a
+        // long single wait, is what absorbs transient failures.
+        private static readonly TimeSpan _PerAttemptReadyTimeout = TimeSpan.FromSeconds(6);
+
+        private McpHttpServer? _Server = null;
+        private CancellationTokenSource _Cts = new CancellationTokenSource();
         private Task? _RunTask = null;
         private bool _Disposed = false;
 
@@ -24,9 +33,9 @@ namespace Test.Shared
         #region Public-Members
 
         /// <summary>
-        /// The base URL for the HTTP MCP server.
+        /// The base URL for the HTTP MCP server. Populated once <see cref="StartAsync"/> succeeds.
         /// </summary>
-        public string BaseUrl { get; }
+        public string BaseUrl { get; private set; } = string.Empty;
 
         /// <summary>
         /// The MCP path for streamable HTTP requests.
@@ -42,10 +51,105 @@ namespace Test.Shared
         /// </summary>
         public TestMcpHttpServer()
         {
-            int port = GetFreePort();
-            BaseUrl = $"http://127.0.0.1:{port}";
-            _Server = new McpHttpServer("127.0.0.1", port);
-            _Server.RegisterTool(
+        }
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Starts the HTTP MCP server, retrying on a fresh port if a start attempt fails to become ready.
+        /// </summary>
+        /// <returns>A task that completes once the listener is accepting connections.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when no attempt becomes ready.</exception>
+        public async Task StartAsync()
+        {
+            List<string> failures = new List<string>();
+
+            for (int attempt = 1; attempt <= _MaxStartAttempts; attempt++)
+            {
+                int port = GetFreePort();
+                string baseUrl = "http://127.0.0.1:" + port;
+                McpHttpServer server = CreateServer(port);
+                CancellationTokenSource cts = new CancellationTokenSource();
+
+                // McpHttpServer.StartAsync runs an accept loop until cancellation, so this task normally
+                // stays running for the server's lifetime. It also swallows startup exceptions internally
+                // (e.g. a port grabbed between GetFreePort and bind), completing successfully without ever
+                // listening — so completion *before* the health probe succeeds signals a failed start.
+                Task runTask = Task.Run(() => server.StartAsync(cts.Token));
+
+                string? failure = await WaitForReadyAsync(baseUrl, server, runTask, cts.Token).ConfigureAwait(false);
+                if (failure == null)
+                {
+                    _Server = server;
+                    _Cts = cts;
+                    _RunTask = runTask;
+                    BaseUrl = baseUrl;
+                    return;
+                }
+
+                failures.Add("attempt " + attempt + " on " + baseUrl + ": " + failure);
+
+                // Tear down the failed attempt before retrying on a new port.
+                try { cts.Cancel(); } catch { /* best effort */ }
+                try { server.Stop(); } catch { /* best effort */ }
+                try { runTask.Wait(2000); } catch { /* ignore cancellation/stop errors */ }
+                try { server.Dispose(); } catch { /* best effort */ }
+                cts.Dispose();
+            }
+
+            throw new InvalidOperationException(
+                "The HTTP MCP test server did not become ready after " + _MaxStartAttempts +
+                " attempt(s). " + string.Join(" | ", failures));
+        }
+
+        /// <summary>
+        /// Stops the HTTP MCP server.
+        /// </summary>
+        public void Stop()
+        {
+            if (_Disposed)
+            {
+                return;
+            }
+
+            _Cts.Cancel();
+            _Server?.Stop();
+            try
+            {
+                _RunTask?.Wait(5000);
+            }
+            catch (AggregateException)
+            {
+                // Ignore cancellation/stop exceptions during teardown.
+            }
+        }
+
+        /// <summary>
+        /// Releases all resources used by this <see cref="TestMcpHttpServer"/> instance.
+        /// </summary>
+        public void Dispose()
+        {
+            if (!_Disposed)
+            {
+                Stop();
+                _Server?.Dispose();
+                _Cts.Dispose();
+                _Disposed = true;
+            }
+
+            GC.SuppressFinalize(this);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private McpHttpServer CreateServer(int port)
+        {
+            McpHttpServer server = new McpHttpServer("127.0.0.1", port);
+            server.RegisterTool(
                 "echo",
                 "Returns the input text",
                 new
@@ -70,88 +174,41 @@ namespace Test.Shared
                         }
                     };
                 });
-        }
 
-        #endregion
-
-        #region Public-Methods
-
-        /// <summary>
-        /// Starts the HTTP MCP server.
-        /// </summary>
-        /// <returns>A task that completes once the listener has been started.</returns>
-        public async Task StartAsync()
-        {
-            _RunTask = Task.Run(() => _Server.StartAsync(_Cts.Token));
-            await WaitForHealthAsync().ConfigureAwait(false);
+            return server;
         }
 
         /// <summary>
-        /// Stops the HTTP MCP server.
+        /// Waits for a single start attempt to begin accepting connections.
         /// </summary>
-        public void Stop()
+        /// <returns><c>null</c> if the listener became ready; otherwise a description of why it did not.</returns>
+        private static async Task<string?> WaitForReadyAsync(string baseUrl, McpHttpServer server, Task runTask, CancellationToken token)
         {
-            if (_Disposed)
-            {
-                return;
-            }
+            // Short per-request timeout so a single stalled connect cannot eat the whole per-attempt budget.
+            // Any HTTP response — even 404/405 — means the listener is accepting connections, which is all
+            // "ready" requires here (the server answers GET / with a health response).
+            using HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
 
-            _Cts.Cancel();
-            _Server.Stop();
-            try
-            {
-                _RunTask?.Wait(5000);
-            }
-            catch (AggregateException)
-            {
-                // Ignore cancellation/stop exceptions during teardown.
-            }
-        }
-
-        /// <summary>
-        /// Releases all resources used by this <see cref="TestMcpHttpServer"/> instance.
-        /// </summary>
-        public void Dispose()
-        {
-            if (!_Disposed)
-            {
-                Stop();
-                _Server.Dispose();
-                _Cts.Dispose();
-                _Disposed = true;
-            }
-
-            GC.SuppressFinalize(this);
-        }
-
-        #endregion
-
-        #region Private-Methods
-
-        private async Task WaitForHealthAsync()
-        {
-            // Short per-request timeout so a single stalled connect cannot eat the whole budget, and a
-            // generous overall budget so a slow or heavily loaded CI runner (where process/port setup can
-            // lag by many seconds) does not fail spuriously. Any HTTP response — even 404/405 — means the
-            // listener is accepting connections, which is all "started" requires here.
-            using HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-
-            DateTime deadline = DateTime.UtcNow.AddSeconds(30);
+            DateTime deadline = DateTime.UtcNow.Add(_PerAttemptReadyTimeout);
             while (DateTime.UtcNow < deadline)
             {
-                // If the server task already failed (e.g. the port was taken between GetFreePort and bind),
-                // surface its real error immediately instead of waiting out the full budget on a vague timeout.
-                if (_RunTask != null && _RunTask.IsFaulted)
+                // The run task faulting, or completing at all before we see a healthy response, both mean the
+                // server exited without a live listener (McpHttpServer swallows startup errors and returns).
+                if (runTask.IsFaulted)
                 {
-                    throw new InvalidOperationException(
-                        "The HTTP MCP test server failed to start at " + BaseUrl + ".",
-                        _RunTask.Exception?.GetBaseException());
+                    return "server task faulted: " +
+                        (runTask.Exception?.GetBaseException().Message ?? "unknown error");
+                }
+
+                if (runTask.IsCompleted)
+                {
+                    return "server task exited before the listener became ready (startup error was swallowed by the server)";
                 }
 
                 try
                 {
-                    using HttpResponseMessage response = await client.GetAsync(BaseUrl, _Cts.Token).ConfigureAwait(false);
-                    return;
+                    using HttpResponseMessage response = await client.GetAsync(baseUrl, token).ConfigureAwait(false);
+                    return null;
                 }
                 catch (HttpRequestException)
                 {
@@ -160,14 +217,28 @@ namespace Test.Shared
                 {
                 }
 
-                await Task.Delay(100, _Cts.Token).ConfigureAwait(false);
+                try
+                {
+                    await Task.Delay(100, token).ConfigureAwait(false);
+                }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
             }
 
-            string detail = _RunTask != null && _RunTask.IsFaulted
-                ? " Server task error: " + (_RunTask.Exception?.GetBaseException().Message ?? "unknown")
-                : string.Empty;
-            throw new InvalidOperationException(
-                "Timed out after 30s waiting for the HTTP MCP test server to start at " + BaseUrl + "." + detail);
+            if (runTask.IsFaulted)
+            {
+                return "server task faulted: " +
+                    (runTask.Exception?.GetBaseException().Message ?? "unknown error");
+            }
+
+            if (runTask.IsCompleted)
+            {
+                return "server task exited before the listener became ready (startup error was swallowed by the server)";
+            }
+
+            return "timed out after " + _PerAttemptReadyTimeout.TotalSeconds + "s waiting for the listener to accept connections";
         }
 
         private static int GetFreePort()
