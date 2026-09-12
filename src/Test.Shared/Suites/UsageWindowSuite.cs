@@ -4,7 +4,7 @@ namespace Test.Shared.Suites
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
-    using Mux.Desktop.Services;
+    using Mux.Core.Telemetry;
     using Touchstone.Core;
 
     /// <summary>

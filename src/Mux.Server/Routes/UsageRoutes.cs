@@ -237,7 +237,7 @@ namespace Mux.Server.Routes
             if (from == 0 && to == 0 && !string.IsNullOrWhiteSpace(range))
             {
                 long nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                long span = RangeSpanMs(range);
+                long span = UsageWindow.NaturalSpanMs(range);
                 if (span > 0)
                 {
                     filter.FromUnixMs = nowMs - span;
@@ -268,19 +268,6 @@ namespace Mux.Server.Routes
             return filter;
         }
 
-        private static long RangeSpanMs(string range)
-        {
-            switch (range.Trim().ToLowerInvariant())
-            {
-                case "hour": return 60L * 60L * 1000L;
-                case "day": return 24L * 60L * 60L * 1000L;
-                case "week": return 7L * 24L * 60L * 60L * 1000L;
-                case "month": return 30L * 24L * 60L * 60L * 1000L;
-                case "all": return 0L;
-                default: return 0L;
-            }
-        }
-
         /// <summary>
         /// Resolves an aligned, fixed-granularity window for the time series and returns the bucket width in
         /// milliseconds. The window is snapped to the bucket grid and sized to a fixed slice count per range:
@@ -296,22 +283,13 @@ namespace Mux.Server.Routes
             if (explicitFrom > 0 && explicitTo > explicitFrom)
             {
                 long span = explicitTo - explicitFrom;
-                long width = NiceBucketMs(span / 90L);
+                long width = UsageWindow.NiceBucketMs(span / 90L);
                 filter.FromUnixMs = explicitFrom;
                 filter.ToUnixMs = explicitTo;
                 return width;
             }
 
-            long bucketMs;
-            int count;
-            switch ((ctx.Request.Query.Elements["range"] ?? "day").Trim().ToLowerInvariant())
-            {
-                case "hour": bucketMs = 60L * 1000L; count = 60; break;
-                case "week": bucketMs = 2L * 60L * 60L * 1000L; count = 84; break;
-                case "month": bucketMs = 12L * 60L * 60L * 1000L; count = 60; break;
-                case "day":
-                default: bucketMs = 15L * 60L * 1000L; count = 96; break;
-            }
+            UsageWindow.Bucketing(ctx.Request.Query.Elements["range"], out long bucketMs, out int count);
 
             long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             long lastStart = (now / bucketMs) * bucketMs;
@@ -319,26 +297,6 @@ namespace Mux.Server.Routes
             filter.FromUnixMs = firstStart;
             filter.ToUnixMs = lastStart + bucketMs - 1;
             return bucketMs;
-        }
-
-        private static long NiceBucketMs(long target)
-        {
-            long[] steps = new long[]
-            {
-                60L * 1000L, 5L * 60L * 1000L, 15L * 60L * 1000L, 30L * 60L * 1000L,
-                60L * 60L * 1000L, 2L * 60L * 60L * 1000L, 6L * 60L * 60L * 1000L,
-                12L * 60L * 60L * 1000L, 24L * 60L * 60L * 1000L
-            };
-
-            foreach (long step in steps)
-            {
-                if (target <= step)
-                {
-                    return step;
-                }
-            }
-
-            return steps[steps.Length - 1];
         }
 
         private static long ParseLong(string? value, long fallback)
