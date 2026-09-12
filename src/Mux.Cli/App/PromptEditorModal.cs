@@ -48,6 +48,30 @@ namespace Mux.Cli.App
         // profile instead of appending a new one.
         private bool _NamingRename;
 
+        // Click hit-testing geometry captured on the last render: the profile row and its per-profile x-ranges,
+        // the field-tab row and its per-tab x-ranges, and the editor rectangle.
+        private int _ProfileRowY = -1;
+        private int _FieldRowY = -1;
+        private Rect _EditorRect;
+        private readonly List<Hit> _ProfileHits = new List<Hit>();
+        private readonly List<Hit> _FieldHits = new List<Hit>();
+
+        private sealed class Hit
+        {
+            public Hit(int start, int end, int value)
+            {
+                Start = start;
+                End = end;
+                Value = value;
+            }
+
+            public int Start { get; }
+
+            public int End { get; }
+
+            public int Value { get; }
+        }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -108,6 +132,57 @@ namespace Mux.Cli.App
             }
 
             return HandleNavKey(key);
+        }
+
+        /// <inheritdoc/>
+        public override bool HandleMouse(MouseEvent mouse)
+        {
+            // Left click only; naming has its own text field and is finished with the keyboard.
+            if (mouse == null || mouse.Kind != MouseEventKind.Press || mouse.Button != MouseButton.Left || _Naming)
+            {
+                return true;
+            }
+
+            // Click a profile to select it.
+            if (mouse.Y == _ProfileRowY)
+            {
+                foreach (Hit hit in _ProfileHits)
+                {
+                    if (mouse.X >= hit.Start && mouse.X < hit.End)
+                    {
+                        FlushEditorToModel();
+                        _SelectedProfile = hit.Value;
+                        LoadFieldIntoEditor();
+                        return true;
+                    }
+                }
+            }
+
+            // Click a field tab to switch fields.
+            if (mouse.Y == _FieldRowY)
+            {
+                foreach (Hit hit in _FieldHits)
+                {
+                    if (mouse.X >= hit.Start && mouse.X < hit.End)
+                    {
+                        FlushEditorToModel();
+                        _Field = (PromptField)hit.Value;
+                        LoadFieldIntoEditor();
+                        return true;
+                    }
+                }
+            }
+
+            // Click the editor area to start editing the selected field.
+            if (_EditorRect.Width > 0
+                && mouse.X >= _EditorRect.X && mouse.X < _EditorRect.X + _EditorRect.Width
+                && mouse.Y >= _EditorRect.Y && mouse.Y < _EditorRect.Y + _EditorRect.Height)
+            {
+                BeginEdit();
+                return true;
+            }
+
+            return true;
         }
 
         /// <inheritdoc/>
@@ -455,6 +530,9 @@ namespace Mux.Cli.App
             CellStyle label = CellStyle.Default.WithForeground(Color.FromPalette(8));
             surface.DrawText(contentX, y, "Profiles:", label);
 
+            _ProfileRowY = y;
+            _ProfileHits.Clear();
+
             int x = contentX + 10;
             int limit = contentX + width;
             for (int i = 0; i < _Profiles.Count; i++)
@@ -476,6 +554,7 @@ namespace Mux.Cli.App
                     ? CellStyle.Default.WithForeground(Color.FromPalette(6)).WithAttribute(CellAttributes.Reverse, true)
                     : CellStyle.Default.WithForeground(Color.FromPalette(7));
                 surface.DrawText(x, y, draw, style);
+                _ProfileHits.Add(new Hit(x, Math.Min(limit, x + chunk.Length), i));
                 x += chunk.Length;
             }
         }
@@ -485,12 +564,23 @@ namespace Mux.Cli.App
             CellStyle label = CellStyle.Default.WithForeground(Color.FromPalette(8));
             surface.DrawText(contentX, y, "Field:", label);
 
+            _FieldRowY = y;
+            _FieldHits.Clear();
+
             int x = contentX + 7;
             int limit = contentX + width;
 
+            int start = x;
             RenderFieldTab(surface, ref x, limit, y, "System", _Field == PromptField.System);
+            _FieldHits.Add(new Hit(start, x, (int)PromptField.System));
+
+            start = x;
             RenderFieldTab(surface, ref x, limit, y, "Tools-disabled", _Field == PromptField.ToolsDisabled);
+            _FieldHits.Add(new Hit(start, x, (int)PromptField.ToolsDisabled));
+
+            start = x;
             RenderFieldTab(surface, ref x, limit, y, "Compaction", _Field == PromptField.Compaction);
+            _FieldHits.Add(new Hit(start, x, (int)PromptField.Compaction));
         }
 
         private static void RenderFieldTab(ISurface surface, ref int x, int limit, int y, string name, bool current)
@@ -515,6 +605,7 @@ namespace Mux.Cli.App
         {
             // The TextEditor renders into a BufferSurface, so render it to a buffer and copy the cells into
             // the modal box (mirrors how the app's composer is rendered into a sub-region).
+            _EditorRect = new Rect(contentX, top, width, height);
             _Editor.IsFocused = _Editing;
             CellBuffer buffer = new CellBuffer(width, height);
             _Editor.Render(new BufferSurface(buffer));
