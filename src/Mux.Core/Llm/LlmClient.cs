@@ -180,12 +180,16 @@ namespace Mux.Core.Llm
         }
 
         /// <summary>
-        /// Attempts to load (and thereby validate) the configured model by issuing a minimal, near-empty
-        /// completion request. For providers that lazily load models — such as Ollama — this warms the model
-        /// into memory; for hosted providers it confirms the model name, base URL, and credentials are usable.
-        /// The request uses the same transport and adapter as real turns, so a success here means the next
-        /// turn will reach the same model. Never throws for backend/transport errors; those are returned as a
-        /// failure result.
+        /// Attempts to load (and thereby validate) the configured model by issuing a minimal streaming
+        /// completion request and stopping at the first streamed token. Streaming with a real token budget —
+        /// rather than a near-zero non-streaming request — means a reasoning ("thinking") model, which spends
+        /// tokens thinking before it can emit an answer, still validates: its first reasoning or answer chunk
+        /// is enough to confirm the endpoint is reachable and the model is generating, at which point the rest
+        /// of the completion is cancelled. For providers that lazily load models (such as Ollama) this warms
+        /// the model; for hosted providers it confirms the model name, base URL, and credentials are usable.
+        /// The request uses the same transport and adapter as real turns. Never throws for backend/transport
+        /// errors; those are returned as a failure result, with <see cref="ModelLoadResult.Reachable"/>
+        /// distinguishing an endpoint that answered (even with an error) from one that could not be reached.
         /// </summary>
         /// <param name="cancellationToken">A token to cancel the probe.</param>
         /// <returns>A <see cref="ModelLoadResult"/> describing success or the failure details.</returns>
@@ -195,45 +199,78 @@ namespace Mux.Core.Llm
             {
                 Model = string.IsNullOrWhiteSpace(_Endpoint.Model) ? null : _Endpoint.Model,
 
-                // Keep the probe cheap but not so tight that a reasoning model (which spends tokens thinking
-                // before it can emit anything) or a backend that rejects a 1-token cap fails a reachable
-                // endpoint. A small budget still returns near-instantly.
-                MaxTokens = 16,
+                // Give the model a real budget so it can actually produce output — a reasoning ("thinking")
+                // model spends tokens thinking before it can emit anything, and a 1-token cap made it fail a
+                // perfectly reachable endpoint. We stream and stop at the very first chunk (see below), so the
+                // budget is never reached and a healthy endpoint still validates near-instantly.
+                MaxTokens = 512,
                 ToolChoice = "none"
             };
 
             // A single minimal user message keeps the request valid across providers that reject an empty
-            // messages array while still asking for essentially no generation (max 1 token).
+            // messages array.
             request.Messages.Add(Pp.ChatMessage.User("."));
 
             string failureDetail = "no response";
+            bool reachable = false;
+
             for (int attempt = 0; ; attempt++)
             {
                 bool transportFailure = false;
 
                 try
                 {
-                    Pp.ToolChatResponse response = await _Client.ToolChatAsync(request, cancellationToken).ConfigureAwait(false);
+                    // Stream rather than wait for a full completion: the first streamed chunk — whether it is
+                    // answer text or the model's reasoning — proves the endpoint is reachable AND the model is
+                    // generating, which is exactly what the health check needs. We then stop immediately.
+                    Pp.ToolChatStreamingResponse response = await _Client.ToolChatStreamingAsync(request, cancellationToken).ConfigureAwait(false);
 
                     if (response.Success)
                     {
+                        IAsyncEnumerator<Pp.ToolChatStreamingChunk> enumerator = response.Chunks.GetAsyncEnumerator(cancellationToken);
+                        try
+                        {
+                            while (await enumerator.MoveNextAsync().ConfigureAwait(false))
+                            {
+                                Pp.ToolChatStreamingChunk chunk = enumerator.Current;
+                                if (chunk != null && (!string.IsNullOrEmpty(chunk.Text) || !string.IsNullOrEmpty(chunk.ReasoningText)))
+                                {
+                                    // First real token received — cancel the rest of the completion by
+                                    // disposing the stream (in the finally) and report success.
+                                    break;
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            try
+                            {
+                                await enumerator.DisposeAsync().ConfigureAwait(false);
+                            }
+                            catch (Exception)
+                            {
+                                // Best-effort: tearing down the stream after we've already validated it must
+                                // never turn a healthy endpoint into a failure.
+                            }
+                        }
+
+                        // A successfully opened stream (with or without a content chunk before it ended)
+                        // proves the endpoint responded.
                         return ModelLoadResult.Ok();
                     }
 
                     string status = response.StatusCode.HasValue ? $"status {response.StatusCode.Value}" : "no response";
                     failureDetail = string.IsNullOrWhiteSpace(response.Error) ? status : $"{status}: {response.Error}";
 
-                    // Only transport-level failures (no HTTP status) are transient; an HTTP error status
-                    // is a definitive answer and should not be retried.
+                    // Only transport-level failures (no HTTP status) are transient; an HTTP error status is a
+                    // definitive answer and should not be retried. A returned status — even an error one —
+                    // proves the endpoint/URL/credentials are reachable, so the UI does not mislabel a
+                    // reachable-but-fussy backend as "unreachable".
                     transportFailure = IsTransportFailure(response.StatusCode);
-
-                    // A returned HTTP status — even an error one — proves the endpoint, URL, and credentials
-                    // are reachable; only the probe request itself failed. Surface that distinction so the UI
-                    // does not mislabel a reachable-but-fussy backend as "unreachable". (Transport failures
-                    // fall through to the retry/exhaust logic below and are reported as unreachable.)
+                    reachable = !transportFailure;
                     if (!transportFailure)
                     {
-                        return ModelLoadResult.Fail(failureDetail, reachable: response.StatusCode.HasValue);
+                        return ModelLoadResult.Fail(failureDetail, reachable: true);
                     }
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -244,11 +281,12 @@ namespace Mux.Core.Llm
                 {
                     failureDetail = ex.Message;
                     transportFailure = true;
+                    reachable = false;
                 }
 
                 if (!transportFailure || attempt >= MaxRetries)
                 {
-                    return ModelLoadResult.Fail(failureDetail);
+                    return ModelLoadResult.Fail(failureDetail, reachable);
                 }
 
                 await Task.Delay(RetryBackoff(attempt), cancellationToken).ConfigureAwait(false);
