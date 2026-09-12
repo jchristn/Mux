@@ -6,7 +6,7 @@ namespace Test.Shared.Suites
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
-    using Mux.Cli.App;
+    using Mux.Core.Tools;
     using Mux.Core.Agent;
     using Mux.Core.Models;
     using Mux.Core.Skills;

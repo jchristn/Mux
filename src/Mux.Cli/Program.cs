@@ -480,7 +480,6 @@ CONFIG:
             List<ToolDefinition> builtInTools = new BuiltInToolRegistry(runtime.MuxSettings).GetToolDefinitions();
             string basePrompt = runtime.SystemPrompt;
             string baseCompaction = runtime.CompactionSystemPrompt;
-            object promptSync = new object();
             McpRuntime? mcpRuntime = null;
             SkillRuntime? skillRuntime = null;
 
@@ -488,25 +487,18 @@ CONFIG:
             // background thread can be routed into the transcript. Null before the shell is built.
             MuxTuiApp? shell = null;
 
-            // Re-binds the live MCP tools and the skills runtime (callable tools + prompt awareness) onto the
-            // template. Runs at startup, whenever the MCP tool set or the skill set changes, and on profile
-            // switch. The template is read per job run, so updates apply to the next submitted turn.
-            void ApplyTemplate()
-            {
-                lock (promptSync)
-                {
-                    List<ToolDefinition> mcpTools = mcpRuntime?.CurrentTools ?? new List<ToolDefinition>();
-                    Func<string, JsonElement, string, CancellationToken, Task<ToolResult>>? executor =
-                        mcpRuntime != null ? mcpRuntime.ExecuteToolAsync : null;
-                    ExternalToolsBinder.Apply(template, basePrompt, baseCompaction, mcpTools, executor, skillRuntime, builtInTools.Count);
-                }
-            }
+            // The shared coordinator that composes the live MCP tools + skills runtime (callable tools +
+            // prompt awareness) onto the template. Rebind runs at startup, whenever the MCP tool set or the
+            // skill set changes, and on profile switch; the template is read per job run so updates apply to
+            // the next submitted turn.
+            ToolRuntimeBinder toolBinder = new ToolRuntimeBinder(template, basePrompt, baseCompaction, builtInTools.Count);
 
             mcpRuntime = new McpRuntime(
                 SettingsLoader.LoadMcpServers,
-                ApplyTemplate,
+                toolBinder.Rebind,
                 TimeSpan.FromSeconds(30),
                 onNotice: message => shell?.PostNotice(message));
+            toolBinder.McpRuntime = mcpRuntime;
 
             if (runtime.MuxSettings.SkillsEnabled)
             {
@@ -514,8 +506,9 @@ CONFIG:
                 skillRuntime = new SkillRuntime(
                     skillsDirectory,
                     SettingsLoader.LoadSkillIndex,
-                    ApplyTemplate,
+                    toolBinder.Rebind,
                     TimeSpan.FromSeconds(runtime.MuxSettings.SkillRefreshIntervalSeconds));
+                toolBinder.SkillRuntime = skillRuntime;
             }
 
             try
@@ -552,7 +545,7 @@ CONFIG:
 
                 // Baseline bind (wires the executor and leaves the prompt at its MCP-free base until the
                 // first MCP discovery completes).
-                ApplyTemplate();
+                toolBinder.Rebind();
 
                 using MuxTuiApp app = new MuxTuiApp(
                     new ConsoleBackend(),
@@ -581,13 +574,7 @@ CONFIG:
                         bool toolsEnabled = template.Endpoint.Quirks?.SupportsTools ?? true;
                         (string systemPrompt, string compactionPrompt) = CommandRuntimeResolver.ResolveProfilePrompts(
                             profile, toolsEnabled, runtime.WorkingDirectory, builtInTools);
-                        lock (promptSync)
-                        {
-                            basePrompt = systemPrompt;
-                            baseCompaction = compactionPrompt;
-                        }
-
-                        ApplyTemplate();
+                        toolBinder.SetProfilePrompt(systemPrompt, compactionPrompt);
                     },
                     onSettingsChanged: (MuxSettings changed) =>
                     {

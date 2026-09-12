@@ -1,4 +1,4 @@
-namespace Mux.Cli.App
+namespace Mux.Core.Tools
 {
     using System;
     using System.Collections.Generic;
@@ -8,7 +8,6 @@ namespace Mux.Cli.App
     using Mux.Core.Agent;
     using Mux.Core.Models;
     using Mux.Core.Skills;
-    using Mux.Core.Tools;
 
     /// <summary>
     /// Composes every external tool source onto an interactive <see cref="AgentLoopOptions"/> template so

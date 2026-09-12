@@ -172,6 +172,7 @@ namespace Test.Shared
                     // Skills: interactive runtime lifecycle and template composition.
                     SkillRuntimeSuite.Create(),
                     ExternalToolsBinderSuite.Create(),
+                    ToolRuntimeBinderSuite.Create(),
 
                     // Skills: manager operations (create/enable/disable/remove/import) and the /skills surface.
                     SkillManagerSuite.Create(),
