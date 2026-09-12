@@ -59,6 +59,29 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("DesktopPreferences", "ViewTogglesRoundTrip", "Sidebar and thinking view toggles persist", (CancellationToken ct) =>
+                    {
+                        string dir = NewDir();
+                        try
+                        {
+                            DesktopPreferencesStore store = new DesktopPreferencesStore(dir);
+                            MuxAssert.IsFalse(store.Load().SidebarCollapsed, "sidebar defaults expanded");
+                            MuxAssert.IsFalse(store.Load().AutoExpandThinking, "thinking defaults collapsed");
+
+                            store.Save(new DesktopPreferences { ThemeMode = "dark", SidebarCollapsed = true, AutoExpandThinking = true });
+                            DesktopPreferences loaded = store.Load();
+                            MuxAssert.IsTrue(loaded.SidebarCollapsed, "sidebar collapse persisted");
+                            MuxAssert.IsTrue(loaded.AutoExpandThinking, "auto-expand thinking persisted");
+                            MuxAssert.AreEqual("dark", loaded.ThemeMode, "theme preserved alongside view toggles");
+                        }
+                        finally
+                        {
+                            Cleanup(dir);
+                        }
+
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("DesktopPreferences", "NormalizesUnknownMode", "An unknown mode normalizes to dark", (CancellationToken ct) =>
                     {
                         string dir = NewDir();

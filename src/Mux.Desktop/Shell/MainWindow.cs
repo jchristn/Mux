@@ -97,6 +97,7 @@ namespace Mux.Desktop.Shell
         private const int TitleSummaryThreshold = 250;
         private DateTime _CurrentCreatedUtc;
         private bool _SidebarCollapsed;
+        private bool _AutoExpandThinking;
         private bool _ConversationsOpen = true;
         private bool _ManageOpen;
         private ColumnDefinition? _SidebarColumn;
@@ -144,9 +145,12 @@ namespace Mux.Desktop.Shell
 
             _PromptHistory.Load(new PromptHistoryStore(configDirectory).Load());
 
-            // Apply the persisted theme before the first layout so there is no flash of the default.
-            string savedMode = new DesktopPreferencesStore(configDirectory).Load().ThemeMode;
-            AppTheme.Set(ResolveThemeVariant(savedMode));
+            // Apply the persisted theme + view preferences before the first layout so there is no flash of
+            // the default and the sidebar opens in its remembered state.
+            DesktopPreferences prefs = new DesktopPreferencesStore(configDirectory).Load();
+            _SidebarCollapsed = prefs.SidebarCollapsed;
+            _AutoExpandThinking = prefs.AutoExpandThinking;
+            AppTheme.Set(ResolveThemeVariant(prefs.ThemeMode));
             _Theme = AppTheme.Current;
 
             Background = _Theme.Surface;
@@ -508,6 +512,8 @@ namespace Mux.Desktop.Shell
             {
                 _SidebarHost.Child = BuildSidebarContent();
             }
+
+            SavePreferences();
         }
 
         private void ToggleConversations()
@@ -621,6 +627,35 @@ namespace Mux.Desktop.Shell
         private void OpenKeybindingsWindow()
         {
             _ = new KeybindingsWindow().ShowDialog(this);
+        }
+
+        private MenuFlyout BuildViewFlyout()
+        {
+            MenuFlyout flyout = new MenuFlyout();
+
+            MenuItem sidebar = new MenuItem { Header = ViewItemHeader("Collapse sidebar", _SidebarCollapsed) };
+            sidebar.Click += (sender, args) =>
+            {
+                ToggleSidebarCollapse();
+                sidebar.Header = ViewItemHeader("Collapse sidebar", _SidebarCollapsed);
+            };
+            flyout.Items.Add(sidebar);
+
+            MenuItem thinking = new MenuItem { Header = ViewItemHeader("Auto-expand thinking", _AutoExpandThinking) };
+            thinking.Click += (sender, args) =>
+            {
+                _AutoExpandThinking = !_AutoExpandThinking;
+                SavePreferences();
+                thinking.Header = ViewItemHeader("Auto-expand thinking", _AutoExpandThinking);
+            };
+            flyout.Items.Add(thinking);
+
+            return flyout;
+        }
+
+        private static string ViewItemHeader(string label, bool on)
+        {
+            return (on ? "✓   " : "      ") + label;
         }
 
         private Button HeaderGlyphButton(string glyph, string tip)
@@ -829,9 +864,19 @@ namespace Mux.Desktop.Shell
 
         private void SaveThemeMode()
         {
+            SavePreferences();
+        }
+
+        private void SavePreferences()
+        {
             try
             {
-                new DesktopPreferencesStore(_ConfigDirectory).Save(new DesktopPreferences { ThemeMode = _ThemeMode });
+                new DesktopPreferencesStore(_ConfigDirectory).Save(new DesktopPreferences
+                {
+                    ThemeMode = _ThemeMode,
+                    SidebarCollapsed = _SidebarCollapsed,
+                    AutoExpandThinking = _AutoExpandThinking
+                });
             }
             catch (Exception)
             {
@@ -925,6 +970,10 @@ namespace Mux.Desktop.Shell
             themeToggle.Tip(_Theme.IsDark ? "Switch to the light theme." : "Switch to the dark theme.");
             themeToggle.Click += (sender, args) => SetThemeMode(_Theme.IsDark ? "light" : "dark");
             right.Children.Add(themeToggle);
+
+            Button viewMenu = HeaderGlyphButton("☰", "View options: sidebar and thinking display.");
+            viewMenu.Flyout = BuildViewFlyout();
+            right.Children.Add(viewMenu);
 
             DockPanel.SetDock(right, Dock.Right);
             header.Children.Add(right);
@@ -2016,7 +2065,7 @@ namespace Mux.Desktop.Shell
             }
 
             _ThinkingText = new TextBlock { Text = string.Empty, Foreground = _Theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Cascadia Mono,Consolas,Menlo,monospace") };
-            _ThinkingSection = new CollapsibleSection("💭 Thinking", _Theme);
+            _ThinkingSection = new CollapsibleSection("💭 Thinking", _Theme, expanded: _AutoExpandThinking);
             _ThinkingSection.Body.Children.Add(_ThinkingText);
 
             int index = _PendingBubble != null ? _Transcript.Children.IndexOf(_PendingBubble) : _Transcript.Children.Count;

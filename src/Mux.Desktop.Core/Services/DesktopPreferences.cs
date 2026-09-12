@@ -14,5 +14,17 @@ namespace Mux.Desktop.Services
         /// </summary>
         [JsonPropertyName("themeMode")]
         public string ThemeMode { get; set; } = "dark";
+
+        /// <summary>
+        /// Whether the conversation sidebar starts collapsed to its icon rail. Defaults to false (expanded).
+        /// </summary>
+        [JsonPropertyName("sidebarCollapsed")]
+        public bool SidebarCollapsed { get; set; }
+
+        /// <summary>
+        /// Whether the streamed thinking panel starts expanded rather than collapsed. Defaults to false.
+        /// </summary>
+        [JsonPropertyName("autoExpandThinking")]
+        public bool AutoExpandThinking { get; set; }
     }
 }
