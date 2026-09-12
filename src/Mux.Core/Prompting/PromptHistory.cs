@@ -1,22 +1,35 @@
-namespace Mux.Desktop.Services
+namespace Mux.Core.Prompting
 {
     using System;
     using System.Collections.Generic;
 
     /// <summary>
-    /// Shell-style recall of previously submitted prompts. Entries are ordered oldest-to-newest.
-    /// <see cref="TryPrevious"/> walks toward older entries (Up), <see cref="TryNext"/> walks back toward the
-    /// newest and finally the in-progress draft (Down). The draft the user was typing is preserved when
-    /// navigation begins and restored when they walk past the newest entry. Consecutive duplicates are
-    /// collapsed and the list is capped.
+    /// Shell-style recall of previously submitted prompts, shared by both front ends. Entries are ordered
+    /// oldest-to-newest. <see cref="TryPrevious"/> walks toward older entries (Up), <see cref="TryNext"/>
+    /// walks back toward the newest and finally the in-progress draft (Down). The draft the user was typing
+    /// is captured when navigation begins and restored when they walk past the newest entry. Consecutive
+    /// duplicates are collapsed, blanks are ignored, and the list is capped at a capacity. Pure logic — no
+    /// UI dependency — so both the TUI composer and the desktop composer drive the same recall behavior.
     /// </summary>
+    /// <remarks>
+    /// This is the single promoted implementation (previously duplicated as <c>Mux.Cli.App.PromptHistory</c>
+    /// and <c>Mux.Desktop.Services.PromptHistory</c>). The desktop persists entries via its own
+    /// <c>PromptHistoryStore</c> (<see cref="Load"/>/<see cref="Entries"/>); the TUI persists them inside the
+    /// session snapshot (<see cref="Snapshot"/>/<see cref="Restore"/>).
+    /// </remarks>
     public sealed class PromptHistory
     {
+        #region Private-Members
+
         private readonly List<string> _Entries = new List<string>();
         private readonly int _Capacity;
         private int _Position;
         private string _Draft = string.Empty;
         private bool _Navigating;
+
+        #endregion
+
+        #region Constructors-and-Factories
 
         /// <summary>
         /// Instantiate a prompt history.
@@ -28,21 +41,40 @@ namespace Mux.Desktop.Services
             _Position = 0;
         }
 
-        /// <summary>
-        /// The entries, oldest-to-newest.
-        /// </summary>
-        public IReadOnlyList<string> Entries => _Entries;
+        #endregion
+
+        #region Public-Members
+
+        /// <summary>The entries, oldest-to-newest.</summary>
+        public IReadOnlyList<string> Entries
+        {
+            get => _Entries;
+        }
+
+        /// <summary>The number of stored entries.</summary>
+        public int Count
+        {
+            get => _Entries.Count;
+        }
 
         /// <summary>
         /// Whether the user is currently walking through history (as opposed to editing a fresh draft).
         /// </summary>
-        public bool IsNavigating => _Navigating;
+        public bool IsNavigating
+        {
+            get => _Navigating;
+        }
+
+        #endregion
+
+        #region Public-Methods
 
         /// <summary>
-        /// Replace all entries (e.g. loaded from disk), keeping only the most recent up to the capacity.
+        /// Replace all entries (for example loaded from disk or a resumed session), keeping only the most
+        /// recent up to the capacity, and reset the cursor. Blanks are skipped and entries are trimmed.
         /// </summary>
         /// <param name="entries">The entries oldest-to-newest; null is treated as empty.</param>
-        public void Load(IEnumerable<string> entries)
+        public void Load(IEnumerable<string>? entries)
         {
             _Entries.Clear();
             if (entries != null)
@@ -62,7 +94,8 @@ namespace Mux.Desktop.Services
         }
 
         /// <summary>
-        /// Record a submitted prompt as the newest entry and reset navigation.
+        /// Record a submitted prompt as the newest entry (ignoring blanks and consecutive duplicates) and
+        /// reset navigation to the fresh-draft position.
         /// </summary>
         /// <param name="prompt">The submitted prompt.</param>
         public void Add(string prompt)
@@ -85,7 +118,7 @@ namespace Mux.Desktop.Services
         }
 
         /// <summary>
-        /// Stop navigating and return to the draft position.
+        /// Stop navigating and return to the fresh-draft position without adding anything.
         /// </summary>
         public void ResetCursor()
         {
@@ -95,11 +128,12 @@ namespace Mux.Desktop.Services
         }
 
         /// <summary>
-        /// Walk toward older entries (Up). On the first call the current text is captured as the draft.
+        /// Walk toward older entries (Up). On the first call the current composer text is captured as the
+        /// draft so it can be restored when the user walks back past the newest entry.
         /// </summary>
         /// <param name="current">The current composer text.</param>
-        /// <param name="result">The recalled text.</param>
-        /// <returns><c>true</c> when a history entry was produced; otherwise <c>false</c> (empty history).</returns>
+        /// <param name="result">The recalled text when this returns true; the unchanged current otherwise.</param>
+        /// <returns><c>true</c> when a history entry was produced; <c>false</c> when history is empty.</returns>
         public bool TryPrevious(string current, out string result)
         {
             result = current ?? string.Empty;
@@ -125,9 +159,10 @@ namespace Mux.Desktop.Services
         }
 
         /// <summary>
-        /// Walk toward newer entries (Down), eventually restoring the draft.
+        /// Walk toward newer entries (Down), eventually restoring the captured draft when stepping past the
+        /// newest entry.
         /// </summary>
-        /// <param name="result">The recalled text (or the draft when walking past the newest entry).</param>
+        /// <param name="result">The recalled text, or the draft when walking past the newest entry.</param>
         /// <returns><c>true</c> when navigating; <c>false</c> when there was nothing to do.</returns>
         public bool TryNext(out string result)
         {
@@ -150,6 +185,29 @@ namespace Mux.Desktop.Services
             return true;
         }
 
+        /// <summary>
+        /// Returns the stored entries oldest-first, for persistence (used by the TUI session snapshot).
+        /// </summary>
+        /// <returns>A copy of the entries.</returns>
+        public IReadOnlyList<string> Snapshot()
+        {
+            return new List<string>(_Entries);
+        }
+
+        /// <summary>
+        /// Replaces the stored entries (for example when resuming a session) and resets the cursor. Alias of
+        /// <see cref="Load"/>, kept for the TUI's session-restore call site.
+        /// </summary>
+        /// <param name="entries">The entries to load, oldest-first. Null is treated as empty.</param>
+        public void Restore(IEnumerable<string>? entries)
+        {
+            Load(entries);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
         private void Trim()
         {
             while (_Entries.Count > _Capacity)
@@ -157,5 +215,7 @@ namespace Mux.Desktop.Services
                 _Entries.RemoveAt(0);
             }
         }
+
+        #endregion
     }
 }

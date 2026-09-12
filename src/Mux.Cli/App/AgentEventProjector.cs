@@ -9,6 +9,7 @@ namespace Mux.Cli.App
     using Mux.Core.Conversation;
     using Mux.Core.Enums;
     using Mux.Core.Tasks;
+    using Mux.Core.Tools;
     using TUIKit;
     using TUIKit.Content;
 

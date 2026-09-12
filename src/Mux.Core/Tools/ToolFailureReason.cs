@@ -1,4 +1,4 @@
-namespace Mux.Cli.App
+namespace Mux.Core.Tools
 {
     using System;
     using System.Text;

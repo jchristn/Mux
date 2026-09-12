@@ -20,6 +20,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Cosmetic "thinking…" phrase pool, shared by the TUI and desktop via ThinkingPhrases. -->
+    <EmbeddedResource Include="Conversation\Resources\thinking-messages.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.11" />
     <!-- Pin the native SQLite bundle to a patched build; the version Microsoft.Data.Sqlite pulls
          transitively (2.1.10) carries advisory GHSA-2m69-gcr7-jv3q. -->

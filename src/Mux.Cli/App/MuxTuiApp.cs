@@ -13,6 +13,7 @@ namespace Mux.Cli.App
     using Mux.Core.Jobs;
     using Mux.Core.Llm;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
     using Mux.Core.Skills;
@@ -1948,9 +1949,7 @@ namespace Mux.Cli.App
 
         private static string PromptPreview(string prompt)
         {
-            string flattened = (prompt ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
-            const int max = 60;
-            return flattened.Length <= max ? flattened : flattened.Substring(0, max - 1) + "…";
+            return Mux.Core.Prompting.PromptText.Preview(prompt, 60);
         }
 
         // Opens the queue editor. Processing pauses while it is open so a turn finishing mid-edit does not
@@ -2192,7 +2191,7 @@ namespace Mux.Cli.App
 
         private static string[] ShuffledThinkingPhrases()
         {
-            List<string> phrases = new List<string>(ThinkingMessages.All);
+            List<string> phrases = new List<string>(ThinkingPhrases.All);
             for (int i = phrases.Count - 1; i > 0; i--)
             {
                 int j = Random.Shared.Next(i + 1);
@@ -2215,7 +2214,7 @@ namespace Mux.Cli.App
 
         private bool RecallPrevious()
         {
-            if (_PromptHistory.TryPrevious(out string entry))
+            if (_PromptHistory.TryPrevious(_Composer.Text ?? string.Empty, out string entry))
             {
                 _Composer.Text = entry;
                 RefreshComposerLayout();

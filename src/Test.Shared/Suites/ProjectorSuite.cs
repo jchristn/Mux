@@ -10,6 +10,7 @@ namespace Test.Shared.Suites
     using Mux.Core.Agent;
     using Mux.Core.Conversation;
     using Mux.Core.Models;
+    using Mux.Core.Tools;
     using Touchstone.Core;
     using TUIKit.Content;
 

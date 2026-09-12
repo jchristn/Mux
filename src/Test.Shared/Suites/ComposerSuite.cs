@@ -7,9 +7,11 @@ namespace Test.Shared.Suites
     using System.Threading.Tasks;
     using Mux.Cli.App;
     using Mux.Core.Agent;
+    using Mux.Core.Conversation;
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Touchstone.Core;
     using TUIKit.Input;
     using TUIKit.Terminal;
@@ -43,10 +45,10 @@ namespace Test.Shared.Suites
                         history.Add("b");
                         history.Add("c");
 
-                        MuxAssert.IsTrue(history.TryPrevious(out string p1), "prev 1"); MuxAssert.AreEqual("c", p1, "newest");
-                        MuxAssert.IsTrue(history.TryPrevious(out string p2), "prev 2"); MuxAssert.AreEqual("b", p2, "middle");
-                        MuxAssert.IsTrue(history.TryPrevious(out string p3), "prev 3"); MuxAssert.AreEqual("a", p3, "oldest");
-                        MuxAssert.IsTrue(history.TryPrevious(out string p4), "prev 4"); MuxAssert.AreEqual("a", p4, "clamped at oldest");
+                        MuxAssert.IsTrue(history.TryPrevious(string.Empty, out string p1), "prev 1"); MuxAssert.AreEqual("c", p1, "newest");
+                        MuxAssert.IsTrue(history.TryPrevious(string.Empty, out string p2), "prev 2"); MuxAssert.AreEqual("b", p2, "middle");
+                        MuxAssert.IsTrue(history.TryPrevious(string.Empty, out string p3), "prev 3"); MuxAssert.AreEqual("a", p3, "oldest");
+                        MuxAssert.IsTrue(history.TryPrevious(string.Empty, out string p4), "prev 4"); MuxAssert.AreEqual("a", p4, "clamped at oldest");
                         return Task.CompletedTask;
                     }),
 
@@ -55,8 +57,8 @@ namespace Test.Shared.Suites
                         PromptHistory history = new PromptHistory();
                         history.Add("a");
                         history.Add("b");
-                        history.TryPrevious(out _); // b
-                        history.TryPrevious(out _); // a
+                        history.TryPrevious(string.Empty, out _); // b
+                        history.TryPrevious(string.Empty, out _); // a
 
                         MuxAssert.IsTrue(history.TryNext(out string n1), "next 1"); MuxAssert.AreEqual("b", n1, "back to b");
                         MuxAssert.IsTrue(history.TryNext(out string n2), "next 2"); MuxAssert.AreEqual(string.Empty, n2, "fresh draft");
@@ -78,7 +80,7 @@ namespace Test.Shared.Suites
                     Case("HistoryEmptyPreviousReturnsFalse", "Previous on empty history returns false", (CancellationToken ct) =>
                     {
                         PromptHistory history = new PromptHistory();
-                        MuxAssert.IsFalse(history.TryPrevious(out _), "no history");
+                        MuxAssert.IsFalse(history.TryPrevious(string.Empty, out _), "no history");
                         return Task.CompletedTask;
                     }),
 
@@ -339,9 +341,9 @@ namespace Test.Shared.Suites
                     Case("ThinkingLibraryLoadsFromResource", "The thinking-message library loads a large set from the embedded resource", async (CancellationToken ct) =>
                     {
                         await Task.CompletedTask.ConfigureAwait(false);
-                        MuxAssert.IsTrue(ThinkingMessages.All.Count > 100, "many thinking phrases loaded");
-                        MuxAssert.IsTrue(ThinkingMessages.All.Contains("Thinking..."), "a known phrase from the library is present");
-                        MuxAssert.IsTrue(ThinkingMessages.Spinner.Count > 0, "spinner frames present");
+                        MuxAssert.IsTrue(ThinkingPhrases.All.Count > 100, "many thinking phrases loaded");
+                        MuxAssert.IsTrue(ThinkingPhrases.All.Contains("Thinking..."), "a known phrase from the library is present");
+                        MuxAssert.IsTrue(ThinkingPhrases.Spinner.Count > 0, "spinner frames present");
                     }),
 
                     Case("ThinkingIndicatorShownWhileWorkingThenHidden", "A thinking indicator shows beneath the prompt while the model works and vanishes when output begins", async (CancellationToken ct) =>
@@ -355,7 +357,7 @@ namespace Test.Shared.Suites
 
                             MuxAssert.IsTrue(app.IsThinking, "indicator shown while working");
                             string message = app.CurrentThinkingMessage ?? string.Empty;
-                            MuxAssert.IsTrue(ThinkingMessages.All.Contains(message), "indicator shows a phrase from the library");
+                            MuxAssert.IsTrue(ThinkingPhrases.All.Contains(message), "indicator shows a phrase from the library");
                             MuxAssert.Contains(message, Join(app.TranscriptSnapshot()), "indicator rendered into the transcript");
 
                             release.TrySetResult(true);

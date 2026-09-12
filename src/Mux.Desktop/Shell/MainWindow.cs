@@ -22,6 +22,7 @@ namespace Mux.Desktop.Shell
     using Mux.Core.Enums;
     using Mux.Core.Llm;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
     using Mux.Core.Tasks;
@@ -1821,13 +1822,8 @@ namespace Mux.Desktop.Shell
 
         private static string CheckpointLabel(string prompt)
         {
-            string trimmed = (prompt ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
-            if (trimmed.Length <= 60)
-            {
-                return trimmed.Length == 0 ? "turn" : trimmed;
-            }
-
-            return trimmed.Substring(0, 57) + "…";
+            string label = PromptText.Preview(prompt, 60);
+            return label.Length == 0 ? "turn" : label;
         }
 
         private void SetSending(bool sending)
@@ -2353,7 +2349,7 @@ namespace Mux.Desktop.Shell
 
         private void StartPendingIndicator()
         {
-            _PendingText = new TextBlock { Text = "✳ " + ThinkingQuips.At(0), Foreground = _Theme.Muted, FontStyle = FontStyle.Italic, TextWrapping = TextWrapping.Wrap };
+            _PendingText = new TextBlock { Text = "✳ " + ThinkingPhrases.At(0), Foreground = _Theme.Muted, FontStyle = FontStyle.Italic, TextWrapping = TextWrapping.Wrap };
             _PendingBubble = new Border
             {
                 Background = _Theme.AssistantBubble,
@@ -2377,7 +2373,7 @@ namespace Mux.Desktop.Shell
             _QuipIndex++;
             if (_PendingText != null)
             {
-                _PendingText.Text = "✳ " + ThinkingQuips.At(_QuipIndex);
+                _PendingText.Text = "✳ " + ThinkingPhrases.At(_QuipIndex);
             }
         }
 
