@@ -14,7 +14,8 @@ namespace Mux.Desktop.Views
 
     /// <summary>
     /// A modal that validates a single endpoint's model live: it opens showing "Validating…", runs the shared
-    /// <see cref="LlmClient.LoadModelAsync"/> health check (stream, stop at the first token), then updates to a
+    /// <see cref="LlmClient.LoadModelAsync(Mux.Core.Models.EndpointConfig, bool, System.Threading.CancellationToken)"/>
+    /// health check (stream, stop at the first token), then updates to a
     /// ✓ ready / ⚠ reachable / ✗ unreachable result with the full, selectable error text so the user can read
     /// or copy exactly what the backend reported.
     /// </summary>
