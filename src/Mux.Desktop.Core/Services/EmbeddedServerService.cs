@@ -179,6 +179,14 @@ namespace Mux.Desktop.Services
 
                     rest.ApiKey = apiKey;
 
+                    // Pre-check the port so a clash (another mux server, the tray agent, or an unrelated
+                    // process already bound) surfaces a clear message instead of a raw socket exception.
+                    if (!IsPortAvailable(rest.Hostname, rest.Port))
+                    {
+                        _LastError = "Port " + rest.Port + " on " + rest.Hostname + " is already in use — another mux server (or the tray agent) may already be running. Change the REST port in Settings or stop the other server.";
+                        return false;
+                    }
+
                     string sessionsDir = Path.Combine(SettingsLoader.GetConfigDirectory(), "sessions");
                     SessionStore sessionStore = new SessionStore(sessionsDir);
 
@@ -248,6 +256,41 @@ namespace Mux.Desktop.Services
         #endregion
 
         #region Private-Methods
+
+        private static bool IsPortAvailable(string? hostname, int port)
+        {
+            // Try to bind a listener on the same host/port the server will use. If the bind succeeds the port
+            // is free (we release it immediately); a SocketException means it is already taken. Unknown hosts
+            // fall back to loopback. Best-effort — any other failure is treated as "available" so the real
+            // bind attempt can still surface the authoritative error.
+            System.Net.IPAddress address;
+            if (string.IsNullOrWhiteSpace(hostname)
+                || string.Equals(hostname, "localhost", StringComparison.OrdinalIgnoreCase)
+                || !System.Net.IPAddress.TryParse(hostname, out address!))
+            {
+                address = System.Net.IPAddress.Loopback;
+            }
+
+            System.Net.Sockets.TcpListener? listener = null;
+            try
+            {
+                listener = new System.Net.Sockets.TcpListener(address, port);
+                listener.Start();
+                return true;
+            }
+            catch (System.Net.Sockets.SocketException)
+            {
+                return false;
+            }
+            catch (Exception)
+            {
+                return true;
+            }
+            finally
+            {
+                try { listener?.Stop(); } catch (Exception) { }
+            }
+        }
 
         private static string ProductVersion()
         {
