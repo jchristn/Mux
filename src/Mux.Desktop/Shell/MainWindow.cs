@@ -650,6 +650,14 @@ namespace Mux.Desktop.Shell
             };
             flyout.Items.Add(thinking);
 
+            // Refresh the checkmarks each time the menu opens so they stay correct even when the sidebar was
+            // toggled elsewhere (the « » rail button), not just through this menu.
+            flyout.Opened += (sender, args) =>
+            {
+                sidebar.Header = ViewItemHeader("Collapse sidebar", _SidebarCollapsed);
+                thinking.Header = ViewItemHeader("Auto-expand thinking", _AutoExpandThinking);
+            };
+
             return flyout;
         }
 

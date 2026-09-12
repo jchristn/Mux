@@ -112,6 +112,21 @@ namespace Mux.Desktop.Views
                 return;
             }
 
+            string? conflictId = _Model.FindConflict(command.Id, chord);
+            if (conflictId != null)
+            {
+                KeybindingCommand? other = KeybindingCatalog.Find(conflictId);
+                bool proceed = await new ConfirmDialog(
+                    "Chord already in use",
+                    chord + " is already bound to \"" + (other?.Title ?? conflictId) + "\". Rebind anyway? Both commands will share this chord.",
+                    "Rebind",
+                    destructive: false).ShowDialog<bool>(this);
+                if (!proceed)
+                {
+                    return;
+                }
+            }
+
             _Model.SetChord(command.Id, chord);
             Persist();
         }

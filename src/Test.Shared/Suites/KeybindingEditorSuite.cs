@@ -90,6 +90,17 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    Case("FindConflictDetectsSharedChord", "A chord already bound to another command is reported", ct =>
+                    {
+                        KeybindingEditorModel model = new KeybindingEditorModel(null);
+                        // mux.clear defaults to ctrl+l; rebinding mux.usage to ctrl+l should conflict with it.
+                        MuxAssert.AreEqual("mux.clear", model.FindConflict("mux.usage", "Ctrl+L"), "detects the default holder");
+                        MuxAssert.IsTrue(model.FindConflict("mux.clear", "ctrl+l") == null, "same command is not its own conflict");
+                        MuxAssert.IsTrue(model.FindConflict("mux.usage", "ctrl+shift+f9") == null, "a free chord has no conflict");
+                        MuxAssert.IsTrue(model.FindConflict("mux.usage", null) == null, "unbinding never conflicts");
+                        return Task.CompletedTask;
+                    }),
+
                     Case("UnknownOverridesAndSetsIgnored", "Unknown command ids are dropped on load and ignored on set", ct =>
                     {
                         KeybindingEditorModel model = new KeybindingEditorModel(new Dictionary<string, string?> { { "mux.ghost", "ctrl+j" } });

@@ -121,6 +121,38 @@ namespace Mux.Desktop.Services
             _Overrides.Remove(id);
         }
 
+        /// <summary>
+        /// Finds another command that currently resolves to the given chord, or null when the chord is free
+        /// (or unbound). Used to warn before creating a duplicate binding. The command identified by
+        /// <paramref name="id"/> is excluded from the search.
+        /// </summary>
+        /// <param name="id">The command being rebound (excluded from the conflict search).</param>
+        /// <param name="chord">The candidate chord.</param>
+        /// <returns>The id of a conflicting command, or null when none.</returns>
+        public string? FindConflict(string id, string? chord)
+        {
+            string? normalized = Normalize(chord);
+            if (normalized == null)
+            {
+                return null;
+            }
+
+            foreach (KeybindingCommand command in KeybindingCatalog.Commands)
+            {
+                if (string.Equals(command.Id, id, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (string.Equals(EffectiveChord(command.Id), normalized, StringComparison.Ordinal))
+                {
+                    return command.Id;
+                }
+            }
+
+            return null;
+        }
+
         private static string? Normalize(string? chord)
         {
             if (string.IsNullOrWhiteSpace(chord))
