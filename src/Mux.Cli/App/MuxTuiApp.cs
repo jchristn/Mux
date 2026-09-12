@@ -7,6 +7,7 @@ namespace Mux.Cli.App
     using System.Runtime.InteropServices;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Mux.Core.Llm;
@@ -254,6 +255,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.tasks", "Tasks", null, OpenTasksModal, "View", new[] { "tasks", "task", "plan", "todo" }));
             _Catalog.Add(new CommandDescriptor("mux.usage", "Usage", null, OpenUsageView, "View", new[] { "usage", "stats", "spend" }));
             _Catalog.Add(new CommandDescriptor("mux.effort", "Reasoning effort", null, OpenEffortSelector, "Model", new[] { "effort", "reasoning", "reasoning-effort" }));
+            _Catalog.Add(new CommandDescriptor("mux.compact", "Compact conversation", null, CompactConversation, "Session", new[] { "compact", "compress", "summarize" }));
             _Catalog.Add(new CommandDescriptor("mux.settings", "Settings", null, OpenSettingsModal, "Model", new[] { "settings", "config", "preferences", "prefs" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
@@ -3794,6 +3796,83 @@ namespace Mux.Cli.App
         private void ClearTranscript()
         {
             _Conversation.Clear();
+        }
+
+        private void CompactConversation()
+        {
+            _ = CompactConversationAsync();
+        }
+
+        private async Task CompactConversationAsync()
+        {
+            List<ConversationMessage> snapshot;
+            lock (_Sync)
+            {
+                snapshot = new List<ConversationMessage>(_ConversationHistory);
+            }
+
+            if (snapshot.Count == 0)
+            {
+                PostNotice("There is nothing to compact yet.");
+                return;
+            }
+
+            EndpointConfig? endpoint = LoadActiveEndpoint();
+            if (endpoint == null)
+            {
+                PostNotice("No endpoint is configured to compact with.");
+                return;
+            }
+
+            MuxSettings settings = SettingsLoader.LoadSettings();
+            string compactionPrompt = SettingsLoader.GetActivePromptProfile().CompactionPrompt ?? string.Empty;
+
+            PostNotice("Compacting the conversation…");
+
+            CompactionResult result = await ConversationCompactor.CompactAsync(
+                snapshot,
+                endpoint,
+                compactionPrompt,
+                settings.CompactionPreserveTurns,
+                settings.IgnoreCertErrors,
+                CancellationToken.None).ConfigureAwait(false);
+
+            if (!result.Compacted || result.History == null)
+            {
+                PostNotice(result.Message);
+                return;
+            }
+
+            lock (_Sync)
+            {
+                _ConversationHistory.Clear();
+                _ConversationHistory.AddRange(result.History);
+            }
+
+            RedrawTranscriptFromHistory(result.History);
+            PostNotice(result.Message);
+        }
+
+        private void RedrawTranscriptFromHistory(List<ConversationMessage> history)
+        {
+            _Conversation.Clear();
+            WriteHeader();
+            foreach (ConversationMessage message in history)
+            {
+                if (message.Role == RoleEnum.User && !string.IsNullOrEmpty(message.Content))
+                {
+                    EchoPrompt(message.Content!);
+                }
+                else if (message.Role == RoleEnum.Assistant && !string.IsNullOrEmpty(message.Content))
+                {
+                    _Conversation.WriteLine(Text.From(message.Content!));
+                }
+                else if (message.Role == RoleEnum.System && !string.IsNullOrEmpty(message.Content)
+                    && message.Content!.StartsWith(ConversationCompactor.SummaryPrefix, StringComparison.Ordinal))
+                {
+                    WriteNotice("« earlier conversation summarized to save context »");
+                }
+            }
         }
 
         private void SetFooterHint(StyledText hint)

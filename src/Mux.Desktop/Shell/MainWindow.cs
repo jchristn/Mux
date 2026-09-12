@@ -1137,6 +1137,57 @@ namespace Mux.Desktop.Shell
             UpdateEmptyState();
         }
 
+        private async Task CompactCurrentAsync()
+        {
+            if (_Conversation == null || _Conversation.History.Count == 0)
+            {
+                AddNotice("There is nothing to compact yet.", isError: false);
+                return;
+            }
+
+            if (!(_ModelPicker.SelectedItem is EndpointConfig picked))
+            {
+                AddNotice("Select an endpoint first to compact the conversation.", isError: false);
+                return;
+            }
+
+            MuxSettings settings = SettingsLoader.LoadSettings();
+            string compactionPrompt = SettingsLoader.GetActivePromptProfile().CompactionPrompt ?? string.Empty;
+
+            AddNotice("Compacting the conversation…", isError: false);
+
+            CompactionResult result = await ConversationCompactor.CompactAsync(
+                _Conversation.History,
+                picked,
+                compactionPrompt,
+                settings.CompactionPreserveTurns,
+                settings.IgnoreCertErrors,
+                CancellationToken.None);
+
+            if (!result.Compacted || result.History == null)
+            {
+                AddNotice(result.Message, isError: !result.Success);
+                return;
+            }
+
+            _Conversation.Event -= OnConversationEvent;
+            _Conversation = new ConversationService(_Runner, result.History);
+            _Conversation.Event += OnConversationEvent;
+
+            ResetStreamingState();
+            _Transcript.Children.Clear();
+            foreach (ConversationMessage message in result.History)
+            {
+                RenderPersistedMessage(message);
+            }
+
+            UpdateEmptyState();
+
+            await PersistCurrentAsync();
+            await LoadThreadsAsync();
+            AddNotice(result.Message, isError: false);
+        }
+
         private async Task SendAsync()
         {
             string prompt = (_Composer.Text ?? string.Empty).Trim();
@@ -1276,6 +1327,9 @@ namespace Mux.Desktop.Shell
                 case "/effort":
                     OpenEffortPicker();
                     break;
+                case "/compact":
+                    _ = CompactCurrentAsync();
+                    break;
                 case "/new":
                     _ = NewChatAsync();
                     break;
@@ -1322,6 +1376,7 @@ namespace Mux.Desktop.Shell
             card.Children.Add(new TextBlock { Text = "Quick commands", FontWeight = FontWeight.SemiBold, Foreground = _Theme.Text });
             card.Children.Add(CommandRow("/clear", "Clear the transcript"));
             card.Children.Add(CommandRow("/context", "Show conversation statistics"));
+            card.Children.Add(CommandRow("/compact", "Summarize older turns to free up context"));
             card.Children.Add(CommandRow("/usage", "Open the usage dashboard"));
             card.Children.Add(CommandRow("/endpoints", "Manage model endpoints"));
             card.Children.Add(CommandRow("/mcp", "Manage MCP servers"));
@@ -1746,6 +1801,11 @@ namespace Mux.Desktop.Shell
             else if (message.Role == RoleEnum.Assistant && !string.IsNullOrEmpty(message.Content))
             {
                 AddAssistantMarkdownBubble(message.Content!);
+            }
+            else if (message.Role == RoleEnum.System && !string.IsNullOrEmpty(message.Content)
+                && message.Content!.StartsWith(ConversationCompactor.SummaryPrefix, StringComparison.Ordinal))
+            {
+                AddNotice("🗜 Earlier conversation summarized to save context.", isError: false);
             }
         }
 

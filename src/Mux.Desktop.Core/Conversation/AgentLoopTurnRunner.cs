@@ -184,10 +184,15 @@ namespace Mux.Desktop.Conversation
                 .Replace("{WorkingDirectory}", _WorkingDirectory, StringComparison.Ordinal)
                 .Replace("{ToolDescriptions}", string.Empty, StringComparison.Ordinal);
 
+            // Use the active prompt profile's compaction prompt so the user's editable prompt drives the
+            // automatic history compaction (blank falls back to the built-in default inside the loop).
+            string compactionPrompt = SettingsLoader.GetActivePromptProfile().CompactionPrompt ?? string.Empty;
+
             AgentLoopOptions options = new AgentLoopOptions(endpoint)
             {
                 ConversationHistory = new List<ConversationMessage>(history),
                 SystemPrompt = systemPrompt,
+                CompactionSystemPrompt = compactionPrompt,
                 ApprovalPolicy = ApprovalPolicyEnum.AutoSafe,
                 WorkingDirectory = _WorkingDirectory,
                 MuxSettings = settings,

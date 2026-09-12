@@ -51,6 +51,7 @@ namespace Test.Shared
                     ContextWindowManagerSuite.Create(),
                     ApprovalRoutingSuite.Create(),
                     ConversationCompactionPlannerSuite.Create(),
+                    ConversationCompactorSuite.Create(),
                     ConversationTrimCompactorSuite.Create(),
                     AgentLoopOptionsSuite.Create(),
                     ExternalToolProviderSuite.Create(),
