@@ -174,6 +174,7 @@ namespace Mux.Desktop.Shell
                 new PaletteCommand("Model pricing", "Edit model pricing", OpenPricingWindow),
                 new PaletteCommand("Web search providers", "Configure web search", OpenSearchProvidersWindow),
                 new PaletteCommand("Plugins", "Manage hooks and custom commands", OpenPluginsWindow),
+                new PaletteCommand("Keybindings", "Rebind keyboard shortcuts", OpenKeybindingsWindow),
                 new PaletteCommand("Reasoning effort", "Set the current model's reasoning effort", OpenEffortPicker),
                 new PaletteCommand("Settings", "Open settings", OpenSettingsWindow),
                 new PaletteCommand("About", "About mux", OpenAboutWindow)
@@ -251,6 +252,7 @@ namespace Mux.Desktop.Shell
                 manageGroup.Children.Add(ManageDrawerItem("💲", "Pricing", "Edit per-model token rates used to compute usage cost.", OpenPricingWindow));
                 manageGroup.Children.Add(ManageDrawerItem("🔎", "Search", "Configure external web-search providers.", OpenSearchProvidersWindow));
                 manageGroup.Children.Add(ManageDrawerItem("🧰", "Plugins", "Manage lifecycle hooks and custom slash commands.", OpenPluginsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("⌨", "Keybindings", "Rebind or unbind keyboard shortcuts.", OpenKeybindingsWindow));
                 bottom.Children.Add(HighlightBlock(manageGroup));
             }
             else
@@ -607,6 +609,11 @@ namespace Mux.Desktop.Shell
         private void OpenPluginsWindow()
         {
             _ = new PluginsWindow().ShowDialog(this);
+        }
+
+        private void OpenKeybindingsWindow()
+        {
+            _ = new KeybindingsWindow().ShowDialog(this);
         }
 
         private async void OpenEffortPicker()
@@ -1359,6 +1366,11 @@ namespace Mux.Desktop.Shell
                 case "/hooks":
                     OpenPluginsWindow();
                     break;
+                case "/keys":
+                case "/keybindings":
+                case "/shortcuts":
+                    OpenKeybindingsWindow();
+                    break;
                 case "/effort":
                     OpenEffortPicker();
                     break;
@@ -1421,6 +1433,7 @@ namespace Mux.Desktop.Shell
             card.Children.Add(CommandRow("/pricing", "Edit model pricing"));
             card.Children.Add(CommandRow("/search", "Configure web search providers"));
             card.Children.Add(CommandRow("/plugins", "Manage hooks and custom commands"));
+            card.Children.Add(CommandRow("/keys", "Rebind keyboard shortcuts"));
             card.Children.Add(CommandRow("/effort", "Set the model's reasoning effort"));
             card.Children.Add(CommandRow("/commands", "Open the command palette (Ctrl+K)"));
             card.Children.Add(CommandRow("/new", "Start a new conversation"));

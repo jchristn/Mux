@@ -95,6 +95,7 @@ namespace Test.Shared
                     CodeTokenizerSuite.Create(),
                     DesktopPreferencesSuite.Create(),
                     PromptHistorySuite.Create(),
+                    KeybindingEditorSuite.Create(),
                     WelcomeQuipsSuite.Create(),
 
                     CommandRuntimeResolverSuite.Create(),
