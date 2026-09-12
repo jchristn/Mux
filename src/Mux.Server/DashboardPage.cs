@@ -961,12 +961,49 @@ function sendChat(){
   var typing={role:"assistant",content:"",typing:true};
   messages.push(typing);renderMessages();busy=true;el("sendBtn").textContent="…";
   var payload={endpoint:endpoint,messages:messages.filter(function(m){return !m.typing;}).map(function(m){return {role:m.role,content:m.content};})};
-  api("/v1.0/api/chat","POST",payload).then(function(reply){
-    typing.typing=false;typing.content=(reply&&reply.Content)||"";typing.model=(reply&&reply.Model)||"";typing.stats=(reply&&reply.Stats)||null;
-    renderMessages();
+  streamChat(payload,typing);
+}
+
+function endChat(){busy=false;el("sendBtn").textContent="➤";}
+
+// Streams the assistant reply token-by-token over Server-Sent Events so the answer appears as it is
+// produced, rather than all at once when the whole completion finishes.
+function streamChat(payload,typing){
+  var headers={"Content-Type":"application/json","Accept":"text/event-stream"};
+  if(API_KEY) headers["Authorization"]="Bearer "+API_KEY;
+  fetch("/v1.0/api/chat/stream",{method:"POST",headers:headers,body:JSON.stringify(payload)}).then(function(res){
+    if(!res.ok||!res.body){
+      return res.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null;}catch(e){}throw new Error((j&&(j.Message||j.message))||("HTTP "+res.status));});
+    }
+    var reader=res.body.getReader();var dec=new TextDecoder();var buf="";
+    function pump(){
+      return reader.read().then(function(r){
+        if(r.done){if(typing.typing){typing.typing=false;renderMessages();}endChat();return;}
+        buf+=dec.decode(r.value,{stream:true});
+        var idx;
+        while((idx=buf.indexOf("\n\n"))>=0){var block=buf.slice(0,idx);buf=buf.slice(idx+2);handleSse(block,typing);}
+        return pump();
+      });
+    }
+    return pump();
   }).catch(function(e){
-    typing.typing=false;typing.content="⚠️ "+e.message;typing.role="assistant";renderMessages();toast(e.message,true);
-  }).finally(function(){busy=false;el("sendBtn").textContent="➤";});
+    typing.typing=false;typing.content="⚠️ "+e.message;typing.role="assistant";renderMessages();toast(e.message,true);endChat();
+  });
+}
+
+function handleSse(block,typing){
+  var ev="message",data="";
+  var lines=block.split("\n");
+  for(var i=0;i<lines.length;i++){
+    var line=lines[i];
+    if(line.indexOf("event:")===0){ev=line.slice(6).trim();}
+    else if(line.indexOf("data:")===0){data+=(data?"\n":"")+line.slice(5).replace(/^ /,"");}
+  }
+  if(!data)return;
+  var parsed;try{parsed=JSON.parse(data);}catch(e){return;}
+  if(ev==="token"){typing.typing=false;typing.content+=parsed;renderMessages();}
+  else if(ev==="done"){typing.typing=false;typing.content=(parsed&&parsed.Content)||typing.content;typing.model=(parsed&&parsed.Model)||"";typing.stats=(parsed&&parsed.Stats)||null;renderMessages();endChat();}
+  else if(ev==="error"){typing.typing=false;typing.content="⚠️ "+parsed;renderMessages();toast(String(parsed),true);endChat();}
 }
 
 function loadEndpoints(){
