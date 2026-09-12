@@ -1807,7 +1807,7 @@ namespace Mux.Cli.App
                 // would then seed the model with a run of consecutive user messages, which it treats as one
                 // batched request (the "it's re-processing my previous prompts" symptom).
                 string answer = projector.CapturedAssistantText;
-                if (!string.IsNullOrEmpty(answer))
+                if (!projector.WasCancelled && !string.IsNullOrEmpty(answer))
                 {
                     _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.User, Content = prompt });
                     _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.Assistant, Content = answer });

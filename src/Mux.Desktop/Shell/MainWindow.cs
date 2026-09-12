@@ -214,6 +214,9 @@ namespace Mux.Desktop.Shell
         {
             base.OnOpened(e);
             _ = LoadThreadsAsync();
+
+            // Land the caret in the composer immediately so the user can start typing without clicking in.
+            Dispatcher.UIThread.Post(() => _Composer?.Focus(), DispatcherPriority.Input);
         }
 
         // ---- layout ------------------------------------------------------------------------------
@@ -1859,6 +1862,8 @@ namespace Mux.Desktop.Shell
         private void SetSending(bool sending)
         {
             _SendButton.Content = sending ? "Stop" : "Send";
+            // Stop is a cancel action — colour it red; the idle Send keeps the green accent.
+            _SendButton.Background = sending ? _Theme.Error : _Theme.AccentButton;
             _Workspace.ActiveTab?.NotifyBusy(sending);
         }
 
@@ -2529,7 +2534,7 @@ namespace Mux.Desktop.Shell
                 FontSize = 13,
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(0, 0, -6, -6)
+                Margin = new Thickness(6, 0, 0, 0)
             };
             copy.Tip("Copy this response to the clipboard.");
             copy.Click += async (sender, args) =>
@@ -2551,7 +2556,13 @@ namespace Mux.Desktop.Shell
                 }
             };
 
+            // Put the copy icon in its own column so it sits beside the text, bottom-aligned, and never
+            // overlaps the last line of the response.
             Grid layout = new Grid();
+            layout.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            layout.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+            Grid.SetColumn(content, 0);
+            Grid.SetColumn(copy, 1);
             layout.Children.Add(content);
             layout.Children.Add(copy);
 

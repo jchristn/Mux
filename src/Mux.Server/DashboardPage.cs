@@ -107,7 +107,8 @@ body{background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
 .chatwrap{flex:1;min-height:0;display:grid;grid-template-columns:248px minmax(0,1fr)}
 .convos{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--panel)}
 .convos-head{height:64px;box-sizing:border-box;padding:0 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
-.convos-head .btn{flex:1}
+.convos-head .btn{flex:1;height:36px;display:inline-flex;align-items:center;justify-content:center;padding:0 10px;box-sizing:border-box}
+.convos-head .btn.icon{flex:0 0 auto;width:40px}
 .convo-list{flex:1;overflow-y:auto;padding:6px}
 .convo-empty{color:var(--muted);font-size:12px;padding:14px 10px;text-align:center}
 .convo-item{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:6px;cursor:pointer;color:var(--text)}
@@ -1060,7 +1061,7 @@ function openConvo(id){
 }
 function newChat(){messages=[];currentSessionId=null;currentModel="";setChatTitle("");renderMessages();highlightConvo();var c=el("composer");if(c)c.focus();}
 function persistConvo(){
-  var real=messages.filter(function(m){return !m.typing;});
+  var real=messages.filter(function(m){return !m.typing&&!m.local;});
   if(!real.length)return;
   var payload={Id:currentSessionId||"",Title:"",EndpointName:el("endpointSelect").value||"",Model:currentModel||"",Messages:real.map(function(m){return {Role:m.role,Content:m.content};})};
   api("/v1.0/api/sessions","PUT",payload).then(function(s){if(s&&s.Id){currentSessionId=s.Id;setChatTitle(s.Title||"");}loadConvos();}).catch(function(){});
@@ -1079,28 +1080,50 @@ function deleteConvo(id){
   });
 }
 
+var CHAT_HELP="**Chat commands**\n\n- `/?` or `/help` — show this list of commands\n- `/new` or `/clear` — start a new conversation\n\n_Type a message and press Enter to chat with your model._";
+function handleChatCommand(text){
+  var cmd=text.slice(1).trim().toLowerCase();
+  if(cmd==="?"||cmd==="help"){messages.push({role:"assistant",content:CHAT_HELP,local:true});renderMessages();return;}
+  if(cmd==="new"||cmd==="clear"){newChat();return;}
+  toast("Unknown command: "+text+" (try /?)",true);
+}
 function sendChat(){
   if(busy)return;
   var text=el("composer").value.trim();
   var endpoint=el("endpointSelect").value;
   if(!text)return;
+  // Chat slash commands are handled locally and never sent to the model.
+  if(text.charAt(0)==="/"){el("composer").value="";el("composer").style.height="44px";handleChatCommand(text);return;}
   if(!endpoint){toast("No endpoint selected",true);return;}
   messages.push({role:"user",content:text});
   el("composer").value="";el("composer").style.height="44px";
   var typing={role:"assistant",content:"",typing:true};
-  messages.push(typing);renderMessages();busy=true;el("sendBtn").textContent="…";
-  var payload={endpoint:endpoint,messages:messages.filter(function(m){return !m.typing;}).map(function(m){return {role:m.role,content:m.content};})};
+  messages.push(typing);renderMessages();busy=true;el("sendBtn").textContent="■";el("sendBtn").title="Stop the response";
+  var payload={endpoint:endpoint,messages:messages.filter(function(m){return !m.typing&&!m.local;}).map(function(m){return {role:m.role,content:m.content};})};
   streamChat(payload,typing);
 }
 
-function endChat(){busy=false;el("sendBtn").textContent="➤";}
+var currentAbort=null;
+function endChat(){busy=false;currentAbort=null;el("sendBtn").textContent="➤";el("sendBtn").title="Send";}
+// Stop the in-flight response. Abort the stream and drop the incomplete turn (both the empty assistant
+// bubble and the user prompt that started it) so the model history stays clean — matching the TUI/desktop.
+function stopChat(){if(currentAbort){try{currentAbort.abort();}catch(e){}}}
+function dropIncompleteTurn(typing){
+  var i=messages.indexOf(typing);if(i>=0)messages.splice(i,1);
+  if(messages.length&&messages[messages.length-1].role==="user")messages.pop();
+  renderMessages();
+}
 
 // Streams the assistant reply token-by-token over Server-Sent Events so the answer appears as it is
 // produced, rather than all at once when the whole completion finishes.
 function streamChat(payload,typing){
+  var ac=(typeof AbortController!=="undefined")?new AbortController():null;
+  currentAbort=ac;
   var headers={"Content-Type":"application/json","Accept":"text/event-stream"};
   if(API_KEY) headers["Authorization"]="Bearer "+API_KEY;
-  fetch("/v1.0/api/chat/stream",{method:"POST",headers:headers,body:JSON.stringify(payload)}).then(function(res){
+  var opts={method:"POST",headers:headers,body:JSON.stringify(payload)};
+  if(ac)opts.signal=ac.signal;
+  fetch("/v1.0/api/chat/stream",opts).then(function(res){
     if(!res.ok||!res.body){
       return res.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null;}catch(e){}throw new Error((j&&(j.Message||j.message))||("HTTP "+res.status));});
     }
@@ -1116,6 +1139,7 @@ function streamChat(payload,typing){
     }
     return pump();
   }).catch(function(e){
+    if(e&&e.name==="AbortError"){dropIncompleteTurn(typing);endChat();toast("Stopped");return;}
     typing.typing=false;typing.content="⚠️ "+e.message;typing.role="assistant";renderMessages();toast(e.message,true);endChat();
   });
 }
@@ -1886,7 +1910,7 @@ function applyTheme(t){document.documentElement.setAttribute("data-theme",t);loc
 
 document.querySelectorAll(".nav-item").forEach(function(n){n.addEventListener("click",function(){switchView(n.dataset.view);});});
 el("themeBtn").addEventListener("click",function(){applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");});
-el("sendBtn").addEventListener("click",sendChat);
+el("sendBtn").addEventListener("click",function(){if(busy)stopChat();else sendChat();});
 el("newChatBtn").addEventListener("click",newChat);
 el("delMultiBtn").addEventListener("click",deleteMultiple);
 el("refreshConvosBtn").addEventListener("click",function(){loadConvos();toast("Refreshed");});

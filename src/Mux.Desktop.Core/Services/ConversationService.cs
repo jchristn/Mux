@@ -106,7 +106,10 @@ namespace Mux.Desktop.Services
             }
             finally
             {
-                AppendAssistantReply(projection, userMessage);
+                // Treat a token-cancelled turn as cancelled even if the loop returned gracefully (so a turn
+                // stopped after streaming partial text is still dropped, not kept).
+                bool cancelled = projection.WasCancelled || token.IsCancellationRequested;
+                AppendAssistantReply(projection, userMessage, cancelled);
                 _IsBusy = false;
                 RaiseStateChanged();
             }
@@ -114,16 +117,17 @@ namespace Mux.Desktop.Services
             return projection;
         }
 
-        private void AppendAssistantReply(TurnProjection projection, ConversationMessage userMessage)
+        private void AppendAssistantReply(TurnProjection projection, ConversationMessage userMessage, bool cancelled)
         {
             string answer = projection.AssistantText;
-            if (string.IsNullOrEmpty(answer))
+            if (cancelled || string.IsNullOrEmpty(answer))
             {
-                // The turn produced no assistant reply (cancelled, errored, or the model ended in its
-                // reasoning channel without a final answer). Drop the user message added before the turn so
-                // the model-facing history never carries a dangling, unanswered prompt; otherwise the next
-                // turn would send a run of consecutive user messages, which the model treats as one batched
-                // request. The transcript still shows the user's bubble (rendered by the shell directly).
+                // The turn did not complete a normal exchange — it was cancelled/stopped, errored, or the
+                // model ended in its reasoning channel without a final answer. Drop the user message added
+                // before the turn so the model-facing history never carries a dangling, unanswered prompt;
+                // otherwise the next turn would send the model a run of consecutive user messages, which it
+                // treats as one batched request. The transcript still shows the user's bubble (rendered by the
+                // shell directly).
                 _History.Remove(userMessage);
                 return;
             }
