@@ -18,6 +18,7 @@ namespace Mux.Desktop.Shell
     using Avalonia.Styling;
     using Avalonia.Threading;
     using Mux.Core.Agent;
+    using Mux.Core.Checkpoints;
     using Mux.Core.Enums;
     using Mux.Core.Llm;
     using Mux.Core.Models;
@@ -63,7 +64,11 @@ namespace Mux.Desktop.Shell
         private TextBlock _QuipText = null!;
         private TextBox _Composer = null!;
         private Button _SendButton = null!;
+        private Button _UndoButton = null!;
+        private Button _RedoButton = null!;
 
+        private CheckpointManager? _Checkpoints;
+        private bool _CheckpointProbed;
         private ConversationService? _Conversation;
         private TextBlock? _StreamingBlock;
         private Border? _AssistantBorder;
@@ -175,6 +180,8 @@ namespace Mux.Desktop.Shell
                 new PaletteCommand("Web search providers", "Configure web search", OpenSearchProvidersWindow),
                 new PaletteCommand("Plugins", "Manage hooks and custom commands", OpenPluginsWindow),
                 new PaletteCommand("Keybindings", "Rebind keyboard shortcuts", OpenKeybindingsWindow),
+                new PaletteCommand("Undo last turn", "Restore the working tree to before the last turn", () => _ = UndoLastTurnAsync()),
+                new PaletteCommand("Redo last undo", "Reapply the most recently undone change", () => _ = RedoLastUndoAsync()),
                 new PaletteCommand("Reasoning effort", "Set the current model's reasoning effort", OpenEffortPicker),
                 new PaletteCommand("Settings", "Open settings", OpenSettingsWindow),
                 new PaletteCommand("About", "About mux", OpenAboutWindow)
@@ -616,6 +623,126 @@ namespace Mux.Desktop.Shell
             _ = new KeybindingsWindow().ShowDialog(this);
         }
 
+        private Button HeaderGlyphButton(string glyph, string tip)
+        {
+            Button button = new Button
+            {
+                Content = glyph,
+                Background = Brushes.Transparent,
+                Foreground = _Theme.Text,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(6, 4, 6, 4),
+                FontSize = 15,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            button.Tip(tip);
+            return button;
+        }
+
+        private async Task EnsureCheckpointManagerAsync()
+        {
+            if (_CheckpointProbed)
+            {
+                return;
+            }
+
+            _CheckpointProbed = true;
+            try
+            {
+                GitCheckpointService service = new GitCheckpointService(_Runner.WorkingDirectory);
+                if (await service.IsRepositoryAsync(CancellationToken.None))
+                {
+                    _Checkpoints = new CheckpointManager(service);
+                }
+            }
+            catch (Exception)
+            {
+                // git unavailable or probe failed; leave undo/redo disabled.
+            }
+
+            UpdateUndoRedoButtons();
+        }
+
+        private void UpdateUndoRedoButtons()
+        {
+            bool available = _Checkpoints != null;
+            _UndoButton.IsVisible = available;
+            _RedoButton.IsVisible = available;
+            if (!available)
+            {
+                return;
+            }
+
+            _UndoButton.IsEnabled = _Checkpoints!.CanUndo;
+            _RedoButton.IsEnabled = _Checkpoints!.CanRedo;
+        }
+
+        private async Task UndoLastTurnAsync()
+        {
+            if (_Checkpoints == null)
+            {
+                AddNotice("Undo is unavailable (not a git repository).", isError: false);
+                return;
+            }
+
+            if (_Conversation != null && _Conversation.IsBusy)
+            {
+                return;
+            }
+
+            try
+            {
+                Checkpoint? restored = await _Checkpoints.UndoAsync(CancellationToken.None);
+                if (restored == null)
+                {
+                    AddNotice("Nothing to undo.", isError: false);
+                }
+                else
+                {
+                    AddNotice("↶ Undid \"" + restored.Label + "\" — working tree restored. Use /redo to reapply.", isError: false);
+                }
+            }
+            catch (Exception ex)
+            {
+                AddNotice("Undo failed: " + ex.Message, isError: true);
+            }
+
+            UpdateUndoRedoButtons();
+        }
+
+        private async Task RedoLastUndoAsync()
+        {
+            if (_Checkpoints == null)
+            {
+                AddNotice("Redo is unavailable (not a git repository).", isError: false);
+                return;
+            }
+
+            if (_Conversation != null && _Conversation.IsBusy)
+            {
+                return;
+            }
+
+            try
+            {
+                Checkpoint? restored = await _Checkpoints.RedoAsync(CancellationToken.None);
+                if (restored == null)
+                {
+                    AddNotice("Nothing to redo.", isError: false);
+                }
+                else
+                {
+                    AddNotice("↷ Redid \"" + restored.Label + "\" — working tree reapplied.", isError: false);
+                }
+            }
+            catch (Exception ex)
+            {
+                AddNotice("Redo failed: " + ex.Message, isError: true);
+            }
+
+            UpdateUndoRedoButtons();
+        }
+
         private async void OpenEffortPicker()
         {
             if (!(_ModelPicker.SelectedItem is EndpointConfig selected))
@@ -759,6 +886,15 @@ namespace Mux.Desktop.Shell
             header.Children.Add(_TitleText);
 
             StackPanel right = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+
+            _UndoButton = HeaderGlyphButton("↶", "Undo the last turn's file changes (restores the git working tree).");
+            _UndoButton.Click += async (sender, args) => await UndoLastTurnAsync();
+            right.Children.Add(_UndoButton);
+
+            _RedoButton = HeaderGlyphButton("↷", "Redo the most recently undone change.");
+            _RedoButton.Click += async (sender, args) => await RedoLastUndoAsync();
+            right.Children.Add(_RedoButton);
+            UpdateUndoRedoButtons();
 
             _ContextIndicator = new TextBlock { Text = string.Empty, FontSize = 12, Foreground = _Theme.Muted, VerticalAlignment = VerticalAlignment.Center };
             right.Children.Add(_ContextIndicator);
@@ -1267,6 +1403,20 @@ namespace Mux.Desktop.Shell
             UpdateEmptyState();
             SetSending(true);
 
+            await EnsureCheckpointManagerAsync();
+            if (_Checkpoints != null)
+            {
+                try
+                {
+                    await _Checkpoints.RecordAsync(CheckpointLabel(prompt), _TurnCts.Token);
+                    UpdateUndoRedoButtons();
+                }
+                catch (Exception)
+                {
+                    // Best-effort snapshot; never block the turn on checkpointing.
+                }
+            }
+
             try
             {
                 TurnProjection projection = await _Conversation!.RunTurnAsync(prompt, _TurnCts.Token);
@@ -1289,6 +1439,17 @@ namespace Mux.Desktop.Shell
                 await PersistCurrentAsync();
                 await LoadThreadsAsync();
             }
+        }
+
+        private static string CheckpointLabel(string prompt)
+        {
+            string trimmed = (prompt ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+            if (trimmed.Length <= 60)
+            {
+                return trimmed.Length == 0 ? "turn" : trimmed;
+            }
+
+            return trimmed.Substring(0, 57) + "…";
         }
 
         private void SetSending(bool sending)
@@ -1371,6 +1532,12 @@ namespace Mux.Desktop.Shell
                 case "/shortcuts":
                     OpenKeybindingsWindow();
                     break;
+                case "/undo":
+                    _ = UndoLastTurnAsync();
+                    break;
+                case "/redo":
+                    _ = RedoLastUndoAsync();
+                    break;
                 case "/effort":
                     OpenEffortPicker();
                     break;
@@ -1424,6 +1591,8 @@ namespace Mux.Desktop.Shell
             card.Children.Add(CommandRow("/clear", "Clear the transcript"));
             card.Children.Add(CommandRow("/context", "Show conversation statistics"));
             card.Children.Add(CommandRow("/compact", "Summarize older turns to free up context"));
+            card.Children.Add(CommandRow("/undo", "Undo the last turn's file changes"));
+            card.Children.Add(CommandRow("/redo", "Redo the last undone change"));
             card.Children.Add(CommandRow("/usage", "Open the usage dashboard"));
             card.Children.Add(CommandRow("/endpoints", "Manage model endpoints"));
             card.Children.Add(CommandRow("/mcp", "Manage MCP servers"));
