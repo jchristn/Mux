@@ -139,9 +139,10 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .msg.user{align-items:flex-end}
 .bubble{max-width:min(760px,100%);padding:12px 15px;border-radius:8px;background:var(--panel-2);white-space:normal;word-wrap:break-word}
 .msg.assistant .bubble{position:relative}
-.msgcopy{position:absolute;top:6px;right:6px;background:var(--panel);border:1px solid var(--line);border-radius:5px;color:var(--muted);cursor:pointer;font-size:12px;line-height:1;padding:3px 6px;opacity:0;transition:opacity .12s}
+.msgcopy{position:absolute;bottom:6px;right:6px;background:var(--panel);border:1px solid var(--line);border-radius:5px;color:var(--muted);cursor:pointer;font-size:12px;line-height:1;padding:3px 6px;opacity:0;transition:opacity .12s}
 .msg.assistant .bubble:hover .msgcopy{opacity:1}
 .msgcopy:hover{color:var(--accent);border-color:var(--accent)}
+.msgcopy.ok{opacity:1;color:var(--accent);border-color:var(--accent)}
 .msg.user .bubble{background:color-mix(in srgb,var(--accent) 18%,var(--panel))}
 .bubble pre{background:#2f343a;color:#f6f8fa;border:1px solid #4b5563;border-radius:6px;padding:12px;overflow:auto;font-size:13px}
 .bubble code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
@@ -986,7 +987,7 @@ function renderMessages(){
     var m=messages[i];
     var think=(m.role==="assistant"&&m.thinking)?'<div class="think">💭 '+esc(m.thinking).replace(/\n/g,"<br>")+'</div>':'';
     var body=m.typing?'<div class="thinking"><span></span><span></span><span></span></div>':(m.role==="assistant"?md(m.content):"<p>"+esc(m.content).replace(/\n/g,"<br>")+"</p>");
-    var cp=(m.role==="assistant"&&!m.typing&&!m.local&&m.content)?'<button class="msgcopy" title="Copy response to the clipboard" onclick="copyMsg('+i+')">⧉</button>':'';
+    var cp=(m.role==="assistant"&&!m.typing&&!m.local&&m.content)?'<button class="msgcopy" title="Copy response to the clipboard" onclick="copyMsg('+i+',this)">⧉</button>':'';
     var inner=cp+think+body;
     html+='<div class="msg '+m.role+'"><div class="bubble">'+inner+'</div>';
     if(m.role==="assistant"&&!m.typing&&m.model){html+='<div class="meta">'+esc(m.model)+statInfo(m.stats)+'</div>';}
@@ -995,12 +996,7 @@ function renderMessages(){
   box.innerHTML=html;
   box.scrollTop=box.scrollHeight;
 }
-function copyMsg(i){
-  var m=messages[i];if(!m||!m.content)return;
-  var done=function(){toast("Copied");};var fail=function(){toast("Copy failed",true);};
-  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(m.content).then(done).catch(fail);}
-  else{try{var ta=document.createElement("textarea");ta.value=m.content;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);done();}catch(e){fail();}}
-}
+function copyMsg(i,btn){var m=messages[i];if(!m||!m.content)return;copyText(m.content,btn);}
 
 /* ---- conversations (persisted like the desktop/TUI: list, open, new, rename, delete, export) ---- */
 function setChatTitle(x){var e=el("chatTitle");if(e)e.textContent=x||"";}
@@ -1439,8 +1435,11 @@ function gridLoading(cid){var b=el(cid);if(b)b.innerHTML='<div class="empty"><di
 function gridError(cid,msg){var b=el(cid);if(b)b.innerHTML='<div class="empty"><div class="eicon">⚠️</div><div>'+esc(msg||t("tbl.failed"))+'</div><button class="btn" data-retry="'+cid+'">'+t("act.retry")+'</button></div>';}
 var _reload={};
 function fallbackCopy(t){var ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();try{document.execCommand("copy");}catch(e){}document.body.removeChild(ta);}
-function copyText(t,btn){var done=function(){if(btn){var o=btn.textContent;btn.textContent="Copied";btn.classList.add("ok");setTimeout(function(){btn.textContent=o;btn.classList.remove("ok");},1300);}else toast(t("toast.copied"));};
-  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(done).catch(function(){fallbackCopy(t);done();});else{fallbackCopy(t);done();}}
+// The single shared copy helper used everywhere in the dashboard. Copies text (navigator.clipboard on a
+// secure context, execCommand fallback on plain http / non-localhost) and briefly flips the button to a
+// green checkmark (via the .ok class) instead of a toast, restoring its original content afterward.
+function copyText(t,btn){var done=function(){if(btn){if(btn.getAttribute("data-flashing"))return;btn.setAttribute("data-orig",btn.innerHTML);btn.setAttribute("data-flashing","1");btn.innerHTML="✓";btn.classList.add("ok");setTimeout(function(){btn.innerHTML=btn.getAttribute("data-orig")||btn.innerHTML;btn.classList.remove("ok");btn.removeAttribute("data-flashing");btn.removeAttribute("data-orig");},1200);}else toast(t("toast.copied"));};
+  if(navigator.clipboard&&navigator.clipboard.writeText&&window.isSecureContext){navigator.clipboard.writeText(t).then(done).catch(function(){fallbackCopy(t);done();});}else{fallbackCopy(t);done();}}
 function viewJson(title,obj){var txt=JSON.stringify(obj,null,2);openModal(title,'<pre style="white-space:pre-wrap;margin:0;max-height:60vh">'+esc(txt)+'</pre>',[{label:t("act.copyjson"),onClick:function(){copyText(txt,this);}},{label:t("act.close"),primary:true,onClick:closeModal}],true);}
 function dupOf(o,idf){var c=JSON.parse(JSON.stringify(o));if(idf)delete c[idf];c.IsDefault=false;delete c.ApiKey;delete c.ApiKeySet;delete c.AuthSecret;delete c.AuthSecretSet;return c;}
 function busyModal(on){var f=el("modalFoot");if(!f)return;var bs=f.querySelectorAll("button");for(var i=0;i<bs.length;i++)bs[i].disabled=on;}

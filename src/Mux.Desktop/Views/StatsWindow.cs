@@ -26,8 +26,6 @@ namespace Mux.Desktop.Views
         private static readonly IBrush OutputColor = new SolidColorBrush(Color.Parse("#d29922"));
 
         private readonly string _Json;
-        private readonly TextBlock _CopyGlyph = new TextBlock { Text = "⧉", FontSize = 16 };
-        private DispatcherTimer? _CopyResetTimer;
 
         /// <summary>
         /// Instantiate the statistics window.
@@ -43,7 +41,6 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
             _Json = BuildJson(metrics, turns, contextWindow, estimatedTokens);
-            _CopyGlyph.Foreground = theme.Muted;
 
             Title = "Conversation statistics";
             Icon = IconResources.LoadWindowIcon();
@@ -90,42 +87,12 @@ namespace Mux.Desktop.Views
             DockPanel.SetDock(title, Dock.Left);
             header.Children.Add(title);
 
-            Button copy = new Button
-            {
-                Content = _CopyGlyph,
-                Background = Brushes.Transparent,
-                BorderThickness = new Thickness(0),
-                Padding = new Thickness(6, 2, 6, 2),
-                HorizontalAlignment = HorizontalAlignment.Right
-            };
-            ToolTip.SetTip(copy, "Copy statistics as JSON");
-            copy.Click += (sender, args) => CopyJson();
+            CopyButton copy = new CopyButton(() => _Json, theme) { HorizontalAlignment = HorizontalAlignment.Right };
+            copy.Tip("Copy statistics as JSON");
             DockPanel.SetDock(copy, Dock.Right);
             header.Children.Add(copy);
 
             return header;
-        }
-
-        private void CopyJson()
-        {
-            IClipboard? clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-            if (clipboard == null)
-            {
-                return;
-            }
-
-            _ = clipboard.SetTextAsync(_Json);
-            _CopyGlyph.Text = "✓";
-
-            _CopyResetTimer?.Stop();
-            _CopyResetTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
-            _CopyResetTimer.Tick += (sender, args) =>
-            {
-                _CopyResetTimer?.Stop();
-                _CopyResetTimer = null;
-                _CopyGlyph.Text = "⧉";
-            };
-            _CopyResetTimer.Start();
         }
 
         private static TextBlock SectionLabel(string text, AppTheme theme)

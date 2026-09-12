@@ -2499,7 +2499,9 @@ namespace Mux.Desktop.Shell
             SelectableTextBlock content = new SelectableTextBlock { Text = string.Empty, Foreground = _Theme.Text, TextWrapping = TextWrapping.Wrap };
             Border host = new Border { Child = content };
             _AssistantContentHost = host;
-            Border bubble = NewAssistantBorder(host, () => _StreamingBlock?.Text ?? content.Text ?? string.Empty);
+            // Read this bubble's own text block (not the shared _StreamingBlock field, which points at the
+            // latest turn) so the copy button always copies THIS response, even after later turns run.
+            Border bubble = NewAssistantBorder(host, () => content.Text ?? string.Empty);
             _AssistantBorder = bubble;
             _Transcript.Children.Add(bubble);
             ScrollTranscriptToEnd();
@@ -2524,38 +2526,11 @@ namespace Mux.Desktop.Shell
 
         private Border NewAssistantBorder(Control content, Func<string> rawTextProvider)
         {
-            Button copy = new Button
+            CopyButton copy = new CopyButton(rawTextProvider, _Theme)
             {
-                Content = "⧉",
-                Background = Brushes.Transparent,
-                Foreground = _Theme.Muted,
-                BorderThickness = new Thickness(0),
-                Padding = new Thickness(4, 0, 4, 0),
-                FontSize = 13,
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Bottom,
                 Margin = new Thickness(6, 0, 0, 0)
-            };
-            copy.Tip("Copy this response to the clipboard.");
-            copy.Click += async (sender, args) =>
-            {
-                try
-                {
-                    // Prefer this window's clipboard (a TopLevel), falling back to a tree walk from the button.
-                    IClipboard? clipboard = Clipboard ?? TopLevel.GetTopLevel(copy)?.Clipboard;
-                    string text = rawTextProvider() ?? string.Empty;
-                    if (clipboard != null && text.Length > 0)
-                    {
-                        await clipboard.SetTextAsync(text);
-                        copy.Content = "✓";
-                        await Task.Delay(1200);
-                        copy.Content = "⧉";
-                    }
-                }
-                catch (Exception)
-                {
-                    // Best-effort copy.
-                }
             };
 
             // Put the copy icon in its own column so it sits beside the text, bottom-aligned, and never
