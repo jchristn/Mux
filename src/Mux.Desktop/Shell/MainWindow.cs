@@ -71,6 +71,7 @@ namespace Mux.Desktop.Shell
         private CheckpointManager? _Checkpoints;
         private Task? _CheckpointProbe;
         private readonly WorkspaceViewModel _Workspace = new WorkspaceViewModel();
+        private readonly Dictionary<string, StackPanel> _TabTranscripts = new Dictionary<string, StackPanel>(StringComparer.Ordinal);
         private Border _TabStripHost = null!;
         private ConversationService? _Conversation;
         private TextBlock? _StreamingBlock;
@@ -1106,6 +1107,7 @@ namespace Mux.Desktop.Shell
 
             tab.PropertyChanged -= OnTabPropertyChanged;
             _Workspace.CloseTab(tab);
+            _TabTranscripts.Remove(tab.Id);
             RenderTabStrip();
 
             if (!wasActive)
@@ -1135,7 +1137,8 @@ namespace Mux.Desktop.Shell
             _CurrentTitle = string.Empty;
             _TitleSummarized = false;
             ResetStreamingState();
-            _Transcript.Children.Clear();
+            _Transcript = new StackPanel { Margin = new Thickness(24, 16, 24, 16), Spacing = 14 };
+            _TranscriptScroll.Content = _Transcript;
             _TitleText.Text = "mux";
             _LastEstimatedTokens = 0;
             UpdateContextIndicator();
@@ -1176,6 +1179,7 @@ namespace Mux.Desktop.Shell
             {
                 tab.PropertyChanged -= OnTabPropertyChanged;
                 _Workspace.CloseTab(tab);
+                _TabTranscripts.Remove(tab.Id);
             }
 
             RenderTabStrip();
@@ -1367,6 +1371,9 @@ namespace Mux.Desktop.Shell
         {
             _Theme = AppTheme.Current;
             ResetStreamingState();
+            // Cached transcript panels belong to the old visual tree and old theme colors; drop them so each
+            // tab re-renders fresh (RefreshAfterRebuild re-opens the current thread).
+            _TabTranscripts.Clear();
             Background = _Theme.Surface;
             Content = BuildLayout();
             PopulateModelPicker();
@@ -1634,14 +1641,35 @@ namespace Mux.Desktop.Shell
             _Conversation.Event += OnConversationEvent;
 
             ResetStreamingState();
-            _Transcript.Children.Clear();
-            foreach (ConversationMessage message in snapshot.ConversationHistory)
+
+            // Each tab keeps its own rendered transcript so switching tabs is instant and preserves scroll,
+            // rather than clearing and re-rendering from disk every time. Point _Transcript (the target of all
+            // render helpers) at this thread's panel and show it.
+            _Transcript = GetOrCreateTranscriptPanel(snapshot.Id, snapshot.ConversationHistory);
+            _TranscriptScroll.Content = _Transcript;
+
+            OpenOrFocusTab(snapshot.Id, snapshot.Title);
+            UpdateEmptyState();
+        }
+
+        private StackPanel GetOrCreateTranscriptPanel(string id, IReadOnlyList<ConversationMessage> history)
+        {
+            if (_TabTranscripts.TryGetValue(id, out StackPanel? existing))
+            {
+                return existing;
+            }
+
+            StackPanel panel = new StackPanel { Margin = new Thickness(24, 16, 24, 16), Spacing = 14 };
+            _TabTranscripts[id] = panel;
+
+            // RenderPersistedMessage appends to _Transcript, so target the new panel while rendering history.
+            _Transcript = panel;
+            foreach (ConversationMessage message in history)
             {
                 RenderPersistedMessage(message);
             }
 
-            OpenOrFocusTab(snapshot.Id, snapshot.Title);
-            UpdateEmptyState();
+            return panel;
         }
 
         private async Task CompactCurrentAsync()
@@ -2253,6 +2281,7 @@ namespace Mux.Desktop.Shell
             {
                 tab.PropertyChanged -= OnTabPropertyChanged;
                 _Workspace.CloseTab(tab);
+                _TabTranscripts.Remove(id);
                 RenderTabStrip();
             }
 
