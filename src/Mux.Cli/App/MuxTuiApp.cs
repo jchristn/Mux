@@ -258,6 +258,8 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.compact", "Compact conversation", null, CompactConversation, "Session", new[] { "compact", "compress", "summarize" }));
             _Catalog.Add(new CommandDescriptor("mux.settings", "Settings", null, OpenSettingsModal, "Model", new[] { "settings", "config", "preferences", "prefs" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme", null, OpenThemeSelector, "View", new[] { "theme" }));
+            _Catalog.Add(new CommandDescriptor("mux.theme.dark", "Dark mode", null, () => ApplyThemeByName("dark", persist: true), "View", new[] { "dark" }));
+            _Catalog.Add(new CommandDescriptor("mux.theme.light", "Light mode", null, () => ApplyThemeByName("light", persist: true), "View", new[] { "light" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
             _Catalog.Add(new CommandDescriptor("mux.borders", "Toggle boundary lines", null, ToggleBoundaries, "View", new[] { "borders", "boundaries", "boundary", "lines" }));
             _Catalog.Add(new CommandDescriptor("mux.thinking", "Toggle thinking display", null, ToggleThinking, "View", new[] { "thinking", "think", "reasoning-display" }));
@@ -306,6 +308,16 @@ namespace Mux.Cli.App
             RefreshSidebar();
             RefreshFooter();
             ApplyResponsiveLayout();
+
+            // Restore the persisted theme (best-effort) so the shell opens in the user's chosen appearance.
+            try
+            {
+                ApplyThemeByName(SettingsLoader.LoadSettings().TuiTheme, persist: false);
+            }
+            catch (Exception)
+            {
+                // Keep the default theme on any settings read failure.
+            }
 
             if (showSplash)
             {
@@ -880,6 +892,7 @@ namespace Mux.Cli.App
             if (result is int index && index >= 0 && index < _Themes.Length)
             {
                 ApplyTheme(index);
+                PersistThemeName(ThemeNameForIndex(_ThemeIndex));
             }
         }
 
@@ -905,6 +918,66 @@ namespace Mux.Cli.App
             RepaintPromptLabel();
             RefreshSidebar();
             RefreshFooter();
+        }
+
+        /// <summary>
+        /// Applies a theme by name (<c>mux</c>, <c>dark</c>, <c>light</c>, <c>highcontrast</c>) and, when
+        /// requested, persists it to settings so it survives restarts.
+        /// </summary>
+        /// <param name="name">The theme name; unknown names fall back to the mux default.</param>
+        /// <param name="persist">True to save the choice to settings.json.</param>
+        public void ApplyThemeByName(string name, bool persist)
+        {
+            ApplyTheme(ThemeIndexForName(name));
+
+            if (persist)
+            {
+                PersistThemeName(ThemeNameForIndex(_ThemeIndex));
+            }
+        }
+
+        private void PersistThemeName(string name)
+        {
+            try
+            {
+                MuxSettings settings = SettingsLoader.LoadSettings();
+                settings.TuiTheme = name;
+                SettingsLoader.SaveSettings(settings);
+            }
+            catch (Exception)
+            {
+                // Best-effort; the theme still applies for this session.
+            }
+        }
+
+        private static int ThemeIndexForName(string? name)
+        {
+            switch ((name ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "dark":
+                    return 1;
+                case "light":
+                    return 2;
+                case "highcontrast":
+                    return 3;
+                default:
+                    return 0;
+            }
+        }
+
+        private static string ThemeNameForIndex(int index)
+        {
+            switch (index)
+            {
+                case 1:
+                    return "dark";
+                case 2:
+                    return "light";
+                case 3:
+                    return "highcontrast";
+                default:
+                    return "mux";
+            }
         }
 
         /// <summary>

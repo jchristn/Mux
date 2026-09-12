@@ -26,6 +26,7 @@ namespace Mux.Core.Models
         private string _DefaultEnqueueBehavior = "ask";
         private bool _IgnoreCertErrors = false;
         private bool _ShowBoundaryLines = false;
+        private string _TuiTheme = "mux";
         private bool _SkillsEnabled = true;
         private int _SkillRefreshIntervalSeconds = 30;
         private string? _SkillsDirectory = null;
@@ -236,6 +237,35 @@ namespace Mux.Core.Models
         {
             get => _ShowBoundaryLines;
             set => _ShowBoundaryLines = value;
+        }
+
+        /// <summary>
+        /// The interactive shell's color theme: <c>mux</c> (default), <c>dark</c>, <c>light</c>, or
+        /// <c>highcontrast</c>. Toggle live with <c>/dark</c> and <c>/light</c>. Unknown values fall back to
+        /// <c>mux</c>.
+        /// </summary>
+        [JsonPropertyName("tuiTheme")]
+        public string TuiTheme
+        {
+            get => _TuiTheme;
+            set
+            {
+                switch ((value ?? string.Empty).Trim().ToLowerInvariant())
+                {
+                    case "dark":
+                        _TuiTheme = "dark";
+                        break;
+                    case "light":
+                        _TuiTheme = "light";
+                        break;
+                    case "highcontrast":
+                        _TuiTheme = "highcontrast";
+                        break;
+                    default:
+                        _TuiTheme = "mux";
+                        break;
+                }
+            }
         }
 
         /// <summary>

@@ -4,4 +4,15 @@
 set -e
 TFM="${1:-net10.0}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+cat <<'EOF'
+
+ _____ _ _ _ _
+|     | | |_'_|
+|_|_|_|___|_,_|
+
+ mux desktop
+
+EOF
+
 dotnet run --project "$SCRIPT_DIR/src/Mux.Desktop/Mux.Desktop.csproj" --framework "$TFM"
