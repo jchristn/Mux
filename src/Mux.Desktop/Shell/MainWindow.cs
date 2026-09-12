@@ -173,6 +173,7 @@ namespace Mux.Desktop.Shell
                 new PaletteCommand("Subagents", "Manage subagent definitions", OpenSubagentsWindow),
                 new PaletteCommand("Model pricing", "Edit model pricing", OpenPricingWindow),
                 new PaletteCommand("Web search providers", "Configure web search", OpenSearchProvidersWindow),
+                new PaletteCommand("Plugins", "Manage hooks and custom commands", OpenPluginsWindow),
                 new PaletteCommand("Reasoning effort", "Set the current model's reasoning effort", OpenEffortPicker),
                 new PaletteCommand("Settings", "Open settings", OpenSettingsWindow),
                 new PaletteCommand("About", "About mux", OpenAboutWindow)
@@ -249,6 +250,7 @@ namespace Mux.Desktop.Shell
                 manageGroup.Children.Add(ManageDrawerItem("🤖", "Subagents", "Define subagents the model can delegate scoped tasks to.", OpenSubagentsWindow));
                 manageGroup.Children.Add(ManageDrawerItem("💲", "Pricing", "Edit per-model token rates used to compute usage cost.", OpenPricingWindow));
                 manageGroup.Children.Add(ManageDrawerItem("🔎", "Search", "Configure external web-search providers.", OpenSearchProvidersWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🧰", "Plugins", "Manage lifecycle hooks and custom slash commands.", OpenPluginsWindow));
                 bottom.Children.Add(HighlightBlock(manageGroup));
             }
             else
@@ -600,6 +602,11 @@ namespace Mux.Desktop.Shell
         private void OpenSearchProvidersWindow()
         {
             _ = new SearchProvidersWindow().ShowDialog(this);
+        }
+
+        private void OpenPluginsWindow()
+        {
+            _ = new PluginsWindow().ShowDialog(this);
         }
 
         private async void OpenEffortPicker()
@@ -1347,6 +1354,11 @@ namespace Mux.Desktop.Shell
                 case "/websearch":
                     OpenSearchProvidersWindow();
                     break;
+                case "/plugin":
+                case "/plugins":
+                case "/hooks":
+                    OpenPluginsWindow();
+                    break;
                 case "/effort":
                     OpenEffortPicker();
                     break;
@@ -1408,6 +1420,7 @@ namespace Mux.Desktop.Shell
             card.Children.Add(CommandRow("/subagents", "Manage subagent definitions"));
             card.Children.Add(CommandRow("/pricing", "Edit model pricing"));
             card.Children.Add(CommandRow("/search", "Configure web search providers"));
+            card.Children.Add(CommandRow("/plugins", "Manage hooks and custom commands"));
             card.Children.Add(CommandRow("/effort", "Set the model's reasoning effort"));
             card.Children.Add(CommandRow("/commands", "Open the command palette (Ctrl+K)"));
             card.Children.Add(CommandRow("/new", "Start a new conversation"));
