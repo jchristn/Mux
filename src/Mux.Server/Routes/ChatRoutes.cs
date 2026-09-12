@@ -6,12 +6,15 @@ namespace Mux.Server.Routes
     using System.Linq;
     using System.Text.Json;
     using System.Threading.Tasks;
+    using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Prompting;
     using Mux.Core.Settings;
+    using Mux.Core.Skills;
     using Mux.Core.Telemetry;
+    using Mux.Core.Tools;
     using Mux.Server.Models;
     using WatsonWebserver;
     using WatsonWebserver.Core;
@@ -30,6 +33,13 @@ namespace Mux.Server.Routes
         private readonly string? _ApiKey;
         private readonly Func<List<EndpointConfig>> _EndpointsProvider;
         private readonly IUsageRecorder? _UsageRecorder;
+
+        // Server-lifetime tool runtimes, created lazily on the first chat so MCP servers are connected once
+        // and reused across requests. Not disposed — they live for the server process.
+        private readonly object _ToolSync = new object();
+        private McpRuntime? _Mcp;
+        private SkillRuntime? _Skills;
+        private bool _ToolsInitialized;
 
         /// <summary>
         /// Instantiate.
@@ -209,6 +219,54 @@ namespace Mux.Server.Routes
             });
         }
 
+        // Lazily starts the server-lifetime MCP + skills runtimes on the first chat so the dashboard model can
+        // call MCP tools and use skills. Best-effort: if either fails to start, chat still works without it.
+        private void EnsureToolRuntimes()
+        {
+            if (_ToolsInitialized)
+            {
+                return;
+            }
+
+            lock (_ToolSync)
+            {
+                if (_ToolsInitialized)
+                {
+                    return;
+                }
+
+                try
+                {
+                    _Mcp = new McpRuntime(SettingsLoader.LoadMcpServers, () => { }, TimeSpan.FromSeconds(30), onNotice: null);
+                    _Mcp.Start();
+                }
+                catch (Exception)
+                {
+                    _Mcp = null;
+                }
+
+                try
+                {
+                    MuxSettings settings = SettingsLoader.LoadSettings();
+                    if (settings.SkillsEnabled)
+                    {
+                        _Skills = new SkillRuntime(
+                            SettingsLoader.ResolveSkillsDirectory(settings),
+                            SettingsLoader.LoadSkillIndex,
+                            () => { },
+                            TimeSpan.FromSeconds(settings.SkillRefreshIntervalSeconds));
+                        _Skills.Start();
+                    }
+                }
+                catch (Exception)
+                {
+                    _Skills = null;
+                }
+
+                _ToolsInitialized = true;
+            }
+        }
+
         private async Task StreamChatAsync(HttpContextBase ctx)
         {
             if (!ApiAuth.Authorize(ctx, _ApiKey))
@@ -244,7 +302,31 @@ namespace Mux.Server.Routes
             bool ignoreCertErrors = false;
             try { ignoreCertErrors = SettingsLoader.LoadSettings().IgnoreCertErrors; } catch (Exception) { }
 
-            List<ConversationMessage> messages = BuildMessages(request);
+            EnsureToolRuntimes();
+
+            MuxSettings settings;
+            try { settings = SettingsLoader.LoadSettings(); } catch (Exception) { settings = new MuxSettings(); }
+
+            // Split the message array into prior history + the newest user prompt (the agent loop appends the
+            // prompt itself). The dashboard always sends the user's new message last.
+            List<ConversationMessage> history = new List<ConversationMessage>();
+            for (int i = 0; i < request.Messages.Count - 1; i++)
+            {
+                ChatMessageDto m = request.Messages[i];
+                history.Add(new ConversationMessage { Role = RoleEnumExtensions.ParseRole(m.Role), Content = m.Content ?? string.Empty });
+            }
+            string prompt = request.Messages[request.Messages.Count - 1].Content ?? string.Empty;
+
+            bool toolsEnabled = endpoint.Quirks?.SupportsTools ?? true;
+            List<ToolDefinition> builtInTools = new BuiltInToolRegistry(settings).GetToolDefinitions();
+            ResolvedSystemPrompt resolved = SystemPromptResolver.Resolve(
+                SettingsLoader.LoadSystemPrompt(null, settings),
+                SettingsLoader.GetActivePromptProfile(),
+                toolsEnabled,
+                builtInTools,
+                Directory.GetCurrentDirectory(),
+                settings.TaskPlanningEnabled,
+                null);
 
             // Everything validated — switch the response into Server-Sent Events mode and stream.
             ctx.Response.StatusCode = 200;
@@ -254,54 +336,72 @@ namespace Mux.Server.Routes
             System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
             long ttftMs = -1;
             System.Text.StringBuilder content = new System.Text.StringBuilder();
+            RunCompletedEvent? runCompleted = null;
             string? errorMessage = null;
 
             try
             {
-                using LlmClient client = new LlmClient(endpoint, ignoreCertErrors);
-
-                await foreach (Mux.Core.Agent.AgentEvent agentEvent in client.StreamAsync(messages, new List<ToolDefinition>(), ctx.Token).ConfigureAwait(false))
+                AgentLoopOptions options = new AgentLoopOptions(endpoint)
                 {
-                    if (agentEvent is Mux.Core.Agent.AssistantTextEvent textEvent)
-                    {
-                        if (string.IsNullOrEmpty(textEvent.Text))
-                        {
-                            continue;
-                        }
+                    ConversationHistory = history,
+                    SystemPrompt = resolved.SystemPrompt,
+                    CompactionSystemPrompt = resolved.CompactionSystemPrompt,
+                    // No approval UI in the browser: read-only tools auto-run under AutoSafe; anything that
+                    // would prompt (mutating tools like write_file / run_process) is denied so a web chat can
+                    // never mutate the server.
+                    ApprovalPolicy = ApprovalPolicyEnum.AutoSafe,
+                    PromptUserFunc = _ => System.Threading.Tasks.Task.FromResult("n"),
+                    WorkingDirectory = Directory.GetCurrentDirectory(),
+                    MuxSettings = settings,
+                    MaxIterations = settings.GetEffectiveMaxAgentIterations(endpoint),
+                    ConfigDirectory = SettingsLoader.GetConfigDirectory(),
+                    CommandName = "dashboard",
+                    SessionId = request.Id ?? string.Empty,
+                    UsageRecorder = _UsageRecorder
+                };
 
-                        if (ttftMs < 0)
-                        {
-                            ttftMs = stopwatch.ElapsedMilliseconds;
-                        }
+                if (toolsEnabled)
+                {
+                    IReadOnlyList<ToolDefinition> mcpTools = _Mcp?.CurrentTools ?? new List<ToolDefinition>();
+                    Func<string, System.Text.Json.JsonElement, string, System.Threading.CancellationToken, System.Threading.Tasks.Task<ToolResult>>? executor =
+                        _Mcp != null ? _Mcp.ExecuteToolAsync : null;
+                    ExternalToolsBinder.Apply(options, resolved.SystemPrompt, resolved.CompactionSystemPrompt, mcpTools, executor, _Skills, builtInTools.Count);
+                }
 
-                        content.Append(textEvent.Text);
-                        await ctx.Response.SendEvent(new ServerSentEvent
-                        {
-                            Event = "token",
-                            Data = JsonSerializer.Serialize(textEvent.Text)
-                        }, false, ctx.Token).ConfigureAwait(false);
-                    }
-                    else if (agentEvent is Mux.Core.Agent.AssistantThinkingEvent thinkingEvent)
+                using AgentLoop loop = new AgentLoop(options);
+                await foreach (AgentEvent agentEvent in loop.RunAsync(prompt, ctx.Token).ConfigureAwait(false))
+                {
+                    switch (agentEvent)
                     {
-                        if (string.IsNullOrEmpty(thinkingEvent.Text))
-                        {
-                            continue;
-                        }
-
-                        await ctx.Response.SendEvent(new ServerSentEvent
-                        {
-                            Event = "thinking",
-                            Data = JsonSerializer.Serialize(thinkingEvent.Text)
-                        }, false, ctx.Token).ConfigureAwait(false);
-                    }
-                    else if (agentEvent is Mux.Core.Agent.ErrorEvent errorEvent)
-                    {
-                        errorMessage = errorEvent.Message;
+                        case AssistantTextEvent textEvent:
+                            if (string.IsNullOrEmpty(textEvent.Text)) break;
+                            if (ttftMs < 0) ttftMs = stopwatch.ElapsedMilliseconds;
+                            content.Append(textEvent.Text);
+                            await ctx.Response.SendEvent(new ServerSentEvent { Event = "token", Data = JsonSerializer.Serialize(textEvent.Text) }, false, ctx.Token).ConfigureAwait(false);
+                            break;
+                        case AssistantThinkingEvent thinkingEvent:
+                            if (string.IsNullOrEmpty(thinkingEvent.Text)) break;
+                            await ctx.Response.SendEvent(new ServerSentEvent { Event = "thinking", Data = JsonSerializer.Serialize(thinkingEvent.Text) }, false, ctx.Token).ConfigureAwait(false);
+                            break;
+                        case ToolCallProposedEvent proposed:
+                            await ctx.Response.SendEvent(new ServerSentEvent { Event = "tool", Data = JsonSerializer.Serialize(new ChatToolEvent { Id = proposed.ToolCall.Id ?? string.Empty, Name = proposed.ToolCall.Name, Status = "running" }) }, false, ctx.Token).ConfigureAwait(false);
+                            break;
+                        case ToolCallCompletedEvent completed:
+                            bool ok = completed.Result != null && completed.Result.Success;
+                            await ctx.Response.SendEvent(new ServerSentEvent { Event = "tool", Data = JsonSerializer.Serialize(new ChatToolEvent { Id = completed.ToolCallId ?? string.Empty, Name = completed.ToolName, Status = ok ? "ok" : "fail", ElapsedMs = completed.ElapsedMs }) }, false, ctx.Token).ConfigureAwait(false);
+                            break;
+                        case ErrorEvent errorEvent:
+                            errorMessage = errorEvent.Message;
+                            break;
+                        case RunCompletedEvent rc:
+                            runCompleted = rc;
+                            break;
+                        default:
+                            break;
                     }
                 }
 
                 long totalMs = stopwatch.ElapsedMilliseconds;
-                RecordChatUsage(endpoint, client, ttftMs, totalMs, errorMessage == null);
 
                 if (errorMessage != null && content.Length == 0)
                 {
@@ -313,7 +413,6 @@ namespace Mux.Server.Routes
                     return;
                 }
 
-                Mux.Core.Llm.LlmUsage? usage = client.LastUsage;
                 ChatReply reply = new ChatReply
                 {
                     Role = "assistant",
@@ -325,9 +424,9 @@ namespace Mux.Server.Routes
                         TtftMs = ttftMs,
                         StreamingMs = ttftMs >= 0 ? System.Math.Max(0, totalMs - ttftMs) : 0,
                         TotalMs = totalMs,
-                        InputTokens = usage?.InputTokens ?? 0,
-                        OutputTokens = usage?.OutputTokens ?? 0,
-                        TotalTokens = usage?.TotalTokens ?? 0
+                        InputTokens = runCompleted?.InputTokens ?? 0,
+                        OutputTokens = runCompleted?.OutputTokens ?? 0,
+                        TotalTokens = (runCompleted?.InputTokens ?? 0) + (runCompleted?.OutputTokens ?? 0)
                     }
                 };
 

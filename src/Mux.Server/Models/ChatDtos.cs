@@ -22,8 +22,30 @@ namespace Mux.Server.Models
         /// <summary>Configured endpoint name to run against.</summary>
         public string Endpoint { get; set; } = string.Empty;
 
+        /// <summary>Optional conversation/session id, used to tag usage telemetry per conversation.</summary>
+        public string? Id { get; set; }
+
         /// <summary>Conversation so far (including the new user turn).</summary>
         public List<ChatMessageDto> Messages { get; set; } = new List<ChatMessageDto>();
+    }
+
+    /// <summary>
+    /// A tool-call lifecycle event streamed to the dashboard chat: the call's id and name and its status
+    /// ("running", "ok", or "fail"), plus elapsed time when completed.
+    /// </summary>
+    public class ChatToolEvent
+    {
+        /// <summary>The tool-call id (correlates running → completed).</summary>
+        public string Id { get; set; } = string.Empty;
+
+        /// <summary>The tool name.</summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>"running", "ok", or "fail".</summary>
+        public string Status { get; set; } = string.Empty;
+
+        /// <summary>Elapsed execution time in milliseconds (0 until completed).</summary>
+        public long ElapsedMs { get; set; }
     }
 
     /// <summary>

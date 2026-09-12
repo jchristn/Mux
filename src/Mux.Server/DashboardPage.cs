@@ -169,6 +169,11 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .stattip .r span:first-child{color:var(--muted)}
 .stattip .r span:last-child{font-variant-numeric:tabular-nums}
 .think{color:var(--muted);font-size:12px;line-height:1.5;white-space:pre-wrap;border-left:2px solid var(--border);padding:2px 0 2px 8px;margin:0 0 8px 0;max-height:240px;overflow:auto}
+.tools{display:flex;flex-direction:column;gap:3px;margin:0 0 8px 0}
+.toolrow{font-size:12px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.toolrow.ok{color:var(--accent)}
+.toolrow.fail{color:#e5534b}
+.toolrow .ms{opacity:.7}
 .model-status{font-size:12px;color:var(--muted)}
 .model-status.ready{color:var(--accent)}
 .model-status.warn{color:#bf8700}
@@ -989,7 +994,16 @@ function renderMessages(){
     var think=(m.role==="assistant"&&m.thinking)?'<div class="think">💭 '+esc(m.thinking).replace(/\n/g,"<br>")+'</div>':'';
     var body=m.typing?'<div class="thinking"><span></span><span></span><span></span></div>':(m.role==="assistant"?md(m.content):"<p>"+esc(m.content).replace(/\n/g,"<br>")+"</p>");
     var cp=(m.role==="assistant"&&!m.typing&&!m.local&&m.content)?'<button class="msgcopy" title="Copy response to the clipboard" onclick="copyMsg('+i+',this)">⧉</button>':'';
-    var inner=cp+think+body;
+    var toolsHtml="";
+    if(m.role==="assistant"&&m.tools&&m.tools.length){
+      toolsHtml='<div class="tools">'+m.tools.map(function(tc){
+        var icon=tc.status==="ok"?"✓":(tc.status==="fail"?"✗":"⚙");
+        var cls=tc.status==="ok"?"ok":(tc.status==="fail"?"fail":"run");
+        var ms=(tc.status!=="running"&&tc.ms)?' <span class="ms">'+tc.ms+' ms</span>':'';
+        return '<div class="toolrow '+cls+'">'+icon+' '+esc(tc.name)+ms+'</div>';
+      }).join("")+'</div>';
+    }
+    var inner=cp+think+toolsHtml+body;
     html+='<div class="msg '+m.role+'"><div class="bubble">'+inner+'</div>';
     if(m.role==="assistant"&&!m.typing&&m.model){html+='<div class="meta">'+esc(m.model)+statInfo(m.stats)+'</div>';}
     html+='</div>';
@@ -1151,7 +1165,7 @@ function sendChat(){
   el("composer").value="";el("composer").style.height="44px";
   var typing={role:"assistant",content:"",typing:true};
   messages.push(typing);renderMessages();busy=true;el("sendBtn").textContent="■";el("sendBtn").title="Stop the response";el("sendBtn").style.background="#e5534b";
-  var payload={endpoint:endpoint,messages:messages.filter(function(m){return !m.typing&&!m.local;}).map(function(m){return {role:m.role,content:m.content};})};
+  var payload={endpoint:endpoint,Id:currentSessionId||"",messages:messages.filter(function(m){return !m.typing&&!m.local;}).map(function(m){return {role:m.role,content:m.content};})};
   streamChat(payload,typing);
 }
 
@@ -1207,6 +1221,7 @@ function handleSse(block,typing){
   if(!data)return;
   var parsed;try{parsed=JSON.parse(data);}catch(e){return;}
   if(ev==="thinking"){typing.thinking=(typing.thinking||"")+parsed;renderMessages();}
+  else if(ev==="tool"){if(!typing.tools)typing.tools=[];var tc=null;for(var k=0;k<typing.tools.length;k++){if(typing.tools[k].id===parsed.Id){tc=typing.tools[k];break;}}if(tc){tc.status=parsed.Status;tc.ms=parsed.ElapsedMs;}else{typing.tools.push({id:parsed.Id,name:parsed.Name,status:parsed.Status,ms:parsed.ElapsedMs});}renderMessages();}
   else if(ev==="token"){typing.typing=false;typing.content+=parsed;renderMessages();}
   else if(ev==="done"){typing.typing=false;typing.content=(parsed&&parsed.Content)||typing.content;typing.model=(parsed&&parsed.Model)||"";typing.stats=(parsed&&parsed.Stats)||null;if(typing.model)currentModel=typing.model;renderMessages();endChat();persistConvo();}
   else if(ev==="error"){typing.typing=false;typing.content="⚠️ "+parsed;renderMessages();toast(String(parsed),true);endChat();}
