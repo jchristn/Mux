@@ -420,6 +420,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 .copybtn{background:none;border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;color:var(--muted);display:inline-flex;align-items:center;gap:5px;line-height:1}
 .copybtn:hover{border-color:var(--accent);color:var(--accent)}
 .copybtn.ok{color:var(--accent);border-color:var(--accent)}
+.copybtn.icon{padding:3px 8px;font-size:13px;line-height:1}
 .langsel{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;line-height:1;max-width:150px}
 .langsel:hover{border-color:var(--accent);color:var(--text)}
 .langsel:focus{outline:2px solid var(--accent);outline-offset:1px}
@@ -481,7 +482,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
         <span class="badge" id="badgeVersion" title="The version of mux running this server"></span>
         <span class="badge" id="badgeUptime" title="How long this server process has been running"></span>
         <span class="badge mono" id="serverUrl" title="The host and port this dashboard is served from"></span>
-        <button class="copybtn" id="copyUrlBtn" title="Copy the server URL to the clipboard">Copy</button>
+        <button class="copybtn icon" id="copyUrlBtn" title="Copy the server URL to the clipboard">⧉</button>
         <select class="langsel" id="langSel" aria-label="Language" title="Choose the dashboard display language">
           <option value="en">English</option>
           <option value="es">Español</option>

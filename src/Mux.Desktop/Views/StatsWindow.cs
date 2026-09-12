@@ -87,7 +87,8 @@ namespace Mux.Desktop.Views
             DockPanel.SetDock(title, Dock.Left);
             header.Children.Add(title);
 
-            CopyButton copy = new CopyButton(() => _Json, theme) { HorizontalAlignment = HorizontalAlignment.Right };
+            Button copy = CopyButton.Create(() => _Json, theme);
+            copy.HorizontalAlignment = HorizontalAlignment.Right;
             copy.Tip("Copy statistics as JSON");
             DockPanel.SetDock(copy, Dock.Right);
             header.Children.Add(copy);

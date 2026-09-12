@@ -2526,12 +2526,10 @@ namespace Mux.Desktop.Shell
 
         private Border NewAssistantBorder(Control content, Func<string> rawTextProvider)
         {
-            CopyButton copy = new CopyButton(rawTextProvider, _Theme)
-            {
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(6, 0, 0, 0)
-            };
+            Button copy = CopyButton.Create(rawTextProvider, _Theme);
+            copy.HorizontalAlignment = HorizontalAlignment.Right;
+            copy.VerticalAlignment = VerticalAlignment.Bottom;
+            copy.Margin = new Thickness(6, 0, 0, 0);
 
             // Put the copy icon in its own column so it sits beside the text, bottom-aligned, and never
             // overlaps the last line of the response.

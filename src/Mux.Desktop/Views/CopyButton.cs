@@ -1,97 +1,89 @@
 namespace Mux.Desktop.Views
 {
     using System;
-    using System.Threading.Tasks;
     using Avalonia;
     using Avalonia.Controls;
     using Avalonia.Input.Platform;
-    using Avalonia.Interactivity;
     using Avalonia.Media;
+    using Avalonia.Threading;
 
     /// <summary>
-    /// The reusable copy-to-clipboard control for the desktop app: a small ⧉ button that, when clicked,
-    /// copies the text from its provider to this window's clipboard and briefly flips to a green ✓ for
-    /// feedback (regardless of whether the text was empty), then restores. The text is read from the provider
-    /// at click time so each button copies its own content — a single shared component used everywhere copy
-    /// is offered.
+    /// The reusable copy-to-clipboard control for the desktop app. Implemented as a factory that returns a
+    /// plain <see cref="Button"/> (rather than a <see cref="Button"/> subclass, which in Avalonia would not
+    /// inherit the default button control theme and therefore would not render or receive clicks). The
+    /// returned button copies the text from its provider — evaluated at click time, so each button copies its
+    /// own content — to this window's clipboard, and flips to a green ✓ immediately on click (before the
+    /// clipboard call, so the feedback never depends on the clipboard being fast or available), restoring the
+    /// ⧉ glyph after a moment.
     /// </summary>
-    public sealed class CopyButton : Button
+    public static class CopyButton
     {
-        private readonly Func<string> _Provider;
-        private readonly AppTheme _Theme;
-        private bool _Flashing;
-
         /// <summary>
-        /// Instantiate a copy button.
+        /// Creates a copy button.
         /// </summary>
         /// <param name="textProvider">Returns the text to copy, evaluated at click time. Required.</param>
-        /// <param name="theme">The active theme (for the idle and success colors). Required.</param>
+        /// <param name="theme">The active theme (idle and success colors). Required.</param>
+        /// <returns>A configured button with the copy behavior wired.</returns>
         /// <exception cref="ArgumentNullException">Thrown when a required argument is null.</exception>
-        public CopyButton(Func<string> textProvider, AppTheme theme)
+        public static Button Create(Func<string> textProvider, AppTheme theme)
         {
-            _Provider = textProvider ?? throw new ArgumentNullException(nameof(textProvider));
-            _Theme = theme ?? throw new ArgumentNullException(nameof(theme));
+            if (textProvider is null) throw new ArgumentNullException(nameof(textProvider));
+            if (theme is null) throw new ArgumentNullException(nameof(theme));
 
-            Content = "⧉";
-            Background = Brushes.Transparent;
-            Foreground = theme.Muted;
-            BorderThickness = new Thickness(0);
-            Padding = new Thickness(6, 2, 6, 2);
-            FontSize = 13;
-            Click += OnClick;
-            this.Tip("Copy to the clipboard.");
-        }
+            Button button = new Button
+            {
+                Content = "⧉",
+                Background = Brushes.Transparent,
+                Foreground = theme.Muted,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(6, 2, 6, 2),
+                FontSize = 13
+            };
+            button.Tip("Copy to the clipboard.");
 
-        private async void OnClick(object? sender, RoutedEventArgs e)
-        {
-            string text = string.Empty;
-            try
+            DispatcherTimer? resetTimer = null;
+            button.Click += async (sender, args) =>
             {
-                text = _Provider() ?? string.Empty;
-            }
-            catch (Exception)
-            {
-                // Provider failure copies nothing but still gives feedback.
-            }
-
-            try
-            {
-                IClipboard? clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-                if (clipboard != null)
+                // Immediate feedback, before any await, so the ✓ shows even if the clipboard call is slow or
+                // unavailable. The reset runs on a timer independent of the copy.
+                button.Content = "✓";
+                button.Foreground = theme.Success;
+                resetTimer?.Stop();
+                resetTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
+                resetTimer.Tick += (ts, te) =>
                 {
-                    await clipboard.SetTextAsync(text);
+                    resetTimer?.Stop();
+                    resetTimer = null;
+                    button.Content = "⧉";
+                    button.Foreground = theme.Muted;
+                };
+                resetTimer.Start();
+
+                string text = string.Empty;
+                try
+                {
+                    text = textProvider() ?? string.Empty;
                 }
-            }
-            catch (Exception)
-            {
-                // Best-effort copy.
-            }
+                catch (Exception)
+                {
+                    // Provider failure copies nothing but still gives feedback.
+                }
 
-            await FlashAsync();
-        }
+                try
+                {
+                    IClipboard? clipboard = TopLevel.GetTopLevel(button)?.Clipboard;
+                    if (clipboard != null)
+                    {
+                        await clipboard.SetTextAsync(text);
+                    }
+                }
+                catch (Exception)
+                {
+                    // Best-effort copy.
+                }
+            };
 
-        private async Task FlashAsync()
-        {
-            if (_Flashing)
-            {
-                return;
-            }
-
-            _Flashing = true;
-            Content = "✓";
-            Foreground = _Theme.Success;
-            try
-            {
-                await Task.Delay(1200);
-            }
-            catch (Exception)
-            {
-                // Ignore.
-            }
-
-            Content = "⧉";
-            Foreground = _Theme.Muted;
-            _Flashing = false;
+            return button;
         }
     }
 }
