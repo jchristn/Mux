@@ -12,6 +12,7 @@ namespace Mux.Desktop.Conversation
     using Mux.Core.Models;
     using Mux.Core.Prompting;
     using Mux.Core.Settings;
+    using Mux.Core.Skills;
     using Mux.Core.Telemetry;
     using Mux.Core.Tools;
 
@@ -35,6 +36,8 @@ namespace Mux.Desktop.Conversation
         private string? _EndpointName;
         private string? _SessionId;
         private string _WorkingDirectory = Directory.GetCurrentDirectory();
+        private McpRuntime? _Mcp;
+        private SkillRuntime? _Skills;
 
         /// <summary>
         /// Instantiate the runner.
@@ -61,6 +64,26 @@ namespace Mux.Desktop.Conversation
         {
             get => _EndpointName;
             set => _EndpointName = value;
+        }
+
+        /// <summary>
+        /// The live MCP runtime whose currently-connected tools are exposed to the model, or null when MCP is
+        /// not wired. Set once by the host; read per turn so newly connected servers apply to the next turn.
+        /// </summary>
+        public McpRuntime? Mcp
+        {
+            get => _Mcp;
+            set => _Mcp = value;
+        }
+
+        /// <summary>
+        /// The live skills runtime registered as an external tool provider, or null when skills are off. Set
+        /// once by the host; read per turn.
+        /// </summary>
+        public SkillRuntime? Skills
+        {
+            get => _Skills;
+            set => _Skills = value;
         }
 
         /// <summary>The session/thread id to tag usage telemetry with, so per-conversation stats can be queried.</summary>
@@ -211,6 +234,23 @@ namespace Mux.Desktop.Conversation
                 PromptUserFunc = _ApprovalHandler,
                 UsageRecorder = _UsageRecorder
             };
+
+            // Compose the live MCP tools + skills runtime onto the options so the desktop model can call them,
+            // matching the TUI. When neither is wired this reduces to the base prompt with no external tools.
+            if (toolsEnabled)
+            {
+                IReadOnlyList<ToolDefinition> mcpTools = _Mcp?.CurrentTools ?? new List<ToolDefinition>();
+                System.Func<string, System.Text.Json.JsonElement, string, CancellationToken, System.Threading.Tasks.Task<ToolResult>>? executor =
+                    _Mcp != null ? _Mcp.ExecuteToolAsync : null;
+                ExternalToolsBinder.Apply(
+                    options,
+                    resolved.SystemPrompt,
+                    resolved.CompactionSystemPrompt,
+                    mcpTools,
+                    executor,
+                    _Skills,
+                    builtInTools.Count);
+            }
 
             using AgentLoop loop = new AgentLoop(options);
             await foreach (AgentEvent agentEvent in loop.RunAsync(prompt, token))

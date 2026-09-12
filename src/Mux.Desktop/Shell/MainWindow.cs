@@ -25,8 +25,10 @@ namespace Mux.Desktop.Shell
     using Mux.Core.Prompting;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
+    using Mux.Core.Skills;
     using Mux.Core.Tasks;
     using Mux.Core.Telemetry;
+    using Mux.Core.Tools;
     using Mux.Core.Utility;
     using Mux.Core.Conversation;
     using Mux.Desktop.Conversation;
@@ -50,6 +52,8 @@ namespace Mux.Desktop.Shell
         private readonly IThreadService _Threads;
         private readonly SessionStore _Store;
         private readonly AgentLoopTurnRunner _Runner;
+        private McpRuntime? _Mcp;
+        private SkillRuntime? _Skills;
         private readonly string _ConfigDirectory;
         private readonly UsageQueryService? _UsageQuery;
 
@@ -163,11 +167,67 @@ namespace Mux.Desktop.Shell
             Content = BuildLayout();
             PopulateModelPicker();
 
+            // Start the MCP + skills runtimes so the desktop model can call MCP tools and use skills (TUI
+            // parity); the runner reads their live state per turn. Done after the layout so connection notices
+            // can be written into the transcript.
+            InitializeToolRuntimes();
+
             AddHandler(InputElement.KeyDownEvent, OnGlobalKeyDown, RoutingStrategies.Tunnel);
 
             // Probe for a git work tree in the background so the undo/redo buttons appear immediately in a
             // repository (they stay disabled until the first per-turn checkpoint is recorded).
             _ = EnsureCheckpointManagerAsync();
+        }
+
+        // Starts the shared MCP + skills runtimes (both refresh in the background). The turn runner reads their
+        // current tools per turn, so a newly connected server or re-scanned skill applies to the next turn.
+        private void InitializeToolRuntimes()
+        {
+            MuxSettings settings;
+            try { settings = SettingsLoader.LoadSettings(); }
+            catch (Exception) { settings = new MuxSettings(); }
+
+            try
+            {
+                _Mcp = new McpRuntime(
+                    SettingsLoader.LoadMcpServers,
+                    () => { },
+                    TimeSpan.FromSeconds(30),
+                    onNotice: message => Dispatcher.UIThread.Post(() => AddNotice(message, isError: false)));
+                _Mcp.Start();
+                _Runner.Mcp = _Mcp;
+            }
+            catch (Exception)
+            {
+                // MCP is best-effort; the app works without it.
+            }
+
+            if (settings.SkillsEnabled)
+            {
+                try
+                {
+                    string skillsDirectory = SettingsLoader.ResolveSkillsDirectory(settings);
+                    _Skills = new SkillRuntime(
+                        skillsDirectory,
+                        SettingsLoader.LoadSkillIndex,
+                        () => { },
+                        TimeSpan.FromSeconds(settings.SkillRefreshIntervalSeconds));
+                    _Skills.Start();
+                    _Runner.Skills = _Skills;
+                }
+                catch (Exception)
+                {
+                    // Skills are best-effort.
+                }
+            }
+        }
+
+        /// <inheritdoc/>
+        protected override void OnClosed(EventArgs e)
+        {
+            base.OnClosed(e);
+            try { _Mcp?.Dispose(); } catch (Exception) { }
+            try { _Skills?.Dispose(); } catch (Exception) { }
         }
 
         private void OnGlobalKeyDown(object? sender, KeyEventArgs e)

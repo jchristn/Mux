@@ -508,6 +508,8 @@ Phases are ordered so a usable chat client exists early and parity fills in behi
 
 **Phase 7 — MCP, Skills, Subagents, Plugins.** Four managers + custom-command palette integration. *Exit:* MCP live status/reconnect; skills CRUD + editor; subagents CRUD; hooks + custom commands. *Calls:* `McpRuntime`, `SkillRuntime`, `SubagentRegistry`, `Mux.Core.Plugins`.
 
+> **Delivered (2026-09-12):** the four managers shipped earlier; the desktop now also **calls MCP tools + uses skills in turns** (parity with the TUI). `AgentLoopTurnRunner` composes the live `McpRuntime`/`SkillRuntime` onto each turn's `AgentLoopOptions` via `ExternalToolsBinder.Apply`; `MainWindow` starts long-lived MCP + skills runtimes (background reconnect/rescan, connection notices to the transcript) and hands them to the runner. Tool cards and the AutoSafe approval modal reuse the existing paths. *Needs a GUI + MCP-server smoke test.*
+
 **Phase 8 — Settings & keybindings.** Form-based settings with apply-timing hints; keybindings editor. *Exit:* every `MuxSettings` field editable and validated; rebinding works.
 
 **Phase 9 — Monitoring & reporting (§8).** Home/overview, Usage analytics (all six charts, per-tab KPI strip, filters incl. call-kind/success, group-by, events table with detail + delete), Pricing editor, Server Info. *Exit:* analytics reflect shared-DB activity; charts match the dashboard. *Calls:* `UsageQueryService`, `PricingTable`, `OverviewRoutes` data.
