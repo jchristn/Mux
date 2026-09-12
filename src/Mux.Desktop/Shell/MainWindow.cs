@@ -1486,6 +1486,9 @@ namespace Mux.Desktop.Shell
                     }
                     _TranscriptScroll.ScrollToEnd();
                     break;
+                case ContextCompactedEvent compacted:
+                    AddNotice("🗜 Context automatically compacted (" + compacted.MessagesBefore + " → " + compacted.MessagesAfter + " messages) to stay within the model's window.", isError: false);
+                    break;
                 case ToolCallProposedEvent proposed:
                     StopPendingIndicator();
                     AddToolCard(proposed.ToolCall);
