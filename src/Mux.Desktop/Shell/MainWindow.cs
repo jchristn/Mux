@@ -23,6 +23,7 @@ namespace Mux.Desktop.Shell
     using Mux.Core.Models;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
+    using Mux.Core.Tasks;
     using Mux.Core.Telemetry;
     using Mux.Core.Utility;
     using Mux.Desktop.Conversation;
@@ -66,6 +67,7 @@ namespace Mux.Desktop.Shell
         private TextBlock? _StreamingBlock;
         private Border? _AssistantBorder;
         private Border? _AssistantContentHost;
+        private StackPanel? _TaskPlanBody;
         private CollapsibleSection? _ThinkingSection;
         private TextBlock? _ThinkingText;
         private Border? _PendingBubble;
@@ -1489,6 +1491,9 @@ namespace Mux.Desktop.Shell
                 case ContextCompactedEvent compacted:
                     AddNotice("🗜 Context automatically compacted (" + compacted.MessagesBefore + " → " + compacted.MessagesAfter + " messages) to stay within the model's window.", isError: false);
                     break;
+                case TaskPlanUpdatedEvent plan:
+                    RenderTaskPlan(plan);
+                    break;
                 case ToolCallProposedEvent proposed:
                     StopPendingIndicator();
                     AddToolCard(proposed.ToolCall);
@@ -1729,6 +1734,7 @@ namespace Mux.Desktop.Shell
             _AssistantBorder = null;
             _ThinkingSection = null;
             _ThinkingText = null;
+            _TaskPlanBody = null;
             _ToolCards.Clear();
         }
 
@@ -1955,6 +1961,77 @@ namespace Mux.Desktop.Shell
             });
             _TranscriptScroll.ScrollToEnd();
             UpdateEmptyState();
+        }
+
+        private void RenderTaskPlan(TaskPlanUpdatedEvent plan)
+        {
+            if (_TaskPlanBody == null)
+            {
+                _TaskPlanBody = new StackPanel { Spacing = 3 };
+                Border host = new Border
+                {
+                    Background = _Theme.SurfaceAlt,
+                    BorderBrush = _Theme.Border,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(10),
+                    Padding = new Thickness(14, 10, 14, 10),
+                    Margin = new Thickness(0, 0, 60, 0),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Child = _TaskPlanBody
+                };
+                _Transcript.Children.Add(host);
+            }
+
+            _TaskPlanBody.Children.Clear();
+            _TaskPlanBody.Children.Add(new TextBlock
+            {
+                Text = "📋 Tasks (" + plan.CompletedCount + "/" + plan.TotalCount + ")",
+                FontWeight = FontWeight.SemiBold,
+                Foreground = _Theme.Text,
+                Margin = new Thickness(0, 0, 0, 2)
+            });
+
+            foreach (AgentTask task in plan.Tasks)
+            {
+                StackPanel row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                row.Children.Add(new TextBlock { Text = TaskGlyph(task.Status), Foreground = TaskColor(task.Status), Width = 16, VerticalAlignment = VerticalAlignment.Top });
+                row.Children.Add(new TextBlock { Text = task.Title, Foreground = task.Status == AgentTaskStatusEnum.Completed ? _Theme.Muted : _Theme.Text, TextWrapping = TextWrapping.Wrap });
+                _TaskPlanBody.Children.Add(row);
+            }
+
+            _TranscriptScroll.ScrollToEnd();
+        }
+
+        private static string TaskGlyph(AgentTaskStatusEnum status)
+        {
+            switch (status)
+            {
+                case AgentTaskStatusEnum.Completed:
+                    return "✓";
+                case AgentTaskStatusEnum.InProgress:
+                    return "◐";
+                case AgentTaskStatusEnum.Failed:
+                    return "✗";
+                case AgentTaskStatusEnum.Skipped:
+                    return "–";
+                default:
+                    return "○";
+            }
+        }
+
+        private IBrush TaskColor(AgentTaskStatusEnum status)
+        {
+            switch (status)
+            {
+                case AgentTaskStatusEnum.Completed:
+                    return _Theme.Success;
+                case AgentTaskStatusEnum.Failed:
+                    return _Theme.Error;
+                case AgentTaskStatusEnum.InProgress:
+                    return _Theme.Accent;
+                default:
+                    return _Theme.Muted;
+            }
         }
 
         private void UpdateEmptyState()
