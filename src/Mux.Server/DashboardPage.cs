@@ -106,21 +106,26 @@ body{background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
 /* chat */
 .chatwrap{flex:1;min-height:0;display:grid;grid-template-columns:248px minmax(0,1fr)}
 .convos{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--panel)}
-.convos-head{padding:10px;border-bottom:1px solid var(--line)}
+.convos-head{height:64px;box-sizing:border-box;padding:0 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
+.convos-head .btn{flex:1}
 .convo-list{flex:1;overflow-y:auto;padding:6px}
 .convo-empty{color:var(--muted);font-size:12px;padding:14px 10px;text-align:center}
 .convo-item{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:6px;cursor:pointer;color:var(--text)}
 .convo-item:hover{background:var(--hover,rgba(127,127,127,.10))}
 .convo-item.active{background:var(--accent);color:#fff}
 .convo-item .ct{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
-.convo-item .ca{display:none;gap:2px}
-.convo-item:hover .ca,.convo-item.active .ca{display:flex}
-.convo-item .ca button{background:none;border:none;cursor:pointer;color:inherit;opacity:.75;font-size:13px;padding:2px 3px;border-radius:4px}
-.convo-item .ca button:hover{opacity:1;background:rgba(127,127,127,.2)}
+.convo-item .convo-menu{display:none;background:none;border:none;cursor:pointer;color:inherit;font-size:16px;line-height:1;padding:2px 6px;border-radius:4px;flex:none}
+.convo-item:hover .convo-menu,.convo-item.active .convo-menu{display:inline-flex}
+.convo-item .convo-menu:hover{background:rgba(127,127,127,.25)}
+.pickhead{display:flex;gap:8px;margin-bottom:10px}
+.picklist{max-height:min(50vh,360px);overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.pickrow{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer}
+.pickrow:hover{background:rgba(127,127,127,.12)}
+.pickrow span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-title{color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40vw}
 @media(max-width:820px){.chatwrap{grid-template-columns:1fr}.convos{display:none}}
 .chat{display:grid;grid-template-rows:auto 1fr auto;height:100%;min-height:0}
-.chat-toolbar{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+.chat-toolbar{height:64px;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--panel)}
 .chat-toolbar label{font-size:12px;color:var(--muted);margin-right:6px}
 select,input,textarea{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:14px;font-family:inherit}
 select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
@@ -505,7 +510,8 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
       <div class="chatwrap">
         <aside class="convos">
           <div class="convos-head">
-            <button class="btn" id="newChatBtn" style="width:100%" title="Start a fresh conversation">+ <span data-i18n="act.newchat">New chat</span></button>
+            <button class="btn" id="newChatBtn" title="Start a fresh conversation">+ New</button>
+            <button class="btn secondary" id="delMultiBtn" title="Delete multiple conversations">- Delete</button>
           </div>
           <div class="convo-list" id="convoList"></div>
         </aside>
@@ -986,18 +992,52 @@ function renderConvos(items){
   var html="";
   for(var i=0;i<items.length;i++){var s=items[i];var act=(s.Id===currentSessionId)?" active":"";
     html+='<div class="convo-item'+act+'" data-id="'+esc(s.Id)+'"><span class="ct" title="'+esc(s.Title||s.Id)+'">'+esc(s.Title||"Untitled")+'</span>'
-      +'<span class="ca"><button data-act="rename" title="'+"Rename"+'">✎</button>'
-      +'<button data-act="export" title="'+"Export (Markdown)"+'">⤓</button>'
-      +'<button data-act="delete" title="'+"Delete"+'">🗑</button></span></div>';
+      +'<button class="convo-menu" title="Actions">&#8942;</button></div>';
   }
   box.innerHTML=html;
   Array.prototype.forEach.call(box.querySelectorAll(".convo-item"),function(row){
     var id=row.getAttribute("data-id");
     row.addEventListener("click",function(e){
-      var b=e.target.closest("button");
-      if(b){e.stopPropagation();var a=b.getAttribute("data-act");
-        if(a==="rename")renameConvo(id);else if(a==="export")exportSe(id,"md");else if(a==="delete")deleteConvo(id);return;}
+      var b=e.target.closest(".convo-menu");
+      if(b){e.stopPropagation();openMenu(b,[
+        {label:"Rename",run:function(){renameConvo(id);}},
+        {label:"Export (Markdown)",run:function(){exportSe(id,"md");}},
+        {label:"Export (HTML)",run:function(){exportSe(id,"html");}},
+        {sep:true},
+        {label:"Delete",danger:true,run:function(){deleteConvo(id);}}
+      ]);return;}
       openConvo(id);
+    });
+  });
+}
+function deleteMultiple(){
+  api("/v1.0/api/sessions").then(function(r){
+    var items=(r&&r.Items)||[];
+    if(!items.length){toast("No conversations to delete.");return;}
+    items.sort(function(a,b){return String(b.UpdatedUtc||"").localeCompare(String(a.UpdatedUtc||""));});
+    var rows=items.map(function(s){return '<label class="pickrow"><input type="checkbox" value="'+esc(s.Id)+'"><span>'+esc(s.Title||"Untitled")+'</span></label>';}).join("");
+    var body='<div class="pickhead"><button type="button" class="btn secondary" id="pickAll">Select all</button><button type="button" class="btn secondary" id="pickNone">Select none</button></div><div class="picklist">'+rows+'</div>';
+    openModal("Delete conversations",body,[
+      {label:"Cancel"},
+      {label:"Delete selected",danger:true,onClick:function(){
+        var ids=Array.prototype.slice.call(document.querySelectorAll("#modalBody .picklist input:checked")).map(function(c){return c.value;});
+        if(!ids.length){toast("Select at least one conversation.",true);return;}
+        confirmModal("Delete "+ids.length+" conversation(s)? This cannot be undone.",function(){doDeleteMultiple(ids);});
+      }}
+    ],true);
+    el("pickAll").addEventListener("click",function(){Array.prototype.forEach.call(document.querySelectorAll("#modalBody .picklist input"),function(c){c.checked=true;});});
+    el("pickNone").addEventListener("click",function(){Array.prototype.forEach.call(document.querySelectorAll("#modalBody .picklist input"),function(c){c.checked=false;});});
+  }).catch(function(e){toast(e.message,true);});
+}
+function doDeleteMultiple(ids){
+  var ok=0,fail=0,done=0;
+  ids.forEach(function(id){
+    api("/v1.0/api/sessions?id="+encodeURIComponent(id),"DELETE").then(function(){ok++;},function(){fail++;}).then(function(){
+      done++;if(done!==ids.length)return;
+      if(ids.indexOf(currentSessionId)>=0)newChat();
+      loadConvos();
+      var msg=(fail===0)?("Deleted "+ok+" conversation"+(ok===1?"":"s")+"."):("Deleted "+ok+", failed to delete "+fail+".");
+      openModal(fail===0?"Deleted":"Completed with errors",'<p style="margin:0">'+esc(msg)+'</p>',[{label:"OK",primary:true}]);
     });
   });
 }
@@ -1821,6 +1861,7 @@ document.querySelectorAll(".nav-item").forEach(function(n){n.addEventListener("c
 el("themeBtn").addEventListener("click",function(){applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");});
 el("sendBtn").addEventListener("click",sendChat);
 el("newChatBtn").addEventListener("click",newChat);
+el("delMultiBtn").addEventListener("click",deleteMultiple);
 el("saveSettingsBtn").addEventListener("click",saveSettings);
 el("reloadSettingsBtn").addEventListener("click",loadSettings);
 /* modal close wiring */
