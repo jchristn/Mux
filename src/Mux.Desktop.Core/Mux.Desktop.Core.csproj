@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Mux.Core\Mux.Core.csproj" />
+    <ProjectReference Include="..\Mux.Server\Mux.Server.csproj" />
   </ItemGroup>
 
 </Project>

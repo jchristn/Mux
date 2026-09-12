@@ -7,6 +7,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Controls;
     using Avalonia.Layout;
     using Avalonia.Media;
+    using Avalonia.Platform.Storage;
     using Mux.Core.Models;
     using Mux.Core.Settings;
     using Mux.Core.Skills;
@@ -88,11 +89,20 @@ namespace Mux.Desktop.Views
             DockPanel.SetDock(titleBlock, Dock.Left);
             headerRow.Children.Add(titleBlock);
 
-            Button add = new Button { Content = "＋  Add skill", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Padding = new Thickness(12, 6, 12, 6) };
+            StackPanel headerButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top };
+
+            Button import = new Button { Content = "⬇  Import", Background = theme.SurfaceAlt, Foreground = theme.Text, BorderBrush = theme.Border, BorderThickness = new Thickness(1), Padding = new Thickness(12, 6, 12, 6) };
+            import.Tip("Import an existing skill from another folder (validates and copies it under the skills directory).");
+            import.Click += (sender, args) => OnImport();
+            headerButtons.Children.Add(import);
+
+            Button add = new Button { Content = "＋  Add skill", Background = theme.AccentButton, Foreground = theme.AccentText, Padding = new Thickness(12, 6, 12, 6) };
             add.Tip("Scaffold a new skill (creates a SKILL.md folder under the skills directory).");
             add.Click += (sender, args) => OnAdd();
-            DockPanel.SetDock(add, Dock.Right);
-            headerRow.Children.Add(add);
+            headerButtons.Children.Add(add);
+
+            DockPanel.SetDock(headerButtons, Dock.Right);
+            headerRow.Children.Add(headerButtons);
 
             DockPanel.SetDock(headerRow, Dock.Top);
             root.Children.Add(headerRow);
@@ -134,6 +144,48 @@ namespace Mux.Desktop.Views
             if (await new SkillScaffoldDialog(_SkillsDirectory).ShowDialog<bool>(this))
             {
                 Reload();
+            }
+        }
+
+        private async void OnImport()
+        {
+            // Pick a source skill folder, then validate-and-copy it under the skills directory (parity with
+            // the TUI's "Import skill…"). The source keeps its folder name as the imported id.
+            IReadOnlyList<IStorageFolder> picked;
+            try
+            {
+                picked = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+                {
+                    Title = "Import skill — choose the skill's folder",
+                    AllowMultiple = false
+                });
+            }
+            catch (Exception)
+            {
+                return;
+            }
+
+            if (picked == null || picked.Count == 0)
+            {
+                return;
+            }
+
+            string? source = picked[0].TryGetLocalPath();
+            if (string.IsNullOrEmpty(source))
+            {
+                await new ConfirmDialog("Import failed", "That location can't be read from disk. Choose a local folder.", "OK", destructive: false).ShowDialog<bool>(this);
+                return;
+            }
+
+            try
+            {
+                string id = new SkillManager(_SkillsDirectory).Import(source, null);
+                Reload();
+                await new ConfirmDialog("Skill imported", "Imported skill \"" + id + "\" and enabled it.", "OK", destructive: false).ShowDialog<bool>(this);
+            }
+            catch (Exception ex)
+            {
+                await new ConfirmDialog("Import failed", ex.Message, "OK", destructive: false).ShowDialog<bool>(this);
             }
         }
 

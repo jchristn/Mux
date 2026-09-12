@@ -92,6 +92,7 @@ namespace Test.Shared
                     TurnProjectionSuite.Create(),
                     ConversationStatsSuite.Create(),
                     ConversationServiceSuite.Create(),
+                    EmbeddedServerSuite.Create(),
                     WorkspaceSuite.Create(),
                     CodeTokenizerSuite.Create(),
                     DesktopPreferencesSuite.Create(),

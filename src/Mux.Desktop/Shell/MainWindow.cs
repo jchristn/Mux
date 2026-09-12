@@ -192,6 +192,7 @@ namespace Mux.Desktop.Shell
                 new PaletteCommand("Model pricing", "Edit model pricing", OpenPricingWindow),
                 new PaletteCommand("Web search providers", "Configure web search", OpenSearchProvidersWindow),
                 new PaletteCommand("Plugins", "Manage hooks and custom commands", OpenPluginsWindow),
+                new PaletteCommand("Local server", "Start or stop the embedded REST + dashboard server", OpenLocalServerWindow),
                 new PaletteCommand("Keybindings", "Rebind keyboard shortcuts", OpenKeybindingsWindow),
                 new PaletteCommand("Undo last turn", "Restore the working tree to before the last turn", () => _ = UndoLastTurnAsync()),
                 new PaletteCommand("Redo last undo", "Reapply the most recently undone change", () => _ = RedoLastUndoAsync()),
@@ -272,6 +273,7 @@ namespace Mux.Desktop.Shell
                 manageGroup.Children.Add(ManageDrawerItem("💲", "Pricing", "Edit per-model token rates used to compute usage cost.", OpenPricingWindow));
                 manageGroup.Children.Add(ManageDrawerItem("🔎", "Search", "Configure external web-search providers.", OpenSearchProvidersWindow));
                 manageGroup.Children.Add(ManageDrawerItem("🧰", "Plugins", "Manage lifecycle hooks and custom slash commands.", OpenPluginsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🌐", "Local server", "Start or stop the embedded REST API and web dashboard (bound to loopback).", OpenLocalServerWindow));
                 manageGroup.Children.Add(ManageDrawerItem("⌨", "Keybindings", "Rebind or unbind keyboard shortcuts.", OpenKeybindingsWindow));
                 bottom.Children.Add(HighlightBlock(manageGroup));
             }
@@ -606,6 +608,11 @@ namespace Mux.Desktop.Shell
         private void OpenPromptsWindow()
         {
             _ = new PromptsWindow(null).ShowDialog(this);
+        }
+
+        private void OpenLocalServerWindow()
+        {
+            _ = new LocalServerWindow().ShowDialog(this);
         }
 
         private void OpenSkillsWindow()
