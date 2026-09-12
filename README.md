@@ -33,18 +33,27 @@
 <details>
 <summary>Click to expand</summary>
 
-<p align="center"><img src="assets/ss1.png" alt="mux screenshot 1" width="900"></p>
-<p align="center"><img src="assets/ss2.png" alt="mux screenshot 2" width="900"></p>
-<p align="center"><img src="assets/ss3.png" alt="mux screenshot 3" width="900"></p>
-<p align="center"><img src="assets/ss4.png" alt="mux screenshot 4" width="900"></p>
-<p align="center"><img src="assets/ss5.png" alt="mux screenshot 5" width="900"></p>
+**Interactive TUI** — the terminal experience (`mux`)
 
-**MCP tools**
+<p align="center"><img src="assets/screenshots/tui-0.png" alt="mux TUI screenshot 1" width="900"></p>
+<p align="center"><img src="assets/screenshots/tui-1.png" alt="mux TUI screenshot 2" width="900"></p>
+<p align="center"><img src="assets/screenshots/tui-2.png" alt="mux TUI screenshot 3" width="900"></p>
+<p align="center"><img src="assets/screenshots/tui-3.png" alt="mux TUI screenshot 4" width="900"></p>
+<p align="center"><img src="assets/screenshots/tui-4.png" alt="mux TUI screenshot 5" width="900"></p>
 
-<p align="center"><img src="assets/ss6.png" alt="mux MCP tools screenshot 1" width="900"></p>
-<p align="center"><img src="assets/ss7.png" alt="mux MCP tools screenshot 2" width="900"></p>
-<p align="center"><img src="assets/ss8.png" alt="mux MCP tools screenshot 3" width="900"></p>
-<p align="center"><img src="assets/ss9.png" alt="mux MCP tools screenshot 4" width="900"></p>
+**Desktop app** — the cross-platform Avalonia client (`mux Desktop`)
+
+<p align="center"><img src="assets/screenshots/desktop-0.png" alt="mux Desktop screenshot 1" width="900"></p>
+<p align="center"><img src="assets/screenshots/desktop-1.png" alt="mux Desktop screenshot 2" width="900"></p>
+<p align="center"><img src="assets/screenshots/desktop-2.png" alt="mux Desktop screenshot 3" width="900"></p>
+<p align="center"><img src="assets/screenshots/desktop-3.png" alt="mux Desktop screenshot 4" width="900"></p>
+
+**Web dashboard** — the browser UI served by `mux serve`
+
+<p align="center"><img src="assets/screenshots/web-0.png" alt="mux web dashboard screenshot 1" width="900"></p>
+<p align="center"><img src="assets/screenshots/web-1.png" alt="mux web dashboard screenshot 2" width="900"></p>
+<p align="center"><img src="assets/screenshots/web-2.png" alt="mux web dashboard screenshot 3" width="900"></p>
+<p align="center"><img src="assets/screenshots/web-3.png" alt="mux web dashboard screenshot 4" width="900"></p>
 
 </details>
 
