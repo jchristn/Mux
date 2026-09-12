@@ -755,6 +755,20 @@ namespace Mux.Desktop.Shell
             _ModelPicker.SelectionChanged += OnModelSelected;
             right.Children.Add(_ModelPicker);
 
+            Button themeToggle = new Button
+            {
+                Content = _Theme.IsDark ? "☀" : "🌙",
+                Background = Brushes.Transparent,
+                Foreground = _Theme.Text,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(6, 4, 6, 4),
+                FontSize = 15,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            themeToggle.Tip(_Theme.IsDark ? "Switch to the light theme." : "Switch to the dark theme.");
+            themeToggle.Click += (sender, args) => SetThemeMode(_Theme.IsDark ? "light" : "dark");
+            right.Children.Add(themeToggle);
+
             DockPanel.SetDock(right, Dock.Right);
             header.Children.Add(right);
 
