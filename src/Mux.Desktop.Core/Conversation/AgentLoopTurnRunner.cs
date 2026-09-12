@@ -10,8 +10,10 @@ namespace Mux.Desktop.Conversation
     using Mux.Core.Enums;
     using Mux.Core.Llm;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Core.Settings;
     using Mux.Core.Telemetry;
+    using Mux.Core.Tools;
 
     /// <summary>
     /// The real <see cref="ITurnRunner"/>: resolves the selected endpoint from configuration, builds an
@@ -21,9 +23,9 @@ namespace Mux.Desktop.Conversation
     /// supplied.
     /// </summary>
     /// <remarks>
-    /// The system prompt uses mux's resolved persona prompt with its <c>{WorkingDirectory}</c> and
-    /// <c>{ToolDescriptions}</c> placeholders substituted here (the CLI resolver normally does this). Full
-    /// prompt-profile parity arrives when the shared runtime resolver is promoted into Mux.Core.
+    /// The system + compaction prompts are resolved through the shared
+    /// <see cref="Mux.Core.Prompting.SystemPromptResolver"/>, so the desktop and the TUI produce an identical
+    /// prompt (tools-disabled variant, real <c>{ToolDescriptions}</c>, and <c>{TaskPlanningGuidance}</c>).
     /// </remarks>
     public sealed class AgentLoopTurnRunner : ITurnRunner
     {
@@ -180,23 +182,29 @@ namespace Mux.Desktop.Conversation
             List<EndpointConfig> endpoints = SettingsLoader.LoadEndpoints();
             EndpointConfig endpoint = SettingsLoader.ResolveEndpoint(endpoints, _EndpointName, null, null, null, null, null);
 
-            string systemPrompt = SettingsLoader.LoadSystemPrompt(null, settings)
-                .Replace("{WorkingDirectory}", _WorkingDirectory, StringComparison.Ordinal)
-                .Replace("{ToolDescriptions}", string.Empty, StringComparison.Ordinal);
-
-            // Use the active prompt profile's compaction prompt so the user's editable prompt drives the
-            // automatic history compaction (blank falls back to the built-in default inside the loop).
-            string compactionPrompt = SettingsLoader.GetActivePromptProfile().CompactionPrompt ?? string.Empty;
+            // Resolve the system + compaction prompts through the shared Core resolver so the desktop and the
+            // TUI produce an identical prompt: the tools-disabled variant when the endpoint has no tool
+            // support, real {ToolDescriptions}, and the {TaskPlanningGuidance} block when enabled.
+            bool toolsEnabled = endpoint.Quirks?.SupportsTools ?? true;
+            List<ToolDefinition> builtInTools = new BuiltInToolRegistry(settings).GetToolDefinitions();
+            ResolvedSystemPrompt resolved = SystemPromptResolver.Resolve(
+                SettingsLoader.LoadSystemPrompt(null, settings),
+                SettingsLoader.GetActivePromptProfile(),
+                toolsEnabled,
+                builtInTools,
+                _WorkingDirectory,
+                settings.TaskPlanningEnabled,
+                null);
 
             AgentLoopOptions options = new AgentLoopOptions(endpoint)
             {
                 ConversationHistory = new List<ConversationMessage>(history),
-                SystemPrompt = systemPrompt,
-                CompactionSystemPrompt = compactionPrompt,
+                SystemPrompt = resolved.SystemPrompt,
+                CompactionSystemPrompt = resolved.CompactionSystemPrompt,
                 ApprovalPolicy = ApprovalPolicyEnum.AutoSafe,
                 WorkingDirectory = _WorkingDirectory,
                 MuxSettings = settings,
-                MaxIterations = settings.MaxAgentIterations,
+                MaxIterations = settings.GetEffectiveMaxAgentIterations(endpoint),
                 ConfigDirectory = _ConfigDirectory,
                 CommandName = "desktop",
                 SessionId = _SessionId ?? string.Empty,

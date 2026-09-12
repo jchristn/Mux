@@ -8,6 +8,7 @@ namespace Mux.Cli.Commands
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Core.Settings;
     using Mux.Core.Tools;
 
@@ -108,45 +109,21 @@ namespace Mux.Cli.Commands
             int builtInToolCount = builtInTools.Count;
             int effectiveToolCount = toolsEnabled ? builtInToolCount : 0;
 
-            StringBuilder toolDescBuilder = new StringBuilder();
-            if (toolsEnabled)
-            {
-                foreach (ToolDefinition tool in builtInTools)
-                {
-                    toolDescBuilder.AppendLine($"- {tool.Name}: {tool.Description}");
-                }
-            }
-
             PromptProfile activePromptProfile = SettingsLoader.GetActivePromptProfile();
 
-            string systemPrompt = SettingsLoader.LoadSystemPrompt(settings.SystemPrompt, muxSettings);
-            if (!toolsEnabled)
-            {
-                // No tools: use the active profile's tools-disabled prompt, falling back to the built-in.
-                systemPrompt = string.IsNullOrWhiteSpace(activePromptProfile.ToolsDisabledPrompt)
-                    ? Defaults.ToolsDisabledSystemPrompt
-                    : activePromptProfile.ToolsDisabledPrompt;
-            }
+            // Resolve the system + compaction prompts through the shared Core resolver so the CLI and the
+            // desktop produce an identical prompt (tools-disabled variant, placeholder substitution, append).
+            ResolvedSystemPrompt resolvedPrompt = SystemPromptResolver.Resolve(
+                SettingsLoader.LoadSystemPrompt(settings.SystemPrompt, muxSettings),
+                activePromptProfile,
+                toolsEnabled,
+                builtInTools,
+                workingDirectory,
+                muxSettings.TaskPlanningEnabled,
+                settings.AppendSystemPrompt);
 
-            string taskPlanningGuidance = (toolsEnabled && muxSettings.TaskPlanningEnabled)
-                ? Defaults.TaskPlanningGuidance
-                : string.Empty;
-
-            systemPrompt = systemPrompt
-                .Replace("{WorkingDirectory}", workingDirectory)
-                .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd())
-                .Replace("{TaskPlanningGuidance}", taskPlanningGuidance);
-
-            // Append caller-supplied system-prompt text after all placeholder substitution so it survives
-            // profile switches and is never consumed by a placeholder.
-            if (!string.IsNullOrWhiteSpace(settings.AppendSystemPrompt))
-            {
-                systemPrompt = string.IsNullOrEmpty(systemPrompt)
-                    ? settings.AppendSystemPrompt!.Trim()
-                    : systemPrompt + Environment.NewLine + Environment.NewLine + settings.AppendSystemPrompt!.Trim();
-            }
-
-            string compactionSystemPrompt = activePromptProfile.CompactionPrompt ?? string.Empty;
+            string systemPrompt = resolvedPrompt.SystemPrompt;
+            string compactionSystemPrompt = resolvedPrompt.CompactionSystemPrompt;
 
             ApprovalPolicyEnum approvalPolicy = ResolveApprovalPolicy(settings, endpoint, allowAskApproval);
 
