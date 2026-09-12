@@ -91,6 +91,7 @@ namespace Test.Shared
                     UsageAnalyticsSuite.Create(),
                     TurnProjectionSuite.Create(),
                     ConversationStatsSuite.Create(),
+                    ConversationControllerSuite.Create(),
                     SystemPromptResolverSuite.Create(),
                     ConversationServiceSuite.Create(),
                     EmbeddedServerSuite.Create(),

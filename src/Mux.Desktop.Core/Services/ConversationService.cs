@@ -120,14 +120,16 @@ namespace Mux.Desktop.Services
         private void AppendAssistantReply(TurnProjection projection, ConversationMessage userMessage, bool cancelled)
         {
             string answer = projection.AssistantText;
-            if (cancelled || string.IsNullOrEmpty(answer))
+            bool completed = projection.Completed != null;
+            if (cancelled || (string.IsNullOrEmpty(answer) && !completed))
             {
-                // The turn did not complete a normal exchange — it was cancelled/stopped, errored, or the
-                // model ended in its reasoning channel without a final answer. Drop the user message added
-                // before the turn so the model-facing history never carries a dangling, unanswered prompt;
-                // otherwise the next turn would send the model a run of consecutive user messages, which it
-                // treats as one batched request. The transcript still shows the user's bubble (rendered by the
-                // shell directly).
+                // The turn did not complete a normal exchange — it was cancelled/stopped, or it ended with no
+                // answer AND no completion (errored / timed out). Drop the user message added before the turn
+                // so the model-facing history never carries a dangling, unanswered prompt; otherwise the next
+                // turn would send the model consecutive user messages, which it treats as one batched request.
+                // A turn that ran to completion is kept even when the answer is empty (the model may have
+                // intentionally produced no text), so the next turn still has the prompt as context. The
+                // transcript still shows the user's bubble (rendered by the shell directly).
                 _History.Remove(userMessage);
                 return;
             }

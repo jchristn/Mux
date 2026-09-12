@@ -75,25 +75,31 @@ namespace Test.Shared.Suites
                         MuxAssert.IsFalse(service.IsBusy, "idle after cancel");
                     }),
 
-                    new TestCaseDescriptor("ConversationService", "EmptyTurnDropsUserMessage", "A turn with no assistant text drops its user message and the next completed turn stays clean", async (CancellationToken ct) =>
+                    new TestCaseDescriptor("ConversationService", "CompletedEmptyTurnIsKept", "A completed turn with no answer keeps the user prompt (empty assistant) for context", async (CancellationToken ct) =>
                     {
-                        // First turn: the model returns no assistant text (e.g. it ended in its reasoning
-                        // channel). The user message must not linger in history.
+                        // The model ran to completion (a RunCompletedEvent) but produced no answer text — for
+                        // example it was asked to output nothing. The prompt is KEPT (with an empty assistant
+                        // reply) so the next turn still has it as context; only cancelled/errored turns drop.
                         ConversationService service = new ConversationService(
                             new ListTurnRunner(new List<AgentEvent> { new RunCompletedEvent { Status = "completed" } }),
                             null);
-                        await service.RunTurnAsync("first (no answer)", ct);
-                        MuxAssert.AreEqual(0, service.History.Count, "empty turn leaves nothing in history");
+                        await service.RunTurnAsync("output nothing", ct);
+                        MuxAssert.AreEqual(2, service.History.Count, "user + empty assistant kept for a completed turn");
+                        MuxAssert.AreEqual(RoleEnum.User, service.History[0].Role, "user first");
+                        MuxAssert.AreEqual("output nothing", service.History[0].Content, "user prompt preserved");
+                        MuxAssert.AreEqual(RoleEnum.Assistant, service.History[1].Role, "empty assistant second");
+                        MuxAssert.AreEqual(string.Empty, service.History[1].Content, "assistant reply is empty");
+                    }),
 
-                        // Second turn (a fresh service to swap the runner) completing normally yields a clean
-                        // user→assistant pair with no consecutive user messages carried over.
-                        ConversationService service2 = new ConversationService(
-                            new ListTurnRunner(new List<AgentEvent> { new AssistantTextEvent { Text = "answer" }, new RunCompletedEvent { Status = "completed" } }),
-                            service.History);
-                        await service2.RunTurnAsync("second", ct);
-                        MuxAssert.AreEqual(2, service2.History.Count, "only the completed exchange is recorded");
-                        MuxAssert.AreEqual(RoleEnum.User, service2.History[0].Role, "user first");
-                        MuxAssert.AreEqual(RoleEnum.Assistant, service2.History[1].Role, "assistant second");
+                    new TestCaseDescriptor("ConversationService", "ErroredTurnDropsUserMessage", "A turn with no answer and no completion (errored/timed out) drops its user message", async (CancellationToken ct) =>
+                    {
+                        // No AssistantTextEvent and no RunCompletedEvent — an aborted/errored turn. The user
+                        // message must not linger so the next turn is not batched with a dangling prompt.
+                        ConversationService service = new ConversationService(
+                            new ListTurnRunner(new List<AgentEvent> { new ErrorEvent { Code = "e", Message = "boom" } }),
+                            null);
+                        await service.RunTurnAsync("first (errored)", ct);
+                        MuxAssert.AreEqual(0, service.History.Count, "errored turn leaves nothing in history");
                     }),
 
                     new TestCaseDescriptor("ConversationService", "ResumeFromHistory", "Initial history is preserved", async (CancellationToken ct) =>
@@ -104,15 +110,16 @@ namespace Test.Shared.Suites
                             new ConversationMessage { Role = RoleEnum.Assistant, Content = "reply" }
                         };
                         ConversationService service = new ConversationService(
-                            new ListTurnRunner(new List<AgentEvent> { new RunCompletedEvent { Status = "completed" } }),
+                            new ListTurnRunner(new List<AgentEvent> { new AssistantTextEvent { Text = "ok" }, new RunCompletedEvent { Status = "completed" } }),
                             seed);
 
                         MuxAssert.AreEqual(2, service.History.Count, "seeded history");
                         await service.RunTurnAsync("next", ct);
-                        // The turn produced no assistant text, so its user message is dropped and the seeded
-                        // history is preserved unchanged (no dangling prompt appended).
-                        MuxAssert.AreEqual(2, service.History.Count, "no dangling user message on an empty turn");
-                        MuxAssert.AreEqual(RoleEnum.Assistant, service.History[1].Role, "seeded history intact");
+                        // The seeded history is preserved and the new completed exchange is appended after it.
+                        MuxAssert.AreEqual(4, service.History.Count, "seed + new exchange");
+                        MuxAssert.AreEqual("reply", service.History[1].Content, "seeded assistant intact");
+                        MuxAssert.AreEqual("next", service.History[2].Content, "new user appended");
+                        MuxAssert.AreEqual("ok", service.History[3].Content, "new assistant appended");
                     })
                 });
         }
