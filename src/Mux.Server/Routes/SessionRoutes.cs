@@ -88,7 +88,7 @@ namespace Mux.Server.Routes
                 };
                 foreach (ConversationMessage message in snapshot.ConversationHistory)
                 {
-                    detail.Messages.Add(new ChatMessageDto { Role = RoleToString(message.Role), Content = message.Content ?? string.Empty });
+                    detail.Messages.Add(new ChatMessageDto { Role = message.Role.ToWire(), Content = message.Content ?? string.Empty });
                 }
 
                 req.Http.Response.StatusCode = 200;
@@ -139,7 +139,7 @@ namespace Mux.Server.Routes
                 snapshot.Model = request.Model ?? string.Empty;
                 snapshot.UpdatedUtc = now;
                 snapshot.ConversationHistory = request.Messages
-                    .Select(m => new ConversationMessage { Role = ParseRole(m.Role), Content = m.Content ?? string.Empty })
+                    .Select(m => new ConversationMessage { Role = RoleEnumExtensions.ParseRole(m.Role), Content = m.Content ?? string.Empty })
                     .ToList();
 
                 try
@@ -207,26 +207,5 @@ namespace Mux.Server.Routes
             });
         }
 
-        private static RoleEnum ParseRole(string? role)
-        {
-            switch ((role ?? string.Empty).Trim().ToLowerInvariant())
-            {
-                case "system": return RoleEnum.System;
-                case "assistant": return RoleEnum.Assistant;
-                case "tool": return RoleEnum.Tool;
-                default: return RoleEnum.User;
-            }
-        }
-
-        private static string RoleToString(RoleEnum role)
-        {
-            switch (role)
-            {
-                case RoleEnum.System: return "system";
-                case RoleEnum.Assistant: return "assistant";
-                case RoleEnum.Tool: return "tool";
-                default: return "user";
-            }
-        }
     }
 }

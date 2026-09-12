@@ -876,37 +876,19 @@ namespace Mux.Core.Agent
                 return;
             }
 
-            UsageEvent usageEvent = new UsageEvent
-            {
-                RunId = runId,
-                SessionId = string.IsNullOrEmpty(_Options.SessionId) ? null : _Options.SessionId,
-                JobId = string.IsNullOrEmpty(_Options.JobId) ? null : _Options.JobId,
-                CallKind = _Options.UsageCallKind,
-                Command = string.IsNullOrEmpty(_Options.CommandName) ? null : _Options.CommandName,
-                EndpointName = _Options.Endpoint.Name,
-                AdapterType = _Options.Endpoint.AdapterType.ToString(),
-                Model = !string.IsNullOrEmpty(metrics?.Model) ? metrics!.Model! : _Options.Endpoint.Model,
-                BaseHost = ExtractHost(_Options.Endpoint.BaseUrl),
-                Project = ExtractProject(_Options.WorkingDirectory),
-                Iteration = iteration,
-                Success = !errored && (metrics?.Success ?? false),
-                ErrorCode = errored ? errorCode : null
-            };
-
-            if (metrics != null)
-            {
-                LlmUsage usage = metrics.Usage;
-                usageEvent.InputTokens = usage.InputTokens;
-                usageEvent.CachedTokens = usage.CachedTokens;
-                usageEvent.OutputTokens = usage.OutputTokens;
-                usageEvent.ReasoningTokens = usage.ReasoningTokens;
-                usageEvent.TotalTokens = usage.TotalTokens;
-                usageEvent.TimeToFirstTokenMs = metrics.TimeToFirstTokenMs;
-                usageEvent.StreamingMs = metrics.StreamingMs;
-                usageEvent.TotalMs = metrics.TotalMs;
-                usageEvent.TokensPerSecond = metrics.TokensPerSecond;
-                usageEvent.FinishReason = metrics.FinishReason;
-            }
+            UsageEvent usageEvent = UsageEvent.FromCall(
+                _Options.Endpoint,
+                metrics,
+                metrics?.Usage,
+                _Options.UsageCallKind,
+                _Options.CommandName,
+                !errored && (metrics?.Success ?? false));
+            usageEvent.RunId = runId;
+            usageEvent.SessionId = string.IsNullOrEmpty(_Options.SessionId) ? null : _Options.SessionId;
+            usageEvent.JobId = string.IsNullOrEmpty(_Options.JobId) ? null : _Options.JobId;
+            usageEvent.Project = ExtractProject(_Options.WorkingDirectory);
+            usageEvent.Iteration = iteration;
+            usageEvent.ErrorCode = errored ? errorCode : null;
 
             // Best-effort: the recorder never throws, but guard anyway so a telemetry fault cannot break a run.
             try
@@ -917,21 +899,6 @@ namespace Mux.Core.Agent
             {
                 // Intentionally swallowed — usage recording must never affect the agent loop.
             }
-        }
-
-        private static string? ExtractHost(string? baseUrl)
-        {
-            if (string.IsNullOrWhiteSpace(baseUrl))
-            {
-                return null;
-            }
-
-            if (Uri.TryCreate(baseUrl, UriKind.Absolute, out Uri? uri) && !string.IsNullOrEmpty(uri.Host))
-            {
-                return uri.Host;
-            }
-
-            return null;
         }
 
         private static string? ExtractProject(string? workingDirectory)

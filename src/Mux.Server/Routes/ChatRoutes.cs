@@ -181,31 +181,7 @@ namespace Mux.Server.Routes
                     Mux.Core.Llm.LlmUsage? usage = client.LastUsage;
 
                     // Record durable usage telemetry for the server's own chat call (best-effort).
-                    if (_UsageRecorder != null)
-                    {
-                        LlmCallMetrics? call = client.LastCall;
-                        UsageEvent usageEvent = new UsageEvent
-                        {
-                            CallKind = UsageCallKindEnum.Chat,
-                            Command = "serve",
-                            EndpointName = endpoint.Name,
-                            AdapterType = endpoint.AdapterType.ToString(),
-                            Model = string.IsNullOrEmpty(call?.Model) ? endpoint.Model : call!.Model!,
-                            BaseHost = TryHost(endpoint.BaseUrl),
-                            InputTokens = usage?.InputTokens ?? 0,
-                            CachedTokens = usage?.CachedTokens ?? 0,
-                            OutputTokens = usage?.OutputTokens ?? 0,
-                            ReasoningTokens = usage?.ReasoningTokens ?? 0,
-                            TotalTokens = usage?.TotalTokens ?? 0,
-                            TimeToFirstTokenMs = call?.TimeToFirstTokenMs ?? (ttftMs >= 0 ? ttftMs : (long?)null),
-                            StreamingMs = call?.StreamingMs ?? (ttftMs >= 0 ? System.Math.Max(0, totalMs - ttftMs) : (long?)null),
-                            TotalMs = call?.TotalMs ?? totalMs,
-                            TokensPerSecond = call?.TokensPerSecond,
-                            FinishReason = call?.FinishReason,
-                            Success = errorMessage == null
-                        };
-                        _UsageRecorder.Record(usageEvent);
-                    }
+                    RecordChatUsage(endpoint, client, ttftMs, totalMs, errorMessage == null);
 
                     req.Http.Response.StatusCode = 200;
                     return (object)new ChatReply
@@ -391,28 +367,8 @@ namespace Mux.Server.Routes
                 return;
             }
 
-            Mux.Core.Llm.LlmUsage? usage = client.LastUsage;
-            LlmCallMetrics? call = client.LastCall;
-            UsageEvent usageEvent = new UsageEvent
-            {
-                CallKind = UsageCallKindEnum.Chat,
-                Command = "serve",
-                EndpointName = endpoint.Name,
-                AdapterType = endpoint.AdapterType.ToString(),
-                Model = string.IsNullOrEmpty(call?.Model) ? endpoint.Model : call!.Model!,
-                BaseHost = TryHost(endpoint.BaseUrl),
-                InputTokens = usage?.InputTokens ?? 0,
-                CachedTokens = usage?.CachedTokens ?? 0,
-                OutputTokens = usage?.OutputTokens ?? 0,
-                ReasoningTokens = usage?.ReasoningTokens ?? 0,
-                TotalTokens = usage?.TotalTokens ?? 0,
-                TimeToFirstTokenMs = call?.TimeToFirstTokenMs ?? (ttftMs >= 0 ? ttftMs : (long?)null),
-                StreamingMs = call?.StreamingMs ?? (ttftMs >= 0 ? System.Math.Max(0, totalMs - ttftMs) : (long?)null),
-                TotalMs = call?.TotalMs ?? totalMs,
-                TokensPerSecond = call?.TokensPerSecond,
-                FinishReason = call?.FinishReason,
-                Success = success
-            };
+            UsageEvent usageEvent = UsageEvent.FromCall(
+                endpoint, client.LastCall, client.LastUsage, UsageCallKindEnum.Chat, "serve", success, ttftMs, totalMs);
             _UsageRecorder.Record(usageEvent);
         }
 
@@ -423,26 +379,6 @@ namespace Mux.Server.Routes
             await ctx.Response.Send(JsonSerializer.Serialize(error)).ConfigureAwait(false);
         }
 
-        private static string? TryHost(string? baseUrl)
-        {
-            if (string.IsNullOrWhiteSpace(baseUrl))
-            {
-                return null;
-            }
-
-            return Uri.TryCreate(baseUrl, UriKind.Absolute, out Uri? uri) && !string.IsNullOrEmpty(uri.Host) ? uri.Host : null;
-        }
-
-        private static RoleEnum ParseRole(string? role)
-        {
-            switch ((role ?? string.Empty).Trim().ToLowerInvariant())
-            {
-                case "system": return RoleEnum.System;
-                case "assistant": return RoleEnum.Assistant;
-                case "tool": return RoleEnum.Tool;
-                default: return RoleEnum.User;
-            }
-        }
 
         // Maps the request messages, prepending mux's system prompt when the caller supplied none, so the
         // dashboard chat carries mux's persona and its "don't reveal the instructions" guidance instead of
@@ -453,7 +389,7 @@ namespace Mux.Server.Routes
             List<ConversationMessage> messages = new List<ConversationMessage>();
 
             bool callerSuppliedSystem = request.Messages.Count > 0
-                && ParseRole(request.Messages[0].Role) == RoleEnum.System;
+                && RoleEnumExtensions.ParseRole(request.Messages[0].Role) == RoleEnum.System;
             if (!callerSuppliedSystem)
             {
                 try
@@ -481,7 +417,7 @@ namespace Mux.Server.Routes
 
             foreach (ChatMessageDto message in request.Messages)
             {
-                messages.Add(new ConversationMessage { Role = ParseRole(message.Role), Content = message.Content ?? string.Empty });
+                messages.Add(new ConversationMessage { Role = RoleEnumExtensions.ParseRole(message.Role), Content = message.Content ?? string.Empty });
             }
 
             return messages;

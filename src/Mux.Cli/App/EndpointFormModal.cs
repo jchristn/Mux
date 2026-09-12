@@ -514,13 +514,7 @@ namespace Mux.Cli.App
 
         private static AdapterTypeEnum ParseAdapter(string adapter)
         {
-            switch (adapter)
-            {
-                case "ollama": return AdapterTypeEnum.Ollama;
-                case "openai": return AdapterTypeEnum.OpenAi;
-                case "vllm": return AdapterTypeEnum.Vllm;
-                default: return AdapterTypeEnum.OpenAiCompatible;
-            }
+            return AdapterTypeEnumExtensions.FromKebab(adapter);
         }
 
         private static string DefaultBaseUrlFor(AdapterTypeEnum adapterType)

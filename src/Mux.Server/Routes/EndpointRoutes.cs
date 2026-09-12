@@ -53,7 +53,7 @@ namespace Mux.Server.Routes
                     items.Add(new EndpointSummary
                     {
                         Name = endpoint.Name,
-                        AdapterType = AdapterKebab(endpoint.AdapterType),
+                        AdapterType = endpoint.AdapterType.ToKebab(),
                         BaseUrl = string.IsNullOrWhiteSpace(endpoint.BaseUrl) ? null : endpoint.BaseUrl,
                         Model = endpoint.Model,
                         IsDefault = endpoint.IsDefault
@@ -169,7 +169,7 @@ namespace Mux.Server.Routes
             EndpointDto dto = new EndpointDto
             {
                 Name = e.Name,
-                AdapterType = AdapterKebab(e.AdapterType),
+                AdapterType = e.AdapterType.ToKebab(),
                 BaseUrl = e.BaseUrl ?? string.Empty,
                 Model = e.Model ?? string.Empty,
                 IsDefault = e.IsDefault,
@@ -255,21 +255,5 @@ namespace Mux.Server.Routes
             return config;
         }
 
-        private static string AdapterKebab(AdapterTypeEnum adapter)
-        {
-            switch (adapter)
-            {
-                case AdapterTypeEnum.Ollama: return "ollama";
-                case AdapterTypeEnum.OpenAi: return "openai";
-                case AdapterTypeEnum.Vllm: return "vllm";
-                case AdapterTypeEnum.OpenAiCompatible: return "openai-compatible";
-                case AdapterTypeEnum.Anthropic: return "anthropic";
-                case AdapterTypeEnum.Gemini: return "gemini";
-                case AdapterTypeEnum.AzureOpenAi: return "azure-openai";
-                case AdapterTypeEnum.Vertex: return "vertex";
-                case AdapterTypeEnum.Bedrock: return "bedrock";
-                default: return adapter.ToString().ToLowerInvariant();
-            }
-        }
     }
 }

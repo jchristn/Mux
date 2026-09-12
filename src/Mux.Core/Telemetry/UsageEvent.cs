@@ -180,5 +180,78 @@ namespace Mux.Core.Telemetry
         }
 
         #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Builds a usage event for one completed (or errored) model call from the endpoint plus the client's
+        /// last-call metrics and usage — the mapping the agent loop and the server chat routes previously each
+        /// hand-rolled. Callers set any additional context (run/session/job ids, project, iteration, error
+        /// code) on the returned instance.
+        /// </summary>
+        /// <param name="endpoint">The endpoint the call was made against. Must not be null.</param>
+        /// <param name="call">The client's last-call metrics, or null when none was recorded.</param>
+        /// <param name="usage">The provider-reported token usage, or null when unavailable.</param>
+        /// <param name="callKind">The kind of call.</param>
+        /// <param name="command">The command/context that made the call, or null.</param>
+        /// <param name="success">Whether the call succeeded.</param>
+        /// <param name="fallbackTtftMs">A client-measured time-to-first-token to use when metrics carry none
+        /// (negative means unknown). Optional.</param>
+        /// <param name="fallbackTotalMs">A client-measured total duration to use when metrics carry none.
+        /// Optional.</param>
+        /// <returns>A populated usage event.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is null.</exception>
+        public static UsageEvent FromCall(
+            Mux.Core.Models.EndpointConfig endpoint,
+            Mux.Core.Llm.LlmCallMetrics? call,
+            Mux.Core.Llm.LlmUsage? usage,
+            UsageCallKindEnum callKind,
+            string? command,
+            bool success,
+            long? fallbackTtftMs = null,
+            long? fallbackTotalMs = null)
+        {
+            if (endpoint is null) throw new ArgumentNullException(nameof(endpoint));
+
+            bool haveFallbackTtft = fallbackTtftMs.HasValue && fallbackTtftMs.Value >= 0;
+
+            return new UsageEvent
+            {
+                CallKind = callKind,
+                Command = string.IsNullOrEmpty(command) ? null : command,
+                EndpointName = endpoint.Name,
+                AdapterType = endpoint.AdapterType.ToString(),
+                Model = string.IsNullOrEmpty(call?.Model) ? endpoint.Model : call!.Model!,
+                BaseHost = HostFromUrl(endpoint.BaseUrl),
+                InputTokens = usage?.InputTokens ?? 0,
+                CachedTokens = usage?.CachedTokens ?? 0,
+                OutputTokens = usage?.OutputTokens ?? 0,
+                ReasoningTokens = usage?.ReasoningTokens ?? 0,
+                TotalTokens = usage?.TotalTokens ?? 0,
+                TimeToFirstTokenMs = call?.TimeToFirstTokenMs ?? (haveFallbackTtft ? fallbackTtftMs : null),
+                StreamingMs = call?.StreamingMs ?? (haveFallbackTtft && fallbackTotalMs.HasValue ? (long?)Math.Max(0, fallbackTotalMs.Value - fallbackTtftMs!.Value) : null),
+                TotalMs = call?.TotalMs ?? fallbackTotalMs,
+                TokensPerSecond = call?.TokensPerSecond,
+                FinishReason = call?.FinishReason,
+                Success = success
+            };
+        }
+
+        /// <summary>
+        /// Extracts the host from a base URL, or null when it is blank or not an absolute URL.
+        /// </summary>
+        /// <param name="baseUrl">The base URL.</param>
+        /// <returns>The host, or null.</returns>
+        public static string? HostFromUrl(string? baseUrl)
+        {
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                return null;
+            }
+
+            return Uri.TryCreate(baseUrl, UriKind.Absolute, out Uri? uri) && !string.IsNullOrEmpty(uri.Host) ? uri.Host : null;
+        }
+
+        #endregion
     }
 }
