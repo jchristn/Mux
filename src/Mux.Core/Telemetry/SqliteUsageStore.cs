@@ -34,6 +34,12 @@ namespace Mux.Core.Telemetry
         private SqliteConnection? _KeepAlive = null;
         private bool _Disposed = false;
 
+        // Serializes writes within the process. WAL + busy_timeout rides out cross-process collisions, but two
+        // concurrent in-process writers (the recorder's writer loop and its maintenance/prune loop) can still
+        // race a write-transaction upgrade and surface "database is locked", which the recorder then swallows —
+        // silently dropping a batch. One in-process writer at a time removes that flaky failure mode.
+        private readonly SemaphoreSlim _WriteGate = new SemaphoreSlim(1, 1);
+
         private const string CreateSchemaSql = @"
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
 
@@ -166,31 +172,39 @@ VALUES
 
             token.ThrowIfCancellationRequested();
 
-            await using SqliteConnection connection = await OpenConnectionAsync(token).ConfigureAwait(false);
-            await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(token).ConfigureAwait(false);
-
-            int inserted = 0;
-            await using (SqliteCommand command = connection.CreateCommand())
+            await _WriteGate.WaitAsync(token).ConfigureAwait(false);
+            try
             {
-                command.Transaction = transaction;
-                command.CommandText = InsertSql;
-                PrepareInsertParameters(command);
+                await using SqliteConnection connection = await OpenConnectionAsync(token).ConfigureAwait(false);
+                await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(token).ConfigureAwait(false);
 
-                foreach (UsageEvent usageEvent in events)
+                int inserted = 0;
+                await using (SqliteCommand command = connection.CreateCommand())
                 {
-                    if (usageEvent == null)
+                    command.Transaction = transaction;
+                    command.CommandText = InsertSql;
+                    PrepareInsertParameters(command);
+
+                    foreach (UsageEvent usageEvent in events)
                     {
-                        continue;
+                        if (usageEvent == null)
+                        {
+                            continue;
+                        }
+
+                        token.ThrowIfCancellationRequested();
+                        BindInsertParameters(command, usageEvent);
+                        inserted += await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                     }
-
-                    token.ThrowIfCancellationRequested();
-                    BindInsertParameters(command, usageEvent);
-                    inserted += await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
-            }
 
-            await transaction.CommitAsync(token).ConfigureAwait(false);
-            return inserted;
+                await transaction.CommitAsync(token).ConfigureAwait(false);
+                return inserted;
+            }
+            finally
+            {
+                _WriteGate.Release();
+            }
         }
 
         /// <summary>
@@ -204,34 +218,42 @@ VALUES
         {
             token.ThrowIfCancellationRequested();
 
-            await using SqliteConnection connection = await OpenConnectionAsync(token).ConfigureAwait(false);
-
-            int deleted = 0;
-
-            if (_RetentionDays > 0)
+            await _WriteGate.WaitAsync(token).ConfigureAwait(false);
+            try
             {
-                long cutoff = nowUnixMs - ((long)_RetentionDays * 24L * 60L * 60L * 1000L);
-                await using SqliteCommand command = connection.CreateCommand();
-                command.CommandText = "DELETE FROM usage_events WHERE ts_utc < $cutoff;";
-                command.Parameters.AddWithValue("$cutoff", cutoff);
-                deleted += await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-            }
+                await using SqliteConnection connection = await OpenConnectionAsync(token).ConfigureAwait(false);
 
-            // Secondary guard: cap total rows, deleting the oldest beyond the ceiling.
-            await using (SqliteCommand capCommand = connection.CreateCommand())
-            {
-                capCommand.CommandText = @"
+                int deleted = 0;
+
+                if (_RetentionDays > 0)
+                {
+                    long cutoff = nowUnixMs - ((long)_RetentionDays * 24L * 60L * 60L * 1000L);
+                    await using SqliteCommand command = connection.CreateCommand();
+                    command.CommandText = "DELETE FROM usage_events WHERE ts_utc < $cutoff;";
+                    command.Parameters.AddWithValue("$cutoff", cutoff);
+                    deleted += await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                }
+
+                // Secondary guard: cap total rows, deleting the oldest beyond the ceiling.
+                await using (SqliteCommand capCommand = connection.CreateCommand())
+                {
+                    capCommand.CommandText = @"
 DELETE FROM usage_events
 WHERE id IN (
     SELECT id FROM usage_events
     ORDER BY ts_utc DESC, id DESC
     LIMIT -1 OFFSET $max
 );";
-                capCommand.Parameters.AddWithValue("$max", _MaxRows);
-                deleted += await capCommand.ExecuteNonQueryAsync(token).ConfigureAwait(false);
-            }
+                    capCommand.Parameters.AddWithValue("$max", _MaxRows);
+                    deleted += await capCommand.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                }
 
-            return deleted;
+                return deleted;
+            }
+            finally
+            {
+                _WriteGate.Release();
+            }
         }
 
         /// <summary>
@@ -246,10 +268,18 @@ WHERE id IN (
         {
             token.ThrowIfCancellationRequested();
 
-            await using SqliteConnection connection = await OpenConnectionAsync(token).ConfigureAwait(false);
-            await using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM usage_events WHERE session_id IS NULL OR TRIM(session_id) = '';";
-            return await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            await _WriteGate.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
+                await using SqliteConnection connection = await OpenConnectionAsync(token).ConfigureAwait(false);
+                await using SqliteCommand command = connection.CreateCommand();
+                command.CommandText = "DELETE FROM usage_events WHERE session_id IS NULL OR TRIM(session_id) = '';";
+                return await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            }
+            finally
+            {
+                _WriteGate.Release();
+            }
         }
 
         /// <summary>
@@ -497,11 +527,19 @@ WHERE id IN (
         {
             token.ThrowIfCancellationRequested();
 
-            await using SqliteConnection connection = await OpenConnectionAsync(token).ConfigureAwait(false);
-            await using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM usage_events WHERE id = $id;";
-            command.Parameters.AddWithValue("$id", id);
-            return await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            await _WriteGate.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
+                await using SqliteConnection connection = await OpenConnectionAsync(token).ConfigureAwait(false);
+                await using SqliteCommand command = connection.CreateCommand();
+                command.CommandText = "DELETE FROM usage_events WHERE id = $id;";
+                command.Parameters.AddWithValue("$id", id);
+                return await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+            }
+            finally
+            {
+                _WriteGate.Release();
+            }
         }
 
         /// <summary>
@@ -533,6 +571,7 @@ WHERE id IN (
 
             _KeepAlive?.Dispose();
             _KeepAlive = null;
+            _WriteGate.Dispose();
             _Disposed = true;
         }
 
