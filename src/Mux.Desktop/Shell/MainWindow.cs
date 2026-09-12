@@ -2526,7 +2526,7 @@ namespace Mux.Desktop.Shell
 
         private Border NewAssistantBorder(Control content, Func<string> rawTextProvider)
         {
-            Button copy = CopyButton.Create(rawTextProvider, _Theme);
+            Button copy = CopyButton.Create(rawTextProvider, _Theme, this);
             copy.HorizontalAlignment = HorizontalAlignment.Right;
             copy.VerticalAlignment = VerticalAlignment.Bottom;
             copy.Margin = new Thickness(6, 0, 0, 0);
