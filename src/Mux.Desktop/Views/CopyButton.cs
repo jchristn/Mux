@@ -3,7 +3,6 @@ namespace Mux.Desktop.Views
     using System;
     using Avalonia;
     using Avalonia.Controls;
-    using Avalonia.Input.Platform;
     using Avalonia.Media;
     using Avalonia.Threading;
 
@@ -72,24 +71,9 @@ namespace Mux.Desktop.Views
                     // Provider failure copies nothing but still gives feedback.
                 }
 
-                // Never write an empty string — that would clear whatever is on the clipboard.
-                if (text.Length == 0)
-                {
-                    return;
-                }
-
-                try
-                {
-                    IClipboard? clipboard = clipboardOwner.Clipboard ?? TopLevel.GetTopLevel(button)?.Clipboard;
-                    if (clipboard != null)
-                    {
-                        await clipboard.SetTextAsync(text);
-                    }
-                }
-                catch (Exception)
-                {
-                    // Best-effort copy.
-                }
+                // Copy through the reliable helper (Win32 clipboard on Windows, Avalonia elsewhere). Empty
+                // text is ignored there so the clipboard is never cleared.
+                await ClipboardHelper.CopyAsync(clipboardOwner, text);
             };
 
             return button;
