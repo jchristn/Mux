@@ -104,6 +104,21 @@ body{background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
 .view{flex:1;min-height:0;overflow:auto;display:none}
 .view.active{display:flex;flex-direction:column}
 /* chat */
+.chatwrap{flex:1;min-height:0;display:grid;grid-template-columns:248px minmax(0,1fr)}
+.convos{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--panel)}
+.convos-head{padding:10px;border-bottom:1px solid var(--line)}
+.convo-list{flex:1;overflow-y:auto;padding:6px}
+.convo-empty{color:var(--muted);font-size:12px;padding:14px 10px;text-align:center}
+.convo-item{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:6px;cursor:pointer;color:var(--text)}
+.convo-item:hover{background:var(--hover,rgba(127,127,127,.10))}
+.convo-item.active{background:var(--accent);color:#fff}
+.convo-item .ct{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.convo-item .ca{display:none;gap:2px}
+.convo-item:hover .ca,.convo-item.active .ca{display:flex}
+.convo-item .ca button{background:none;border:none;cursor:pointer;color:inherit;opacity:.75;font-size:13px;padding:2px 3px;border-radius:4px}
+.convo-item .ca button:hover{opacity:1;background:rgba(127,127,127,.2)}
+.chat-title{color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40vw}
+@media(max-width:820px){.chatwrap{grid-template-columns:1fr}.convos{display:none}}
 .chat{display:grid;grid-template-rows:auto 1fr auto;height:100%;min-height:0}
 .chat-toolbar{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
 .chat-toolbar label{font-size:12px;color:var(--muted);margin-right:6px}
@@ -487,22 +502,30 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 
     <!-- Chat -->
     <div class="view" id="view-chat">
-      <div class="chat">
-        <div class="chat-toolbar">
-          <span><label title="The model endpoint this chat runs against" data-i18n="chat.endpoint">Endpoint</label></span>
-          <select id="endpointSelect" style="min-width:260px" title="Choose which configured model endpoint answers your messages"></select>
-          <span class="grow"></span>
-          <button class="btn secondary" id="newChatBtn" title="Clear the conversation and start a fresh chat">+ <span data-i18n="act.newchat">New chat</span></button>
-        </div>
-        <div class="messages" id="messages">
-          <div class="empty" id="chatEmpty" data-i18n="chat.empty">Pick an endpoint and start chatting with your model.</div>
-        </div>
-        <div>
-          <div class="composer">
-            <textarea id="composer" rows="1" placeholder="Message your model… (Enter to send, Shift+Enter for newline)" title="Type a message. Enter sends it; Shift+Enter inserts a newline."></textarea>
-            <button class="btn send" id="sendBtn" title="Send this message to the model">➤</button>
+      <div class="chatwrap">
+        <aside class="convos">
+          <div class="convos-head">
+            <button class="btn" id="newChatBtn" style="width:100%" title="Start a fresh conversation">+ <span data-i18n="act.newchat">New chat</span></button>
           </div>
-          <div class="disclaimer" data-i18n="chat.disclaimer">mux is using the specified model.  Verify important results.</div>
+          <div class="convo-list" id="convoList"></div>
+        </aside>
+        <div class="chat">
+          <div class="chat-toolbar">
+            <span><label title="The model endpoint this chat runs against" data-i18n="chat.endpoint">Endpoint</label></span>
+            <select id="endpointSelect" style="min-width:260px" title="Choose which configured model endpoint answers your messages"></select>
+            <span class="grow"></span>
+            <span id="chatTitle" class="chat-title" title="The current conversation"></span>
+          </div>
+          <div class="messages" id="messages">
+            <div class="empty" id="chatEmpty" data-i18n="chat.empty">Pick an endpoint and start chatting with your model.</div>
+          </div>
+          <div>
+            <div class="composer">
+              <textarea id="composer" rows="1" placeholder="Message your model… (Enter to send, Shift+Enter for newline)" title="Type a message. Enter sends it; Shift+Enter inserts a newline."></textarea>
+              <button class="btn send" id="sendBtn" title="Send this message to the model">➤</button>
+            </div>
+            <div class="disclaimer" data-i18n="chat.disclaimer">mux is using the specified model.  Verify important results.</div>
+          </div>
         </div>
       </div>
     </div>
@@ -871,6 +894,8 @@ function setLocale(l){LOCALE=I18N[l]?l:"en";try{localStorage.setItem("mux.lang",
 
 var messages=[];
 var busy=false;
+var currentSessionId=null;
+var currentModel="";
 
 function el(id){return document.getElementById(id);}
 function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
@@ -950,6 +975,61 @@ function renderMessages(){
   box.scrollTop=box.scrollHeight;
 }
 
+/* ---- conversations (persisted like the desktop/TUI: list, open, new, rename, delete, export) ---- */
+function setChatTitle(x){var e=el("chatTitle");if(e)e.textContent=x||"";}
+function loadConvos(){api("/v1.0/api/sessions").then(function(r){renderConvos((r&&r.Items)||[]);}).catch(function(){renderConvos([]);});}
+function highlightConvo(){Array.prototype.forEach.call(document.querySelectorAll("#convoList .convo-item"),function(row){row.classList.toggle("active",row.getAttribute("data-id")===currentSessionId);});}
+function renderConvos(items){
+  var box=el("convoList");if(!box)return;
+  if(!items.length){box.innerHTML='<div class="convo-empty">'+"No conversations yet."+'</div>';return;}
+  items.sort(function(a,b){return String(b.UpdatedUtc||"").localeCompare(String(a.UpdatedUtc||""));});
+  var html="";
+  for(var i=0;i<items.length;i++){var s=items[i];var act=(s.Id===currentSessionId)?" active":"";
+    html+='<div class="convo-item'+act+'" data-id="'+esc(s.Id)+'"><span class="ct" title="'+esc(s.Title||s.Id)+'">'+esc(s.Title||"Untitled")+'</span>'
+      +'<span class="ca"><button data-act="rename" title="'+"Rename"+'">✎</button>'
+      +'<button data-act="export" title="'+"Export (Markdown)"+'">⤓</button>'
+      +'<button data-act="delete" title="'+"Delete"+'">🗑</button></span></div>';
+  }
+  box.innerHTML=html;
+  Array.prototype.forEach.call(box.querySelectorAll(".convo-item"),function(row){
+    var id=row.getAttribute("data-id");
+    row.addEventListener("click",function(e){
+      var b=e.target.closest("button");
+      if(b){e.stopPropagation();var a=b.getAttribute("data-act");
+        if(a==="rename")renameConvo(id);else if(a==="export")exportSe(id,"md");else if(a==="delete")deleteConvo(id);return;}
+      openConvo(id);
+    });
+  });
+}
+function openConvo(id){
+  api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
+    messages=((d&&d.Messages)||[]).map(function(m){return {role:m.Role,content:m.Content};});
+    currentSessionId=(d&&d.Id)||id;currentModel=(d&&d.Model)||"";
+    if(d&&d.EndpointName){var sel=el("endpointSelect");if(sel){for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===d.EndpointName){sel.selectedIndex=i;break;}}}}
+    setChatTitle((d&&d.Title)||"");renderMessages();highlightConvo();
+  }).catch(function(e){toast(e.message,true);});
+}
+function newChat(){messages=[];currentSessionId=null;currentModel="";setChatTitle("");renderMessages();highlightConvo();var c=el("composer");if(c)c.focus();}
+function persistConvo(){
+  var real=messages.filter(function(m){return !m.typing;});
+  if(!real.length)return;
+  var payload={Id:currentSessionId||"",Title:"",EndpointName:el("endpointSelect").value||"",Model:currentModel||"",Messages:real.map(function(m){return {Role:m.role,Content:m.content};})};
+  api("/v1.0/api/sessions","PUT",payload).then(function(s){if(s&&s.Id){currentSessionId=s.Id;setChatTitle(s.Title||"");}loadConvos();}).catch(function(){});
+}
+function renameConvo(id){
+  var cur="";var e=document.querySelector('#convoList .convo-item[data-id="'+id+'"] .ct');if(e)cur=e.getAttribute("title")||e.textContent;
+  var val=window.prompt("Rename conversation",cur);if(val==null)return;val=val.trim();if(!val)return;
+  api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
+    var payload={Id:id,Title:val,EndpointName:(d&&d.EndpointName)||"",Model:(d&&d.Model)||"",Messages:((d&&d.Messages)||[]).map(function(m){return {Role:m.Role,Content:m.Content};})};
+    return api("/v1.0/api/sessions","PUT",payload);
+  }).then(function(s){if(id===currentSessionId&&s)setChatTitle(s.Title||"");loadConvos();}).catch(function(e){toast(e.message,true);});
+}
+function deleteConvo(id){
+  confirmModal("Delete this conversation?",function(){
+    api("/v1.0/api/sessions?id="+encodeURIComponent(id),"DELETE").then(function(){if(id===currentSessionId)newChat();loadConvos();toast("Deleted");}).catch(function(e){toast(e.message,true);});
+  });
+}
+
 function sendChat(){
   if(busy)return;
   var text=el("composer").value.trim();
@@ -1002,7 +1082,7 @@ function handleSse(block,typing){
   if(!data)return;
   var parsed;try{parsed=JSON.parse(data);}catch(e){return;}
   if(ev==="token"){typing.typing=false;typing.content+=parsed;renderMessages();}
-  else if(ev==="done"){typing.typing=false;typing.content=(parsed&&parsed.Content)||typing.content;typing.model=(parsed&&parsed.Model)||"";typing.stats=(parsed&&parsed.Stats)||null;renderMessages();endChat();}
+  else if(ev==="done"){typing.typing=false;typing.content=(parsed&&parsed.Content)||typing.content;typing.model=(parsed&&parsed.Model)||"";typing.stats=(parsed&&parsed.Stats)||null;if(typing.model)currentModel=typing.model;renderMessages();endChat();persistConvo();}
   else if(ev==="error"){typing.typing=false;typing.content="⚠️ "+parsed;renderMessages();toast(String(parsed),true);endChat();}
 }
 
@@ -1289,7 +1369,7 @@ function openEp(i,prefill){var isEdit=i>=0,e=isEdit?_ep[i]:(prefill||{AdapterTyp
     var list=_ep.slice();if(isEdit)list[i]=v;else list.push(v);
     saveCollection("/v1.0/api/endpoints",list,function(items){_ep=items;closeModal();renderEp();loadEndpoints();});});}
 function delEp(name){confirmModal('Delete endpoint "'+name+'"?',function(){
-  api("/v1.0/api/endpoints?name="+encodeURIComponent(name),"DELETE").then(function(r){_ep=(r&&r.Items)||[];renderEp();toast(t("toast.deleted"));loadEndpoints();}).catch(function(e){toast(e.message,true);});});}
+  api("/v1.0/api/endpoints?name="+encodeURIComponent(name),"DELETE").then(function(r){_ep=(r&&r.Items)||[];renderEp();toast("Deleted");loadEndpoints();}).catch(function(e){toast(e.message,true);});});}
 
 /* ================= MCP servers ================= */
 var _mcp=[];
@@ -1316,7 +1396,7 @@ function openMcp(i,prefill){var isEdit=i>=0,s=isEdit?_mcp[i]:(prefill||{Transpor
     var list=_mcp.slice();if(isEdit)list[i]=v;else list.push(v);
     saveCollection("/v1.0/api/mcp-servers",list,function(items){_mcp=items;closeModal();renderMcp();});});}
 function delMcp(name){confirmModal('Delete MCP server "'+name+'"?',function(){
-  api("/v1.0/api/mcp-servers?name="+encodeURIComponent(name),"DELETE").then(function(r){_mcp=(r&&r.Items)||[];renderMcp();toast(t("toast.deleted"));}).catch(function(e){toast(e.message,true);});});}
+  api("/v1.0/api/mcp-servers?name="+encodeURIComponent(name),"DELETE").then(function(r){_mcp=(r&&r.Items)||[];renderMcp();toast("Deleted");}).catch(function(e){toast(e.message,true);});});}
 
 /* ================= Prompts ================= */
 var _pr=[];
@@ -1440,7 +1520,7 @@ function openSk(name){
   if(name)api("/v1.0/api/skills/detail?id="+encodeURIComponent(name)).then(function(s){skEditor(s.Name,s.Body||"",true);}).catch(function(e){toast(e.message,true);});
   else skEditor("","---\nname: my-skill\ndescription: what this skill does\ncommands: []\n---\n\nDescribe the skill's procedure here.\n",false);}
 function delSk(name){confirmModal('Delete skill "'+name+'"? This removes its folder.',function(){
-  api("/v1.0/api/skills?id="+encodeURIComponent(name),"DELETE").then(function(r){_sk=(r&&r.Items)||[];renderSk();toast(t("toast.deleted"));}).catch(function(e){toast(e.message,true);});});}
+  api("/v1.0/api/skills?id="+encodeURIComponent(name),"DELETE").then(function(r){_sk=(r&&r.Items)||[];renderSk();toast("Deleted");}).catch(function(e){toast(e.message,true);});});}
 
 /* ================= Sessions ================= */
 var _se=[];
@@ -1462,7 +1542,7 @@ function viewSe(id,fmt){api("/v1.0/api/sessions/export?id="+encodeURIComponent(i
   }
 }).catch(function(e){toast(e.message,true);});}
 function delSe(id){confirmModal('Delete session "'+id+'"?',function(){
-  api("/v1.0/api/sessions?id="+encodeURIComponent(id),"DELETE").then(function(r){_se=(r&&r.Items)||[];renderSe();toast(t("toast.deleted"));}).catch(function(e){toast(e.message,true);});});}
+  api("/v1.0/api/sessions?id="+encodeURIComponent(id),"DELETE").then(function(r){_se=(r&&r.Items)||[];renderSe();toast("Deleted");}).catch(function(e){toast(e.message,true);});});}
 
 /* ================= Home / Overview ================= */
 function loadHome(){el("home_kpis").innerHTML='<div class="empty"><div class="spinner"></div><div>'+t("tbl.loading")+'</div></div>';
@@ -1676,7 +1756,7 @@ function renderUsageHistory(){
   ],_uhist,{icon:"🗒️",msg:"No calls recorded in this window."});
 }
 function delUsageRow(i){var r=_uhist[i];if(!r)return;confirmModal("Delete this usage record? This cannot be undone.",function(){
-  api("/v1.0/api/usage/events?id="+encodeURIComponent(r.Id),"DELETE").then(function(){toast(t("toast.deleted"));refreshUsage();}).catch(function(e){toast(e.message,true);});});}
+  api("/v1.0/api/usage/events?id="+encodeURIComponent(r.Id),"DELETE").then(function(){toast("Deleted");refreshUsage();}).catch(function(e){toast(e.message,true);});});}
 function viewUsageRow(i){var r=_uhist[i];if(!r)return;
   function sec(title,pairs){var h='<div class="udetail-sec"><h5>'+esc(title)+'</h5><div class="udetail-kv">';pairs.forEach(function(kv){h+='<div><div class="k">'+esc(kv[0])+'</div><div class="v">'+esc(""+kv[1])+'</div></div>';});return h+'</div></div>';}
   var badge=r.Success?'<span class="ubadge ok">success</span>':'<span class="ubadge err">'+esc(r.ErrorCode||"error")+'</span>';
@@ -1717,7 +1797,7 @@ function delPr(i){var m=_pr2[i];if(!m)return;confirmModal('Remove pricing for "'
 function savePricingList(list){var models={};list.forEach(function(r){if(r.Model)models[r.Model]={inputPerMTok:+r.Input||0,cachedInputPerMTok:+r.Cached||0,outputPerMTok:+r.Output||0};});
   busyModal(true);api("/v1.0/api/usage/pricing","PUT",{version:_prVersion,models:models}).then(function(tb){_prVersion=(tb&&tb.version)||_prVersion;closeModal();loadPricing();toast(t("toast.saved"));}).catch(function(e){toast(e.message,true);}).finally(function(){busyModal(false);});
 }
-var VIEW_LOADERS={home:loadHome,endpoints:loadEndpointsAdmin,mcp:loadMcp,prompts:loadPrompts,subagents:loadSubagents,hooks:loadHooks,commands:loadHooks,keybindings:loadKeybindings,skills:loadSkills,sessions:loadSessions,usage:loadUsage,pricing:loadPricing,settings:loadSettings};
+var VIEW_LOADERS={home:loadHome,chat:loadConvos,endpoints:loadEndpointsAdmin,mcp:loadMcp,prompts:loadPrompts,subagents:loadSubagents,hooks:loadHooks,commands:loadHooks,keybindings:loadKeybindings,skills:loadSkills,sessions:loadSessions,usage:loadUsage,pricing:loadPricing,settings:loadSettings};
 function loadStatus(){api("/v1.0/api/health").then(function(h){
   var p=el("statusPill");if(p){p.textContent=(h.Status||"—");p.className="badge status"+(h.Status==="healthy"?" ok":"");}
   var v=el("badgeVersion");if(v)v.textContent=h.Version?("v"+h.Version):"";
@@ -1740,7 +1820,7 @@ function applyTheme(t){document.documentElement.setAttribute("data-theme",t);loc
 document.querySelectorAll(".nav-item").forEach(function(n){n.addEventListener("click",function(){switchView(n.dataset.view);});});
 el("themeBtn").addEventListener("click",function(){applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");});
 el("sendBtn").addEventListener("click",sendChat);
-el("newChatBtn").addEventListener("click",function(){messages=[];renderMessages();});
+el("newChatBtn").addEventListener("click",newChat);
 el("saveSettingsBtn").addEventListener("click",saveSettings);
 el("reloadSettingsBtn").addEventListener("click",loadSettings);
 /* modal close wiring */

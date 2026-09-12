@@ -53,6 +53,50 @@ namespace Mux.Server.Models
     }
 
     /// <summary>
+    /// The full contents of a saved conversation, returned when the dashboard opens one to continue it.
+    /// </summary>
+    public class SessionDetailDto
+    {
+        /// <summary>Session id.</summary>
+        public string Id { get; set; } = string.Empty;
+
+        /// <summary>Session title.</summary>
+        public string Title { get; set; } = string.Empty;
+
+        /// <summary>Endpoint name captured with the session.</summary>
+        public string EndpointName { get; set; } = string.Empty;
+
+        /// <summary>Model captured with the session.</summary>
+        public string Model { get; set; } = string.Empty;
+
+        /// <summary>The conversation messages, oldest first.</summary>
+        public List<ChatMessageDto> Messages { get; set; } = new List<ChatMessageDto>();
+    }
+
+    /// <summary>
+    /// A request to create or update (upsert) a saved conversation from the dashboard chat. When
+    /// <see cref="Id"/> is empty a new session is created; otherwise the existing session is replaced. A blank
+    /// <see cref="Title"/> is derived from the first user message.
+    /// </summary>
+    public class SessionSaveRequest
+    {
+        /// <summary>Session id to update; empty to create a new one.</summary>
+        public string? Id { get; set; }
+
+        /// <summary>Optional title; blank derives one from the first user message.</summary>
+        public string? Title { get; set; }
+
+        /// <summary>Endpoint name to record.</summary>
+        public string EndpointName { get; set; } = string.Empty;
+
+        /// <summary>Model to record.</summary>
+        public string Model { get; set; } = string.Empty;
+
+        /// <summary>The conversation messages to persist, oldest first.</summary>
+        public List<ChatMessageDto> Messages { get; set; } = new List<ChatMessageDto>();
+    }
+
+    /// <summary>
     /// A dashboard chat reply.
     /// </summary>
     public class ChatReply
