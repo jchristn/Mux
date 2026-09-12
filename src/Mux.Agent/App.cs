@@ -91,23 +91,10 @@ namespace Mux.Agent
 
         internal static WindowIcon? LoadIcon()
         {
-            // The taskbar/notification area follows the OS theme. Use the white glyph on a dark taskbar and the
-            // black glyph on a light one. Load the full-resolution PNG (not the tiny .ico) so the icon renders
+            // A single grey glyph is used for the taskbar/notification icon on both light and dark taskbars,
+            // matching the rest of the app. Load the full-resolution PNG (not the tiny .ico) so it renders
             // crisp and full-size rather than small and blurry.
-            bool dark = false;
-            try
-            {
-                IPlatformSettings? platformSettings = Application.Current?.PlatformSettings;
-                if (platformSettings != null)
-                {
-                    dark = platformSettings.GetColorValues().ThemeVariant == PlatformThemeVariant.Dark;
-                }
-            }
-            catch (Exception)
-            {
-            }
-
-            string resource = dark ? "Mux.Agent.logo-white.png" : "Mux.Agent.logo-black.png";
+            string resource = "Mux.Agent.logo-grey.png";
             try
             {
                 Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource);

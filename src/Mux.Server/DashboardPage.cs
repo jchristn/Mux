@@ -21,12 +21,14 @@ namespace Mux.Server
         {
             string logoDark = LoadLogoDataUri("Mux.Server.logo-white.png");
             string logoLight = LoadLogoDataUri("Mux.Server.logo-black.png");
+            string logoGrey = LoadLogoDataUri("Mux.Server.logo-grey.png");
 
             return Template
                 .Replace("__MUX_API_KEY__", JsString(apiKey ?? string.Empty))
                 .Replace("__MUX_VERSION__", HtmlEscape(version))
                 .Replace("__LOGO_DARK__", logoDark)
-                .Replace("__LOGO_LIGHT__", logoLight);
+                .Replace("__LOGO_LIGHT__", logoLight)
+                .Replace("__LOGO_GREY__", logoGrey);
         }
 
         private static string LoadLogoDataUri(string resourceName)
@@ -65,7 +67,7 @@ namespace Mux.Server
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>mux dashboard</title>
-<link rel="icon" href="__LOGO_LIGHT__">
+<link rel="icon" href="__LOGO_GREY__">
 <style>
 :root{
   --bg:#f6f7f8; --panel:#ffffff; --panel-2:#eef2f5; --line:#d7dde3;

@@ -23,8 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="..\..\assets\icon-black.png" LogicalName="Mux.Agent.logo-black.png" />
-    <EmbeddedResource Include="..\..\assets\icon-white.png" LogicalName="Mux.Agent.logo-white.png" />
+    <EmbeddedResource Include="..\..\assets\icon-grey.png" LogicalName="Mux.Agent.logo-grey.png" />
   </ItemGroup>
 
   <ItemGroup>

@@ -8,7 +8,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsPackable>false</IsPackable>
-    <ApplicationIcon>..\..\assets\icon-black.ico</ApplicationIcon>
+    <ApplicationIcon>..\..\assets\icon-grey.ico</ApplicationIcon>
     <Description>mux Desktop: cross-platform Avalonia desktop client for the mux agent.</Description>
     <!--
       The Phase 0 foundation is authored in code (no XAML), matching the proven Mux.Agent pattern.
@@ -27,8 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="..\..\assets\icon-black.png" LogicalName="Mux.Desktop.logo-black.png" />
-    <EmbeddedResource Include="..\..\assets\icon-white.png" LogicalName="Mux.Desktop.logo-white.png" />
+    <EmbeddedResource Include="..\..\assets\icon-grey.png" LogicalName="Mux.Desktop.logo-grey.png" />
   </ItemGroup>
 
   <ItemGroup>

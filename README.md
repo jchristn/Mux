@@ -1,9 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/icon-white.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/icon-black.png">
-    <img src="assets/icon-black.png" width="256" height="256" alt="mux">
-  </picture>
+  <img src="assets/logo-grey.png" width="360" alt="mux">
 </p>
 
 <h1 align="center">mux</h1>

@@ -53,10 +53,12 @@ namespace Mux.Desktop
 
         private static Stream? OpenLogoStream(bool white)
         {
-            string resource = white ? "Mux.Desktop.logo-white.png" : "Mux.Desktop.logo-black.png";
+            // A single grey glyph is used for the window/taskbar icon and splash on both light and dark
+            // surfaces, matching the app/exe icon (icon-grey.ico). The theme parameter is retained for the
+            // call sites but no longer selects a variant.
             try
             {
-                return Assembly.GetExecutingAssembly().GetManifestResourceStream(resource);
+                return Assembly.GetExecutingAssembly().GetManifestResourceStream("Mux.Desktop.logo-grey.png");
             }
             catch (Exception)
             {
