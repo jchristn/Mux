@@ -27,6 +27,7 @@ namespace Mux.Desktop.Shell
     using Mux.Core.Tasks;
     using Mux.Core.Telemetry;
     using Mux.Core.Utility;
+    using Mux.Core.Conversation;
     using Mux.Desktop.Conversation;
     using Mux.Desktop.I18n;
     using Mux.Desktop.Services;

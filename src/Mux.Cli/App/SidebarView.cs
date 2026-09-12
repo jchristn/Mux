@@ -1,6 +1,7 @@
 namespace Mux.Cli.App
 {
     using System;
+    using Mux.Core.Conversation;
     using TUIKit;
     using TUIKit.Content;
 

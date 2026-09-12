@@ -1,10 +1,12 @@
-namespace Mux.Cli.App
+namespace Mux.Core.Conversation
 {
     /// <summary>
-    /// A snapshot of conversation telemetry rendered in the sidebar: per-turn and session-wide timing
-    /// and token measurements. Timing is measured client-side by the shell; token counts are the
-    /// engine's estimates until real provider usage is wired through (input/output/prompt/cached are
-    /// populated when the endpoint returns usage data, otherwise left at zero).
+    /// A snapshot of conversation telemetry rendered by a front end (for example the TUI sidebar or the
+    /// desktop status area): per-turn and session-wide timing and token measurements. Timing is measured
+    /// client-side by the shell; token counts are the engine's estimates until real provider usage is wired
+    /// through (input/output/prompt/cached are populated when the endpoint returns usage data, otherwise
+    /// left at zero). This is a plain data carrier produced by <see cref="ConversationStatsAggregator"/>;
+    /// it is UI-framework-agnostic and lives in Mux.Core so both front ends consume one shape.
     /// </summary>
     public sealed class ConversationStats
     {

@@ -7,6 +7,7 @@ namespace Mux.Desktop.Services
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Conversation;
     using Mux.Desktop.Conversation;
 
     /// <summary>

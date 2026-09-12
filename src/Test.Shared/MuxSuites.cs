@@ -90,6 +90,7 @@ namespace Test.Shared
                     UsageWindowSuite.Create(),
                     UsageAnalyticsSuite.Create(),
                     TurnProjectionSuite.Create(),
+                    ConversationStatsSuite.Create(),
                     ConversationServiceSuite.Create(),
                     WorkspaceSuite.Create(),
                     CodeTokenizerSuite.Create(),

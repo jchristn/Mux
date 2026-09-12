@@ -5,14 +5,17 @@ namespace Test.Shared.Suites
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Agent;
+    using Mux.Core.Conversation;
     using Mux.Core.Models;
-    using Mux.Desktop.Conversation;
     using Touchstone.Core;
 
     /// <summary>
-    /// Touchstone suite for <see cref="TurnProjection"/>: assistant/thinking text accumulation, the tool-call
-    /// lifecycle (proposed → approved → completed/failed), error capture, completion, cancellation, and the
-    /// null-event guard.
+    /// Touchstone suite for <see cref="TurnProjection"/> — the single shared turn accumulator. Cases cover
+    /// the state the desktop renders from (assistant/thinking text accumulation, the tool-call lifecycle
+    /// proposed → approved → completed/failed, error capture, completion, cancellation, the null guard) and
+    /// the streaming signals the TUI drives its indicator from (first-token fires once on the first non-empty
+    /// token; the responded latch fires once per stretch and re-arms on a heartbeat, which also raises
+    /// model-working).
     /// </summary>
     public static class TurnProjectionSuite
     {
@@ -94,6 +97,39 @@ namespace Test.Shared.Suites
                         projection.MarkCancelled();
                         MuxAssert.IsTrue(projection.WasCancelled, "cancelled");
                         MuxAssert.Throws<ArgumentNullException>(() => projection.Apply(null!), "null event");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("TurnProjection", "FirstTokenSignalFiresOnceOnNonEmpty", "First-token signal fires once, on the first non-empty token", (CancellationToken ct) =>
+                    {
+                        TurnProjection projection = new TurnProjection();
+                        int fired = 0;
+                        projection.FirstTokenReceived += () => fired++;
+                        projection.Apply(new AssistantTextEvent { Text = string.Empty });
+                        MuxAssert.AreEqual(0, fired, "empty token does not stamp first-token");
+                        projection.Apply(new AssistantTextEvent { Text = "a" });
+                        projection.Apply(new AssistantTextEvent { Text = "b" });
+                        MuxAssert.AreEqual(1, fired, "first-token fires exactly once");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("TurnProjection", "RespondedLatchesAndReArmsOnHeartbeat", "Responded latches per stretch and re-arms on a heartbeat (which raises model-working)", (CancellationToken ct) =>
+                    {
+                        TurnProjection projection = new TurnProjection();
+                        int responded = 0;
+                        int working = 0;
+                        projection.ModelResponded += () => responded++;
+                        projection.ModelWorking += () => working++;
+
+                        projection.Apply(new AssistantTextEvent { Text = "x" });
+                        projection.Apply(new AssistantTextEvent { Text = "y" });
+                        MuxAssert.AreEqual(1, responded, "responded fires once until re-armed");
+
+                        projection.Apply(new HeartbeatEvent { StepNumber = 1 });
+                        MuxAssert.AreEqual(1, working, "heartbeat raises model-working");
+
+                        projection.Apply(new ToolCallCompletedEvent { ToolCallId = "z", ToolName = "t", Result = new ToolResult { ToolCallId = "z", Success = true, Content = "ok" }, ElapsedMs = 1 });
+                        MuxAssert.AreEqual(2, responded, "responded fires again after heartbeat re-arm");
                         return Task.CompletedTask;
                     })
                 });

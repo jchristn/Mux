@@ -6,6 +6,7 @@ namespace Mux.Cli.App
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Agent;
+    using Mux.Core.Conversation;
     using Mux.Core.Enums;
     using Mux.Core.Tasks;
     using TUIKit;
@@ -20,24 +21,27 @@ namespace Mux.Cli.App
     /// pane; the pane is thread-safe so projection may run on a background task while the render loop
     /// reads the pane.
     /// </summary>
-    public sealed class AgentEventProjector
+    /// <remarks>
+    /// This is the TUIKit implementation of <see cref="ITurnObserver"/>: run-level accumulation (captured
+    /// text, completion summary, error/cancel flags, and the first-token/responded/working signals) lives in
+    /// the shared <see cref="TurnProjection"/>, and this class delegates to it while keeping only the pane
+    /// rendering. The projector still owns the drive loop (<see cref="ProjectAsync"/>) so existing callers
+    /// are unchanged; the same <see cref="ITurnObserver"/> seam lets <c>ConversationController</c> drive a
+    /// desktop renderer over an identical projection.
+    /// </remarks>
+    public sealed class AgentEventProjector : ITurnObserver
     {
         #region Private-Members
 
         private readonly Pane _Pane;
+        private readonly TurnProjection _Projection = new TurnProjection();
         private readonly StringBuilder _AssistantText = new StringBuilder();
-        private readonly StringBuilder _RunAssistantText = new StringBuilder();
         private readonly StringBuilder _ThinkingText = new StringBuilder();
         private readonly List<PaneLineHandle> _ThinkingLines = new List<PaneLineHandle>();
         private bool _ThinkingHeaderShown;
         private readonly Dictionary<string, PaneLineHandle> _ToolLines = new Dictionary<string, PaneLineHandle>(StringComparer.Ordinal);
         private readonly List<PaneLineHandle> _AssistantLines = new List<PaneLineHandle>();
         private readonly List<PaneLineHandle> _TaskLines = new List<PaneLineHandle>();
-        private bool _FirstTokenSeen;
-        private bool _ModelResponded;
-        private bool _RenderedError;
-        private bool _WasCancelled;
-        private RunCompletedEvent? _LastRunCompleted;
 
         #endregion
 
@@ -61,25 +65,46 @@ namespace Mux.Cli.App
         /// Raised once, when the first assistant token of the run is projected. Used by the shell to
         /// stamp time-to-first-token.
         /// </summary>
-        public event Action? FirstTokenReceived;
+        public event Action? FirstTokenReceived
+        {
+            add => _Projection.FirstTokenReceived += value;
+            remove => _Projection.FirstTokenReceived -= value;
+        }
 
         /// <summary>
         /// Raised when the run produces observable output (assistant text, a tool call, or an error) after
         /// a quiet stretch. Used by the shell to dismiss the "thinking" indicator the moment results begin.
         /// Re-armed by <see cref="ModelWorking"/>, so it fires again once the model resumes after tool calls.
         /// </summary>
-        public event Action? ModelResponded;
+        public event Action? ModelResponded
+        {
+            add => _Projection.ModelResponded += value;
+            remove => _Projection.ModelResponded -= value;
+        }
 
         /// <summary>
         /// Raised when the model goes back to work with nothing yet to show — after a step's tool calls
         /// complete and before the next model response streams (the per-step heartbeat). Used by the shell
         /// to bring the "thinking" indicator back so a working turn never looks stalled between tool runs.
         /// </summary>
-        public event Action? ModelWorking;
+        public event Action? ModelWorking
+        {
+            add => _Projection.ModelWorking += value;
+            remove => _Projection.ModelWorking -= value;
+        }
 
         #endregion
 
         #region Public-Members
+
+        /// <summary>
+        /// The shared, UI-free accumulation for this turn (captured text, completion summary, error/cancel
+        /// flags, timing signals). The projector renders over it; a controller may read it after the turn.
+        /// </summary>
+        public TurnProjection Projection
+        {
+            get => _Projection;
+        }
 
         /// <summary>
         /// The full assistant text emitted across the run, accumulated verbatim (all blocks joined).
@@ -87,7 +112,7 @@ namespace Mux.Cli.App
         /// </summary>
         public string CapturedAssistantText
         {
-            get => _RunAssistantText.ToString();
+            get => _Projection.AssistantText;
         }
 
         /// <summary>
@@ -96,7 +121,7 @@ namespace Mux.Cli.App
         /// </summary>
         public RunCompletedEvent? LastRunCompleted
         {
-            get => _LastRunCompleted;
+            get => _Projection.Completed;
         }
 
         /// <summary>
@@ -105,7 +130,7 @@ namespace Mux.Cli.App
         /// </summary>
         public bool RenderedError
         {
-            get => _RenderedError;
+            get => _Projection.Error != null;
         }
 
         /// <summary>
@@ -114,7 +139,7 @@ namespace Mux.Cli.App
         /// </summary>
         public bool WasCancelled
         {
-            get => _WasCancelled;
+            get => _Projection.WasCancelled;
         }
 
         #endregion
@@ -137,26 +162,24 @@ namespace Mux.Cli.App
             {
                 await foreach (AgentEvent agentEvent in events.WithCancellation(cancellationToken).ConfigureAwait(false))
                 {
-                    Project(agentEvent);
+                    OnEvent(agentEvent);
                 }
 
-                FinalizeAssistantBlock();
+                OnCompleted();
             }
             catch (OperationCanceledException)
             {
-                _WasCancelled = true;
-                FinalizeAssistantBlock();
-                _Pane.WriteLine(Text.From("(cancelled)").Dim());
+                OnCancelled();
             }
         }
 
-        #endregion
-
-        #region Private-Methods
-
-        private void Project(AgentEvent agentEvent)
+        /// <inheritdoc/>
+        public void OnEvent(AgentEvent agentEvent)
         {
-            SignalRespondedIfMeaningful(agentEvent);
+            if (agentEvent is null) throw new ArgumentNullException(nameof(agentEvent));
+
+            // Accumulate run-level state and raise timing signals in the shared projection, then render.
+            _Projection.Apply(agentEvent);
 
             switch (agentEvent)
             {
@@ -186,7 +209,6 @@ namespace Mux.Cli.App
 
                 case ErrorEvent errorEvent:
                     FinalizeAssistantBlock();
-                    _RenderedError = true;
                     _Pane.WriteLine(Text.From($"Error [{errorEvent.Code}]: {errorEvent.Message}").Red());
                     break;
 
@@ -196,16 +218,11 @@ namespace Mux.Cli.App
                     break;
 
                 case HeartbeatEvent:
-                    // A step's tool calls are done and the model is about to be called again. Re-arm the
-                    // "responded" latch and signal the shell to resume its wait-state indicator, so the gap
-                    // between tools finishing and the next response streaming does not look stalled.
-                    _ModelResponded = false;
-                    ModelWorking?.Invoke();
+                    // The projection re-arms its "responded" latch and raises ModelWorking; nothing to paint.
                     break;
 
-                case RunCompletedEvent runCompleted:
+                case RunCompletedEvent:
                     FinalizeAssistantBlock();
-                    _LastRunCompleted = runCompleted;
                     break;
 
                 default:
@@ -213,31 +230,31 @@ namespace Mux.Cli.App
             }
         }
 
-        private void SignalRespondedIfMeaningful(AgentEvent agentEvent)
+        /// <inheritdoc/>
+        public void OnCompleted()
         {
-            if (_ModelResponded)
-            {
-                return;
-            }
-
-            if (agentEvent is AssistantTextEvent
-                || agentEvent is AssistantThinkingEvent
-                || agentEvent is ToolCallProposedEvent
-                || agentEvent is ToolCallCompletedEvent
-                || agentEvent is ErrorEvent
-                || agentEvent is TaskPlanUpdatedEvent)
-            {
-                _ModelResponded = true;
-                ModelResponded?.Invoke();
-            }
+            FinalizeAssistantBlock();
         }
+
+        /// <inheritdoc/>
+        public void OnCancelled()
+        {
+            _Projection.MarkCancelled();
+            FinalizeAssistantBlock();
+            _Pane.WriteLine(Text.From("(cancelled)").Dim());
+        }
+
+        #endregion
+
+        #region Private-Methods
 
         private void AppendThinking(string text)
         {
             if (string.IsNullOrEmpty(text)) return;
 
-            // A dimmed, labeled block above the answer. Kept out of _RunAssistantText (and therefore out of
-            // conversation history) and never re-rendered as markdown — it reads as context, not the result.
+            // A dimmed, labeled block above the answer. Kept out of the projection's captured text (and
+            // therefore out of conversation history) and never re-rendered as markdown — it reads as
+            // context, not the result.
             if (!_ThinkingHeaderShown)
             {
                 _Pane.WriteLine(Text.From("💭 thinking").Dim());
@@ -283,13 +300,6 @@ namespace Mux.Cli.App
         {
             FinalizeThinkingBlock();
             _AssistantText.Append(text);
-            _RunAssistantText.Append(text);
-
-            if (!_FirstTokenSeen && !string.IsNullOrEmpty(text))
-            {
-                _FirstTokenSeen = true;
-                FirstTokenReceived?.Invoke();
-            }
 
             // Stream the full response as it grows, one pane line per text line, so it fills the
             // available vertical space; the block is re-rendered as markdown when it finalizes.

@@ -7,6 +7,7 @@ namespace Test.Shared.Suites
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Conversation;
     using Mux.Desktop.Conversation;
     using Mux.Desktop.Services;
     using Test.Shared.Support;

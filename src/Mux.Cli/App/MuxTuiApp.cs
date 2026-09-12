@@ -8,6 +8,7 @@ namespace Mux.Cli.App
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Agent;
+    using Mux.Core.Conversation;
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Mux.Core.Llm;
@@ -95,7 +96,7 @@ namespace Mux.Cli.App
         private readonly List<string> _PendingPrompts = new List<string>();
         private readonly List<string> _TurnJobIds = new List<string>();
         private readonly List<Task> _ProjectorTasks = new List<Task>();
-        private readonly ConversationStats _Stats = new ConversationStats();
+        private readonly ConversationStatsAggregator _StatsAggregator = new ConversationStatsAggregator();
         private readonly object _Sync = new object();
         private readonly SemaphoreSlim _SaveGate = new SemaphoreSlim(1, 1);
         private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
@@ -1805,23 +1806,7 @@ namespace Mux.Cli.App
                     _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.Assistant, Content = answer });
                 }
 
-                _Stats.Turns++;
-                _Stats.LastTtftMs = ttftMs;
-                long stream = ttftMs >= 0 ? Math.Max(0, totalMs - ttftMs) : 0;
-                _Stats.LastStreamMs = stream;
-                _Stats.SessionStreamMs += stream;
-                if (ttftMs >= 0)
-                {
-                    _Stats.SessionTtftMs += ttftMs;
-                    _Stats.TtftSamples++;
-                }
-
-                if (projector.LastRunCompleted != null)
-                {
-                    _Stats.LastContextTokens = projector.LastRunCompleted.FinalEstimatedTokens;
-                    _Stats.InputTokens += projector.LastRunCompleted.InputTokens;
-                    _Stats.OutputTokens += projector.LastRunCompleted.OutputTokens;
-                }
+                _StatsAggregator.RecordTurn(projector.LastRunCompleted, totalMs, ttftMs);
 
                 _ActiveJob = null;
 
@@ -4251,7 +4236,6 @@ namespace Mux.Cli.App
 
             _Sidebar.EffortLabel = effortLabel;
             _Sidebar.ThinkingLabel = thinkingLabel;
-            stats.SessionCostUsd = _Pricing.ComputeCostUsd(model, stats.InputTokens, stats.CachedTokens, stats.OutputTokens);
             _Sidebar.Refresh(model, stats);
         }
 
@@ -4267,23 +4251,10 @@ namespace Mux.Cli.App
                 taskCompleted = plan.CompletedCount;
             }
 
-            return new ConversationStats
-            {
-                Busy = _TurnInFlight,
-                Queued = _PendingPrompts.Count,
-                Turns = _Stats.Turns,
-                LastTtftMs = _Stats.LastTtftMs,
-                LastStreamMs = _Stats.LastStreamMs,
-                LastContextTokens = _Stats.LastContextTokens,
-                SessionStreamMs = _Stats.SessionStreamMs,
-                SessionTtftMs = _Stats.SessionTtftMs,
-                TtftSamples = _Stats.TtftSamples,
-                InputTokens = _Stats.InputTokens,
-                OutputTokens = _Stats.OutputTokens,
-                CachedTokens = _Stats.CachedTokens,
-                TaskTotal = taskTotal,
-                TaskCompleted = taskCompleted
-            };
+            ConversationStats stats = _StatsAggregator.Snapshot(taskTotal, taskCompleted, _Pricing, _Model);
+            stats.Busy = _TurnInFlight;
+            stats.Queued = _PendingPrompts.Count;
+            return stats;
         }
 
         private void WriteHeader()

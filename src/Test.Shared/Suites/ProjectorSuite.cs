@@ -8,6 +8,7 @@ namespace Test.Shared.Suites
     using System.Threading.Tasks;
     using Mux.Cli.App;
     using Mux.Core.Agent;
+    using Mux.Core.Conversation;
     using Mux.Core.Models;
     using Touchstone.Core;
     using TUIKit.Content;

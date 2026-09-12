@@ -1,4 +1,4 @@
-namespace Mux.Desktop.Conversation
+namespace Mux.Core.Conversation
 {
     /// <summary>
     /// The lifecycle state of a tool call as it moves through a turn: proposed and running, approved,

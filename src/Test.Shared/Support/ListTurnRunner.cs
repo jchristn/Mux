@@ -7,6 +7,7 @@ namespace Test.Shared.Support
     using System.Threading.Tasks;
     using Mux.Core.Agent;
     using Mux.Core.Models;
+    using Mux.Core.Conversation;
     using Mux.Desktop.Conversation;
 
     /// <summary>

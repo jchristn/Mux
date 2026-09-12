@@ -1,4 +1,4 @@
-namespace Mux.Desktop.Conversation
+namespace Mux.Core.Conversation
 {
     using System;
     using Mux.Core.Models;
@@ -17,7 +17,7 @@ namespace Mux.Desktop.Conversation
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="toolCall"/> is null.</exception>
         public ToolCallRecord(ToolCall toolCall)
         {
-            ArgumentNullException.ThrowIfNull(toolCall);
+            if (toolCall is null) throw new ArgumentNullException(nameof(toolCall));
 
             _Id = toolCall.Id ?? string.Empty;
             _Name = toolCall.Name ?? string.Empty;
