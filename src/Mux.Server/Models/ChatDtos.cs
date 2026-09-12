@@ -116,4 +116,20 @@ namespace Mux.Server.Models
         /// <summary>Per-turn timing and token statistics.</summary>
         public ChatStats Stats { get; set; } = new ChatStats();
     }
+
+    /// <summary>
+    /// The result of a model-load (warm) request: whether the probe succeeded, whether the endpoint was
+    /// reachable at all, and any error detail.
+    /// </summary>
+    public class ModelLoadReply
+    {
+        /// <summary>Whether the model responded to the warm probe.</summary>
+        public bool Ok { get; set; }
+
+        /// <summary>Whether the endpoint was reachable (a response was returned, even an error one).</summary>
+        public bool Reachable { get; set; }
+
+        /// <summary>Error detail when the probe did not succeed, or null.</summary>
+        public string? Error { get; set; }
+    }
 }

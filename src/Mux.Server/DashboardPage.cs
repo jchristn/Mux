@@ -162,6 +162,11 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .stattip .r{display:flex;justify-content:space-between;gap:18px;padding:2px 0}
 .stattip .r span:first-child{color:var(--muted)}
 .stattip .r span:last-child{font-variant-numeric:tabular-nums}
+.think{color:var(--muted);font-size:12px;line-height:1.5;white-space:pre-wrap;border-left:2px solid var(--border);padding:2px 0 2px 8px;margin:0 0 8px 0;max-height:240px;overflow:auto}
+.model-status{font-size:12px;color:var(--muted)}
+.model-status.ready{color:var(--accent)}
+.model-status.warn{color:#bf8700}
+.model-status.err{color:#e5534b}
 .thinking{display:flex;gap:5px;padding:4px 0}
 .thinking span{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.2s infinite}
 .thinking span:nth-child(2){animation-delay:.2s}
@@ -512,6 +517,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
           <div class="convos-head">
             <button class="btn" id="newChatBtn" title="Start a fresh conversation">+ New</button>
             <button class="btn secondary" id="delMultiBtn" title="Delete multiple conversations">- Delete</button>
+            <button class="btn secondary icon" id="refreshConvosBtn" title="Refresh the conversation list">⟳</button>
           </div>
           <div class="convo-list" id="convoList"></div>
         </aside>
@@ -519,6 +525,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
           <div class="chat-toolbar">
             <span><label title="The model endpoint this chat runs against" data-i18n="chat.endpoint">Endpoint</label></span>
             <select id="endpointSelect" style="min-width:260px" title="Choose which configured model endpoint answers your messages"></select>
+            <span id="modelStatus" class="model-status" title="Whether the selected model is loaded and ready"></span>
             <span class="grow"></span>
             <span id="chatTitle" class="chat-title" title="The current conversation"></span>
           </div>
@@ -972,7 +979,9 @@ function renderMessages(){
   var html="";
   for(var i=0;i<messages.length;i++){
     var m=messages[i];
-    var inner=m.typing?'<div class="thinking"><span></span><span></span><span></span></div>':(m.role==="assistant"?md(m.content):"<p>"+esc(m.content).replace(/\n/g,"<br>")+"</p>");
+    var think=(m.role==="assistant"&&m.thinking)?'<div class="think">💭 '+esc(m.thinking).replace(/\n/g,"<br>")+'</div>':'';
+    var body=m.typing?'<div class="thinking"><span></span><span></span><span></span></div>':(m.role==="assistant"?md(m.content):"<p>"+esc(m.content).replace(/\n/g,"<br>")+"</p>");
+    var inner=think+body;
     html+='<div class="msg '+m.role+'"><div class="bubble">'+inner+'</div>';
     if(m.role==="assistant"&&!m.typing&&m.model){html+='<div class="meta">'+esc(m.model)+statInfo(m.stats)+'</div>';}
     html+='</div>';
@@ -1121,7 +1130,8 @@ function handleSse(block,typing){
   }
   if(!data)return;
   var parsed;try{parsed=JSON.parse(data);}catch(e){return;}
-  if(ev==="token"){typing.typing=false;typing.content+=parsed;renderMessages();}
+  if(ev==="thinking"){typing.thinking=(typing.thinking||"")+parsed;renderMessages();}
+  else if(ev==="token"){typing.typing=false;typing.content+=parsed;renderMessages();}
   else if(ev==="done"){typing.typing=false;typing.content=(parsed&&parsed.Content)||typing.content;typing.model=(parsed&&parsed.Model)||"";typing.stats=(parsed&&parsed.Stats)||null;if(typing.model)currentModel=typing.model;renderMessages();endChat();persistConvo();}
   else if(ev==="error"){typing.typing=false;typing.content="⚠️ "+parsed;renderMessages();toast(String(parsed),true);endChat();}
 }
@@ -1131,8 +1141,25 @@ function loadEndpoints(){
     var items=(res&&res.Items)||[];var sel=el("endpointSelect");sel.innerHTML="";
     if(items.length===0){var o=document.createElement("option");o.textContent="(no endpoints configured)";o.value="";sel.appendChild(o);return;}
     items.forEach(function(ep){var o=document.createElement("option");o.value=ep.Name;o.textContent=ep.Name+"  ·  "+ep.Model;if(ep.IsDefault)o.selected=true;sel.appendChild(o);});
+    warmModel();
   }).catch(function(e){toast("Failed to load endpoints: "+e.message,true);});
 }
+
+// Warm (load) the selected model so the first chat token is fast, and surface a small ready/unreachable
+// status. Called when endpoints load, when the chat view opens, and whenever the endpoint is switched.
+function warmModel(){
+  var ep=el("endpointSelect");var st=el("modelStatus");
+  if(!ep||!ep.value){if(st)st.textContent="";return;}
+  if(st){st.textContent="⏳ loading…";st.className="model-status";}
+  api("/v1.0/api/model/load","POST",{Endpoint:ep.value}).then(function(r){
+    if(!st)return;
+    if(r&&r.Ok){st.textContent="✓ ready";st.className="model-status ready";}
+    else if(r&&r.Reachable){st.textContent="⚠ reachable";st.className="model-status warn";}
+    else{st.textContent="✗ unreachable";st.className="model-status err";}
+  }).catch(function(){if(st){st.textContent="✗ unreachable";st.className="model-status err";}});
+}
+
+function loadChat(){loadConvos();warmModel();}
 
 function loadSettings(){
   api("/v1.0/api/settings").then(function(s){
@@ -1837,7 +1864,7 @@ function delPr(i){var m=_pr2[i];if(!m)return;confirmModal('Remove pricing for "'
 function savePricingList(list){var models={};list.forEach(function(r){if(r.Model)models[r.Model]={inputPerMTok:+r.Input||0,cachedInputPerMTok:+r.Cached||0,outputPerMTok:+r.Output||0};});
   busyModal(true);api("/v1.0/api/usage/pricing","PUT",{version:_prVersion,models:models}).then(function(tb){_prVersion=(tb&&tb.version)||_prVersion;closeModal();loadPricing();toast(t("toast.saved"));}).catch(function(e){toast(e.message,true);}).finally(function(){busyModal(false);});
 }
-var VIEW_LOADERS={home:loadHome,chat:loadConvos,endpoints:loadEndpointsAdmin,mcp:loadMcp,prompts:loadPrompts,subagents:loadSubagents,hooks:loadHooks,commands:loadHooks,keybindings:loadKeybindings,skills:loadSkills,sessions:loadSessions,usage:loadUsage,pricing:loadPricing,settings:loadSettings};
+var VIEW_LOADERS={home:loadHome,chat:loadChat,endpoints:loadEndpointsAdmin,mcp:loadMcp,prompts:loadPrompts,subagents:loadSubagents,hooks:loadHooks,commands:loadHooks,keybindings:loadKeybindings,skills:loadSkills,sessions:loadSessions,usage:loadUsage,pricing:loadPricing,settings:loadSettings};
 function loadStatus(){api("/v1.0/api/health").then(function(h){
   var p=el("statusPill");if(p){p.textContent=(h.Status||"—");p.className="badge status"+(h.Status==="healthy"?" ok":"");}
   var v=el("badgeVersion");if(v)v.textContent=h.Version?("v"+h.Version):"";
@@ -1862,6 +1889,8 @@ el("themeBtn").addEventListener("click",function(){applyTheme(document.documentE
 el("sendBtn").addEventListener("click",sendChat);
 el("newChatBtn").addEventListener("click",newChat);
 el("delMultiBtn").addEventListener("click",deleteMultiple);
+el("refreshConvosBtn").addEventListener("click",function(){loadConvos();toast("Refreshed");});
+el("endpointSelect").addEventListener("change",function(){currentModel="";warmModel();});
 el("saveSettingsBtn").addEventListener("click",saveSettings);
 el("reloadSettingsBtn").addEventListener("click",loadSettings);
 /* modal close wiring */

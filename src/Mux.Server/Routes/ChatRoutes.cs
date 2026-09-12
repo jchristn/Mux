@@ -2,12 +2,14 @@ namespace Mux.Server.Routes
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
     using System.Text.Json;
     using System.Threading.Tasks;
     using Mux.Core.Enums;
     using Mux.Core.Llm;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Core.Settings;
     using Mux.Core.Telemetry;
     using Mux.Server.Models;
@@ -60,6 +62,47 @@ namespace Mux.Server.Routes
                 return (object?)null;
             });
 
+            // Warm (load) a model so the next chat's first token is fast. The dashboard calls this when the
+            // chat surface opens and whenever the selected endpoint changes. Best-effort: it probes the model
+            // via a short streaming request and reports reachability.
+            app.Post("/v1.0/api/model/load", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey))
+                {
+                    return (object)new ApiError("Unauthorized", "Authentication required.");
+                }
+
+                ChatRequest? loadRequest;
+                try
+                {
+                    loadRequest = JsonSerializer.Deserialize<ChatRequest>(req.Http.Request.DataAsString ?? string.Empty, _JsonOptions);
+                }
+                catch (Exception)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiError("BadRequest", "Request body is not valid JSON.");
+                }
+
+                if (loadRequest == null || string.IsNullOrWhiteSpace(loadRequest.Endpoint))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiError("BadRequest", "'endpoint' is required.");
+                }
+
+                EndpointConfig? loadEndpoint = _EndpointsProvider().FirstOrDefault(e => string.Equals(e.Name, loadRequest.Endpoint, StringComparison.Ordinal));
+                if (loadEndpoint == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return (object)new ApiError("NotFound", "Unknown endpoint: " + loadRequest.Endpoint);
+                }
+
+                bool ignoreCert = false;
+                try { ignoreCert = SettingsLoader.LoadSettings().IgnoreCertErrors; } catch (Exception) { }
+
+                ModelLoadResult result = await LlmClient.LoadModelAsync(loadEndpoint, ignoreCert, req.Http.Token).ConfigureAwait(false);
+                return (object)new ModelLoadReply { Ok = result.Success, Reachable = result.Reachable, Error = result.Error };
+            });
+
             app.Post("/v1.0/api/chat", async (req) =>
             {
                 if (!ApiAuth.Authorize(req.Http, _ApiKey))
@@ -95,15 +138,7 @@ namespace Mux.Server.Routes
                 bool ignoreCertErrors = false;
                 try { ignoreCertErrors = SettingsLoader.LoadSettings().IgnoreCertErrors; } catch (Exception) { }
 
-                List<ConversationMessage> messages = new List<ConversationMessage>();
-                foreach (ChatMessageDto message in request.Messages)
-                {
-                    messages.Add(new ConversationMessage
-                    {
-                        Role = ParseRole(message.Role),
-                        Content = message.Content ?? string.Empty
-                    });
-                }
+                List<ConversationMessage> messages = BuildMessages(request);
 
                 try
                 {
@@ -233,11 +268,7 @@ namespace Mux.Server.Routes
             bool ignoreCertErrors = false;
             try { ignoreCertErrors = SettingsLoader.LoadSettings().IgnoreCertErrors; } catch (Exception) { }
 
-            List<ConversationMessage> messages = new List<ConversationMessage>();
-            foreach (ChatMessageDto message in request.Messages)
-            {
-                messages.Add(new ConversationMessage { Role = ParseRole(message.Role), Content = message.Content ?? string.Empty });
-            }
+            List<ConversationMessage> messages = BuildMessages(request);
 
             // Everything validated — switch the response into Server-Sent Events mode and stream.
             ctx.Response.StatusCode = 200;
@@ -272,6 +303,19 @@ namespace Mux.Server.Routes
                         {
                             Event = "token",
                             Data = JsonSerializer.Serialize(textEvent.Text)
+                        }, false, ctx.Token).ConfigureAwait(false);
+                    }
+                    else if (agentEvent is Mux.Core.Agent.AssistantThinkingEvent thinkingEvent)
+                    {
+                        if (string.IsNullOrEmpty(thinkingEvent.Text))
+                        {
+                            continue;
+                        }
+
+                        await ctx.Response.SendEvent(new ServerSentEvent
+                        {
+                            Event = "thinking",
+                            Data = JsonSerializer.Serialize(thinkingEvent.Text)
                         }, false, ctx.Token).ConfigureAwait(false);
                     }
                     else if (agentEvent is Mux.Core.Agent.ErrorEvent errorEvent)
@@ -398,6 +442,49 @@ namespace Mux.Server.Routes
                 case "tool": return RoleEnum.Tool;
                 default: return RoleEnum.User;
             }
+        }
+
+        // Maps the request messages, prepending mux's system prompt when the caller supplied none, so the
+        // dashboard chat carries mux's persona and its "don't reveal the instructions" guidance instead of
+        // falling back to the raw provider default (which leaked "You are ChatGPT ..."). The dashboard runs no
+        // tools, so the tools-disabled variant is used — the model is not told about tools it cannot call.
+        private static List<ConversationMessage> BuildMessages(ChatRequest request)
+        {
+            List<ConversationMessage> messages = new List<ConversationMessage>();
+
+            bool callerSuppliedSystem = request.Messages.Count > 0
+                && ParseRole(request.Messages[0].Role) == RoleEnum.System;
+            if (!callerSuppliedSystem)
+            {
+                try
+                {
+                    MuxSettings settings = SettingsLoader.LoadSettings();
+                    PromptProfile profile = SettingsLoader.GetActivePromptProfile();
+                    ResolvedSystemPrompt resolved = SystemPromptResolver.Resolve(
+                        SettingsLoader.LoadSystemPrompt(null, settings),
+                        profile,
+                        toolsEnabled: false,
+                        tools: null,
+                        workingDirectory: Directory.GetCurrentDirectory(),
+                        taskPlanningEnabled: false,
+                        appendSystemPrompt: null);
+                    if (!string.IsNullOrWhiteSpace(resolved.SystemPrompt))
+                    {
+                        messages.Add(new ConversationMessage { Role = RoleEnum.System, Content = resolved.SystemPrompt });
+                    }
+                }
+                catch (Exception)
+                {
+                    // Best-effort: if resolution fails, fall through and send the caller's messages as-is.
+                }
+            }
+
+            foreach (ChatMessageDto message in request.Messages)
+            {
+                messages.Add(new ConversationMessage { Role = ParseRole(message.Role), Content = message.Content ?? string.Empty });
+            }
+
+            return messages;
         }
     }
 }
