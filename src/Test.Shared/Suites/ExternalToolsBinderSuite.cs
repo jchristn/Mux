@@ -9,6 +9,7 @@ namespace Test.Shared.Suites
     using Mux.Cli.App;
     using Mux.Core.Agent;
     using Mux.Core.Models;
+    using Mux.Core.Skills;
     using Touchstone.Core;
 
     /// <summary>

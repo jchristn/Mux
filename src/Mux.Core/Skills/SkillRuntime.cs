@@ -1,4 +1,4 @@
-namespace Mux.Cli.App
+namespace Mux.Core.Skills
 {
     using System;
     using System.Collections.Generic;
@@ -7,7 +7,6 @@ namespace Mux.Cli.App
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
-    using Mux.Core.Skills;
     using Mux.Core.Tools;
 
     /// <summary>

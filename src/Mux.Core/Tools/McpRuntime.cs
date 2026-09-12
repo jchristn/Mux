@@ -1,4 +1,4 @@
-namespace Mux.Cli.App
+namespace Mux.Core.Tools
 {
     using System;
     using System.Collections.Generic;
@@ -6,7 +6,6 @@ namespace Mux.Cli.App
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
-    using Mux.Core.Tools;
 
     /// <summary>
     /// Owns the lifecycle of the interactive session's MCP (Model Context Protocol) connections. On start it

@@ -6,6 +6,7 @@ namespace Test.Shared.Suites
     using System.Threading.Tasks;
     using Mux.Cli.App;
     using Mux.Core.Models;
+    using Mux.Core.Tools;
     using Touchstone.Core;
 
     /// <summary>

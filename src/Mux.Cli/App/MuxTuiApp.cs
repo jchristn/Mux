@@ -17,6 +17,7 @@ namespace Mux.Cli.App
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
     using Mux.Core.Skills;
+    using Mux.Core.Tools;
     using Mux.Core.Utility;
     using TUIKit;
     using TUIKit.Content;

@@ -11,6 +11,7 @@ namespace Test.Shared.Suites
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Mux.Core.Models;
+    using Mux.Core.Skills;
     using Mux.Core.Settings;
     using Touchstone.Core;
     using TUIKit.Input;
