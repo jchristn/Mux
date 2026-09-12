@@ -65,6 +65,41 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("EndpointConfig", "CloneIsDeepAndIndependent", "Clone copies nested settings and is independent of the original", (CancellationToken ct) =>
+                    {
+                        EndpointConfig original = new EndpointConfig
+                        {
+                            Name = "src",
+                            AdapterType = AdapterTypeEnum.Ollama,
+                            BaseUrl = "http://localhost:11434",
+                            Model = "gpt-oss-20b",
+                            MaxAgentIterations = 40,
+                            Headers = new Dictionary<string, string> { { "Authorization", "Bearer token-a" } },
+                            Quirks = new BackendQuirks { SupportsParallelToolCalls = true },
+                            ReasoningEffort = new ReasoningEffortConfig { Level = ReasoningLevelEnum.High }
+                        };
+
+                        EndpointConfig clone = original.Clone();
+
+                        MuxAssert.AreEqual(original.Name, clone.Name, "Name copied");
+                        MuxAssert.AreEqual(original.Model, clone.Model, "Model copied");
+                        MuxAssert.AreEqual(original.MaxAgentIterations, clone.MaxAgentIterations, "MaxAgentIterations copied");
+                        MuxAssert.AreEqual("Bearer token-a", clone.Headers["Authorization"], "Headers copied");
+                        MuxAssert.IsNotNull(clone.Quirks, "Quirks copied");
+                        MuxAssert.IsTrue(clone.Quirks!.SupportsParallelToolCalls, "Quirks value copied");
+                        MuxAssert.IsNotNull(clone.ReasoningEffort, "ReasoningEffort copied");
+                        MuxAssert.AreEqual(ReasoningLevelEnum.High, clone.ReasoningEffort!.Level, "ReasoningEffort value copied");
+
+                        // Mutating the clone (including its nested objects) must not touch the original.
+                        clone.Name = "dst";
+                        clone.Headers["Authorization"] = "Bearer token-b";
+                        clone.Quirks!.SupportsParallelToolCalls = false;
+                        MuxAssert.AreEqual("src", original.Name, "original name unchanged");
+                        MuxAssert.AreEqual("Bearer token-a", original.Headers["Authorization"], "original header unchanged");
+                        MuxAssert.IsTrue(original.Quirks!.SupportsParallelToolCalls, "original quirks unchanged");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("EndpointConfig", "ReasoningEffortRoundTrips", "Reasoning effort survives a serialization round-trip", (CancellationToken ct) =>
                     {
                         EndpointConfig original = new EndpointConfig

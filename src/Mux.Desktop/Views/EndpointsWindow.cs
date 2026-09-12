@@ -2,10 +2,12 @@ namespace Mux.Desktop.Views
 {
     using System;
     using System.Collections.Generic;
+    using System.Threading;
     using Avalonia;
     using Avalonia.Controls;
     using Avalonia.Layout;
     using Avalonia.Media;
+    using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Settings;
 
@@ -63,6 +65,8 @@ namespace Mux.Desktop.Views
             List<TableRowAction<EndpointConfig>> actions = new List<TableRowAction<EndpointConfig>>
             {
                 new TableRowAction<EndpointConfig>("Edit", e => OnEdit(e)),
+                new TableRowAction<EndpointConfig>("Validate", e => OnValidate(e)),
+                new TableRowAction<EndpointConfig>("Duplicate", e => OnDuplicate(e)),
                 new TableRowAction<EndpointConfig>("Import models…", e => OnImport(e))
             };
 
@@ -129,6 +133,60 @@ namespace Mux.Desktop.Views
             {
                 Persist(endpoint);
             }
+        }
+
+        private async void OnDuplicate(EndpointConfig source)
+        {
+            EndpointConfig clone = source.Clone();
+            clone.Name = UniqueName(source.Name + " (copy)");
+            clone.IsDefault = false;
+
+            if (await new EndpointFormDialog(clone, isNew: true).ShowDialog<bool>(this))
+            {
+                _Endpoints.Add(clone);
+                Persist(clone);
+            }
+        }
+
+        private async void OnValidate(EndpointConfig endpoint)
+        {
+            bool ignoreCert = false;
+            try
+            {
+                ignoreCert = SettingsLoader.LoadSettings().IgnoreCertErrors;
+            }
+            catch (Exception)
+            {
+                // Use the default on any settings read failure.
+            }
+
+            ModelLoadResult result;
+            try
+            {
+                using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                result = await LlmClient.LoadModelAsync(endpoint, ignoreCert, cts.Token);
+            }
+            catch (Exception exception)
+            {
+                result = ModelLoadResult.Fail(exception.Message);
+            }
+
+            string message;
+            if (result.Success)
+            {
+                message = "✓ \"" + endpoint.Name + "\" is ready — the endpoint responded successfully.";
+            }
+            else if (result.Reachable)
+            {
+                message = "⚠ \"" + endpoint.Name + "\" is reachable, but the validation request did not succeed:\n\n"
+                    + result.Error + "\n\nNormal chats may still work — for example, a reasoning model can't answer within the tiny probe budget.";
+            }
+            else
+            {
+                message = "✗ \"" + endpoint.Name + "\" is unreachable:\n\n" + result.Error;
+            }
+
+            await new ConfirmDialog("Validate endpoint", message, "OK", destructive: false).ShowDialog<bool>(this);
         }
 
         private async void OnImport(EndpointConfig source)

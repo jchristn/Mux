@@ -194,7 +194,11 @@ namespace Mux.Core.Llm
             Pp.ToolChatRequest request = new Pp.ToolChatRequest
             {
                 Model = string.IsNullOrWhiteSpace(_Endpoint.Model) ? null : _Endpoint.Model,
-                MaxTokens = 1,
+
+                // Keep the probe cheap but not so tight that a reasoning model (which spends tokens thinking
+                // before it can emit anything) or a backend that rejects a 1-token cap fails a reachable
+                // endpoint. A small budget still returns near-instantly.
+                MaxTokens = 16,
                 ToolChoice = "none"
             };
 
@@ -222,6 +226,15 @@ namespace Mux.Core.Llm
                     // Only transport-level failures (no HTTP status) are transient; an HTTP error status
                     // is a definitive answer and should not be retried.
                     transportFailure = IsTransportFailure(response.StatusCode);
+
+                    // A returned HTTP status — even an error one — proves the endpoint, URL, and credentials
+                    // are reachable; only the probe request itself failed. Surface that distinction so the UI
+                    // does not mislabel a reachable-but-fussy backend as "unreachable". (Transport failures
+                    // fall through to the retry/exhaust logic below and are reported as unreachable.)
+                    if (!transportFailure)
+                    {
+                        return ModelLoadResult.Fail(failureDetail, reachable: response.StatusCode.HasValue);
+                    }
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {

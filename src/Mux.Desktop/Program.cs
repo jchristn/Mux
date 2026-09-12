@@ -22,9 +22,9 @@ namespace Mux.Desktop
         private static readonly string[] Banner =
         {
             string.Empty,
-            "▄▄   ▄▄ ▄▄ ▄▄ ▄▄ ▄▄",
-            "██▀▄▀██ ██ ██ ▀█▄█▀",
-            "██   ██ ▀███▀ ██ ██",
+            " ▄▄   ▄▄ ▄▄ ▄▄ ▄▄ ▄▄",
+            " ██▀▄▀██ ██ ██ ▀█▄█▀",
+            " ██   ██ ▀███▀ ██ ██",
             string.Empty,
         };
 

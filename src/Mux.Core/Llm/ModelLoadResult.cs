@@ -19,14 +19,24 @@ namespace Mux.Core.Llm
         /// </summary>
         public string? Error { get; }
 
+        /// <summary>
+        /// Whether the endpoint was actually reached. True on success and on any failure where the backend
+        /// returned an HTTP status (the server, URL, and credentials are usable, but the probe request itself
+        /// did not succeed — for example a reasoning model that cannot answer within the probe's tiny token
+        /// budget). False only for transport-level failures (DNS, connection refused, TLS, timeout), which are
+        /// the genuine "unreachable" case.
+        /// </summary>
+        public bool Reachable { get; }
+
         #endregion
 
         #region Constructors-and-Factories
 
-        private ModelLoadResult(bool success, string? error)
+        private ModelLoadResult(bool success, string? error, bool reachable)
         {
             Success = success;
             Error = error;
+            Reachable = reachable;
         }
 
         /// <summary>
@@ -35,17 +45,29 @@ namespace Mux.Core.Llm
         /// <returns>A success result.</returns>
         public static ModelLoadResult Ok()
         {
-            return new ModelLoadResult(true, null);
+            return new ModelLoadResult(true, null, true);
         }
 
         /// <summary>
-        /// Creates a failure result.
+        /// Creates a failure result for a transport-level (unreachable) failure.
         /// </summary>
         /// <param name="error">The failure details.</param>
-        /// <returns>A failure result carrying <paramref name="error"/>.</returns>
+        /// <returns>A failure result carrying <paramref name="error"/>, marked unreachable.</returns>
         public static ModelLoadResult Fail(string? error)
         {
-            return new ModelLoadResult(false, string.IsNullOrWhiteSpace(error) ? "unknown error" : error);
+            return new ModelLoadResult(false, string.IsNullOrWhiteSpace(error) ? "unknown error" : error, false);
+        }
+
+        /// <summary>
+        /// Creates a failure result, distinguishing a reachable endpoint (the backend answered with an error)
+        /// from a transport-level failure.
+        /// </summary>
+        /// <param name="error">The failure details.</param>
+        /// <param name="reachable">True when the backend returned an HTTP status.</param>
+        /// <returns>A failure result carrying <paramref name="error"/> and reachability.</returns>
+        public static ModelLoadResult Fail(string? error, bool reachable)
+        {
+            return new ModelLoadResult(false, string.IsNullOrWhiteSpace(error) ? "unknown error" : error, reachable);
         }
 
         #endregion

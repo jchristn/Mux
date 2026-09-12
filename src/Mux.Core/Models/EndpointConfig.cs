@@ -262,5 +262,21 @@ namespace Mux.Core.Models
         }
 
         #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Creates a deep copy of this endpoint, including nested settings (headers, quirks, and reasoning
+        /// effort), via a JSON round trip so no field is missed as new ones are added. The copy is independent:
+        /// mutating it does not affect the original.
+        /// </summary>
+        /// <returns>A deep copy of this endpoint.</returns>
+        public EndpointConfig Clone()
+        {
+            string json = System.Text.Json.JsonSerializer.Serialize(this);
+            return System.Text.Json.JsonSerializer.Deserialize<EndpointConfig>(json) ?? new EndpointConfig();
+        }
+
+        #endregion
     }
 }

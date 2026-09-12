@@ -1518,6 +1518,14 @@ namespace Mux.Desktop.Shell
                 _ModelStatus.Text = "✓ ready";
                 _ModelStatus.Tip("The selected endpoint responded when it was last checked.");
             }
+            else if (result.Reachable)
+            {
+                // The backend answered (so the URL, credentials, and model routing work), but the lightweight
+                // validation request itself did not succeed. Normal chats may still work — don't cry "unreachable".
+                _ModelStatus.Foreground = new SolidColorBrush(Color.Parse("#bf8700"));
+                _ModelStatus.Text = "⚠ reachable";
+                _ModelStatus.Tip("The endpoint is reachable but the validation request did not succeed: " + (result.Error ?? "unknown error") + ". Normal chats may still work.");
+            }
             else
             {
                 _ModelStatus.Foreground = _Theme.Error;
