@@ -106,7 +106,7 @@ namespace Mux.Desktop.Services
             }
             finally
             {
-                AppendAssistantReply(projection);
+                AppendAssistantReply(projection, userMessage);
                 _IsBusy = false;
                 RaiseStateChanged();
             }
@@ -114,11 +114,17 @@ namespace Mux.Desktop.Services
             return projection;
         }
 
-        private void AppendAssistantReply(TurnProjection projection)
+        private void AppendAssistantReply(TurnProjection projection, ConversationMessage userMessage)
         {
             string answer = projection.AssistantText;
             if (string.IsNullOrEmpty(answer))
             {
+                // The turn produced no assistant reply (cancelled, errored, or the model ended in its
+                // reasoning channel without a final answer). Drop the user message added before the turn so
+                // the model-facing history never carries a dangling, unanswered prompt; otherwise the next
+                // turn would send a run of consecutive user messages, which the model treats as one batched
+                // request. The transcript still shows the user's bubble (rendered by the shell directly).
+                _History.Remove(userMessage);
                 return;
             }
 

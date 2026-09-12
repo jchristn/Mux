@@ -63,15 +63,37 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(0, service.History.Count, "history untouched");
                     }),
 
-                    new TestCaseDescriptor("ConversationService", "CancelledTurn", "A cancelled turn is flagged and appends no assistant reply", async (CancellationToken ct) =>
+                    new TestCaseDescriptor("ConversationService", "CancelledTurn", "A cancelled turn is flagged and leaves no dangling user message", async (CancellationToken ct) =>
                     {
                         ConversationService service = new ConversationService(new ListTurnRunner(null, cancel: true), null);
                         TurnProjection projection = await service.RunTurnAsync("do work", ct);
 
                         MuxAssert.IsTrue(projection.WasCancelled, "cancelled flag");
-                        MuxAssert.AreEqual(1, service.History.Count, "only user message");
-                        MuxAssert.AreEqual(RoleEnum.User, service.History[0].Role, "user message");
+                        // The user message added before the turn is removed when the turn yields no assistant
+                        // reply, so history is not polluted with a dangling, unanswered prompt.
+                        MuxAssert.AreEqual(0, service.History.Count, "no dangling user message after cancel");
                         MuxAssert.IsFalse(service.IsBusy, "idle after cancel");
+                    }),
+
+                    new TestCaseDescriptor("ConversationService", "EmptyTurnDropsUserMessage", "A turn with no assistant text drops its user message and the next completed turn stays clean", async (CancellationToken ct) =>
+                    {
+                        // First turn: the model returns no assistant text (e.g. it ended in its reasoning
+                        // channel). The user message must not linger in history.
+                        ConversationService service = new ConversationService(
+                            new ListTurnRunner(new List<AgentEvent> { new RunCompletedEvent { Status = "completed" } }),
+                            null);
+                        await service.RunTurnAsync("first (no answer)", ct);
+                        MuxAssert.AreEqual(0, service.History.Count, "empty turn leaves nothing in history");
+
+                        // Second turn (a fresh service to swap the runner) completing normally yields a clean
+                        // user→assistant pair with no consecutive user messages carried over.
+                        ConversationService service2 = new ConversationService(
+                            new ListTurnRunner(new List<AgentEvent> { new AssistantTextEvent { Text = "answer" }, new RunCompletedEvent { Status = "completed" } }),
+                            service.History);
+                        await service2.RunTurnAsync("second", ct);
+                        MuxAssert.AreEqual(2, service2.History.Count, "only the completed exchange is recorded");
+                        MuxAssert.AreEqual(RoleEnum.User, service2.History[0].Role, "user first");
+                        MuxAssert.AreEqual(RoleEnum.Assistant, service2.History[1].Role, "assistant second");
                     }),
 
                     new TestCaseDescriptor("ConversationService", "ResumeFromHistory", "Initial history is preserved", async (CancellationToken ct) =>
@@ -87,7 +109,10 @@ namespace Test.Shared.Suites
 
                         MuxAssert.AreEqual(2, service.History.Count, "seeded history");
                         await service.RunTurnAsync("next", ct);
-                        MuxAssert.AreEqual(3, service.History.Count, "user appended, no assistant text");
+                        // The turn produced no assistant text, so its user message is dropped and the seeded
+                        // history is preserved unchanged (no dangling prompt appended).
+                        MuxAssert.AreEqual(2, service.History.Count, "no dangling user message on an empty turn");
+                        MuxAssert.AreEqual(RoleEnum.Assistant, service.History[1].Role, "seeded history intact");
                     })
                 });
         }

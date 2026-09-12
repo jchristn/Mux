@@ -1801,10 +1801,15 @@ namespace Mux.Cli.App
             string? next;
             lock (_Sync)
             {
-                _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.User, Content = prompt });
+                // Only commit a completed exchange (user + assistant) to history. A cancelled, errored, or
+                // empty turn — for example a reasoning model that spends its whole budget in the thinking
+                // channel and returns no final answer — must not leave a dangling user message: the next turn
+                // would then seed the model with a run of consecutive user messages, which it treats as one
+                // batched request (the "it's re-processing my previous prompts" symptom).
                 string answer = projector.CapturedAssistantText;
                 if (!string.IsNullOrEmpty(answer))
                 {
+                    _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.User, Content = prompt });
                     _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.Assistant, Content = answer });
                 }
 
