@@ -18,11 +18,13 @@
 
 ## What is mux?
 
-`mux` is a CLI AI agent that gives you a Claude Code / Codex-like experience using the backend and model you choose. It can run against Ollama, OpenAI, vLLM, LM Studio, Azure OpenAI, or any OpenAI-compatible API.
+`mux` is an AI coding agent that gives you a Claude Code / Codex-like experience using the backend and model you choose — from the terminal, a web dashboard, or a desktop app. It can run against Ollama, OpenAI, vLLM, LM Studio, Azure OpenAI, or any OpenAI-compatible API.
 
-`mux` can read and write files, run commands, search code, and manage a project through either:
-- an interactive REPL
-- a single-shot non-interactive command surface
+`mux` can read and write files, run commands, search code, and manage a project across four surfaces that all share one engine (`Mux.Core`):
+- **Interactive terminal UI** — a full-screen REPL with per-job transcripts, a tool-approval modal, slash commands, and resumable sessions (`mux`).
+- **Non-interactive command surface** — single-shot runs for scripting and automation, including machine-readable `jsonl` output (`mux print`, `mux --print`).
+- **Local web dashboard** — `mux serve` hosts a loopback, token-guarded REST + WebSocket API and a self-contained single-page dashboard (chat, configuration, usage/pricing analytics, sessions), run in the background by a cross-platform system-tray agent.
+- **Cross-platform desktop app** — `mux Desktop`, an Avalonia client with conversations/threads, streaming chat, the full set of configuration managers, and the usage dashboard.
 
 `mux` does not install or manage model runners. You bring your own local or remote inference backend, and `mux` connects to it.
 
@@ -64,7 +66,7 @@
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Local REST server & tray agent (`v0.9.0`, opt-in): `mux serve` starts a loopback-bound, token-guarded REST + WebSocket API (Watson 7) over mux's in-process services; a cross-platform Avalonia system-tray agent hosts it in the background with **About / Launch Mux / Exit**. Never auto-starts from a plain run. See `docs/REST_API.md`
 - Usage analytics: every model call is recorded to a local SQLite database (`~/.mux/usage.db`, multi-process safe, no external service) — tokens, cost, time-to-first-token, streaming time, latency, and throughput. See it via `/usage` and the live sidebar cost in the TUI, or the **Usage** and **Pricing** pages on the `mux serve` dashboard (charts over time with endpoint/model filters). Cost derives from an editable `pricing.json`. See `docs/CONFIG.md`
-- Desktop app (`v0.10.0`, in progress): `mux Desktop` is a cross-platform Avalonia client that will reach full parity with the TUI and the `mux serve` dashboard's monitoring/reporting, with first-class conversations/threads and localization. It links `Mux.Core` in-process. The foundation (app shell, splash, About/Help, single-instance, i18n scaffold) is in `src/Mux.Desktop`; launch it with `run-desktop.bat` / `run-desktop.sh`. See `DESKTOP_APP.md`
+- Desktop app (`v0.10.0`): `mux Desktop` is a cross-platform Avalonia client that links `Mux.Core` in-process. It offers streaming chat with Markdown, tables, and syntax-highlighted code (with per-response copy); conversations/threads with AI-summarized titles, rename/export/bulk-delete; a command palette (`Ctrl+K`) and slash commands; live context/usage stats and the `mux serve` usage dashboard (candlestick charts with endpoint/conversation filters). Configuration is fully managed in-app — endpoints (with model import and validation), MCP servers (with connectivity checks), prompt profiles, skills, subagents, pricing, and web-search providers, plus a grouped settings surface, `/compact` and `/effort`, light/dark/system theming, and localization scaffolding. Launch it with `run-desktop.bat` / `run-desktop.sh`. See `DESKTOP_APP.md`
 - Engine as a library: `Mux.Core` (and `Mux.Search`) publish to NuGet with a symbol package, so you can build your own experiences on the mux engine (`AgentLoop`, `SessionStore`, `McpToolManager`, `UsageQueryService`, `SettingsLoader`)
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
 - Health checks: `mux probe` validates config, backend reachability, auth, and model access
@@ -131,9 +133,12 @@ mux --print [OPTIONS] <prompt>       Single-shot mode
 echo "prompt" | mux --print          Read prompt from stdin
 mux probe [OPTIONS]                  Validate config and backend access
 mux endpoint <subcommand> [OPTIONS]  Inspect configured endpoints
+mux serve [OPTIONS]                   Start the local REST/WebSocket API + web dashboard (opt-in)
 ```
 
-Use `mux print` as the preferred non-interactive entrypoint in scripts and automation. `--print` remains supported and is convenient for stdin piping. Use `mux endpoint list`/`ls`/`show` when automation needs to inspect stored endpoint configuration without entering the REPL.
+Use `mux print` as the preferred non-interactive entrypoint in scripts and automation. `--print` remains supported and is convenient for stdin piping. Use `mux endpoint list`/`ls`/`show` when automation needs to inspect stored endpoint configuration without entering the REPL. Use `mux serve` to bring up the token-guarded local REST API and web dashboard (see `docs/REST_API.md`).
+
+The **desktop app** launches from the repo with `run-desktop.bat` (Windows) or `./run-desktop.sh` (Linux/macOS); see `DESKTOP_APP.md`.
 
 ### Options
 
