@@ -30,6 +30,7 @@ namespace Mux.Desktop.Shell
     using Mux.Desktop.Conversation;
     using Mux.Desktop.I18n;
     using Mux.Desktop.Services;
+    using Mux.Desktop.ViewModels;
     using Mux.Desktop.Views;
 
     /// <summary>
@@ -69,6 +70,8 @@ namespace Mux.Desktop.Shell
 
         private CheckpointManager? _Checkpoints;
         private Task? _CheckpointProbe;
+        private readonly WorkspaceViewModel _Workspace = new WorkspaceViewModel();
+        private Border _TabStripHost = null!;
         private ConversationService? _Conversation;
         private TextBlock? _StreamingBlock;
         private Border? _AssistantBorder;
@@ -927,9 +930,265 @@ namespace Mux.Desktop.Shell
         {
             DockPanel column = new DockPanel();
             column.Children.Add(BuildHeader());
+            column.Children.Add(BuildTabStrip());
             column.Children.Add(BuildComposer());
             column.Children.Add(BuildTranscriptArea());
             return column;
+        }
+
+        // ---- tabbed workspace --------------------------------------------------------------------
+
+        private Control BuildTabStrip()
+        {
+            _TabStripHost = new Border
+            {
+                Background = _Theme.SurfaceAlt,
+                BorderBrush = _Theme.Border,
+                BorderThickness = new Thickness(0, 0, 0, 1)
+            };
+            DockPanel.SetDock(_TabStripHost, Dock.Top);
+            RenderTabStrip();
+            return _TabStripHost;
+        }
+
+        private void RenderTabStrip()
+        {
+            if (_TabStripHost == null)
+            {
+                return;
+            }
+
+            if (!_Workspace.HasTabs)
+            {
+                _TabStripHost.IsVisible = false;
+                _TabStripHost.Child = null;
+                return;
+            }
+
+            _TabStripHost.IsVisible = true;
+
+            StackPanel row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Thickness(8, 5, 8, 5) };
+            foreach (WorkspaceTabViewModel tab in _Workspace.Tabs)
+            {
+                row.Children.Add(BuildTabButton(tab));
+            }
+
+            _TabStripHost.Child = new ScrollViewer
+            {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Content = row
+            };
+        }
+
+        private Control BuildTabButton(WorkspaceTabViewModel tab)
+        {
+            bool active = ReferenceEquals(tab, _Workspace.ActiveTab);
+
+            StackPanel content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7, VerticalAlignment = VerticalAlignment.Center };
+
+            content.Children.Add(new Avalonia.Controls.Shapes.Ellipse
+            {
+                Width = 8,
+                Height = 8,
+                Fill = StatusDotBrush(tab.Status),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            string label = string.IsNullOrEmpty(tab.Title) ? "Untitled" : tab.Title;
+            if (tab.UnreadCount > 0 && !active)
+            {
+                label += "  (" + tab.UnreadCount + ")";
+            }
+
+            content.Children.Add(new TextBlock
+            {
+                Text = label,
+                Foreground = active ? _Theme.AccentText : _Theme.Text,
+                FontSize = 12,
+                FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal,
+                VerticalAlignment = VerticalAlignment.Center,
+                MaxWidth = 200,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+
+            Button close = new Button
+            {
+                Content = "✕",
+                Background = Brushes.Transparent,
+                Foreground = active ? _Theme.AccentText : _Theme.Muted,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(3, 0, 3, 0),
+                FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            close.Tip("Close this tab.");
+            close.Click += async (sender, args) => await CloseTabAsync(tab);
+            content.Children.Add(close);
+
+            Border chrome = new Border
+            {
+                Background = active ? _Theme.AccentButton : Brushes.Transparent,
+                BorderBrush = active ? _Theme.AccentButton : _Theme.Border,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(9, 4, 6, 4),
+                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
+                Child = content
+            };
+            chrome.Tip(tab.Title);
+            chrome.Tapped += async (sender, args) =>
+            {
+                if (!close.IsPointerOver)
+                {
+                    await SelectTabAsync(tab);
+                }
+            };
+
+            return chrome;
+        }
+
+        private IBrush StatusDotBrush(TabStatus status)
+        {
+            switch (status)
+            {
+                case TabStatus.NeedsApproval:
+                    return new SolidColorBrush(Color.Parse("#d1242f"));
+                case TabStatus.Error:
+                    return _Theme.Error;
+                case TabStatus.Unread:
+                    return new SolidColorBrush(Color.Parse("#0969da"));
+                case TabStatus.Running:
+                    return new SolidColorBrush(Color.Parse("#bf8700"));
+                default:
+                    return _Theme.Border;
+            }
+        }
+
+        private WorkspaceTabViewModel OpenOrFocusTab(string id, string title)
+        {
+            WorkspaceTabViewModel tab = _Workspace.OpenTab(id, title);
+            tab.PropertyChanged -= OnTabPropertyChanged;
+            tab.PropertyChanged += OnTabPropertyChanged;
+            RenderTabStrip();
+            return tab;
+        }
+
+        private void OnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            Dispatcher.UIThread.Post(RenderTabStrip);
+        }
+
+        private async Task SelectTabAsync(WorkspaceTabViewModel tab)
+        {
+            if (ReferenceEquals(tab, _Workspace.ActiveTab) && string.Equals(tab.Id, _CurrentThreadId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (_Conversation != null && _Conversation.IsBusy)
+            {
+                AddNotice("Finish or stop the current turn before switching tabs.", isError: false);
+                return;
+            }
+
+            await OpenThreadAsync(tab.Id);
+        }
+
+        private async Task CloseTabAsync(WorkspaceTabViewModel tab)
+        {
+            bool wasActive = ReferenceEquals(tab, _Workspace.ActiveTab);
+            if (wasActive && _Conversation != null && _Conversation.IsBusy)
+            {
+                AddNotice("Finish or stop the current turn before closing this tab.", isError: false);
+                return;
+            }
+
+            tab.PropertyChanged -= OnTabPropertyChanged;
+            _Workspace.CloseTab(tab);
+            RenderTabStrip();
+
+            if (!wasActive)
+            {
+                return;
+            }
+
+            if (_Workspace.ActiveTab != null)
+            {
+                await OpenThreadAsync(_Workspace.ActiveTab.Id);
+            }
+            else
+            {
+                ClearActiveConversation();
+            }
+        }
+
+        private void ClearActiveConversation()
+        {
+            if (_Conversation != null)
+            {
+                _Conversation.Event -= OnConversationEvent;
+                _Conversation = null;
+            }
+
+            _CurrentThreadId = string.Empty;
+            _CurrentTitle = string.Empty;
+            _TitleSummarized = false;
+            ResetStreamingState();
+            _Transcript.Children.Clear();
+            _TitleText.Text = "mux";
+            _LastEstimatedTokens = 0;
+            UpdateContextIndicator();
+            UpdateEmptyState();
+            RefreshThreadSelection();
+        }
+
+        private WorkspaceTabViewModel? FindTabById(string id)
+        {
+            foreach (WorkspaceTabViewModel tab in _Workspace.Tabs)
+            {
+                if (string.Equals(tab.Id, id, StringComparison.Ordinal))
+                {
+                    return tab;
+                }
+            }
+
+            return null;
+        }
+
+        private void PruneClosedTabs(HashSet<string> liveIds)
+        {
+            List<WorkspaceTabViewModel> stale = new List<WorkspaceTabViewModel>();
+            foreach (WorkspaceTabViewModel tab in _Workspace.Tabs)
+            {
+                if (!liveIds.Contains(tab.Id))
+                {
+                    stale.Add(tab);
+                }
+            }
+
+            if (stale.Count == 0)
+            {
+                return;
+            }
+
+            foreach (WorkspaceTabViewModel tab in stale)
+            {
+                tab.PropertyChanged -= OnTabPropertyChanged;
+                _Workspace.CloseTab(tab);
+            }
+
+            RenderTabStrip();
+        }
+
+        private void SyncActiveTabTitle(string title)
+        {
+            WorkspaceTabViewModel? tab = _Workspace.ActiveTab;
+            if (tab != null && string.Equals(tab.Id, _CurrentThreadId, StringComparison.Ordinal))
+            {
+                tab.Title = DisplayTitle(title);
+                RenderTabStrip();
+            }
         }
 
         private Control BuildHeader()
@@ -1173,6 +1432,16 @@ namespace Mux.Desktop.Shell
             try
             {
                 IReadOnlyList<ThreadSummary> threads = await _Threads.ListAsync(CancellationToken.None);
+
+                // Close any open tabs whose conversation no longer exists (e.g. after a bulk delete).
+                HashSet<string> liveIds = new HashSet<string>(StringComparer.Ordinal);
+                foreach (ThreadSummary summary in threads)
+                {
+                    liveIds.Add(summary.Id);
+                }
+
+                PruneClosedTabs(liveIds);
+
                 _ThreadListPanel.Children.Clear();
                 if (threads.Count == 0)
                 {
@@ -1371,6 +1640,7 @@ namespace Mux.Desktop.Shell
                 RenderPersistedMessage(message);
             }
 
+            OpenOrFocusTab(snapshot.Id, snapshot.Title);
             UpdateEmptyState();
         }
 
@@ -1519,6 +1789,7 @@ namespace Mux.Desktop.Shell
         private void SetSending(bool sending)
         {
             _SendButton.Content = sending ? "Stop" : "Send";
+            _Workspace.ActiveTab?.NotifyBusy(sending);
         }
 
         private void OnConversationEvent(object? sender, AgentEvent agentEvent)
@@ -1868,6 +2139,7 @@ namespace Mux.Desktop.Shell
                 {
                     _CurrentTitle = SessionTitleHelper.Normalize(firstUser, SessionTitleHelper.DefaultTitle);
                     _TitleText.Text = DisplayTitle(_CurrentTitle);
+                    SyncActiveTabTitle(_CurrentTitle);
                 }
             }
 
@@ -1936,6 +2208,7 @@ namespace Mux.Desktop.Shell
 
             _CurrentTitle = title!;
             _TitleText.Text = DisplayTitle(title!);
+            SyncActiveTabTitle(title!);
 
             // Persist the summarized title (PersistCurrentAsync no longer overwrites it since _TitleSummarized
             // is set) and refresh the nav so the session shows its new name.
@@ -1959,6 +2232,7 @@ namespace Mux.Desktop.Shell
                 _CurrentTitle = updated.Title;
                 _CurrentTitlePinned = true;
                 _TitleText.Text = DisplayTitle(updated.Title);
+                SyncActiveTabTitle(updated.Title);
             }
 
             await LoadThreadsAsync();
@@ -1974,19 +2248,24 @@ namespace Mux.Desktop.Shell
 
             await _Threads.DeleteAsync(id, CancellationToken.None);
 
+            WorkspaceTabViewModel? tab = FindTabById(id);
+            if (tab != null)
+            {
+                tab.PropertyChanged -= OnTabPropertyChanged;
+                _Workspace.CloseTab(tab);
+                RenderTabStrip();
+            }
+
             if (string.Equals(id, _CurrentThreadId, StringComparison.Ordinal))
             {
-                if (_Conversation != null)
+                if (_Workspace.ActiveTab != null)
                 {
-                    _Conversation.Event -= OnConversationEvent;
-                    _Conversation = null;
+                    await OpenThreadAsync(_Workspace.ActiveTab.Id);
                 }
-
-                _CurrentThreadId = string.Empty;
-                _CurrentTitle = string.Empty;
-                _Transcript.Children.Clear();
-                _TitleText.Text = "mux";
-                UpdateEmptyState();
+                else
+                {
+                    ClearActiveConversation();
+                }
             }
 
             await LoadThreadsAsync();
