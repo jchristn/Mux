@@ -825,7 +825,12 @@ namespace Mux.Core.Llm
                     // OpenAI-compatible surface and yields "404 page not found" against /v1/api/chat. mux's
                     // own defaults and docs historically appended /v1 to ollama base URLs, so tolerate it
                     // here the way OpenAiClient tolerates a base URL that already ends in /v1.
-                    client = new OllamaClient(NormalizeOllamaBaseUrl(endpoint.BaseUrl), apiKey: null, logging: SilentLogging, httpClient: httpClient);
+                    //
+                    // Pass the API key through: a local Ollama needs none (a blank key resolves to null and
+                    // sends no auth), but an authenticated Ollama-compatible gateway expects the key as an
+                    // Authorization: Bearer header — which PolyPrompt's OllamaClient sends when given a key.
+                    // Without this, the endpoint's "API key" field was silently ignored for Ollama.
+                    client = new OllamaClient(NormalizeOllamaBaseUrl(endpoint.BaseUrl), apiKey: apiKey, logging: SilentLogging, httpClient: httpClient);
                     break;
                 case AdapterTypeEnum.Anthropic:
                     // Anthropic authenticates with an API key sent as x-api-key; PolyPrompt's client attaches
