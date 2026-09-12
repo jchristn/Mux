@@ -2541,10 +2541,12 @@ namespace Mux.Desktop.Shell
             {
                 try
                 {
-                    IClipboard? clipboard = TopLevel.GetTopLevel(copy)?.Clipboard;
-                    if (clipboard != null)
+                    // Prefer this window's clipboard (a TopLevel), falling back to a tree walk from the button.
+                    IClipboard? clipboard = Clipboard ?? TopLevel.GetTopLevel(copy)?.Clipboard;
+                    string text = rawTextProvider() ?? string.Empty;
+                    if (clipboard != null && text.Length > 0)
                     {
-                        await clipboard.SetTextAsync(rawTextProvider() ?? string.Empty);
+                        await clipboard.SetTextAsync(text);
                         copy.Content = "✓";
                         await Task.Delay(1200);
                         copy.Content = "⧉";

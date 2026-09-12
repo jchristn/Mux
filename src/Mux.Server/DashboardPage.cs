@@ -138,6 +138,10 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .msg{display:flex;flex-direction:column}
 .msg.user{align-items:flex-end}
 .bubble{max-width:min(760px,100%);padding:12px 15px;border-radius:8px;background:var(--panel-2);white-space:normal;word-wrap:break-word}
+.msg.assistant .bubble{position:relative}
+.msgcopy{position:absolute;top:6px;right:6px;background:var(--panel);border:1px solid var(--line);border-radius:5px;color:var(--muted);cursor:pointer;font-size:12px;line-height:1;padding:3px 6px;opacity:0;transition:opacity .12s}
+.msg.assistant .bubble:hover .msgcopy{opacity:1}
+.msgcopy:hover{color:var(--accent);border-color:var(--accent)}
 .msg.user .bubble{background:color-mix(in srgb,var(--accent) 18%,var(--panel))}
 .bubble pre{background:#2f343a;color:#f6f8fa;border:1px solid #4b5563;border-radius:6px;padding:12px;overflow:auto;font-size:13px}
 .bubble code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
@@ -982,13 +986,20 @@ function renderMessages(){
     var m=messages[i];
     var think=(m.role==="assistant"&&m.thinking)?'<div class="think">💭 '+esc(m.thinking).replace(/\n/g,"<br>")+'</div>':'';
     var body=m.typing?'<div class="thinking"><span></span><span></span><span></span></div>':(m.role==="assistant"?md(m.content):"<p>"+esc(m.content).replace(/\n/g,"<br>")+"</p>");
-    var inner=think+body;
+    var cp=(m.role==="assistant"&&!m.typing&&!m.local&&m.content)?'<button class="msgcopy" title="Copy response to the clipboard" onclick="copyMsg('+i+')">⧉</button>':'';
+    var inner=cp+think+body;
     html+='<div class="msg '+m.role+'"><div class="bubble">'+inner+'</div>';
     if(m.role==="assistant"&&!m.typing&&m.model){html+='<div class="meta">'+esc(m.model)+statInfo(m.stats)+'</div>';}
     html+='</div>';
   }
   box.innerHTML=html;
   box.scrollTop=box.scrollHeight;
+}
+function copyMsg(i){
+  var m=messages[i];if(!m||!m.content)return;
+  var done=function(){toast("Copied");};var fail=function(){toast("Copy failed",true);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(m.content).then(done).catch(fail);}
+  else{try{var ta=document.createElement("textarea");ta.value=m.content;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);done();}catch(e){fail();}}
 }
 
 /* ---- conversations (persisted like the desktop/TUI: list, open, new, rename, delete, export) ---- */
