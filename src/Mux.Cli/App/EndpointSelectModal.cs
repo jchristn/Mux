@@ -76,6 +76,12 @@ namespace Mux.Cli.App
         private readonly ListView<string> _List = new ListView<string>();
         private readonly int _EndpointCount;
 
+        // Geometry captured on the last Render so HandleMouse can hit-test clicks against the rows and the
+        // key-hint line (a modal draws its own box, so it owns the coordinate mapping).
+        private Rect _ListRect;
+        private int _HintRow = -1;
+        private readonly List<HintZone> _HintZones = new List<HintZone>();
+
         #endregion
 
         #region Constructors-and-Factories
@@ -159,6 +165,61 @@ namespace Mux.Cli.App
         }
 
         /// <inheritdoc/>
+        public override bool HandleMouse(MouseEvent mouse)
+        {
+            if (mouse == null)
+            {
+                return true;
+            }
+
+            // Wheel scrolls the list.
+            if (mouse.Kind == MouseEventKind.Wheel && _ListRect.Width > 0)
+            {
+                _List.HandleMouse(new MouseEvent(mouse.Kind, mouse.Button, mouse.X - _ListRect.X, mouse.Y - _ListRect.Y, mouse.Modifiers, mouse.ClickCount));
+                return true;
+            }
+
+            if (mouse.Kind != MouseEventKind.Press || mouse.Button != MouseButton.Left)
+            {
+                return true;
+            }
+
+            // A click on a row selects it (the list maps the y to an index, accounting for scroll) and, when
+            // it landed on a real row, activates it — the same as pressing Enter, so "+ Add endpoint…" runs.
+            if (_ListRect.Width > 0
+                && mouse.X >= _ListRect.X && mouse.X < _ListRect.X + _ListRect.Width
+                && mouse.Y >= _ListRect.Y && mouse.Y < _ListRect.Y + _ListRect.Height)
+            {
+                bool hitRow = _List.HandleMouse(new MouseEvent(mouse.Kind, mouse.Button, mouse.X - _ListRect.X, mouse.Y - _ListRect.Y, mouse.Modifiers, mouse.ClickCount));
+                if (hitRow)
+                {
+                    Close(new EndpointModalResult(_List.SelectedIndex, EndpointModalActivationEnum.Select));
+                }
+
+                return true;
+            }
+
+            // A click on a key-hint segment fires that action against the highlighted endpoint.
+            if (mouse.Y == _HintRow)
+            {
+                foreach (HintZone zone in _HintZones)
+                {
+                    if (mouse.X >= zone.Start && mouse.X < zone.End)
+                    {
+                        if (zone.Activation == EndpointModalActivationEnum.Select || IsEndpointRow(_List.SelectedIndex))
+                        {
+                            Close(new EndpointModalResult(_List.SelectedIndex, zone.Activation));
+                        }
+
+                        return true;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override void Render(ISurface surface)
         {
             if (surface == null)
@@ -182,15 +243,57 @@ namespace Mux.Cli.App
 
             int contentX = x + 1 + pad.Left;
             int listTop = y + 1 + pad.Top;
+            _ListRect = new Rect(contentX, listTop, innerWidth, listHeight);
             if (surface is BufferSurface buffer)
-                _List.Render(buffer.CreateView(new Rect(contentX, listTop, innerWidth, listHeight)));
+                _List.Render(buffer.CreateView(_ListRect));
 
             int hintRow = listTop + listHeight + 1;
+            _HintRow = hintRow;
             surface.DrawText(
                 contentX,
                 hintRow,
-                Trim("↑↓ move · Enter switch · e edit · v validate · d/Del remove", innerWidth),
+                Trim(BuildHint(contentX, innerWidth), innerWidth),
                 CellStyle.Default.WithForeground(Color.FromPalette(8)));
+        }
+
+        // Builds the key-hint line and, as a side effect, records the clickable X range of each action
+        // segment (so a click on "e edit" or "v validate" fires that action, matching the keyboard shortcut).
+        private string BuildHint(int contentX, int innerWidth)
+        {
+            _HintZones.Clear();
+            Segment[] segments =
+            {
+                new Segment("↑↓ move", null),
+                new Segment("Enter switch", EndpointModalActivationEnum.Select),
+                new Segment("e edit", EndpointModalActivationEnum.Edit),
+                new Segment("v validate", EndpointModalActivationEnum.Validate),
+                new Segment("d/Del remove", EndpointModalActivationEnum.Remove),
+            };
+
+            System.Text.StringBuilder builder = new System.Text.StringBuilder();
+            const string separator = " · ";
+            int column = 0;
+            for (int i = 0; i < segments.Length; i++)
+            {
+                if (i > 0)
+                {
+                    builder.Append(separator);
+                    column += separator.Length;
+                }
+
+                int start = contentX + column;
+                builder.Append(segments[i].Text);
+                column += segments[i].Text.Length;
+
+                // Only record zones that fall within the rendered (possibly trimmed) width.
+                EndpointModalActivationEnum? activation = segments[i].Activation;
+                if (activation.HasValue && start < contentX + innerWidth)
+                {
+                    _HintZones.Add(new HintZone(start, contentX + column, activation.Value));
+                }
+            }
+
+            return builder.ToString();
         }
 
         #endregion
@@ -200,6 +303,37 @@ namespace Mux.Cli.App
         private bool IsEndpointRow(int index)
         {
             return index >= 0 && index < _EndpointCount;
+        }
+
+        // A key-hint segment: its display text and, when clickable, the action it fires.
+        private sealed class Segment
+        {
+            public Segment(string text, EndpointModalActivationEnum? activation)
+            {
+                Text = text;
+                Activation = activation;
+            }
+
+            public string Text { get; }
+
+            public EndpointModalActivationEnum? Activation { get; }
+        }
+
+        // The rendered X range [Start, End) of a clickable hint segment and the action it fires.
+        private sealed class HintZone
+        {
+            public HintZone(int start, int end, EndpointModalActivationEnum activation)
+            {
+                Start = start;
+                End = end;
+                Activation = activation;
+            }
+
+            public int Start { get; }
+
+            public int End { get; }
+
+            public EndpointModalActivationEnum Activation { get; }
         }
 
         private static string Trim(string text, int width)
