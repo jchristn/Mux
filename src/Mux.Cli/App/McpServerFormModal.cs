@@ -48,6 +48,7 @@ namespace Mux.Cli.App
         private readonly TextField _ApiKeyValue;
 
         private Form _Form;
+        private Rect _FormRect;
         private int _FormHeight;
         private string _Error = string.Empty;
 
@@ -136,6 +137,34 @@ namespace Mux.Cli.App
         }
 
         /// <inheritdoc/>
+        public override bool HandleMouse(MouseEvent mouse)
+        {
+            if (mouse == null || _FormRect.Width <= 0
+                || mouse.X < _FormRect.X || mouse.X >= _FormRect.X + _FormRect.Width
+                || mouse.Y < _FormRect.Y || mouse.Y >= _FormRect.Y + _FormRect.Height)
+            {
+                return true;
+            }
+
+            int previousTransport = _Transport.SelectedIndex;
+            int previousAuth = _AuthType.SelectedIndex;
+            _Form.HandleMouse(new MouseEvent(mouse.Kind, mouse.Button, mouse.X - _FormRect.X, mouse.Y - _FormRect.Y, mouse.Modifiers, mouse.ClickCount));
+
+            // Clicking the transport or auth selector changes which fields apply, so rebuild the form as the
+            // keyboard path does.
+            if (_Transport.SelectedIndex != previousTransport)
+            {
+                RebuildForm(TransportFieldIndex);
+            }
+            else if (_AuthType.SelectedIndex != previousAuth)
+            {
+                RebuildForm(AuthFieldIndex);
+            }
+
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override void Render(ISurface surface)
         {
             if (surface == null) throw new ArgumentNullException(nameof(surface));
@@ -166,6 +195,7 @@ namespace Mux.Cli.App
 
             // The Form only renders its field widgets into a BufferSurface, so render it to a buffer and
             // copy the cells into the modal box.
+            _FormRect = new Rect(contentX, firstRow, contentWidth, usableHeight);
             CellBuffer buffer = new CellBuffer(contentWidth, usableHeight);
             _Form.Render(new BufferSurface(buffer));
             for (int y = 0; y < usableHeight; y++)

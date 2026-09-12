@@ -65,6 +65,8 @@ namespace Mux.Cli.App
         private readonly string _Title;
         private readonly MuxSettings _Settings;
         private readonly Form _Form;
+        private Rect _FormRect;
+        private int _FormScrollY;
         private readonly TextField _MaxAgentIterations;
         private readonly TextField _MaxTokenBudget;
         private readonly TextField _MaxConcurrency;
@@ -176,6 +178,21 @@ namespace Mux.Cli.App
         }
 
         /// <inheritdoc/>
+        public override bool HandleMouse(MouseEvent mouse)
+        {
+            if (mouse == null || _FormRect.Width <= 0
+                || mouse.X < _FormRect.X || mouse.X >= _FormRect.X + _FormRect.Width
+                || mouse.Y < _FormRect.Y || mouse.Y >= _FormRect.Y + _FormRect.Height)
+            {
+                return true;
+            }
+
+            // Translate into the form's own coordinates, accounting for the vertical scroll offset.
+            _Form.HandleMouse(new MouseEvent(mouse.Kind, mouse.Button, mouse.X - _FormRect.X, (mouse.Y - _FormRect.Y) + _FormScrollY, mouse.Modifiers, mouse.ClickCount));
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override void Render(ISurface surface)
         {
             if (surface == null) throw new ArgumentNullException(nameof(surface));
@@ -213,6 +230,8 @@ namespace Mux.Cli.App
             // buffer tall enough to hold every field, then copy a vertical window of it into the modal box.
             // The window is scrolled so the focused field is always visible even when the form overflows.
             int scrollY = ComputeScrollOffset(formHeight, usableHeight);
+            _FormRect = new Rect(contentX, firstRow, contentWidth, usableHeight);
+            _FormScrollY = scrollY;
             CellBuffer buffer = new CellBuffer(contentWidth, Math.Max(usableHeight, formHeight));
             _Form.Render(new BufferSurface(buffer));
             for (int y = 0; y < usableHeight; y++)
