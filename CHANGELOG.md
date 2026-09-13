@@ -6,23 +6,36 @@ All notable changes to mux are documented here.
 
 ### Added
 
-- **mux Desktop (Avalonia) — foundation.** A new cross-platform desktop front end (`src/Mux.Desktop`) that
-  will reach full parity with the interactive TUI and the `mux serve` dashboard's monitoring/reporting, add
-  first-class conversations/threads, and localize the UI. This release lays the foundation: the Avalonia app
-  shell (conversation sidebar, header, workspace), a startup **splash screen**, an **About / Help** window
-  (modeled on the tray agent's About window), a single-instance lock, and an internationalization scaffold.
-  It links `Mux.Core` in-process (the REST API is not used for agentic work). Conversation/thread management
-  is functional today — the sidebar lists your saved sessions and **New conversation** creates one (threads
-  are ordinary mux sessions, shared with the TUI). The UI-framework-agnostic logic lives in a separate,
-  Avalonia-free **`Mux.Desktop.Core`** library (localization, formatters, and the thread/usage/conversation
-  services over `Mux.Core`, plus a `TurnProjection` event accumulator), covered by passing Touchstone suites
-  in `Test.Shared`. As part of this work, `SessionTitleHelper` moved into `Mux.Core.Sessions` so both front
-  ends share it. The shell is a Claude/Codex-style chat: a conversation sidebar, a header model/endpoint
-  picker, a streaming transcript, and a composer. Sending a message drives the mux agent in-process
-  (`AgentLoopTurnRunner` → `AgentLoop`) under an auto-safe approval policy (read-only tools auto-approve;
-  mutating tools prompt), streams the reply, and persists the conversation. Like the TUI, the desktop app
-  brings up the tray agent at startup (opt out with `MUX_AGENT_AUTOSTART=0`). See `archive/DESKTOP_APP.md` (plan) and
-  `docs/DESKTOP.md` (guide). Launch it with `run-desktop.bat` / `run-desktop.sh`.
+- **mux Desktop (Avalonia).** A new cross-platform desktop front end (`src/Mux.Desktop`) that reaches the
+  full mux TUI capability set plus the `mux serve` dashboard's monitoring/reporting, in a Claude/Codex-style
+  interface. It links `Mux.Core` in-process (the REST API is not used for agentic work) under an auto-safe
+  approval policy (read-only tools auto-approve; mutating tools prompt). Highlights:
+  - **Chat:** streaming transcript with Markdown, tables, and syntax-highlighted code (per-response copy),
+    thinking sections, tool-call cards, MCP tools and skills in turns, prompt-history recall, `/compact`,
+    `/effort`, and a full set of slash commands.
+  - **Parallel conversation tabs:** each open thread has its own runtime, transcript, and streaming state,
+    so tabs run agent turns concurrently and switching tabs never blocks (git checkpoints are serialized
+    across the shared working tree; undo/redo remain global).
+  - **Threads:** a conversation sidebar backed by the real mux session store (shared with the TUI), with
+    AI-summarized titles, rename/export/bulk-delete, and a command palette (`Ctrl+K`).
+  - **Configuration managers** for endpoints (model import + validation), MCP servers (connectivity checks),
+    prompt profiles, skills, subagents, pricing, hooks, custom commands, keybindings, and web-search
+    providers, plus a grouped settings surface and an embedded local-server toggle.
+  - **Monitoring:** the usage dashboard (KPI strip; token/cost/latency/TTFT/streaming/throughput charts with
+    endpoint/conversation filters and a per-call history) and a per-conversation stats window.
+  - **Internationalization:** the full UI is translated into the same eleven languages as the dashboard
+    (English, Spanish, Portuguese, French, Italian, German, Mandarin Chinese, Arabic, Russian, Malay,
+    Hindi) with a live language switcher and right-to-left layout for Arabic.
+  - **Accessibility & theming:** system/light/dark plus a high-contrast theme, and accessible names on
+    icon-only controls for screen readers.
+  - Undo/redo via git checkpoints, a startup splash, an About/Help window, a single-instance lock, and
+    self-contained per-OS publish scripts (`publish-desktop.*`). Like the TUI it brings up the tray agent at
+    startup (opt out with `MUX_AGENT_AUTOSTART=0`). The UI-framework-agnostic logic lives in a separate,
+    Avalonia-free **`Mux.Desktop.Core`** library (localization, formatters, thread/usage/conversation
+    services over `Mux.Core`, `TurnProjection`), covered by Touchstone suites in `Test.Shared`;
+    `SessionTitleHelper` moved into `Mux.Core.Sessions` so both front ends share it. See `docs/DESKTOP.md`
+    (guide) and `archive/DESKTOP_APP.md` (implementation plan). Launch it with
+    `run-desktop.bat` / `run-desktop.sh`.
 - **`Mux.Core` published to NuGet.** `Mux.Core` (and its `Mux.Search` dependency) now carry full package
   metadata — MIT license, project/repository URLs, README, icon, tags — and produce a symbol package
   (`.snupkg`) with SourceLink, so others can build their own experiences on top of the mux engine.
