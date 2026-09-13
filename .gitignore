@@ -12,3 +12,6 @@ obj/
 /artifact.txt
 /src/artifact.txt
 /artifacts/
+
+# Self-contained desktop publish output (publish-desktop.{sh,bat})
+/dist/

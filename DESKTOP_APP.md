@@ -518,9 +518,9 @@ Phases are ordered so a usable chat client exists early and parity fills in behi
 
 **Phase 11 — i18n rollout & accessibility.** All twelve catalogs, RTL/CJK/expansion QA, keyboard nav, focus order, contrast, responsive widths. *Exit:* i18n Definition of Done met; a11y pass green.
 
-**Phase 12 — Packaging & distribution.** Per-OS bundles, single-instance, signing/notarization, optional auto-update. *Exit:* installable artifacts for all three OSes.
+**Phase 12 — Packaging & distribution.** Per-OS bundles, single-instance, signing/notarization, optional auto-update. *Exit:* installable artifacts for all three OSes. _Partially delivered:_ `publish-desktop.sh` / `publish-desktop.bat` produce self-contained, single-file per-RID builds into `dist/desktop/<RID>/` (verified on win-x64), and the single-instance lock is already in place. **Remaining (human-gated):** code-signing / notarization (needs the maintainer's Authenticode + Apple Developer ID certificates), per-OS installers (MSIX / `.dmg` / AppImage), and auto-update (Velopack).
 
-**Phase 13 — Docs, tests, CI gates.** README/CHANGELOG, `docs/DESKTOP.md`, the full test suite and CI gates (§14). *Exit:* standards conformance verified.
+**Phase 13 — Docs, tests, CI gates.** README/CHANGELOG, `docs/DESKTOP.md`, the full test suite and CI gates (§14). *Exit:* standards conformance verified. _Delivered:_ `docs/DESKTOP.md` rewritten to the shipped feature surface (chat, tools/approvals, managers, analytics, local server, packaging); the Touchstone suite covers the shared `Mux.Core` logic and the desktop `Mux.Desktop.Core` services. **Remaining:** desktop-specific CI conformance gates.
 
 ---
 
