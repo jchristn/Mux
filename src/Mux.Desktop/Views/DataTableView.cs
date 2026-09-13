@@ -7,6 +7,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Controls.Primitives;
     using Avalonia.Layout;
     using Avalonia.Media;
+    using Avalonia.Threading;
 
     /// <summary>
     /// A lightweight, dependency-free sortable table. Columns are described by <see cref="TableColumn{TRow}"/>
@@ -336,7 +337,10 @@ namespace Mux.Desktop.Views
                 item.Foreground = theme.Error;
             }
 
-            item.Click += (sender, args) => action.Invoke(row);
+            // Defer the action until after the ⋯ flyout / context menu has finished closing. Invoking it
+            // synchronously from the menu-item click — especially when it opens a modal dialog (Validate,
+            // Edit, Delete) — races with the menu dismissal and the dialog sometimes fails to open.
+            item.Click += (sender, args) => Dispatcher.UIThread.Post(() => action.Invoke(row));
             return item;
         }
     }
