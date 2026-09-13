@@ -6,6 +6,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Layout;
     using Avalonia.Media;
     using Mux.Core.Models;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A form for creating or editing a single prompt profile (system prompt, tools-disabled prompt, and
@@ -16,7 +17,7 @@ namespace Mux.Desktop.Views
     {
         private readonly PromptProfile _Profile;
         private readonly TextBox _Name = new TextBox();
-        private readonly CheckBox _IsActive = new CheckBox { Content = "Use as the active profile" };
+        private readonly CheckBox _IsActive = new CheckBox { Content = Localizer.T("prompt.useActive") };
         private readonly TextBox _SystemPrompt = MultilineBox();
         private readonly TextBox _ToolsDisabled = MultilineBox();
         private readonly TextBox _Compaction = MultilineBox();
@@ -33,7 +34,7 @@ namespace Mux.Desktop.Views
             ArgumentNullException.ThrowIfNull(profile);
             _Profile = profile;
 
-            Title = isNew ? "Add prompt profile" : "Edit prompt profile";
+            Title = isNew ? Localizer.T("prompt.form.addTitle") : Localizer.T("prompt.form.editTitle");
             Icon = IconResources.LoadWindowIcon();
             Width = 960;
             Height = 930;
@@ -69,12 +70,12 @@ namespace Mux.Desktop.Views
             DockPanel root = new DockPanel { Margin = new Thickness(20) };
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Discard changes and close.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("prompt.cancel.tip"));
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
-            Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
-            ok.Tip("Save this prompt profile.");
+            Button ok = new Button { Content = Localizer.T("act.save"), Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip(Localizer.T("prompt.save.tip"));
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -84,11 +85,11 @@ namespace Mux.Desktop.Views
             root.Children.Add(_Error);
 
             StackPanel form = new StackPanel { Spacing = 10, Margin = new Thickness(0, 0, 14, 0) };
-            form.Children.Add(Field("Name", _Name, "A short name for this profile, shown in the profiles list."));
-            form.Children.Add(_IsActive.Tip("Make this the profile that drives the agent's persona for new runs."));
-            form.Children.Add(Field("System prompt", _SystemPrompt, "The main persona and instructions sent to the model at the start of every conversation."));
-            form.Children.Add(Field("Tools-disabled prompt", _ToolsDisabled, "An alternative system prompt used when tools are turned off for a run."));
-            form.Children.Add(Field("Compaction prompt", _Compaction, "The instruction used to summarize old history when compacting the conversation."));
+            form.Children.Add(Field(Localizer.T("col.name"), _Name, Localizer.T("prompt.name.tip")));
+            form.Children.Add(_IsActive.Tip(Localizer.T("prompt.useActive.tip")));
+            form.Children.Add(Field(Localizer.T("prompt.systemPrompt"), _SystemPrompt, Localizer.T("prompt.systemPrompt.tip")));
+            form.Children.Add(Field(Localizer.T("prompt.toolsDisabled"), _ToolsDisabled, Localizer.T("prompt.toolsDisabled.tip")));
+            form.Children.Add(Field(Localizer.T("prompt.compaction"), _Compaction, Localizer.T("prompt.compaction.tip")));
 
             root.Children.Add(new ScrollViewer { Content = form });
             return root;
@@ -107,7 +108,7 @@ namespace Mux.Desktop.Views
             string name = (_Name.Text ?? string.Empty).Trim();
             if (name.Length == 0)
             {
-                _Error.Text = "Name is required.";
+                _Error.Text = Localizer.T("prompt.err.nameRequired");
                 return;
             }
 

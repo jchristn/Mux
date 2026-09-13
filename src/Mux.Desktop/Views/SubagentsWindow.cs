@@ -8,6 +8,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Media;
     using Mux.Core.Settings;
     using Mux.Core.Subagents;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A manager for subagent definitions (parity with the TUI's subagents surface): a sortable table with
@@ -27,7 +28,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Subagents";
+            Title = Localizer.T("nav.subagents");
             Icon = IconResources.LoadWindowIcon();
             Width = 1290;
             Height = 700;
@@ -45,11 +46,11 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<SubagentDefinition>>
             {
-                new TableColumn<SubagentDefinition>("Name", s => string.IsNullOrEmpty(s.Name) ? "(unnamed)" : s.Name, new GridLength(2, GridUnitType.Star), s => s.Name, tooltip: "The subagent's name, used when the agent delegates work to it."),
-                new TableColumn<SubagentDefinition>("Description", s => string.IsNullOrEmpty(s.Description) ? "—" : s.Description, new GridLength(3, GridUnitType.Star), tooltip: "What this subagent is for; helps the model decide when to delegate to it."),
-                new TableColumn<SubagentDefinition>("Endpoint", s => string.IsNullOrEmpty(s.EndpointName) ? "default" : s.EndpointName, new GridLength(1.5, GridUnitType.Star), s => s.EndpointName ?? string.Empty, tooltip: "The endpoint this subagent runs on, or “default” to inherit the main conversation's."),
-                new TableColumn<SubagentDefinition>("Tools", s => s.AllowedTools.Count == 0 ? "all" : s.AllowedTools.Count.ToString(), new GridLength(1, GridUnitType.Star), s => s.AllowedTools.Count, tooltip: "How many tools this subagent may use (“all” means no restriction)."),
-                new TableColumn<SubagentDefinition>("Max iters", s => s.MaxIterations?.ToString() ?? "—", new GridLength(1, GridUnitType.Star), s => s.MaxIterations ?? 0, tooltip: "The subagent's agent-loop iteration cap (“—” inherits the global setting).")
+                new TableColumn<SubagentDefinition>(Localizer.T("col.name"), s => string.IsNullOrEmpty(s.Name) ? Localizer.T("subagent.unnamed") : s.Name, new GridLength(2, GridUnitType.Star), s => s.Name, tooltip: Localizer.T("subagent.col.name.tip")),
+                new TableColumn<SubagentDefinition>(Localizer.T("col.description"), s => string.IsNullOrEmpty(s.Description) ? "—" : s.Description, new GridLength(3, GridUnitType.Star), tooltip: Localizer.T("subagent.col.description.tip")),
+                new TableColumn<SubagentDefinition>(Localizer.T("subagent.col.endpoint"), s => string.IsNullOrEmpty(s.EndpointName) ? Localizer.T("subagent.endpointDefault") : s.EndpointName, new GridLength(1.5, GridUnitType.Star), s => s.EndpointName ?? string.Empty, tooltip: Localizer.T("subagent.col.endpoint.tip")),
+                new TableColumn<SubagentDefinition>(Localizer.T("subagent.col.tools"), s => s.AllowedTools.Count == 0 ? Localizer.T("subagent.toolsAll") : s.AllowedTools.Count.ToString(), new GridLength(1, GridUnitType.Star), s => s.AllowedTools.Count, tooltip: Localizer.T("subagent.col.tools.tip")),
+                new TableColumn<SubagentDefinition>(Localizer.T("subagent.col.maxIters"), s => s.MaxIterations?.ToString() ?? "—", new GridLength(1, GridUnitType.Star), s => s.MaxIterations ?? 0, tooltip: Localizer.T("subagent.col.maxIters.tip"))
             };
         }
 
@@ -57,8 +58,8 @@ namespace Mux.Desktop.Views
         {
             return new List<TableRowAction<SubagentDefinition>>
             {
-                new TableRowAction<SubagentDefinition>("Edit", s => OnEdit(s)),
-                new TableRowAction<SubagentDefinition>("Delete", s => OnDelete(s), destructive: true)
+                new TableRowAction<SubagentDefinition>(Localizer.T("act.edit"), s => OnEdit(s)),
+                new TableRowAction<SubagentDefinition>(Localizer.T("act.delete"), s => OnDelete(s), destructive: true)
             };
         }
 
@@ -67,12 +68,12 @@ namespace Mux.Desktop.Views
             DockPanel root = new DockPanel { Margin = new Thickness(20) };
 
             DockPanel header = new DockPanel();
-            TextBlock title = new TextBlock { Text = "Subagents", FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
+            TextBlock title = new TextBlock { Text = Localizer.T("nav.subagents"), FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(title, Dock.Left);
             header.Children.Add(title);
 
-            Button add = new Button { Content = "＋  Add subagent", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
-            add.Tip("Define a new subagent the model can delegate scoped tasks to.");
+            Button add = new Button { Content = "＋  " + Localizer.T("subagent.add"), Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
+            add.Tip(Localizer.T("subagent.add.tip"));
             add.Click += (sender, args) => OnAdd();
             DockPanel.SetDock(add, Dock.Right);
             header.Children.Add(add);
@@ -110,7 +111,7 @@ namespace Mux.Desktop.Views
 
         private async void OnDelete(SubagentDefinition subagent)
         {
-            bool confirmed = await new ConfirmDialog("Delete subagent", "Delete \"" + subagent.Name + "\"?", "Delete", destructive: true).ShowDialog<bool>(this);
+            bool confirmed = await new ConfirmDialog(Localizer.T("subagent.delete.title"), Localizer.T("act.delete") + " \"" + subagent.Name + "\"?", Localizer.T("act.delete"), destructive: true).ShowDialog<bool>(this);
             if (confirmed)
             {
                 _Subagents.Remove(subagent);

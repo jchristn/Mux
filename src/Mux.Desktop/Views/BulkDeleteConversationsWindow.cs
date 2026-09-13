@@ -8,6 +8,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Controls;
     using Avalonia.Layout;
     using Avalonia.Media;
+    using Mux.Desktop.I18n;
     using Mux.Desktop.Services;
 
     /// <summary>
@@ -35,7 +36,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Delete conversations";
+            Title = Localizer.T("bulkDelete.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 640;
             Height = 620;
@@ -44,9 +45,9 @@ namespace Mux.Desktop.Views
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = theme.Surface;
 
-            _Status = new TextBlock { Text = "Loading…", Foreground = theme.Muted, FontSize = 12 };
-            _DeleteButton = new Button { Content = "Delete multiple", Background = theme.Error, Foreground = Brushes.White, IsEnabled = false };
-            _DeleteButton.Tip("Delete every checked conversation, after a confirmation.");
+            _Status = new TextBlock { Text = Localizer.T("bulkDelete.loading"), Foreground = theme.Muted, FontSize = 12 };
+            _DeleteButton = new Button { Content = Localizer.T("bulkDelete.deleteMultiple"), Background = theme.Error, Foreground = Brushes.White, IsEnabled = false };
+            _DeleteButton.Tip(Localizer.T("bulkDelete.deleteMultiple.tip"));
             _DeleteButton.Click += (sender, args) => OnDelete();
 
             Content = BuildContent(theme);
@@ -58,16 +59,16 @@ namespace Mux.Desktop.Views
             DockPanel root = new DockPanel { Margin = new Thickness(20) };
 
             StackPanel head = new StackPanel { Spacing = 4 };
-            head.Children.Add(new TextBlock { Text = "Delete conversations", FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text });
+            head.Children.Add(new TextBlock { Text = Localizer.T("bulkDelete.title"), FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text });
             head.Children.Add(_Status);
 
             StackPanel selectRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(0, 4, 0, 0) };
-            Button all = new Button { Content = "Select all", Padding = new Thickness(10, 4, 10, 4) };
-            all.Tip("Check every conversation.");
+            Button all = new Button { Content = Localizer.T("bulkDelete.selectAll"), Padding = new Thickness(10, 4, 10, 4) };
+            all.Tip(Localizer.T("bulkDelete.selectAll.tip"));
             all.Click += (sender, args) => SetAll(true);
             selectRow.Children.Add(all);
-            Button none = new Button { Content = "Select none", Padding = new Thickness(10, 4, 10, 4) };
-            none.Tip("Uncheck every conversation.");
+            Button none = new Button { Content = Localizer.T("bulkDelete.selectNone"), Padding = new Thickness(10, 4, 10, 4) };
+            none.Tip(Localizer.T("bulkDelete.selectNone.tip"));
             none.Click += (sender, args) => SetAll(false);
             selectRow.Children.Add(none);
             head.Children.Add(selectRow);
@@ -76,8 +77,8 @@ namespace Mux.Desktop.Views
             root.Children.Add(head);
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Close without deleting anything.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("bulkDelete.cancel.tip"));
             cancel.Click += (sender, args) => Close(null);
             buttons.Children.Add(cancel);
             buttons.Children.Add(_DeleteButton);
@@ -104,13 +105,13 @@ namespace Mux.Desktop.Views
                     _List.Children.Add(box);
                 }
 
-                _Status.Text = threads.Count == 0 ? "You have no conversations." : threads.Count + " conversation" + (threads.Count == 1 ? string.Empty : "s") + ". Check the ones to delete.";
+                _Status.Text = threads.Count == 0 ? Localizer.T("bulkDelete.none") : threads.Count + " " + (threads.Count == 1 ? Localizer.T("bulkDelete.conversation") : Localizer.T("bulkDelete.conversations")) + Localizer.T("bulkDelete.checkHint");
                 UpdateDeleteEnabled();
             }
             catch (Exception exception)
             {
                 _Status.Foreground = AppTheme.Current.Error;
-                _Status.Text = "Could not load conversations: " + exception.Message;
+                _Status.Text = Localizer.T("bulkDelete.loadError") + exception.Message;
             }
         }
 
@@ -150,9 +151,9 @@ namespace Mux.Desktop.Views
             }
 
             bool confirmed = await new ConfirmDialog(
-                "Delete conversations",
-                "Are you sure you wish to delete " + ids.Count + " conversation" + (ids.Count == 1 ? string.Empty : "s") + "?",
-                "Delete",
+                Localizer.T("bulkDelete.title"),
+                Localizer.T("bulkDelete.confirmPrefix") + ids.Count + " " + (ids.Count == 1 ? Localizer.T("bulkDelete.conversation") : Localizer.T("bulkDelete.conversations")) + "?",
+                Localizer.T("act.delete"),
                 destructive: true).ShowDialog<bool>(this);
             if (!confirmed)
             {
@@ -178,7 +179,7 @@ namespace Mux.Desktop.Views
 
         private static string DisplayTitle(ThreadSummary thread)
         {
-            return string.IsNullOrWhiteSpace(thread.Title) ? "Untitled conversation" : thread.Title;
+            return string.IsNullOrWhiteSpace(thread.Title) ? Localizer.T("bulkDelete.untitled") : thread.Title;
         }
     }
 }

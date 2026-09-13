@@ -451,14 +451,14 @@ namespace Mux.Desktop.Shell
             button.Tip("Open this conversation. Right-click to rename, export, or delete it.");
 
             ContextMenu menu = new ContextMenu();
-            MenuItem rename = new MenuItem { Header = "Rename" };
+            MenuItem rename = new MenuItem { Header = L("thread.rename") };
             rename.Click += (sender, args) => _ = RenameThreadAsync(item.Id, item.Title);
             menu.Items.Add(rename);
-            MenuItem export = new MenuItem { Header = "Export" };
+            MenuItem export = new MenuItem { Header = L("thread.export") };
             export.Click += (sender, args) => _ = ExportThreadAsync(item.Id, DisplayTitle(item));
             menu.Items.Add(export);
             menu.Items.Add(new Separator());
-            MenuItem delete = new MenuItem { Header = "Delete", Foreground = _Theme.Error };
+            MenuItem delete = new MenuItem { Header = L("act.delete"), Foreground = _Theme.Error };
             delete.Click += (sender, args) => _ = DeleteThreadAsync(item.Id, DisplayTitle(item));
             menu.Items.Add(delete);
             button.ContextMenu = menu;
@@ -1598,7 +1598,7 @@ namespace Mux.Desktop.Shell
                 _ThreadListPanel.Children.Clear();
                 if (threads.Count == 0)
                 {
-                    _ThreadListPanel.Children.Add(new TextBlock { Text = "No conversations yet.", Foreground = _Theme.Muted, FontSize = 12, Margin = new Thickness(18, 4, 10, 4) });
+                    _ThreadListPanel.Children.Add(new TextBlock { Text = L("main.noConversations"), Foreground = _Theme.Muted, FontSize = 12, Margin = new Thickness(18, 4, 10, 4) });
                     return;
                 }
 
@@ -2116,7 +2116,7 @@ namespace Mux.Desktop.Shell
         private void ShowHelpMenu()
         {
             StackPanel card = new StackPanel { Spacing = 4 };
-            card.Children.Add(new TextBlock { Text = "Quick commands", FontWeight = FontWeight.SemiBold, Foreground = _Theme.Text });
+            card.Children.Add(new TextBlock { Text = L("main.quickCommands"), FontWeight = FontWeight.SemiBold, Foreground = _Theme.Text });
             card.Children.Add(CommandRow("/clear", "Clear the transcript"));
             card.Children.Add(CommandRow("/context", "Show conversation statistics"));
             card.Children.Add(CommandRow("/compact", "Summarize older turns to free up context"));
@@ -2846,7 +2846,7 @@ namespace Mux.Desktop.Shell
                 if (threads.Count > 0)
                 {
                     StackPanel recent = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Stretch };
-                    recent.Children.Add(new TextBlock { Text = "Recent conversations", FontWeight = FontWeight.SemiBold, Foreground = _Theme.Text, Margin = new Thickness(2, 6, 0, 2) });
+                    recent.Children.Add(new TextBlock { Text = L("main.recentConversations"), FontWeight = FontWeight.SemiBold, Foreground = _Theme.Text, Margin = new Thickness(2, 6, 0, 2) });
 
                     int shown = 0;
                     foreach (ThreadSummary summary in threads)

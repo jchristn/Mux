@@ -9,6 +9,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Media;
     using Mux.Core.Settings;
     using Mux.Core.Telemetry;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// An editor for the model pricing table (parity row 40): a sortable table of per-model input/cached/
@@ -33,7 +34,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Model pricing";
+            Title = Localizer.T("pricing.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 900;
             Height = 600;
@@ -51,10 +52,10 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<PricingRow>>
             {
-                new TableColumn<PricingRow>("Model", r => r.Model, new GridLength(3, GridUnitType.Star), r => r.Model, tooltip: "The model id these rates apply to when computing usage cost."),
-                new TableColumn<PricingRow>("Input $/Mtok", r => Money(r.Pricing.InputPerMTok), new GridLength(1.5, GridUnitType.Star), r => r.Pricing.InputPerMTok, tooltip: "US dollars per million prompt (input) tokens."),
-                new TableColumn<PricingRow>("Cached $/Mtok", r => Money(r.Pricing.CachedInputPerMTok), new GridLength(1.5, GridUnitType.Star), r => r.Pricing.CachedInputPerMTok, tooltip: "US dollars per million cached-input tokens (usually cheaper than fresh input)."),
-                new TableColumn<PricingRow>("Output $/Mtok", r => Money(r.Pricing.OutputPerMTok), new GridLength(1.5, GridUnitType.Star), r => r.Pricing.OutputPerMTok, tooltip: "US dollars per million generated (output) tokens.")
+                new TableColumn<PricingRow>(Localizer.T("col.model"), r => r.Model, new GridLength(3, GridUnitType.Star), r => r.Model, tooltip: Localizer.T("pricing.col.model.tip")),
+                new TableColumn<PricingRow>(Localizer.T("pricing.col.input"), r => Money(r.Pricing.InputPerMTok), new GridLength(1.5, GridUnitType.Star), r => r.Pricing.InputPerMTok, tooltip: Localizer.T("pricing.col.input.tip")),
+                new TableColumn<PricingRow>(Localizer.T("pricing.col.cached"), r => Money(r.Pricing.CachedInputPerMTok), new GridLength(1.5, GridUnitType.Star), r => r.Pricing.CachedInputPerMTok, tooltip: Localizer.T("pricing.col.cached.tip")),
+                new TableColumn<PricingRow>(Localizer.T("pricing.col.output"), r => Money(r.Pricing.OutputPerMTok), new GridLength(1.5, GridUnitType.Star), r => r.Pricing.OutputPerMTok, tooltip: Localizer.T("pricing.col.output.tip"))
             };
         }
 
@@ -62,8 +63,8 @@ namespace Mux.Desktop.Views
         {
             return new List<TableRowAction<PricingRow>>
             {
-                new TableRowAction<PricingRow>("Edit", r => OnEdit(r)),
-                new TableRowAction<PricingRow>("Delete", r => OnDelete(r), destructive: true)
+                new TableRowAction<PricingRow>(Localizer.T("act.edit"), r => OnEdit(r)),
+                new TableRowAction<PricingRow>(Localizer.T("act.delete"), r => OnDelete(r), destructive: true)
             };
         }
 
@@ -77,12 +78,12 @@ namespace Mux.Desktop.Views
             DockPanel root = new DockPanel { Margin = new Thickness(20) };
 
             DockPanel header = new DockPanel();
-            TextBlock title = new TextBlock { Text = "Model pricing", FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
+            TextBlock title = new TextBlock { Text = Localizer.T("pricing.title"), FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(title, Dock.Left);
             header.Children.Add(title);
 
-            Button add = new Button { Content = "＋  Add model", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
-            add.Tip("Add pricing for a model so usage cost can be computed for it.");
+            Button add = new Button { Content = "＋  " + Localizer.T("pricing.add"), Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
+            add.Tip(Localizer.T("pricing.add.tip"));
             add.Click += (sender, args) => OnAdd();
             DockPanel.SetDock(add, Dock.Right);
             header.Children.Add(add);
@@ -123,7 +124,7 @@ namespace Mux.Desktop.Views
 
         private async void OnDelete(PricingRow row)
         {
-            bool confirmed = await new ConfirmDialog("Delete pricing", "Delete pricing for \"" + row.Model + "\"?", "Delete", destructive: true).ShowDialog<bool>(this);
+            bool confirmed = await new ConfirmDialog(Localizer.T("pricing.delete.title"), string.Format(Localizer.T("pricing.delete.confirm"), row.Model), Localizer.T("act.delete"), destructive: true).ShowDialog<bool>(this);
             if (confirmed)
             {
                 _Rows.Remove(row);

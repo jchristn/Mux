@@ -9,6 +9,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Media;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A form for creating or editing a single MCP server, at field parity with the TUI's MCP form: name,
@@ -43,7 +44,7 @@ namespace Mux.Desktop.Views
             ArgumentNullException.ThrowIfNull(config);
             _Config = config;
 
-            Title = isNew ? "Add MCP server" : "Edit MCP server";
+            Title = isNew ? Localizer.T("mcp.form.addTitle") : Localizer.T("mcp.form.editTitle");
             Icon = IconResources.LoadWindowIcon();
             Width = 560;
             Height = 720;
@@ -76,12 +77,12 @@ namespace Mux.Desktop.Views
             DockPanel root = new DockPanel { Margin = new Thickness(20) };
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Discard changes and close.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("mcp.form.cancel.tip"));
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
-            Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
-            ok.Tip("Validate and save this MCP server.");
+            Button ok = new Button { Content = Localizer.T("act.save"), Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip(Localizer.T("mcp.form.save.tip"));
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -91,17 +92,17 @@ namespace Mux.Desktop.Views
             root.Children.Add(_Error);
 
             StackPanel form = new StackPanel { Spacing = 10, Margin = new Thickness(0, 0, 14, 0) };
-            form.Children.Add(Row("Name", _Name, "A unique name for this server; its tools are namespaced under it."));
-            form.Children.Add(Row("Transport", _Transport, "stdio launches a local process and talks over stdin/stdout; http connects to a URL."));
-            form.Children.Add(Row("Command (stdio)", _Command, "The executable to launch for a stdio server (e.g. npx, uvx, python)."));
-            form.Children.Add(Row("Args (one per line)", _Args, "Arguments passed to the command, one per line."));
-            form.Children.Add(Row("Env (KEY=VALUE per line)", _Env, "Environment variables for the launched process, one KEY=VALUE per line."));
-            form.Children.Add(Row("URL (http)", _Url, "The base URL of an HTTP MCP server."));
-            form.Children.Add(Row("MCP path (http)", _McpPath, "The request path appended to the URL (defaults to /mcp)."));
-            form.Children.Add(Row("Authentication", _AuthType, "How HTTP requests authenticate: none, a bearer token, or an API key header."));
-            form.Children.Add(Row("Bearer token", _BearerToken, "Sent as “Authorization: Bearer <token>”. Used only for bearer authentication."));
-            form.Children.Add(Row("API key header", _ApiKeyHeader, "The header name carrying the API key (e.g. X-API-Key). Used only for API-key auth."));
-            form.Children.Add(Row("API key value", _ApiKeyValue, "The secret API key sent in the header above. Used only for API-key auth."));
+            form.Children.Add(Row(Localizer.T("col.name"), _Name, Localizer.T("mcp.form.name.tip")));
+            form.Children.Add(Row(Localizer.T("mcp.transport"), _Transport, Localizer.T("mcp.form.transport.tip")));
+            form.Children.Add(Row(Localizer.T("mcp.form.command"), _Command, Localizer.T("mcp.form.command.tip")));
+            form.Children.Add(Row(Localizer.T("mcp.form.args"), _Args, Localizer.T("mcp.form.args.tip")));
+            form.Children.Add(Row(Localizer.T("mcp.form.env"), _Env, Localizer.T("mcp.form.env.tip")));
+            form.Children.Add(Row(Localizer.T("mcp.form.url"), _Url, Localizer.T("mcp.form.url.tip")));
+            form.Children.Add(Row(Localizer.T("mcp.form.mcpPath"), _McpPath, Localizer.T("mcp.form.mcpPath.tip")));
+            form.Children.Add(Row(Localizer.T("mcp.form.auth"), _AuthType, Localizer.T("mcp.form.auth.tip")));
+            form.Children.Add(Row(Localizer.T("mcp.form.bearerToken"), _BearerToken, Localizer.T("mcp.form.bearerToken.tip")));
+            form.Children.Add(Row(Localizer.T("mcp.form.apiKeyHeader"), _ApiKeyHeader, Localizer.T("mcp.form.apiKeyHeader.tip")));
+            form.Children.Add(Row(Localizer.T("mcp.form.apiKeyValue"), _ApiKeyValue, Localizer.T("mcp.form.apiKeyValue.tip")));
 
             root.Children.Add(new ScrollViewer { Content = form, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto });
             return root;
@@ -121,27 +122,27 @@ namespace Mux.Desktop.Views
             string name = (_Name.Text ?? string.Empty).Trim();
             if (name.Length == 0)
             {
-                _Error.Text = "Name is required.";
+                _Error.Text = Localizer.T("mcp.form.err.nameRequired");
                 return;
             }
 
             McpTransportTypeEnum transport = _Transport.SelectedItem is McpTransportTypeEnum selected ? selected : McpTransportTypeEnum.Stdio;
             if (transport == McpTransportTypeEnum.Stdio && (_Command.Text ?? string.Empty).Trim().Length == 0)
             {
-                _Error.Text = "Command is required for stdio servers.";
+                _Error.Text = Localizer.T("mcp.form.err.commandRequired");
                 return;
             }
 
             if (transport == McpTransportTypeEnum.Http && (_Url.Text ?? string.Empty).Trim().Length == 0)
             {
-                _Error.Text = "URL is required for HTTP servers.";
+                _Error.Text = Localizer.T("mcp.form.err.urlRequired");
                 return;
             }
 
             McpAuthTypeEnum authType = _AuthType.SelectedItem is McpAuthTypeEnum auth ? auth : McpAuthTypeEnum.None;
             if (authType == McpAuthTypeEnum.Bearer && (_BearerToken.Text ?? string.Empty).Trim().Length == 0)
             {
-                _Error.Text = "A bearer token is required for bearer authentication.";
+                _Error.Text = Localizer.T("mcp.form.err.bearerRequired");
                 return;
             }
 
@@ -149,13 +150,13 @@ namespace Mux.Desktop.Views
             {
                 if ((_ApiKeyHeader.Text ?? string.Empty).Trim().Length == 0)
                 {
-                    _Error.Text = "An API key header is required for API key authentication.";
+                    _Error.Text = Localizer.T("mcp.form.err.apiKeyHeaderRequired");
                     return;
                 }
 
                 if ((_ApiKeyValue.Text ?? string.Empty).Trim().Length == 0)
                 {
-                    _Error.Text = "An API key value is required for API key authentication.";
+                    _Error.Text = Localizer.T("mcp.form.err.apiKeyValueRequired");
                     return;
                 }
             }

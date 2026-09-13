@@ -8,6 +8,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Media;
     using Mux.Core.Models;
     using Mux.Core.Settings;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A manager for external web-search providers (parity row 34): the master enable/fallback toggles plus a
@@ -30,7 +31,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Web search providers";
+            Title = Localizer.T("search.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 900;
             Height = 600;
@@ -48,10 +49,10 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<ExternalSearchProviderConfig>>
             {
-                new TableColumn<ExternalSearchProviderConfig>("Name", p => p.Name, new GridLength(2, GridUnitType.Star), p => p.Name, p => p.IsDefault ? "default" : null, tooltip: "The provider configuration's name. The green “default” badge marks the one tried first."),
-                new TableColumn<ExternalSearchProviderConfig>("Type", p => p.ProviderType, new GridLength(1.2, GridUnitType.Star), p => p.ProviderType, tooltip: "The search backend (tavily or you)."),
-                new TableColumn<ExternalSearchProviderConfig>("Endpoint", p => string.IsNullOrEmpty(p.Endpoint) ? "(default)" : p.Endpoint, new GridLength(3, GridUnitType.Star), p => p.Endpoint, tooltip: "The provider's API base URL, or its built-in default when blank."),
-                new TableColumn<ExternalSearchProviderConfig>("Enabled", p => p.Enabled ? "yes" : "no", new GridLength(1, GridUnitType.Star), p => p.Enabled ? 1 : 0, tooltip: "Whether this provider participates in web searches.")
+                new TableColumn<ExternalSearchProviderConfig>(Localizer.T("col.name"), p => p.Name, new GridLength(2, GridUnitType.Star), p => p.Name, p => p.IsDefault ? Localizer.T("search.default") : null, tooltip: Localizer.T("search.col.name.tip")),
+                new TableColumn<ExternalSearchProviderConfig>(Localizer.T("search.col.type"), p => p.ProviderType, new GridLength(1.2, GridUnitType.Star), p => p.ProviderType, tooltip: Localizer.T("search.col.type.tip")),
+                new TableColumn<ExternalSearchProviderConfig>(Localizer.T("search.endpoint"), p => string.IsNullOrEmpty(p.Endpoint) ? Localizer.T("search.endpointDefault") : p.Endpoint, new GridLength(3, GridUnitType.Star), p => p.Endpoint, tooltip: Localizer.T("search.col.endpoint.tip")),
+                new TableColumn<ExternalSearchProviderConfig>(Localizer.T("search.col.enabled"), p => p.Enabled ? Localizer.T("search.yes") : Localizer.T("search.no"), new GridLength(1, GridUnitType.Star), p => p.Enabled ? 1 : 0, tooltip: Localizer.T("search.col.enabled.tip"))
             };
         }
 
@@ -59,16 +60,16 @@ namespace Mux.Desktop.Views
         {
             List<TableRowAction<ExternalSearchProviderConfig>> actions = new List<TableRowAction<ExternalSearchProviderConfig>>
             {
-                new TableRowAction<ExternalSearchProviderConfig>("Edit", p => OnEdit(p)),
-                new TableRowAction<ExternalSearchProviderConfig>(provider.Enabled ? "Disable" : "Enable", p => OnToggleEnabled(p))
+                new TableRowAction<ExternalSearchProviderConfig>(Localizer.T("act.edit"), p => OnEdit(p)),
+                new TableRowAction<ExternalSearchProviderConfig>(provider.Enabled ? Localizer.T("search.disable") : Localizer.T("search.enable"), p => OnToggleEnabled(p))
             };
 
             if (!provider.IsDefault)
             {
-                actions.Add(new TableRowAction<ExternalSearchProviderConfig>("Set as default", p => OnSetDefault(p)));
+                actions.Add(new TableRowAction<ExternalSearchProviderConfig>(Localizer.T("search.setDefault"), p => OnSetDefault(p)));
             }
 
-            actions.Add(new TableRowAction<ExternalSearchProviderConfig>("Delete", p => OnDelete(p), destructive: true));
+            actions.Add(new TableRowAction<ExternalSearchProviderConfig>(Localizer.T("act.delete"), p => OnDelete(p), destructive: true));
             return actions;
         }
 
@@ -78,19 +79,19 @@ namespace Mux.Desktop.Views
 
             StackPanel header = new StackPanel { Spacing = 8 };
             DockPanel titleRow = new DockPanel();
-            TextBlock title = new TextBlock { Text = "Web search providers", FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
+            TextBlock title = new TextBlock { Text = Localizer.T("search.title"), FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(title, Dock.Left);
             titleRow.Children.Add(title);
 
-            Button add = new Button { Content = "＋  Add provider", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
-            add.Tip("Add a new web-search provider configuration.");
+            Button add = new Button { Content = "＋  " + Localizer.T("search.add"), Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
+            add.Tip(Localizer.T("search.add.tip"));
             add.Click += (sender, args) => OnAdd();
             DockPanel.SetDock(add, Dock.Right);
             titleRow.Children.Add(add);
             header.Children.Add(titleRow);
 
-            CheckBox enabled = new CheckBox { Content = "Enable web search", IsChecked = _Settings.ExternalSearch.Enabled };
-            enabled.Tip("Master switch: allow the agent to use the web_search / web_retrieve tools.");
+            CheckBox enabled = new CheckBox { Content = Localizer.T("search.enableSearch"), IsChecked = _Settings.ExternalSearch.Enabled };
+            enabled.Tip(Localizer.T("search.enableSearch.tip"));
             enabled.IsCheckedChanged += (sender, args) =>
             {
                 _Settings.ExternalSearch.Enabled = enabled.IsChecked ?? false;
@@ -98,8 +99,8 @@ namespace Mux.Desktop.Views
             };
             header.Children.Add(enabled);
 
-            CheckBox fallback = new CheckBox { Content = "Allow fallback to other providers on failure", IsChecked = _Settings.ExternalSearch.AllowFallback };
-            fallback.Tip("If the default provider fails, try the other enabled providers in turn.");
+            CheckBox fallback = new CheckBox { Content = Localizer.T("search.allowFallback"), IsChecked = _Settings.ExternalSearch.AllowFallback };
+            fallback.Tip(Localizer.T("search.allowFallback.tip"));
             fallback.IsCheckedChanged += (sender, args) =>
             {
                 _Settings.ExternalSearch.AllowFallback = fallback.IsChecked ?? true;
@@ -158,7 +159,7 @@ namespace Mux.Desktop.Views
 
         private async void OnDelete(ExternalSearchProviderConfig provider)
         {
-            bool confirmed = await new ConfirmDialog("Delete search provider", "Delete \"" + provider.Name + "\"?", "Delete", destructive: true).ShowDialog<bool>(this);
+            bool confirmed = await new ConfirmDialog(Localizer.T("search.delete.title"), string.Format(Localizer.T("search.delete.confirm"), provider.Name), Localizer.T("act.delete"), destructive: true).ShowDialog<bool>(this);
             if (confirmed)
             {
                 _Providers.Remove(provider);

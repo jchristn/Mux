@@ -8,6 +8,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Media;
     using Mux.Core.Models;
     using Mux.Core.Settings;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A manager for prompt profiles (parity with the TUI's <c>/prompt</c>): a sortable table with per-row
@@ -30,7 +31,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Prompt profiles";
+            Title = Localizer.T("prompt.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 860;
             Height = 560;
@@ -48,8 +49,8 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<PromptProfile>>
             {
-                new TableColumn<PromptProfile>("Name", p => string.IsNullOrEmpty(p.Name) ? "(unnamed)" : p.Name, new GridLength(2, GridUnitType.Star), p => p.Name, p => p.IsActive ? "active" : null, tooltip: "The profile's name. The green “active” badge marks the profile currently driving the agent's persona."),
-                new TableColumn<PromptProfile>("System prompt", p => Preview(p.SystemPrompt), new GridLength(4, GridUnitType.Star), tooltip: "A preview of this profile's system prompt (the persona and instructions sent to the model).")
+                new TableColumn<PromptProfile>(Localizer.T("col.name"), p => string.IsNullOrEmpty(p.Name) ? Localizer.T("prompt.unnamed") : p.Name, new GridLength(2, GridUnitType.Star), p => p.Name, p => p.IsActive ? Localizer.T("prompt.active") : null, tooltip: Localizer.T("prompt.col.name.tip")),
+                new TableColumn<PromptProfile>(Localizer.T("prompt.systemPrompt"), p => Preview(p.SystemPrompt), new GridLength(4, GridUnitType.Star), tooltip: Localizer.T("prompt.col.systemPrompt.tip"))
             };
         }
 
@@ -57,15 +58,15 @@ namespace Mux.Desktop.Views
         {
             List<TableRowAction<PromptProfile>> actions = new List<TableRowAction<PromptProfile>>
             {
-                new TableRowAction<PromptProfile>("Edit", p => OnEdit(p))
+                new TableRowAction<PromptProfile>(Localizer.T("act.edit"), p => OnEdit(p))
             };
 
             if (!prompt.IsActive)
             {
-                actions.Add(new TableRowAction<PromptProfile>("Set as active", p => OnSetActive(p)));
+                actions.Add(new TableRowAction<PromptProfile>(Localizer.T("prompt.setActive"), p => OnSetActive(p)));
             }
 
-            actions.Add(new TableRowAction<PromptProfile>("Delete", p => OnDelete(p), destructive: true));
+            actions.Add(new TableRowAction<PromptProfile>(Localizer.T("act.delete"), p => OnDelete(p), destructive: true));
             return actions;
         }
 
@@ -73,7 +74,7 @@ namespace Mux.Desktop.Views
         {
             if (string.IsNullOrWhiteSpace(text))
             {
-                return "(empty)";
+                return Localizer.T("prompt.empty");
             }
 
             string collapsed = text.Replace("\r", " ").Replace("\n", " ").Trim();
@@ -85,12 +86,12 @@ namespace Mux.Desktop.Views
             DockPanel root = new DockPanel { Margin = new Thickness(20) };
 
             DockPanel header = new DockPanel();
-            TextBlock title = new TextBlock { Text = "Prompt profiles", FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
+            TextBlock title = new TextBlock { Text = Localizer.T("prompt.title"), FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(title, Dock.Left);
             header.Children.Add(title);
 
-            Button add = new Button { Content = "＋  Add profile", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
-            add.Tip("Add a new prompt profile (a named system/tools-disabled/compaction prompt set).");
+            Button add = new Button { Content = "＋  " + Localizer.T("prompt.add"), Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
+            add.Tip(Localizer.T("prompt.add.tip"));
             add.Click += (sender, args) => OnAdd();
             DockPanel.SetDock(add, Dock.Right);
             header.Children.Add(add);
@@ -130,7 +131,7 @@ namespace Mux.Desktop.Views
 
         private async void OnDelete(PromptProfile prompt)
         {
-            bool confirmed = await new ConfirmDialog("Delete prompt profile", "Delete \"" + prompt.Name + "\"?", "Delete", destructive: true).ShowDialog<bool>(this);
+            bool confirmed = await new ConfirmDialog(Localizer.T("prompt.delete.title"), string.Format(Localizer.T("prompt.delete.confirm"), prompt.Name), Localizer.T("act.delete"), destructive: true).ShowDialog<bool>(this);
             if (confirmed)
             {
                 _Prompts.Remove(prompt);

@@ -7,6 +7,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Layout;
     using Avalonia.Media;
     using Mux.Core.Settings;
+    using Mux.Desktop.I18n;
     using Mux.Desktop.Services;
 
     /// <summary>
@@ -29,7 +30,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Keybindings";
+            Title = Localizer.T("nav.keybindings");
             Icon = IconResources.LoadWindowIcon();
             Width = 820;
             Height = 640;
@@ -47,9 +48,9 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<KeybindingCommand>>
             {
-                new TableColumn<KeybindingCommand>("Command", c => c.Title, new GridLength(3, GridUnitType.Star), c => c.Title, tooltip: "The command this chord runs."),
-                new TableColumn<KeybindingCommand>("Category", c => c.Category, new GridLength(1.4, GridUnitType.Star), c => c.Category, tooltip: "The command's group."),
-                new TableColumn<KeybindingCommand>("Chord", c => ChordText(c.Id), new GridLength(2, GridUnitType.Star), c => ChordText(c.Id), badge: c => _Model.IsOverridden(c.Id) ? "custom" : null, tooltip: "The effective key chord; a \"custom\" badge marks an override.")
+                new TableColumn<KeybindingCommand>(Localizer.T("keybinding.col.command"), c => c.Title, new GridLength(3, GridUnitType.Star), c => c.Title, tooltip: Localizer.T("keybinding.col.command.tip")),
+                new TableColumn<KeybindingCommand>(Localizer.T("keybinding.col.category"), c => c.Category, new GridLength(1.4, GridUnitType.Star), c => c.Category, tooltip: Localizer.T("keybinding.col.category.tip")),
+                new TableColumn<KeybindingCommand>(Localizer.T("keybinding.col.chord"), c => ChordText(c.Id), new GridLength(2, GridUnitType.Star), c => ChordText(c.Id), badge: c => _Model.IsOverridden(c.Id) ? Localizer.T("keybinding.badge.custom") : null, tooltip: Localizer.T("keybinding.col.chord.tip"))
             };
         }
 
@@ -57,9 +58,9 @@ namespace Mux.Desktop.Views
         {
             return new List<TableRowAction<KeybindingCommand>>
             {
-                new TableRowAction<KeybindingCommand>("Rebind…", c => OnRebind(c)),
-                new TableRowAction<KeybindingCommand>("Unbind", c => OnUnbind(c)),
-                new TableRowAction<KeybindingCommand>("Reset to default", c => OnReset(c))
+                new TableRowAction<KeybindingCommand>(Localizer.T("keybinding.rebind"), c => OnRebind(c)),
+                new TableRowAction<KeybindingCommand>(Localizer.T("keybinding.unbind"), c => OnUnbind(c)),
+                new TableRowAction<KeybindingCommand>(Localizer.T("keybinding.resetDefault"), c => OnReset(c))
             };
         }
 
@@ -73,15 +74,15 @@ namespace Mux.Desktop.Views
 
             DockPanel header = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
 
-            Button resetAll = new Button { Content = "Reset all", HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(12, 6, 12, 6) };
-            resetAll.Tip("Clear every override and restore the shipped defaults.");
+            Button resetAll = new Button { Content = Localizer.T("keybinding.resetAll"), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(12, 6, 12, 6) };
+            resetAll.Tip(Localizer.T("keybinding.resetAll.tip"));
             resetAll.Click += (sender, args) => OnResetAll();
             DockPanel.SetDock(resetAll, Dock.Right);
             header.Children.Add(resetAll);
 
             StackPanel text = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
-            text.Children.Add(new TextBlock { Text = "Keyboard shortcuts", FontSize = 17, FontWeight = FontWeight.SemiBold, Foreground = theme.Text });
-            text.Children.Add(new TextBlock { Text = "Rebind or unbind commands by id. Overrides are saved to keybindings.json and shared with the terminal.", FontSize = 12, Foreground = theme.Muted, TextWrapping = TextWrapping.Wrap });
+            text.Children.Add(new TextBlock { Text = Localizer.T("keybinding.header"), FontSize = 17, FontWeight = FontWeight.SemiBold, Foreground = theme.Text });
+            text.Children.Add(new TextBlock { Text = Localizer.T("keybinding.header.subtitle"), FontSize = 12, Foreground = theme.Muted, TextWrapping = TextWrapping.Wrap });
             header.Children.Add(text);
 
             Grid.SetRow(header, 0);
@@ -117,9 +118,9 @@ namespace Mux.Desktop.Views
             {
                 KeybindingCommand? other = KeybindingCatalog.Find(conflictId);
                 bool proceed = await new ConfirmDialog(
-                    "Chord already in use",
-                    chord + " is already bound to \"" + (other?.Title ?? conflictId) + "\". Rebind anyway? Both commands will share this chord.",
-                    "Rebind",
+                    Localizer.T("keybinding.conflict.title"),
+                    chord + " " + Localizer.T("keybinding.conflict.boundTo") + " \"" + (other?.Title ?? conflictId) + "\". " + Localizer.T("keybinding.conflict.rebindAnyway"),
+                    Localizer.T("keybinding.conflict.confirm"),
                     destructive: false).ShowDialog<bool>(this);
                 if (!proceed)
                 {
@@ -145,7 +146,7 @@ namespace Mux.Desktop.Views
 
         private async void OnResetAll()
         {
-            if (!await new ConfirmDialog("Reset all keybindings", "Clear every override and restore the shipped defaults?", "Reset all", destructive: true).ShowDialog<bool>(this))
+            if (!await new ConfirmDialog(Localizer.T("keybinding.resetAll.title"), Localizer.T("keybinding.resetAll.message"), Localizer.T("keybinding.resetAll"), destructive: true).ShowDialog<bool>(this))
             {
                 return;
             }

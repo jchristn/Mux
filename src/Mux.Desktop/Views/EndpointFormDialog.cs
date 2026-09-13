@@ -8,6 +8,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Media;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A form for creating or editing a single endpoint, at field parity with the TUI's endpoint form:
@@ -34,9 +35,9 @@ namespace Mux.Desktop.Views
         private readonly TextBox _MaxAgentIterations = new TextBox();
         private readonly ComboBox _ReasoningEffort = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly TextBox _GeminiThinkingBudget = new TextBox();
-        private readonly CheckBox _IsDefault = new CheckBox { Content = "Use as the default endpoint" };
-        private readonly CheckBox _AutoApprove = new CheckBox { Content = "Auto-approve tool calls" };
-        private readonly CheckBox _ShowThinking = new CheckBox { Content = "Show thinking (reasoning)" };
+        private readonly CheckBox _IsDefault = new CheckBox { Content = Localizer.T("endpoint.form.useDefault") };
+        private readonly CheckBox _AutoApprove = new CheckBox { Content = Localizer.T("endpoint.form.autoApprove") };
+        private readonly CheckBox _ShowThinking = new CheckBox { Content = Localizer.T("endpoint.form.showThinking") };
         private readonly TextBlock _Error = new TextBlock { Foreground = new SolidColorBrush(Color.Parse("#cf222e")), FontSize = 12, TextWrapping = TextWrapping.Wrap };
 
         /// <summary>
@@ -50,7 +51,7 @@ namespace Mux.Desktop.Views
             ArgumentNullException.ThrowIfNull(config);
             _Config = config;
 
-            Title = isNew ? "Add endpoint" : "Edit endpoint";
+            Title = isNew ? Localizer.T("endpoint.form.addTitle") : Localizer.T("endpoint.form.editTitle");
             Icon = IconResources.LoadWindowIcon();
             Width = 930;
             Height = 640;
@@ -90,12 +91,12 @@ namespace Mux.Desktop.Views
             DockPanel root = new DockPanel { Margin = new Thickness(24) };
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 14, 0, 0) };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Discard changes and close.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("endpoint.form.cancel.tip"));
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
-            Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
-            ok.Tip("Validate and save this endpoint.");
+            Button ok = new Button { Content = Localizer.T("act.save"), Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip(Localizer.T("endpoint.form.save.tip"));
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -113,23 +114,23 @@ namespace Mux.Desktop.Views
                 grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
             }
 
-            Place(grid, Field("Name", _Name, "A unique, human-readable name for this endpoint (shown in the model picker)."), 0, 0);
-            Place(grid, Field("Adapter", _Adapter, "The provider protocol to speak: OpenAI, Ollama, Anthropic, Gemini, and so on."), 0, 1);
-            Place(grid, Field("Base URL", _BaseUrl, "The server address requests are sent to, e.g. http://localhost:11434 for Ollama."), 1, 0);
-            Place(grid, Field("Model", _Model, "The exact model identifier the provider expects (e.g. gpt-4o, llama3.1)."), 1, 1);
-            Place(grid, Field("API key (optional)", _ApiKey, "Secret key sent to authenticate. Leave blank for local servers that need none."), 2, 0);
-            Place(grid, Field("Reasoning effort", _ReasoningEffort, "How hard reasoning models think. “(off)” sends no reasoning field."), 2, 1);
-            Place(grid, Field("Max output tokens", _MaxTokens, "Upper bound on tokens the model may generate per response (1024–131072)."), 3, 0);
-            Place(grid, Field("Temperature (0.0–2.0)", _Temperature, "Sampling randomness: lower is more focused/deterministic, higher is more creative."), 3, 1);
-            Place(grid, Field("Context window", _ContextWindow, "The model's total token budget for prompt + response; drives compaction."), 4, 0);
-            Place(grid, Field("Timeout (ms)", _Timeout, "How long to wait for a single request before giving up (minimum 10000 ms)."), 4, 1);
-            Place(grid, Field("Max agent iterations (blank = global)", _MaxAgentIterations, "Cap on agent-loop turns for this endpoint. Blank inherits the global setting."), 5, 0);
-            Place(grid, Field("Gemini thinking budget (blank = default)", _GeminiThinkingBudget, "Gemini-only thinking token budget. -1 = dynamic, 0 = off. Blank uses the default."), 5, 1);
+            Place(grid, Field(Localizer.T("col.name"), _Name, Localizer.T("endpoint.form.name.tip")), 0, 0);
+            Place(grid, Field(Localizer.T("endpoint.col.adapter"), _Adapter, Localizer.T("endpoint.form.adapter.tip")), 0, 1);
+            Place(grid, Field(Localizer.T("endpoint.col.baseUrl"), _BaseUrl, Localizer.T("endpoint.form.baseUrl.tip")), 1, 0);
+            Place(grid, Field(Localizer.T("col.model"), _Model, Localizer.T("endpoint.form.model.tip")), 1, 1);
+            Place(grid, Field(Localizer.T("endpoint.form.apiKey"), _ApiKey, Localizer.T("endpoint.form.apiKey.tip")), 2, 0);
+            Place(grid, Field(Localizer.T("endpoint.form.reasoning"), _ReasoningEffort, Localizer.T("endpoint.form.reasoning.tip")), 2, 1);
+            Place(grid, Field(Localizer.T("endpoint.form.maxTokens"), _MaxTokens, Localizer.T("endpoint.form.maxTokens.tip")), 3, 0);
+            Place(grid, Field(Localizer.T("endpoint.form.temperature"), _Temperature, Localizer.T("endpoint.form.temperature.tip")), 3, 1);
+            Place(grid, Field(Localizer.T("endpoint.form.contextWindow"), _ContextWindow, Localizer.T("endpoint.form.contextWindow.tip")), 4, 0);
+            Place(grid, Field(Localizer.T("endpoint.form.timeout"), _Timeout, Localizer.T("endpoint.form.timeout.tip")), 4, 1);
+            Place(grid, Field(Localizer.T("endpoint.form.maxIterations"), _MaxAgentIterations, Localizer.T("endpoint.form.maxIterations.tip")), 5, 0);
+            Place(grid, Field(Localizer.T("endpoint.form.geminiBudget"), _GeminiThinkingBudget, Localizer.T("endpoint.form.geminiBudget.tip")), 5, 1);
 
             StackPanel checks = new StackPanel { Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
-            checks.Children.Add(_IsDefault.Tip("Make this the endpoint new conversations use by default."));
-            checks.Children.Add(_AutoApprove.Tip("Let this endpoint's tool calls run without the approval prompt (use with care)."));
-            checks.Children.Add(_ShowThinking.Tip("Stream the model's reasoning into the thinking panel when it emits any."));
+            checks.Children.Add(_IsDefault.Tip(Localizer.T("endpoint.form.useDefault.tip")));
+            checks.Children.Add(_AutoApprove.Tip(Localizer.T("endpoint.form.autoApprove.tip")));
+            checks.Children.Add(_ShowThinking.Tip(Localizer.T("endpoint.form.showThinking.tip")));
             Grid.SetRow(checks, 6);
             Grid.SetColumn(checks, 0);
             Grid.SetColumnSpan(checks, 2);
@@ -160,37 +161,37 @@ namespace Mux.Desktop.Views
             string name = (_Name.Text ?? string.Empty).Trim();
             if (name.Length == 0)
             {
-                _Error.Text = "Name is required.";
+                _Error.Text = Localizer.T("endpoint.form.err.nameRequired");
                 return;
             }
 
             if ((_BaseUrl.Text ?? string.Empty).Trim().Length == 0)
             {
-                _Error.Text = "Base URL is required.";
+                _Error.Text = Localizer.T("endpoint.form.err.baseUrlRequired");
                 return;
             }
 
             if (!double.TryParse(_Temperature.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double temperature) || temperature < 0.0 || temperature > 2.0)
             {
-                _Error.Text = "Temperature must be between 0.0 and 2.0.";
+                _Error.Text = Localizer.T("endpoint.form.err.temperature");
                 return;
             }
 
             if (!int.TryParse(_MaxTokens.Text, out int maxTokens) || maxTokens < 1024)
             {
-                _Error.Text = "Max output tokens must be a whole number of at least 1024.";
+                _Error.Text = Localizer.T("endpoint.form.err.maxTokens");
                 return;
             }
 
             if (!int.TryParse(_ContextWindow.Text, out int contextWindow) || contextWindow < 1024)
             {
-                _Error.Text = "Context window must be a whole number of at least 1024.";
+                _Error.Text = Localizer.T("endpoint.form.err.contextWindow");
                 return;
             }
 
             if (!int.TryParse(_Timeout.Text, out int timeout) || timeout < 10000)
             {
-                _Error.Text = "Timeout must be a whole number of at least 10000 ms.";
+                _Error.Text = Localizer.T("endpoint.form.err.timeout");
                 return;
             }
 
@@ -200,7 +201,7 @@ namespace Mux.Desktop.Views
             {
                 if (!int.TryParse(iterText, out int iters) || iters < 1 || iters > 100)
                 {
-                    _Error.Text = "Max agent iterations must be 1–100, or blank.";
+                    _Error.Text = Localizer.T("endpoint.form.err.maxIterations");
                     return;
                 }
 
@@ -213,7 +214,7 @@ namespace Mux.Desktop.Views
             {
                 if (!int.TryParse(budgetText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int budget) || budget < -1 || budget > 32768)
                 {
-                    _Error.Text = "Gemini thinking budget must be -1–32768, or blank.";
+                    _Error.Text = Localizer.T("endpoint.form.err.geminiBudget");
                     return;
                 }
 

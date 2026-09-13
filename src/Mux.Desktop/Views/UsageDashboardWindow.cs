@@ -9,6 +9,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Layout;
     using Avalonia.Media;
     using Mux.Core.Telemetry;
+    using Mux.Desktop.I18n;
     using Mux.Desktop.Services;
 
     /// <summary>
@@ -28,19 +29,36 @@ namespace Mux.Desktop.Views
         private static readonly IBrush CachedColor = new SolidColorBrush(Color.Parse("#3fb950"));
         private static readonly IBrush OutputColor = new SolidColorBrush(Color.Parse("#d29922"));
         private static readonly IBrush P99Color = new SolidColorBrush(Color.Parse("#dc2626"));
-        private static readonly string[] Headers = { "When", "Endpoint", "Conversation", "In", "Out", "Latency", "Cost", "Status" };
-
-        private static readonly string[] HeaderTips =
+        // Resolved per render (not cached) so a live locale change is reflected on the next open.
+        private static string[] Headers()
         {
-            "When the call happened (your local time).",
-            "The endpoint the call was sent to.",
-            "The conversation (session) the call belongs to.",
-            "Prompt (input) tokens sent.",
-            "Generated (output) tokens received.",
-            "Total round-trip time for the call.",
-            "Estimated US-dollar cost from the pricing table.",
-            "Whether the call succeeded or the error code."
-        };
+            return new[]
+            {
+                Localizer.T("usage.col.when"),
+                Localizer.T("usage.col.endpoint"),
+                Localizer.T("usage.col.conversation"),
+                Localizer.T("usage.col.in"),
+                Localizer.T("usage.col.out"),
+                Localizer.T("usage.col.latency"),
+                Localizer.T("usage.col.cost"),
+                Localizer.T("usage.col.status")
+            };
+        }
+
+        private static string[] HeaderTips()
+        {
+            return new[]
+            {
+                Localizer.T("usage.col.when.tip"),
+                Localizer.T("usage.col.endpoint.tip"),
+                Localizer.T("usage.col.conversation.tip"),
+                Localizer.T("usage.col.in.tip"),
+                Localizer.T("usage.col.out.tip"),
+                Localizer.T("usage.col.latency.tip"),
+                Localizer.T("usage.col.cost.tip"),
+                Localizer.T("usage.col.status.tip")
+            };
+        }
 
         private readonly IUsageAnalyticsService _Analytics;
         private readonly WrapPanel _KpiStrip = new WrapPanel { Orientation = Orientation.Horizontal };
@@ -54,8 +72,8 @@ namespace Mux.Desktop.Views
         private readonly List<UsageBucket> _Series = new List<UsageBucket>();
         private readonly List<UsageEventRow> _AllEvents = new List<UsageEventRow>();
         private readonly List<UsageEventRow> _Events = new List<UsageEventRow>();
-        private readonly TextBox _EndpointFilter = new TextBox { Width = 210, PlaceholderText = "Endpoint contains…" };
-        private readonly TextBox _ConversationFilter = new TextBox { Width = 230, PlaceholderText = "Conversation contains…" };
+        private readonly TextBox _EndpointFilter = new TextBox { Width = 210, PlaceholderText = Localizer.T("usage.endpointFilter.placeholder") };
+        private readonly TextBox _ConversationFilter = new TextBox { Width = 230, PlaceholderText = Localizer.T("usage.conversationFilter.placeholder") };
 
         private UsageRange _Range = UsageRange.Day;
         private ChartMetric _Metric = ChartMetric.Tokens;
@@ -78,7 +96,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Usage";
+            Title = Localizer.T("usage.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 940;
             Height = 720;
@@ -128,18 +146,18 @@ namespace Mux.Desktop.Views
         private Control BuildFilterBar(AppTheme theme)
         {
             StackPanel bar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 10, 0, 0) };
-            bar.Children.Add(new TextBlock { Text = "Filter", VerticalAlignment = VerticalAlignment.Center, Foreground = theme.Muted, FontSize = 12, FontWeight = FontWeight.SemiBold });
+            bar.Children.Add(new TextBlock { Text = Localizer.T("usage.filter"), VerticalAlignment = VerticalAlignment.Center, Foreground = theme.Muted, FontSize = 12, FontWeight = FontWeight.SemiBold });
 
-            _EndpointFilter.Tip("Show only calls whose endpoint name contains this text. Filters the table and recomputes the KPIs and charts above.");
+            _EndpointFilter.Tip(Localizer.T("usage.endpointFilter.tip"));
             _EndpointFilter.TextChanged += (sender, args) => ApplyFilters(AppTheme.Current);
             bar.Children.Add(_EndpointFilter);
 
-            _ConversationFilter.Tip("Show only calls whose conversation name contains this text. Filters the table and recomputes the KPIs and charts above.");
+            _ConversationFilter.Tip(Localizer.T("usage.conversationFilter.tip"));
             _ConversationFilter.TextChanged += (sender, args) => ApplyFilters(AppTheme.Current);
             bar.Children.Add(_ConversationFilter);
 
-            Button clear = new Button { Content = "Clear", Padding = new Thickness(10, 4, 10, 4) };
-            clear.Tip("Clear both filters and show all loaded calls.");
+            Button clear = new Button { Content = Localizer.T("usage.clear"), Padding = new Thickness(10, 4, 10, 4) };
+            clear.Tip(Localizer.T("usage.clear.tip"));
             clear.Click += (sender, args) =>
             {
                 _EndpointFilter.Text = string.Empty;
@@ -152,16 +170,16 @@ namespace Mux.Desktop.Views
         private Control BuildHeader(AppTheme theme)
         {
             DockPanel header = new DockPanel();
-            TextBlock title = new TextBlock { Text = "Usage", FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
-            title.Tip("Token, cost, latency, and per-call telemetry for the selected time range.");
+            TextBlock title = new TextBlock { Text = Localizer.T("usage.title"), FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
+            title.Tip(Localizer.T("usage.title.tip"));
             DockPanel.SetDock(title, Dock.Left);
             header.Children.Add(title);
 
             StackPanel ranges = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Right };
-            ranges.Children.Add(RangeButton("Hour", UsageRange.Hour, theme).Tip("Show usage from the last hour."));
-            ranges.Children.Add(RangeButton("Day", UsageRange.Day, theme).Tip("Show usage from the last day."));
-            ranges.Children.Add(RangeButton("Week", UsageRange.Week, theme).Tip("Show usage from the last week."));
-            ranges.Children.Add(RangeButton("Month", UsageRange.Month, theme).Tip("Show usage from the last month."));
+            ranges.Children.Add(RangeButton(Localizer.T("usage.range.hour"), UsageRange.Hour, theme).Tip(Localizer.T("usage.range.hour.tip")));
+            ranges.Children.Add(RangeButton(Localizer.T("usage.range.day"), UsageRange.Day, theme).Tip(Localizer.T("usage.range.day.tip")));
+            ranges.Children.Add(RangeButton(Localizer.T("usage.range.week"), UsageRange.Week, theme).Tip(Localizer.T("usage.range.week.tip")));
+            ranges.Children.Add(RangeButton(Localizer.T("usage.range.month"), UsageRange.Month, theme).Tip(Localizer.T("usage.range.month.tip")));
             DockPanel.SetDock(ranges, Dock.Right);
             header.Children.Add(ranges);
             return header;
@@ -189,12 +207,12 @@ namespace Mux.Desktop.Views
         {
             _MetricTabs.Children.Clear();
             _MetricButtons.Clear();
-            AddMetricTab("Tokens", ChartMetric.Tokens, theme, "Chart prompt/cached/output tokens per time bucket (stacked).");
-            AddMetricTab("Cost", ChartMetric.Cost, theme, "Chart estimated US-dollar cost per time bucket.");
-            AddMetricTab("Latency", ChartMetric.Latency, theme, "Chart total response time distribution (min–max, avg, p95, p99).");
-            AddMetricTab("TTFT", ChartMetric.Ttft, theme, "Chart time-to-first-token distribution per time bucket.");
-            AddMetricTab("Streaming", ChartMetric.Streaming, theme, "Chart streaming (generation) time distribution per time bucket.");
-            AddMetricTab("Throughput", ChartMetric.Throughput, theme, "Chart output tokens-per-second distribution per time bucket.");
+            AddMetricTab(Localizer.T("usage.metric.tokens"), ChartMetric.Tokens, theme, Localizer.T("usage.metric.tokens.tip"));
+            AddMetricTab(Localizer.T("usage.metric.cost"), ChartMetric.Cost, theme, Localizer.T("usage.metric.cost.tip"));
+            AddMetricTab(Localizer.T("usage.metric.latency"), ChartMetric.Latency, theme, Localizer.T("usage.metric.latency.tip"));
+            AddMetricTab(Localizer.T("usage.metric.ttft"), ChartMetric.Ttft, theme, Localizer.T("usage.metric.ttft.tip"));
+            AddMetricTab(Localizer.T("usage.metric.streaming"), ChartMetric.Streaming, theme, Localizer.T("usage.metric.streaming.tip"));
+            AddMetricTab(Localizer.T("usage.metric.throughput"), ChartMetric.Throughput, theme, Localizer.T("usage.metric.throughput.tip"));
         }
 
         private void AddMetricTab(string label, ChartMetric metric, AppTheme theme, string tip)
@@ -225,10 +243,12 @@ namespace Mux.Desktop.Views
         private void BuildEventsHeader(AppTheme theme)
         {
             _EventsHeader.Children.Clear();
-            for (int i = 0; i < Headers.Length; i++)
+            string[] headers = Headers();
+            string[] headerTips = HeaderTips();
+            for (int i = 0; i < headers.Length; i++)
             {
                 int column = i;
-                string caption = Headers[i];
+                string caption = headers[i];
                 if (i == _SortColumn)
                 {
                     caption += _SortDescending ? "  ▼" : "  ▲";
@@ -242,7 +262,7 @@ namespace Mux.Desktop.Views
                     Padding = new Thickness(4, 2, 4, 2),
                     HorizontalContentAlignment = HorizontalAlignment.Left
                 };
-                cell.Tip((i < HeaderTips.Length ? HeaderTips[i] : Headers[i]) + " Click to sort.");
+                cell.Tip((i < headerTips.Length ? headerTips[i] : headers[i]) + " " + Localizer.T("usage.sortHint"));
                 cell.Click += (sender, args) => SortBy(column, theme);
                 Grid.SetColumn(cell, i);
                 _EventsHeader.Children.Add(cell);
@@ -271,7 +291,7 @@ namespace Mux.Desktop.Views
 
             if (!_Analytics.IsEnabled)
             {
-                _Status.Text = "Usage telemetry is disabled. Enable it in Settings to see analytics.";
+                _Status.Text = Localizer.T("usage.disabled");
                 _KpiStrip.Children.Clear();
                 _ChartHost.Child = null;
                 _EventsList.Children.Clear();
@@ -293,7 +313,7 @@ namespace Mux.Desktop.Views
             }
             catch (Exception ex)
             {
-                _Status.Text = "Could not load usage: " + ex.Message;
+                _Status.Text = Localizer.T("usage.loadError") + ex.Message;
             }
         }
 
@@ -332,10 +352,19 @@ namespace Mux.Desktop.Views
             RenderEvents(theme);
 
             bool filtered = endpointFilter.Length > 0 || conversationFilter.Length > 0;
-            string scope = filtered ? " of " + _AllEvents.Count + " loaded" : string.Empty;
-            string truncated = _LoadTruncated ? " (most recent " + _AllEvents.Count + " loaded)" : string.Empty;
-            _Status.Text = "Showing " + _Events.Count + scope + " call" + (_Events.Count == 1 ? string.Empty : "s")
-                + " in the last " + _Range.ToString().ToLowerInvariant() + (filtered ? ", filtered" : string.Empty) + "." + truncated;
+            string scope = filtered ? " " + Localizer.T("usage.status.of") + " " + _AllEvents.Count + " " + Localizer.T("usage.status.loaded") : string.Empty;
+            string truncated = _LoadTruncated ? " (" + Localizer.T("usage.status.mostRecent") + " " + _AllEvents.Count + " " + Localizer.T("usage.status.loaded") + ")" : string.Empty;
+            string rangeWord = _Range switch
+            {
+                UsageRange.Hour => Localizer.T("usage.range.hour"),
+                UsageRange.Week => Localizer.T("usage.range.week"),
+                UsageRange.Month => Localizer.T("usage.range.month"),
+                _ => Localizer.T("usage.range.day")
+            };
+            _Status.Text = Localizer.T("usage.status.showing") + " " + _Events.Count + scope + " "
+                + (_Events.Count == 1 ? Localizer.T("usage.status.call") : Localizer.T("usage.status.calls"))
+                + " " + Localizer.T("usage.status.inTheLast") + " " + rangeWord
+                + (filtered ? ", " + Localizer.T("usage.status.filtered") : string.Empty) + "." + truncated;
         }
 
         private static UsageMetrics ComputeMetrics(List<UsageEventRow> events)
@@ -448,12 +477,12 @@ namespace Mux.Desktop.Views
         private void RenderKpis(UsageMetrics metrics, AppTheme theme)
         {
             _KpiStrip.Children.Clear();
-            _KpiStrip.Children.Add(Kpi("Total tokens", metrics.TotalTokens.ToString("#,##0"), "Sum of prompt, cached, and output tokens across every call in this range.", theme));
-            _KpiStrip.Children.Add(Kpi("Cost", "$" + metrics.CostUsd.ToString("0.0000"), "Estimated total US-dollar cost, computed from the pricing table.", theme));
-            _KpiStrip.Children.Add(Kpi("Calls", metrics.Calls.ToString("#,##0"), "Number of model calls recorded in this range.", theme));
-            _KpiStrip.Children.Add(Kpi("Error rate", (metrics.ErrorRate * 100).ToString("0.#") + "%", "Share of calls in this range that failed.", theme));
-            _KpiStrip.Children.Add(Kpi("Avg TTFT", metrics.AvgTtftMs.ToString("#,##0") + " ms", "Average time to first token — how quickly responses start streaming.", theme));
-            _KpiStrip.Children.Add(Kpi("Avg latency", metrics.AvgTotalMs.ToString("#,##0") + " ms", "Average total round-trip time per call.", theme));
+            _KpiStrip.Children.Add(Kpi(Localizer.T("usage.kpi.totalTokens"), metrics.TotalTokens.ToString("#,##0"), Localizer.T("usage.kpi.totalTokens.tip"), theme));
+            _KpiStrip.Children.Add(Kpi(Localizer.T("usage.kpi.cost"), "$" + metrics.CostUsd.ToString("0.0000"), Localizer.T("usage.kpi.cost.tip"), theme));
+            _KpiStrip.Children.Add(Kpi(Localizer.T("usage.kpi.calls"), metrics.Calls.ToString("#,##0"), Localizer.T("usage.kpi.calls.tip"), theme));
+            _KpiStrip.Children.Add(Kpi(Localizer.T("usage.kpi.errorRate"), (metrics.ErrorRate * 100).ToString("0.#") + "%", Localizer.T("usage.kpi.errorRate.tip"), theme));
+            _KpiStrip.Children.Add(Kpi(Localizer.T("usage.kpi.avgTtft"), metrics.AvgTtftMs.ToString("#,##0") + " ms", Localizer.T("usage.kpi.avgTtft.tip"), theme));
+            _KpiStrip.Children.Add(Kpi(Localizer.T("usage.kpi.avgLatency"), metrics.AvgTotalMs.ToString("#,##0") + " ms", Localizer.T("usage.kpi.avgLatency.tip"), theme));
         }
 
         private Control Kpi(string label, string value, string tip, AppTheme theme)
@@ -479,7 +508,7 @@ namespace Mux.Desktop.Views
         {
             if (_Series.Count == 0)
             {
-                return new TextBlock { Text = "No activity in this range.", Foreground = theme.Muted, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+                return new TextBlock { Text = Localizer.T("usage.noActivity"), Foreground = theme.Muted, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
             }
 
             double max = ComputeMax();
@@ -569,18 +598,18 @@ namespace Mux.Desktop.Views
 
             if (_Metric == ChartMetric.Tokens)
             {
-                legend.Children.Add(LegendItem("Prompt", PromptColor, theme));
-                legend.Children.Add(LegendItem("Cached", CachedColor, theme));
-                legend.Children.Add(LegendItem("Output", OutputColor, theme));
+                legend.Children.Add(LegendItem(Localizer.T("usage.legend.prompt"), PromptColor, theme));
+                legend.Children.Add(LegendItem(Localizer.T("usage.legend.cached"), CachedColor, theme));
+                legend.Children.Add(LegendItem(Localizer.T("usage.legend.output"), OutputColor, theme));
                 return legend;
             }
 
             if (IsDistribution())
             {
-                legend.Children.Add(LegendItem("avg–p95", boxColor, theme));
-                legend.Children.Add(LegendItem("min–max", theme.Muted, theme));
-                legend.Children.Add(LegendItem("avg", theme.Text, theme));
-                legend.Children.Add(LegendItem("p99", P99Color, theme));
+                legend.Children.Add(LegendItem(Localizer.T("usage.legend.avgP95"), boxColor, theme));
+                legend.Children.Add(LegendItem(Localizer.T("usage.legend.minMax"), theme.Muted, theme));
+                legend.Children.Add(LegendItem(Localizer.T("usage.legend.avg"), theme.Text, theme));
+                legend.Children.Add(LegendItem(Localizer.T("usage.legend.p99"), P99Color, theme));
                 return legend;
             }
 
@@ -922,12 +951,12 @@ namespace Mux.Desktop.Views
 
                 TextBlock status = new TextBlock
                 {
-                    Text = row.Success ? "ok" : (string.IsNullOrEmpty(row.ErrorCode) ? "error" : row.ErrorCode),
+                    Text = row.Success ? Localizer.T("usage.status.ok") : (string.IsNullOrEmpty(row.ErrorCode) ? Localizer.T("usage.status.error") : row.ErrorCode),
                     Foreground = row.Success ? theme.Success : theme.Error,
                     FontSize = 12,
                     Margin = new Thickness(4, 2, 4, 2)
                 };
-                status.Tip(row.Success ? "The call succeeded." : "The call failed" + (string.IsNullOrEmpty(row.ErrorCode) ? "." : ": " + row.ErrorCode));
+                status.Tip(row.Success ? Localizer.T("usage.status.ok.tip") : Localizer.T("usage.status.failed.tip") + (string.IsNullOrEmpty(row.ErrorCode) ? "." : ": " + row.ErrorCode));
                 Grid.SetColumn(status, 7);
                 line.Children.Add(status);
 

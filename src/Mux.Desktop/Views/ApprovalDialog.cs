@@ -6,6 +6,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Layout;
     using Avalonia.Media;
     using Mux.Core.Models;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A modal dialog asking the user to approve a proposed mutating tool call. Returns "y" (approve once),
@@ -23,7 +24,7 @@ namespace Mux.Desktop.Views
         {
             ArgumentNullException.ThrowIfNull(toolCall);
 
-            Title = "Approve tool";
+            Title = Localizer.T("approval.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 520;
             Height = 320;
@@ -36,7 +37,7 @@ namespace Mux.Desktop.Views
 
             panel.Children.Add(new TextBlock
             {
-                Text = "The agent wants to run a tool that can modify files or run commands:",
+                Text = Localizer.T("approval.body"),
                 TextWrapping = TextWrapping.Wrap
             });
 
@@ -68,17 +69,17 @@ namespace Mux.Desktop.Views
                 Spacing = 8
             };
 
-            Button deny = new Button { Content = "Deny" };
+            Button deny = new Button { Content = Localizer.T("approval.deny") };
             deny.Click += (sender, args) => Close("n");
             buttons.Children.Add(deny);
 
-            Button always = new Button { Content = "Always this session" };
+            Button always = new Button { Content = Localizer.T("approval.always") };
             always.Click += (sender, args) => Close("always");
             buttons.Children.Add(always);
 
             Button approve = new Button
             {
-                Content = "Approve once",
+                Content = Localizer.T("approval.approveOnce"),
                 Background = AppTheme.Current.AccentButton,
                 Foreground = AppTheme.Current.AccentText
             };

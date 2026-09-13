@@ -11,6 +11,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Threading;
     using Mux.Core.Models;
     using Mux.Core.Tools;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// Validates connectivity to a single MCP server by initializing a temporary
@@ -33,7 +34,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Validate MCP server";
+            Title = Localizer.T("mcpVal.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 560;
             Height = 460;
@@ -43,7 +44,7 @@ namespace Mux.Desktop.Views
             Background = theme.Surface;
 
             DockPanel root = new DockPanel { Margin = new Thickness(20) };
-            TextBlock title = new TextBlock { Text = "Validating \"" + server.Name + "\"", FontSize = 18, FontWeight = FontWeight.SemiBold, Foreground = theme.Text };
+            TextBlock title = new TextBlock { Text = Localizer.T("mcpVal.validating") + " \"" + server.Name + "\"", FontSize = 18, FontWeight = FontWeight.SemiBold, Foreground = theme.Text };
             DockPanel.SetDock(title, Dock.Top);
             root.Children.Add(title);
 
@@ -51,7 +52,7 @@ namespace Mux.Desktop.Views
             root.Children.Add(new ScrollViewer { Content = _Body });
             Content = root;
 
-            _Body.Children.Add(new TextBlock { Text = "Connecting…", Foreground = theme.Muted });
+            _Body.Children.Add(new TextBlock { Text = Localizer.T("mcpVal.connecting"), Foreground = theme.Muted });
             _ = RunAsync();
         }
 
@@ -87,7 +88,7 @@ namespace Mux.Desktop.Views
 
             if (error != null)
             {
-                _Body.Children.Add(Pill("Failed", theme.Error, Brushes.White));
+                _Body.Children.Add(Pill(Localizer.T("mcpVal.failed"), theme.Error, Brushes.White));
                 _Body.Children.Add(new TextBlock { Text = error, Foreground = theme.Text, TextWrapping = TextWrapping.Wrap });
                 return;
             }
@@ -96,9 +97,9 @@ namespace Mux.Desktop.Views
             foreach (McpConnectionResult result in results)
             {
                 connected = connected || result.Connected;
-                _Body.Children.Add(Pill(result.Connected ? "Connected" : "Failed", result.Connected ? theme.Success : theme.Error, Brushes.White));
-                _Body.Children.Add(new TextBlock { Text = "Transport: " + result.Method, Foreground = theme.Muted, FontSize = 12 });
-                _Body.Children.Add(new TextBlock { Text = "Tools discovered: " + result.ToolCount, Foreground = theme.Muted, FontSize = 12 });
+                _Body.Children.Add(Pill(result.Connected ? Localizer.T("mcpVal.connected") : Localizer.T("mcpVal.failed"), result.Connected ? theme.Success : theme.Error, Brushes.White));
+                _Body.Children.Add(new TextBlock { Text = Localizer.T("mcpVal.transport") + " " + result.Method, Foreground = theme.Muted, FontSize = 12 });
+                _Body.Children.Add(new TextBlock { Text = Localizer.T("mcpVal.toolsDiscovered") + " " + result.ToolCount, Foreground = theme.Muted, FontSize = 12 });
                 if (!string.IsNullOrEmpty(result.Error))
                 {
                     _Body.Children.Add(new TextBlock { Text = result.Error, Foreground = theme.Error, TextWrapping = TextWrapping.Wrap });
@@ -107,12 +108,12 @@ namespace Mux.Desktop.Views
 
             if (results.Count == 0)
             {
-                _Body.Children.Add(new TextBlock { Text = "No connection result was reported.", Foreground = theme.Muted });
+                _Body.Children.Add(new TextBlock { Text = Localizer.T("mcpVal.noResult"), Foreground = theme.Muted });
             }
 
             if (connected && tools.Count > 0)
             {
-                _Body.Children.Add(new TextBlock { Text = "Tools", FontWeight = FontWeight.SemiBold, Foreground = theme.Text, Margin = new Thickness(0, 8, 0, 0) });
+                _Body.Children.Add(new TextBlock { Text = Localizer.T("mcpVal.tools"), FontWeight = FontWeight.SemiBold, Foreground = theme.Text, Margin = new Thickness(0, 8, 0, 0) });
                 foreach (ToolDefinition tool in tools)
                 {
                     _Body.Children.Add(new TextBlock { Text = "• " + tool.Name, Foreground = theme.Text, FontSize = 12 });

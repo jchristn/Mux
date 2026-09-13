@@ -6,6 +6,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Controls;
     using Avalonia.Layout;
     using Avalonia.Media;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A full-height editor for a skill's <c>SKILL.md</c> (parity with the TUI's skill editor). Loads the file
@@ -37,7 +38,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Edit skill · " + skillName;
+            Title = Localizer.T("skill.edit.title") + " · " + skillName;
             Icon = IconResources.LoadWindowIcon();
             Width = 1230;
             Height = 900;
@@ -54,7 +55,7 @@ namespace Mux.Desktop.Views
             catch (Exception exception)
             {
                 _Editor.Text = string.Empty;
-                _Error.Text = "Could not read the skill: " + exception.Message;
+                _Error.Text = Localizer.T("skill.editor.readError") + exception.Message;
             }
 
             Content = BuildContent(theme);
@@ -69,12 +70,12 @@ namespace Mux.Desktop.Views
             root.Children.Add(path);
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Close without writing changes to SKILL.md.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("skill.editor.cancel.tip"));
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
-            Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
-            ok.Tip("Write the edited SKILL.md back to disk.");
+            Button ok = new Button { Content = Localizer.T("act.save"), Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip(Localizer.T("skill.editor.save.tip"));
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -83,7 +84,7 @@ namespace Mux.Desktop.Views
             DockPanel.SetDock(_Error, Dock.Bottom);
             root.Children.Add(_Error);
 
-            _Editor.Tip("The skill's SKILL.md: YAML front-matter (name, description, commands) followed by the skill's markdown instructions.");
+            _Editor.Tip(Localizer.T("skill.editor.body.tip"));
             root.Children.Add(new Border
             {
                 BorderBrush = theme.Border,
@@ -103,7 +104,7 @@ namespace Mux.Desktop.Views
             }
             catch (Exception exception)
             {
-                _Error.Text = "Could not save the skill: " + exception.Message;
+                _Error.Text = Localizer.T("skill.editor.saveError") + exception.Message;
                 return;
             }
 

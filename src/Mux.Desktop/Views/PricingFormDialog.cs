@@ -7,6 +7,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Layout;
     using Avalonia.Media;
     using Mux.Core.Telemetry;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A form for creating or editing one model's pricing (input, cached-input, and output US dollars per
@@ -34,7 +35,7 @@ namespace Mux.Desktop.Views
             _Pricing = pricing ?? throw new ArgumentNullException(nameof(pricing));
             ModelName = model ?? string.Empty;
 
-            Title = isNew ? "Add model pricing" : "Edit model pricing";
+            Title = isNew ? Localizer.T("pricing.form.addTitle") : Localizer.T("pricing.form.editTitle");
             Icon = IconResources.LoadWindowIcon();
             Width = 520;
             SizeToContent = SizeToContent.Height;
@@ -57,19 +58,19 @@ namespace Mux.Desktop.Views
         {
             AppTheme theme = AppTheme.Current;
             StackPanel form = new StackPanel { Margin = new Thickness(24), Spacing = 10 };
-            form.Children.Add(Field("Model", _Model, "The model id these rates apply to (must match the model name in usage records)."));
-            form.Children.Add(Field("Input $/Mtok", _Input, "US dollars per million prompt (input) tokens."));
-            form.Children.Add(Field("Cached input $/Mtok", _Cached, "US dollars per million cached-input tokens."));
-            form.Children.Add(Field("Output $/Mtok", _Output, "US dollars per million generated (output) tokens."));
+            form.Children.Add(Field(Localizer.T("col.model"), _Model, Localizer.T("pricing.model.tip")));
+            form.Children.Add(Field(Localizer.T("pricing.col.input"), _Input, Localizer.T("pricing.col.input.tip")));
+            form.Children.Add(Field(Localizer.T("pricing.cached"), _Cached, Localizer.T("pricing.cached.tip")));
+            form.Children.Add(Field(Localizer.T("pricing.col.output"), _Output, Localizer.T("pricing.col.output.tip")));
             form.Children.Add(_Error);
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Discard changes and close.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("pricing.cancel.tip"));
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
-            Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
-            ok.Tip("Save these rates for the model.");
+            Button ok = new Button { Content = Localizer.T("act.save"), Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip(Localizer.T("pricing.save.tip"));
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             form.Children.Add(buttons);
@@ -91,13 +92,13 @@ namespace Mux.Desktop.Views
             string model = (_Model.Text ?? string.Empty).Trim();
             if (model.Length == 0)
             {
-                _Error.Text = "Model is required.";
+                _Error.Text = Localizer.T("pricing.err.modelRequired");
                 return;
             }
 
             if (!TryParse(_Input.Text, out double input) || !TryParse(_Cached.Text, out double cached) || !TryParse(_Output.Text, out double output))
             {
-                _Error.Text = "Rates must be non-negative numbers.";
+                _Error.Text = Localizer.T("pricing.err.rates");
                 return;
             }
 

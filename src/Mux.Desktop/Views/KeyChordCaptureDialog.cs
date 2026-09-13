@@ -7,6 +7,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Input;
     using Avalonia.Layout;
     using Avalonia.Media;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A modal that captures a single key chord by listening for a key press and formatting it as a
@@ -31,7 +32,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Rebind key";
+            Title = Localizer.T("keybinding.capture.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 440;
             SizeToContent = SizeToContent.Height;
@@ -40,8 +41,8 @@ namespace Mux.Desktop.Views
             Background = theme.Surface;
 
             StackPanel panel = new StackPanel { Margin = new Thickness(24), Spacing = 14 };
-            panel.Children.Add(new TextBlock { Text = "Press the key combination for \"" + commandTitle + "\".", Foreground = theme.Text, TextWrapping = TextWrapping.Wrap });
-            panel.Children.Add(new TextBlock { Text = "Current: " + (string.IsNullOrEmpty(currentChord) ? "unbound" : currentChord), Foreground = theme.Muted, FontSize = 12 });
+            panel.Children.Add(new TextBlock { Text = Localizer.T("keybinding.capture.prompt") + " \"" + commandTitle + "\".", Foreground = theme.Text, TextWrapping = TextWrapping.Wrap });
+            panel.Children.Add(new TextBlock { Text = Localizer.T("keybinding.capture.current") + " " + (string.IsNullOrEmpty(currentChord) ? Localizer.T("keybinding.capture.unbound") : currentChord), Foreground = theme.Muted, FontSize = 12 });
 
             _Preview = new TextBlock
             {
@@ -55,12 +56,12 @@ namespace Mux.Desktop.Views
             panel.Children.Add(new Border { Background = theme.SurfaceAlt, BorderBrush = theme.Border, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(12, 16, 12, 16), Child = _Preview });
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Keep the current binding.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("keybinding.capture.cancel.tip"));
             cancel.Click += (sender, args) => Close(null);
             buttons.Children.Add(cancel);
-            Button ok = new Button { Content = "Assign", Background = theme.AccentButton, Foreground = theme.AccentText, IsEnabled = false };
-            ok.Tip("Assign the captured chord.");
+            Button ok = new Button { Content = Localizer.T("keybinding.assign"), Background = theme.AccentButton, Foreground = theme.AccentText, IsEnabled = false };
+            ok.Tip(Localizer.T("keybinding.assign.tip"));
             ok.Click += (sender, args) => Close(_Captured);
             buttons.Children.Add(ok);
             panel.Children.Add(buttons);

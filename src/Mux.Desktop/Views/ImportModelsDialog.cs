@@ -12,6 +12,7 @@ namespace Mux.Desktop.Views
     using Mux.Core.Models;
     using Mux.Core.Settings;
     using Mux.Core.Utility;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// Discovers the models advertised by an endpoint's backend (parity row 15 — "Import models from Ollama",
@@ -41,7 +42,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Import models";
+            Title = Localizer.T("import.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 560;
             Height = 600;
@@ -51,9 +52,9 @@ namespace Mux.Desktop.Views
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = theme.Surface;
 
-            _Status = new TextBlock { Text = "Querying " + source.Name + "…", Foreground = theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap };
-            _Import = new Button { Content = "Import selected", Background = theme.AccentButton, Foreground = theme.AccentText, IsEnabled = false };
-            _Import.Tip("Create a new endpoint for each checked model, cloning this endpoint's connection settings.");
+            _Status = new TextBlock { Text = Localizer.T("import.querying") + source.Name + "…", Foreground = theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap };
+            _Import = new Button { Content = Localizer.T("import.importSelected"), Background = theme.AccentButton, Foreground = theme.AccentText, IsEnabled = false };
+            _Import.Tip(Localizer.T("import.importSelected.tip"));
             _Import.Click += (sender, args) => OnImport();
 
             Content = BuildContent(theme);
@@ -65,14 +66,14 @@ namespace Mux.Desktop.Views
             DockPanel root = new DockPanel { Margin = new Thickness(20) };
 
             StackPanel head = new StackPanel { Spacing = 4 };
-            head.Children.Add(new TextBlock { Text = "Import models from " + _Source.Name, FontSize = 18, FontWeight = FontWeight.SemiBold, Foreground = theme.Text });
+            head.Children.Add(new TextBlock { Text = Localizer.T("import.heading") + _Source.Name, FontSize = 18, FontWeight = FontWeight.SemiBold, Foreground = theme.Text });
             head.Children.Add(_Status);
             DockPanel.SetDock(head, Dock.Top);
             root.Children.Add(head);
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Close without importing.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("import.cancel.tip"));
             cancel.Click += (sender, args) => Close(null);
             buttons.Children.Add(cancel);
             buttons.Children.Add(_Import);
@@ -118,7 +119,7 @@ namespace Mux.Desktop.Views
             if (!result.Success)
             {
                 _Status.Foreground = theme.Error;
-                _Status.Text = "Could not list models: " + result.ErrorMessage + " (" + result.ErrorCode + ")";
+                _Status.Text = Localizer.T("import.err.list") + result.ErrorMessage + " (" + result.ErrorCode + ")";
                 return;
             }
 
@@ -136,7 +137,7 @@ namespace Mux.Desktop.Views
 
                 CheckBox box = new CheckBox
                 {
-                    Content = exists ? model + "   (already configured)" : model,
+                    Content = exists ? model + Localizer.T("import.alreadyConfigured") : model,
                     IsChecked = !exists,
                     Tag = model,
                     Foreground = exists ? theme.Muted : theme.Text
@@ -148,12 +149,12 @@ namespace Mux.Desktop.Views
 
             if (models.Count == 0)
             {
-                _Status.Text = "The backend reported no models.";
+                _Status.Text = Localizer.T("import.noModels");
                 return;
             }
 
             _Status.Foreground = theme.Muted;
-            _Status.Text = "Found " + models.Count + " model" + (models.Count == 1 ? string.Empty : "s") + " · " + fresh + " new. Check the ones to add.";
+            _Status.Text = Localizer.T("import.found") + " " + models.Count + " " + (models.Count == 1 ? Localizer.T("import.modelSingular") : Localizer.T("import.modelPlural")) + " · " + fresh + " " + Localizer.T("import.newSuffix");
             UpdateImportEnabled();
         }
 

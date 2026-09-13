@@ -107,6 +107,30 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("DesktopLocalization", "FullCatalogParity", "Every key in the merged catalog resolves (non-blank, non-key) in every supported locale", (CancellationToken ct) =>
+                    {
+                        LocalizationService service = new LocalizationService();
+
+                        // The complete key universe = dashboard-shared pack ∪ desktop-specific pack (English side).
+                        HashSet<string> keys = new HashSet<string>(StringComparer.Ordinal);
+                        foreach (string k in DashboardStrings.Build()["en"].Keys) { keys.Add(k); }
+                        foreach (string k in DesktopStrings.Build()["en"].Keys) { keys.Add(k); }
+                        MuxAssert.IsTrue(keys.Count > 600, "catalog key count sanity (" + keys.Count + ")");
+
+                        foreach (LocaleInfo locale in service.SupportedLocales)
+                        {
+                            service.SetActiveLocale(locale.Code);
+                            foreach (string key in keys)
+                            {
+                                string value = service.Get(key);
+                                MuxAssert.IsFalse(string.IsNullOrEmpty(value), locale.Code + ":" + key + " blank");
+                                MuxAssert.AreNotEqual(key, value, locale.Code + ":" + key + " unresolved");
+                            }
+                        }
+
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("DesktopLocalization", "KnownTranslations", "Spot-check real translations from both the dashboard-shared and desktop-specific catalogs", (CancellationToken ct) =>
                     {
                         LocalizationService service = new LocalizationService();

@@ -13,6 +13,7 @@ namespace Mux.Desktop.Views
     using Mux.Core.Models;
     using Mux.Core.Settings;
     using Mux.Core.Tools;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A manager for configured MCP servers (parity with the TUI's <c>/mcp</c>): a sortable table with a live
@@ -36,7 +37,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "MCP servers";
+            Title = Localizer.T("nav.mcp");
             Icon = IconResources.LoadWindowIcon();
             Width = 900;
             Height = 580;
@@ -64,11 +65,11 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<McpServerConfig>>
             {
-                new TableColumn<McpServerConfig>("", StatusGlyph, new GridLength(28), null, null, StatusBrush, tooltip: "Connectivity, probed when this window opens: green ✓ = reachable, red ✗ = failed, … = checking."),
-                new TableColumn<McpServerConfig>("Name", s => s.Name, new GridLength(2, GridUnitType.Star), s => s.Name, tooltip: "The MCP server's unique name, used to reference its tools."),
-                new TableColumn<McpServerConfig>("Transport", s => s.Transport.ToString(), new GridLength(1, GridUnitType.Star), s => s.Transport.ToString(), tooltip: "How mux connects: stdio launches a local process; http connects to a URL."),
-                new TableColumn<McpServerConfig>("Target", DescribeTarget, new GridLength(3, GridUnitType.Star), DescribeTarget, tooltip: "The launch command (stdio) or endpoint URL (http) this server uses."),
-                new TableColumn<McpServerConfig>("Auth", s => s.Auth.Type.ToString(), new GridLength(1, GridUnitType.Star), s => s.Auth.Type.ToString(), tooltip: "The authentication scheme sent with HTTP requests (none, bearer token, or API key header).")
+                new TableColumn<McpServerConfig>("", StatusGlyph, new GridLength(28), null, null, StatusBrush, tooltip: Localizer.T("mcp.col.status.tip")),
+                new TableColumn<McpServerConfig>(Localizer.T("col.name"), s => s.Name, new GridLength(2, GridUnitType.Star), s => s.Name, tooltip: Localizer.T("mcp.col.name.tip")),
+                new TableColumn<McpServerConfig>(Localizer.T("mcp.transport"), s => s.Transport.ToString(), new GridLength(1, GridUnitType.Star), s => s.Transport.ToString(), tooltip: Localizer.T("mcp.col.transport.tip")),
+                new TableColumn<McpServerConfig>(Localizer.T("mcp.target"), DescribeTarget, new GridLength(3, GridUnitType.Star), DescribeTarget, tooltip: Localizer.T("mcp.col.target.tip")),
+                new TableColumn<McpServerConfig>(Localizer.T("mcp.auth"), s => s.Auth.Type.ToString(), new GridLength(1, GridUnitType.Star), s => s.Auth.Type.ToString(), tooltip: Localizer.T("mcp.col.auth.tip"))
             };
         }
 
@@ -76,9 +77,9 @@ namespace Mux.Desktop.Views
         {
             return new List<TableRowAction<McpServerConfig>>
             {
-                new TableRowAction<McpServerConfig>("Edit", s => OnEdit(s)),
-                new TableRowAction<McpServerConfig>("Validate connectivity", s => OnValidate(s)),
-                new TableRowAction<McpServerConfig>("Delete", s => OnDelete(s), destructive: true)
+                new TableRowAction<McpServerConfig>(Localizer.T("act.edit"), s => OnEdit(s)),
+                new TableRowAction<McpServerConfig>(Localizer.T("mcp.action.validate"), s => OnValidate(s)),
+                new TableRowAction<McpServerConfig>(Localizer.T("act.delete"), s => OnDelete(s), destructive: true)
             };
         }
 
@@ -124,12 +125,12 @@ namespace Mux.Desktop.Views
             DockPanel root = new DockPanel { Margin = new Thickness(20) };
 
             DockPanel header = new DockPanel();
-            TextBlock title = new TextBlock { Text = "MCP servers", FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
+            TextBlock title = new TextBlock { Text = Localizer.T("nav.mcp"), FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(title, Dock.Left);
             header.Children.Add(title);
 
-            Button add = new Button { Content = "＋  Add server", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
-            add.Tip("Add a new MCP server to extend the agent with external tools.");
+            Button add = new Button { Content = "＋  " + Localizer.T("mcp.addServer"), Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
+            add.Tip(Localizer.T("mcp.addServer.tip"));
             add.Click += (sender, args) => OnAdd();
             DockPanel.SetDock(add, Dock.Right);
             header.Children.Add(add);
@@ -207,7 +208,7 @@ namespace Mux.Desktop.Views
 
         private async void OnDelete(McpServerConfig server)
         {
-            bool confirmed = await new ConfirmDialog("Delete MCP server", "Delete \"" + server.Name + "\"?", "Delete", destructive: true).ShowDialog<bool>(this);
+            bool confirmed = await new ConfirmDialog(Localizer.T("mcp.delete.title"), Localizer.T("mcp.delete.confirm") + " \"" + server.Name + "\"?", Localizer.T("act.delete"), destructive: true).ShowDialog<bool>(this);
             if (confirmed)
             {
                 _Servers.Remove(server);

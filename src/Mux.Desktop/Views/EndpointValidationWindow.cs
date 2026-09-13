@@ -11,6 +11,7 @@ namespace Mux.Desktop.Views
     using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Settings;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A modal that validates a single endpoint's model live: it opens showing "Validating…", runs the shared
@@ -38,7 +39,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Validate endpoint";
+            Title = Localizer.T("endpointVal.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 560;
             MinWidth = 420;
@@ -53,12 +54,12 @@ namespace Mux.Desktop.Views
             panel.Children.Add(new TextBlock { Text = endpoint.Name, FontSize = 18, FontWeight = FontWeight.SemiBold, Foreground = theme.Text });
             panel.Children.Add(new TextBlock { Text = endpoint.AdapterType + " · " + label + "  —  " + endpoint.BaseUrl, FontSize = 12, Foreground = theme.Muted, TextWrapping = TextWrapping.Wrap });
 
-            _StatusLine = new TextBlock { Text = "⏳ Validating…", FontSize = 14, FontWeight = FontWeight.SemiBold, Foreground = theme.Muted, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) };
+            _StatusLine = new TextBlock { Text = Localizer.T("endpointVal.validating"), FontSize = 14, FontWeight = FontWeight.SemiBold, Foreground = theme.Muted, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) };
             panel.Children.Add(_StatusLine);
 
             _Detail = new SelectableTextBlock
             {
-                Text = "Sending a probe request to the endpoint…",
+                Text = Localizer.T("endpointVal.probing"),
                 FontSize = 12,
                 Foreground = theme.Muted,
                 TextWrapping = TextWrapping.Wrap,
@@ -75,13 +76,13 @@ namespace Mux.Desktop.Views
             });
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
-            Button revalidate = new Button { Content = "Re-validate" };
-            revalidate.Tip("Run the health check again.");
+            Button revalidate = new Button { Content = Localizer.T("endpointVal.revalidate") };
+            revalidate.Tip(Localizer.T("endpointVal.revalidate.tip"));
             revalidate.Click += (sender, args) => Start();
             buttons.Children.Add(revalidate);
 
-            _Close = new Button { Content = "Close", Background = theme.AccentButton, Foreground = theme.AccentText };
-            _Close.Tip("Close this window.");
+            _Close = new Button { Content = Localizer.T("act.close"), Background = theme.AccentButton, Foreground = theme.AccentText };
+            _Close.Tip(Localizer.T("endpointVal.close.tip"));
             _Close.Click += (sender, args) => Close();
             buttons.Children.Add(_Close);
             panel.Children.Add(buttons);
@@ -100,9 +101,9 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
             _StatusLine.Foreground = theme.Muted;
-            _StatusLine.Text = "⏳ Validating…";
+            _StatusLine.Text = Localizer.T("endpointVal.validating");
             _Detail.Foreground = theme.Muted;
-            _Detail.Text = "Sending a streaming probe and waiting for the first token…";
+            _Detail.Text = Localizer.T("endpointVal.probingStream");
 
             bool ignoreCert = false;
             try
@@ -146,25 +147,25 @@ namespace Mux.Desktop.Views
             if (result.Success)
             {
                 _StatusLine.Foreground = theme.Success;
-                _StatusLine.Text = "✓ Ready";
+                _StatusLine.Text = Localizer.T("endpointVal.ready");
                 _Detail.Foreground = theme.Text;
-                _Detail.Text = label + " responded successfully — the endpoint, URL, credentials, and model are usable.";
+                _Detail.Text = label + Localizer.T("endpointVal.readyDetail");
             }
             else if (result.Reachable)
             {
                 _StatusLine.Foreground = new SolidColorBrush(Color.Parse("#bf8700"));
-                _StatusLine.Text = "⚠ Reachable, but the validation request failed";
+                _StatusLine.Text = Localizer.T("endpointVal.reachable");
                 _Detail.Foreground = theme.Text;
-                _Detail.Text = (result.Error ?? "unknown error")
-                    + "\n\nThe endpoint answered, so the URL, credentials, and model routing work. Normal chats may still succeed.";
+                _Detail.Text = (result.Error ?? Localizer.T("endpointVal.unknownError"))
+                    + "\n\n" + Localizer.T("endpointVal.reachableDetail");
             }
             else
             {
                 _StatusLine.Foreground = theme.Error;
-                _StatusLine.Text = "✗ Unreachable";
+                _StatusLine.Text = Localizer.T("endpointVal.unreachable");
                 _Detail.Foreground = theme.Text;
-                _Detail.Text = (result.Error ?? "unknown error")
-                    + "\n\nThe endpoint could not be reached (no HTTP response). Check the base URL, port, and network.";
+                _Detail.Text = (result.Error ?? Localizer.T("endpointVal.unknownError"))
+                    + "\n\n" + Localizer.T("endpointVal.unreachableDetail");
             }
         }
     }

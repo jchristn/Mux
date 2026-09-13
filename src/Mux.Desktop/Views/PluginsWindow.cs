@@ -8,6 +8,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Media;
     using Mux.Core.Plugins;
     using Mux.Core.Settings;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A manager for plugins (parity row 31): out-of-process lifecycle hooks and custom slash commands, both
@@ -29,7 +30,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Plugins";
+            Title = Localizer.T("plugin.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 900;
             Height = 640;
@@ -48,10 +49,10 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<HookDefinition>>
             {
-                new TableColumn<HookDefinition>("Name", h => h.Name, new GridLength(2, GridUnitType.Star), h => h.Name, tooltip: "The hook's name."),
-                new TableColumn<HookDefinition>("Event", h => h.Event.ToString(), new GridLength(1.6, GridUnitType.Star), h => h.Event.ToString(), tooltip: "The lifecycle event that fires this hook."),
-                new TableColumn<HookDefinition>("Command", h => h.Command, new GridLength(3, GridUnitType.Star), h => h.Command, tooltip: "The executable that runs when the event fires."),
-                new TableColumn<HookDefinition>("Blocking", h => h.Blocking ? "yes" : "no", new GridLength(1, GridUnitType.Star), h => h.Blocking ? 1 : 0, tooltip: "Whether a non-zero exit vetoes the event.")
+                new TableColumn<HookDefinition>(Localizer.T("col.name"), h => h.Name, new GridLength(2, GridUnitType.Star), h => h.Name, tooltip: Localizer.T("plugin.hook.col.name.tip")),
+                new TableColumn<HookDefinition>(Localizer.T("plugin.hook.col.event"), h => h.Event.ToString(), new GridLength(1.6, GridUnitType.Star), h => h.Event.ToString(), tooltip: Localizer.T("plugin.hook.col.event.tip")),
+                new TableColumn<HookDefinition>(Localizer.T("plugin.hook.col.command"), h => h.Command, new GridLength(3, GridUnitType.Star), h => h.Command, tooltip: Localizer.T("plugin.hook.col.command.tip")),
+                new TableColumn<HookDefinition>(Localizer.T("plugin.hook.col.blocking"), h => h.Blocking ? Localizer.T("plugin.yes") : Localizer.T("plugin.no"), new GridLength(1, GridUnitType.Star), h => h.Blocking ? 1 : 0, tooltip: Localizer.T("plugin.hook.col.blocking.tip"))
             };
         }
 
@@ -59,8 +60,8 @@ namespace Mux.Desktop.Views
         {
             return new List<TableRowAction<HookDefinition>>
             {
-                new TableRowAction<HookDefinition>("Edit", h => OnEditHook(h)),
-                new TableRowAction<HookDefinition>("Delete", h => OnDeleteHook(h), destructive: true)
+                new TableRowAction<HookDefinition>(Localizer.T("act.edit"), h => OnEditHook(h)),
+                new TableRowAction<HookDefinition>(Localizer.T("act.delete"), h => OnDeleteHook(h), destructive: true)
             };
         }
 
@@ -68,9 +69,9 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<CustomCommandDefinition>>
             {
-                new TableColumn<CustomCommandDefinition>("Command", c => "/" + c.Name, new GridLength(2, GridUnitType.Star), c => c.Name, tooltip: "Invoke this command by typing /name."),
-                new TableColumn<CustomCommandDefinition>("Description", c => string.IsNullOrEmpty(c.Description) ? "—" : c.Description, new GridLength(3, GridUnitType.Star), tooltip: "What this command does."),
-                new TableColumn<CustomCommandDefinition>("Runs", c => c.Command, new GridLength(3, GridUnitType.Star), c => c.Command, tooltip: "The executable this command runs.")
+                new TableColumn<CustomCommandDefinition>(Localizer.T("plugin.command.col.command"), c => "/" + c.Name, new GridLength(2, GridUnitType.Star), c => c.Name, tooltip: Localizer.T("plugin.command.col.command.tip")),
+                new TableColumn<CustomCommandDefinition>(Localizer.T("col.description"), c => string.IsNullOrEmpty(c.Description) ? "—" : c.Description, new GridLength(3, GridUnitType.Star), tooltip: Localizer.T("plugin.command.col.description.tip")),
+                new TableColumn<CustomCommandDefinition>(Localizer.T("plugin.command.col.runs"), c => c.Command, new GridLength(3, GridUnitType.Star), c => c.Command, tooltip: Localizer.T("plugin.command.col.runs.tip"))
             };
         }
 
@@ -78,8 +79,8 @@ namespace Mux.Desktop.Views
         {
             return new List<TableRowAction<CustomCommandDefinition>>
             {
-                new TableRowAction<CustomCommandDefinition>("Edit", c => OnEditCommand(c)),
-                new TableRowAction<CustomCommandDefinition>("Delete", c => OnDeleteCommand(c), destructive: true)
+                new TableRowAction<CustomCommandDefinition>(Localizer.T("act.edit"), c => OnEditCommand(c)),
+                new TableRowAction<CustomCommandDefinition>(Localizer.T("act.delete"), c => OnDeleteCommand(c), destructive: true)
             };
         }
 
@@ -91,12 +92,12 @@ namespace Mux.Desktop.Views
                 RowDefinitions = new RowDefinitions("Auto,*,Auto,*")
             };
 
-            root.Children.Add(SectionHeader("Event hooks", "Run a program out-of-process on session-start, prompt-submit, or session-end.", OnAddHook, "＋  Add hook", theme, 0));
+            root.Children.Add(SectionHeader(Localizer.T("plugin.hooks.section"), Localizer.T("plugin.hooks.section.subtitle"), OnAddHook, "＋  " + Localizer.T("plugin.addHook"), theme, 0));
             _HooksTable.Margin = new Thickness(0, 8, 0, 12);
             Grid.SetRow(_HooksTable, 1);
             root.Children.Add(_HooksTable);
 
-            root.Children.Add(SectionHeader("Custom commands", "Define /name slash commands that run a program.", OnAddCommand, "＋  Add command", theme, 2));
+            root.Children.Add(SectionHeader(Localizer.T("plugin.commands.section"), Localizer.T("plugin.commands.section.subtitle"), OnAddCommand, "＋  " + Localizer.T("plugin.addCommand"), theme, 2));
             _CommandsTable.Margin = new Thickness(0, 8, 0, 0);
             Grid.SetRow(_CommandsTable, 3);
             root.Children.Add(_CommandsTable);
@@ -148,7 +149,7 @@ namespace Mux.Desktop.Views
 
         private async void OnDeleteHook(HookDefinition hook)
         {
-            if (await new ConfirmDialog("Delete hook", "Delete \"" + hook.Name + "\"?", "Delete", destructive: true).ShowDialog<bool>(this))
+            if (await new ConfirmDialog(Localizer.T("plugin.deleteHook.title"), Localizer.T("act.delete") + " \"" + hook.Name + "\"?", Localizer.T("act.delete"), destructive: true).ShowDialog<bool>(this))
             {
                 _Config.Hooks.Remove(hook);
                 Persist();
@@ -175,7 +176,7 @@ namespace Mux.Desktop.Views
 
         private async void OnDeleteCommand(CustomCommandDefinition command)
         {
-            if (await new ConfirmDialog("Delete command", "Delete \"/" + command.Name + "\"?", "Delete", destructive: true).ShowDialog<bool>(this))
+            if (await new ConfirmDialog(Localizer.T("plugin.deleteCommand.title"), Localizer.T("act.delete") + " \"/" + command.Name + "\"?", Localizer.T("act.delete"), destructive: true).ShowDialog<bool>(this))
             {
                 _Config.Commands.Remove(command);
                 Persist();

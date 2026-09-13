@@ -5,6 +5,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Controls;
     using Avalonia.Layout;
     using Avalonia.Media;
+    using Mux.Desktop.I18n;
     using Mux.Desktop.Services;
 
     /// <summary>
@@ -26,7 +27,7 @@ namespace Mux.Desktop.Views
         /// </summary>
         public LocalServerWindow()
         {
-            Title = "Local server";
+            Title = Localizer.T("localServer.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 560;
             SizeToContent = SizeToContent.Height;
@@ -43,10 +44,10 @@ namespace Mux.Desktop.Views
         {
             StackPanel root = new StackPanel { Margin = new Thickness(22), Spacing = 16 };
 
-            root.Children.Add(new TextBlock { Text = "Local server", FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = _Theme.Text });
+            root.Children.Add(new TextBlock { Text = Localizer.T("localServer.title"), FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = _Theme.Text });
             root.Children.Add(new TextBlock
             {
-                Text = "Optionally run the mux REST API and web dashboard in-process, bound to loopback. This is off by default — the app always works without it. Turn it on to reach mux from a browser or another tool on this machine.",
+                Text = Localizer.T("localServer.description"),
                 Foreground = _Theme.Muted,
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap
@@ -69,35 +70,35 @@ namespace Mux.Desktop.Views
         private void RenderState()
         {
             bool running = _Service.IsRunning;
-            _Toggle.Content = running ? "Stop server" : "Start server";
+            _Toggle.Content = running ? Localizer.T("localServer.stop") : Localizer.T("localServer.start");
             _Toggle.Background = running ? _Theme.Error : _Theme.AccentButton;
 
             _Body.Children.Clear();
 
             if (!running)
             {
-                _Body.Children.Add(new TextBlock { Text = "Stopped.", Foreground = _Theme.Muted, FontSize = 12 });
+                _Body.Children.Add(new TextBlock { Text = Localizer.T("localServer.stopped"), Foreground = _Theme.Muted, FontSize = 12 });
                 string? error = _Service.LastError;
                 if (!string.IsNullOrEmpty(error))
                 {
-                    _Body.Children.Add(new TextBlock { Text = "Last start failed: " + error, Foreground = _Theme.Error, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+                    _Body.Children.Add(new TextBlock { Text = Localizer.T("localServer.lastStartFailed") + error, Foreground = _Theme.Error, FontSize = 12, TextWrapping = TextWrapping.Wrap });
                 }
 
                 return;
             }
 
-            _Body.Children.Add(FieldRow("Status", "Listening"));
-            _Body.Children.Add(FieldRow("Base URL", _Service.BaseUrl ?? "—"));
-            _Body.Children.Add(FieldRow("Dashboard", _Service.DashboardUrl ?? "—"));
-            _Body.Children.Add(FieldRow("Health", _Service.HealthUrl ?? "—"));
+            _Body.Children.Add(FieldRow(Localizer.T("localServer.status"), Localizer.T("localServer.listening")));
+            _Body.Children.Add(FieldRow(Localizer.T("localServer.baseUrl"), _Service.BaseUrl ?? "—"));
+            _Body.Children.Add(FieldRow(Localizer.T("localServer.dashboard"), _Service.DashboardUrl ?? "—"));
+            _Body.Children.Add(FieldRow(Localizer.T("localServer.health"), _Service.HealthUrl ?? "—"));
 
             if (_Service.AuthEnabled && !string.IsNullOrEmpty(_Service.ApiKey))
             {
-                _Body.Children.Add(FieldRow("API key", _Service.ApiKey!));
-                _Body.Children.Add(new TextBlock { Text = "Send as  Authorization: Bearer <key>", Foreground = _Theme.Muted, FontSize = 11, TextWrapping = TextWrapping.Wrap });
+                _Body.Children.Add(FieldRow(Localizer.T("localServer.apiKey"), _Service.ApiKey!));
+                _Body.Children.Add(new TextBlock { Text = Localizer.T("localServer.sendAs") + "  Authorization: Bearer <key>", Foreground = _Theme.Muted, FontSize = 11, TextWrapping = TextWrapping.Wrap });
             }
 
-            Button open = new Button { Content = "Open dashboard", Background = _Theme.SurfaceAlt, Foreground = _Theme.Text, BorderBrush = _Theme.Border, BorderThickness = new Thickness(1), Padding = new Thickness(14, 6, 14, 6), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
+            Button open = new Button { Content = Localizer.T("localServer.openDashboard"), Background = _Theme.SurfaceAlt, Foreground = _Theme.Text, BorderBrush = _Theme.Border, BorderThickness = new Thickness(1), Padding = new Thickness(14, 6, 14, 6), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
             open.Click += (sender, args) =>
             {
                 string? url = _Service.DashboardUrl;

@@ -5,6 +5,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Controls;
     using Avalonia.Layout;
     using Avalonia.Media;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A small modal confirmation. Returns true (confirmed) or false (cancelled) via
@@ -37,14 +38,14 @@ namespace Mux.Desktop.Views
             panel.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap });
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Dismiss without making any change.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("confirm.cancel.tip"));
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
 
             Button confirm = new Button { Content = confirmLabel, Foreground = AppTheme.Current.AccentText };
             confirm.Background = destructive ? AppTheme.Current.Error : AppTheme.Current.AccentButton;
-            confirm.Tip(destructive ? "Confirm — this cannot be undone." : "Confirm this action.");
+            confirm.Tip(destructive ? Localizer.T("confirm.destructive.tip") : Localizer.T("confirm.action.tip"));
             confirm.Click += (sender, args) => Close(true);
             buttons.Children.Add(confirm);
 

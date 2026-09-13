@@ -8,6 +8,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Media;
     using Mux.Core.Models;
     using Mux.Core.Settings;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A manager for the configured endpoints (parity with the TUI's <c>/endpoint</c>): a sortable table with
@@ -32,7 +33,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Endpoints";
+            Title = Localizer.T("nav.endpoints");
             Icon = IconResources.LoadWindowIcon();
             Width = 860;
             Height = 560;
@@ -50,11 +51,11 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<EndpointConfig>>
             {
-                new TableColumn<EndpointConfig>("Name", e => e.Name, new GridLength(2, GridUnitType.Star), e => e.Name, e => e.IsDefault ? "default" : null, tooltip: "The endpoint's display name. The green “default” badge marks the endpoint new conversations use."),
-                new TableColumn<EndpointConfig>("Adapter", e => e.AdapterType.ToString(), new GridLength(1.2, GridUnitType.Star), e => e.AdapterType.ToString(), tooltip: "The provider protocol this endpoint speaks (OpenAI, Ollama, Anthropic, and so on)."),
-                new TableColumn<EndpointConfig>("Model", e => string.IsNullOrEmpty(e.Model) ? "—" : e.Model, new GridLength(2, GridUnitType.Star), e => e.Model, tooltip: "The model identifier requests are sent to."),
-                new TableColumn<EndpointConfig>("Base URL", e => e.BaseUrl, new GridLength(2.5, GridUnitType.Star), e => e.BaseUrl, tooltip: "The server address requests are sent to."),
-                new TableColumn<EndpointConfig>("Context", e => e.ContextWindow.ToString("N0"), new GridLength(1, GridUnitType.Star), e => e.ContextWindow, tooltip: "The model's context window size, in tokens.")
+                new TableColumn<EndpointConfig>(Localizer.T("col.name"), e => e.Name, new GridLength(2, GridUnitType.Star), e => e.Name, e => e.IsDefault ? Localizer.T("endpoint.badge.default") : null, tooltip: Localizer.T("endpoint.col.name.tip")),
+                new TableColumn<EndpointConfig>(Localizer.T("endpoint.col.adapter"), e => e.AdapterType.ToString(), new GridLength(1.2, GridUnitType.Star), e => e.AdapterType.ToString(), tooltip: Localizer.T("endpoint.col.adapter.tip")),
+                new TableColumn<EndpointConfig>(Localizer.T("col.model"), e => string.IsNullOrEmpty(e.Model) ? "—" : e.Model, new GridLength(2, GridUnitType.Star), e => e.Model, tooltip: Localizer.T("endpoint.col.model.tip")),
+                new TableColumn<EndpointConfig>(Localizer.T("endpoint.col.baseUrl"), e => e.BaseUrl, new GridLength(2.5, GridUnitType.Star), e => e.BaseUrl, tooltip: Localizer.T("endpoint.col.baseUrl.tip")),
+                new TableColumn<EndpointConfig>(Localizer.T("endpoint.col.context"), e => e.ContextWindow.ToString("N0"), new GridLength(1, GridUnitType.Star), e => e.ContextWindow, tooltip: Localizer.T("endpoint.col.context.tip"))
             };
         }
 
@@ -62,18 +63,18 @@ namespace Mux.Desktop.Views
         {
             List<TableRowAction<EndpointConfig>> actions = new List<TableRowAction<EndpointConfig>>
             {
-                new TableRowAction<EndpointConfig>("Edit", e => OnEdit(e)),
-                new TableRowAction<EndpointConfig>("Validate", e => OnValidate(e)),
-                new TableRowAction<EndpointConfig>("Duplicate", e => OnDuplicate(e)),
-                new TableRowAction<EndpointConfig>("Import models…", e => OnImport(e))
+                new TableRowAction<EndpointConfig>(Localizer.T("act.edit"), e => OnEdit(e)),
+                new TableRowAction<EndpointConfig>(Localizer.T("endpoint.action.validate"), e => OnValidate(e)),
+                new TableRowAction<EndpointConfig>(Localizer.T("endpoint.action.duplicate"), e => OnDuplicate(e)),
+                new TableRowAction<EndpointConfig>(Localizer.T("endpoint.action.import"), e => OnImport(e))
             };
 
             if (!endpoint.IsDefault)
             {
-                actions.Add(new TableRowAction<EndpointConfig>("Set as default", e => OnSetDefault(e)));
+                actions.Add(new TableRowAction<EndpointConfig>(Localizer.T("endpoint.action.setDefault"), e => OnSetDefault(e)));
             }
 
-            actions.Add(new TableRowAction<EndpointConfig>("Delete", e => OnDelete(e), destructive: true));
+            actions.Add(new TableRowAction<EndpointConfig>(Localizer.T("act.delete"), e => OnDelete(e), destructive: true));
             return actions;
         }
 
@@ -82,12 +83,12 @@ namespace Mux.Desktop.Views
             DockPanel root = new DockPanel { Margin = new Thickness(20) };
 
             DockPanel header = new DockPanel();
-            TextBlock title = new TextBlock { Text = "Endpoints", FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
+            TextBlock title = new TextBlock { Text = Localizer.T("nav.endpoints"), FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(title, Dock.Left);
             header.Children.Add(title);
 
-            Button add = new Button { Content = "＋  Add endpoint", Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
-            add.Tip("Add a new model endpoint (provider, URL, model, and generation settings).");
+            Button add = new Button { Content = Localizer.T("endpoint.add"), Background = theme.AccentButton, Foreground = theme.AccentText, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(12, 6, 12, 6) };
+            add.Tip(Localizer.T("endpoint.add.tip"));
             add.Click += (sender, args) => OnAdd();
             DockPanel.SetDock(add, Dock.Right);
             header.Children.Add(add);
@@ -204,7 +205,7 @@ namespace Mux.Desktop.Views
 
         private async void OnDelete(EndpointConfig endpoint)
         {
-            bool confirmed = await new ConfirmDialog("Delete endpoint", "Delete \"" + endpoint.Name + "\"?", "Delete", destructive: true).ShowDialog<bool>(this);
+            bool confirmed = await new ConfirmDialog(Localizer.T("endpoint.delete.title"), Localizer.T("endpoint.delete.confirm") + " \"" + endpoint.Name + "\"?", Localizer.T("act.delete"), destructive: true).ShowDialog<bool>(this);
             if (confirmed)
             {
                 _Endpoints.Remove(endpoint);

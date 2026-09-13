@@ -7,6 +7,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Media;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A quick picker for a conversation endpoint's reasoning effort (parity with the TUI's <c>/effort</c>):
@@ -31,7 +32,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Reasoning effort";
+            Title = Localizer.T("reasoning.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 380;
             SizeToContent = SizeToContent.Height;
@@ -45,19 +46,19 @@ namespace Mux.Desktop.Views
         private Control BuildContent(AppTheme theme)
         {
             StackPanel panel = new StackPanel { Margin = new Thickness(20), Spacing = 8 };
-            panel.Children.Add(new TextBlock { Text = "Reasoning effort for \"" + _Endpoint.Name + "\"", FontWeight = FontWeight.SemiBold, Foreground = theme.Text });
-            panel.Children.Add(new TextBlock { Text = "Higher effort makes reasoning models think longer. Applies to this endpoint.", Foreground = theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+            panel.Children.Add(new TextBlock { Text = Localizer.T("reasoning.forEndpoint") + " \"" + _Endpoint.Name + "\"", FontWeight = FontWeight.SemiBold, Foreground = theme.Text });
+            panel.Children.Add(new TextBlock { Text = Localizer.T("reasoning.help"), Foreground = theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap });
 
             string current = _Endpoint.ReasoningEffort?.Level?.ToString().ToLowerInvariant() ?? Off;
 
-            panel.Children.Add(Option("Off", Off, current, theme, "Send no reasoning field."));
-            panel.Children.Add(Option("Minimal", "minimal", current, theme, "The lightest reasoning."));
-            panel.Children.Add(Option("Low", "low", current, theme, "A little reasoning."));
-            panel.Children.Add(Option("Medium", "medium", current, theme, "Balanced reasoning."));
-            panel.Children.Add(Option("High", "high", current, theme, "The most reasoning."));
+            panel.Children.Add(Option(Localizer.T("reasoning.off"), Off, current, theme, Localizer.T("reasoning.off.tip")));
+            panel.Children.Add(Option(Localizer.T("reasoning.minimal"), "minimal", current, theme, Localizer.T("reasoning.minimal.tip")));
+            panel.Children.Add(Option(Localizer.T("reasoning.low"), "low", current, theme, Localizer.T("reasoning.low.tip")));
+            panel.Children.Add(Option(Localizer.T("reasoning.medium"), "medium", current, theme, Localizer.T("reasoning.medium.tip")));
+            panel.Children.Add(Option(Localizer.T("reasoning.high"), "high", current, theme, Localizer.T("reasoning.high.tip")));
 
-            Button cancel = new Button { Content = "Cancel", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 6, 0, 0) };
-            cancel.Tip("Close without changing the reasoning effort.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel"), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 6, 0, 0) };
+            cancel.Tip(Localizer.T("reasoning.cancel.tip"));
             cancel.Click += (sender, args) => Close(false);
             panel.Children.Add(cancel);
 

@@ -8,6 +8,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Layout;
     using Avalonia.Media;
     using Mux.Core.Plugins;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A form for creating or editing a custom slash command (parity with the TUI's commands editor): name,
@@ -34,7 +35,7 @@ namespace Mux.Desktop.Views
         {
             _Command = command ?? throw new ArgumentNullException(nameof(command));
 
-            Title = isNew ? "Add command" : "Edit command";
+            Title = isNew ? Localizer.T("command.add.title") : Localizer.T("command.edit.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 560;
             SizeToContent = SizeToContent.Height;
@@ -55,20 +56,20 @@ namespace Mux.Desktop.Views
         {
             AppTheme theme = AppTheme.Current;
             StackPanel form = new StackPanel { Margin = new Thickness(24), Spacing = 10 };
-            form.Children.Add(Field("Name (typed as /name)", _Name, "The command's name; invoke it as /name."));
-            form.Children.Add(Field("Description", _Description, "A short description shown in the command menu."));
-            form.Children.Add(Field("Command", _Exe, "The executable to run."));
-            form.Children.Add(Field("Args (one per line)", _Args, "Arguments passed to the command, one per line."));
-            form.Children.Add(Field("Timeout (ms)", _Timeout, "How long to wait for the command before giving up."));
+            form.Children.Add(Field(Localizer.T("command.name"), _Name, Localizer.T("command.name.tip")));
+            form.Children.Add(Field(Localizer.T("col.description"), _Description, Localizer.T("command.description.tip")));
+            form.Children.Add(Field(Localizer.T("command.command"), _Exe, Localizer.T("command.command.tip")));
+            form.Children.Add(Field(Localizer.T("command.args"), _Args, Localizer.T("command.args.tip")));
+            form.Children.Add(Field(Localizer.T("command.timeout"), _Timeout, Localizer.T("command.timeout.tip")));
             form.Children.Add(_Error);
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Discard changes and close.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("command.cancel.tip"));
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
-            Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
-            ok.Tip("Save this command.");
+            Button ok = new Button { Content = Localizer.T("act.save"), Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip(Localizer.T("command.save.tip"));
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             form.Children.Add(buttons);
@@ -90,19 +91,19 @@ namespace Mux.Desktop.Views
             string name = (_Name.Text ?? string.Empty).Trim();
             if (name.Length == 0)
             {
-                _Error.Text = "Name is required.";
+                _Error.Text = Localizer.T("command.err.nameRequired");
                 return;
             }
 
             if ((_Exe.Text ?? string.Empty).Trim().Length == 0)
             {
-                _Error.Text = "Command is required.";
+                _Error.Text = Localizer.T("command.err.commandRequired");
                 return;
             }
 
             if (!int.TryParse((_Timeout.Text ?? string.Empty).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int timeout) || timeout <= 0)
             {
-                _Error.Text = "Timeout must be a positive whole number of milliseconds.";
+                _Error.Text = Localizer.T("command.err.timeoutInvalid");
                 return;
             }
 

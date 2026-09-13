@@ -10,6 +10,7 @@ namespace Mux.Desktop.Views
     using Mux.Core.Models;
     using Mux.Core.Settings;
     using Mux.Core.Subagents;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A form for creating or editing a single subagent definition (name, description, system prompt, optional
@@ -40,7 +41,7 @@ namespace Mux.Desktop.Views
             ArgumentNullException.ThrowIfNull(definition);
             _Definition = definition;
 
-            Title = isNew ? "Add subagent" : "Edit subagent";
+            Title = isNew ? Localizer.T("subagent.add") : Localizer.T("subagent.edit");
             Icon = IconResources.LoadWindowIcon();
             Width = 1020;
             Height = 780;
@@ -78,12 +79,12 @@ namespace Mux.Desktop.Views
             DockPanel root = new DockPanel { Margin = new Thickness(20) };
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Discard changes and close.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("subagent.form.cancel.tip"));
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
-            Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
-            ok.Tip("Save this subagent definition.");
+            Button ok = new Button { Content = Localizer.T("act.save"), Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip(Localizer.T("subagent.form.save.tip"));
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -93,12 +94,12 @@ namespace Mux.Desktop.Views
             root.Children.Add(_Error);
 
             StackPanel form = new StackPanel { Spacing = 10, Margin = new Thickness(0, 0, 14, 0) };
-            form.Children.Add(Field("Name", _Name, "The subagent's name, referenced when the main agent delegates to it."));
-            form.Children.Add(Field("Description", _Description, "What this subagent does; helps the model decide when to hand work to it."));
-            form.Children.Add(Field("Endpoint", _Endpoint, "The endpoint this subagent runs on, or inherit the main conversation's default."));
-            form.Children.Add(Field("System prompt", _SystemPrompt, "The persona and instructions this subagent runs with."));
-            form.Children.Add(Field("Allowed tools (one per line; blank = all)", _AllowedTools, "Restrict which tools this subagent may use, one tool name per line. Blank allows all."));
-            form.Children.Add(Field("Max iterations (blank = default)", _MaxIterations, "Cap on this subagent's agent-loop turns. Blank uses the global setting."));
+            form.Children.Add(Field(Localizer.T("col.name"), _Name, Localizer.T("subagent.form.name.tip")));
+            form.Children.Add(Field(Localizer.T("col.description"), _Description, Localizer.T("subagent.form.description.tip")));
+            form.Children.Add(Field(Localizer.T("subagent.col.endpoint"), _Endpoint, Localizer.T("subagent.form.endpoint.tip")));
+            form.Children.Add(Field(Localizer.T("subagent.form.systemPrompt"), _SystemPrompt, Localizer.T("subagent.form.systemPrompt.tip")));
+            form.Children.Add(Field(Localizer.T("subagent.form.allowedTools"), _AllowedTools, Localizer.T("subagent.form.allowedTools.tip")));
+            form.Children.Add(Field(Localizer.T("subagent.form.maxIterations"), _MaxIterations, Localizer.T("subagent.form.maxIterations.tip")));
 
             root.Children.Add(new ScrollViewer { Content = form });
             return root;
@@ -117,7 +118,7 @@ namespace Mux.Desktop.Views
             string name = (_Name.Text ?? string.Empty).Trim();
             if (name.Length == 0)
             {
-                _Error.Text = "Name is required.";
+                _Error.Text = Localizer.T("subagent.form.err.nameRequired");
                 return;
             }
 
@@ -127,7 +128,7 @@ namespace Mux.Desktop.Views
             {
                 if (!int.TryParse(maxText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) || parsed <= 0)
                 {
-                    _Error.Text = "Max iterations must be a positive whole number, or blank.";
+                    _Error.Text = Localizer.T("subagent.form.err.maxIterations");
                     return;
                 }
 

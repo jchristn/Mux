@@ -8,6 +8,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Interactivity;
     using Avalonia.Layout;
     using Avalonia.Media;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A keyboard-driven command palette (parity with the TUI's command palette / <c>Ctrl+K</c>). Type to
@@ -17,7 +18,7 @@ namespace Mux.Desktop.Views
     public sealed class CommandPaletteWindow : Window
     {
         private readonly List<PaletteCommand> _Commands;
-        private readonly TextBox _Search = new TextBox { PlaceholderText = "Type a command…", FontSize = 15 };
+        private readonly TextBox _Search = new TextBox { PlaceholderText = Localizer.T("palette.search.placeholder"), FontSize = 15 };
         private readonly ListBox _List = new ListBox { Background = Brushes.Transparent };
 
         /// <summary>
@@ -31,7 +32,7 @@ namespace Mux.Desktop.Views
 
             AppTheme theme = AppTheme.Current;
 
-            Title = "Commands";
+            Title = Localizer.T("palette.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 560;
             Height = 440;

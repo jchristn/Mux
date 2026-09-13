@@ -7,6 +7,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Media;
     using Mux.Core.Models;
     using Mux.Core.Skills;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A form for creating a new skill (parity with the TUI's skill scaffold): id, title, description, whether
@@ -16,11 +17,11 @@ namespace Mux.Desktop.Views
     public sealed class SkillScaffoldDialog : Window
     {
         private readonly string _SkillsDirectory;
-        private readonly TextBox _Id = new TextBox { PlaceholderText = "my-skill" };
+        private readonly TextBox _Id = new TextBox { PlaceholderText = Localizer.T("skill.scaffold.id.placeholder") };
         private readonly TextBox _Title = new TextBox();
         private readonly TextBox _Description = new TextBox { AcceptsReturn = true, MinHeight = 60, TextWrapping = TextWrapping.Wrap };
         private readonly TextBox _Interpreter = new TextBox { Text = "bash" };
-        private readonly CheckBox _Mutating = new CheckBox { Content = "This skill can modify the workspace (mutating)" };
+        private readonly CheckBox _Mutating = new CheckBox { Content = Localizer.T("skill.scaffold.mutating") };
         private readonly TextBlock _Error = new TextBlock { Foreground = new SolidColorBrush(Color.Parse("#cf222e")), FontSize = 12, TextWrapping = TextWrapping.Wrap };
 
         /// <summary>
@@ -32,7 +33,7 @@ namespace Mux.Desktop.Views
         {
             _SkillsDirectory = skillsDirectory ?? throw new ArgumentNullException(nameof(skillsDirectory));
 
-            Title = "Add skill";
+            Title = Localizer.T("skill.add");
             Icon = IconResources.LoadWindowIcon();
             Width = 560;
             Height = 520;
@@ -51,12 +52,12 @@ namespace Mux.Desktop.Views
             DockPanel root = new DockPanel { Margin = new Thickness(20) };
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Close without creating a skill.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("skill.scaffold.cancel.tip"));
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
-            Button ok = new Button { Content = "Create", Background = theme.AccentButton, Foreground = theme.AccentText };
-            ok.Tip("Create the skill folder and its SKILL.md.");
+            Button ok = new Button { Content = Localizer.T("skill.create"), Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip(Localizer.T("skill.create.tip"));
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -66,11 +67,11 @@ namespace Mux.Desktop.Views
             root.Children.Add(_Error);
 
             StackPanel form = new StackPanel { Spacing = 10, Margin = new Thickness(0, 0, 14, 0) };
-            form.Children.Add(Field("Id (lowercase, hyphen-separated)", _Id, "The skill's folder name and unique id, e.g. my-skill. Lowercase letters, digits, and hyphens only."));
-            form.Children.Add(Field("Title", _Title, "A human-readable title shown in the skills list."));
-            form.Children.Add(Field("Description", _Description, "What the skill does; this is how the model decides when to use it."));
-            form.Children.Add(Field("Interpreter", _Interpreter, "The interpreter its commands run under (e.g. bash, python)."));
-            form.Children.Add(_Mutating.Tip("Check if this skill can modify the workspace, so its commands require approval."));
+            form.Children.Add(Field(Localizer.T("skill.scaffold.id"), _Id, Localizer.T("skill.scaffold.id.tip")));
+            form.Children.Add(Field(Localizer.T("skill.scaffold.title"), _Title, Localizer.T("skill.scaffold.title.tip")));
+            form.Children.Add(Field(Localizer.T("skill.scaffold.description"), _Description, Localizer.T("skill.scaffold.description.tip")));
+            form.Children.Add(Field(Localizer.T("skill.scaffold.interpreter"), _Interpreter, Localizer.T("skill.scaffold.interpreter.tip")));
+            form.Children.Add(_Mutating.Tip(Localizer.T("skill.scaffold.mutating.tip")));
             root.Children.Add(new ScrollViewer { Content = form });
             return root;
         }
@@ -89,13 +90,13 @@ namespace Mux.Desktop.Views
             string id = (_Id.Text ?? string.Empty).Trim();
             if (id.Length == 0)
             {
-                _Error.Text = "Id is required.";
+                _Error.Text = Localizer.T("skill.scaffold.idRequired");
                 return;
             }
 
             if (!SkillManager.IsValidId(id))
             {
-                _Error.Text = "Id must be lowercase and hyphen-separated (e.g. my-skill).";
+                _Error.Text = Localizer.T("skill.scaffold.idInvalid");
                 return;
             }
 

@@ -7,6 +7,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Layout;
     using Avalonia.Media;
     using Mux.Core.Models;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A form for creating or editing one external web-search provider (parity row 34): name, provider type,
@@ -21,8 +22,8 @@ namespace Mux.Desktop.Views
         private readonly TextBox _Endpoint = new TextBox();
         private readonly TextBox _ApiKey = new TextBox { PasswordChar = '●' };
         private readonly TextBox _Timeout = new TextBox();
-        private readonly CheckBox _Enabled = new CheckBox { Content = "Enabled" };
-        private readonly CheckBox _IsDefault = new CheckBox { Content = "Use as the default provider" };
+        private readonly CheckBox _Enabled = new CheckBox { Content = Localizer.T("search.enabled") };
+        private readonly CheckBox _IsDefault = new CheckBox { Content = Localizer.T("search.useDefault") };
         private readonly TextBlock _Error = new TextBlock { Foreground = new SolidColorBrush(Color.Parse("#cf222e")), FontSize = 12, TextWrapping = TextWrapping.Wrap };
 
         /// <summary>
@@ -36,7 +37,7 @@ namespace Mux.Desktop.Views
             ArgumentNullException.ThrowIfNull(config);
             _Config = config;
 
-            Title = isNew ? "Add search provider" : "Edit search provider";
+            Title = isNew ? Localizer.T("search.form.addTitle") : Localizer.T("search.form.editTitle");
             Icon = IconResources.LoadWindowIcon();
             Width = 520;
             SizeToContent = SizeToContent.Height;
@@ -65,22 +66,22 @@ namespace Mux.Desktop.Views
         {
             AppTheme theme = AppTheme.Current;
             StackPanel form = new StackPanel { Margin = new Thickness(24), Spacing = 10 };
-            form.Children.Add(Field("Name", _Name, "A friendly name for this provider configuration."));
-            form.Children.Add(Field("Provider type", _Type, "Which search backend this is. Only wired-up types (tavily, you) will actually run."));
-            form.Children.Add(Field("Endpoint", _Endpoint, "The provider's API base URL (leave blank to use the provider's default)."));
-            form.Children.Add(Field("API key", _ApiKey, "Your API key for the provider, or an env-var reference the provider resolves."));
-            form.Children.Add(Field("Timeout (ms)", _Timeout, "How long to wait for a search response before giving up (1000–300000)."));
-            form.Children.Add(_Enabled.Tip("Include this provider when the agent performs a web search."));
-            form.Children.Add(_IsDefault.Tip("Try this provider first before any others."));
+            form.Children.Add(Field(Localizer.T("col.name"), _Name, Localizer.T("search.name.tip")));
+            form.Children.Add(Field(Localizer.T("search.providerType"), _Type, Localizer.T("search.providerType.tip")));
+            form.Children.Add(Field(Localizer.T("search.endpoint"), _Endpoint, Localizer.T("search.endpoint.tip")));
+            form.Children.Add(Field(Localizer.T("search.apiKey"), _ApiKey, Localizer.T("search.apiKey.tip")));
+            form.Children.Add(Field(Localizer.T("search.timeout"), _Timeout, Localizer.T("search.timeout.tip")));
+            form.Children.Add(_Enabled.Tip(Localizer.T("search.enabled.tip")));
+            form.Children.Add(_IsDefault.Tip(Localizer.T("search.useDefault.tip")));
             form.Children.Add(_Error);
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Discard changes and close.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("search.cancel.tip"));
             cancel.Click += (sender, args) => Close(false);
             buttons.Children.Add(cancel);
-            Button ok = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
-            ok.Tip("Save this search provider.");
+            Button ok = new Button { Content = Localizer.T("act.save"), Background = theme.AccentButton, Foreground = theme.AccentText };
+            ok.Tip(Localizer.T("search.save.tip"));
             ok.Click += (sender, args) => Ok();
             buttons.Children.Add(ok);
             form.Children.Add(buttons);
@@ -102,13 +103,13 @@ namespace Mux.Desktop.Views
             string name = (_Name.Text ?? string.Empty).Trim();
             if (name.Length == 0)
             {
-                _Error.Text = "Name is required.";
+                _Error.Text = Localizer.T("search.err.nameRequired");
                 return;
             }
 
             if (!int.TryParse((_Timeout.Text ?? string.Empty).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int timeout) || timeout < 1000)
             {
-                _Error.Text = "Timeout must be a whole number of at least 1000 ms.";
+                _Error.Text = Localizer.T("search.err.timeout");
                 return;
             }
 

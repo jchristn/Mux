@@ -6,6 +6,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Input;
     using Avalonia.Layout;
     using Avalonia.Media;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A small modal that collects a single line of text. Returns the entered text via
@@ -42,12 +43,12 @@ namespace Mux.Desktop.Views
             panel.Children.Add(_Input);
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
-            Button cancel = new Button { Content = "Cancel" };
-            cancel.Tip("Dismiss without saving your entry.");
+            Button cancel = new Button { Content = Localizer.T("act.cancel") };
+            cancel.Tip(Localizer.T("input.cancel.tip"));
             cancel.Click += (sender, args) => Close(null);
             buttons.Children.Add(cancel);
-            Button ok = new Button { Content = "OK", Background = AppTheme.Current.AccentButton, Foreground = AppTheme.Current.AccentText };
-            ok.Tip("Accept the entered value (or press Enter).");
+            Button ok = new Button { Content = Localizer.T("input.ok"), Background = AppTheme.Current.AccentButton, Foreground = AppTheme.Current.AccentText };
+            ok.Tip(Localizer.T("input.ok.tip"));
             ok.Click += (sender, args) => Submit();
             buttons.Children.Add(ok);
             panel.Children.Add(buttons);

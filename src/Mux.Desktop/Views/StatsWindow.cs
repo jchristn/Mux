@@ -10,6 +10,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Media;
     using Avalonia.Threading;
     using Mux.Core.Telemetry;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A per-conversation statistics window: token totals by type (as a horizontal bar chart with values),
@@ -42,7 +43,7 @@ namespace Mux.Desktop.Views
             AppTheme theme = AppTheme.Current;
             _Json = BuildJson(metrics, turns, contextWindow, estimatedTokens);
 
-            Title = "Conversation statistics";
+            Title = Localizer.T("stats.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 540;
             SizeToContent = SizeToContent.Height;
@@ -54,25 +55,25 @@ namespace Mux.Desktop.Views
 
             panel.Children.Add(BuildHeader(theme));
 
-            panel.Children.Add(KeyValue("Turns", turns.ToString("#,##0"), theme));
-            panel.Children.Add(KeyValue("Model calls", metrics.Calls.ToString("#,##0"), theme));
+            panel.Children.Add(KeyValue(Localizer.T("stats.turns"), turns.ToString("#,##0"), theme));
+            panel.Children.Add(KeyValue(Localizer.T("stats.modelCalls"), metrics.Calls.ToString("#,##0"), theme));
 
-            panel.Children.Add(SectionLabel("Tokens", theme));
+            panel.Children.Add(SectionLabel(Localizer.T("stats.tokens"), theme));
             long max = Math.Max(1, Math.Max(metrics.InputTokens, Math.Max(metrics.CachedTokens, metrics.OutputTokens)));
-            panel.Children.Add(TokenBar("Input", metrics.InputTokens, max, InputColor, theme));
-            panel.Children.Add(TokenBar("Cached", metrics.CachedTokens, max, CachedColor, theme));
-            panel.Children.Add(TokenBar("Output", metrics.OutputTokens, max, OutputColor, theme));
-            panel.Children.Add(KeyValue("Total tokens", metrics.TotalTokens.ToString("#,##0"), theme));
+            panel.Children.Add(TokenBar(Localizer.T("stats.input"), metrics.InputTokens, max, InputColor, theme));
+            panel.Children.Add(TokenBar(Localizer.T("stats.cached"), metrics.CachedTokens, max, CachedColor, theme));
+            panel.Children.Add(TokenBar(Localizer.T("stats.output"), metrics.OutputTokens, max, OutputColor, theme));
+            panel.Children.Add(KeyValue(Localizer.T("stats.totalTokens"), metrics.TotalTokens.ToString("#,##0"), theme));
 
-            panel.Children.Add(SectionLabel("Latency", theme));
-            panel.Children.Add(KeyValue("Time to first token", Percentiles(metrics.AvgTtftMs, metrics.P95TtftMs, metrics.P99TtftMs), theme));
-            panel.Children.Add(KeyValue("Total latency", Percentiles(metrics.AvgTotalMs, metrics.P95TotalMs, metrics.P99TotalMs), theme));
+            panel.Children.Add(SectionLabel(Localizer.T("stats.latency"), theme));
+            panel.Children.Add(KeyValue(Localizer.T("stats.ttft"), Percentiles(metrics.AvgTtftMs, metrics.P95TtftMs, metrics.P99TtftMs), theme));
+            panel.Children.Add(KeyValue(Localizer.T("stats.totalLatency"), Percentiles(metrics.AvgTotalMs, metrics.P95TotalMs, metrics.P99TotalMs), theme));
 
-            panel.Children.Add(SectionLabel("Context", theme));
-            panel.Children.Add(KeyValue("Context window", contextWindow > 0 ? contextWindow.ToString("#,##0") + " tokens" : "unknown", theme));
+            panel.Children.Add(SectionLabel(Localizer.T("stats.context"), theme));
+            panel.Children.Add(KeyValue(Localizer.T("stats.contextWindow"), contextWindow > 0 ? contextWindow.ToString("#,##0") + " " + Localizer.T("stats.tokensUnit") : Localizer.T("stats.unknown"), theme));
             panel.Children.Add(ContextUtilization(estimatedTokens, contextWindow, theme));
 
-            Button close = new Button { Content = "Close", HorizontalAlignment = HorizontalAlignment.Right, Background = theme.AccentButton, Foreground = theme.AccentText, Margin = new Thickness(0, 6, 0, 0) };
+            Button close = new Button { Content = Localizer.T("act.close"), HorizontalAlignment = HorizontalAlignment.Right, Background = theme.AccentButton, Foreground = theme.AccentText, Margin = new Thickness(0, 6, 0, 0) };
             close.Click += (sender, args) => Close();
             panel.Children.Add(close);
 
@@ -83,13 +84,13 @@ namespace Mux.Desktop.Views
         {
             DockPanel header = new DockPanel();
 
-            TextBlock title = new TextBlock { Text = "Conversation statistics", FontSize = 18, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
+            TextBlock title = new TextBlock { Text = Localizer.T("stats.title"), FontSize = 18, FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center };
             DockPanel.SetDock(title, Dock.Left);
             header.Children.Add(title);
 
             Button copy = CopyButton.Create(() => _Json, theme, this);
             copy.HorizontalAlignment = HorizontalAlignment.Right;
-            copy.Tip("Copy statistics as JSON");
+            copy.Tip(Localizer.T("stats.copy.tip"));
             DockPanel.SetDock(copy, Dock.Right);
             header.Children.Add(copy);
 
@@ -133,10 +134,10 @@ namespace Mux.Desktop.Views
 
             string caption = contextWindow > 0
                 ? (fraction * 100).ToString("0.#") + "%  (est " + estimatedTokens.ToString("#,##0") + " / " + contextWindow.ToString("#,##0") + ")"
-                : "unknown";
+                : Localizer.T("stats.unknown");
 
             StackPanel row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 2, 0, 2) };
-            row.Children.Add(new TextBlock { Text = "Utilization", Width = 70, Foreground = theme.Muted, FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+            row.Children.Add(new TextBlock { Text = Localizer.T("stats.utilization"), Width = 70, Foreground = theme.Muted, FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
             row.Children.Add(track);
             row.Children.Add(new TextBlock { Text = caption, Foreground = theme.Text, FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
             return row;
