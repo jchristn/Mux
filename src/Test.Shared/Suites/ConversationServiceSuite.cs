@@ -102,6 +102,27 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(0, service.History.Count, "errored turn leaves nothing in history");
                     }),
 
+                    new TestCaseDescriptor("ConversationService", "IndependentInstancesIsolated", "Two per-tab conversations run concurrently without sharing history (parallel-tabs premise)", async (CancellationToken ct) =>
+                    {
+                        // Each desktop tab owns its own runner + ConversationService so tabs can run turns at
+                        // the same time. Two services driven concurrently must keep entirely separate histories.
+                        ConversationService a = new ConversationService(
+                            new ListTurnRunner(new List<AgentEvent> { new AssistantTextEvent { Text = "answer-A" }, new RunCompletedEvent { Status = "completed" } }), null);
+                        ConversationService b = new ConversationService(
+                            new ListTurnRunner(new List<AgentEvent> { new AssistantTextEvent { Text = "answer-B" }, new RunCompletedEvent { Status = "completed" } }), null);
+
+                        Task<TurnProjection> turnA = a.RunTurnAsync("prompt-A", ct);
+                        Task<TurnProjection> turnB = b.RunTurnAsync("prompt-B", ct);
+                        await Task.WhenAll(turnA, turnB);
+
+                        MuxAssert.AreEqual(2, a.History.Count, "a history isolated");
+                        MuxAssert.AreEqual(2, b.History.Count, "b history isolated");
+                        MuxAssert.AreEqual("prompt-A", a.History[0].Content, "a user");
+                        MuxAssert.AreEqual("answer-A", a.History[1].Content, "a assistant");
+                        MuxAssert.AreEqual("prompt-B", b.History[0].Content, "b user");
+                        MuxAssert.AreEqual("answer-B", b.History[1].Content, "b assistant");
+                    }),
+
                     new TestCaseDescriptor("ConversationService", "ResumeFromHistory", "Initial history is preserved", async (CancellationToken ct) =>
                     {
                         List<ConversationMessage> seed = new List<ConversationMessage>

@@ -48,7 +48,7 @@ namespace Mux.Desktop.Shell
         private readonly ILocalizationService _Localization;
         private readonly IThreadService _Threads;
         private readonly SessionStore _Store;
-        private readonly AgentLoopTurnRunner _Runner;
+        private readonly IUsageRecorder _UsageRecorder;
         private McpRuntime? _Mcp;
         private SkillRuntime? _Skills;
         private readonly string _ConfigDirectory;
@@ -61,7 +61,6 @@ namespace Mux.Desktop.Shell
         private TextBlock _ContextIndicator = null!;
         private int _ModelValidationSeq;
         private TextBlock _TitleText = null!;
-        private StackPanel _Transcript = null!;
         private ScrollViewer _TranscriptScroll = null!;
         private StackPanel _EmptyState = null!;
         private StackPanel _OverviewHost = null!;
@@ -74,36 +73,72 @@ namespace Mux.Desktop.Shell
         private CheckpointManager? _Checkpoints;
         private Task? _CheckpointProbe;
         private readonly WorkspaceViewModel _Workspace = new WorkspaceViewModel();
-        private readonly Dictionary<string, StackPanel> _TabTranscripts = new Dictionary<string, StackPanel>(StringComparer.Ordinal);
         private Border _TabStripHost = null!;
-        private ConversationService? _Conversation;
-        private TextBlock? _StreamingBlock;
-        private Border? _AssistantBorder;
-        private Border? _AssistantContentHost;
-        private StackPanel? _TaskPlanBody;
-        private CollapsibleSection? _ThinkingSection;
-        private TextBlock? _ThinkingText;
-        private Border? _PendingBubble;
-        private TextBlock? _PendingText;
-        private DispatcherTimer? _QuipTimer;
-        private int _QuipIndex;
-        private readonly Dictionary<string, ToolCardView> _ToolCards = new Dictionary<string, ToolCardView>(StringComparer.Ordinal);
-        private Stopwatch? _TurnStopwatch;
-        private long? _TurnTtftMs;
-        private int _LastEstimatedTokens;
-        private CancellationTokenSource? _TurnCts;
-        private string _CurrentThreadId = string.Empty;
+        private string? _RebuildReopenId;
+
+        // ---- parallel tabs -----------------------------------------------------------------------
+        // Each open thread has its own TabContext (own runner + conversation + transcript + streaming
+        // widgets + turn state), so tabs run agent turns concurrently and switching never blocks. Ctx is the
+        // render target: the tab whose event is currently being applied (_RenderCtx), else the active tab.
+        // The per-conversation fields below are properties proxied to Ctx so the existing render/turn code is
+        // unchanged but always operates on the right tab. Git checkpointing is serialized (_CheckpointGate)
+        // because all tabs share one working tree; undo/redo remain global.
+        private readonly Dictionary<string, TabContext> _Tabs = new Dictionary<string, TabContext>(StringComparer.Ordinal);
+        private TabContext? _Active;
+        private TabContext? _RenderCtx;
+        private readonly StackPanel _DefaultTranscript = new StackPanel { Margin = new Thickness(24, 16, 24, 16), Spacing = 14 };
+        private readonly AgentLoopTurnRunner _FallbackRunner;
+        private static readonly SemaphoreSlim _CheckpointGate = new SemaphoreSlim(1, 1);
+        private static readonly Dictionary<string, ToolCardView> _EmptyToolCards = new Dictionary<string, ToolCardView>(StringComparer.Ordinal);
+
+        private TabContext? Ctx
+        {
+            get => _RenderCtx ?? _Active;
+        }
+
+        private StackPanel _Transcript
+        {
+            get => Ctx?.Transcript ?? _DefaultTranscript;
+        }
+
+        private AgentLoopTurnRunner _Runner
+        {
+            get => Ctx?.Runner ?? _FallbackRunner;
+        }
+
+        private ConversationService? _Conversation
+        {
+            get => Ctx?.Conversation;
+            set { if (Ctx != null) { Ctx.Conversation = value; } }
+        }
+
+        private TextBlock? _StreamingBlock { get => Ctx?.StreamingBlock; set { if (Ctx != null) { Ctx.StreamingBlock = value; } } }
+        private Border? _AssistantBorder { get => Ctx?.AssistantBorder; set { if (Ctx != null) { Ctx.AssistantBorder = value; } } }
+        private Border? _AssistantContentHost { get => Ctx?.AssistantContentHost; set { if (Ctx != null) { Ctx.AssistantContentHost = value; } } }
+        private StackPanel? _TaskPlanBody { get => Ctx?.TaskPlanBody; set { if (Ctx != null) { Ctx.TaskPlanBody = value; } } }
+        private CollapsibleSection? _ThinkingSection { get => Ctx?.ThinkingSection; set { if (Ctx != null) { Ctx.ThinkingSection = value; } } }
+        private TextBlock? _ThinkingText { get => Ctx?.ThinkingText; set { if (Ctx != null) { Ctx.ThinkingText = value; } } }
+        private Border? _PendingBubble { get => Ctx?.PendingBubble; set { if (Ctx != null) { Ctx.PendingBubble = value; } } }
+        private TextBlock? _PendingText { get => Ctx?.PendingText; set { if (Ctx != null) { Ctx.PendingText = value; } } }
+        private DispatcherTimer? _QuipTimer { get => Ctx?.QuipTimer; set { if (Ctx != null) { Ctx.QuipTimer = value; } } }
+        private int _QuipIndex { get => Ctx?.QuipIndex ?? 0; set { if (Ctx != null) { Ctx.QuipIndex = value; } } }
+        private Dictionary<string, ToolCardView> _ToolCards { get => Ctx?.ToolCards ?? _EmptyToolCards; }
+        private Stopwatch? _TurnStopwatch { get => Ctx?.TurnStopwatch; set { if (Ctx != null) { Ctx.TurnStopwatch = value; } } }
+        private long? _TurnTtftMs { get => Ctx?.TurnTtftMs; set { if (Ctx != null) { Ctx.TurnTtftMs = value; } } }
+        private int _LastEstimatedTokens { get => Ctx?.LastEstimatedTokens ?? 0; set { if (Ctx != null) { Ctx.LastEstimatedTokens = value; } } }
+        private CancellationTokenSource? _TurnCts { get => Ctx?.TurnCts; set { if (Ctx != null) { Ctx.TurnCts = value; } } }
+        private string _CurrentThreadId { get => Ctx?.Id ?? string.Empty; set { if (Ctx != null) { Ctx.Id = value; } } }
         private string _ThemeMode = "dark";
         private string _LocaleCode = "en";
         private bool _ThemeSubscribed;
         private readonly PromptHistory _PromptHistory = new PromptHistory();
         private bool _SuppressHistoryReset;
-        private string _CurrentTitle = string.Empty;
-        private bool _CurrentTitlePinned;
-        private bool _TitleSummarized;
+        private string _CurrentTitle { get => Ctx?.Title ?? string.Empty; set { if (Ctx != null) { Ctx.Title = value; } } }
+        private bool _CurrentTitlePinned { get => Ctx?.TitlePinned ?? false; set { if (Ctx != null) { Ctx.TitlePinned = value; } } }
+        private bool _TitleSummarized { get => Ctx?.TitleSummarized ?? false; set { if (Ctx != null) { Ctx.TitleSummarized = value; } } }
 
         private const int TitleSummaryThreshold = 250;
-        private DateTime _CurrentCreatedUtc;
+        private DateTime _CurrentCreatedUtc { get => Ctx?.CreatedUtc ?? default; set { if (Ctx != null) { Ctx.CreatedUtc = value; } } }
         private bool _SidebarCollapsed;
         private bool _AutoExpandThinking;
         private bool _ConversationsOpen = true;
@@ -140,7 +175,8 @@ namespace Mux.Desktop.Shell
             _Store = store;
             _ConfigDirectory = configDirectory;
             _UsageQuery = usageQuery;
-            _Runner = new AgentLoopTurnRunner(configDirectory, ApproveToolAsync, usageRecorder);
+            _UsageRecorder = usageRecorder;
+            _FallbackRunner = CreateRunner();
 
             Title = "mux";
             Icon = IconResources.LoadWindowIcon();
@@ -182,6 +218,26 @@ namespace Mux.Desktop.Shell
 
         // Starts the shared MCP + skills runtimes (both refresh in the background). The turn runner reads their
         // current tools per turn, so a newly connected server or re-scanned skill applies to the next turn.
+        // Build a fresh per-tab runner sharing the app-wide approval handler, usage recorder, and live
+        // MCP/skills runtimes. Each tab owns one so concurrent turns don't clash on endpoint/session state.
+        private AgentLoopTurnRunner CreateRunner()
+        {
+            AgentLoopTurnRunner runner = new AgentLoopTurnRunner(_ConfigDirectory, ApproveToolAsync, _UsageRecorder);
+            runner.Mcp = _Mcp;
+            runner.Skills = _Skills;
+            return runner;
+        }
+
+        // Every live runner: the fallback (used when no tab is active) plus one per open tab.
+        private IEnumerable<AgentLoopTurnRunner> AllRunners()
+        {
+            yield return _FallbackRunner;
+            foreach (TabContext tab in _Tabs.Values)
+            {
+                yield return tab.Runner;
+            }
+        }
+
         private void InitializeToolRuntimes()
         {
             MuxSettings settings;
@@ -196,7 +252,10 @@ namespace Mux.Desktop.Shell
                     TimeSpan.FromSeconds(30),
                     onNotice: message => Dispatcher.UIThread.Post(() => AddNotice(message, isError: false)));
                 _Mcp.Start();
-                _Runner.Mcp = _Mcp;
+                foreach (AgentLoopTurnRunner runner in AllRunners())
+                {
+                    runner.Mcp = _Mcp;
+                }
             }
             catch (Exception)
             {
@@ -214,7 +273,10 @@ namespace Mux.Desktop.Shell
                         () => { },
                         TimeSpan.FromSeconds(settings.SkillRefreshIntervalSeconds));
                     _Skills.Start();
-                    _Runner.Skills = _Skills;
+                    foreach (AgentLoopTurnRunner runner in AllRunners())
+                    {
+                        runner.Skills = _Skills;
+                    }
                 }
                 catch (Exception)
                 {
@@ -555,19 +617,31 @@ namespace Mux.Desktop.Shell
                 return;
             }
 
-            if (deleted.Contains(_CurrentThreadId))
+            bool activeDeleted = _Active != null && deleted.Contains(_Active.Id);
+            foreach (string id in deleted)
             {
-                if (_Conversation != null)
+                WorkspaceTabViewModel? tab = FindTabById(id);
+                if (tab != null)
                 {
-                    _Conversation.Event -= OnConversationEvent;
-                    _Conversation = null;
+                    tab.PropertyChanged -= OnTabPropertyChanged;
+                    _Workspace.CloseTab(tab);
                 }
 
-                _CurrentThreadId = string.Empty;
-                _CurrentTitle = string.Empty;
-                _Transcript.Children.Clear();
-                _TitleText.Text = "mux";
-                UpdateEmptyState();
+                RemoveTabContext(id);
+            }
+
+            RenderTabStrip();
+
+            if (activeDeleted)
+            {
+                if (_Workspace.ActiveTab != null)
+                {
+                    await OpenThreadAsync(_Workspace.ActiveTab.Id);
+                }
+                else
+                {
+                    ClearActiveConversation();
+                }
             }
 
             await LoadThreadsAsync();
@@ -1240,14 +1314,10 @@ namespace Mux.Desktop.Shell
 
         private async Task SelectTabAsync(WorkspaceTabViewModel tab)
         {
-            if (ReferenceEquals(tab, _Workspace.ActiveTab) && string.Equals(tab.Id, _CurrentThreadId, StringComparison.Ordinal))
+            // Parallel tabs: switching is always allowed. A busy tab keeps streaming into its own transcript
+            // in the background; switching back shows its progress.
+            if (_Active != null && string.Equals(tab.Id, _Active.Id, StringComparison.Ordinal))
             {
-                return;
-            }
-
-            if (_Conversation != null && _Conversation.IsBusy)
-            {
-                AddNotice(L("main.finishBeforeSwitch"), isError: false);
                 return;
             }
 
@@ -1256,16 +1326,12 @@ namespace Mux.Desktop.Shell
 
         private async Task CloseTabAsync(WorkspaceTabViewModel tab)
         {
+            // Closing a tab cancels its in-flight turn (if any) rather than blocking on it.
             bool wasActive = ReferenceEquals(tab, _Workspace.ActiveTab);
-            if (wasActive && _Conversation != null && _Conversation.IsBusy)
-            {
-                AddNotice(L("main.finishBeforeClose"), isError: false);
-                return;
-            }
 
             tab.PropertyChanged -= OnTabPropertyChanged;
             _Workspace.CloseTab(tab);
-            _TabTranscripts.Remove(tab.Id);
+            RemoveTabContext(tab.Id);
             RenderTabStrip();
 
             if (!wasActive)
@@ -1283,25 +1349,35 @@ namespace Mux.Desktop.Shell
             }
         }
 
+        // Cancel a tab's in-flight turn, detach its conversation, and drop its context. Leaves the workspace
+        // tab VM alone (callers close that separately).
+        private void RemoveTabContext(string id)
+        {
+            if (_Tabs.TryGetValue(id, out TabContext? context))
+            {
+                try { context.TurnCts?.Cancel(); }
+                catch (ObjectDisposedException) { }
+                DetachConversation(context);
+                _Tabs.Remove(id);
+                if (ReferenceEquals(context, _Active))
+                {
+                    _Active = null;
+                }
+            }
+        }
+
+        // Deactivate to the "no conversation" state (no tab selected): show the empty default transcript.
+        // Does not close or cancel background tabs — they keep running and can be switched back to.
         private void ClearActiveConversation()
         {
-            if (_Conversation != null)
-            {
-                _Conversation.Event -= OnConversationEvent;
-                _Conversation = null;
-            }
-
-            _CurrentThreadId = string.Empty;
-            _CurrentTitle = string.Empty;
-            _TitleSummarized = false;
-            ResetStreamingState();
-            _Transcript = new StackPanel { Margin = new Thickness(24, 16, 24, 16), Spacing = 14 };
-            _TranscriptScroll.Content = _Transcript;
+            _Active = null;
+            _DefaultTranscript.Children.Clear();
+            _TranscriptScroll.Content = _DefaultTranscript;
             _TitleText.Text = "mux";
-            _LastEstimatedTokens = 0;
             UpdateContextIndicator();
             UpdateEmptyState();
             RefreshThreadSelection();
+            UpdateSendButton();
         }
 
         private WorkspaceTabViewModel? FindTabById(string id)
@@ -1337,20 +1413,10 @@ namespace Mux.Desktop.Shell
             {
                 tab.PropertyChanged -= OnTabPropertyChanged;
                 _Workspace.CloseTab(tab);
-                _TabTranscripts.Remove(tab.Id);
+                RemoveTabContext(tab.Id);
             }
 
             RenderTabStrip();
-        }
-
-        private void SyncActiveTabTitle(string title)
-        {
-            WorkspaceTabViewModel? tab = _Workspace.ActiveTab;
-            if (tab != null && string.Equals(tab.Id, _CurrentThreadId, StringComparison.Ordinal))
-            {
-                tab.Title = DisplayTitle(title);
-                RenderTabStrip();
-            }
         }
 
         private Control BuildHeader()
@@ -1513,8 +1579,9 @@ namespace Mux.Desktop.Shell
             _EmptyState.Children.Add(_OverviewHost);
             _ = PopulateOverviewAsync();
 
-            _Transcript = new StackPanel { Margin = new Thickness(24, 16, 24, 16), Spacing = 14 };
-            _TranscriptScroll = new ScrollViewer { HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Content = _Transcript };
+            // The scroll shows the active tab's transcript once a thread opens; until then, the empty default.
+            _DefaultTranscript.Children.Clear();
+            _TranscriptScroll = new ScrollViewer { HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Content = _DefaultTranscript };
 
             Grid area = new Grid();
             area.Children.Add(_TranscriptScroll);
@@ -1538,22 +1605,37 @@ namespace Mux.Desktop.Shell
         private void RebuildContent()
         {
             _Theme = AppTheme.Current;
-            ResetStreamingState();
-            // Cached transcript panels belong to the old visual tree and old theme colors; drop them so each
-            // tab re-renders fresh (RefreshAfterRebuild re-opens the current thread).
-            _TabTranscripts.Clear();
+            // Tab panels belong to the old visual tree and theme; drop every tab context (cancelling any
+            // in-flight turns — rare mid-turn theme/locale changes) and re-open the previously active thread.
+            _RebuildReopenId = _Active?.Id;
+            ClearAllTabs();
             Background = _Theme.Surface;
             Content = BuildLayout();
             PopulateModelPicker();
             _ = RefreshAfterRebuild();
         }
 
+        // Cancel and drop every tab context (used on a full layout rebuild).
+        private void ClearAllTabs()
+        {
+            foreach (TabContext context in _Tabs.Values)
+            {
+                try { context.TurnCts?.Cancel(); }
+                catch (ObjectDisposedException) { }
+                DetachConversation(context);
+            }
+
+            _Tabs.Clear();
+            _Active = null;
+            _RenderCtx = null;
+        }
+
         private async Task RefreshAfterRebuild()
         {
             await LoadThreadsAsync();
-            if (!string.IsNullOrEmpty(_CurrentThreadId))
+            if (!string.IsNullOrEmpty(_RebuildReopenId))
             {
-                await OpenThreadAsync(_CurrentThreadId);
+                await OpenThreadAsync(_RebuildReopenId!);
             }
             else
             {
@@ -1776,8 +1858,20 @@ namespace Mux.Desktop.Shell
         // right after appending/growing content scrolls to the stale extent (the new content has not been
         // measured yet), so streaming text appears to stop following; posting at Background priority runs the
         // scroll after layout so it tracks the growing content.
+        // True when the current render target is the visible tab (so it is safe to touch shared visible
+        // controls). False while applying a background tab's event.
+        private bool RenderingActive
+        {
+            get => _RenderCtx == null || ReferenceEquals(_RenderCtx, _Active);
+        }
+
         private void ScrollTranscriptToEnd()
         {
+            if (!RenderingActive)
+            {
+                return;
+            }
+
             Dispatcher.UIThread.Post(() => _TranscriptScroll.ScrollToEnd(), DispatcherPriority.Background);
         }
 
@@ -1804,63 +1898,89 @@ namespace Mux.Desktop.Shell
 
         private async Task OpenThreadAsync(string id)
         {
+            // If this thread already has a live tab (possibly mid-turn), just activate it — never reload or
+            // reset it, so a background turn keeps streaming into its own transcript.
+            if (_Tabs.TryGetValue(id, out TabContext? existing))
+            {
+                ActivateContext(existing);
+                OpenOrFocusTab(existing.Id, existing.Title);
+                return;
+            }
+
             SessionSnapshot? snapshot = await _Store.LoadAsync(id, CancellationToken.None);
             if (snapshot == null)
             {
                 return;
             }
 
-            _CurrentThreadId = snapshot.Id;
-            RefreshThreadSelection();
-            _Runner.SessionId = snapshot.Id;
-            _LastEstimatedTokens = 0;
-            UpdateContextIndicator();
-            _CurrentTitle = snapshot.Title;
-            _CurrentTitlePinned = snapshot.TitlePinned;
+            StackPanel panel = new StackPanel { Margin = new Thickness(24, 16, 24, 16), Spacing = 14 };
+            TabContext context = new TabContext(snapshot.Id, CreateRunner(), panel);
+            context.Runner.SessionId = snapshot.Id;
+            context.Runner.EndpointName = (_ModelPicker.SelectedItem as EndpointConfig)?.Name ?? _FallbackRunner.EndpointName;
+            context.Title = snapshot.Title;
+            context.TitlePinned = snapshot.TitlePinned;
             // Treat an already-substantial conversation as already titled so we don't re-summarize on reopen;
             // a short one may still cross the threshold and get an AI title as it grows.
-            _TitleSummarized = ConversationCharCount(snapshot.ConversationHistory) >= TitleSummaryThreshold;
-            _CurrentCreatedUtc = snapshot.CreatedUtc == default ? DateTime.UtcNow : snapshot.CreatedUtc;
-            _TitleText.Text = DisplayTitle(snapshot.Title);
+            context.TitleSummarized = ConversationCharCount(snapshot.ConversationHistory) >= TitleSummaryThreshold;
+            context.CreatedUtc = snapshot.CreatedUtc == default ? DateTime.UtcNow : snapshot.CreatedUtc;
+            _Tabs[snapshot.Id] = context;
 
-            if (_Conversation != null)
+            // Render persisted history into the tab's own panel (RenderPersistedMessage targets the render ctx).
+            TabContext? previousRender = _RenderCtx;
+            _RenderCtx = context;
+            try
             {
-                _Conversation.Event -= OnConversationEvent;
+                foreach (ConversationMessage message in snapshot.ConversationHistory)
+                {
+                    RenderPersistedMessage(message);
+                }
+            }
+            finally
+            {
+                _RenderCtx = previousRender;
             }
 
-            _Conversation = new ConversationService(_Runner, snapshot.ConversationHistory);
-            _Conversation.Event += OnConversationEvent;
+            AttachConversation(context, new ConversationService(context.Runner, snapshot.ConversationHistory));
 
-            ResetStreamingState();
-
-            // Each tab keeps its own rendered transcript so switching tabs is instant and preserves scroll,
-            // rather than clearing and re-rendering from disk every time. Point _Transcript (the target of all
-            // render helpers) at this thread's panel and show it.
-            _Transcript = GetOrCreateTranscriptPanel(snapshot.Id, snapshot.ConversationHistory);
-            _TranscriptScroll.Content = _Transcript;
-
+            ActivateContext(context);
             OpenOrFocusTab(snapshot.Id, snapshot.Title);
-            UpdateEmptyState();
         }
 
-        private StackPanel GetOrCreateTranscriptPanel(string id, IReadOnlyList<ConversationMessage> history)
+        // Make a tab the visible/active one: show its transcript, and reflect its title, endpoint, context
+        // usage, and busy state in the shared header controls. Never blocks on a busy tab.
+        private void ActivateContext(TabContext context)
         {
-            if (_TabTranscripts.TryGetValue(id, out StackPanel? existing))
+            _Active = context;
+            _TranscriptScroll.Content = context.Transcript;
+            _TitleText.Text = DisplayTitle(context.Title);
+            SyncModelPickerToActive();
+            UpdateContextIndicator();
+            UpdateEmptyState();
+            RefreshThreadSelection();
+            UpdateSendButton();
+        }
+
+        // Point the shared model picker at the active tab's endpoint without changing it.
+        private void SyncModelPickerToActive()
+        {
+            string? endpointName = _Active?.Runner.EndpointName;
+            if (endpointName == null || _ModelPicker.ItemsSource == null)
             {
-                return existing;
+                return;
             }
 
-            StackPanel panel = new StackPanel { Margin = new Thickness(24, 16, 24, 16), Spacing = 14 };
-            _TabTranscripts[id] = panel;
-
-            // RenderPersistedMessage appends to _Transcript, so target the new panel while rendering history.
-            _Transcript = panel;
-            foreach (ConversationMessage message in history)
+            foreach (object? item in _ModelPicker.ItemsSource)
             {
-                RenderPersistedMessage(message);
-            }
+                if (item is EndpointConfig config && string.Equals(config.Name, endpointName, StringComparison.Ordinal))
+                {
+                    if (!ReferenceEquals(_ModelPicker.SelectedItem, config))
+                    {
+                        _ModelPicker.SelectedItem = config;
+                    }
 
-            return panel;
+                    return;
+                }
+            }
         }
 
         private async Task CompactCurrentAsync()
@@ -1896,22 +2016,46 @@ namespace Mux.Desktop.Shell
                 return;
             }
 
-            _Conversation.Event -= OnConversationEvent;
-            _Conversation = new ConversationService(_Runner, result.History);
-            _Conversation.Event += OnConversationEvent;
+            TabContext? context = _Active;
+            if (context == null)
+            {
+                return;
+            }
+
+            AttachConversation(context, new ConversationService(context.Runner, result.History));
 
             ResetStreamingState();
-            _Transcript.Children.Clear();
-            foreach (ConversationMessage message in result.History)
+            context.Transcript.Children.Clear();
+            WithContext(context, () =>
             {
-                RenderPersistedMessage(message);
-            }
+                foreach (ConversationMessage message in result.History)
+                {
+                    RenderPersistedMessage(message);
+                }
+            });
 
             UpdateEmptyState();
 
-            await PersistCurrentAsync();
+            await PersistCurrentAsync(context);
             await LoadThreadsAsync();
             AddNotice(result.Message, isError: false);
+        }
+
+        // Run a synchronous UI burst against a specific tab's context (its transcript + streaming widgets),
+        // so a turn that started on one tab renders into that tab even after the user switches away. Safe to
+        // nest with OnTabEvent because all UI work runs on the single dispatcher thread.
+        private void WithContext(TabContext context, Action action)
+        {
+            TabContext? previous = _RenderCtx;
+            _RenderCtx = context;
+            try
+            {
+                action();
+            }
+            finally
+            {
+                _RenderCtx = previous;
+            }
         }
 
         private async Task SendAsync()
@@ -1931,65 +2075,81 @@ namespace Mux.Desktop.Shell
                 return;
             }
 
-            if (_Conversation != null && _Conversation.IsBusy)
+            // Only block a second turn in the SAME tab; other tabs may run their own turns concurrently.
+            if (_Active != null && _Active.IsBusy)
             {
                 return;
             }
 
-            if (_Conversation == null)
+            if (_Active == null || _Active.Conversation == null)
             {
                 ThreadSummary created = await _Threads.CreateAsync(null, SelectedEndpointName(), SelectedModel(), CancellationToken.None);
                 await OpenThreadAsync(created.Id);
-                if (_Conversation == null)
+                if (_Active == null || _Active.Conversation == null)
                 {
                     return;
                 }
             }
 
-            _Composer.Text = string.Empty;
-            ResetStreamingState();
-            _TurnStopwatch = Stopwatch.StartNew();
-            _TurnTtftMs = null;
-            _TurnCts = new CancellationTokenSource();
-            AddUserBubble(prompt);
-            StartPendingIndicator();
-            UpdateEmptyState();
-            SetSending(true);
+            TabContext context = _Active;
+            ConversationService conversation = context.Conversation!;
 
+            _Composer.Text = string.Empty;
+            WithContext(context, () =>
+            {
+                ResetStreamingState();
+                _TurnStopwatch = Stopwatch.StartNew();
+                _TurnTtftMs = null;
+                _TurnCts = new CancellationTokenSource();
+                AddUserBubble(prompt);
+                StartPendingIndicator();
+                UpdateEmptyState();
+            });
+            SetTabBusy(context, true);
+
+            // All tabs share one working tree, so serialize git checkpoint recording to avoid index races.
             await EnsureCheckpointManagerAsync();
             if (_Checkpoints != null)
             {
+                await _CheckpointGate.WaitAsync().ConfigureAwait(true);
                 try
                 {
-                    await _Checkpoints.RecordAsync(CheckpointLabel(prompt), _TurnCts.Token);
+                    await _Checkpoints.RecordAsync(CheckpointLabel(prompt), context.TurnCts!.Token);
                     UpdateUndoRedoButtons();
                 }
                 catch (Exception)
                 {
                     // Best-effort snapshot; never block the turn on checkpointing.
                 }
+                finally
+                {
+                    _CheckpointGate.Release();
+                }
             }
 
             try
             {
-                TurnProjection projection = await _Conversation!.RunTurnAsync(prompt, _TurnCts.Token);
+                TurnProjection projection = await conversation.RunTurnAsync(prompt, context.TurnCts!.Token);
                 if (projection.WasCancelled)
                 {
-                    AddNotice(L("main.stopped"), isError: false);
+                    WithContext(context, () => AddNotice(L("main.stopped"), isError: false));
                 }
             }
             catch (Exception ex)
             {
-                AddNotice(L("main.errorPrefix") + ex.Message, isError: true);
+                WithContext(context, () => AddNotice(L("main.errorPrefix") + ex.Message, isError: true));
             }
             finally
             {
-                StopPendingIndicator();
-                FinalizeAssistantBubble();
-                SetSending(false);
-                _TurnCts?.Dispose();
-                _TurnCts = null;
-                await PersistCurrentAsync();
+                WithContext(context, () =>
+                {
+                    StopPendingIndicator();
+                    FinalizeAssistantBubble();
+                });
+                SetTabBusy(context, false);
+                context.TurnCts?.Dispose();
+                context.TurnCts = null;
+                await PersistCurrentAsync(context);
                 await LoadThreadsAsync();
             }
         }
@@ -2000,17 +2160,62 @@ namespace Mux.Desktop.Shell
             return label.Length == 0 ? "turn" : label;
         }
 
-        private void SetSending(bool sending)
+        // Reflect a tab's busy state on its tab dot, and — when it is the active tab — on the shared send
+        // button (Send ↔ red Stop). A background tab's turn updates only its dot, not the visible button.
+        private void SetTabBusy(TabContext context, bool busy)
         {
-            _SendButton.Content = sending ? L(StringKeys.Stop) : L(StringKeys.Send);
-            // Stop is a cancel action — colour it red; the idle Send keeps the green accent.
-            _SendButton.Background = sending ? _Theme.Error : _Theme.AccentButton;
-            _Workspace.ActiveTab?.NotifyBusy(sending);
+            FindTabById(context.Id)?.NotifyBusy(busy);
+            if (ReferenceEquals(context, _Active))
+            {
+                UpdateSendButton();
+            }
         }
 
-        private void OnConversationEvent(object? sender, AgentEvent agentEvent)
+        private void UpdateSendButton()
         {
-            Dispatcher.UIThread.Post(() => ApplyEventToUi(agentEvent));
+            bool busy = _Active?.IsBusy ?? false;
+            _SendButton.Content = busy ? L(StringKeys.Stop) : L(StringKeys.Send);
+            // Stop is a cancel action — colour it red; the idle Send keeps the green accent.
+            _SendButton.Background = busy ? _Theme.Error : _Theme.AccentButton;
+        }
+
+        // Route a conversation's events to ITS tab's render target (which may not be the active tab), so a
+        // background tab's turn streams into its own transcript without disturbing the visible one.
+        private void OnTabEvent(TabContext context, AgentEvent agentEvent)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                TabContext? previous = _RenderCtx;
+                _RenderCtx = context;
+                try
+                {
+                    ApplyEventToUi(agentEvent);
+                }
+                finally
+                {
+                    _RenderCtx = previous;
+                }
+            });
+        }
+
+        // Attach a fresh conversation to a tab with a per-tab event handler kept for later unsubscription.
+        private void AttachConversation(TabContext context, ConversationService conversation)
+        {
+            DetachConversation(context);
+            context.Conversation = conversation;
+            EventHandler<AgentEvent> handler = (sender, e) => OnTabEvent(context, e);
+            context.EventHandler = handler;
+            conversation.Event += handler;
+        }
+
+        private void DetachConversation(TabContext context)
+        {
+            if (context.Conversation != null && context.EventHandler != null)
+            {
+                context.Conversation.Event -= context.EventHandler;
+            }
+
+            context.EventHandler = null;
         }
 
         // ---- slash commands ----------------------------------------------------------------------
@@ -2221,7 +2426,7 @@ namespace Mux.Desktop.Shell
 
         private void UpdateContextIndicator()
         {
-            if (_ContextIndicator == null)
+            if (_ContextIndicator == null || !RenderingActive)
             {
                 return;
             }
@@ -2345,35 +2550,35 @@ namespace Mux.Desktop.Shell
             ScrollTranscriptToEnd();
         }
 
-        private async Task PersistCurrentAsync()
+        private async Task PersistCurrentAsync(TabContext context)
         {
-            if (_Conversation == null || string.IsNullOrEmpty(_CurrentThreadId))
+            ConversationService? conversation = context.Conversation;
+            if (conversation == null || string.IsNullOrEmpty(context.Id))
             {
                 return;
             }
 
             // Until the conversation is substantial, use a quick heuristic title (the first user message).
-            if (!_CurrentTitlePinned && !_TitleSummarized)
+            if (!context.TitlePinned && !context.TitleSummarized)
             {
-                string firstUser = FirstUserMessage(_Conversation.History);
+                string firstUser = FirstUserMessage(conversation.History);
                 if (!string.IsNullOrWhiteSpace(firstUser))
                 {
-                    _CurrentTitle = SessionTitleHelper.Normalize(firstUser, SessionTitleHelper.DefaultTitle);
-                    _TitleText.Text = DisplayTitle(_CurrentTitle);
-                    SyncActiveTabTitle(_CurrentTitle);
+                    context.Title = SessionTitleHelper.Normalize(firstUser, SessionTitleHelper.DefaultTitle);
+                    ApplyTabTitle(context, context.Title);
                 }
             }
 
             SessionSnapshot snapshot = new SessionSnapshot
             {
-                Id = _CurrentThreadId,
-                Title = _CurrentTitle,
-                TitlePinned = _CurrentTitlePinned,
-                CreatedUtc = _CurrentCreatedUtc,
+                Id = context.Id,
+                Title = context.Title,
+                TitlePinned = context.TitlePinned,
+                CreatedUtc = context.CreatedUtc,
                 UpdatedUtc = DateTime.UtcNow,
-                EndpointName = SelectedEndpointName() ?? string.Empty,
+                EndpointName = context.Runner.EndpointName ?? string.Empty,
                 Model = SelectedModel() ?? string.Empty,
-                ConversationHistory = new List<ConversationMessage>(_Conversation.History)
+                ConversationHistory = new List<ConversationMessage>(conversation.History)
             };
 
             try
@@ -2387,10 +2592,26 @@ namespace Mux.Desktop.Shell
 
             // Once the conversation crosses the threshold, replace the heuristic title with an AI summary
             // of the whole conversation (once). This becomes the session name in the nav.
-            if (!_CurrentTitlePinned && !_TitleSummarized && ConversationCharCount(_Conversation.History) >= TitleSummaryThreshold)
+            if (!context.TitlePinned && !context.TitleSummarized && ConversationCharCount(conversation.History) >= TitleSummaryThreshold)
             {
-                _TitleSummarized = true;
-                _ = GenerateAndApplyTitleAsync(_CurrentThreadId, new List<ConversationMessage>(_Conversation.History));
+                context.TitleSummarized = true;
+                _ = GenerateAndApplyTitleAsync(context, new List<ConversationMessage>(conversation.History));
+            }
+        }
+
+        // Apply a title to a tab: its tab-strip VM always, and the header title only when it is active.
+        private void ApplyTabTitle(TabContext context, string title)
+        {
+            WorkspaceTabViewModel? tab = FindTabById(context.Id);
+            if (tab != null)
+            {
+                tab.Title = DisplayTitle(title);
+                RenderTabStrip();
+            }
+
+            if (ReferenceEquals(context, _Active))
+            {
+                _TitleText.Text = DisplayTitle(title);
             }
         }
 
@@ -2413,27 +2634,26 @@ namespace Mux.Desktop.Shell
             return total;
         }
 
-        private async Task GenerateAndApplyTitleAsync(string threadId, List<ConversationMessage> history)
+        private async Task GenerateAndApplyTitleAsync(TabContext context, List<ConversationMessage> history)
         {
-            string? title = await _Runner.GenerateTitleAsync(history, CancellationToken.None);
+            string? title = await context.Runner.GenerateTitleAsync(history, CancellationToken.None);
             if (string.IsNullOrWhiteSpace(title))
             {
                 return;
             }
 
-            // Only apply while the same, unpinned conversation is still open.
-            if (!string.Equals(threadId, _CurrentThreadId, StringComparison.Ordinal) || _CurrentTitlePinned)
+            // Only apply while this tab is still open and unpinned.
+            if (context.TitlePinned || !_Tabs.ContainsKey(context.Id))
             {
                 return;
             }
 
-            _CurrentTitle = title!;
-            _TitleText.Text = DisplayTitle(title!);
-            SyncActiveTabTitle(title!);
+            context.Title = title!;
+            ApplyTabTitle(context, title!);
 
-            // Persist the summarized title (PersistCurrentAsync no longer overwrites it since _TitleSummarized
+            // Persist the summarized title (PersistCurrentAsync no longer overwrites it since TitleSummarized
             // is set) and refresh the nav so the session shows its new name.
-            await PersistCurrentAsync();
+            await PersistCurrentAsync(context);
             await LoadThreadsAsync();
         }
 
@@ -2448,12 +2668,11 @@ namespace Mux.Desktop.Shell
             }
 
             ThreadSummary? updated = await _Threads.RenameAsync(id, result, CancellationToken.None);
-            if (updated != null && string.Equals(id, _CurrentThreadId, StringComparison.Ordinal))
+            if (updated != null && _Tabs.TryGetValue(id, out TabContext? renamed))
             {
-                _CurrentTitle = updated.Title;
-                _CurrentTitlePinned = true;
-                _TitleText.Text = DisplayTitle(updated.Title);
-                SyncActiveTabTitle(updated.Title);
+                renamed.Title = updated.Title;
+                renamed.TitlePinned = true;
+                ApplyTabTitle(renamed, updated.Title);
             }
 
             await LoadThreadsAsync();
@@ -2469,16 +2688,19 @@ namespace Mux.Desktop.Shell
 
             await _Threads.DeleteAsync(id, CancellationToken.None);
 
+            bool wasActive = _Active != null && string.Equals(id, _Active.Id, StringComparison.Ordinal);
+
             WorkspaceTabViewModel? tab = FindTabById(id);
             if (tab != null)
             {
                 tab.PropertyChanged -= OnTabPropertyChanged;
                 _Workspace.CloseTab(tab);
-                _TabTranscripts.Remove(id);
-                RenderTabStrip();
             }
 
-            if (string.Equals(id, _CurrentThreadId, StringComparison.Ordinal))
+            RemoveTabContext(id);
+            RenderTabStrip();
+
+            if (wasActive)
             {
                 if (_Workspace.ActiveTab != null)
                 {
@@ -2807,7 +3029,14 @@ namespace Mux.Desktop.Shell
 
         private void UpdateEmptyState()
         {
-            bool empty = _Transcript.Children.Count == 0;
+            // The empty-state overlay tracks the VISIBLE tab; a background tab's event must not toggle it.
+            if (!RenderingActive)
+            {
+                return;
+            }
+
+            StackPanel visible = _Active?.Transcript ?? _DefaultTranscript;
+            bool empty = visible.Children.Count == 0;
             if (empty && !_EmptyState.IsVisible)
             {
                 _ = PopulateOverviewAsync();
