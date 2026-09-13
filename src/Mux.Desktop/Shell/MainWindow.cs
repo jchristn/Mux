@@ -45,9 +45,6 @@ namespace Mux.Desktop.Shell
     /// </summary>
     public sealed class MainWindow : Window
     {
-        private const string UntitledTitle = "Untitled conversation";
-        private const string Disclaimer = "AI can make mistakes. Verify answers.";
-
         private readonly ILocalizationService _Localization;
         private readonly IThreadService _Threads;
         private readonly SessionStore _Store;
@@ -247,23 +244,23 @@ namespace Mux.Desktop.Shell
         {
             List<PaletteCommand> commands = new List<PaletteCommand>
             {
-                new PaletteCommand("New conversation", "Start a fresh chat", () => _ = NewChatAsync()),
-                new PaletteCommand("Usage dashboard", "Open analytics", OpenUsageWindow),
-                new PaletteCommand("Endpoints", "Manage model endpoints", OpenEndpointsWindow),
-                new PaletteCommand("MCP servers", "Manage MCP servers", OpenMcpServersWindow),
-                new PaletteCommand("Prompt profiles", "Manage prompt profiles", OpenPromptsWindow),
-                new PaletteCommand("Skills", "Manage installed skills", OpenSkillsWindow),
-                new PaletteCommand("Subagents", "Manage subagent definitions", OpenSubagentsWindow),
-                new PaletteCommand("Model pricing", "Edit model pricing", OpenPricingWindow),
-                new PaletteCommand("Web search providers", "Configure web search", OpenSearchProvidersWindow),
-                new PaletteCommand("Plugins", "Manage hooks and custom commands", OpenPluginsWindow),
-                new PaletteCommand("Local server", "Start or stop the embedded REST + dashboard server", OpenLocalServerWindow),
-                new PaletteCommand("Keybindings", "Rebind keyboard shortcuts", OpenKeybindingsWindow),
-                new PaletteCommand("Undo last turn", "Restore the working tree to before the last turn", () => _ = UndoLastTurnAsync()),
-                new PaletteCommand("Redo last undo", "Reapply the most recently undone change", () => _ = RedoLastUndoAsync()),
-                new PaletteCommand("Reasoning effort", "Set the current model's reasoning effort", OpenEffortPicker),
-                new PaletteCommand("Settings", "Open settings", OpenSettingsWindow),
-                new PaletteCommand("About", "About mux", OpenAboutWindow)
+                new PaletteCommand(L("main.palette.newConversation"), L("main.palette.newConversation.desc"), () => _ = NewChatAsync()),
+                new PaletteCommand(L("main.palette.usage"), L("main.palette.usage.desc"), OpenUsageWindow),
+                new PaletteCommand(L("main.palette.endpoints"), L("main.palette.endpoints.desc"), OpenEndpointsWindow),
+                new PaletteCommand(L("main.palette.mcp"), L("main.palette.mcp.desc"), OpenMcpServersWindow),
+                new PaletteCommand(L("main.palette.prompts"), L("main.palette.prompts.desc"), OpenPromptsWindow),
+                new PaletteCommand(L("main.palette.skills"), L("main.palette.skills.desc"), OpenSkillsWindow),
+                new PaletteCommand(L("main.palette.subagents"), L("main.palette.subagents.desc"), OpenSubagentsWindow),
+                new PaletteCommand(L("main.palette.pricing"), L("main.palette.pricing.desc"), OpenPricingWindow),
+                new PaletteCommand(L("main.palette.search"), L("main.palette.search.desc"), OpenSearchProvidersWindow),
+                new PaletteCommand(L("main.palette.plugins"), L("main.palette.plugins.desc"), OpenPluginsWindow),
+                new PaletteCommand(L("main.palette.localServer"), L("main.palette.localServer.desc"), OpenLocalServerWindow),
+                new PaletteCommand(L("main.palette.keybindings"), L("main.palette.keybindings.desc"), OpenKeybindingsWindow),
+                new PaletteCommand(L("main.palette.undo"), L("main.palette.undo.desc"), () => _ = UndoLastTurnAsync()),
+                new PaletteCommand(L("main.palette.redo"), L("main.palette.redo.desc"), () => _ = RedoLastUndoAsync()),
+                new PaletteCommand(L("main.palette.reasoning"), L("main.palette.reasoning.desc"), OpenEffortPicker),
+                new PaletteCommand(L("main.palette.settings"), L("main.palette.settings.desc"), OpenSettingsWindow),
+                new PaletteCommand(L("main.palette.about"), L("main.palette.about.desc"), OpenAboutWindow)
             };
 
             Action? chosen = await new CommandPaletteWindow(commands).ShowDialog<Action?>(this);
@@ -311,8 +308,8 @@ namespace Mux.Desktop.Shell
         }
 
         // Resolve a localized string for the active locale. Called during layout builds, so a locale change
-        // followed by RebuildContent() re-reads every label in the new language. Long help tooltips are kept
-        // English by design (tier-2), matching the mux serve dashboard's translated/untranslated boundary.
+        // followed by RebuildContent() re-reads every label in the new language. Tooltips (including the long
+        // help tooltips) are localized too, so the whole interface follows the selected language.
         private string L(string key)
         {
             return _Localization.Get(key);
@@ -325,63 +322,63 @@ namespace Mux.Desktop.Shell
             bool conversationsExpanded = expanded && _ConversationsOpen;
 
             StackPanel top = new StackPanel { Spacing = 2 };
-            top.Children.Add(NavItem(_SidebarCollapsed ? "»" : "«", null, _SidebarCollapsed ? "Expand the sidebar back to full width." : "Collapse the sidebar to just icons to make more room for the conversation.", ToggleSidebarCollapse, accent: false));
+            top.Children.Add(NavItem(_SidebarCollapsed ? "»" : "«", null, _SidebarCollapsed ? L("main.nav.expand.tip") : L("main.nav.collapse.tip"), ToggleSidebarCollapse, accent: false));
             if (expanded)
             {
                 // New + a compact refresh icon that reloads the saved-conversation list.
                 DockPanel newRow = new DockPanel();
-                Button refreshThreads = HeaderGlyphButton("⟳", "Refresh the conversation list.");
+                Button refreshThreads = HeaderGlyphButton("⟳", L("main.nav.refresh.tip"));
                 refreshThreads.Foreground = _Theme.Text;
                 refreshThreads.Click += (sender, args) => _ = LoadThreadsAsync();
                 DockPanel.SetDock(refreshThreads, Dock.Right);
                 newRow.Children.Add(refreshThreads);
-                newRow.Children.Add(NavItem("＋", L(StringKeys.New), "Start a new, empty conversation.", () => _ = NewChatAsync(), accent: true));
+                newRow.Children.Add(NavItem("＋", L(StringKeys.New), L("main.nav.new.tip"), () => _ = NewChatAsync(), accent: true));
                 top.Children.Add(newRow);
             }
             else
             {
-                top.Children.Add(NavItem("＋", null, "Start a new, empty conversation.", () => _ = NewChatAsync(), accent: true));
+                top.Children.Add(NavItem("＋", null, L("main.nav.new.tip"), () => _ = NewChatAsync(), accent: true));
             }
             if (!conversationsExpanded)
             {
-                top.Children.Add(NavItem("🗂", L(StringKeys.Conversations), "Show your saved conversations to switch between or manage them.", ToggleConversations, accent: false, chevron: "▸"));
+                top.Children.Add(NavItem("🗂", L(StringKeys.Conversations), L("main.nav.conversations.tip"), ToggleConversations, accent: false, chevron: "▸"));
             }
 
             DockPanel.SetDock(top, Dock.Top);
             panel.Children.Add(top);
 
             StackPanel bottom = new StackPanel { Spacing = 2 };
-            bottom.Children.Add(NavItem("📊", L(StringKeys.NavUsage), "Open the usage dashboard: token totals, cost, latency charts, and per-call history.", OpenUsageWindow, accent: false));
+            bottom.Children.Add(NavItem("📊", L(StringKeys.NavUsage), L("main.nav.usage.tip"), OpenUsageWindow, accent: false));
             if (_ManageOpen && expanded)
             {
                 StackPanel manageGroup = new StackPanel { Spacing = 2 };
-                manageGroup.Children.Add(NavItem("🛠", L("sidebar.manage"), "Hide the configuration managers.", ToggleManage, accent: false, chevron: "▾"));
-                manageGroup.Children.Add(ManageDrawerItem("🔌", L(StringKeys.NavEndpoints), "Add, edit, and choose the default model endpoint.", OpenEndpointsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🧩", L(StringKeys.NavMcp), "Manage MCP servers that extend the agent with external tools.", OpenMcpServersWindow));
-                manageGroup.Children.Add(ManageDrawerItem("📝", L(StringKeys.NavPrompts), "Manage prompt profiles (system, tools-disabled, and compaction prompts).", OpenPromptsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("✨", L(StringKeys.NavSkills), "Install, edit, and enable user skills.", OpenSkillsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🤖", L(StringKeys.NavSubagents), "Define subagents the model can delegate scoped tasks to.", OpenSubagentsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("💲", L(StringKeys.NavPricing), "Edit per-model token rates used to compute usage cost.", OpenPricingWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🔎", L("sidebar.search"), "Configure external web-search providers.", OpenSearchProvidersWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🧰", L("sidebar.plugins"), "Manage lifecycle hooks and custom slash commands.", OpenPluginsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🌐", L("sidebar.localServer"), "Start or stop the embedded REST API and web dashboard (bound to loopback).", OpenLocalServerWindow));
-                manageGroup.Children.Add(ManageDrawerItem("⌨", L(StringKeys.NavKeybindings), "Rebind or unbind keyboard shortcuts.", OpenKeybindingsWindow));
+                manageGroup.Children.Add(NavItem("🛠", L("sidebar.manage"), L("main.nav.manage.hide.tip"), ToggleManage, accent: false, chevron: "▾"));
+                manageGroup.Children.Add(ManageDrawerItem("🔌", L(StringKeys.NavEndpoints), L("main.nav.endpoints.tip"), OpenEndpointsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🧩", L(StringKeys.NavMcp), L("main.nav.mcp.tip"), OpenMcpServersWindow));
+                manageGroup.Children.Add(ManageDrawerItem("📝", L(StringKeys.NavPrompts), L("main.nav.prompts.tip"), OpenPromptsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("✨", L(StringKeys.NavSkills), L("main.nav.skills.tip"), OpenSkillsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🤖", L(StringKeys.NavSubagents), L("main.nav.subagents.tip"), OpenSubagentsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("💲", L(StringKeys.NavPricing), L("main.nav.pricing.tip"), OpenPricingWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🔎", L("sidebar.search"), L("main.nav.search.tip"), OpenSearchProvidersWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🧰", L("sidebar.plugins"), L("main.nav.plugins.tip"), OpenPluginsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🌐", L("sidebar.localServer"), L("main.nav.localServer.tip"), OpenLocalServerWindow));
+                manageGroup.Children.Add(ManageDrawerItem("⌨", L(StringKeys.NavKeybindings), L("main.nav.keybindings.tip"), OpenKeybindingsWindow));
                 bottom.Children.Add(HighlightBlock(manageGroup));
             }
             else
             {
-                bottom.Children.Add(NavItem("🛠", L("sidebar.manage"), "Show the configuration managers: endpoints, MCP, prompts, skills, subagents, and pricing.", ToggleManage, accent: false, chevron: "▸"));
+                bottom.Children.Add(NavItem("🛠", L("sidebar.manage"), L("main.nav.manage.show.tip"), ToggleManage, accent: false, chevron: "▸"));
             }
 
-            bottom.Children.Add(NavItem("⚙", L(StringKeys.NavSettings), "Open application settings (approval, context, jobs, tools, skills, telemetry).", OpenSettingsWindow, accent: false));
-            bottom.Children.Add(NavItem("ⓘ", L(StringKeys.AboutHelp), "About mux — version and project information.", OpenAboutWindow, accent: false));
+            bottom.Children.Add(NavItem("⚙", L(StringKeys.NavSettings), L("main.nav.settings.tip"), OpenSettingsWindow, accent: false));
+            bottom.Children.Add(NavItem("ⓘ", L(StringKeys.AboutHelp), L("main.nav.about.tip"), OpenAboutWindow, accent: false));
             DockPanel.SetDock(bottom, Dock.Bottom);
             panel.Children.Add(bottom);
 
             if (conversationsExpanded)
             {
                 DockPanel conversations = new DockPanel();
-                Button conversationsToggle = NavItem("🗂", L(StringKeys.Conversations), "Hide your saved conversations.", ToggleConversations, accent: false, chevron: "▾");
+                Button conversationsToggle = NavItem("🗂", L(StringKeys.Conversations), L("main.nav.conversations.hide.tip"), ToggleConversations, accent: false, chevron: "▾");
                 DockPanel.SetDock(conversationsToggle, Dock.Top);
                 conversations.Children.Add(conversationsToggle);
 
@@ -396,7 +393,7 @@ namespace Mux.Desktop.Shell
                     Padding = new Thickness(18, 4, 10, 4),
                     FontSize = 12
                 };
-                bulkDelete.Tip("Select several conversations and delete them all at once.");
+                bulkDelete.Tip(L("main.bulkDelete.tip"));
                 bulkDelete.Click += (sender, args) => _ = OpenBulkDeleteAsync();
                 DockPanel.SetDock(bulkDelete, Dock.Top);
                 conversations.Children.Add(bulkDelete);
@@ -448,7 +445,7 @@ namespace Mux.Desktop.Shell
                 Padding = new Thickness(18, 4, 10, 4),
                 FontSize = 13
             };
-            button.Tip("Open this conversation. Right-click to rename, export, or delete it.");
+            button.Tip(L("main.conversation.tip"));
 
             ContextMenu menu = new ContextMenu();
             MenuItem rename = new MenuItem { Header = L("thread.rename") };
@@ -655,7 +652,7 @@ namespace Mux.Desktop.Shell
         {
             if (_UsageQuery == null)
             {
-                AddNotice("Usage telemetry is disabled; enable it in Settings to see analytics.", isError: false);
+                AddNotice(L("main.telemetryDisabledAnalytics"), isError: false);
                 return;
             }
 
@@ -740,20 +737,20 @@ namespace Mux.Desktop.Shell
         {
             MenuFlyout flyout = new MenuFlyout();
 
-            MenuItem sidebar = new MenuItem { Header = ViewItemHeader("Collapse sidebar", _SidebarCollapsed) };
+            MenuItem sidebar = new MenuItem { Header = ViewItemHeader(L("main.viewCollapseSidebar"), _SidebarCollapsed) };
             sidebar.Click += (sender, args) =>
             {
                 ToggleSidebarCollapse();
-                sidebar.Header = ViewItemHeader("Collapse sidebar", _SidebarCollapsed);
+                sidebar.Header = ViewItemHeader(L("main.viewCollapseSidebar"), _SidebarCollapsed);
             };
             flyout.Items.Add(sidebar);
 
-            MenuItem thinking = new MenuItem { Header = ViewItemHeader("Auto-expand thinking", _AutoExpandThinking) };
+            MenuItem thinking = new MenuItem { Header = ViewItemHeader(L("main.viewAutoExpandThinking"), _AutoExpandThinking) };
             thinking.Click += (sender, args) =>
             {
                 _AutoExpandThinking = !_AutoExpandThinking;
                 SavePreferences();
-                thinking.Header = ViewItemHeader("Auto-expand thinking", _AutoExpandThinking);
+                thinking.Header = ViewItemHeader(L("main.viewAutoExpandThinking"), _AutoExpandThinking);
             };
             flyout.Items.Add(thinking);
 
@@ -761,8 +758,8 @@ namespace Mux.Desktop.Shell
             // toggled elsewhere (the « » rail button), not just through this menu.
             flyout.Opened += (sender, args) =>
             {
-                sidebar.Header = ViewItemHeader("Collapse sidebar", _SidebarCollapsed);
-                thinking.Header = ViewItemHeader("Auto-expand thinking", _AutoExpandThinking);
+                sidebar.Header = ViewItemHeader(L("main.viewCollapseSidebar"), _SidebarCollapsed);
+                thinking.Header = ViewItemHeader(L("main.viewAutoExpandThinking"), _AutoExpandThinking);
             };
 
             return flyout;
@@ -833,7 +830,7 @@ namespace Mux.Desktop.Shell
             await EnsureCheckpointManagerAsync();
             if (_Checkpoints == null)
             {
-                AddNotice("Undo is unavailable (not a git repository).", isError: false);
+                AddNotice(L("main.undoUnavailable"), isError: false);
                 return;
             }
 
@@ -847,16 +844,16 @@ namespace Mux.Desktop.Shell
                 Checkpoint? restored = await _Checkpoints.UndoAsync(CancellationToken.None);
                 if (restored == null)
                 {
-                    AddNotice("Nothing to undo.", isError: false);
+                    AddNotice(L("main.nothingToUndo"), isError: false);
                 }
                 else
                 {
-                    AddNotice("↶ Undid \"" + restored.Label + "\" — working tree restored. Use /redo to reapply.", isError: false);
+                    AddNotice("↶ " + string.Format(L("main.undid"), restored.Label), isError: false);
                 }
             }
             catch (Exception ex)
             {
-                AddNotice("Undo failed: " + ex.Message, isError: true);
+                AddNotice(L("main.undoFailed") + ex.Message, isError: true);
             }
 
             UpdateUndoRedoButtons();
@@ -867,7 +864,7 @@ namespace Mux.Desktop.Shell
             await EnsureCheckpointManagerAsync();
             if (_Checkpoints == null)
             {
-                AddNotice("Redo is unavailable (not a git repository).", isError: false);
+                AddNotice(L("main.redoUnavailable"), isError: false);
                 return;
             }
 
@@ -881,16 +878,16 @@ namespace Mux.Desktop.Shell
                 Checkpoint? restored = await _Checkpoints.RedoAsync(CancellationToken.None);
                 if (restored == null)
                 {
-                    AddNotice("Nothing to redo.", isError: false);
+                    AddNotice(L("main.nothingToRedo"), isError: false);
                 }
                 else
                 {
-                    AddNotice("↷ Redid \"" + restored.Label + "\" — working tree reapplied.", isError: false);
+                    AddNotice("↷ " + string.Format(L("main.redid"), restored.Label), isError: false);
                 }
             }
             catch (Exception ex)
             {
-                AddNotice("Redo failed: " + ex.Message, isError: true);
+                AddNotice(L("main.redoFailed") + ex.Message, isError: true);
             }
 
             UpdateUndoRedoButtons();
@@ -900,7 +897,7 @@ namespace Mux.Desktop.Shell
         {
             if (!(_ModelPicker.SelectedItem is EndpointConfig selected))
             {
-                AddNotice("Select an endpoint first to change its reasoning effort.", isError: false);
+                AddNotice(L("main.selectEndpointEffort"), isError: false);
                 return;
             }
 
@@ -1132,7 +1129,7 @@ namespace Mux.Desktop.Shell
                 VerticalAlignment = VerticalAlignment.Center
             });
 
-            string label = string.IsNullOrEmpty(tab.Title) ? "Untitled" : tab.Title;
+            string label = string.IsNullOrEmpty(tab.Title) ? L("main.untitledTab") : tab.Title;
             if (tab.UnreadCount > 0 && !active)
             {
                 label += "  (" + tab.UnreadCount + ")";
@@ -1159,7 +1156,7 @@ namespace Mux.Desktop.Shell
                 FontSize = 11,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            close.Tip("Close this tab.");
+            close.Tip(L("main.closeTab.tip"));
             close.Click += async (sender, args) => await CloseTabAsync(tab);
             content.Children.Add(close);
 
@@ -1225,7 +1222,7 @@ namespace Mux.Desktop.Shell
 
             if (_Conversation != null && _Conversation.IsBusy)
             {
-                AddNotice("Finish or stop the current turn before switching tabs.", isError: false);
+                AddNotice(L("main.finishBeforeSwitch"), isError: false);
                 return;
             }
 
@@ -1237,7 +1234,7 @@ namespace Mux.Desktop.Shell
             bool wasActive = ReferenceEquals(tab, _Workspace.ActiveTab);
             if (wasActive && _Conversation != null && _Conversation.IsBusy)
             {
-                AddNotice("Finish or stop the current turn before closing this tab.", isError: false);
+                AddNotice(L("main.finishBeforeClose"), isError: false);
                 return;
             }
 
@@ -1340,17 +1337,17 @@ namespace Mux.Desktop.Shell
             {
                 _TitleText.Text = "mux";
             }
-            _TitleText.Tip("The current conversation's title. It starts from your first message and is replaced with an AI summary once the conversation grows; rename it from the conversation list.");
+            _TitleText.Tip(L("main.title.tip"));
             DockPanel.SetDock(_TitleText, Dock.Left);
             header.Children.Add(_TitleText);
 
             StackPanel right = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
 
-            _UndoButton = HeaderGlyphButton("↶", "Undo the last turn's file changes (restores the git working tree).");
+            _UndoButton = HeaderGlyphButton("↶", L("main.nav.undo.tip"));
             _UndoButton.Click += async (sender, args) => await UndoLastTurnAsync();
             right.Children.Add(_UndoButton);
 
-            _RedoButton = HeaderGlyphButton("↷", "Redo the most recently undone change.");
+            _RedoButton = HeaderGlyphButton("↷", L("main.nav.redo.tip"));
             _RedoButton.Click += async (sender, args) => await RedoLastUndoAsync();
             right.Children.Add(_RedoButton);
             UpdateUndoRedoButtons();
@@ -1360,11 +1357,11 @@ namespace Mux.Desktop.Shell
             UpdateContextIndicator();
 
             _ModelStatus = new TextBlock { Text = string.Empty, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
-            _ModelStatus.Tip("Whether the selected endpoint responded when it was last checked (validated when you switch models).");
+            _ModelStatus.Tip(L("main.modelStatus.tip"));
             right.Children.Add(_ModelStatus);
 
             _ModelPicker = new ComboBox { MinWidth = 200, BorderBrush = _Theme.Border };
-            _ModelPicker.Tip("The endpoint and model this conversation sends to. Manage the list under Manage ▸ Endpoints.");
+            _ModelPicker.Tip(L("main.modelPicker.tip"));
             _ModelPicker.ItemTemplate = new FuncDataTemplate<EndpointConfig>(
                 (item, scope) => new TextBlock { Text = item != null ? item.Name : string.Empty },
                 supportsRecycling: true);
@@ -1391,11 +1388,11 @@ namespace Mux.Desktop.Shell
                 FontSize = 15,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            themeToggle.Tip(_Theme.IsDark ? "Switch to the light theme." : "Switch to the dark theme.");
+            themeToggle.Tip(_Theme.IsDark ? L("main.nav.theme.light.tip") : L("main.nav.theme.dark.tip"));
             themeToggle.Click += (sender, args) => SetThemeMode(_Theme.IsDark ? "light" : "dark");
             right.Children.Add(themeToggle);
 
-            Button viewMenu = HeaderGlyphButton("☰", "View options: sidebar and thinking display.");
+            Button viewMenu = HeaderGlyphButton("☰", L("main.nav.viewMenu.tip"));
             viewMenu.Flyout = BuildViewFlyout();
             right.Children.Add(viewMenu);
 
@@ -1419,7 +1416,7 @@ namespace Mux.Desktop.Shell
                 Foreground = _Theme.Text,
                 BorderBrush = _Theme.Border
             };
-            _Composer.Tip("Type your message. Enter sends; Shift+Enter, Ctrl+Enter, or Ctrl+J insert a new line. Up/Down at the edges recall previous prompts. Type /? for commands.");
+            _Composer.Tip(L("main.composer.tip"));
             // Handle keys on the tunnel route so this runs BEFORE the TextBox's own Enter handling; otherwise
             // the TextBox inserts a newline and marks the event handled before we ever see plain Enter.
             _Composer.AddHandler(InputElement.KeyDownEvent, OnComposerKeyDown, RoutingStrategies.Tunnel);
@@ -1433,7 +1430,7 @@ namespace Mux.Desktop.Shell
             };
 
             _SendButton = AccentButton(L(StringKeys.Send));
-            _SendButton.Tip("Send your message (Enter). While the model is responding this becomes Stop to cancel the turn.");
+            _SendButton.Tip(L("main.send.tip"));
             _SendButton.VerticalAlignment = VerticalAlignment.Bottom;
             _SendButton.Padding = new Thickness(18, 8, 18, 8);
             _SendButton.Margin = new Thickness(8, 0, 0, 0);
@@ -1446,7 +1443,7 @@ namespace Mux.Desktop.Shell
 
             TextBlock disclaimer = new TextBlock
             {
-                Text = Disclaimer,
+                Text = L("main.disclaimer"),
                 Foreground = _Theme.Muted,
                 FontSize = 11,
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -1629,7 +1626,7 @@ namespace Mux.Desktop.Shell
         {
             int seq = ++_ModelValidationSeq;
             _ModelStatus.Foreground = _Theme.Muted;
-            _ModelStatus.Text = "checking…";
+            _ModelStatus.Text = L("main.modelChecking");
 
             bool ignoreCert = false;
             try
@@ -1661,22 +1658,22 @@ namespace Mux.Desktop.Shell
             if (result.Success)
             {
                 _ModelStatus.Foreground = _Theme.Success;
-                _ModelStatus.Text = "✓ ready";
-                _ModelStatus.Tip("The selected endpoint responded when it was last checked.");
+                _ModelStatus.Text = "✓ " + L("main.modelReady");
+                _ModelStatus.Tip(L("main.modelStatus.ok.tip"));
             }
             else if (result.Reachable)
             {
                 // The backend answered (so the URL, credentials, and model routing work), but the lightweight
                 // validation request itself did not succeed. Normal chats may still work — don't cry "unreachable".
                 _ModelStatus.Foreground = new SolidColorBrush(Color.Parse("#bf8700"));
-                _ModelStatus.Text = "⚠ reachable";
-                _ModelStatus.Tip("The endpoint is reachable but the validation request did not succeed: " + (result.Error ?? "unknown error") + ". Normal chats may still work.");
+                _ModelStatus.Text = "⚠ " + L("main.modelReachable");
+                _ModelStatus.Tip(string.Format(L("main.modelStatus.reachable.tip"), result.Error ?? L("main.unknownError")));
             }
             else
             {
                 _ModelStatus.Foreground = _Theme.Error;
-                _ModelStatus.Text = "✗ unreachable";
-                _ModelStatus.Tip("The selected endpoint did not respond: " + (result.Error ?? "unknown error"));
+                _ModelStatus.Text = "✗ " + L("main.modelUnreachable");
+                _ModelStatus.Tip(string.Format(L("main.modelStatus.fail.tip"), result.Error ?? L("main.unknownError")));
             }
         }
 
@@ -1845,20 +1842,20 @@ namespace Mux.Desktop.Shell
         {
             if (_Conversation == null || _Conversation.History.Count == 0)
             {
-                AddNotice("There is nothing to compact yet.", isError: false);
+                AddNotice(L("main.nothingToCompact"), isError: false);
                 return;
             }
 
             if (!(_ModelPicker.SelectedItem is EndpointConfig picked))
             {
-                AddNotice("Select an endpoint first to compact the conversation.", isError: false);
+                AddNotice(L("main.selectEndpointCompact"), isError: false);
                 return;
             }
 
             MuxSettings settings = SettingsLoader.LoadSettings();
             string compactionPrompt = SettingsLoader.GetActivePromptProfile().CompactionPrompt ?? string.Empty;
 
-            AddNotice("Compacting the conversation…", isError: false);
+            AddNotice(L("main.compacting"), isError: false);
 
             CompactionResult result = await ConversationCompactor.CompactAsync(
                 _Conversation.History,
@@ -1953,12 +1950,12 @@ namespace Mux.Desktop.Shell
                 TurnProjection projection = await _Conversation!.RunTurnAsync(prompt, _TurnCts.Token);
                 if (projection.WasCancelled)
                 {
-                    AddNotice("(stopped)", isError: false);
+                    AddNotice(L("main.stopped"), isError: false);
                 }
             }
             catch (Exception ex)
             {
-                AddNotice("Error: " + ex.Message, isError: true);
+                AddNotice(L("main.errorPrefix") + ex.Message, isError: true);
             }
             finally
             {
@@ -2082,7 +2079,7 @@ namespace Mux.Desktop.Shell
                     ShowHelpMenu();
                     break;
                 default:
-                    AddNotice("Unknown command: " + command, isError: false);
+                    AddNotice(L("main.unknownCommand") + command, isError: false);
                     ShowHelpMenu();
                     break;
             }
@@ -2092,13 +2089,13 @@ namespace Mux.Desktop.Shell
         {
             if (_UsageQuery == null)
             {
-                AddNotice("Usage telemetry is disabled; statistics are unavailable.", isError: false);
+                AddNotice(L("main.telemetryDisabledStats"), isError: false);
                 return;
             }
 
             if (string.IsNullOrEmpty(_CurrentThreadId))
             {
-                AddNotice("Open a conversation to see its statistics.", isError: false);
+                AddNotice(L("main.openConvForStats"), isError: false);
                 return;
             }
 
@@ -2109,7 +2106,7 @@ namespace Mux.Desktop.Shell
             }
             catch (Exception ex)
             {
-                AddNotice("Could not load statistics: " + ex.Message, isError: true);
+                AddNotice(L("main.statsLoadFailed") + ex.Message, isError: true);
             }
         }
 
@@ -2117,25 +2114,25 @@ namespace Mux.Desktop.Shell
         {
             StackPanel card = new StackPanel { Spacing = 4 };
             card.Children.Add(new TextBlock { Text = L("main.quickCommands"), FontWeight = FontWeight.SemiBold, Foreground = _Theme.Text });
-            card.Children.Add(CommandRow("/clear", "Clear the transcript"));
-            card.Children.Add(CommandRow("/context", "Show conversation statistics"));
-            card.Children.Add(CommandRow("/compact", "Summarize older turns to free up context"));
-            card.Children.Add(CommandRow("/undo", "Undo the last turn's file changes"));
-            card.Children.Add(CommandRow("/redo", "Redo the last undone change"));
-            card.Children.Add(CommandRow("/usage", "Open the usage dashboard"));
-            card.Children.Add(CommandRow("/endpoints", "Manage model endpoints"));
-            card.Children.Add(CommandRow("/mcp", "Manage MCP servers"));
-            card.Children.Add(CommandRow("/prompt", "Manage prompt profiles"));
-            card.Children.Add(CommandRow("/skills", "Manage installed skills"));
-            card.Children.Add(CommandRow("/subagents", "Manage subagent definitions"));
-            card.Children.Add(CommandRow("/pricing", "Edit model pricing"));
-            card.Children.Add(CommandRow("/search", "Configure web search providers"));
-            card.Children.Add(CommandRow("/plugins", "Manage hooks and custom commands"));
-            card.Children.Add(CommandRow("/keys", "Rebind keyboard shortcuts"));
-            card.Children.Add(CommandRow("/effort", "Set the model's reasoning effort"));
-            card.Children.Add(CommandRow("/commands", "Open the command palette (Ctrl+K)"));
-            card.Children.Add(CommandRow("/new", "Start a new conversation"));
-            card.Children.Add(CommandRow("/help", "Show this menu"));
+            card.Children.Add(CommandRow("/clear", L("main.help.clear")));
+            card.Children.Add(CommandRow("/context", L("main.help.context")));
+            card.Children.Add(CommandRow("/compact", L("main.help.compact")));
+            card.Children.Add(CommandRow("/undo", L("main.help.undo")));
+            card.Children.Add(CommandRow("/redo", L("main.help.redo")));
+            card.Children.Add(CommandRow("/usage", L("main.help.usage")));
+            card.Children.Add(CommandRow("/endpoints", L("main.help.endpoints")));
+            card.Children.Add(CommandRow("/mcp", L("main.help.mcp")));
+            card.Children.Add(CommandRow("/prompt", L("main.help.prompt")));
+            card.Children.Add(CommandRow("/skills", L("main.help.skills")));
+            card.Children.Add(CommandRow("/subagents", L("main.help.subagents")));
+            card.Children.Add(CommandRow("/pricing", L("main.help.pricing")));
+            card.Children.Add(CommandRow("/search", L("main.help.search")));
+            card.Children.Add(CommandRow("/plugins", L("main.help.plugins")));
+            card.Children.Add(CommandRow("/keys", L("main.help.keys")));
+            card.Children.Add(CommandRow("/effort", L("main.help.effort")));
+            card.Children.Add(CommandRow("/commands", L("main.help.commands")));
+            card.Children.Add(CommandRow("/new", L("main.help.new")));
+            card.Children.Add(CommandRow("/help", L("main.help.help")));
 
             _Transcript.Children.Add(new Border
             {
@@ -2214,7 +2211,7 @@ namespace Mux.Desktop.Shell
             double fraction = Math.Min(1.0, (double)_LastEstimatedTokens / window);
             _ContextIndicator.Text = "ctx " + (fraction * 100).ToString("0") + "%";
             _ContextIndicator.Foreground = fraction >= 0.9 ? _Theme.Error : fraction >= 0.75 ? new SolidColorBrush(Color.Parse("#bf8700")) : _Theme.Muted;
-            _ContextIndicator.Tip("Estimated context used: about " + _LastEstimatedTokens.ToString("N0") + " of " + window.ToString("N0") + " tokens (" + (fraction * 100).ToString("0") + "%). Use /compact to free up room.");
+            _ContextIndicator.Tip(string.Format(L("main.ctx.tip"), _LastEstimatedTokens.ToString("N0"), window.ToString("N0"), (fraction * 100).ToString("0")));
         }
 
         private void ApplyEventToUi(AgentEvent agentEvent)
@@ -2243,7 +2240,7 @@ namespace Mux.Desktop.Shell
                     ScrollTranscriptToEnd();
                     break;
                 case ContextCompactedEvent compacted:
-                    AddNotice("🗜 Context automatically compacted (" + compacted.MessagesBefore + " → " + compacted.MessagesAfter + " messages) to stay within the model's window.", isError: false);
+                    AddNotice("🗜 " + string.Format(L("main.contextCompacted"), compacted.MessagesBefore, compacted.MessagesAfter), isError: false);
                     break;
                 case TaskPlanUpdatedEvent plan:
                     RenderTaskPlan(plan);
@@ -2301,10 +2298,14 @@ namespace Mux.Desktop.Shell
             long ttft = _TurnTtftMs ?? 0;
             long streaming = Math.Max(0, total - ttft);
 
-            string tip = "Time to first token: " + ttft + " ms\n"
-                + "Streaming: " + streaming + " ms\n"
-                + "Total: " + FormatMs(total) + "\n"
-                + "Tokens: input " + completed.InputTokens + " · output " + completed.OutputTokens + " · total " + completed.TotalTokens;
+            string tip = string.Format(
+                L("main.turnInfo.tip"),
+                ttft,
+                streaming,
+                FormatMs(total),
+                completed.InputTokens,
+                completed.OutputTokens,
+                completed.TotalTokens);
 
             TextBlock info = new TextBlock
             {
@@ -2415,7 +2416,7 @@ namespace Mux.Desktop.Shell
 
         private async Task RenameThreadAsync(string id, string currentTitle)
         {
-            string? result = await new InputDialog("Rename conversation", "New title:", currentTitle).ShowDialog<string?>(this);
+            string? result = await new InputDialog(L("main.renameTitle"), L("main.newTitleLabel"), currentTitle).ShowDialog<string?>(this);
             if (string.IsNullOrWhiteSpace(result))
             {
                 return;
@@ -2435,7 +2436,7 @@ namespace Mux.Desktop.Shell
 
         private async Task DeleteThreadAsync(string id, string title)
         {
-            bool confirmed = await new ConfirmDialog("Delete conversation", "Delete \"" + title + "\"? This cannot be undone.", "Delete", destructive: true).ShowDialog<bool>(this);
+            bool confirmed = await new ConfirmDialog(L("main.deleteTitle"), string.Format(L("main.deleteConfirm"), title), L("act.delete"), destructive: true).ShowDialog<bool>(this);
             if (!confirmed)
             {
                 return;
@@ -2481,11 +2482,11 @@ namespace Mux.Desktop.Shell
                 Directory.CreateDirectory(exportsDir);
                 string path = Path.Combine(exportsDir, SafeFileName(title) + ".md");
                 await File.WriteAllTextAsync(path, content);
-                await new ConfirmDialog("Exported", "Saved to:\n" + path, "OK", destructive: false).ShowDialog<bool>(this);
+                await new ConfirmDialog(L("main.exportedTitle"), L("main.savedTo") + path, L("main.ok"), destructive: false).ShowDialog<bool>(this);
             }
             catch (Exception ex)
             {
-                await new ConfirmDialog("Export failed", ex.Message, "OK", destructive: false).ShowDialog<bool>(this);
+                await new ConfirmDialog(L("main.exportFailedTitle"), ex.Message, L("main.ok"), destructive: false).ShowDialog<bool>(this);
             }
         }
 
@@ -2557,7 +2558,7 @@ namespace Mux.Desktop.Shell
             }
 
             _ThinkingText = new TextBlock { Text = string.Empty, Foreground = _Theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Cascadia Mono,Consolas,Menlo,monospace") };
-            _ThinkingSection = new CollapsibleSection("💭 Thinking", _Theme, expanded: _AutoExpandThinking);
+            _ThinkingSection = new CollapsibleSection("💭 " + L("main.thinking"), _Theme, expanded: _AutoExpandThinking);
             _ThinkingSection.Body.Children.Add(_ThinkingText);
 
             int index = _PendingBubble != null ? _Transcript.Children.IndexOf(_PendingBubble) : _Transcript.Children.Count;
@@ -2592,7 +2593,7 @@ namespace Mux.Desktop.Shell
             else if (message.Role == RoleEnum.System && !string.IsNullOrEmpty(message.Content)
                 && message.Content!.StartsWith(ConversationCompactor.SummaryPrefix, StringComparison.Ordinal))
             {
-                AddNotice("🗜 Earlier conversation summarized to save context.", isError: false);
+                AddNotice("🗜 " + L("main.earlierSummarized"), isError: false);
             }
         }
 
@@ -2730,7 +2731,7 @@ namespace Mux.Desktop.Shell
             _TaskPlanBody.Children.Clear();
             _TaskPlanBody.Children.Add(new TextBlock
             {
-                Text = "📋 Tasks (" + plan.CompletedCount + "/" + plan.TotalCount + ")",
+                Text = "📋 " + string.Format(L("main.tasks"), plan.CompletedCount, plan.TotalCount),
                 FontWeight = FontWeight.SemiBold,
                 Foreground = _Theme.Text,
                 Margin = new Thickness(0, 0, 0, 2)
@@ -2827,11 +2828,11 @@ namespace Mux.Desktop.Shell
                 }
 
                 WrapPanel stats = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
-                stats.Children.Add(StatPill("Endpoints", endpoints.Count.ToString(), "Configured model endpoints. Manage under Manage ▸ Endpoints."));
-                stats.Children.Add(StatPill("Default model", def != null ? (string.IsNullOrEmpty(def.Model) ? def.Name : def.Model) : "none", "The endpoint new conversations use."));
-                stats.Children.Add(StatPill("MCP servers", mcpCount.ToString(), "Configured MCP tool servers."));
-                stats.Children.Add(StatPill("Skills", settings.SkillsEnabled ? "on" : "off", "Whether user skills are loaded."));
-                stats.Children.Add(StatPill("Telemetry", settings.Telemetry.Enabled ? "on" : "off", "Whether usage analytics are recorded."));
+                stats.Children.Add(StatPill(L(StringKeys.NavEndpoints), endpoints.Count.ToString(), "Configured model endpoints. Manage under Manage ▸ Endpoints."));
+                stats.Children.Add(StatPill(L("main.statDefaultModel"), def != null ? (string.IsNullOrEmpty(def.Model) ? def.Name : def.Model) : L("main.none"), "The endpoint new conversations use."));
+                stats.Children.Add(StatPill(L(StringKeys.NavMcp), mcpCount.ToString(), "Configured MCP tool servers."));
+                stats.Children.Add(StatPill(L(StringKeys.NavSkills), settings.SkillsEnabled ? L("main.on") : L("main.off"), "Whether user skills are loaded."));
+                stats.Children.Add(StatPill(L("main.statTelemetry"), settings.Telemetry.Enabled ? L("main.on") : L("main.off"), "Whether usage analytics are recorded."));
                 _OverviewHost.Children.Add(stats);
             }
             catch (Exception)
@@ -2899,7 +2900,7 @@ namespace Mux.Desktop.Shell
                 BorderThickness = new Thickness(0),
                 Padding = new Thickness(8, 4, 8, 4)
             };
-            button.Tip("Open this conversation.");
+            button.Tip(L("main.openConversation.tip"));
             button.Click += (sender, args) => _ = OpenThreadAsync(summary.Id);
             return button;
         }
@@ -2914,16 +2915,16 @@ namespace Mux.Desktop.Shell
 
         // ---- small helpers -----------------------------------------------------------------------
 
-        private static string DisplayTitle(ThreadSummary? summary)
+        private string DisplayTitle(ThreadSummary? summary)
         {
-            return summary == null ? UntitledTitle : DisplayTitle(summary.Title);
+            return summary == null ? L("main.untitled") : DisplayTitle(summary.Title);
         }
 
-        private static string DisplayTitle(string? title)
+        private string DisplayTitle(string? title)
         {
             if (string.IsNullOrWhiteSpace(title) || string.Equals(title, SessionTitleHelper.DefaultTitle, StringComparison.Ordinal))
             {
-                return UntitledTitle;
+                return L("main.untitled");
             }
 
             return title!;

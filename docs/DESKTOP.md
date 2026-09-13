@@ -80,7 +80,7 @@ Theme (light/dark) and other preferences live in the **Settings** window.
 
 ## Language
 
-The header has a language selector offering the same eleven languages as the `mux serve` dashboard: English, Spanish, Portuguese, French, Italian, German, Mandarin Chinese, Arabic, Russian, Malay, and Hindi. Switching language applies immediately — the shell re-renders in the chosen language, Arabic flips the interface to right-to-left, and the choice is remembered (persisted to `desktop.json`) for next launch. The desktop and dashboard share the same authored translations for the same interface strings. Long help text and tooltips remain in English by design, matching the dashboard's own coverage boundary.
+The header has a language selector offering the same eleven languages as the `mux serve` dashboard: English, Spanish, Portuguese, French, Italian, German, Mandarin Chinese, Arabic, Russian, Malay, and Hindi. Switching language applies immediately — the shell re-renders in the chosen language, Arabic flips the interface to right-to-left, and the choice is remembered (persisted to `desktop.json`) for next launch. Localization is comprehensive: every window, form, dialog, label, button, and tooltip across the app is translated — the chat shell, all the managers (Endpoints, MCP, Skills, Subagents, Prompts, Pricing, Search, Plugins, Hooks, Commands, Keybindings), the Usage dashboard, Stats, Settings, and About. The desktop and dashboard share the same authored translations for the same interface strings. A few things stay in English by design: brand text ("mux"), technical tokens (URLs, `settings.json`, MCP), and the playful welcome one-liners.
 
 ## Architecture
 
