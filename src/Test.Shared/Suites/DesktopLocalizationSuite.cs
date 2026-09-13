@@ -24,10 +24,10 @@ namespace Test.Shared.Suites
                 "Desktop localization service",
                 new List<TestCaseDescriptor>
                 {
-                    new TestCaseDescriptor("DesktopLocalization", "RegistryAndDefaults", "Twelve locales; English default resolves a known key", (CancellationToken ct) =>
+                    new TestCaseDescriptor("DesktopLocalization", "RegistryAndDefaults", "Eleven locales (dashboard parity); English default resolves a known key", (CancellationToken ct) =>
                     {
                         LocalizationService service = new LocalizationService();
-                        MuxAssert.AreEqual(12, service.SupportedLocales.Count, "locale count");
+                        MuxAssert.AreEqual(11, service.SupportedLocales.Count, "locale count");
                         MuxAssert.AreEqual("en", service.CurrentLocale, "default locale");
                         MuxAssert.AreEqual("mux", service.Get(StringKeys.AppTitle), "known key");
                         return Task.CompletedTask;
@@ -77,6 +77,57 @@ namespace Test.Shared.Suites
                         MuxAssert.IsTrue(service.IsRightToLeft, "arabic rtl");
                         service.SetActiveLocale("en");
                         MuxAssert.IsFalse(service.IsRightToLeft, "english ltr");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("DesktopLocalization", "EveryLocaleResolvesChrome", "Every supported locale resolves the chrome keys to a real (non-key, non-blank) string", (CancellationToken ct) =>
+                    {
+                        LocalizationService service = new LocalizationService();
+                        List<string> keys = new List<string>
+                        {
+                            StringKeys.NavChat, StringKeys.NavEndpoints, StringKeys.NavMcp, StringKeys.NavSettings,
+                            StringKeys.ActSave, StringKeys.ActCancel, StringKeys.ActDelete, StringKeys.ActReload,
+                            StringKeys.Conversations, StringKeys.NewConversation, StringKeys.New, StringKeys.Refresh,
+                            StringKeys.ComposerPlaceholder, StringKeys.Send, StringKeys.Stop, StringKeys.ChatThinking,
+                            StringKeys.ChatYou, StringKeys.ChatAssistant, StringKeys.AboutHelp, StringKeys.License,
+                            StringKeys.EmptyStateTitle, StringKeys.AppTagline
+                        };
+
+                        foreach (LocaleInfo locale in service.SupportedLocales)
+                        {
+                            service.SetActiveLocale(locale.Code);
+                            foreach (string key in keys)
+                            {
+                                string value = service.Get(key);
+                                MuxAssert.IsFalse(string.IsNullOrEmpty(value), locale.Code + ":" + key + " blank");
+                                MuxAssert.AreNotEqual(key, value, locale.Code + ":" + key + " unresolved");
+                            }
+                        }
+
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("DesktopLocalization", "KnownTranslations", "Spot-check real translations from both the dashboard-shared and desktop-specific catalogs", (CancellationToken ct) =>
+                    {
+                        LocalizationService service = new LocalizationService();
+
+                        service.SetActiveLocale("es");
+                        MuxAssert.AreEqual("Servidores MCP", service.Get(StringKeys.NavMcp), "es nav.mcp");
+                        MuxAssert.AreEqual("Nueva conversación", service.Get(StringKeys.NewConversation), "es new conversation");
+
+                        service.SetActiveLocale("fr");
+                        MuxAssert.AreEqual("Enregistrer", service.Get(StringKeys.ActSave), "fr act.save");
+                        MuxAssert.AreEqual("Envoyer", service.Get(StringKeys.Send), "fr composer.send");
+
+                        service.SetActiveLocale("de");
+                        MuxAssert.AreEqual("Stopp", service.Get(StringKeys.Stop), "de composer.stop");
+
+                        service.SetActiveLocale("ar");
+                        MuxAssert.AreEqual("يفكر…", service.Get(StringKeys.ChatThinking), "ar chat.thinking");
+
+                        // Long English-only help text resolves to the English value in a non-English locale.
+                        service.SetActiveLocale("ru");
+                        MuxAssert.IsTrue(service.Get(StringKeys.HelpBody).StartsWith("mux Desktop", StringComparison.Ordinal), "ru help body falls back to english");
                         return Task.CompletedTask;
                     })
                 });

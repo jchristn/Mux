@@ -3,9 +3,10 @@ namespace Mux.Desktop.I18n
     using System.Collections.Generic;
 
     /// <summary>
-    /// The baseline set of supported UI locales, per the project internationalization requirements. English
-    /// is the source locale and the default fallback for every other locale. Catalogs for locales other than
-    /// English are populated in later phases; until then they resolve through the English fallback.
+    /// The set of supported UI locales — the same eleven languages the <c>mux serve</c> dashboard ships, so
+    /// the two front ends stay in lockstep. English is the source locale and the default fallback for every
+    /// other locale. Every locale ships a complete chrome catalog; only long English-only help text falls
+    /// back to English.
     /// </summary>
     public static class LocaleRegistry
     {
@@ -34,8 +35,7 @@ namespace Mux.Desktop.I18n
                     new LocaleInfo("ar", "Arabic", "العربية", true, "en"),
                     new LocaleInfo("ru", "Russian", "Русский", false, "en"),
                     new LocaleInfo("ms", "Malay", "Bahasa Melayu", false, "en"),
-                    new LocaleInfo("hi", "Hindi", "हिन्दी", false, "en"),
-                    new LocaleInfo("ja", "Japanese", "日本語", false, "en")
+                    new LocaleInfo("hi", "Hindi", "हिन्दी", false, "en")
                 };
             }
         }

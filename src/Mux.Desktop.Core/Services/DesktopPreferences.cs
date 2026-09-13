@@ -26,5 +26,12 @@ namespace Mux.Desktop.Services
         /// </summary>
         [JsonPropertyName("autoExpandThinking")]
         public bool AutoExpandThinking { get; set; }
+
+        /// <summary>
+        /// The active UI locale code (for example <c>en</c>, <c>fr</c>, <c>ar</c>). Empty selects the default
+        /// locale. Matches the language set of the <c>mux serve</c> dashboard.
+        /// </summary>
+        [JsonPropertyName("localeCode")]
+        public string LocaleCode { get; set; } = string.Empty;
     }
 }

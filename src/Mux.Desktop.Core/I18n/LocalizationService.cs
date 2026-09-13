@@ -6,8 +6,9 @@ namespace Mux.Desktop.I18n
 
     /// <summary>
     /// In-memory localization service. Holds one string catalog per locale and resolves keys against the
-    /// active locale, its fallback, and finally the key itself. The English catalog ships complete; catalogs
-    /// for other locales are added in later phases and, until then, resolve through the English fallback.
+    /// active locale, its fallback, and finally the key itself. All supported locales ship complete chrome
+    /// catalogs (merged from the dashboard-shared packs and the desktop-specific strings); long English-only
+    /// help text resolves through the English fallback by design.
     /// </summary>
     /// <remarks>
     /// Thread safety: intended to be used from the UI thread. <see cref="SetActiveLocale"/> mutates the
@@ -131,31 +132,42 @@ namespace Mux.Desktop.I18n
 
         private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> BuildCatalogs()
         {
+            // Two authored sources merged per locale: the dashboard-shared chrome packs (ported verbatim from
+            // mux serve so both front ends share translations) and the desktop-specific strings (splash,
+            // sidebar, composer, About). Where both define a key, the desktop-specific value wins.
+            Dictionary<string, Dictionary<string, string>> merged =
+                new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+
+            MergeInto(merged, DashboardStrings.Build());
+            MergeInto(merged, DesktopStrings.Build());
+
             Dictionary<string, IReadOnlyDictionary<string, string>> catalogs =
                 new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-
-            Dictionary<string, string> english = new Dictionary<string, string>(StringComparer.Ordinal)
+            foreach (KeyValuePair<string, Dictionary<string, string>> pair in merged)
             {
-                { StringKeys.AppTitle, "mux" },
-                { StringKeys.AppTagline, "Your AI agent, your models, your infrastructure." },
-                { StringKeys.SplashLoading, "Starting…" },
-                { StringKeys.Conversations, "Conversations" },
-                { StringKeys.NewConversation, "New conversation" },
-                { StringKeys.EmptyStateTitle, "Start a new conversation" },
-                { StringKeys.EmptyStateBody, "Your threads will appear here. This is the mux Desktop foundation." },
-                { StringKeys.AboutHelp, "About" },
-                { StringKeys.HelpHeading, "Getting started" },
-                {
-                    StringKeys.HelpBody,
-                    "mux Desktop runs the mux agent locally against the model and backend you configure. "
-                        + "Create a conversation to start a thread, then type a prompt and press Enter. "
-                        + "Endpoints, tools, MCP servers, skills, and usage analytics are managed in the app."
-                },
-                { StringKeys.License, "MIT License" }
-            };
+                catalogs[pair.Key] = pair.Value;
+            }
 
-            catalogs[LocaleRegistry.DefaultLocaleCode] = english;
             return catalogs;
+        }
+
+        private static void MergeInto(
+            Dictionary<string, Dictionary<string, string>> target,
+            Dictionary<string, Dictionary<string, string>> source)
+        {
+            foreach (KeyValuePair<string, Dictionary<string, string>> localePair in source)
+            {
+                if (!target.TryGetValue(localePair.Key, out Dictionary<string, string>? localeMap))
+                {
+                    localeMap = new Dictionary<string, string>(StringComparer.Ordinal);
+                    target[localePair.Key] = localeMap;
+                }
+
+                foreach (KeyValuePair<string, string> entry in localePair.Value)
+                {
+                    localeMap[entry.Key] = entry.Value;
+                }
+            }
         }
     }
 }

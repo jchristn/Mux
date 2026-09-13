@@ -97,6 +97,7 @@ namespace Mux.Desktop.Shell
         private CancellationTokenSource? _TurnCts;
         private string _CurrentThreadId = string.Empty;
         private string _ThemeMode = "dark";
+        private string _LocaleCode = "en";
         private bool _ThemeSubscribed;
         private readonly PromptHistory _PromptHistory = new PromptHistory();
         private bool _SuppressHistoryReset;
@@ -151,15 +152,18 @@ namespace Mux.Desktop.Shell
             MinWidth = 820;
             MinHeight = 520;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            FlowDirection = localization.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
 
             _PromptHistory.Load(new PromptHistoryStore(configDirectory).Load());
 
-            // Apply the persisted theme + view preferences before the first layout so there is no flash of
-            // the default and the sidebar opens in its remembered state.
+            // Apply the persisted theme + view + locale preferences before the first layout so there is no
+            // flash of the default and the sidebar opens in its remembered state and language.
             DesktopPreferences prefs = new DesktopPreferencesStore(configDirectory).Load();
             _SidebarCollapsed = prefs.SidebarCollapsed;
             _AutoExpandThinking = prefs.AutoExpandThinking;
+            _LocaleCode = string.IsNullOrEmpty(prefs.LocaleCode) ? _Localization.CurrentLocale : prefs.LocaleCode;
+            _Localization.SetActiveLocale(_LocaleCode);
+            _LocaleCode = _Localization.CurrentLocale;
+            FlowDirection = _Localization.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
             AppTheme.Set(ResolveThemeVariant(prefs.ThemeMode));
             _Theme = AppTheme.Current;
 
@@ -306,6 +310,14 @@ namespace Mux.Desktop.Shell
             return _SidebarHost;
         }
 
+        // Resolve a localized string for the active locale. Called during layout builds, so a locale change
+        // followed by RebuildContent() re-reads every label in the new language. Long help tooltips are kept
+        // English by design (tier-2), matching the mux serve dashboard's translated/untranslated boundary.
+        private string L(string key)
+        {
+            return _Localization.Get(key);
+        }
+
         private Control BuildSidebarContent()
         {
             DockPanel panel = new DockPanel { Margin = new Thickness(8) };
@@ -323,7 +335,7 @@ namespace Mux.Desktop.Shell
                 refreshThreads.Click += (sender, args) => _ = LoadThreadsAsync();
                 DockPanel.SetDock(refreshThreads, Dock.Right);
                 newRow.Children.Add(refreshThreads);
-                newRow.Children.Add(NavItem("＋", "New", "Start a new, empty conversation.", () => _ = NewChatAsync(), accent: true));
+                newRow.Children.Add(NavItem("＋", L(StringKeys.New), "Start a new, empty conversation.", () => _ = NewChatAsync(), accent: true));
                 top.Children.Add(newRow);
             }
             else
@@ -332,28 +344,28 @@ namespace Mux.Desktop.Shell
             }
             if (!conversationsExpanded)
             {
-                top.Children.Add(NavItem("🗂", "Conversations", "Show your saved conversations to switch between or manage them.", ToggleConversations, accent: false, chevron: "▸"));
+                top.Children.Add(NavItem("🗂", L(StringKeys.Conversations), "Show your saved conversations to switch between or manage them.", ToggleConversations, accent: false, chevron: "▸"));
             }
 
             DockPanel.SetDock(top, Dock.Top);
             panel.Children.Add(top);
 
             StackPanel bottom = new StackPanel { Spacing = 2 };
-            bottom.Children.Add(NavItem("📊", "Usage", "Open the usage dashboard: token totals, cost, latency charts, and per-call history.", OpenUsageWindow, accent: false));
+            bottom.Children.Add(NavItem("📊", L(StringKeys.NavUsage), "Open the usage dashboard: token totals, cost, latency charts, and per-call history.", OpenUsageWindow, accent: false));
             if (_ManageOpen && expanded)
             {
                 StackPanel manageGroup = new StackPanel { Spacing = 2 };
                 manageGroup.Children.Add(NavItem("🛠", "Manage", "Hide the configuration managers.", ToggleManage, accent: false, chevron: "▾"));
-                manageGroup.Children.Add(ManageDrawerItem("🔌", "Endpoints", "Add, edit, and choose the default model endpoint.", OpenEndpointsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🧩", "MCP servers", "Manage MCP servers that extend the agent with external tools.", OpenMcpServersWindow));
-                manageGroup.Children.Add(ManageDrawerItem("📝", "Prompts", "Manage prompt profiles (system, tools-disabled, and compaction prompts).", OpenPromptsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("✨", "Skills", "Install, edit, and enable user skills.", OpenSkillsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🤖", "Subagents", "Define subagents the model can delegate scoped tasks to.", OpenSubagentsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("💲", "Pricing", "Edit per-model token rates used to compute usage cost.", OpenPricingWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🔌", L(StringKeys.NavEndpoints), "Add, edit, and choose the default model endpoint.", OpenEndpointsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🧩", L(StringKeys.NavMcp), "Manage MCP servers that extend the agent with external tools.", OpenMcpServersWindow));
+                manageGroup.Children.Add(ManageDrawerItem("📝", L(StringKeys.NavPrompts), "Manage prompt profiles (system, tools-disabled, and compaction prompts).", OpenPromptsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("✨", L(StringKeys.NavSkills), "Install, edit, and enable user skills.", OpenSkillsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🤖", L(StringKeys.NavSubagents), "Define subagents the model can delegate scoped tasks to.", OpenSubagentsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("💲", L(StringKeys.NavPricing), "Edit per-model token rates used to compute usage cost.", OpenPricingWindow));
                 manageGroup.Children.Add(ManageDrawerItem("🔎", "Search", "Configure external web-search providers.", OpenSearchProvidersWindow));
                 manageGroup.Children.Add(ManageDrawerItem("🧰", "Plugins", "Manage lifecycle hooks and custom slash commands.", OpenPluginsWindow));
                 manageGroup.Children.Add(ManageDrawerItem("🌐", "Local server", "Start or stop the embedded REST API and web dashboard (bound to loopback).", OpenLocalServerWindow));
-                manageGroup.Children.Add(ManageDrawerItem("⌨", "Keybindings", "Rebind or unbind keyboard shortcuts.", OpenKeybindingsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("⌨", L(StringKeys.NavKeybindings), "Rebind or unbind keyboard shortcuts.", OpenKeybindingsWindow));
                 bottom.Children.Add(HighlightBlock(manageGroup));
             }
             else
@@ -361,15 +373,15 @@ namespace Mux.Desktop.Shell
                 bottom.Children.Add(NavItem("🛠", "Manage", "Show the configuration managers: endpoints, MCP, prompts, skills, subagents, and pricing.", ToggleManage, accent: false, chevron: "▸"));
             }
 
-            bottom.Children.Add(NavItem("⚙", "Settings", "Open application settings (approval, context, jobs, tools, skills, telemetry).", OpenSettingsWindow, accent: false));
-            bottom.Children.Add(NavItem("ⓘ", "About", "About mux — version and project information.", OpenAboutWindow, accent: false));
+            bottom.Children.Add(NavItem("⚙", L(StringKeys.NavSettings), "Open application settings (approval, context, jobs, tools, skills, telemetry).", OpenSettingsWindow, accent: false));
+            bottom.Children.Add(NavItem("ⓘ", L(StringKeys.AboutHelp), "About mux — version and project information.", OpenAboutWindow, accent: false));
             DockPanel.SetDock(bottom, Dock.Bottom);
             panel.Children.Add(bottom);
 
             if (conversationsExpanded)
             {
                 DockPanel conversations = new DockPanel();
-                Button conversationsToggle = NavItem("🗂", "Conversations", "Hide your saved conversations.", ToggleConversations, accent: false, chevron: "▾");
+                Button conversationsToggle = NavItem("🗂", L(StringKeys.Conversations), "Hide your saved conversations.", ToggleConversations, accent: false, chevron: "▾");
                 DockPanel.SetDock(conversationsToggle, Dock.Top);
                 conversations.Children.Add(conversationsToggle);
 
@@ -939,6 +951,42 @@ namespace Mux.Desktop.Shell
             SaveThemeMode();
         }
 
+        private LocaleInfo? CurrentLocaleInfo()
+        {
+            foreach (LocaleInfo locale in _Localization.SupportedLocales)
+            {
+                if (string.Equals(locale.Code, _Localization.CurrentLocale, StringComparison.OrdinalIgnoreCase))
+                {
+                    return locale;
+                }
+            }
+
+            return null;
+        }
+
+        private void OnLocaleSelected(object? sender, SelectionChangedEventArgs e)
+        {
+            if (sender is ComboBox picker && picker.SelectedItem is LocaleInfo locale)
+            {
+                SetLocale(locale.Code);
+            }
+        }
+
+        private void SetLocale(string code)
+        {
+            if (string.IsNullOrEmpty(code) || string.Equals(code, _Localization.CurrentLocale, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _Localization.SetActiveLocale(code);
+            _LocaleCode = _Localization.CurrentLocale;
+            // Right-to-left locales (Arabic) flip the whole window's flow direction.
+            FlowDirection = _Localization.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+            SavePreferences();
+            RebuildContent();
+        }
+
         private bool ResolveThemeVariant(string mode)
         {
             _ThemeMode = mode;
@@ -981,7 +1029,8 @@ namespace Mux.Desktop.Shell
                 {
                     ThemeMode = _ThemeMode,
                     SidebarCollapsed = _SidebarCollapsed,
-                    AutoExpandThinking = _AutoExpandThinking
+                    AutoExpandThinking = _AutoExpandThinking,
+                    LocaleCode = _LocaleCode
                 });
             }
             catch (Exception)
@@ -1322,6 +1371,16 @@ namespace Mux.Desktop.Shell
             _ModelPicker.SelectionChanged += OnModelSelected;
             right.Children.Add(_ModelPicker);
 
+            ComboBox languagePicker = new ComboBox { MinWidth = 120, BorderBrush = _Theme.Border, VerticalAlignment = VerticalAlignment.Center };
+            languagePicker.Tip(L(StringKeys.LangLabel) + " — change the interface language.");
+            languagePicker.ItemsSource = _Localization.SupportedLocales;
+            languagePicker.ItemTemplate = new FuncDataTemplate<LocaleInfo>(
+                (item, scope) => new TextBlock { Text = item != null ? item.NativeName : string.Empty },
+                supportsRecycling: true);
+            languagePicker.SelectedItem = CurrentLocaleInfo();
+            languagePicker.SelectionChanged += OnLocaleSelected;
+            right.Children.Add(languagePicker);
+
             Button themeToggle = new Button
             {
                 Content = _Theme.IsDark ? "☀" : "🌙",
@@ -1355,7 +1414,7 @@ namespace Mux.Desktop.Shell
                 AcceptsReturn = true,
                 TextWrapping = TextWrapping.Wrap,
                 MaxHeight = 160,
-                PlaceholderText = "Message mux…  (Enter to send, Shift+Enter for a new line)",
+                PlaceholderText = L(StringKeys.ComposerPlaceholder),
                 VerticalContentAlignment = VerticalAlignment.Center,
                 Foreground = _Theme.Text,
                 BorderBrush = _Theme.Border
@@ -1373,7 +1432,7 @@ namespace Mux.Desktop.Shell
                 }
             };
 
-            _SendButton = AccentButton("Send");
+            _SendButton = AccentButton(L(StringKeys.Send));
             _SendButton.Tip("Send your message (Enter). While the model is responding this becomes Stop to cancel the turn.");
             _SendButton.VerticalAlignment = VerticalAlignment.Bottom;
             _SendButton.Padding = new Thickness(18, 8, 18, 8);
@@ -1921,7 +1980,7 @@ namespace Mux.Desktop.Shell
 
         private void SetSending(bool sending)
         {
-            _SendButton.Content = sending ? "Stop" : "Send";
+            _SendButton.Content = sending ? L(StringKeys.Stop) : L(StringKeys.Send);
             // Stop is a cancel action — colour it red; the idle Send keeps the green accent.
             _SendButton.Background = sending ? _Theme.Error : _Theme.AccentButton;
             _Workspace.ActiveTab?.NotifyBusy(sending);
