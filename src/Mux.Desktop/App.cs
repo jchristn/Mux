@@ -57,6 +57,7 @@ namespace Mux.Desktop
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
                 ILocalizationService localization = _Services.GetRequiredService<ILocalizationService>();
+                Localizer.Current = localization; // ambient access for windows/dialogs not handed the service
                 IThreadService threads = _Services.GetRequiredService<IThreadService>();
                 SessionStore store = _Services.GetRequiredService<SessionStore>();
                 _Telemetry = _Services.GetRequiredService<UsageTelemetry>();

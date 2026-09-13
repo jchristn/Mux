@@ -121,6 +121,11 @@ namespace Test.Shared.Suites
 
                         service.SetActiveLocale("de");
                         MuxAssert.AreEqual("Stopp", service.Get(StringKeys.Stop), "de composer.stop");
+                        MuxAssert.AreEqual("Endpunkte", service.Get("nav.endpoints"), "de nav.endpoints override");
+
+                        service.SetActiveLocale("es");
+                        MuxAssert.AreEqual("Ajustes", service.Get("settings.title"), "es settings.title");
+                        MuxAssert.AreEqual("Gestionar", service.Get("sidebar.manage"), "es sidebar.manage");
 
                         service.SetActiveLocale("ar");
                         MuxAssert.AreEqual("يفكر…", service.Get(StringKeys.ChatThinking), "ar chat.thinking");

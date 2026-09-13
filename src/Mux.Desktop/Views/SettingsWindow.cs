@@ -10,14 +10,22 @@ namespace Mux.Desktop.Views
     using Avalonia.Media;
     using Mux.Core.Models;
     using Mux.Core.Settings;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A grouped, form-based editor over the mux settings — general, context and compaction, jobs and
     /// concurrency, tools and timeouts, skills, and telemetry. Reads and writes <c>settings.json</c> through
-    /// <see cref="SettingsLoader"/>. The action buttons sit outside the scrollable form.
+    /// <see cref="SettingsLoader"/>. The action buttons sit outside the scrollable form. All labels resolve
+    /// through the ambient <see cref="Localizer"/>; dropdowns show localized labels but persist canonical
+    /// values via a parallel value array indexed by selection.
     /// </summary>
     public sealed class SettingsWindow : Window
     {
+        private static readonly string[] ThemeValues = { "system", "light", "dark" };
+        private static readonly string[] ApprovalValues = { "ask", "auto", "deny" };
+        private static readonly string[] CompactionValues = { "summary", "trim" };
+        private static readonly string[] EnqueueValues = { "ask", "run_now", "queue_after", "add_to_focused" };
+
         private readonly MuxSettings _Settings;
         private readonly Action<string>? _OnThemeMode;
 
@@ -27,7 +35,7 @@ namespace Mux.Desktop.Views
         private readonly TextBox _SystemPromptPath = new TextBox();
         private readonly TextBox _MaxTokenBudget = new TextBox();
 
-        private readonly CheckBox _AutoCompact = new CheckBox { Content = "Automatically compact long conversations" };
+        private readonly CheckBox _AutoCompact = new CheckBox();
         private readonly ComboBox _CompactionStrategy = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly TextBox _CompactionPreserveTurns = new TextBox();
         private readonly TextBox _ContextWarningThreshold = new TextBox();
@@ -36,19 +44,19 @@ namespace Mux.Desktop.Views
 
         private readonly TextBox _MaxConcurrency = new TextBox();
         private readonly ComboBox _EnqueueBehavior = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
-        private readonly CheckBox _TaskPlanning = new CheckBox { Content = "Enable background task planning" };
-        private readonly CheckBox _TaskParallelism = new CheckBox { Content = "Allow ready tasks to fan out to parallel jobs" };
+        private readonly CheckBox _TaskPlanning = new CheckBox();
+        private readonly CheckBox _TaskParallelism = new CheckBox();
 
         private readonly TextBox _ToolTimeout = new TextBox();
         private readonly TextBox _ProcessTimeout = new TextBox();
-        private readonly CheckBox _IgnoreCertErrors = new CheckBox { Content = "Ignore TLS certificate errors (intercepting proxies)" };
-        private readonly CheckBox _ShowBoundaryLines = new CheckBox { Content = "Show boundary lines in the interactive shell" };
+        private readonly CheckBox _IgnoreCertErrors = new CheckBox();
+        private readonly CheckBox _ShowBoundaryLines = new CheckBox();
 
-        private readonly CheckBox _SkillsEnabled = new CheckBox { Content = "Load user skills" };
+        private readonly CheckBox _SkillsEnabled = new CheckBox();
         private readonly TextBox _SkillRefreshInterval = new TextBox();
         private readonly TextBox _SkillsDirectory = new TextBox();
 
-        private readonly CheckBox _Telemetry = new CheckBox { Content = "Record usage telemetry" };
+        private readonly CheckBox _Telemetry = new CheckBox();
 
         private readonly TextBlock _Status = new TextBlock { Foreground = new SolidColorBrush(Color.Parse("#2f855a")), VerticalAlignment = VerticalAlignment.Center };
 
@@ -59,7 +67,7 @@ namespace Mux.Desktop.Views
         /// <param name="currentThemeMode">The current theme mode to preselect ("system", "light", or "dark").</param>
         public SettingsWindow(Action<string>? onThemeMode = null, string currentThemeMode = "dark")
         {
-            Title = "Settings";
+            Title = Localizer.T("settings.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 760;
             Height = 760;
@@ -72,22 +80,46 @@ namespace Mux.Desktop.Views
             _OnThemeMode = onThemeMode;
             _Settings = SettingsLoader.LoadSettings();
 
-            _ThemeSelector.ItemsSource = new List<string> { "System", "Light", "Dark" };
-            _ThemeSelector.SelectedItem = ThemeModeLabel(currentThemeMode);
+            _ThemeSelector.ItemsSource = new List<string>
+            {
+                Localizer.T("settings.theme.system"), Localizer.T("settings.theme.light"), Localizer.T("settings.theme.dark")
+            };
+            _ThemeSelector.SelectedIndex = IndexOfValue(ThemeValues, currentThemeMode, 2);
             _ThemeSelector.SelectionChanged += (sender, args) =>
             {
-                if (_ThemeSelector.SelectedItem is string variant)
+                int index = _ThemeSelector.SelectedIndex;
+                if (index >= 0 && index < ThemeValues.Length)
                 {
-                    _OnThemeMode?.Invoke(variant.ToLowerInvariant());
+                    _OnThemeMode?.Invoke(ThemeValues[index]);
                 }
             };
 
-            _ApprovalPolicy.ItemsSource = new List<string> { "ask", "auto", "deny" };
-            _ApprovalPolicy.SelectedItem = Normalize(_Settings.DefaultApprovalPolicy, "ask", "auto", "deny");
-            _CompactionStrategy.ItemsSource = new List<string> { "summary", "trim" };
-            _CompactionStrategy.SelectedItem = Normalize(_Settings.CompactionStrategy, "summary", "trim");
-            _EnqueueBehavior.ItemsSource = new List<string> { "ask", "run_now", "queue_after", "add_to_focused" };
-            _EnqueueBehavior.SelectedItem = Normalize(_Settings.DefaultEnqueueBehavior, "ask", "run_now", "queue_after", "add_to_focused");
+            _ApprovalPolicy.ItemsSource = new List<string>
+            {
+                Localizer.T("settings.approval.ask"), Localizer.T("settings.approval.auto"), Localizer.T("settings.approval.deny")
+            };
+            _ApprovalPolicy.SelectedIndex = IndexOfValue(ApprovalValues, _Settings.DefaultApprovalPolicy, 0);
+
+            _CompactionStrategy.ItemsSource = new List<string>
+            {
+                Localizer.T("settings.compact.summary"), Localizer.T("settings.compact.trim")
+            };
+            _CompactionStrategy.SelectedIndex = IndexOfValue(CompactionValues, _Settings.CompactionStrategy, 0);
+
+            _EnqueueBehavior.ItemsSource = new List<string>
+            {
+                Localizer.T("settings.enqueue.ask"), Localizer.T("settings.enqueue.run_now"),
+                Localizer.T("settings.enqueue.queue_after"), Localizer.T("settings.enqueue.add_to_focused")
+            };
+            _EnqueueBehavior.SelectedIndex = IndexOfValue(EnqueueValues, _Settings.DefaultEnqueueBehavior, 0);
+
+            _AutoCompact.Content = Localizer.T("settings.autoCompact");
+            _TaskPlanning.Content = Localizer.T("settings.taskPlanning");
+            _TaskParallelism.Content = Localizer.T("settings.taskParallel");
+            _IgnoreCertErrors.Content = Localizer.T("settings.ignoreCert");
+            _ShowBoundaryLines.Content = Localizer.T("settings.boundaryLines");
+            _SkillsEnabled.Content = Localizer.T("settings.loadSkills");
+            _Telemetry.Content = Localizer.T("settings.recordTelemetry");
 
             _MaxIterations.Text = _Settings.MaxAgentIterations.ToString(CultureInfo.InvariantCulture);
             _SystemPromptPath.Text = _Settings.SystemPromptPath ?? string.Empty;
@@ -117,18 +149,18 @@ namespace Mux.Desktop.Views
             AppTheme theme = AppTheme.Current;
             DockPanel root = new DockPanel { Margin = new Thickness(24) };
 
-            TextBlock title = new TextBlock { Text = "Settings", FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text };
+            TextBlock title = new TextBlock { Text = Localizer.T("settings.title"), FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = theme.Text };
             DockPanel.SetDock(title, Dock.Top);
             root.Children.Add(title);
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 14, 0, 0) };
             buttons.Children.Add(_Status);
-            Button close = new Button { Content = "Close" };
-            close.Tip("Close this window. Unsaved changes are discarded.");
+            Button close = new Button { Content = Localizer.T("act.close") };
+            close.Tip(Localizer.T("settings.close.tip"));
             close.Click += (sender, args) => Close();
             buttons.Children.Add(close);
-            Button save = new Button { Content = "Save", Background = theme.AccentButton, Foreground = theme.AccentText };
-            save.Tip("Write these settings to settings.json.");
+            Button save = new Button { Content = Localizer.T("act.save"), Background = theme.AccentButton, Foreground = theme.AccentText };
+            save.Tip(Localizer.T("settings.save.tip"));
             save.Click += (sender, args) => Save();
             buttons.Children.Add(save);
             DockPanel.SetDock(buttons, Dock.Bottom);
@@ -136,45 +168,44 @@ namespace Mux.Desktop.Views
 
             StackPanel form = new StackPanel { Spacing = 8, Margin = new Thickness(0, 14, 14, 0) };
 
-            form.Children.Add(Section("General"));
-            form.Children.Add(LabeledRow("Theme", _ThemeSelector, "Appearance for the whole app; applies immediately. “System” follows your OS light/dark setting and tracks changes to it."));
-            form.Children.Add(LabeledRow("Default approval policy", _ApprovalPolicy, "Stored default for how tool calls are approved (ask / auto / deny). The desktop app still auto-runs only read-only tools."));
-            form.Children.Add(LabeledRow("Max agent iterations (1–100)", _MaxIterations, "Hard cap on agent-loop turns before a run is forced to stop."));
-            form.Children.Add(LabeledRow("Max token budget (blank = off)", _MaxTokenBudget, "Optional ceiling on estimated working-context tokens per run; the run stops cleanly if exceeded."));
-            form.Children.Add(LabeledRow("System prompt path (blank = default)", _SystemPromptPath, "Path to a custom system-prompt file. Blank uses the built-in persona."));
+            form.Children.Add(Section(Localizer.T("settings.sec.general")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.theme"), _ThemeSelector, Localizer.T("settings.theme.tip")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.approval"), _ApprovalPolicy, Localizer.T("settings.approval.tip")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.maxIter"), _MaxIterations, Localizer.T("settings.maxIter.tip")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.maxBudget"), _MaxTokenBudget, Localizer.T("settings.maxBudget.tip")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.sysPrompt"), _SystemPromptPath, Localizer.T("settings.sysPrompt.tip")));
 
-            form.Children.Add(Section("Context & compaction"));
-            form.Children.Add(_AutoCompact.Tip("Automatically summarize or trim old history before a run when the prompt would overflow the context window."));
-            form.Children.Add(LabeledRow("Compaction strategy", _CompactionStrategy, "How history is shrunk: “summary” replaces old turns with a summary; “trim” drops the oldest turns."));
-            form.Children.Add(LabeledRow("Preserve recent turns (1–10)", _CompactionPreserveTurns, "How many of the most recent user-led turns compaction always keeps verbatim."));
-            form.Children.Add(LabeledRow("Context warning threshold % (50–95)", _ContextWarningThreshold, "The share of the usable input budget at which mux starts warning about context pressure."));
-            form.Children.Add(LabeledRow("Context safety margin % (5–50)", _ContextSafetyMargin, "Portion of the context window held in reserve so responses have room to generate."));
-            form.Children.Add(LabeledRow("Token estimation ratio (2.0–6.0)", _TokenEstimationRatio, "Characters-per-token estimate used for quick token counts before a call."));
+            form.Children.Add(Section(Localizer.T("settings.sec.context")));
+            form.Children.Add(_AutoCompact.Tip(Localizer.T("settings.autoCompact.tip")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.compactStrategy"), _CompactionStrategy, Localizer.T("settings.compactStrategy.tip")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.preserveTurns"), _CompactionPreserveTurns, Localizer.T("settings.preserveTurns.tip")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.warnThreshold"), _ContextWarningThreshold, Localizer.T("settings.warnThreshold.tip")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.safetyMargin"), _ContextSafetyMargin, Localizer.T("settings.safetyMargin.tip")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.tokenRatio"), _TokenEstimationRatio, Localizer.T("settings.tokenRatio.tip")));
 
-            form.Children.Add(Section("Jobs & concurrency"));
-            form.Children.Add(LabeledRow("Max concurrency (1–32)", _MaxConcurrency, "The most jobs allowed to run at the same time."));
-            form.Children.Add(LabeledRow("Default enqueue behavior", _EnqueueBehavior, "What happens when you submit while a job is busy: ask, run now, queue after, or add to the focused job."));
-            form.Children.Add(_TaskPlanning.Tip("Let the model break a job into a tracked plan of tasks with the plan/update-task tools."));
-            form.Children.Add(_TaskParallelism.Tip("Allow dependency-ready tasks to fan out as their own concurrent jobs (needs task planning on)."));
+            form.Children.Add(Section(Localizer.T("settings.sec.jobs")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.maxConcurrency"), _MaxConcurrency, Localizer.T("settings.maxConcurrency.tip")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.enqueue"), _EnqueueBehavior, Localizer.T("settings.enqueue.tip")));
+            form.Children.Add(_TaskPlanning.Tip(Localizer.T("settings.taskPlanning.tip")));
+            form.Children.Add(_TaskParallelism.Tip(Localizer.T("settings.taskParallel.tip")));
 
-            form.Children.Add(Section("Tools & network"));
-            form.Children.Add(LabeledRow("Tool timeout (ms, 1000–300000)", _ToolTimeout, "How long a single tool call may run before it is cancelled."));
-            form.Children.Add(LabeledRow("Process timeout (ms, 1000–600000)", _ProcessTimeout, "How long a spawned command process may run before it is killed."));
-            form.Children.Add(_IgnoreCertErrors.Tip("Skip TLS certificate validation for mux's own network calls — only for enterprise proxies that intercept TLS."));
-            form.Children.Add(_ShowBoundaryLines.Tip("Draw dark-grey boundary rules in the interactive terminal shell (TUI only)."));
+            form.Children.Add(Section(Localizer.T("settings.sec.tools")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.toolTimeout"), _ToolTimeout, Localizer.T("settings.toolTimeout.tip")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.processTimeout"), _ProcessTimeout, Localizer.T("settings.processTimeout.tip")));
+            form.Children.Add(_IgnoreCertErrors.Tip(Localizer.T("settings.ignoreCert.tip")));
+            form.Children.Add(_ShowBoundaryLines.Tip(Localizer.T("settings.boundaryLines.tip")));
 
-            form.Children.Add(Section("Skills"));
-            form.Children.Add(_SkillsEnabled.Tip("Load user-authored skills and expose them to the model."));
-            form.Children.Add(LabeledRow("Skill refresh interval (s, min 5)", _SkillRefreshInterval, "How often the shell re-scans the skills directory for changes."));
-            form.Children.Add(LabeledRow("Skills directory (blank = default)", _SkillsDirectory, "Override the skills folder (e.g. a shared library). Blank uses ~/.mux/skills."));
+            form.Children.Add(Section(Localizer.T("settings.sec.skills")));
+            form.Children.Add(_SkillsEnabled.Tip(Localizer.T("settings.loadSkills.tip")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.skillRefresh"), _SkillRefreshInterval, Localizer.T("settings.skillRefresh.tip")));
+            form.Children.Add(LabeledRow(Localizer.T("settings.skillsDir"), _SkillsDirectory, Localizer.T("settings.skillsDir.tip")));
 
-            form.Children.Add(Section("Telemetry"));
-            form.Children.Add(_Telemetry.Tip("Record token/latency/cost history to a local SQLite database that powers the Usage dashboard."));
+            form.Children.Add(Section(Localizer.T("settings.sec.telemetry")));
+            form.Children.Add(_Telemetry.Tip(Localizer.T("settings.recordTelemetry.tip")));
 
             form.Children.Add(new TextBlock
             {
-                Text = "The desktop app runs tools under an auto-safe policy regardless of the stored default: "
-                    + "read-only tools run automatically; tools that modify files or run commands always prompt.",
+                Text = Localizer.T("settings.autoSafeNote"),
                 Foreground = theme.Muted,
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
@@ -209,9 +240,9 @@ namespace Mux.Desktop.Views
 
         private void Save()
         {
-            _Settings.DefaultApprovalPolicy = _ApprovalPolicy.SelectedItem as string ?? _Settings.DefaultApprovalPolicy;
-            _Settings.CompactionStrategy = _CompactionStrategy.SelectedItem as string ?? _Settings.CompactionStrategy;
-            _Settings.DefaultEnqueueBehavior = _EnqueueBehavior.SelectedItem as string ?? _Settings.DefaultEnqueueBehavior;
+            _Settings.DefaultApprovalPolicy = ValueAt(ApprovalValues, _ApprovalPolicy.SelectedIndex, _Settings.DefaultApprovalPolicy);
+            _Settings.CompactionStrategy = ValueAt(CompactionValues, _CompactionStrategy.SelectedIndex, _Settings.CompactionStrategy);
+            _Settings.DefaultEnqueueBehavior = ValueAt(EnqueueValues, _EnqueueBehavior.SelectedIndex, _Settings.DefaultEnqueueBehavior);
 
             AssignInt(_MaxIterations, value => _Settings.MaxAgentIterations = value);
             AssignInt(_CompactionPreserveTurns, value => _Settings.CompactionPreserveTurns = value);
@@ -245,13 +276,13 @@ namespace Mux.Desktop.Views
             {
                 SettingsLoader.SaveSettings(_Settings);
                 _Status.Foreground = new SolidColorBrush(Color.Parse("#2f855a"));
-                _Status.Text = "Saved.";
+                _Status.Text = Localizer.T("settings.saved");
                 SyncBack();
             }
             catch (Exception ex)
             {
                 _Status.Foreground = new SolidColorBrush(Color.Parse("#c0392b"));
-                _Status.Text = "Save failed: " + ex.Message;
+                _Status.Text = Localizer.T("settings.saveFailed") + " " + ex.Message;
             }
         }
 
@@ -277,31 +308,25 @@ namespace Mux.Desktop.Views
             }
         }
 
-        private static string ThemeModeLabel(string? mode)
+        // Map a stored canonical value to its index in the option list (for preselecting a localized combo).
+        private static int IndexOfValue(string[] values, string? current, int fallback)
         {
-            switch ((mode ?? string.Empty).Trim().ToLowerInvariant())
+            string candidate = (current ?? string.Empty).Trim().ToLowerInvariant();
+            for (int i = 0; i < values.Length; i++)
             {
-                case "system":
-                    return "System";
-                case "light":
-                    return "Light";
-                default:
-                    return "Dark";
-            }
-        }
-
-        private static string Normalize(string? value, params string[] allowed)
-        {
-            string candidate = (value ?? string.Empty).Trim().ToLowerInvariant();
-            foreach (string option in allowed)
-            {
-                if (string.Equals(option, candidate, StringComparison.Ordinal))
+                if (string.Equals(values[i], candidate, StringComparison.Ordinal))
                 {
-                    return option;
+                    return i;
                 }
             }
 
-            return allowed[0];
+            return fallback;
+        }
+
+        // Map a selected index back to its canonical value (for saving), falling back when out of range.
+        private static string ValueAt(string[] values, int index, string fallback)
+        {
+            return index >= 0 && index < values.Length ? values[index] : fallback;
         }
     }
 }

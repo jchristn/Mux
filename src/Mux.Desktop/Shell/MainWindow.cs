@@ -355,22 +355,22 @@ namespace Mux.Desktop.Shell
             if (_ManageOpen && expanded)
             {
                 StackPanel manageGroup = new StackPanel { Spacing = 2 };
-                manageGroup.Children.Add(NavItem("🛠", "Manage", "Hide the configuration managers.", ToggleManage, accent: false, chevron: "▾"));
+                manageGroup.Children.Add(NavItem("🛠", L("sidebar.manage"), "Hide the configuration managers.", ToggleManage, accent: false, chevron: "▾"));
                 manageGroup.Children.Add(ManageDrawerItem("🔌", L(StringKeys.NavEndpoints), "Add, edit, and choose the default model endpoint.", OpenEndpointsWindow));
                 manageGroup.Children.Add(ManageDrawerItem("🧩", L(StringKeys.NavMcp), "Manage MCP servers that extend the agent with external tools.", OpenMcpServersWindow));
                 manageGroup.Children.Add(ManageDrawerItem("📝", L(StringKeys.NavPrompts), "Manage prompt profiles (system, tools-disabled, and compaction prompts).", OpenPromptsWindow));
                 manageGroup.Children.Add(ManageDrawerItem("✨", L(StringKeys.NavSkills), "Install, edit, and enable user skills.", OpenSkillsWindow));
                 manageGroup.Children.Add(ManageDrawerItem("🤖", L(StringKeys.NavSubagents), "Define subagents the model can delegate scoped tasks to.", OpenSubagentsWindow));
                 manageGroup.Children.Add(ManageDrawerItem("💲", L(StringKeys.NavPricing), "Edit per-model token rates used to compute usage cost.", OpenPricingWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🔎", "Search", "Configure external web-search providers.", OpenSearchProvidersWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🧰", "Plugins", "Manage lifecycle hooks and custom slash commands.", OpenPluginsWindow));
-                manageGroup.Children.Add(ManageDrawerItem("🌐", "Local server", "Start or stop the embedded REST API and web dashboard (bound to loopback).", OpenLocalServerWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🔎", L("sidebar.search"), "Configure external web-search providers.", OpenSearchProvidersWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🧰", L("sidebar.plugins"), "Manage lifecycle hooks and custom slash commands.", OpenPluginsWindow));
+                manageGroup.Children.Add(ManageDrawerItem("🌐", L("sidebar.localServer"), "Start or stop the embedded REST API and web dashboard (bound to loopback).", OpenLocalServerWindow));
                 manageGroup.Children.Add(ManageDrawerItem("⌨", L(StringKeys.NavKeybindings), "Rebind or unbind keyboard shortcuts.", OpenKeybindingsWindow));
                 bottom.Children.Add(HighlightBlock(manageGroup));
             }
             else
             {
-                bottom.Children.Add(NavItem("🛠", "Manage", "Show the configuration managers: endpoints, MCP, prompts, skills, subagents, and pricing.", ToggleManage, accent: false, chevron: "▸"));
+                bottom.Children.Add(NavItem("🛠", L("sidebar.manage"), "Show the configuration managers: endpoints, MCP, prompts, skills, subagents, and pricing.", ToggleManage, accent: false, chevron: "▸"));
             }
 
             bottom.Children.Add(NavItem("⚙", L(StringKeys.NavSettings), "Open application settings (approval, context, jobs, tools, skills, telemetry).", OpenSettingsWindow, accent: false));
@@ -387,7 +387,7 @@ namespace Mux.Desktop.Shell
 
                 Button bulkDelete = new Button
                 {
-                    Content = "🗑   Delete multiple",
+                    Content = "🗑   " + L("sidebar.deleteMultiple"),
                     Foreground = _Theme.Error,
                     Background = Brushes.Transparent,
                     BorderThickness = new Thickness(0),
@@ -1479,7 +1479,7 @@ namespace Mux.Desktop.Shell
             _EmptyState.Children.Add(_QuipText);
             _EmptyState.Children.Add(new TextBlock
             {
-                Text = "Type a message below and press Enter, or start a new conversation.",
+                Text = L("workspace.emptySecondary"),
                 Foreground = _Theme.Muted,
                 MaxWidth = 420,
                 TextWrapping = TextWrapping.Wrap,

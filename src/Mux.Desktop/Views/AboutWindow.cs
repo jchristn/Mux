@@ -134,17 +134,17 @@ namespace Mux.Desktop.Views
             StackPanel diagnostics = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
             diagnostics.Children.Add(new TextBlock
             {
-                Text = "Diagnostics",
+                Text = localization.Get("about.diagnostics"),
                 Foreground = theme.Text,
                 FontWeight = FontWeight.SemiBold,
                 TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center
             });
-            diagnostics.Children.Add(DiagnosticRow("Version", Defaults.ProductVersion, "The mux product version this desktop app was built from.", theme));
-            diagnostics.Children.Add(DiagnosticRow("Config directory", SafeConfigDirectory(), "Where mux reads and writes its settings, endpoints, and telemetry (set MUX_CONFIG_DIR to override).", theme));
-            diagnostics.Children.Add(DiagnosticRow("Runtime", RuntimeInformation.FrameworkDescription, "The .NET runtime hosting the app.", theme));
-            diagnostics.Children.Add(DiagnosticRow("OS", RuntimeInformation.OSDescription.Trim(), "The operating system and version.", theme));
-            diagnostics.Children.Add(DiagnosticRow("Architecture", RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(), "The process CPU architecture.", theme));
+            diagnostics.Children.Add(DiagnosticRow(localization.Get("about.version"), Defaults.ProductVersion, "The mux product version this desktop app was built from.", theme));
+            diagnostics.Children.Add(DiagnosticRow(localization.Get("about.configDir"), SafeConfigDirectory(), "Where mux reads and writes its settings, endpoints, and telemetry (set MUX_CONFIG_DIR to override).", theme));
+            diagnostics.Children.Add(DiagnosticRow(localization.Get("about.runtime"), RuntimeInformation.FrameworkDescription, "The .NET runtime hosting the app.", theme));
+            diagnostics.Children.Add(DiagnosticRow(localization.Get("about.os"), RuntimeInformation.OSDescription.Trim(), "The operating system and version.", theme));
+            diagnostics.Children.Add(DiagnosticRow(localization.Get("about.architecture"), RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(), "The process CPU architecture.", theme));
             panel.Children.Add(diagnostics);
 
             panel.Children.Add(new TextBlock
