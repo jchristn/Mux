@@ -8,6 +8,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Layout;
     using Avalonia.Media;
     using Avalonia.Threading;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// A lightweight, dependency-free sortable table. Columns are described by <see cref="TableColumn{TRow}"/>
@@ -206,7 +207,7 @@ namespace Mux.Desktop.Views
             _Body.Children.Clear();
             if (_Rows.Count == 0)
             {
-                _Body.Children.Add(new TextBlock { Text = "Nothing here yet.", Foreground = theme.Muted, Margin = new Thickness(12, 12, 12, 12) });
+                _Body.Children.Add(new TextBlock { Text = Localizer.T("table.empty"), Foreground = theme.Muted, Margin = new Thickness(12, 12, 12, 12) });
                 return;
             }
 
@@ -241,7 +242,7 @@ namespace Mux.Desktop.Views
                 VerticalAlignment = VerticalAlignment.Center
             };
             actionsButton.Flyout = BuildFlyout(row, theme);
-            actionsButton.Tip("Actions for this row (or right-click the row)");
+            actionsButton.Tip(Localizer.T("table.actions.tip"));
             Grid.SetColumn(actionsButton, _Columns.Count);
             grid.Children.Add(actionsButton);
 
@@ -256,7 +257,7 @@ namespace Mux.Desktop.Views
 
             if (_OnRowActivated != null)
             {
-                rowBorder.Tip("Click to open this row for editing; right-click for more actions");
+                rowBorder.Tip(Localizer.T("table.rowActivate.tip"));
                 rowBorder.Tapped += (sender, args) =>
                 {
                     // A click on the ⋯ actions button opens its menu; don't also activate the row.

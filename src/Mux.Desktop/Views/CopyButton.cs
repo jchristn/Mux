@@ -5,6 +5,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Controls;
     using Avalonia.Media;
     using Avalonia.Threading;
+    using Mux.Desktop.I18n;
 
     /// <summary>
     /// The reusable copy-to-clipboard control for the desktop app. Implemented as a factory that returns a
@@ -41,7 +42,7 @@ namespace Mux.Desktop.Views
                 Padding = new Thickness(6, 2, 6, 2),
                 FontSize = 13
             };
-            button.Tip("Copy to the clipboard.");
+            button.Tip(Localizer.T("copy.tip"));
 
             DispatcherTimer? resetTimer = null;
             button.Click += async (sender, args) =>

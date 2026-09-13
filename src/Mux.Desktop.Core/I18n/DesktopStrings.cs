@@ -808,6 +808,10 @@ namespace Mux.Desktop.I18n
                 { "main.nav.theme.dark.tip", "Switch to the dark theme." },
                 { "main.nav.viewMenu.tip", "View options: sidebar and thinking display." },
                 { "main.turnInfo.tip", "Time to first token: {0} ms\nStreaming: {1} ms\nTotal: {2}\nTokens: input {3} · output {4} · total {5}" },
+                { "copy.tip", "Copy to the clipboard." },
+                { "table.empty", "Nothing here yet." },
+                { "table.actions.tip", "Actions for this row (or right-click the row)" },
+                { "table.rowActivate.tip", "Click to open this row for editing; right-click for more actions" },
             };
 
             all["es"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -1597,6 +1601,10 @@ namespace Mux.Desktop.I18n
                 { "main.nav.theme.dark.tip", "Cambiar al tema oscuro." },
                 { "main.nav.viewMenu.tip", "Opciones de vista: barra lateral y visualización del razonamiento." },
                 { "main.turnInfo.tip", "Tiempo hasta el primer token: {0} ms\nStreaming: {1} ms\nTotal: {2}\nTokens: entrada {3} · salida {4} · total {5}" },
+                { "copy.tip", "Copiar al portapapeles." },
+                { "table.empty", "Aún no hay nada aquí." },
+                { "table.actions.tip", "Acciones para esta fila (o haz clic derecho en la fila)" },
+                { "table.rowActivate.tip", "Haz clic para abrir esta fila y editarla; haz clic derecho para más acciones" },
             };
 
             all["pt"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -2386,6 +2394,10 @@ namespace Mux.Desktop.I18n
                 { "main.nav.theme.dark.tip", "Mudar para o tema escuro." },
                 { "main.nav.viewMenu.tip", "Opções de visualização: barra lateral e exibição do raciocínio." },
                 { "main.turnInfo.tip", "Tempo até o primeiro token: {0} ms\nStreaming: {1} ms\nTotal: {2}\nTokens: entrada {3} · saída {4} · total {5}" },
+                { "copy.tip", "Copiar para a área de transferência." },
+                { "table.empty", "Ainda não há nada aqui." },
+                { "table.actions.tip", "Ações para esta linha (ou clique com o botão direito na linha)" },
+                { "table.rowActivate.tip", "Clique para abrir esta linha para edição; clique com o botão direito para mais ações" },
             };
 
             all["fr"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -3175,6 +3187,10 @@ namespace Mux.Desktop.I18n
                 { "main.nav.theme.dark.tip", "Passer au thème sombre." },
                 { "main.nav.viewMenu.tip", "Options d'affichage : barre latérale et affichage de la réflexion." },
                 { "main.turnInfo.tip", "Temps jusqu'au premier token : {0} ms\nDiffusion : {1} ms\nTotal : {2}\nTokens : entrée {3} · sortie {4} · total {5}" },
+                { "copy.tip", "Copier dans le presse-papiers." },
+                { "table.empty", "Rien ici pour l'instant." },
+                { "table.actions.tip", "Actions pour cette ligne (ou clic droit sur la ligne)" },
+                { "table.rowActivate.tip", "Cliquez pour ouvrir cette ligne en édition ; clic droit pour plus d'actions" },
             };
 
             all["it"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -3964,6 +3980,10 @@ namespace Mux.Desktop.I18n
                 { "main.nav.theme.dark.tip", "Passa al tema scuro." },
                 { "main.nav.viewMenu.tip", "Opzioni di visualizzazione: barra laterale e visualizzazione del ragionamento." },
                 { "main.turnInfo.tip", "Tempo al primo token: {0} ms\nStreaming: {1} ms\nTotale: {2}\nToken: input {3} · output {4} · totale {5}" },
+                { "copy.tip", "Copia negli appunti." },
+                { "table.empty", "Ancora niente qui." },
+                { "table.actions.tip", "Azioni per questa riga (o clic con il tasto destro sulla riga)" },
+                { "table.rowActivate.tip", "Fai clic per aprire questa riga per la modifica; clic destro per altre azioni" },
             };
 
             all["de"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -4753,6 +4773,10 @@ namespace Mux.Desktop.I18n
                 { "main.nav.theme.dark.tip", "Zum dunklen Design wechseln." },
                 { "main.nav.viewMenu.tip", "Ansichtsoptionen: Seitenleiste und Denk-Anzeige." },
                 { "main.turnInfo.tip", "Zeit bis zum ersten Token: {0} ms\nStreaming: {1} ms\nGesamt: {2}\nTokens: Eingabe {3} · Ausgabe {4} · gesamt {5}" },
+                { "copy.tip", "In die Zwischenablage kopieren." },
+                { "table.empty", "Noch nichts vorhanden." },
+                { "table.actions.tip", "Aktionen für diese Zeile (oder Rechtsklick auf die Zeile)" },
+                { "table.rowActivate.tip", "Zum Bearbeiten dieser Zeile klicken; Rechtsklick für weitere Aktionen" },
             };
 
             all["zh"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -5542,6 +5566,10 @@ namespace Mux.Desktop.I18n
                 { "main.nav.theme.dark.tip", "切换到深色主题。" },
                 { "main.nav.viewMenu.tip", "视图选项：侧边栏和思考显示。" },
                 { "main.turnInfo.tip", "首个 token 时间：{0} ms\n流式传输：{1} ms\n总计：{2}\nTokens：输入 {3} · 输出 {4} · 总计 {5}" },
+                { "copy.tip", "复制到剪贴板。" },
+                { "table.empty", "这里还什么都没有。" },
+                { "table.actions.tip", "此行的操作（或右键单击该行）" },
+                { "table.rowActivate.tip", "点击以打开此行进行编辑；右键单击查看更多操作" },
             };
 
             all["ar"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -6331,6 +6359,10 @@ namespace Mux.Desktop.I18n
                 { "main.nav.theme.dark.tip", "التبديل إلى السمة الداكنة." },
                 { "main.nav.viewMenu.tip", "خيارات العرض: الشريط الجانبي وعرض التفكير." },
                 { "main.turnInfo.tip", "الزمن حتى أول رمز: {0} مللي ثانية\nالبث: {1} مللي ثانية\nالإجمالي: {2}\nالرموز: إدخال {3} · إخراج {4} · إجمالي {5}" },
+                { "copy.tip", "النسخ إلى الحافظة." },
+                { "table.empty", "لا يوجد شيء هنا بعد." },
+                { "table.actions.tip", "إجراءات هذا الصف (أو انقر بزر الفأرة الأيمن على الصف)" },
+                { "table.rowActivate.tip", "انقر لفتح هذا الصف للتحرير؛ انقر بزر الفأرة الأيمن لمزيد من الإجراءات" },
             };
 
             all["ru"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -7120,6 +7152,10 @@ namespace Mux.Desktop.I18n
                 { "main.nav.theme.dark.tip", "Переключиться на тёмную тему." },
                 { "main.nav.viewMenu.tip", "Параметры вида: боковая панель и отображение размышлений." },
                 { "main.turnInfo.tip", "Время до первого токена: {0} мс\nПотоковая передача: {1} мс\nВсего: {2}\nТокены: ввод {3} · вывод {4} · всего {5}" },
+                { "copy.tip", "Копировать в буфер обмена." },
+                { "table.empty", "Здесь пока ничего нет." },
+                { "table.actions.tip", "Действия для этой строки (или щёлкните строку правой кнопкой)" },
+                { "table.rowActivate.tip", "Щёлкните, чтобы открыть строку для редактирования; правый клик — больше действий" },
             };
 
             all["ms"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -7909,6 +7945,10 @@ namespace Mux.Desktop.I18n
                 { "main.nav.theme.dark.tip", "Tukar kepada tema gelap." },
                 { "main.nav.viewMenu.tip", "Pilihan paparan: bar sisi dan paparan pemikiran." },
                 { "main.turnInfo.tip", "Masa ke token pertama: {0} ms\nPenstriman: {1} ms\nJumlah: {2}\nToken: input {3} · output {4} · jumlah {5}" },
+                { "copy.tip", "Salin ke papan keratan." },
+                { "table.empty", "Belum ada apa-apa di sini." },
+                { "table.actions.tip", "Tindakan untuk baris ini (atau klik kanan pada baris)" },
+                { "table.rowActivate.tip", "Klik untuk membuka baris ini untuk penyuntingan; klik kanan untuk lebih banyak tindakan" },
             };
 
             all["hi"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -8698,6 +8738,10 @@ namespace Mux.Desktop.I18n
                 { "main.nav.theme.dark.tip", "डार्क थीम पर स्विच करें।" },
                 { "main.nav.viewMenu.tip", "व्यू विकल्प: साइडबार और थिंकिंग प्रदर्शन।" },
                 { "main.turnInfo.tip", "पहले token तक का समय: {0} ms\nस्ट्रीमिंग: {1} ms\nकुल: {2}\nTokens: इनपुट {3} · आउटपुट {4} · कुल {5}" },
+                { "copy.tip", "क्लिपबोर्ड पर कॉपी करें।" },
+                { "table.empty", "यहाँ अभी कुछ नहीं है।" },
+                { "table.actions.tip", "इस पंक्ति के लिए क्रियाएँ (या पंक्ति पर राइट-क्लिक करें)" },
+                { "table.rowActivate.tip", "संपादन के लिए इस पंक्ति को खोलने हेतु क्लिक करें; अधिक क्रियाओं के लिए राइट-क्लिक करें" },
             };
 
             return all;
