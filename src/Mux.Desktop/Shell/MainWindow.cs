@@ -161,7 +161,7 @@ namespace Mux.Desktop.Shell
             _Localization.SetActiveLocale(_LocaleCode);
             _LocaleCode = _Localization.CurrentLocale;
             FlowDirection = _Localization.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
-            AppTheme.Set(ResolveThemeVariant(prefs.ThemeMode));
+            ApplyThemeForMode(prefs.ThemeMode);
             _Theme = AppTheme.Current;
 
             Background = _Theme.Surface;
@@ -522,6 +522,8 @@ namespace Mux.Desktop.Shell
                 Margin = new Thickness(0, 0, 0, 2)
             };
             button.Tip(tooltip);
+            // Accessible name: the visible label when present, else the tooltip (collapsed icon-only rail).
+            Avalonia.Automation.AutomationProperties.SetName(button, string.IsNullOrEmpty(label) ? tooltip : label);
             button.Click += (sender, args) => onClick();
             return button;
         }
@@ -783,6 +785,8 @@ namespace Mux.Desktop.Shell
                 VerticalAlignment = VerticalAlignment.Center
             };
             button.Tip(tip);
+            // Icon-only button: expose the (localized) tooltip as its accessible name for screen readers.
+            Avalonia.Automation.AutomationProperties.SetName(button, tip);
             return button;
         }
 
@@ -943,9 +947,29 @@ namespace Mux.Desktop.Shell
 
         private void SetThemeMode(string mode)
         {
-            bool dark = ResolveThemeVariant(mode);
-            ApplyThemeDark(dark);
+            ApplyThemeForMode(mode);
+            RebuildContent();
             SaveThemeMode();
+        }
+
+        // Apply the palette for an explicit theme mode ("system"/"light"/"dark"/"highcontrast"). Does not
+        // rebuild the layout — callers rebuild when appropriate. Shared by startup and the settings selector.
+        private void ApplyThemeForMode(string mode)
+        {
+            if (string.Equals(mode, "highcontrast", StringComparison.OrdinalIgnoreCase))
+            {
+                _ThemeMode = mode;
+                if (Application.Current != null)
+                {
+                    // High contrast is a dark-based accessibility palette; keep the OS variant dark.
+                    Application.Current.RequestedThemeVariant = ThemeVariant.Dark;
+                }
+
+                AppTheme.SetHighContrast();
+                return;
+            }
+
+            AppTheme.Set(ResolveThemeVariant(mode));
         }
 
         private LocaleInfo? CurrentLocaleInfo()
@@ -1051,7 +1075,8 @@ namespace Mux.Desktop.Shell
 
         private void ApplyThemeDark(bool dark)
         {
-            if (dark == _Theme.IsDark)
+            // Re-apply when leaving high contrast even if the dark/light bit is unchanged.
+            if (dark == _Theme.IsDark && !_Theme.IsHighContrast)
             {
                 return;
             }

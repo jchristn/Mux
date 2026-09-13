@@ -13,6 +13,9 @@ namespace Mux.Desktop
         /// <summary>Whether this is the dark variant.</summary>
         public bool IsDark { get; private set; }
 
+        /// <summary>Whether this is the high-contrast (accessibility) variant.</summary>
+        public bool IsHighContrast { get; private set; }
+
         /// <summary>Primary window/background surface.</summary>
         public IBrush Surface { get; private set; } = Brushes.White;
 
@@ -71,6 +74,42 @@ namespace Mux.Desktop
         {
             Current = dark ? CreateDark() : CreateLight();
             return Current;
+        }
+
+        /// <summary>
+        /// Set the active palette to the high-contrast accessibility variant.
+        /// </summary>
+        /// <returns>The new active palette.</returns>
+        public static AppTheme SetHighContrast()
+        {
+            Current = CreateHighContrast();
+            return Current;
+        }
+
+        /// <summary>
+        /// Build the high-contrast accessibility palette: pure-black surfaces, pure-white text and borders,
+        /// and a bright-yellow accent, for maximum contrast (WCAG-friendly).
+        /// </summary>
+        /// <returns>The high-contrast palette.</returns>
+        public static AppTheme CreateHighContrast()
+        {
+            return new AppTheme
+            {
+                IsDark = true,
+                IsHighContrast = true,
+                Surface = Solid("#000000"),
+                SurfaceAlt = Solid("#0a0a0a"),
+                Text = Solid("#ffffff"),
+                Muted = Solid("#e6e6e6"),
+                Border = Solid("#ffffff"),
+                Accent = Solid("#ffff00"),
+                AccentButton = Solid("#ffff00"),
+                AccentText = Solid("#000000"),
+                UserBubble = Solid("#1a1a1a"),
+                AssistantBubble = Solid("#000000"),
+                Error = Solid("#ff8080"),
+                Success = Solid("#80ff80")
+            };
         }
 
         /// <summary>

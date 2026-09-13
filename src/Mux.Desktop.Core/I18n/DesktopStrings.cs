@@ -812,6 +812,7 @@ namespace Mux.Desktop.I18n
                 { "table.empty", "Nothing here yet." },
                 { "table.actions.tip", "Actions for this row (or right-click the row)" },
                 { "table.rowActivate.tip", "Click to open this row for editing; right-click for more actions" },
+                { "settings.theme.highContrast", "High contrast" },
             };
 
             all["es"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -1605,6 +1606,7 @@ namespace Mux.Desktop.I18n
                 { "table.empty", "Aún no hay nada aquí." },
                 { "table.actions.tip", "Acciones para esta fila (o haz clic derecho en la fila)" },
                 { "table.rowActivate.tip", "Haz clic para abrir esta fila y editarla; haz clic derecho para más acciones" },
+                { "settings.theme.highContrast", "Alto contraste" },
             };
 
             all["pt"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -2398,6 +2400,7 @@ namespace Mux.Desktop.I18n
                 { "table.empty", "Ainda não há nada aqui." },
                 { "table.actions.tip", "Ações para esta linha (ou clique com o botão direito na linha)" },
                 { "table.rowActivate.tip", "Clique para abrir esta linha para edição; clique com o botão direito para mais ações" },
+                { "settings.theme.highContrast", "Alto contraste" },
             };
 
             all["fr"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -3191,6 +3194,7 @@ namespace Mux.Desktop.I18n
                 { "table.empty", "Rien ici pour l'instant." },
                 { "table.actions.tip", "Actions pour cette ligne (ou clic droit sur la ligne)" },
                 { "table.rowActivate.tip", "Cliquez pour ouvrir cette ligne en édition ; clic droit pour plus d'actions" },
+                { "settings.theme.highContrast", "Contraste élevé" },
             };
 
             all["it"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -3984,6 +3988,7 @@ namespace Mux.Desktop.I18n
                 { "table.empty", "Ancora niente qui." },
                 { "table.actions.tip", "Azioni per questa riga (o clic con il tasto destro sulla riga)" },
                 { "table.rowActivate.tip", "Fai clic per aprire questa riga per la modifica; clic destro per altre azioni" },
+                { "settings.theme.highContrast", "Contrasto elevato" },
             };
 
             all["de"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -4777,6 +4782,7 @@ namespace Mux.Desktop.I18n
                 { "table.empty", "Noch nichts vorhanden." },
                 { "table.actions.tip", "Aktionen für diese Zeile (oder Rechtsklick auf die Zeile)" },
                 { "table.rowActivate.tip", "Zum Bearbeiten dieser Zeile klicken; Rechtsklick für weitere Aktionen" },
+                { "settings.theme.highContrast", "Hoher Kontrast" },
             };
 
             all["zh"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -5570,6 +5576,7 @@ namespace Mux.Desktop.I18n
                 { "table.empty", "这里还什么都没有。" },
                 { "table.actions.tip", "此行的操作（或右键单击该行）" },
                 { "table.rowActivate.tip", "点击以打开此行进行编辑；右键单击查看更多操作" },
+                { "settings.theme.highContrast", "高对比度" },
             };
 
             all["ar"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -6363,6 +6370,7 @@ namespace Mux.Desktop.I18n
                 { "table.empty", "لا يوجد شيء هنا بعد." },
                 { "table.actions.tip", "إجراءات هذا الصف (أو انقر بزر الفأرة الأيمن على الصف)" },
                 { "table.rowActivate.tip", "انقر لفتح هذا الصف للتحرير؛ انقر بزر الفأرة الأيمن لمزيد من الإجراءات" },
+                { "settings.theme.highContrast", "تباين عالٍ" },
             };
 
             all["ru"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -7156,6 +7164,7 @@ namespace Mux.Desktop.I18n
                 { "table.empty", "Здесь пока ничего нет." },
                 { "table.actions.tip", "Действия для этой строки (или щёлкните строку правой кнопкой)" },
                 { "table.rowActivate.tip", "Щёлкните, чтобы открыть строку для редактирования; правый клик — больше действий" },
+                { "settings.theme.highContrast", "Высокий контраст" },
             };
 
             all["ms"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -7949,6 +7958,7 @@ namespace Mux.Desktop.I18n
                 { "table.empty", "Belum ada apa-apa di sini." },
                 { "table.actions.tip", "Tindakan untuk baris ini (atau klik kanan pada baris)" },
                 { "table.rowActivate.tip", "Klik untuk membuka baris ini untuk penyuntingan; klik kanan untuk lebih banyak tindakan" },
+                { "settings.theme.highContrast", "Kontras tinggi" },
             };
 
             all["hi"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -8742,6 +8752,7 @@ namespace Mux.Desktop.I18n
                 { "table.empty", "यहाँ अभी कुछ नहीं है।" },
                 { "table.actions.tip", "इस पंक्ति के लिए क्रियाएँ (या पंक्ति पर राइट-क्लिक करें)" },
                 { "table.rowActivate.tip", "संपादन के लिए इस पंक्ति को खोलने हेतु क्लिक करें; अधिक क्रियाओं के लिए राइट-क्लिक करें" },
+                { "settings.theme.highContrast", "उच्च कंट्रास्ट" },
             };
 
             return all;

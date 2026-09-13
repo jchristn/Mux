@@ -21,7 +21,7 @@ namespace Mux.Desktop.Views
     /// </summary>
     public sealed class SettingsWindow : Window
     {
-        private static readonly string[] ThemeValues = { "system", "light", "dark" };
+        private static readonly string[] ThemeValues = { "system", "light", "dark", "highcontrast" };
         private static readonly string[] ApprovalValues = { "ask", "auto", "deny" };
         private static readonly string[] CompactionValues = { "summary", "trim" };
         private static readonly string[] EnqueueValues = { "ask", "run_now", "queue_after", "add_to_focused" };
@@ -82,7 +82,8 @@ namespace Mux.Desktop.Views
 
             _ThemeSelector.ItemsSource = new List<string>
             {
-                Localizer.T("settings.theme.system"), Localizer.T("settings.theme.light"), Localizer.T("settings.theme.dark")
+                Localizer.T("settings.theme.system"), Localizer.T("settings.theme.light"),
+                Localizer.T("settings.theme.dark"), Localizer.T("settings.theme.highContrast")
             };
             _ThemeSelector.SelectedIndex = IndexOfValue(ThemeValues, currentThemeMode, 2);
             _ThemeSelector.SelectionChanged += (sender, args) =>
