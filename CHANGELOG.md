@@ -21,7 +21,7 @@ All notable changes to mux are documented here.
   picker, a streaming transcript, and a composer. Sending a message drives the mux agent in-process
   (`AgentLoopTurnRunner` → `AgentLoop`) under an auto-safe approval policy (read-only tools auto-approve;
   mutating tools prompt), streams the reply, and persists the conversation. Like the TUI, the desktop app
-  brings up the tray agent at startup (opt out with `MUX_AGENT_AUTOSTART=0`). See `DESKTOP_APP.md` (plan) and
+  brings up the tray agent at startup (opt out with `MUX_AGENT_AUTOSTART=0`). See `archive/DESKTOP_APP.md` (plan) and
   `docs/DESKTOP.md` (guide). Launch it with `run-desktop.bat` / `run-desktop.sh`.
 - **`Mux.Core` published to NuGet.** `Mux.Core` (and its `Mux.Search` dependency) now carry full package
   metadata — MIT license, project/repository URLs, README, icon, tags — and produce a symbol package

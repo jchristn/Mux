@@ -2,7 +2,7 @@
 
 _Introduced in mux v0.10.0._
 
-`mux Desktop` is a cross-platform desktop client for the mux agent, built on [Avalonia](https://avaloniaui.net/). It is the third front end over the shared `Mux.Core` engine, alongside the interactive TUI and the `mux serve` web dashboard. It targets parity with the TUI's capability set and the dashboard's monitoring and reporting, plus a first-class conversation/thread experience. The full design and roadmap live in [`DESKTOP_APP.md`](../DESKTOP_APP.md).
+`mux Desktop` is a cross-platform desktop client for the mux agent, built on [Avalonia](https://avaloniaui.net/). It is the third front end over the shared `Mux.Core` engine, alongside the interactive TUI and the `mux serve` web dashboard. It targets parity with the TUI's capability set and the dashboard's monitoring and reporting, plus a first-class conversation/thread experience. The full design and roadmap live in [`DESKTOP_APP.md`](../archive/DESKTOP_APP.md).
 
 The desktop app links `Mux.Core` in-process and drives the agent the same way the TUI does — it does **not** require `mux serve` to be running. It reads and writes the same `~/.mux` configuration and session store as the CLI and tray agent, so conversations, endpoints, MCP servers, skills, and usage telemetry are shared across all three surfaces.
 
@@ -76,7 +76,11 @@ The **Local server** window starts and stops an embedded `mux serve` instance (t
 
 The desktop app reads the same configuration as the rest of mux, under `~/.mux/` by default. Set `MUX_CONFIG_DIR` before launching to point at an isolated config directory — endpoints, settings, sessions, and usage telemetry are all shared with the CLI and the tray agent. See [`CONFIG.md`](CONFIG.md).
 
-Theme (light/dark) and other preferences live in the **Settings** window.
+Theme (System / Light / Dark, plus a **High contrast** accessibility variant) and other preferences live in the **Settings** window. The theme choice is remembered across launches.
+
+## Parallel conversations
+
+Each open conversation runs in its own tab. Tabs are independent: you can start a turn in one, switch to another, and start a turn there too — both run at the same time, each streaming into its own transcript. Switching tabs never blocks, even while a turn is in flight. (All tabs share one working directory and git history, so undo/redo apply to the working tree as a whole and file-changing turns are checkpointed one at a time.)
 
 ## Language
 
@@ -122,4 +126,4 @@ These artifacts are **unsigned**. Shipping to end users additionally requires pl
 - **macOS** — codesign the `.app` with a Developer ID certificate and notarize it with `notarytool` before stapling.
 - **Linux** — no signing is required to run; package as AppImage/`.deb`/`.rpm` as desired.
 
-Signing, notarization, per-OS installers, and auto-update are the remaining items in the packaging phase of [`DESKTOP_APP.md`](../DESKTOP_APP.md).
+Signing, notarization, per-OS installers, and auto-update are the remaining items in the packaging phase of [`DESKTOP_APP.md`](../archive/DESKTOP_APP.md).
