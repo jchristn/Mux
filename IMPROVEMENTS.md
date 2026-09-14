@@ -109,7 +109,7 @@ The current local REST server, dashboard, and tray agent are the right foundatio
 
 ### IDE Extension Surface
 
-A first VS Code extension has landed in `src/Mux.VSCode`, planned in `VSCODE_EXTENSION.md`. It is a thin
+A first VS Code extension has landed in `src/Mux.VSCode`, planned in `archive/VSCODE_EXTENSION.md`. It is a thin
 client over the local `mux serve` API — a streaming chat panel with in-editor approvals, inline commands and
 code actions, editor context injection, and the shared session tree, with the agent loop staying in
 `Mux.Core`. The rows below track what remains (LSP awareness, live session mirroring over the WebSocket
