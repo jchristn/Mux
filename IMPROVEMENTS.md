@@ -24,9 +24,9 @@ The main gap is not raw capability. The main gap is product finish: the first-ru
 | Model capability detection | Probing and model listing exist for several backends. | Detect and surface capabilities per model: tool calling, streaming, reasoning controls, thinking output, vision, JSON/schema output, context size, cache support. | Prevents confusing runs where the selected model cannot actually do the requested job. |
 | Defaults | Sensible, local-first defaults. | Ship curated endpoint presets, prompt profiles, subagent profiles, and skills tuned for common stacks, with a clear "reset to defaults" path. | Defaults define perceived quality before customization begins. |
 | TUI fit and finish | Feature-rich, but still alpha-shaped in places. | Tighten layout, copy, empty states, keyboard discoverability, modal consistency, visual hierarchy, terminal compatibility, and accessibility. | The interface should feel calm under long-running, high-context work. |
-| Diff review | Undo/redo exists through git checkpoints. | Add first-class diff review before and after writes: per-file summary, hunk preview, accept/reject selected changes, and restore points. | Users trust agents more when edits are inspectable at the right granularity. |
+| Diff review | Undo/redo and per-turn restore points exist through git checkpoints (TUI + desktop). | Add first-class diff review before and after writes: per-file summary, hunk preview, and accept/reject selected changes. | Users trust agents more when edits are inspectable at the right granularity. |
 | Background jobs | Concurrent jobs, queued prompts, task plans, and write leases exist. | Add richer job controls: pause/resume, cancel with cleanup, restart failed step, promote queued prompt, inspect live subprocess output, and job notifications. | Long tasks need operator controls, not just transcript output. |
-| Usage and cost | Usage telemetry and pricing support are emerging. | Make usage visible everywhere: per-turn cost, budget caps, trend charts, per-provider pricing overrides, and warnings before expensive runs. | Cost confidence is part of product confidence. |
+| Usage and cost | Per-turn cost, trend charts, and per-provider pricing overrides shipped across the dashboard and desktop. | Add budget caps and warnings before expensive runs. | Cost confidence is part of product confidence. |
 | Documentation | Broad docs exist, but some sections drift as features move quickly. | Create versioned docs, a feature matrix, copy-paste recipes, troubleshooting by failure class, and architecture diagrams. | Fast-moving alpha software needs docs that reduce surprise. |
 | Release quality | Strong tests exist. | Add release smoke tests against representative real endpoints, signed artifacts, changelog discipline, migration notes, and compatibility promises per contract. | Users need to know what can change and what is stable enough to automate against. |
 
@@ -103,11 +103,9 @@ The current local REST server, dashboard, and tray agent are the right foundatio
 
 | Surface | Needed Capability |
 |---|---|
-| Session home | Browse, search, tag, fork, resume, export, and delete sessions from a native shell. |
-| Multi-session work | Run multiple sessions in tabs or windows, with clear model, branch, workspace, and status indicators. |
+| Session home | Search, tag, and fork sessions from a native shell (browse, resume, export, and delete already ship). |
 | Job center | Show running, queued, completed, failed, and paused jobs with controls for cancel, retry, resume, and inspect logs. |
-| Approval center | Approve or deny tool calls from the desktop app, including diff previews and command risk labels. |
-| Configuration | Manage endpoints, model catalogs, MCP servers, skills, subagents, prompt profiles, hooks, keybindings, usage, and pricing. |
+| Approval center | Add diff previews and command risk labels to the desktop approve/deny flow (basic approve/deny/always already ships). |
 | Notifications | Native notifications when a job needs approval, completes, fails, or exceeds a budget threshold. |
 | Update flow | Built-in update checks, release notes, rollback guidance, and compatibility warnings. |
 | Diagnostics | One-click diagnostic bundle with redacted config, logs, environment, endpoint probes, and recent failure categories. |
