@@ -90,7 +90,8 @@ namespace Mux.Cli.App
                     entry.Value,
                     existing.Handler,
                     existing.Category,
-                    existing.SlashAliases);
+                    existing.SlashAliases,
+                    existing.ArgumentHandler);
 
                 // Replace in place so the command keeps its catalog position (menu order, footer order).
                 int index = _Commands.IndexOf(existing);

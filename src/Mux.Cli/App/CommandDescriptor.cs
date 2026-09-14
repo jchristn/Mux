@@ -44,6 +44,14 @@ namespace Mux.Cli.App
         /// </summary>
         public Action Handler { get; }
 
+        /// <summary>
+        /// An optional handler that receives the argument text typed after the slash command (for example the
+        /// path in <c>/cwd c:\code\mux</c>). When set, the slash router invokes this instead of
+        /// <see cref="Handler"/> and passes the trimmed remainder; menu, palette, and keybinding invocations
+        /// (which carry no argument) always use <see cref="Handler"/>. Null for parameterless commands.
+        /// </summary>
+        public Action<string>? ArgumentHandler { get; }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -59,13 +67,15 @@ namespace Mux.Cli.App
         /// <param name="slashAliases">Optional slash aliases (without the leading slash).</param>
         /// <exception cref="ArgumentException">Thrown when <paramref name="id"/> is null or empty.</exception>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="handler"/> is null.</exception>
+        /// <param name="argumentHandler">Optional handler receiving the argument text after the slash command; when set, the slash router calls it instead of <paramref name="handler"/>.</param>
         public CommandDescriptor(
             string id,
             string title,
             string? chord,
             Action handler,
             string? category = null,
-            IEnumerable<string>? slashAliases = null)
+            IEnumerable<string>? slashAliases = null,
+            Action<string>? argumentHandler = null)
         {
             if (string.IsNullOrEmpty(id)) throw new ArgumentException("Command id cannot be null or empty.", nameof(id));
             Id = id;
@@ -73,6 +83,7 @@ namespace Mux.Cli.App
             Category = string.IsNullOrWhiteSpace(category) ? string.Empty : category;
             Chord = string.IsNullOrWhiteSpace(chord) ? null : chord;
             Handler = handler ?? throw new ArgumentNullException(nameof(handler));
+            ArgumentHandler = argumentHandler;
 
             List<string> aliases = new List<string>();
             if (slashAliases != null)

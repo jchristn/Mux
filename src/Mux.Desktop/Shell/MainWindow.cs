@@ -2222,10 +2222,13 @@ namespace Mux.Desktop.Shell
 
         private void HandleSlashCommand(string input)
         {
-            string command = input.Trim();
+            string trimmedInput = input.Trim();
+            string command = trimmedInput;
+            string argument = string.Empty;
             int space = command.IndexOf(' ');
             if (space > 0)
             {
+                argument = trimmedInput.Substring(space + 1).Trim();
                 command = command.Substring(0, space);
             }
 
@@ -2233,6 +2236,11 @@ namespace Mux.Desktop.Shell
 
             switch (command)
             {
+                case "/cwd":
+                case "/cd":
+                case "/chdir":
+                    ChangeWorkingDirectory(argument);
+                    break;
                 case "/clear":
                     _Transcript.Children.Clear();
                     UpdateEmptyState();
@@ -2315,6 +2323,42 @@ namespace Mux.Desktop.Shell
             }
         }
 
+        // /cwd [path] — report or change the working directory the current conversation's agent runs in.
+        private void ChangeWorkingDirectory(string argument)
+        {
+            AgentLoopTurnRunner runner = _Runner;
+
+            if (string.IsNullOrWhiteSpace(argument))
+            {
+                AddNotice("Working directory: " + runner.WorkingDirectory, isError: false);
+                return;
+            }
+
+            Mux.Core.Utility.WorkingDirectoryResolution resolution =
+                Mux.Core.Utility.WorkingDirectoryResolver.Resolve(runner.WorkingDirectory, argument);
+            if (!resolution.Ok)
+            {
+                AddNotice(resolution.Error, isError: true);
+                return;
+            }
+
+            runner.WorkingDirectory = resolution.Path;
+
+            // Re-probe git for the new directory so undo/redo target its work tree (or disable them when it is
+            // not a repository). The previous directory's checkpoint history is intentionally dropped.
+            _Checkpoints = null;
+            _CheckpointProbe = null;
+            _ = EnsureCheckpointManagerAsync();
+
+            // Persist now so the change survives a reopen (it is also stamped onto the snapshot each turn).
+            if (Ctx != null)
+            {
+                _ = PersistCurrentAsync(Ctx);
+            }
+
+            AddNotice("Working directory changed to " + resolution.Path, isError: false);
+        }
+
         private async Task ShowStatsAsync()
         {
             if (_UsageQuery == null)
@@ -2360,6 +2404,7 @@ namespace Mux.Desktop.Shell
             card.Children.Add(CommandRow("/plugins", L("main.help.plugins")));
             card.Children.Add(CommandRow("/keys", L("main.help.keys")));
             card.Children.Add(CommandRow("/effort", L("main.help.effort")));
+            card.Children.Add(CommandRow("/cwd <path>", "Show or change the working directory"));
             card.Children.Add(CommandRow("/commands", L("main.help.commands")));
             card.Children.Add(CommandRow("/new", L("main.help.new")));
             card.Children.Add(CommandRow("/help", L("main.help.help")));

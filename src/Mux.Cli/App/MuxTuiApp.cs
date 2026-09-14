@@ -68,14 +68,15 @@ namespace Mux.Cli.App
         private readonly SessionStore? _Store;
         private readonly Mux.Core.Telemetry.UsageQueryService? _UsageQuery;
         private readonly Mux.Core.Telemetry.PricingTable _Pricing = new Mux.Core.Telemetry.PricingTable();
-        private readonly Mux.Core.Checkpoints.CheckpointManager? _CheckpointManager;
+        private Mux.Core.Checkpoints.CheckpointManager? _CheckpointManager;
         private readonly Mux.Core.Plugins.PluginRegistry? _PluginRegistry;
         private readonly Mux.Core.Plugins.HookRunner _HookRunner = new Mux.Core.Plugins.HookRunner();
-        private readonly string _HookWorkingDirectory;
+        private string _HookWorkingDirectory;
         private readonly Action<EndpointConfig>? _OnEndpointSelected;
         private readonly Func<EndpointConfig, CancellationToken, Task<ModelLoadResult>>? _OnValidateModel;
         private readonly Action<PromptProfile>? _OnPromptProfileSelected;
         private readonly Action<MuxSettings>? _OnSettingsChanged;
+        private readonly Action<string>? _OnWorkingDirectoryChanged;
         private readonly McpRuntime? _McpRuntime;
         private readonly SkillRuntime? _SkillRuntime;
         private string _EndpointName;
@@ -179,6 +180,7 @@ namespace Mux.Cli.App
             Func<EndpointConfig, CancellationToken, Task<ModelLoadResult>>? onValidateModel = null,
             Action<PromptProfile>? onPromptProfileSelected = null,
             Action<MuxSettings>? onSettingsChanged = null,
+            Action<string>? onWorkingDirectoryChanged = null,
             bool showSplash = false,
             bool showBoundaries = false,
             McpRuntime? mcpRuntime = null,
@@ -202,6 +204,7 @@ namespace Mux.Cli.App
             _OnValidateModel = onValidateModel;
             _OnPromptProfileSelected = onPromptProfileSelected;
             _OnSettingsChanged = onSettingsChanged;
+            _OnWorkingDirectoryChanged = onWorkingDirectoryChanged;
             _McpRuntime = mcpRuntime;
             _SkillRuntime = skillRuntime;
             _InitialPrompt = string.IsNullOrWhiteSpace(initialPrompt) ? null : initialPrompt;
@@ -255,6 +258,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.mcp", "MCP servers", null, OpenMcpModal, "Model", new[] { "mcp", "mcp-servers", "mcpservers", "servers" }));
             _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
+            _Catalog.Add(new CommandDescriptor("mux.cwd", "Working directory", null, ShowWorkingDirectory, "Session", new[] { "cwd", "cd", "chdir" }, ChangeWorkingDirectory));
             _Catalog.Add(new CommandDescriptor("mux.tasks", "Tasks", null, OpenTasksModal, "View", new[] { "tasks", "task", "plan", "todo" }));
             _Catalog.Add(new CommandDescriptor("mux.usage", "Usage", null, OpenUsageView, "View", new[] { "usage", "stats", "spend" }));
             _Catalog.Add(new CommandDescriptor("mux.effort", "Reasoning effort", null, OpenEffortSelector, "Model", new[] { "effort", "reasoning", "reasoning-effort" }));
@@ -2649,6 +2653,58 @@ namespace Mux.Cli.App
             {
                 WriteNotice("Save failed: " + ex.Message);
             }
+        }
+
+        // Command handler (menu / keybinding / bare "/cwd"): report the current working directory.
+        private void ShowWorkingDirectory()
+        {
+            WriteNotice($"Working directory: {_HookWorkingDirectory}");
+        }
+
+        // Slash-argument handler ("/cwd <path>"): change the working directory for subsequent turns, or
+        // report the current directory when called with no path.
+        private void ChangeWorkingDirectory(string argument)
+        {
+            if (string.IsNullOrWhiteSpace(argument))
+            {
+                ShowWorkingDirectory();
+                return;
+            }
+
+            Mux.Core.Utility.WorkingDirectoryResolution resolution =
+                Mux.Core.Utility.WorkingDirectoryResolver.Resolve(_HookWorkingDirectory, argument);
+            if (!resolution.Ok)
+            {
+                WriteNotice("⚠ " + resolution.Error);
+                return;
+            }
+
+            ApplyWorkingDirectory(resolution.Path);
+        }
+
+        private void ApplyWorkingDirectory(string directory)
+        {
+            _HookWorkingDirectory = directory;
+
+            // Re-probe git so /undo and /redo target the new directory's repository (or disable them when it
+            // is not a work tree). The checkpoint history from the previous directory is intentionally dropped.
+            try
+            {
+                Mux.Core.Checkpoints.GitCheckpointService service = new Mux.Core.Checkpoints.GitCheckpointService(directory);
+                _CheckpointManager = service.IsRepositoryAsync(_Cts.Token).GetAwaiter().GetResult()
+                    ? new Mux.Core.Checkpoints.CheckpointManager(service)
+                    : null;
+            }
+            catch (Exception)
+            {
+                _CheckpointManager = null;
+            }
+
+            // Update the per-turn agent options: the working directory tools resolve against and the
+            // re-substituted {WorkingDirectory} in the system prompt, so the next turn uses the new directory.
+            _OnWorkingDirectoryChanged?.Invoke(directory);
+
+            WriteNotice($"Working directory changed to {directory}");
         }
 
         private void OpenSessionBrowser()

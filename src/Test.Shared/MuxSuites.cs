@@ -117,6 +117,9 @@ namespace Test.Shared
                     // Mux.Core / Sessions shared management verbs (cross-surface parity).
                     SessionManagerSuite.Create(),
 
+                    // Mux.Core / Utility: shared /cwd path resolver.
+                    WorkingDirectoryResolverSuite.Create(),
+
                     // Mux.Cli TUIKit interactive shell suite (M6).
                     TuiShellSuite.Create(),
 

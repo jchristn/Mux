@@ -4,9 +4,10 @@ namespace Mux.Cli.App
 
     /// <summary>
     /// Resolves composer input that begins with <c>/</c> against the command catalog's slash aliases and
-    /// invokes the matching command. The leading token (after the slash) selects the command; any
-    /// remaining text is treated as arguments (unused by the current parameterless commands, reserved
-    /// for later). This is the router the composer's slash hook delegates to.
+    /// invokes the matching command. The leading token (after the slash) selects the command; any remaining
+    /// text is passed to the command's argument handler when it has one (for example the path in
+    /// <c>/cwd c:\code\mux</c>), otherwise the parameterless handler runs. This is the router the composer's
+    /// slash hook delegates to.
     /// </summary>
     public sealed class SlashCommandParser
     {
@@ -69,8 +70,34 @@ namespace Mux.Cli.App
                 return false;
             }
 
-            descriptor.Handler();
+            if (descriptor.ArgumentHandler != null)
+            {
+                descriptor.ArgumentHandler(ExtractArgument(input));
+            }
+            else
+            {
+                descriptor.Handler();
+            }
+
             return true;
+        }
+
+        /// <summary>
+        /// Extracts the argument text that follows the command token in slash input (everything after the
+        /// first whitespace-separated token), trimmed. Returns an empty string when there is no argument.
+        /// </summary>
+        /// <param name="input">The raw composer input (with or without the leading slash).</param>
+        /// <returns>The trimmed argument text, or an empty string.</returns>
+        public static string ExtractArgument(string input)
+        {
+            string trimmed = (input ?? string.Empty).Trim();
+            if (trimmed.StartsWith("/", StringComparison.Ordinal))
+            {
+                trimmed = trimmed.Substring(1);
+            }
+
+            int space = trimmed.IndexOfAny(new[] { ' ', '\t' });
+            return space < 0 ? string.Empty : trimmed.Substring(space + 1).Trim();
         }
 
         #endregion

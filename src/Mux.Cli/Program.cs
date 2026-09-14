@@ -581,6 +581,19 @@ CONFIG:
                             profile, toolsEnabled, runtime.WorkingDirectory, builtInTools);
                         toolBinder.SetProfilePrompt(systemPrompt, compactionPrompt);
                     },
+                    onWorkingDirectoryChanged: (string newWorkingDirectory) =>
+                    {
+                        // /cwd changed the working directory. Point subsequent turns' tools at it and
+                        // re-substitute {WorkingDirectory} in the active profile's system prompt so the model
+                        // is told the new directory. The template is read per job run, so this takes effect on
+                        // the next submitted turn.
+                        template.WorkingDirectory = newWorkingDirectory;
+                        bool toolsEnabled = template.Endpoint.Quirks?.SupportsTools ?? true;
+                        PromptProfile activeProfile = SettingsLoader.GetActivePromptProfile();
+                        (string systemPrompt, string compactionPrompt) = CommandRuntimeResolver.ResolveProfilePrompts(
+                            activeProfile, toolsEnabled, newWorkingDirectory, builtInTools);
+                        toolBinder.SetProfilePrompt(systemPrompt, compactionPrompt);
+                    },
                     onSettingsChanged: (MuxSettings changed) =>
                     {
                         // Apply the values the agent loop reads per turn from the template. The template is

@@ -90,6 +90,31 @@ namespace Test.Shared.Suites
                         }
                     }),
 
+                    Case("SlashArgumentHandlerReceivesRemainder", "A command with an argument handler receives the text after the token", async (CancellationToken ct) =>
+                    {
+                        await Task.CompletedTask.ConfigureAwait(false);
+                        MuxCommandCatalog catalog = new MuxCommandCatalog();
+                        string? seenArg = null;
+                        int bareHits = 0;
+                        catalog.Add(new CommandDescriptor("t.cwd", "Cwd", null, () => bareHits++, "T", new[] { "cwd", "cd" }, arg => seenArg = arg));
+                        SlashCommandParser parser = new SlashCommandParser(catalog);
+
+                        // With an argument, the argument handler runs and receives the trimmed remainder.
+                        MuxAssert.IsTrue(parser.TryHandle("/cwd  c:\\code\\mux "), "handled with arg");
+                        MuxAssert.AreEqual("c:\\code\\mux", seenArg, "trimmed remainder passed");
+                        MuxAssert.AreEqual(0, bareHits, "parameterless handler not used when argument handler present");
+
+                        // The alias works too, and a bare command yields an empty argument (not the parameterless path).
+                        seenArg = null;
+                        MuxAssert.IsTrue(parser.TryHandle("/cd"), "handled bare");
+                        MuxAssert.AreEqual(string.Empty, seenArg, "empty argument for bare command");
+                        MuxAssert.AreEqual(0, bareHits, "still routed to argument handler");
+
+                        // Direct extraction helper.
+                        MuxAssert.AreEqual("a b c", SlashCommandParser.ExtractArgument("/x a b c"), "multi-token argument");
+                        MuxAssert.AreEqual(string.Empty, SlashCommandParser.ExtractArgument("/x"), "no argument");
+                    }),
+
                     // ---- Slash surface wired into the shell ----
                     Case("SlashClearClearsTranscript", "A /clear submission clears the transcript", async (CancellationToken ct) =>
                     {
