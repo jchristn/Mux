@@ -78,6 +78,16 @@ export async function collectContext(sources: ContextSource[], workspaceRoot: st
                 break;
             }
 
+            case 'symbols': {
+                if (editor) {
+                    const rendered = await renderSymbols(editor);
+                    if (rendered) {
+                        items.push({ kind: 'symbols', label: vscode.l10n.t('Symbols and definitions'), content: rendered });
+                    }
+                }
+                break;
+            }
+
             case 'terminal':
                 // The stable VS Code API does not expose a terminal's scrollback, so this source cannot be
                 // honored yet. Report it rather than pretend it was attached.
@@ -94,6 +104,60 @@ export async function collectContext(sources: ContextSource[], workspaceRoot: st
 
 function relativePath(uri: vscode.Uri): string {
     return vscode.workspace.asRelativePath(uri, false);
+}
+
+/**
+ * Renders the file's symbol outline from the language server, plus the hover (type/definition) at the
+ * selection when there is one. Uses the built-in LSP command bridge, so it works for any language with a
+ * server installed and returns nothing when none is.
+ */
+async function renderSymbols(editor: vscode.TextEditor): Promise<string> {
+    const lines: string[] = [];
+
+    try {
+        const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+            'vscode.executeDocumentSymbolProvider',
+            editor.document.uri,
+        );
+        if (symbols && symbols.length > 0) {
+            lines.push('Outline:');
+            appendSymbols(symbols, 0, lines);
+        }
+    } catch (error) {
+        logError('Failed to read document symbols.', error);
+    }
+
+    if (!editor.selection.isEmpty) {
+        try {
+            const hovers = await vscode.commands.executeCommand<vscode.Hover[]>(
+                'vscode.executeHoverProvider',
+                editor.document.uri,
+                editor.selection.start,
+            );
+            const text = (hovers ?? [])
+                .flatMap((h) => h.contents.map((c) => (typeof c === 'string' ? c : c.value)))
+                .join('\n')
+                .trim();
+            if (text) {
+                lines.push('', 'Selection hover:', text);
+            }
+        } catch (error) {
+            logError('Failed to read hover for the selection.', error);
+        }
+    }
+
+    return lines.join('\n');
+}
+
+function appendSymbols(symbols: vscode.DocumentSymbol[], depth: number, lines: string[]): void {
+    for (const symbol of symbols) {
+        const indent = '  '.repeat(depth);
+        const kind = vscode.SymbolKind[symbol.kind] ?? 'Symbol';
+        lines.push(`${indent}${kind} ${symbol.name} [line ${symbol.range.start.line + 1}]`);
+        if (symbol.children && symbol.children.length > 0) {
+            appendSymbols(symbol.children, depth + 1, lines);
+        }
+    }
 }
 
 function renderDiagnostics(uri: vscode.Uri): string {

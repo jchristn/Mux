@@ -40,6 +40,7 @@ namespace Mux.Server
         private Webserver? _App;
         private bool _Disposed = false;
         private readonly bool _AllowInteractiveTools;
+        private readonly CheckpointRegistry _Checkpoints = new CheckpointRegistry();
 
         #endregion
 
@@ -189,7 +190,8 @@ namespace Mux.Server
             new HealthRoutes(_Version, _StartUtc).Register(app);
             new EndpointRoutes(apiKey, _EndpointsProvider).Register(app);
             new SessionRoutes(apiKey, _SessionStore).Register(app);
-            new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder, _SessionStore, _AllowInteractiveTools).Register(app);
+            new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder, _SessionStore, _AllowInteractiveTools, _Checkpoints).Register(app);
+            new CheckpointRoutes(apiKey, _Checkpoints).Register(app);
             new SettingsRoutes(apiKey).Register(app);
             new McpRoutes(apiKey).Register(app);
             new ConfigRoutes(apiKey).Register(app);

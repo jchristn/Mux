@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { resolveLocale } from '../i18n/locales';
 
 /** Which editor context sources a run may attach. */
-export type ContextSource = 'activeFile' | 'selection' | 'diagnostics' | 'openTabs' | 'gitDiff' | 'terminal';
+export type ContextSource = 'activeFile' | 'selection' | 'diagnostics' | 'openTabs' | 'gitDiff' | 'symbols' | 'terminal';
 
 /** How mutating tools are handled during a run. */
 export type ApprovalPosture = 'prompt' | 'auto-safe';

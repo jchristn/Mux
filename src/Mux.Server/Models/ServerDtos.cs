@@ -171,6 +171,51 @@ namespace Mux.Server.Models
     }
 
     /// <summary>
+    /// The undo/redo availability for a working directory, from <c>GET /v1.0/api/checkpoints</c>.
+    /// </summary>
+    public class CheckpointStatus
+    {
+        /// <summary>The working directory queried.</summary>
+        public string WorkingDirectory { get; set; } = string.Empty;
+
+        /// <summary>Whether the directory is a git repository (checkpoints are only available in one).</summary>
+        public bool IsRepository { get; set; }
+
+        /// <summary>Whether a turn's changes can be undone.</summary>
+        public bool CanUndo { get; set; }
+
+        /// <summary>Whether an undone turn can be redone.</summary>
+        public bool CanRedo { get; set; }
+    }
+
+    /// <summary>
+    /// A request to undo or redo the last turn's file changes in a working directory.
+    /// </summary>
+    public class CheckpointActionRequest
+    {
+        /// <summary>The working directory whose checkpoints to act on.</summary>
+        public string WorkingDirectory { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// The result of an undo or redo: whether the working tree was restored and the new availability.
+    /// </summary>
+    public class CheckpointActionResult
+    {
+        /// <summary>Whether a checkpoint was restored (false when there was nothing to undo/redo).</summary>
+        public bool Restored { get; set; }
+
+        /// <summary>The label of the restored checkpoint, or null.</summary>
+        public string? Label { get; set; }
+
+        /// <summary>Whether a further undo is available.</summary>
+        public bool CanUndo { get; set; }
+
+        /// <summary>Whether a redo is available.</summary>
+        public bool CanRedo { get; set; }
+    }
+
+    /// <summary>
     /// Standard error envelope.
     /// </summary>
     public class ApiError

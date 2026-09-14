@@ -9,6 +9,8 @@ import { ApiError } from './ApiError';
 import { drainBuffer } from './streaming';
 import {
     ChatStreamRequest,
+    CheckpointActionResult,
+    CheckpointStatus,
     EndpointSummary,
     HealthResponse,
     SessionDetail,
@@ -80,6 +82,21 @@ export class ApiClient {
     /** Renders a session to Markdown or HTML for download. */
     public getSessionExport(id: string, format: 'md' | 'html', signal?: AbortSignal): Promise<{ format: string; filename: string; content: string }> {
         return this.getJson(`/v1.0/api/sessions/export?id=${encodeURIComponent(id)}&format=${format}`, signal);
+    }
+
+    /** Reads whether a turn's changes can be undone or redone in a working directory. */
+    public getCheckpointStatus(workingDirectory: string, signal?: AbortSignal): Promise<CheckpointStatus> {
+        return this.getJson<CheckpointStatus>(`/v1.0/api/checkpoints?workingDirectory=${encodeURIComponent(workingDirectory)}`, signal);
+    }
+
+    /** Undoes the last turn's file changes in a working directory. */
+    public undoCheckpoint(workingDirectory: string, signal?: AbortSignal): Promise<CheckpointActionResult> {
+        return this.sendJson<CheckpointActionResult>('POST', '/v1.0/api/checkpoints/undo', { WorkingDirectory: workingDirectory }, signal);
+    }
+
+    /** Redoes an undone turn's file changes in a working directory. */
+    public redoCheckpoint(workingDirectory: string, signal?: AbortSignal): Promise<CheckpointActionResult> {
+        return this.sendJson<CheckpointActionResult>('POST', '/v1.0/api/checkpoints/redo', { WorkingDirectory: workingDirectory }, signal);
     }
 
     /** Answers an approval prompt raised during an interactive run. */

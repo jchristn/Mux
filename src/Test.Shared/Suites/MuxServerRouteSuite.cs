@@ -168,6 +168,32 @@ namespace Test.Shared.Suites
                             wdReq.Content = new StringContent(wdBody, System.Text.Encoding.UTF8, "application/json");
                             HttpResponseMessage wdRes = http.SendAsync(wdReq).GetAwaiter().GetResult();
                             MuxAssert.AreEqual(400, (int)wdRes.StatusCode, "StreamMissingWorkingDirStatus");
+
+                            // Checkpoints for a non-git directory report unavailable rather than erroring, and
+                            // undo there restores nothing — the editor undo path degrades cleanly.
+                            string plainDir = Path.Combine(Path.GetTempPath(), "mux-plain-" + Guid.NewGuid().ToString("N"));
+                            Directory.CreateDirectory(plainDir);
+                            try
+                            {
+                                using HttpRequestMessage cpReq = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/v1.0/api/checkpoints?workingDirectory=" + Uri.EscapeDataString(plainDir));
+                                cpReq.Headers.Add("Authorization", "Bearer testkey123");
+                                HttpResponseMessage cpRes = http.SendAsync(cpReq).GetAwaiter().GetResult();
+                                string cpBody = cpRes.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                                MuxAssert.AreEqual(200, (int)cpRes.StatusCode, "CheckpointStatusStatus");
+                                MuxAssert.Contains("\"IsRepository\":false", cpBody, "non-repo reports not a repository");
+
+                                using HttpRequestMessage undoReq = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/v1.0/api/checkpoints/undo");
+                                undoReq.Headers.Add("Authorization", "Bearer testkey123");
+                                undoReq.Content = new StringContent("{\"workingDirectory\":" + System.Text.Json.JsonSerializer.Serialize(plainDir) + "}", System.Text.Encoding.UTF8, "application/json");
+                                HttpResponseMessage undoRes = http.SendAsync(undoReq).GetAwaiter().GetResult();
+                                string undoBody = undoRes.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                                MuxAssert.AreEqual(200, (int)undoRes.StatusCode, "CheckpointUndoStatus");
+                                MuxAssert.Contains("\"Restored\":false", undoBody, "nothing to undo in a non-repo");
+                            }
+                            finally
+                            {
+                                try { if (Directory.Exists(plainDir)) Directory.Delete(plainDir, true); } catch (Exception) { }
+                            }
                         }
                         finally
                         {

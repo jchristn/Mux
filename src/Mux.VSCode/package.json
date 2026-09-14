@@ -112,6 +112,16 @@
         "category": "mux"
       },
       {
+        "command": "mux.undo",
+        "title": "%cmd.undo%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.redo",
+        "title": "%cmd.redo%",
+        "category": "mux"
+      },
+      {
         "command": "mux.sessions.refresh",
         "title": "%cmd.sessions.refresh%",
         "category": "mux",
@@ -247,6 +257,7 @@
               "diagnostics",
               "openTabs",
               "gitDiff",
+              "symbols",
               "terminal"
             ]
           },

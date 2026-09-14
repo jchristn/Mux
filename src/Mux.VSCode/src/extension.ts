@@ -42,6 +42,8 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('mux.selectEndpoint', () => endpointPicker.pick()),
         vscode.commands.registerCommand('mux.setWorkingDirectory', () => showWorkingDirectory()),
         vscode.commands.registerCommand('mux.reviewChanges', () => vscode.commands.executeCommand('workbench.view.scm')),
+        vscode.commands.registerCommand('mux.undo', () => undoRedo(lifecycle, 'undo')),
+        vscode.commands.registerCommand('mux.redo', () => undoRedo(lifecycle, 'redo')),
         vscode.commands.registerCommand('mux.sessions.refresh', () => sessions.refresh()),
         vscode.commands.registerCommand('mux.sessions.resume', (node: SessionNode) => sessions.resume(node)),
         vscode.commands.registerCommand('mux.sessions.rename', (node: SessionNode) => sessions.rename(node)),
@@ -62,6 +64,32 @@ export function activate(context: vscode.ExtensionContext): void {
 /** Deactivates the extension. Disposables registered on the context clean up the server and UI. */
 export function deactivate(): void {
     log('mux extension deactivating.');
+}
+
+async function undoRedo(lifecycle: MuxServerLifecycle, action: 'undo' | 'redo'): Promise<void> {
+    const root = workspaceRootPath();
+    if (!root) {
+        void vscode.window.showInformationMessage(vscode.l10n.t('Open a folder to undo or redo mux changes.'));
+        return;
+    }
+
+    try {
+        const client = await lifecycle.getClient(new vscode.CancellationTokenSource().token);
+        const result = action === 'undo' ? await client.undoCheckpoint(root) : await client.redoCheckpoint(root);
+        if (result.Restored) {
+            void vscode.window.showInformationMessage(
+                action === 'undo'
+                    ? vscode.l10n.t('Undid: {0}', result.Label ?? '')
+                    : vscode.l10n.t('Redid: {0}', result.Label ?? ''),
+            );
+        } else {
+            void vscode.window.showInformationMessage(
+                action === 'undo' ? vscode.l10n.t('Nothing to undo.') : vscode.l10n.t('Nothing to redo.'),
+            );
+        }
+    } catch (error) {
+        void vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+    }
 }
 
 function showWorkingDirectory(): void {

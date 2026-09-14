@@ -56,6 +56,22 @@ export interface HealthResponse {
     Pid: number;
 }
 
+/** Undo/redo availability for a working directory, from `GET /v1.0/api/checkpoints`. */
+export interface CheckpointStatus {
+    WorkingDirectory: string;
+    IsRepository: boolean;
+    CanUndo: boolean;
+    CanRedo: boolean;
+}
+
+/** The result of an undo or redo, from `POST /v1.0/api/checkpoints/undo|redo`. */
+export interface CheckpointActionResult {
+    Restored: boolean;
+    Label?: string | null;
+    CanUndo: boolean;
+    CanRedo: boolean;
+}
+
 /** The request body for `POST /v1.0/api/chat/stream`. */
 export interface ChatStreamRequest {
     endpoint: string;

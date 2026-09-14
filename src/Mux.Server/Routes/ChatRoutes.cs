@@ -38,6 +38,7 @@ namespace Mux.Server.Routes
         private readonly IUsageRecorder? _UsageRecorder;
         private readonly SessionStore? _SessionStore;
         private readonly bool _AllowInteractiveTools;
+        private readonly CheckpointRegistry? _Checkpoints;
 
         // Pending tool approvals for interactive web chats, keyed by "runId:toolCallId". The streaming run
         // registers a completion source and streams an "approval" event; the browser answers via
@@ -60,18 +61,21 @@ namespace Mux.Server.Routes
         /// <param name="usageRecorder">Optional recorder so the server's chat calls are captured. Null skips recording.</param>
         /// <param name="sessionStore">Optional session store so streamed web chats are persisted server-side (into the shared session store) keyed by session id. Null disables server-side persistence.</param>
         /// <param name="allowInteractiveTools">When true, mutating tools proposed during a web chat prompt the browser for approval instead of being auto-denied. Defaults to false (read-only web chat).</param>
+        /// <param name="checkpoints">Optional checkpoint registry so each run records a pre-turn git snapshot for undo/redo. Null disables checkpointing.</param>
         public ChatRoutes(
             string? apiKey,
             Func<List<EndpointConfig>> endpointsProvider,
             IUsageRecorder? usageRecorder = null,
             SessionStore? sessionStore = null,
-            bool allowInteractiveTools = false)
+            bool allowInteractiveTools = false,
+            CheckpointRegistry? checkpoints = null)
         {
             _ApiKey = apiKey;
             _EndpointsProvider = endpointsProvider ?? throw new ArgumentNullException(nameof(endpointsProvider));
             _UsageRecorder = usageRecorder;
             _SessionStore = sessionStore;
             _AllowInteractiveTools = allowInteractiveTools;
+            _Checkpoints = checkpoints;
         }
 
         /// <summary>
@@ -474,6 +478,25 @@ namespace Mux.Server.Routes
                     ExternalToolsBinder.Apply(options, resolved.SystemPrompt, resolved.CompactionSystemPrompt, mcpTools, executor, _Skills, builtInTools.Count);
                 }
 
+                // Snapshot the working tree before the turn so an editor can undo the turn's file changes,
+                // matching the TUI and desktop. Best-effort and only in a git repository; a checkpoint is a
+                // shadow ref that never touches the user's branch, history, or stash.
+                if (_Checkpoints != null)
+                {
+                    try
+                    {
+                        Mux.Core.Checkpoints.CheckpointManager? checkpointManager = await _Checkpoints.GetOrCreateAsync(runDirectory, ctx.Token).ConfigureAwait(false);
+                        if (checkpointManager != null)
+                        {
+                            await checkpointManager.RecordAsync(CheckpointLabel(prompt), ctx.Token).ConfigureAwait(false);
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // Checkpointing is best-effort; a failure must not block the run.
+                    }
+                }
+
                 using AgentLoop loop = new AgentLoop(options);
                 await foreach (AgentEvent agentEvent in loop.RunAsync(prompt, ctx.Token).ConfigureAwait(false))
                 {
@@ -691,6 +714,13 @@ namespace Mux.Server.Routes
             UsageEvent usageEvent = UsageEvent.FromCall(
                 endpoint, client.LastCall, client.LastUsage, UsageCallKindEnum.Chat, "serve", success, ttftMs, totalMs);
             _UsageRecorder.Record(usageEvent);
+        }
+
+        // Builds a short checkpoint label from the user's prompt.
+        private static string CheckpointLabel(string prompt)
+        {
+            string trimmed = (prompt ?? string.Empty).Trim().Replace('\n', ' ');
+            return trimmed.Length <= 60 ? trimmed : trimmed.Substring(0, 60);
         }
 
         private static async Task SendJsonAsync(HttpContextBase ctx, int statusCode, ApiError error)

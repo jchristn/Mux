@@ -50,6 +50,24 @@ for (const locale of locales) {
     }
 }
 
+// Runtime l10n bundles: each non-English locale must have a valid bundle. Partial bundles are allowed — an
+// untranslated string falls back to the English source — so key parity is not enforced here, only presence
+// and valid JSON.
+const runtimeLocales = ['es', 'pt', 'fr', 'it', 'de', 'zh', 'ar', 'ru', 'ms', 'hi', 'ja'];
+for (const locale of runtimeLocales) {
+    const file = join(root, 'l10n', `bundle.l10n.${locale}.json`);
+    if (!existsSync(file)) {
+        problems.push(`Missing runtime bundle l10n/bundle.l10n.${locale}.json.`);
+        continue;
+    }
+
+    try {
+        JSON.parse(readFileSync(file, 'utf8'));
+    } catch (error) {
+        problems.push(`Runtime bundle l10n/bundle.l10n.${locale}.json is not valid JSON: ${error.message}`);
+    }
+}
+
 if (problems.length > 0) {
     for (const problem of problems) {
         console.error(`i18n: ${problem}`);

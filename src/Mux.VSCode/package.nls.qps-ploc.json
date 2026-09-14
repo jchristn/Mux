@@ -12,6 +12,8 @@
   "cmd.selectEndpoint": "⟦Select endpoint······⟧",
   "cmd.setWorkingDirectory": "⟦Show working directory·········⟧",
   "cmd.reviewChanges": "⟦Review changes······⟧",
+  "cmd.undo": "⟦Undo last turn's changes··········⟧",
+  "cmd.redo": "⟦Redo undone changes········⟧",
   "cmd.sessions.refresh": "⟦Refresh sessions·······⟧",
   "cmd.sessions.resume": "⟦Resume···⟧",
   "cmd.sessions.rename": "⟦Rename···⟧",
