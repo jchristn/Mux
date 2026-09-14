@@ -2,6 +2,10 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 0.1.1
+
+- Added the Marketplace listing icon.
+
 ## 0.1.0
 
 Initial alpha.

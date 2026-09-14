@@ -2,7 +2,8 @@
   "name": "mux-ai",
   "displayName": "mux-ai",
   "description": "mux in your editor — chat, inline commands, native diffs, and shared sessions over the local mux agent.",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "icon": "dashboard/media/icon.png",
   "publisher": "usemux",
   "license": "MIT",
   "engines": {
