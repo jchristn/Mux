@@ -517,7 +517,12 @@ CONFIG:
                     ? runtime.Endpoint.Name
                     : $"{runtime.Endpoint.Name} · {runtime.Endpoint.Model}";
 
-                SessionStore sessionStore = new SessionStore();
+                // Resolve the sessions directory the same way every other surface does (serve, desktop, tray
+                // agent, export/print) so the interactive TUI reads and writes the SAME store — honoring
+                // MUX_CONFIG_DIR. Using the bare default would pin the TUI to ~/.mux/sessions and hide sessions
+                // created by the other surfaces whenever the config directory is relocated.
+                SessionStore sessionStore = new SessionStore(
+                    Path.Combine(SettingsLoader.GetConfigDirectory(), "sessions"));
 
                 // Per-turn undo/redo is available only inside a git work tree. Probe once at startup; when
                 // the working directory is a repository, hand the shell a checkpoint manager so each turn is

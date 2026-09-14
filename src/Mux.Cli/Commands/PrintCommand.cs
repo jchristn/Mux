@@ -213,7 +213,9 @@ namespace Mux.Cli.Commands
 
             if (sessionRequested)
             {
-                sessionStore = new SessionStore();
+                // Resolve the sessions directory via the config directory (honoring MUX_CONFIG_DIR) so headless
+                // resume/continue reads the same store as the interactive TUI, desktop, and web surfaces.
+                sessionStore = new SessionStore(Path.Combine(SettingsLoader.GetConfigDirectory(), "sessions"));
                 try
                 {
                     loadedSnapshot = await ResolveSessionSnapshotAsync(sessionStore, settings, cancellationToken).ConfigureAwait(false);

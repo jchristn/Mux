@@ -2659,12 +2659,22 @@ namespace Mux.Cli.App
                 return;
             }
 
-            IReadOnlyList<SessionSnapshot> sessions = _Store.ListAsync(_Cts.Token).GetAwaiter().GetResult();
-            if (sessions.Count == 0)
+            IReadOnlyList<SessionSnapshot> loaded = _Store.ListAsync(_Cts.Token).GetAwaiter().GetResult();
+            if (loaded.Count == 0)
             {
                 _App.Modals.Push(new MessageModal("Sessions", "No saved sessions.", new List<string> { "OK" }));
                 return;
             }
+
+            // Sort newest-updated first (falling back to creation time) so a session just created on any
+            // surface appears at the top — matching the Desktop sidebar and Web dashboard ordering. The store
+            // enumerates files in arbitrary filesystem order, which otherwise buries a new session mid-list.
+            List<SessionSnapshot> sessions = new List<SessionSnapshot>(loaded);
+            sessions.Sort((a, b) =>
+            {
+                int byUpdated = b.UpdatedUtc.CompareTo(a.UpdatedUtc);
+                return byUpdated != 0 ? byUpdated : b.CreatedUtc.CompareTo(a.CreatedUtc);
+            });
 
             List<string> labels = new List<string>();
             foreach (SessionSnapshot session in sessions)

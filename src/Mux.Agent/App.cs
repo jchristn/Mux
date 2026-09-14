@@ -10,9 +10,9 @@ namespace Mux.Agent
     using Avalonia.Themes.Fluent;
 
     /// <summary>
-    /// The Avalonia application for the mux tray agent. Its only surface is the system-tray icon with three
-    /// actions — About, Launch Mux, and Exit — over a background <see cref="AgentHost"/> that runs the local
-    /// REST server.
+    /// The Avalonia application for the mux tray agent. Its only surface is the system-tray icon, which
+    /// launches each mux front end — Launch Dashboard, Launch Terminal, Launch Desktop — plus About and Exit,
+    /// over a background <see cref="AgentHost"/> that runs the local REST server.
     /// </summary>
     public sealed class App : Application
     {
@@ -50,19 +50,23 @@ namespace Mux.Agent
         {
             NativeMenu menu = new NativeMenu();
 
-            NativeMenuItem about = new NativeMenuItem("About");
-            about.Click += OnAbout;
-            menu.Items.Add(about);
-
-            NativeMenuItem launch = new NativeMenuItem("Launch Mux");
-            launch.Click += OnLaunch;
-            menu.Items.Add(launch);
-
             NativeMenuItem dashboard = new NativeMenuItem("Launch Dashboard");
             dashboard.Click += OnLaunchDashboard;
             menu.Items.Add(dashboard);
 
+            NativeMenuItem terminal = new NativeMenuItem("Launch Terminal");
+            terminal.Click += OnLaunchTerminal;
+            menu.Items.Add(terminal);
+
+            NativeMenuItem desktop = new NativeMenuItem("Launch Desktop");
+            desktop.Click += OnLaunchDesktop;
+            menu.Items.Add(desktop);
+
             menu.Items.Add(new NativeMenuItemSeparator());
+
+            NativeMenuItem about = new NativeMenuItem("About");
+            about.Click += OnAbout;
+            menu.Items.Add(about);
 
             NativeMenuItem exit = new NativeMenuItem("Exit");
             exit.Click += OnExit;
@@ -125,9 +129,14 @@ namespace Mux.Agent
             window.Show();
         }
 
-        private void OnLaunch(object? sender, EventArgs e)
+        private void OnLaunchTerminal(object? sender, EventArgs e)
         {
-            _Host?.LaunchMux();
+            _Host?.LaunchTerminal();
+        }
+
+        private void OnLaunchDesktop(object? sender, EventArgs e)
+        {
+            _Host?.LaunchDesktop();
         }
 
         private void OnLaunchDashboard(object? sender, EventArgs e)

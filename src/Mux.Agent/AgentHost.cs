@@ -3,6 +3,7 @@ namespace Mux.Agent
     using System;
     using System.Diagnostics;
     using System.IO;
+    using System.Linq;
     using Mux.Core.Models;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
@@ -161,35 +162,151 @@ namespace Mux.Agent
         }
 
         /// <summary>
-        /// Launch the interactive mux TUI as an independent process.
+        /// Launch the interactive mux terminal UI (the TUI) as an independent process. Best-effort; never
+        /// throws. Opens a fresh terminal window so the full-screen shell has a console to draw into.
         /// </summary>
-        public void LaunchMux()
+        public void LaunchTerminal()
         {
-            try
-            {
-                Process.Start(new ProcessStartInfo { FileName = "mux", UseShellExecute = true });
-                return;
-            }
-            catch (Exception)
-            {
-                // Fall through to a shell-mediated launch when "mux" is not directly spawnable.
-            }
-
+            // The TUI needs its own console. Spawn a new terminal window that runs `mux`, rather than
+            // launching the CLI directly (which, from a GUI tray process, would have no console attached).
             try
             {
                 if (OperatingSystem.IsWindows())
                 {
-                    Process.Start(new ProcessStartInfo { FileName = "cmd", Arguments = "/c mux", UseShellExecute = true });
+                    // `start "" cmd /k mux` opens a new console window and keeps it open running the TUI.
+                    Process.Start(new ProcessStartInfo { FileName = "cmd", Arguments = "/c start \"mux\" cmd /k mux", UseShellExecute = true });
+                    return;
                 }
-                else
+
+                if (OperatingSystem.IsMacOS())
                 {
-                    Process.Start(new ProcessStartInfo { FileName = "/bin/sh", Arguments = "-c mux", UseShellExecute = true });
+                    Process.Start(new ProcessStartInfo { FileName = "open", Arguments = "-a Terminal mux", UseShellExecute = false });
+                    return;
                 }
+
+                // Linux: try common terminal emulators in turn.
+                foreach (string terminal in new[] { "x-terminal-emulator", "gnome-terminal", "konsole", "xterm" })
+                {
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo { FileName = terminal, Arguments = "-e mux", UseShellExecute = false });
+                        return;
+                    }
+                    catch (Exception)
+                    {
+                        // Try the next emulator.
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Fall through to a direct launch below.
+            }
+
+            // Last resort: spawn `mux` directly (works when the tray was itself started from a console).
+            try
+            {
+                Process.Start(new ProcessStartInfo { FileName = "mux", UseShellExecute = true });
             }
             catch (Exception)
             {
                 // Best effort; the tray stays up either way.
             }
+        }
+
+        /// <summary>
+        /// Launch the mux desktop application as an independent process. Best-effort; never throws. Locates
+        /// the desktop executable via the <c>MUX_DESKTOP</c> environment variable (a full path to the
+        /// executable or the directory containing it), then a copy alongside the running agent, then the
+        /// newest built <c>Mux.Desktop</c> under a repository checkout's <c>src/Mux.Desktop/bin</c>.
+        /// </summary>
+        public void LaunchDesktop()
+        {
+            try
+            {
+                string? executable = LocateDesktopExecutable();
+                if (executable == null)
+                {
+                    return;
+                }
+
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = executable,
+                    UseShellExecute = true, // detach as an independent GUI process, not a child console
+                    WorkingDirectory = Path.GetDirectoryName(executable) ?? Environment.CurrentDirectory
+                });
+            }
+            catch (Exception)
+            {
+                // Best-effort; the tray stays up either way.
+            }
+        }
+
+        private static string? LocateDesktopExecutable()
+        {
+            string exeName = OperatingSystem.IsWindows() ? "Mux.Desktop.exe" : "Mux.Desktop";
+
+            // 1) Explicit override: a full path to the executable, or a directory containing it.
+            string? overridePath = Environment.GetEnvironmentVariable("MUX_DESKTOP");
+            if (!string.IsNullOrWhiteSpace(overridePath))
+            {
+                if (File.Exists(overridePath))
+                {
+                    return overridePath;
+                }
+
+                string inDir = Path.Combine(overridePath, exeName);
+                if (File.Exists(inDir))
+                {
+                    return inDir;
+                }
+            }
+
+            // 2) Alongside the running agent binary (covers a side-by-side install).
+            try
+            {
+                string beside = Path.Combine(AppContext.BaseDirectory, exeName);
+                if (File.Exists(beside))
+                {
+                    return beside;
+                }
+            }
+            catch (Exception)
+            {
+            }
+
+            // 3) Developer layout: walk up from the working directory to a checkout (a directory containing
+            //    src/Mux.Desktop) and take the newest built desktop executable under its bin output.
+            try
+            {
+                DirectoryInfo? dir = new DirectoryInfo(Environment.CurrentDirectory);
+                for (int depth = 0; dir != null && depth < 8; depth++, dir = dir.Parent)
+                {
+                    string desktopDir = Path.Combine(dir.FullName, "src", "Mux.Desktop");
+                    if (!Directory.Exists(desktopDir))
+                    {
+                        continue;
+                    }
+
+                    string binDir = Path.Combine(desktopDir, "bin");
+                    if (!Directory.Exists(binDir))
+                    {
+                        break; // found the checkout, but nothing is built
+                    }
+
+                    FileInfo? newest = new DirectoryInfo(binDir)
+                        .EnumerateFiles(exeName, SearchOption.AllDirectories)
+                        .OrderByDescending(f => f.LastWriteTimeUtc)
+                        .FirstOrDefault();
+                    return newest?.FullName;
+                }
+            }
+            catch (Exception)
+            {
+            }
+
+            return null;
         }
 
         /// <summary>
