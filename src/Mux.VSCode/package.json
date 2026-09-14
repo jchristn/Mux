@@ -1,0 +1,290 @@
+{
+  "name": "mux",
+  "displayName": "mux",
+  "description": "mux in your editor — chat, inline commands, native diffs, and shared sessions over the local mux agent.",
+  "version": "0.1.0",
+  "publisher": "usemux",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jchristn/Mux.git",
+    "directory": "src/Mux.VSCode"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "mux",
+    "ai",
+    "agent",
+    "llm",
+    "coding-agent"
+  ],
+  "main": "./out/src/extension.js",
+  "l10n": "./l10n",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mux",
+          "title": "mux",
+          "icon": "dashboard/media/mux.svg"
+        }
+      ]
+    },
+    "views": {
+      "mux": [
+        {
+          "id": "mux.chat",
+          "name": "%view.chat.name%",
+          "type": "webview"
+        },
+        {
+          "id": "mux.sessions",
+          "name": "%view.sessions.name%"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "mux.newConversation",
+        "title": "%cmd.newConversation%",
+        "category": "mux",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mux.explainSelection",
+        "title": "%cmd.explainSelection%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.fixDiagnostic",
+        "title": "%cmd.fixDiagnostic%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.generateTests",
+        "title": "%cmd.generateTests%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.refactorSelection",
+        "title": "%cmd.refactorSelection%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.commitMessage",
+        "title": "%cmd.commitMessage%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.summarizeDiff",
+        "title": "%cmd.summarizeDiff%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.reviewFile",
+        "title": "%cmd.reviewFile%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.selectEndpoint",
+        "title": "%cmd.selectEndpoint%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.setWorkingDirectory",
+        "title": "%cmd.setWorkingDirectory%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.reviewChanges",
+        "title": "%cmd.reviewChanges%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.sessions.refresh",
+        "title": "%cmd.sessions.refresh%",
+        "category": "mux",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mux.sessions.resume",
+        "title": "%cmd.sessions.resume%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.sessions.rename",
+        "title": "%cmd.sessions.rename%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.sessions.duplicate",
+        "title": "%cmd.sessions.duplicate%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.sessions.export",
+        "title": "%cmd.sessions.export%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.sessions.delete",
+        "title": "%cmd.sessions.delete%",
+        "category": "mux"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "mux.explainSelection",
+          "when": "editorHasSelection",
+          "group": "mux@1"
+        },
+        {
+          "command": "mux.refactorSelection",
+          "when": "editorHasSelection",
+          "group": "mux@2"
+        },
+        {
+          "command": "mux.generateTests",
+          "when": "editorHasSelection",
+          "group": "mux@3"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "mux.newConversation",
+          "when": "view == mux.chat",
+          "group": "navigation"
+        },
+        {
+          "command": "mux.sessions.refresh",
+          "when": "view == mux.sessions",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "mux.sessions.resume",
+          "when": "view == mux.sessions",
+          "group": "1@1"
+        },
+        {
+          "command": "mux.sessions.rename",
+          "when": "view == mux.sessions",
+          "group": "1@2"
+        },
+        {
+          "command": "mux.sessions.duplicate",
+          "when": "view == mux.sessions",
+          "group": "1@3"
+        },
+        {
+          "command": "mux.sessions.export",
+          "when": "view == mux.sessions",
+          "group": "2@1"
+        },
+        {
+          "command": "mux.sessions.delete",
+          "when": "view == mux.sessions",
+          "group": "3@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "mux",
+      "properties": {
+        "mux.server.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.server.autoStart%"
+        },
+        "mux.server.port": {
+          "type": "number",
+          "default": 0,
+          "description": "%config.server.port%"
+        },
+        "mux.server.path": {
+          "type": "string",
+          "default": "mux",
+          "description": "%config.server.path%"
+        },
+        "mux.defaultEndpoint": {
+          "type": "string",
+          "default": "",
+          "description": "%config.defaultEndpoint%"
+        },
+        "mux.approvalPosture": {
+          "type": "string",
+          "enum": [
+            "prompt",
+            "auto-safe"
+          ],
+          "enumDescriptions": [
+            "%config.approvalPosture.prompt%",
+            "%config.approvalPosture.autoSafe%"
+          ],
+          "default": "prompt",
+          "description": "%config.approvalPosture%"
+        },
+        "mux.context.sources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "activeFile",
+              "selection",
+              "diagnostics",
+              "openTabs",
+              "gitDiff",
+              "terminal"
+            ]
+          },
+          "default": [
+            "activeFile",
+            "selection",
+            "diagnostics"
+          ],
+          "description": "%config.context.sources%"
+        },
+        "mux.locale": {
+          "type": "string",
+          "default": "",
+          "description": "%config.locale%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "tsc --noEmit -p ./",
+    "i18n": "node scripts/i18n-check.mjs",
+    "i18n:gen": "node scripts/gen-locales.mjs",
+    "test:unit": "npm run compile && node --test \"out/test/unit/**/*.test.js\"",
+    "test:integration": "npm run compile && node ./out/test/integration/runTest.js",
+    "test": "npm run test:unit",
+    "package": "vsce package",
+    "publish:vsce": "vsce publish",
+    "publish:ovsx": "ovsx publish"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^2.4.0",
+    "glob": "^10.5.0",
+    "mocha": "^10.4.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,0 +1,75 @@
+name: vscode-extension
+
+# Builds, checks, and (on a tag) publishes the VS Code extension. Publishing reaches both surfaces a user
+# installs from — the VS Code Marketplace and Open VSX — plus a checksummed GitHub Release asset, driven
+# entirely from CI. The two marketplace tokens are the only human-provided inputs; both are free.
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/Mux.VSCode/**', '.github/workflows/vscode-extension.yml']
+    tags: ['vscode-v*']
+  pull_request:
+    paths: ['src/Mux.VSCode/**']
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: src/Mux.VSCode
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: i18n check
+        run: npm run i18n
+      - name: Unit tests
+        run: npm run test:unit
+      - name: Integration tests
+        run: xvfb-run -a npm run test:integration
+      - name: Package VSIX
+        run: |
+          npx --yes @vscode/vsce package --out mux.vsix
+          sha256sum mux.vsix > mux.vsix.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: |
+            src/Mux.VSCode/mux.vsix
+            src/Mux.VSCode/mux.vsix.sha256
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/vscode-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Package VSIX
+        run: |
+          npx --yes @vscode/vsce package --out mux.vsix
+          sha256sum mux.vsix > mux.vsix.sha256
+      - name: Publish to VS Code Marketplace
+        run: npx --yes @vscode/vsce publish --packagePath mux.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: Publish to Open VSX
+        run: npx --yes ovsx publish mux.vsix
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src/Mux.VSCode/mux.vsix
+            src/Mux.VSCode/mux.vsix.sha256

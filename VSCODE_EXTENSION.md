@@ -14,6 +14,20 @@ Check a box when the task is complete and merged, not when it is written. A box 
 
 Status legend: `- [ ]` open · `- [x]` complete · `- [~]` in progress (annotate what remains) · `- [-]` dropped (annotate why).
 
+## Progress log
+
+An initial build of the extension landed on 2026-09-14 under `src/Mux.VSCode`. The state by phase:
+
+- **Phase 0 — done.** `workingDirectory` on `/v1.0/api/chat/stream` (validated, resolved request → session → server cwd), `contractVersion` on `/health`, tests in `MuxServerRouteSuite`, docs updated. Full C# suite green on both TFMs.
+- **Phase 1 — done.** Manifest, strict TS build, `ApiClient` with typed `ApiError`, SSE parsing, `MuxServerLifecycle` (discover-or-launch, secret storage, contract negotiation), output-channel logging, and settings.
+- **Phases 2–7 — core landed.** Chat panel (streaming + in-editor approvals + session binding), context providers, the seven inline commands + code actions, the session tree (resume/rename/duplicate/export/delete), and the endpoint picker. Diff review opens the SCM view; server-backed checkpoint undo needs a REST route and stays open. Terminal context is reported unavailable by design.
+- **Phase 8 — infrastructure done, translations pending (`[~]`).** Locale registry, locale-aware formatters (tested), English `package.nls.json`, seeded files for the eleven other locales plus a pseudo-locale, and a CI key-drift check. The eleven human translations are the open item.
+- **Phase 9 — unit done, integration harness in place.** Sixteen unit tests over the vscode-free logic pass under `node --test`; the `@vscode/test-electron` harness and an activation/command suite compile and run where VS Code can be downloaded (CI uses `xvfb-run`).
+- **Phase 10 — CI authored, not yet published.** `.github/workflows/vscode-extension.yml` builds, checks, packages, and on a `vscode-v*` tag publishes to the Marketplace and Open VSX with a checksummed release. Publishing needs the two tokens (see below).
+- **Phase 11 — repo docs done, website open.** `README.md`, `CHANGELOG.md`, `LICENSE.md`, `docs/VSCODE.md`, and the mux `README`/`IMPROVEMENTS.md` mentions are in. The usemux.ai changes remain, to be pushed to that repository separately.
+
+To publish (Phase 10), a maintainer provides two free tokens as GitHub Actions secrets, once: `VSCE_PAT` (a VS Code Marketplace publisher token from an Azure DevOps organization) and `OVSX_PAT` (an Open VSX token). No paid certificate is involved. Step-by-step instructions are provided when publishing is next.
+
 ## Goals and non-goals
 
 The extension earns its place if a developer can stay in the editor for the work they would otherwise drop to a terminal for: ask about the file they are reading, fix the diagnostic under the cursor, review what the agent changed as a real diff, and pick a conversation back up tomorrow. Everything below serves that, and nothing below rebuilds what the CLI already does well.

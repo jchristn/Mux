@@ -25,6 +25,7 @@
 - **Non-interactive command surface** — single-shot runs for scripting and automation, including machine-readable `jsonl` output (`mux print`, `mux --print`).
 - **Local web dashboard** — `mux serve` hosts a loopback, token-guarded REST + WebSocket API and a self-contained single-page dashboard (chat, configuration, usage/pricing analytics, sessions), run in the background by a cross-platform system-tray agent. Web chats persist server-side into the shared session store, so they appear (and resume) in the TUI and desktop app too; read-only by default, `mux serve --allow-tools` lets mutating tools prompt the browser for approval.
 - **Cross-platform desktop app** — `mux Desktop`, an Avalonia client with conversations/threads, streaming chat, the full set of configuration managers, and the usage dashboard.
+- **VS Code extension** — `mux` in the editor: a chat panel with in-editor tool approvals, inline commands and code actions (explain, fix, tests, refactor, commit message), editor context injection, and the shared session store, driven over the local `mux serve` API. Source in `src/Mux.VSCode`; see `docs/VSCODE.md`.
 
 `mux` does not install or manage model runners. You bring your own local or remote inference backend, and `mux` connects to it.
 
