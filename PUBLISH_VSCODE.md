@@ -14,10 +14,11 @@ first; add Open VSX whenever you want broader reach.
 ## Before you start
 
 - **Node.js 20+** installed, and a terminal open at `C:\Code\Mux\src\Mux.VSCode`.
-- The **publisher ID** the extension is built for is **`usemux`** — it is hard-coded in `package.json`
-  (`"publisher": "usemux"`) and in one integration test (`usemux.mux`). Everything below assumes `usemux`. If
-  you want a different ID, change it in both places first, or the publish will not match the publisher you
-  register.
+- The extension's Marketplace identity is **`usemux.mux-agent`** — publisher `usemux` (`"publisher"` in
+  `package.json`) plus the internal name `mux-agent` (`"name"`). The **display name is "mux"**
+  (`"displayName"`), which is what users see; only the internal `name` had to be unique across the whole
+  Marketplace, hence `mux-agent`. Both the publisher and the name also appear in one integration test
+  (`usemux.mux-agent`). If you change either, change it in `package.json` and that test together.
 - Decide nothing else — versions, categories, and the manifest are already set.
 
 ## Part 1 — VS Code Marketplace token
@@ -81,7 +82,7 @@ This compiles (via the `vscode:prepublish` script), packages the `.vsix`, and up
 missing icon or activation events are fine; they are not errors. When it succeeds the extension is live at:
 
 ```
-https://marketplace.visualstudio.com/items?itemName=usemux.mux
+https://marketplace.visualstudio.com/items?itemName=usemux.mux-agent
 ```
 
 It becomes searchable as "mux" in the VS Code Extensions panel within a few minutes.
@@ -98,6 +99,10 @@ It becomes searchable as "mux" in the VS Code Extensions panel within a few minu
   `.vsix` (you can see it in the file list `vsce` prints before uploading). No action is needed. If you want
   the Marketplace page to show a License tab explicitly, that is already satisfied by `LICENSE.md` plus
   `"license": "MIT"` in `package.json`.
+- **`The extension '<name>' already exists in the Marketplace`.** The `name` field must be unique across the
+  entire Marketplace, not just within your publisher. Someone already holds that name. Change `"name"` in
+  `package.json` to something unique (the extension uses `mux-agent`); leave `"displayName"` as "mux" so the
+  listing still reads "mux". Update the id in the integration test to match.
 - **`ERROR  Missing publisher name`.** `package.json` has no `publisher`, or you ran from the wrong folder.
   Run from `src/Mux.VSCode`.
 - **Publish rejected because the version already exists.** Each publish needs a higher version than the last.

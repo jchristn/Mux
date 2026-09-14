@@ -9,7 +9,7 @@ import * as vscode from 'vscode';
  */
 suite('mux extension', () => {
     test('activates', async () => {
-        const extension = vscode.extensions.getExtension('usemux.mux');
+        const extension = vscode.extensions.getExtension('usemux.mux-agent');
         assert.ok(extension, 'extension is present');
         await extension!.activate();
         assert.strictEqual(extension!.isActive, true);
