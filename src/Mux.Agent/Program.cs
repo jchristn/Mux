@@ -1,9 +1,11 @@
 namespace Mux.Agent
 {
     using System;
+    using System.Diagnostics;
     using Avalonia;
     using Avalonia.Controls;
     using Mux.Core.Settings;
+    using Mux.Core.Startup;
 
     /// <summary>
     /// Entry point for the mux tray agent. Starts an Avalonia application whose only surface is the
@@ -29,6 +31,11 @@ namespace Mux.Agent
                 return 0;
             }
 
+            // On first run, register the agent to start at login (idempotent, best-effort, opt-out via
+            // MUX_AGENT_AUTOSTART=0). Doing this in the app means installers need no startup script — which
+            // is why macOS ships a plain .dmg rather than a .pkg.
+            TryRegisterStartup(configDirectory);
+
             try
             {
                 using (instance)
@@ -40,6 +47,22 @@ namespace Mux.Agent
             {
                 Console.Error.WriteLine("mux agent error: " + ex.Message);
                 return 2;
+            }
+        }
+
+        private static void TryRegisterStartup(string configDirectory)
+        {
+            try
+            {
+                string exePath = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(exePath))
+                {
+                    StartupRegistrar.EnsureRegisteredOnFirstRun(exePath, configDirectory);
+                }
+            }
+            catch (Exception)
+            {
+                // Never let startup registration prevent the agent from launching.
             }
         }
 

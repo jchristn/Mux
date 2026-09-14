@@ -1,0 +1,179 @@
+name: release
+
+# One tagged build (or manual dispatch) fans out to windows/macos/ubuntu runners. Each runner builds
+# the self-contained artifacts it owns, invokes Mux.Publisher for the channels the manifest assigns to
+# its OS, signs natively, and uploads to the GitHub Release. The version is supplied here and never
+# stored in publisher.json.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, e.g. 0.10.0 (no leading v)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - id: resolve
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            tag="${GITHUB_REF_NAME}"
+            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+  package:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            job: windows
+          - os: macos-latest
+            job: macos
+          - os: ubuntu-latest
+            job: linux
+    runs-on: ${{ matrix.os }}
+    env:
+      MUX_RELEASE_VERSION: ${{ needs.version.outputs.version }}
+      # Channel tokens (passed straight through; the drivers reference these names).
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+      CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+      # Linux repo-metadata GPG key id (free, self-generated; read by the apt/yum drivers).
+      GPG_SIGNING_KEYID: ${{ secrets.GPG_KEYID }}
+      # NOTE: no Windows Authenticode or Apple Developer certificate is configured, so publisher.json
+      # omits those signing entries. Windows installers ship unsigned (SmartScreen warns) and the macOS
+      # .dmg ships unsigned (users right-click -> Open on first launch). To enable later, restore the
+      # 'windows'/'macOs' entries in publisher.json and add the corresponding cert secrets + prep steps.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      # --- Linux packaging toolchain -------------------------------------------------------------
+      - name: Install Linux packaging tools
+        if: matrix.job == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev build-essential rpm createrepo-c dpkg-dev apt-utils libfuse2
+          sudo gem install --no-document fpm
+          curl -L -o /usr/local/bin/appimagetool \
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" || true
+          sudo chmod +x /usr/local/bin/appimagetool || true
+
+      - name: Import GPG signing key (Linux)
+        if: matrix.job == 'linux'
+        shell: bash
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          if [ -n "${GPG_PRIVATE_KEY:-}" ]; then
+            echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          else
+            echo "No GPG_PRIVATE_KEY secret; apt/yum metadata will be unsigned."
+          fi
+
+      # macOS code signing / notarization is intentionally not configured (no Apple Developer cert):
+      # the .dmg ships unsigned and users right-click -> Open on first launch.
+
+      - name: Generate macOS icon (icns)
+        if: matrix.job == 'macos'
+        shell: bash
+        run: |
+          # Best-effort: derive assets/icon-green.icns from the png so the dmg driver can bundle it.
+          if [ ! -f assets/icon-green.icns ] && [ -f assets/icon-green.png ]; then
+            ICONSET="$RUNNER_TEMP/mux.iconset"; mkdir -p "$ICONSET"
+            for s in 16 32 128 256 512; do
+              sips -z $s $s assets/icon-green.png --out "$ICONSET/icon_${s}x${s}.png" >/dev/null 2>&1 || true
+              d=$((s*2)); sips -z $d $d assets/icon-green.png --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null 2>&1 || true
+            done
+            iconutil -c icns "$ICONSET" -o assets/icon-green.icns || true
+          fi
+
+      # Windows Authenticode signing is intentionally not configured (no certificate): the .exe/.msi
+      # ship unsigned and SmartScreen shows a "More info -> Run anyway" prompt on first run.
+
+      # --- Build the orchestrator once -----------------------------------------------------------
+      - name: Build Mux.Publisher
+        shell: bash
+        run: dotnet build src/Mux.Publisher/Mux.Publisher.csproj -c Release -f net10.0
+
+      - name: Validate manifest
+        shell: bash
+        run: dotnet src/Mux.Publisher/bin/Release/net10.0/Mux.Publisher.dll --validate
+
+      # --- Run every channel this OS owns, in dependency order -----------------------------------
+      - name: Package channels
+        shell: bash
+        run: |
+          set -euo pipefail
+          PUB="src/Mux.Publisher/bin/Release/net10.0/Mux.Publisher.dll"
+          CHANNELS=$(dotnet "$PUB" --channels-for ${{ matrix.job }})
+          echo "Channels for ${{ matrix.job }}: $CHANNELS"
+          for ch in $CHANNELS; do
+            echo "::group::channel $ch"
+            dotnet "$PUB" --channel "$ch" --version "$MUX_RELEASE_VERSION"
+            echo "::endgroup::"
+          done
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist/release
+          : > "SHA256SUMS-${{ matrix.job }}.txt"
+          for d in windows macos linux nuget; do
+            [ -d "$d" ] || continue
+            find "$d" -maxdepth 1 -type f ! -name '*.txt' -print0 \
+              | while IFS= read -r -d '' f; do
+                  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$f"; else shasum -a 256 "$f"; fi
+                done >> "SHA256SUMS-${{ matrix.job }}.txt"
+          done
+          cat "SHA256SUMS-${{ matrix.job }}.txt" || true
+
+      - name: Upload artifacts to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          files: |
+            dist/release/windows/*
+            dist/release/macos/*
+            dist/release/linux/*
+            dist/release/nuget/*.nupkg
+            dist/release/SHA256SUMS-*.txt
+          fail_on_unmatched_files: false
+
+  # A single line the maintainer sees: which surfaces end at an external review gate and are not yet live.
+  report:
+    needs: [ version, package ]
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          echo "Release v${{ needs.version.outputs.version }} packaged."
+          echo "Pending EXTERNAL review (not yet live until approved/merged):"
+          echo "  - winget:     PR into microsoft/winget-pkgs must be merged"
+          echo "  - chocolatey: package must clear the community moderation queue"
+          echo "  - flathub/snap (if enabled): store review"
+          echo "apt/yum repos (dist/release/apt, dist/release/yum) must be deployed to your repo host,"
+          echo "and the Homebrew tap / Scoop bucket commits pushed to their repositories."

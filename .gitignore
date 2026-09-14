@@ -15,3 +15,6 @@ obj/
 
 # Self-contained desktop publish output (publish-desktop.{sh,bat})
 /dist/
+
+# Installer build output (build-installers.{sh,bat})
+/installers/

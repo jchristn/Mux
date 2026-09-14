@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "name": "mux",
+    "displayName": "mux",
+    "repo": "jchristn/mux",
+    "homepage": "https://github.com/jchristn/mux",
+    "description": "Multiplexed AI agent — CLI, desktop, and server.",
+    "license": "MIT"
+  },
+  "build": {
+    "artifacts": [
+      { "id": "cli", "csproj": "src/Mux.Cli/Mux.Cli.csproj", "kind": "DotnetTool" },
+      { "id": "desktop", "csproj": "src/Mux.Desktop/Mux.Desktop.csproj", "kind": "Gui" }
+    ],
+    "frameworks": [ "net10.0", "net8.0" ],
+    "runtimes": [ "win-x64", "win-arm64", "osx-x64", "osx-arm64", "linux-x64", "linux-arm64" ]
+  },
+  "channels": {
+    "nuget":         { "enabled": true, "artifact": "cli", "os": "linux", "options": { "vaultRef": "NUGET_API_KEY" } },
+    "scoop":         { "enabled": true, "artifact": "cli", "os": "windows", "runtimes": [ "win-x64" ], "options": { "bucket": "jchristn/scoop-bucket" } },
+    "homebrew":      { "enabled": true, "artifact": "cli", "os": "macos", "runtimes": [ "osx-x64", "osx-arm64" ], "options": { "tap": "jchristn/homebrew-tap" } },
+    "homebrew-cask": { "enabled": true, "driver": "homebrew", "artifact": "desktop", "os": "macos", "runtimes": [ "osx-x64", "osx-arm64" ], "options": { "tap": "jchristn/homebrew-tap" } },
+
+    "inno":          { "enabled": true, "artifact": "desktop", "runtimes": [ "win-x64", "win-arm64" ] },
+    "wix":           { "enabled": false, "artifact": "desktop", "runtimes": [ "win-x64" ] },
+    "winget":        { "enabled": true, "artifact": "desktop", "runtimes": [ "win-x64" ], "options": { "packageId": "jchristn.mux", "vaultRef": "WINGET_TOKEN" } },
+    "chocolatey":    { "enabled": true, "artifact": "desktop", "runtimes": [ "win-x64" ], "options": { "vaultRef": "CHOCO_API_KEY" } },
+
+    "dmg":           { "enabled": true, "artifact": "desktop", "runtimes": [ "osx-x64", "osx-arm64" ], "options": { "bundleId": "com.jchristn.mux" } },
+
+    "debrpm":        { "enabled": true, "artifact": "desktop", "runtimes": [ "linux-x64", "linux-arm64" ] },
+    "appimage":      { "enabled": true, "artifact": "desktop", "runtimes": [ "linux-x64", "linux-arm64" ] },
+    "apt":           { "enabled": true, "artifact": "desktop", "runtimes": [ "linux-x64" ], "options": { "suite": "stable", "component": "main" } },
+    "yum":           { "enabled": true, "artifact": "desktop", "runtimes": [ "linux-x64" ] },
+    "snap":          { "enabled": false, "artifact": "desktop", "runtimes": [ "linux-x64" ], "options": { "confinement": "classic" } },
+    "flatpak":       { "enabled": false, "artifact": "desktop", "runtimes": [ "linux-x64" ], "options": { "appId": "com.jchristn.mux" } }
+  },
+  "signing": {
+    "//": "No paid code-signing certificates. Windows installers ship unsigned (SmartScreen warns) and the macOS .dmg ships unsigned (Gatekeeper requires a manual right-click -> Open). Linux repo metadata is signed with a free, self-generated GPG key. To enable Windows/macOS signing later, restore 'windows'/'macOs' entries here and add the matching secrets.",
+    "linux":   { "vaultRef": "GPG_SIGNING", "notarize": false }
+  },
+  "releaseNotes": { "source": "CHANGELOG.md", "section": "## {version}" }
+}

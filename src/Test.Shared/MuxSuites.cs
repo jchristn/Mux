@@ -227,7 +227,14 @@ namespace Test.Shared
                     UsageStoreSuite.Create(),
 
                     // Usage telemetry: live REST endpoints over a seeded store.
-                    UsageRoutesSuite.Create()
+                    UsageRoutesSuite.Create(),
+
+                    // Mux.Publisher: manifest parsing/validation, publish args + checksums, channel
+                    // driver rendering/command plans, and first-run startup registration recipes.
+                    PublisherManifestSuite.Create(),
+                    PublishServiceSuite.Create(),
+                    PublisherDriversSuite.Create(),
+                    StartupRegistrarSuite.Create()
                 };
             }
         }
