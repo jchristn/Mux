@@ -40,31 +40,28 @@ The main gap is not raw capability. The main gap is product finish: the first-ru
 
 ## 2. Provider Coverage
 
-mux is already good because it can talk to local runners, hosted APIs, cloud endpoints, and OpenAI-compatible services. To become very good or excellent, it needs fewer "bring your own URL and headers" paths and more first-class adapters with auth, catalog, capability, and usage support.
+mux's provider strategy is deliberately compat-first, and that design largely closes this area rather than leaving it open. mux speaks the de facto OpenAI wire format — covering OpenAI, Azure, vLLM, LM Studio, and the entire OpenAI-compatible long tail (Groq, Together, Fireworks, DeepSeek, Mistral, OpenRouter, and gateways) — plus native adapters for the wire formats that are *not* OpenAI-shaped (Anthropic, Gemini, Vertex, Bedrock), used where a native path preserves features a compatibility shim drops (prompt caching, thinking budgets, tool-result formatting). Routing, load balancing, failover, QoS, and cost governance are intentionally **out of scope for the agent**: they belong to an external router/virtualization layer that does that job *behind a standard endpoint* — for example [Conductor](https://github.com/jchristn/Conductor) (which virtualizes model runners and re-exposes them as OpenAI/vLLM/Gemini/Ollama APIs), LiteLLM, or OpenRouter. mux works with these today with no special code because they present as ordinary OpenAI endpoints. So the residual here is not a bigger adapter surface or a provider SDK; it is onboarding convenience and a few optional native-auth flows.
 
 ### Model Provider Gaps
 
 | Gap | Needed Capability | Priority |
 |---|---|---:|
-| Native model-router providers | First-class setup for router-style providers: API key/OAuth, model catalog, routing parameters, cost metadata, context windows, tool/vision/reasoning flags. | P0 |
-| Subscription-backed providers | Login flows that let users authenticate through existing individual or enterprise subscriptions where terms permit it. | P0 |
-| Additional frontier API providers | Dedicated adapters for major model labs not currently represented as first-class endpoints, even when they can be reached through compatibility layers. | P1 |
-| High-throughput inference providers | Native support for low-latency hosted inference vendors with model catalog refresh, rate-limit handling, and usage reporting. | P1 |
-| Enterprise cloud AI platforms | First-class adapters for data-platform and enterprise-cloud model endpoints, including region/project/account scoping and identity-based auth. | P1 |
-| Local runner depth | Beyond the current local runner support, add native llama.cpp server setup, GGUF model metadata, local model health, and local capability detection. | P1 |
-| Custom provider SDK | A documented way to add providers without changing mux core: auth, catalog, request/response mapping, streaming, usage, reasoning, and tool-call translation. | P0 |
-| Provider conformance tests | A reusable test harness that records mocked provider streams and validates tool calls, errors, usage, and edge cases. | P0 |
+| Onboarding presets + adapter-aware forms | Ship a preset table (base URL, suggested models, quirks, and an auth hint per known provider) and endpoint forms that show only the fields a given adapter needs. This is pure config + form work in the TUI modal and web form — no engine change — and it is the single genuinely useful item in this section. | P1 |
+| Model capability / quirks detection | Keep surfacing per-model capability flags (tools, vision, JSON schema, reasoning, cache) via `BackendQuirks` so a run never selects a model that cannot do the requested job. | P1 |
+| Provider conformance tests | A harness that records mocked streams and validates tool calls, errors, and usage for the **native** adapters (Anthropic/Gemini/Vertex/Bedrock); the compat transport is already exercised by the `LlmBridge` suite. | P1 |
+| Native non-Bearer auth (optional) | For users who do **not** front a gateway, implement real auth runtimes for the cloud adapters that already have enum slots: Vertex (service-account/ADC token minting + refresh), Bedrock (SigV4 request signing), and OAuth/subscription login where terms permit. This is adapter + secure-credential-storage work, not field layout — and it is avoidable by pointing mux at a gateway that holds the cloud credential and re-exposes OpenAI. | P2 |
+| Frontier-format fidelity | Keep the native Anthropic/Gemini adapters ahead of their OpenAI-compat shims where the native format adds value (cache control, thinking config). | P2 |
+| Local runner depth | Native llama.cpp server setup, GGUF model metadata, and local model health/capability detection. | P2 |
 
-### Specific Provider Families To Consider
+### How mux Reaches Each Provider Class
 
-| Provider Family | Why It Helps |
+| Provider Class | How mux Reaches It Today |
 |---|---|
-| Model routers and gateways | Immediately broaden model choice, simplify experimentation, and centralize billing for users who switch models frequently. |
-| Subscription account bridges | Reduce the need for separate API billing and make setup easier for users who already pay for model access. |
-| Low-latency inference clouds | Improve interactive responsiveness and make smaller open models more practical. |
-| Enterprise data/cloud platforms | Make mux easier to adopt in locked-down environments where model access is already governed by cloud identity. |
-| Regional model providers | Improve coverage for teams outside the US/EU and for users who need region-specific compliance or language performance. |
-| Local model runtimes | Strengthen mux's local-first identity and make offline/private workflows more credible. |
+| OpenAI-compatible APIs (OpenAI, Azure, vLLM, LM Studio, Groq, Together, Fireworks, DeepSeek, Mistral, …) | Directly, via the `openai` / `openai_compatible` adapters — no per-vendor code. |
+| Non-OpenAI wire formats (Anthropic, Gemini) | Native adapters that preserve format-specific features their compat shims drop. |
+| Enterprise cloud (Vertex, Bedrock) | Native adapters (native IAM auth is the only residual) — or fronted by a gateway that re-exposes OpenAI. |
+| Routers / gateways / virtualization (Conductor, LiteLLM, OpenRouter) | As an ordinary OpenAI endpoint; the gateway owns routing, load balancing, failover, QoS, and cost. mux stays a thin client on purpose. |
+| Subscription accounts | Only where the provider offers an API key, or an OAuth flow whose terms permit programmatic use. |
 
 ### Search, Retrieval, And Context Providers
 
@@ -82,8 +79,8 @@ mux is already good because it can talk to local runners, hosted APIs, cloud end
 | Level | Requirement |
 |---|---|
 | Good | A user can configure a provider manually and complete a tool-using run. |
-| Very good | mux can guide setup, list models, detect capabilities, report usage, and show actionable errors. |
-| Excellent | mux supports native auth, model catalogs, pricing/cost, capability flags, provider quirks, conformance tests, and extension-based provider additions. |
+| Very good | Adapter-aware forms and presets fill a working config, models list, capabilities/quirks are detected, usage/cost is reported, and errors are actionable. |
+| Excellent | Compat-first transport + native adapters for the non-OpenAI formats, capability/quirks detection, pricing/cost, and conformance tests for the native adapters — with routing, load balancing, and cost governance delegated to an external gateway rather than reimplemented in the agent. |
 
 ## 3. IDE And Desktop Capabilities
 
@@ -212,7 +209,7 @@ mux already has skills, hooks, custom slash commands, MCP, subagents, prompt pro
 |---|---|---|
 | 1 | Polish the first-run path and provider setup. | New users reach a working, tool-capable run quickly. |
 | 2 | Finish the local API and desktop/job control plane. | TUI, dashboard, desktop, and automation all share one reliable engine. |
-| 3 | Ship provider SDK and several high-value native providers. | Provider coverage feels broad without config gymnastics. |
+| 3 | Provider onboarding presets + adapter-aware forms (and, only for gateway-averse users, native cloud-IAM auth). | Provider setup is a two-click preset, not URL/header/quirks gymnastics; routing stays in an external gateway. |
 | 4 | Build the IDE extension around the local API. | mux becomes present where users already read and edit code. |
 | 5 | Stabilize the extension and package system. | Advanced users can bend mux into custom workflows without forking it. |
 
