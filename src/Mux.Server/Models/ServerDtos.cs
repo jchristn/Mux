@@ -17,6 +17,13 @@ namespace Mux.Server.Models
         /// <summary>Product version.</summary>
         public string Version { get; set; } = string.Empty;
 
+        /// <summary>
+        /// The API contract version clients negotiate against. Bumped when a breaking change lands in the
+        /// REST/SSE surface so a client (for example the VS Code extension) can refuse an incompatible server
+        /// instead of failing mid-run. Independent of the product version.
+        /// </summary>
+        public string ContractVersion { get; set; } = "1.0";
+
         /// <summary>Process id hosting the server.</summary>
         public int Pid { get; set; } = 0;
 

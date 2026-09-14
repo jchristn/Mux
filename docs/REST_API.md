@@ -75,7 +75,7 @@ All paths are versioned under `/v1.0/api`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/v1.0/api/health` | none | Status, product version, pid, uptime. |
+| GET | `/v1.0/api/health` | none | Status, product version, **`contractVersion`** (the REST/SSE API contract a client negotiates against), pid, uptime. |
 | GET | `/v1.0/api/endpoints` | key | Configured endpoints (name, adapter type, base URL, model, default). **No secrets.** |
 | GET | `/v1.0/api/endpoints/detail` | key | Full endpoint fields for editing, **secrets masked** (`apiKeySet` flag; header/key values blanked). |
 | PUT | `/v1.0/api/endpoints` | key | Replace the endpoint collection (`{ "items": [ … ] }`). A blank secret preserves the stored one. |
@@ -93,6 +93,7 @@ All paths are versioned under `/v1.0/api`.
 | GET | `/v1.0/api/sessions/export?id=<id>&format=md\|html` | key | Render a session → `{ "format", "filename", "content" }` for download. |
 | DELETE | `/v1.0/api/sessions?id=<id>` | key | Delete a session. |
 | POST | `/v1.0/api/chat` | key | Plain (tool-free) chat completion against a configured endpoint. Body: `{ "endpoint": "<name>", "messages": [{ "role": "user", "content": "…" }] }` → `{ "role": "assistant", "content": "…", "endpoint", "model", "stats": { "ttftMs", "streamingMs", "totalMs", "inputTokens", "outputTokens", "totalTokens" } }`. |
+| POST | `/v1.0/api/chat/stream` | key | Agentic run over Server-Sent Events (`token`/`thinking`/`tool`/`approval`/`done`/`error`). Body adds optional `id` (session), `workingDirectory` (the directory tools resolve paths against — must exist, else `400`; falls back to the session's recorded directory, then the server's), and, with `mux serve --allow-tools`, mutating tools raise an `approval` event answered by `POST /v1.0/api/chat/approve`. Persists the turn to the shared session store. |
 | GET | `/v1.0/api/settings` | key | Editable settings subset, **secrets masked** (`rest.apiKeySet` instead of the key). |
 | PUT | `/v1.0/api/settings` | key | Update settings (validated/clamped, written to `settings.json`). The REST API key changes only when a non-blank `rest.apiKey` is supplied. |
 | GET | `/v1.0/api/usage/summary` | key | Window KPI summary. Query: `from`/`to` (epoch ms) or `range=hour\|day\|week\|month\|all`, plus `endpoint`, `model`, `callKind`. Returns `{ FromUnixMs, ToUnixMs, Metrics }`. |

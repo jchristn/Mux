@@ -383,18 +383,50 @@ namespace Mux.Server.Routes
 
             bool toolsEnabled = endpoint.Quirks?.SupportsTools ?? true;
             List<ToolDefinition> builtInTools = new BuiltInToolRegistry(settings).GetToolDefinitions();
+
+            // Resolve the session id up front (minting one when the caller sent none) so the run is tagged,
+            // the server can persist it, and the caller can adopt it from the terminal "done" event.
+            string sessionId = string.IsNullOrWhiteSpace(request.Id) ? Guid.NewGuid().ToString("N") : request.Id!.Trim();
+
+            // Resolve the directory the run's tools execute in: an explicit request value (which must exist),
+            // else the persisted session's working directory, else the server's current directory. This lets
+            // an editor or automation run mux against a specific workspace rather than wherever the server was
+            // launched. Validated before switching to SSE so a bad path returns a clean 400, not a stream.
+            string runDirectory = Directory.GetCurrentDirectory();
+            if (!string.IsNullOrWhiteSpace(request.WorkingDirectory))
+            {
+                if (!Directory.Exists(request.WorkingDirectory))
+                {
+                    await SendJsonAsync(ctx, 400, new ApiError("BadRequest", "workingDirectory does not exist: " + request.WorkingDirectory)).ConfigureAwait(false);
+                    return;
+                }
+
+                runDirectory = request.WorkingDirectory!;
+            }
+            else if (_SessionStore != null)
+            {
+                try
+                {
+                    SessionSnapshot? existingSession = await _SessionStore.LoadAsync(sessionId, ctx.Token).ConfigureAwait(false);
+                    if (existingSession != null && !string.IsNullOrWhiteSpace(existingSession.WorkingDirectory) && Directory.Exists(existingSession.WorkingDirectory))
+                    {
+                        runDirectory = existingSession.WorkingDirectory;
+                    }
+                }
+                catch (Exception)
+                {
+                    // Fall back to the server's current directory.
+                }
+            }
+
             ResolvedSystemPrompt resolved = SystemPromptResolver.Resolve(
                 SettingsLoader.LoadSystemPrompt(null, settings),
                 SettingsLoader.GetActivePromptProfile(),
                 toolsEnabled,
                 builtInTools,
-                Directory.GetCurrentDirectory(),
+                runDirectory,
                 settings.TaskPlanningEnabled,
                 null);
-
-            // Resolve the session id up front (minting one when the browser sent none) so the run is tagged,
-            // the server can persist it, and the browser can adopt it from the terminal "done" event.
-            string sessionId = string.IsNullOrWhiteSpace(request.Id) ? Guid.NewGuid().ToString("N") : request.Id!.Trim();
 
             // A per-run id correlating interactive approval prompts with their decisions.
             string runId = Guid.NewGuid().ToString("N");
@@ -425,7 +457,7 @@ namespace Mux.Server.Routes
                     PromptUserFunc = _AllowInteractiveTools
                         ? toolCall => RequestBrowserApprovalAsync(ctx, runId, toolCall)
                         : (Func<ToolCall, Task<string>>)(_ => Task.FromResult("n")),
-                    WorkingDirectory = Directory.GetCurrentDirectory(),
+                    WorkingDirectory = runDirectory,
                     MuxSettings = settings,
                     MaxIterations = settings.GetEffectiveMaxAgentIterations(endpoint),
                     ConfigDirectory = SettingsLoader.GetConfigDirectory(),
@@ -491,7 +523,7 @@ namespace Mux.Server.Routes
                 // durable without depending on a follow-up PUT from the browser, and appears (and is
                 // resumable) on every surface. Best-effort and non-cancellable (the client may have already
                 // disconnected once the run finished).
-                await PersistTurnAsync(sessionId, endpoint, history, prompt, content.ToString()).ConfigureAwait(false);
+                await PersistTurnAsync(sessionId, endpoint, runDirectory, history, prompt, content.ToString()).ConfigureAwait(false);
 
                 ChatReply reply = new ChatReply
                 {
@@ -545,6 +577,7 @@ namespace Mux.Server.Routes
         private async Task PersistTurnAsync(
             string sessionId,
             EndpointConfig endpoint,
+            string workingDirectory,
             List<ConversationMessage> priorFromRequest,
             string prompt,
             string assistantText)
@@ -577,9 +610,9 @@ namespace Mux.Server.Routes
                 snapshot.EndpointName = endpoint.Name;
                 snapshot.Model = endpoint.Model;
                 snapshot.UpdatedUtc = now;
-                if (string.IsNullOrEmpty(snapshot.WorkingDirectory))
+                if (!string.IsNullOrWhiteSpace(workingDirectory))
                 {
-                    snapshot.WorkingDirectory = Directory.GetCurrentDirectory();
+                    snapshot.WorkingDirectory = workingDirectory;
                 }
 
                 if (!snapshot.TitlePinned && string.IsNullOrWhiteSpace(snapshot.Title))

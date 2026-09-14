@@ -107,6 +107,13 @@ namespace Mux.Server.Models
         /// <summary>Optional conversation/session id, used to tag usage telemetry per conversation.</summary>
         public string? Id { get; set; }
 
+        /// <summary>
+        /// Optional working directory the run's tools resolve paths against. When set it must exist. When
+        /// omitted, the run resolves against the persisted session's working directory, then the server's
+        /// current directory. Lets an editor or automation run mux in a specific workspace.
+        /// </summary>
+        public string? WorkingDirectory { get; set; }
+
         /// <summary>Conversation so far (including the new user turn).</summary>
         public List<ChatMessageDto> Messages { get; set; } = new List<ChatMessageDto>();
     }

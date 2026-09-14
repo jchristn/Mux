@@ -97,6 +97,7 @@ namespace Test.Shared.Suites
                             MuxAssert.AreEqual(200, healthStatus, "HealthStatus");
                             MuxAssert.Contains("healthy", healthBody, "HealthBody");
                             MuxAssert.Contains("9.9.9-test", healthBody, "HealthVersion");
+                            MuxAssert.Contains("ContractVersion", healthBody, "HealthContractVersion");
 
                             // Endpoints without a key -> 401.
                             HttpResponseMessage noKey = http.GetAsync(baseUrl + "/v1.0/api/endpoints").GetAwaiter().GetResult();
@@ -157,6 +158,16 @@ namespace Test.Shared.Suites
                             MuxAssert.Contains("tc1", detailBody, "tool call id round-trips");
                             MuxAssert.Contains("glob", detailBody, "tool name round-trips");
                             MuxAssert.Contains("ToolCallId", detailBody, "tool result id round-trips");
+
+                            // A streamed chat with a non-existent working directory is rejected up front (400),
+                            // before switching to SSE — so an editor client learns the path is bad cleanly.
+                            string missingDir = Path.Combine(Path.GetTempPath(), "mux-missing-" + Guid.NewGuid().ToString("N"));
+                            string wdBody = "{\"endpoint\":\"unit-ollama\",\"workingDirectory\":" + System.Text.Json.JsonSerializer.Serialize(missingDir) + ",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";
+                            using HttpRequestMessage wdReq = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/v1.0/api/chat/stream");
+                            wdReq.Headers.Add("Authorization", "Bearer testkey123");
+                            wdReq.Content = new StringContent(wdBody, System.Text.Encoding.UTF8, "application/json");
+                            HttpResponseMessage wdRes = http.SendAsync(wdReq).GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(400, (int)wdRes.StatusCode, "StreamMissingWorkingDirStatus");
                         }
                         finally
                         {
