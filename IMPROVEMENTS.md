@@ -9,7 +9,7 @@ This document outlines the work needed to move mux from a capable local-first co
 
 ## Current Position
 
-mux already has strong bones: backend-agnostic endpoint configuration, interactive and headless execution, structured JSON/JSONL output, MCP support, skills, task tracking, subagents, undo/redo, local session export, a local REST server, and a web dashboard.
+mux already has strong bones: backend-agnostic endpoint configuration, interactive and headless execution, structured JSON/JSONL output, MCP support, skills, task tracking, subagents, undo/redo, local session export, a local REST server, and a web dashboard. Sessions are now portable across surfaces — the TUI, desktop app, and web dashboard read and write one session store (resume/rename/duplicate/export/delete on every surface, a working directory recorded per session and changeable mid-run with `/cwd`), web chats persist server-side, and a system-tray launcher brings up all three front ends.
 
 The main gap is not raw capability. The main gap is product finish: the first-run path, provider convenience, editor integration, desktop control surface, and extension/runtime story need to feel coherent and dependable without requiring the user to assemble too much by hand.
 
@@ -93,7 +93,7 @@ The current local REST server, dashboard, and tray agent are the right foundatio
 
 | Capability | Needed Work |
 |---|---|
-| Run-driving API | Add routes to create sessions, append user messages, stream run events, cancel runs, resume sessions, and inspect task state. |
+| Run-driving API | Session CRUD (`/v1.0/api/sessions` create/list/detail/upsert/delete), streamed run events (`/v1.0/api/chat/stream` SSE: text, thinking, tool calls, completion), server-side persistence, resume-by-id, and browser-approved mutating tools (`--allow-tools`) all ship. Remaining: an explicit cancel-run route (cancel is client-abort today) and a task-state inspection route. |
 | Complete WebSocket bridge | Stream the same event contract used by headless JSONL: assistant text, tool calls, tool results, task updates, errors, and completion. |
 | OpenAPI document | Publish a complete OpenAPI 3.1 document for the local server and generate typed SDKs from it. |
 | Client auth model | Move local secrets into OS-protected storage where possible, preserve loopback safety, and provide clear remote-binding warnings. |
@@ -103,7 +103,7 @@ The current local REST server, dashboard, and tray agent are the right foundatio
 
 | Surface | Needed Capability |
 |---|---|
-| Session home | Search, tag, and fork sessions from a native shell (browse, resume, export, and delete already ship). |
+| Session home | Search and tag sessions from a native shell (browse, resume, rename, fork/duplicate, export, and delete already ship on the desktop, TUI, and web over one shared session store). |
 | Job center | Show running, queued, completed, failed, and paused jobs with controls for cancel, retry, resume, and inspect logs. |
 | Approval center | Add diff previews and command risk labels to the desktop approve/deny flow (basic approve/deny/always already ships). |
 | Notifications | Native notifications when a job needs approval, completes, fails, or exceeds a budget threshold. |
@@ -172,7 +172,7 @@ mux already has skills, hooks, custom slash commands, MCP, subagents, prompt pro
 
 | Feature | Needed Capability |
 |---|---|
-| Custom commands | Expand custom slash commands to support arguments, forms, confirmations, streamed output, and typed results. |
+| Custom commands | Slash commands now accept arguments (built-in commands route the text after the token to an argument handler, e.g. `/cwd <path>`). Remaining: extend arguments to user-authored custom commands, plus forms, confirmations, streamed output, and typed results. |
 | Custom panels | Let extensions add TUI and desktop panels for dashboards, task boards, logs, approvals, or domain-specific tools. |
 | Custom renderers | Let extensions control how tool calls, tool results, artifacts, diffs, and custom messages render. |
 | Autocomplete providers | Let extensions contribute file references, issue IDs, symbols, commands, templates, skills, and arbitrary project entities. |
