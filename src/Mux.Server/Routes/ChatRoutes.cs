@@ -1,16 +1,19 @@
 namespace Mux.Server.Routes
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
     using System.Text.Json;
+    using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Prompting;
+    using Mux.Core.Sessions;
     using Mux.Core.Settings;
     using Mux.Core.Skills;
     using Mux.Core.Telemetry;
@@ -33,6 +36,14 @@ namespace Mux.Server.Routes
         private readonly string? _ApiKey;
         private readonly Func<List<EndpointConfig>> _EndpointsProvider;
         private readonly IUsageRecorder? _UsageRecorder;
+        private readonly SessionStore? _SessionStore;
+        private readonly bool _AllowInteractiveTools;
+
+        // Pending tool approvals for interactive web chats, keyed by "runId:toolCallId". The streaming run
+        // registers a completion source and streams an "approval" event; the browser answers via
+        // POST /v1.0/api/chat/approve, which resolves the source. Server-lifetime.
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<string>> _PendingApprovals =
+            new ConcurrentDictionary<string, TaskCompletionSource<string>>();
 
         // Server-lifetime tool runtimes, created lazily on the first chat so MCP servers are connected once
         // and reused across requests. Not disposed — they live for the server process.
@@ -47,11 +58,20 @@ namespace Mux.Server.Routes
         /// <param name="apiKey">Configured API key, or null for no-auth.</param>
         /// <param name="endpointsProvider">Callback returning the configured endpoints.</param>
         /// <param name="usageRecorder">Optional recorder so the server's chat calls are captured. Null skips recording.</param>
-        public ChatRoutes(string? apiKey, Func<List<EndpointConfig>> endpointsProvider, IUsageRecorder? usageRecorder = null)
+        /// <param name="sessionStore">Optional session store so streamed web chats are persisted server-side (into the shared session store) keyed by session id. Null disables server-side persistence.</param>
+        /// <param name="allowInteractiveTools">When true, mutating tools proposed during a web chat prompt the browser for approval instead of being auto-denied. Defaults to false (read-only web chat).</param>
+        public ChatRoutes(
+            string? apiKey,
+            Func<List<EndpointConfig>> endpointsProvider,
+            IUsageRecorder? usageRecorder = null,
+            SessionStore? sessionStore = null,
+            bool allowInteractiveTools = false)
         {
             _ApiKey = apiKey;
             _EndpointsProvider = endpointsProvider ?? throw new ArgumentNullException(nameof(endpointsProvider));
             _UsageRecorder = usageRecorder;
+            _SessionStore = sessionStore;
+            _AllowInteractiveTools = allowInteractiveTools;
         }
 
         /// <summary>
@@ -70,6 +90,50 @@ namespace Mux.Server.Routes
             {
                 await StreamChatAsync(req.Http).ConfigureAwait(false);
                 return (object?)null;
+            });
+
+            // Answer an approval prompt raised during an interactive web chat run. The streaming run is
+            // blocked awaiting this decision; resolving the pending completion source unblocks it.
+            app.Post("/v1.0/api/chat/approve", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey))
+                {
+                    return (object)new ApiError("Unauthorized", "Authentication required.");
+                }
+
+                ChatApproveRequest? decision;
+                try
+                {
+                    decision = JsonSerializer.Deserialize<ChatApproveRequest>(req.Http.Request.DataAsString ?? string.Empty, _JsonOptions);
+                }
+                catch (Exception)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiError("BadRequest", "Request body is not valid JSON.");
+                }
+
+                if (decision == null || string.IsNullOrWhiteSpace(decision.RunId) || string.IsNullOrWhiteSpace(decision.ToolCallId))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiError("BadRequest", "'runId' and 'toolCallId' are required.");
+                }
+
+                string key = decision.RunId + ":" + decision.ToolCallId;
+                if (_PendingApprovals.TryRemove(key, out TaskCompletionSource<string>? source))
+                {
+                    string verdict = (decision.Decision ?? "n").Trim().ToLowerInvariant();
+                    if (verdict != "y" && verdict != "always")
+                    {
+                        verdict = "n";
+                    }
+
+                    source.TrySetResult(verdict);
+                    req.Http.Response.StatusCode = 200;
+                    return (object)new { ok = true };
+                }
+
+                req.Http.Response.StatusCode = 404;
+                return (object)new ApiError("NotFound", "No pending approval for that run and tool call.");
             });
 
             // Warm (load) a model so the next chat's first token is fast. The dashboard calls this when the
@@ -328,6 +392,13 @@ namespace Mux.Server.Routes
                 settings.TaskPlanningEnabled,
                 null);
 
+            // Resolve the session id up front (minting one when the browser sent none) so the run is tagged,
+            // the server can persist it, and the browser can adopt it from the terminal "done" event.
+            string sessionId = string.IsNullOrWhiteSpace(request.Id) ? Guid.NewGuid().ToString("N") : request.Id!.Trim();
+
+            // A per-run id correlating interactive approval prompts with their decisions.
+            string runId = Guid.NewGuid().ToString("N");
+
             // Everything validated — switch the response into Server-Sent Events mode and stream.
             ctx.Response.StatusCode = 200;
             ctx.Response.ContentType = "text/event-stream";
@@ -346,17 +417,20 @@ namespace Mux.Server.Routes
                     ConversationHistory = history,
                     SystemPrompt = resolved.SystemPrompt,
                     CompactionSystemPrompt = resolved.CompactionSystemPrompt,
-                    // No approval UI in the browser: read-only tools auto-run under AutoSafe; anything that
-                    // would prompt (mutating tools like write_file / run_process) is denied so a web chat can
-                    // never mutate the server.
+                    // Read-only tools auto-run under AutoSafe. By default anything that would prompt (mutating
+                    // tools like write_file / run_process) is denied so a web chat can never mutate the host.
+                    // When the server was started with interactive web tools enabled, such tools instead
+                    // prompt the browser for approval over the SSE channel.
                     ApprovalPolicy = ApprovalPolicyEnum.AutoSafe,
-                    PromptUserFunc = _ => System.Threading.Tasks.Task.FromResult("n"),
+                    PromptUserFunc = _AllowInteractiveTools
+                        ? toolCall => RequestBrowserApprovalAsync(ctx, runId, toolCall)
+                        : (Func<ToolCall, Task<string>>)(_ => Task.FromResult("n")),
                     WorkingDirectory = Directory.GetCurrentDirectory(),
                     MuxSettings = settings,
                     MaxIterations = settings.GetEffectiveMaxAgentIterations(endpoint),
                     ConfigDirectory = SettingsLoader.GetConfigDirectory(),
                     CommandName = "dashboard",
-                    SessionId = request.Id ?? string.Empty,
+                    SessionId = sessionId,
                     UsageRecorder = _UsageRecorder
                 };
 
@@ -413,9 +487,16 @@ namespace Mux.Server.Routes
                     return;
                 }
 
+                // Persist the turn server-side into the shared session store so a web-started conversation is
+                // durable without depending on a follow-up PUT from the browser, and appears (and is
+                // resumable) on every surface. Best-effort and non-cancellable (the client may have already
+                // disconnected once the run finished).
+                await PersistTurnAsync(sessionId, endpoint, history, prompt, content.ToString()).ConfigureAwait(false);
+
                 ChatReply reply = new ChatReply
                 {
                     Role = "assistant",
+                    Id = sessionId,
                     Content = content.ToString(),
                     Endpoint = endpoint.Name,
                     Model = endpoint.Model,
@@ -455,6 +536,114 @@ namespace Mux.Server.Routes
                     // Best-effort — the connection may already be gone.
                 }
             }
+        }
+
+        // Persists a completed web-chat turn into the shared session store (best-effort). Loads the existing
+        // snapshot first so prior turns' full-fidelity history (including tool calls) is preserved, then
+        // appends the new user prompt and assistant reply. Non-cancellable — the browser may have already
+        // disconnected once the run finished, but the turn must still be saved.
+        private async Task PersistTurnAsync(
+            string sessionId,
+            EndpointConfig endpoint,
+            List<ConversationMessage> priorFromRequest,
+            string prompt,
+            string assistantText)
+        {
+            if (_SessionStore == null || string.IsNullOrWhiteSpace(sessionId))
+            {
+                return;
+            }
+
+            try
+            {
+                SessionSnapshot? existing = await _SessionStore.LoadAsync(sessionId, CancellationToken.None).ConfigureAwait(false);
+                DateTime now = DateTime.UtcNow;
+                SessionSnapshot snapshot = existing ?? new SessionSnapshot { Id = sessionId, CreatedUtc = now };
+                snapshot.Id = sessionId;
+
+                // Prefer the stored history (preserves tool-call structure from prior turns); fall back to the
+                // request's prior messages only for a brand-new session.
+                List<ConversationMessage> prior = existing != null && existing.ConversationHistory.Count > 0
+                    ? existing.ConversationHistory
+                    : priorFromRequest;
+
+                List<ConversationMessage> updated = new List<ConversationMessage>(prior)
+                {
+                    new ConversationMessage { Role = RoleEnum.User, Content = prompt },
+                    new ConversationMessage { Role = RoleEnum.Assistant, Content = assistantText }
+                };
+
+                snapshot.ConversationHistory = updated;
+                snapshot.EndpointName = endpoint.Name;
+                snapshot.Model = endpoint.Model;
+                snapshot.UpdatedUtc = now;
+                if (string.IsNullOrEmpty(snapshot.WorkingDirectory))
+                {
+                    snapshot.WorkingDirectory = Directory.GetCurrentDirectory();
+                }
+
+                if (!snapshot.TitlePinned && string.IsNullOrWhiteSpace(snapshot.Title))
+                {
+                    snapshot.Title = SessionTitleHelper.Normalize(prompt, SessionTitleHelper.DefaultTitle);
+                }
+
+                await _SessionStore.SaveAsync(snapshot, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // Best-effort persistence.
+            }
+        }
+
+        // Streams an approval prompt to the browser and blocks the run until the browser answers (via
+        // POST /v1.0/api/chat/approve), the request is cancelled, or a timeout elapses. Returns "y"/"always"
+        // to approve or "n" to deny. Only used when the server was started with interactive web tools enabled.
+        private async Task<string> RequestBrowserApprovalAsync(HttpContextBase ctx, string runId, ToolCall toolCall)
+        {
+            string toolCallId = toolCall?.Id ?? string.Empty;
+            string key = runId + ":" + toolCallId;
+            TaskCompletionSource<string> source = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _PendingApprovals[key] = source;
+
+            try
+            {
+                await ctx.Response.SendEvent(new ServerSentEvent
+                {
+                    Event = "approval",
+                    Data = JsonSerializer.Serialize(new ChatApprovalRequest
+                    {
+                        RunId = runId,
+                        ToolCallId = toolCallId,
+                        Name = toolCall?.Name ?? string.Empty,
+                        Arguments = toolCall?.Arguments ?? string.Empty
+                    })
+                }, false, ctx.Token).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                _PendingApprovals.TryRemove(key, out _);
+                return "n";
+            }
+
+            try
+            {
+                Task delay = Task.Delay(TimeSpan.FromMinutes(5), ctx.Token);
+                Task finished = await Task.WhenAny(source.Task, delay).ConfigureAwait(false);
+                if (finished == source.Task)
+                {
+                    return source.Task.Result;
+                }
+            }
+            catch (Exception)
+            {
+                // Fall through to deny on cancellation/timeout.
+            }
+            finally
+            {
+                _PendingApprovals.TryRemove(key, out _);
+            }
+
+            return "n";
         }
 
         // Records durable usage telemetry for a server chat call (best-effort; shared by the buffered and

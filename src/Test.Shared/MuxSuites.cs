@@ -114,6 +114,9 @@ namespace Test.Shared
                     // Mux.Core / Sessions persistence suite (M4).
                     SessionStoreSuite.Create(),
 
+                    // Mux.Core / Sessions shared management verbs (cross-surface parity).
+                    SessionManagerSuite.Create(),
+
                     // Mux.Cli TUIKit interactive shell suite (M6).
                     TuiShellSuite.Create(),
 

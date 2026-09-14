@@ -18,6 +18,7 @@ namespace Mux.Core.Sessions
         private string _Title = string.Empty;
         private string _EndpointName = string.Empty;
         private string _Model = string.Empty;
+        private string _WorkingDirectory = string.Empty;
         private List<ConversationMessage> _ConversationHistory = new List<ConversationMessage>();
         private List<string> _PromptHistory = new List<string>();
         private List<PersistedJobSnapshot> _Jobs = new List<PersistedJobSnapshot>();
@@ -89,6 +90,17 @@ namespace Mux.Core.Sessions
         {
             get => _Model;
             set => _Model = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// The working directory (project root) the session was run in. Persisted so a session started on
+        /// one surface can be resumed against the same directory on another. Empty when unknown; a resuming
+        /// surface should fall back to its own current directory (and warn) when the path no longer exists.
+        /// </summary>
+        public string WorkingDirectory
+        {
+            get => _WorkingDirectory;
+            set => _WorkingDirectory = value ?? string.Empty;
         }
 
         /// <summary>

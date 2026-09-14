@@ -2569,17 +2569,27 @@ namespace Mux.Desktop.Shell
                 }
             }
 
-            SessionSnapshot snapshot = new SessionSnapshot
+            // Load the existing snapshot first so fields this surface does not author — the CLI's job
+            // projection, prompt history, compaction count — are preserved on every save instead of being
+            // silently dropped. This keeps a session fully portable when it round-trips TUI → Desktop → TUI.
+            SessionSnapshot snapshot;
+            try
             {
-                Id = context.Id,
-                Title = context.Title,
-                TitlePinned = context.TitlePinned,
-                CreatedUtc = context.CreatedUtc,
-                UpdatedUtc = DateTime.UtcNow,
-                EndpointName = context.Runner.EndpointName ?? string.Empty,
-                Model = SelectedModel() ?? string.Empty,
-                ConversationHistory = new List<ConversationMessage>(conversation.History)
-            };
+                snapshot = await _Store.LoadAsync(context.Id, CancellationToken.None) ?? new SessionSnapshot { CreatedUtc = context.CreatedUtc };
+            }
+            catch (Exception)
+            {
+                snapshot = new SessionSnapshot { CreatedUtc = context.CreatedUtc };
+            }
+
+            snapshot.Id = context.Id;
+            snapshot.Title = context.Title;
+            snapshot.TitlePinned = context.TitlePinned;
+            snapshot.UpdatedUtc = DateTime.UtcNow;
+            snapshot.EndpointName = context.Runner.EndpointName ?? string.Empty;
+            snapshot.Model = SelectedModel() ?? string.Empty;
+            snapshot.WorkingDirectory = context.Runner.WorkingDirectory ?? string.Empty;
+            snapshot.ConversationHistory = new List<ConversationMessage>(conversation.History);
 
             try
             {

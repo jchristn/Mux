@@ -86,10 +86,7 @@ namespace Mux.Server.Routes
                     EndpointName = snapshot.EndpointName,
                     Model = snapshot.Model
                 };
-                foreach (ConversationMessage message in snapshot.ConversationHistory)
-                {
-                    detail.Messages.Add(new ChatMessageDto { Role = message.Role.ToWire(), Content = message.Content ?? string.Empty });
-                }
+                detail.Messages.AddRange(ChatMessageMapper.ToDtoList(snapshot.ConversationHistory));
 
                 req.Http.Response.StatusCode = 200;
                 return (object)detail;
@@ -138,9 +135,7 @@ namespace Mux.Server.Routes
                 snapshot.EndpointName = request.EndpointName ?? string.Empty;
                 snapshot.Model = request.Model ?? string.Empty;
                 snapshot.UpdatedUtc = now;
-                snapshot.ConversationHistory = request.Messages
-                    .Select(m => new ConversationMessage { Role = RoleEnumExtensions.ParseRole(m.Role), Content = m.Content ?? string.Empty })
-                    .ToList();
+                snapshot.ConversationHistory = ChatMessageMapper.ToModelList(request.Messages);
 
                 try
                 {

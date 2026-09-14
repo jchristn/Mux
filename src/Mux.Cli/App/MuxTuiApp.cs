@@ -1216,7 +1216,8 @@ namespace Mux.Cli.App
                 _EndpointName,
                 _Model,
                 _PromptHistory.Snapshot(),
-                DateTime.UtcNow);
+                DateTime.UtcNow,
+                _HookWorkingDirectory);
         }
 
         /// <summary>
@@ -1277,8 +1278,40 @@ namespace Mux.Cli.App
                 ReplayJob(job, interrupted: true);
             }
 
+            // Sessions authored by the Desktop or Web surfaces carry no jobs — they persist the flat
+            // ConversationHistory instead. Fall back to replaying that so a session started anywhere is
+            // fully readable and continuable in the TUI (the shared-store portability guarantee).
+            if (resume.CompletedJobs.Count == 0
+                && resume.InterruptedJobs.Count == 0
+                && resume.ConversationHistory.Count > 0)
+            {
+                ReplayConversationHistory(resume.ConversationHistory);
+            }
+
             RefreshSidebar();
             RefreshFooter();
+        }
+
+        private void ReplayConversationHistory(IReadOnlyList<ConversationMessage> history)
+        {
+            foreach (ConversationMessage message in history)
+            {
+                if (message.Role == RoleEnum.User && !string.IsNullOrEmpty(message.Content))
+                {
+                    EchoPrompt(message.Content);
+                }
+                else if (message.Role == RoleEnum.Assistant && !string.IsNullOrEmpty(message.Content))
+                {
+                    _Conversation.WriteLine(Text.From(message.Content));
+                }
+
+                // Preserve every message (including tool calls / tool results, which have no text to echo)
+                // so the next turn continues from the full, unmodified history.
+                lock (_Sync)
+                {
+                    _ConversationHistory.Add(message);
+                }
+            }
         }
 
         /// <summary>
@@ -2640,7 +2673,7 @@ namespace Mux.Cli.App
                 labels.Add($"{title}  ({session.Id})");
             }
 
-            SelectModal modal = new SelectModal("Sessions — select to resume", labels);
+            SelectModal modal = new SelectModal("Sessions — select to manage", labels);
             _App.Modals.Push(modal);
             _ = ResolveSessionBrowserAsync(modal, sessions);
         }
@@ -2649,10 +2682,114 @@ namespace Mux.Cli.App
         {
             object? result = await modal.Completion.ConfigureAwait(false);
             int index = result is int value ? value : -1;
-            if (index >= 0 && index < sessions.Count)
+            if (index < 0 || index >= sessions.Count)
             {
-                RestoreSession(SessionResumeService.Resume(sessions[index]));
+                return;
             }
+
+            await ShowSessionActionsAsync(sessions[index]).ConfigureAwait(false);
+        }
+
+        // The action menu shown after picking a session in the browser. Backed by the shared
+        // Mux.Core.Sessions.SessionManager so the TUI offers the same verbs (resume/rename/duplicate/
+        // export/delete) as the Desktop and Web surfaces over the one on-disk session store.
+        private async Task ShowSessionActionsAsync(SessionSnapshot session)
+        {
+            if (_Store == null)
+            {
+                return;
+            }
+
+            string label = string.IsNullOrWhiteSpace(session.Title) ? session.Id : session.Title;
+            List<string> actions = new List<string> { "Resume", "Rename", "Duplicate", "Export (Markdown)", "Export (HTML)", "Delete" };
+            SelectModal actionModal = new SelectModal($"Session: {label}", actions);
+            _App.Modals.Push(actionModal);
+            object? actionResult = await actionModal.Completion.ConfigureAwait(false);
+            if (!(actionResult is int action) || action < 0)
+            {
+                return;
+            }
+
+            SessionManager manager = new SessionManager(_Store);
+            switch (action)
+            {
+                case 0:
+                    RestoreSession(SessionResumeService.Resume(session));
+                    break;
+                case 1:
+                    await RenameSessionAsync(manager, session).ConfigureAwait(false);
+                    break;
+                case 2:
+                    SessionInfo? copy = await manager.DuplicateAsync(session.Id, _Cts.Token).ConfigureAwait(false);
+                    WriteNotice(copy == null ? "Duplicate failed." : $"Duplicated to \"{copy.Title}\".");
+                    break;
+                case 3:
+                    await ExportSessionAsync(manager, session, "md").ConfigureAwait(false);
+                    break;
+                case 4:
+                    await ExportSessionAsync(manager, session, "html").ConfigureAwait(false);
+                    break;
+                case 5:
+                    await DeleteSessionAsync(manager, session, label).ConfigureAwait(false);
+                    break;
+            }
+        }
+
+        private async Task RenameSessionAsync(SessionManager manager, SessionSnapshot session)
+        {
+            PromptModal prompt = new PromptModal("Rename session", string.IsNullOrWhiteSpace(session.Title) ? session.Id : session.Title);
+            _App.Modals.Push(prompt);
+            object? entered = await prompt.Completion.ConfigureAwait(false);
+            string title = (entered as string ?? string.Empty).Trim();
+            if (title.Length == 0)
+            {
+                return;
+            }
+
+            SessionInfo? updated = await manager.RenameAsync(session.Id, title, _Cts.Token).ConfigureAwait(false);
+            WriteNotice(updated == null ? "Rename failed." : $"Renamed to \"{updated.Title}\".");
+        }
+
+        private async Task ExportSessionAsync(SessionManager manager, SessionSnapshot session, string format)
+        {
+            string? rendered = await manager.ExportAsync(session.Id, format, _Cts.Token).ConfigureAwait(false);
+            if (rendered == null)
+            {
+                WriteNotice("Export failed.");
+                return;
+            }
+
+            string ext = string.Equals(format, "html", StringComparison.OrdinalIgnoreCase) ? "html" : "md";
+            string baseName = SanitizeFileStem(string.IsNullOrWhiteSpace(session.Title) ? session.Id : session.Title);
+            if (string.IsNullOrEmpty(baseName))
+            {
+                baseName = session.Id;
+            }
+
+            string path = Path.Combine(_HookWorkingDirectory, baseName + "." + ext);
+            try
+            {
+                await File.WriteAllTextAsync(path, rendered, _Cts.Token).ConfigureAwait(false);
+                WriteNotice($"Exported to {path}");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Export write failed: " + ex.Message);
+            }
+        }
+
+        private async Task DeleteSessionAsync(SessionManager manager, SessionSnapshot session, string label)
+        {
+            MessageModal confirm = new MessageModal("Delete session", $"Delete \"{label}\"? This cannot be undone.", new List<string> { "Delete", "Cancel" });
+            _App.Modals.Push(confirm);
+            object? confirmResult = await confirm.Completion.ConfigureAwait(false);
+            if (!(confirmResult is int c) || c != 0)
+            {
+                return;
+            }
+
+            bool deleted = await manager.DeleteAsync(session.Id, _Cts.Token).ConfigureAwait(false);
+            WriteNotice(deleted ? $"Deleted \"{label}\"." : "Delete failed.");
         }
 
         private void ReplayJob(PersistedJobSnapshot job, bool interrupted)

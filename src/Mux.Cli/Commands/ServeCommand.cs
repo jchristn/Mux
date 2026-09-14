@@ -32,6 +32,7 @@ namespace Mux.Cli.Commands
             // Environment overrides, then CLI overrides (CLI wins).
             ApplyEnvOverrides(rest);
             bool noAuth = false;
+            bool allowTools = false;
             string? cliApiKey = null;
             for (int i = 0; i < args.Length; i++)
             {
@@ -49,6 +50,9 @@ namespace Mux.Cli.Commands
                         break;
                     case "--no-auth":
                         noAuth = true;
+                        break;
+                    case "--allow-tools":
+                        allowTools = true;
                         break;
                     default:
                         break;
@@ -101,7 +105,8 @@ namespace Mux.Cli.Commands
                 () => SettingsLoader.LoadEndpoints(),
                 logger: null,
                 usageQuery: usageQuery,
-                usageRecorder: usageTelemetry.Recorder);
+                usageRecorder: usageTelemetry.Recorder,
+                allowInteractiveTools: allowTools);
 
             try
             {
@@ -132,6 +137,9 @@ namespace Mux.Cli.Commands
                 Console.WriteLine("  " + "api key".PadRight(labelWidth) + " : " + apiKey);
                 Console.WriteLine(valueIndent + "send as 'Authorization: Bearer <key>'");
             }
+            Console.WriteLine("  " + "tools".PadRight(labelWidth) + " : " + (allowTools
+                ? "interactive (mutating tools prompt the browser for approval)"
+                : "read-only (mutating tools denied; enable with --allow-tools)"));
             Console.WriteLine();
             Console.WriteLine("Press Ctrl+C to stop.");
             Console.WriteLine();

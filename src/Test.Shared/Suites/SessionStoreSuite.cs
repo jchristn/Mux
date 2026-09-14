@@ -40,6 +40,7 @@ namespace Test.Shared.Suites
                         MuxAssert.IsTrue(loaded.TitlePinned, "titlePinned");
                         MuxAssert.AreEqual("openai-prod", loaded.EndpointName, "endpoint");
                         MuxAssert.AreEqual("gpt-4o", loaded.Model, "model");
+                        MuxAssert.AreEqual("/work/project", loaded.WorkingDirectory, "workingDirectory");
                         MuxAssert.AreEqual(2, loaded.CompactionCount, "compactionCount");
                         MuxAssert.AreEqual(2, loaded.ConversationHistory.Count, "history count");
                         MuxAssert.AreEqual(RoleEnum.User, loaded.ConversationHistory[0].Role, "history[0] role");
@@ -188,6 +189,7 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(2, result.InterruptedJobs.Count, "interrupted (Running+Queued)");
                         MuxAssert.AreEqual(3, result.CompletedJobs.Count, "completed (Completed+Failed+Cancelled)");
                         MuxAssert.AreEqual("Resume", result.Title, "carried title");
+                        MuxAssert.AreEqual("/work/project", result.WorkingDirectory, "carried working directory");
                         MuxAssert.AreEqual(2, result.ConversationHistory.Count, "carried history");
                     }),
 
@@ -226,6 +228,7 @@ namespace Test.Shared.Suites
                 UpdatedUtc = new DateTime(2026, 1, 2, 3, 5, 6, DateTimeKind.Utc),
                 EndpointName = "openai-prod",
                 Model = "gpt-4o",
+                WorkingDirectory = "/work/project",
                 CompactionCount = 2,
                 ConversationHistory = new List<ConversationMessage>
                 {

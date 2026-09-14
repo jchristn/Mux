@@ -17,6 +17,7 @@ namespace Mux.Core.Sessions
         private string _Title = string.Empty;
         private string _EndpointName = string.Empty;
         private string _Model = string.Empty;
+        private string _WorkingDirectory = string.Empty;
         private List<ConversationMessage> _ConversationHistory = new List<ConversationMessage>();
         private List<string> _PromptHistory = new List<string>();
         private List<PersistedJobSnapshot> _InterruptedJobs = new List<PersistedJobSnapshot>();
@@ -65,6 +66,15 @@ namespace Mux.Core.Sessions
         {
             get => _Model;
             set => _Model = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// The working directory (project root) the session was run in, or empty when unknown.
+        /// </summary>
+        public string WorkingDirectory
+        {
+            get => _WorkingDirectory;
+            set => _WorkingDirectory = value ?? string.Empty;
         }
 
         /// <summary>

@@ -28,6 +28,7 @@ namespace Mux.Core.Sessions
                 TitlePinned = snapshot.TitlePinned,
                 EndpointName = snapshot.EndpointName,
                 Model = snapshot.Model,
+                WorkingDirectory = snapshot.WorkingDirectory,
                 CompactionCount = snapshot.CompactionCount,
                 ConversationHistory = new List<ConversationMessage>(snapshot.ConversationHistory),
                 PromptHistory = new List<string>(snapshot.PromptHistory)

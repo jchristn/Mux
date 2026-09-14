@@ -2,160 +2,103 @@ namespace Mux.Desktop.Services
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Sessions;
 
     /// <summary>
-    /// Default <see cref="IThreadService"/> over a <see cref="SessionStore"/>. Threads are persisted
-    /// sessions; creation, rename, pin, duplicate, delete, and export map onto the store and the shared
-    /// session helpers. Thread ids are opaque GUIDs so they are always valid file names.
+    /// Default <see cref="IThreadService"/> for the desktop app. A thread is one persisted session; this
+    /// service is a thin adapter over the shared <see cref="ISessionManager"/> (the single implementation of
+    /// session-management verbs used by every surface), mapping <see cref="SessionInfo"/> to the desktop's
+    /// <see cref="ThreadSummary"/> projection. Thread ids are opaque GUIDs so they are always valid file names.
     /// </summary>
     public sealed class ThreadService : IThreadService
     {
-        private readonly SessionStore _Store;
+        private readonly ISessionManager _Sessions;
 
         /// <summary>
-        /// Instantiate the thread service.
+        /// Instantiate the thread service over a session store.
         /// </summary>
         /// <param name="store">The session store backing the threads. Required.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="store"/> is null.</exception>
         public ThreadService(SessionStore store)
+            : this(new SessionManager(store ?? throw new ArgumentNullException(nameof(store))))
         {
-            ArgumentNullException.ThrowIfNull(store);
-            _Store = store;
+        }
+
+        /// <summary>
+        /// Instantiate the thread service over an explicit session manager.
+        /// </summary>
+        /// <param name="sessions">The shared session manager. Required.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="sessions"/> is null.</exception>
+        public ThreadService(ISessionManager sessions)
+        {
+            _Sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         }
 
         /// <inheritdoc />
         public async Task<IReadOnlyList<ThreadSummary>> ListAsync(CancellationToken token)
         {
-            IReadOnlyList<SessionSnapshot> snapshots = await _Store.ListAsync(token).ConfigureAwait(false);
-
-            List<ThreadSummary> summaries = new List<ThreadSummary>(snapshots.Count);
-            foreach (SessionSnapshot snapshot in snapshots)
+            IReadOnlyList<SessionInfo> sessions = await _Sessions.ListAsync(token).ConfigureAwait(false);
+            List<ThreadSummary> summaries = new List<ThreadSummary>(sessions.Count);
+            foreach (SessionInfo info in sessions)
             {
-                summaries.Add(MapToSummary(snapshot));
+                summaries.Add(MapToSummary(info));
             }
 
-            return summaries
-                .OrderByDescending(summary => summary.UpdatedUtc)
-                .ToList();
+            return summaries;
         }
 
         /// <inheritdoc />
         public async Task<ThreadSummary> CreateAsync(string? title, string? endpointName, string? model, CancellationToken token)
         {
-            DateTime now = DateTime.UtcNow;
-            SessionSnapshot snapshot = new SessionSnapshot
-            {
-                Id = NewId(),
-                Title = SessionTitleHelper.Normalize(title, SessionTitleHelper.DefaultTitle),
-                TitlePinned = !string.IsNullOrWhiteSpace(title),
-                CreatedUtc = now,
-                UpdatedUtc = now,
-                EndpointName = endpointName ?? string.Empty,
-                Model = model ?? string.Empty
-            };
-
-            await _Store.SaveAsync(snapshot, token).ConfigureAwait(false);
-            return MapToSummary(snapshot);
+            SessionInfo info = await _Sessions.CreateAsync(title, endpointName, model, null, token).ConfigureAwait(false);
+            return MapToSummary(info);
         }
 
         /// <inheritdoc />
         public async Task<ThreadSummary?> RenameAsync(string id, string title, CancellationToken token)
         {
-            SessionSnapshot? snapshot = await _Store.LoadAsync(id, token).ConfigureAwait(false);
-            if (snapshot == null)
-            {
-                return null;
-            }
-
-            snapshot.Title = SessionTitleHelper.Normalize(title, snapshot.Title);
-            snapshot.TitlePinned = true;
-            snapshot.UpdatedUtc = DateTime.UtcNow;
-
-            await _Store.SaveAsync(snapshot, token).ConfigureAwait(false);
-            return MapToSummary(snapshot);
+            SessionInfo? info = await _Sessions.RenameAsync(id, title, token).ConfigureAwait(false);
+            return info == null ? null : MapToSummary(info);
         }
 
         /// <inheritdoc />
-        public async Task<bool> SetTitlePinnedAsync(string id, bool pinned, CancellationToken token)
+        public Task<bool> SetTitlePinnedAsync(string id, bool pinned, CancellationToken token)
         {
-            SessionSnapshot? snapshot = await _Store.LoadAsync(id, token).ConfigureAwait(false);
-            if (snapshot == null)
-            {
-                return false;
-            }
-
-            snapshot.TitlePinned = pinned;
-            await _Store.SaveAsync(snapshot, token).ConfigureAwait(false);
-            return true;
+            return _Sessions.SetTitlePinnedAsync(id, pinned, token);
         }
 
         /// <inheritdoc />
         public async Task<ThreadSummary?> DuplicateAsync(string id, CancellationToken token)
         {
-            SessionSnapshot? source = await _Store.LoadAsync(id, token).ConfigureAwait(false);
-            if (source == null)
-            {
-                return null;
-            }
-
-            DateTime now = DateTime.UtcNow;
-            SessionSnapshot copy = new SessionSnapshot
-            {
-                Id = NewId(),
-                Title = SessionTitleHelper.Normalize(source.Title + " (copy)", SessionTitleHelper.DefaultTitle),
-                TitlePinned = true,
-                CreatedUtc = now,
-                UpdatedUtc = now,
-                EndpointName = source.EndpointName,
-                Model = source.Model,
-                CompactionCount = source.CompactionCount,
-                ConversationHistory = new List<Mux.Core.Models.ConversationMessage>(source.ConversationHistory),
-                PromptHistory = new List<string>(source.PromptHistory),
-                Jobs = new List<PersistedJobSnapshot>(source.Jobs)
-            };
-
-            await _Store.SaveAsync(copy, token).ConfigureAwait(false);
-            return MapToSummary(copy);
+            SessionInfo? info = await _Sessions.DuplicateAsync(id, token).ConfigureAwait(false);
+            return info == null ? null : MapToSummary(info);
         }
 
         /// <inheritdoc />
         public Task<bool> DeleteAsync(string id, CancellationToken token)
         {
-            return _Store.DeleteAsync(id, token);
+            return _Sessions.DeleteAsync(id, token);
         }
 
         /// <inheritdoc />
-        public async Task<string?> ExportAsync(string id, string format, CancellationToken token)
+        public Task<string?> ExportAsync(string id, string format, CancellationToken token)
         {
-            SessionSnapshot? snapshot = await _Store.LoadAsync(id, token).ConfigureAwait(false);
-            if (snapshot == null)
-            {
-                return null;
-            }
-
-            return SessionExporter.Render(snapshot, format);
+            return _Sessions.ExportAsync(id, format, token);
         }
 
-        private static string NewId()
-        {
-            return Guid.NewGuid().ToString("N");
-        }
-
-        private static ThreadSummary MapToSummary(SessionSnapshot snapshot)
+        private static ThreadSummary MapToSummary(SessionInfo info)
         {
             return new ThreadSummary(
-                snapshot.Id,
-                snapshot.Title,
-                snapshot.EndpointName,
-                snapshot.Model,
-                snapshot.CreatedUtc,
-                snapshot.UpdatedUtc,
-                snapshot.ConversationHistory.Count,
-                snapshot.TitlePinned);
+                info.Id,
+                info.Title,
+                info.EndpointName,
+                info.Model,
+                info.CreatedUtc,
+                info.UpdatedUtc,
+                info.MessageCount,
+                info.TitlePinned);
         }
     }
 }

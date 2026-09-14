@@ -23,6 +23,7 @@ namespace Mux.Core.Sessions
         /// <param name="model">The effective model.</param>
         /// <param name="promptHistory">The prompt-history entries to persist (oldest-first).</param>
         /// <param name="nowUtc">The timestamp to stamp as <c>UpdatedUtc</c>.</param>
+        /// <param name="workingDirectory">The working directory (project root) to persist, so the session can be resumed against the same directory on any surface. Optional.</param>
         /// <returns>The populated snapshot.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="manager"/> is null.</exception>
         public static SessionSnapshot Build(
@@ -32,7 +33,8 @@ namespace Mux.Core.Sessions
             string endpointName,
             string model,
             IEnumerable<string>? promptHistory,
-            DateTime nowUtc)
+            DateTime nowUtc,
+            string? workingDirectory = null)
         {
             if (manager is null) throw new ArgumentNullException(nameof(manager));
 
@@ -42,6 +44,7 @@ namespace Mux.Core.Sessions
                 Title = title ?? string.Empty,
                 EndpointName = endpointName ?? string.Empty,
                 Model = model ?? string.Empty,
+                WorkingDirectory = workingDirectory ?? string.Empty,
                 CreatedUtc = nowUtc,
                 UpdatedUtc = nowUtc
             };

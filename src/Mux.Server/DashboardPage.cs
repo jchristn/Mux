@@ -1223,8 +1223,22 @@ function handleSse(block,typing){
   if(ev==="thinking"){typing.thinking=(typing.thinking||"")+parsed;renderMessages();}
   else if(ev==="tool"){if(!typing.tools)typing.tools=[];var tc=null;for(var k=0;k<typing.tools.length;k++){if(typing.tools[k].id===parsed.Id){tc=typing.tools[k];break;}}if(tc){tc.status=parsed.Status;tc.ms=parsed.ElapsedMs;}else{typing.tools.push({id:parsed.Id,name:parsed.Name,status:parsed.Status,ms:parsed.ElapsedMs});}renderMessages();}
   else if(ev==="token"){typing.typing=false;typing.content+=parsed;renderMessages();}
-  else if(ev==="done"){typing.typing=false;typing.content=(parsed&&parsed.Content)||typing.content;typing.model=(parsed&&parsed.Model)||"";typing.stats=(parsed&&parsed.Stats)||null;if(typing.model)currentModel=typing.model;renderMessages();endChat();persistConvo();}
+  else if(ev==="approval"){handleApproval(parsed);}
+  // The server persists the turn itself (server-authored, full-fidelity), so adopt the id it assigned and
+  // refresh the list rather than PUTting the browser's flattened copy back over it.
+  else if(ev==="done"){typing.typing=false;typing.content=(parsed&&parsed.Content)||typing.content;typing.model=(parsed&&parsed.Model)||"";typing.stats=(parsed&&parsed.Stats)||null;if(typing.model)currentModel=typing.model;if(parsed&&parsed.Id){currentSessionId=parsed.Id;}renderMessages();endChat();loadConvos();}
   else if(ev==="error"){typing.typing=false;typing.content="⚠️ "+parsed;renderMessages();toast(String(parsed),true);endChat();}
+}
+
+// A mutating tool was proposed during an interactive web chat (server started with --allow-tools). Ask the
+// user to approve or deny and POST the decision back so the blocked run can continue.
+function handleApproval(req){
+  if(!req||!req.RunId){return;}
+  var name=req.Name||"a tool";
+  var args=req.Arguments?("\n\n"+req.Arguments):"";
+  var ok=false;
+  try{ok=window.confirm("Allow mux to run "+name+"?"+args);}catch(e){ok=false;}
+  api("/v1.0/api/chat/approve","POST",{RunId:req.RunId,ToolCallId:req.ToolCallId,Decision:ok?"y":"n"}).catch(function(){});
 }
 
 function loadEndpoints(){

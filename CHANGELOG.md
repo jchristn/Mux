@@ -2,6 +2,33 @@
 
 All notable changes to mux are documented here.
 
+## Unreleased
+
+### Added
+
+- **Cross-surface session portability & parity.** The terminal UI, desktop app, and web dashboard are now
+  three windows onto one session store (`~/.mux/sessions`, keyed by a shared session id), so a conversation
+  started in any surface can be resumed in any other — in any ordering — with its full transcript intact.
+  - **Working directory** is now recorded on every session (`SessionSnapshot.WorkingDirectory`) so a resumed
+    agent continues against the same project directory (falling back to the current directory when the path
+    no longer exists). Additive and forward-tolerant on disk.
+  - **Canonical history on resume (TUI).** The terminal UI now renders a session's flat `ConversationHistory`
+    when it carries no CLI job projection, fixing the case where a Desktop- or Web-authored session opened in
+    the TUI showed an empty transcript.
+  - **Non-destructive persistence.** The desktop app and web upsert now load-then-mutate, preserving fields
+    they do not author (the CLI job projection, prompt history, compaction count, working directory) instead
+    of dropping them — so a session survives a TUI → Desktop → TUI round trip.
+  - **Shared management verbs.** A single `Mux.Core.Sessions.SessionManager` (`ISessionManager`) implements
+    list/create/rename/pin/duplicate/delete/export for every surface; the desktop `ThreadService` now delegates
+    to it, and the TUI `/sessions` browser gained rename, duplicate, export, and delete (not just resume).
+  - **Server-side web persistence.** `mux serve` chats are now persisted server-side as they complete (keyed
+    by session id, minted when absent and returned to the browser), so a web conversation is durable without a
+    follow-up save and can never be lost by closing the tab. Tool-call structure round-trips through the web
+    surface (session detail/upsert carry tool calls and tool-call ids).
+  - **Interactive web tools (opt-in).** `mux serve --allow-tools` lets a mutating tool proposed during a web
+    chat prompt the browser for approval (streamed over SSE, answered via `POST /v1.0/api/chat/approve`)
+    instead of being auto-denied. The default remains read-only (mutating tools denied).
+
 ## 0.10.0
 
 ### Added

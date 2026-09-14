@@ -23,7 +23,7 @@
 `mux` can read and write files, run commands, search code, and manage a project across four surfaces that all share one engine (`Mux.Core`):
 - **Interactive terminal UI** — a full-screen REPL with per-job transcripts, a tool-approval modal, slash commands, and resumable sessions (`mux`).
 - **Non-interactive command surface** — single-shot runs for scripting and automation, including machine-readable `jsonl` output (`mux print`, `mux --print`).
-- **Local web dashboard** — `mux serve` hosts a loopback, token-guarded REST + WebSocket API and a self-contained single-page dashboard (chat, configuration, usage/pricing analytics, sessions), run in the background by a cross-platform system-tray agent.
+- **Local web dashboard** — `mux serve` hosts a loopback, token-guarded REST + WebSocket API and a self-contained single-page dashboard (chat, configuration, usage/pricing analytics, sessions), run in the background by a cross-platform system-tray agent. Web chats persist server-side into the shared session store, so they appear (and resume) in the TUI and desktop app too; read-only by default, `mux serve --allow-tools` lets mutating tools prompt the browser for approval.
 - **Cross-platform desktop app** — `mux Desktop`, an Avalonia client with conversations/threads, streaming chat, the full set of configuration managers, and the usage dashboard.
 
 `mux` does not install or manage model runners. You bring your own local or remote inference backend, and `mux` connects to it.
@@ -68,6 +68,7 @@
 - TUIKit interactive UI (`v0.8.2`): a full-screen shell with per-job transcripts, a job sidebar, a multi-line composer, slash commands / key bindings / menu over one command catalog, an interactive tool-approval modal, and autosaved resumable sessions. Multiple prompts run as concurrent background jobs (a single-writer lease serializes file edits); enqueue-while-busy lets you start a new job or append to the focused one. See `USAGE.md`.
 - Background tasks: for a large request the model lays out the work as a tracked plan of tasks and advances them as it goes; the interactive shell draws a live checklist that updates in place (pending → running → done), the sidebar shows `TASKS n/m`, `/tasks` opens a viewer to inspect and hand-annotate the plan, and the plan persists across save/resume. A `task_plan_updated` event is emitted in `jsonl` mode for orchestrators. See `USAGE.md`
 - Subagents: define named subagents in `~/.mux/subagents.json` and the model can delegate a scoped sub-task to one with the `spawn_subagent` tool; each runs in an isolated conversation (its own system prompt, endpoint, and tool allow-list) and returns only its final answer, keeping the primary agent's context clean
+- **Cross-surface session portability**: the terminal UI, desktop app, and web dashboard are three windows onto **one** session store (`~/.mux/sessions`, keyed by a shared session id). Start a conversation in any surface and pick it up in any other — the full transcript comes with it, in any ordering (web → TUI, desktop → web, and back). Every surface can **see, resume, rename, duplicate, export, and delete** the same sessions. Web chats persist server-side automatically (no lost turns if you close the tab), and tool-call structure survives the round trip. Sessions also record their working directory so a resumed agent continues against the same project. Point every surface at the same directory (or share it) and your work follows you.
 - Local session export: `/export` (or `mux export <id>`) renders a session to a self-contained HTML file and Markdown — server-free, no network
 - Custom keybindings: rebind or unbind any command's key chord in `~/.mux/keybindings.json`
 - Undo/redo: in a git repository, mux snapshots the working tree before each turn so `/undo` and `/redo` roll a turn's file changes back and forward (git plumbing only — your branch, history, and stash are untouched)
@@ -210,7 +211,7 @@ Every command is also reachable by key binding and the `F1` menu (one catalog, t
 /prompts                          Open the prompt-profile editor (also Ctrl+P)
 /effort, /reasoning               Set the active endpoint's reasoning effort level
 /thinking, /think                 Toggle displaying the model's reasoning ("thinking")
-/sessions                         Browse and resume saved sessions
+/sessions                         Browse saved sessions; resume, rename, duplicate, export, or delete
 /tasks                            View and annotate the focused job's task plan
 /save                             Save the current session
 /export, /share                   Export the session to HTML + Markdown (server-free)

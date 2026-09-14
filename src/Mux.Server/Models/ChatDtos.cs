@@ -1,17 +1,99 @@
 namespace Mux.Server.Models
 {
     using System.Collections.Generic;
+    using System.Linq;
+    using Mux.Core.Enums;
+    using Mux.Core.Models;
 
     /// <summary>
-    /// A single chat message in a dashboard chat request.
+    /// A tool call requested by the assistant, projected for the dashboard so a persisted conversation's
+    /// tool-call structure survives a round trip through the web surface.
+    /// </summary>
+    public class ChatToolCallDto
+    {
+        /// <summary>The tool-call id (correlates the call with its result message).</summary>
+        public string Id { get; set; } = string.Empty;
+
+        /// <summary>The tool name.</summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>The raw JSON arguments string.</summary>
+        public string Arguments { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// A single chat message in a dashboard chat request or a persisted conversation. Carries optional tool
+    /// calls (assistant) and a tool-call id (tool result) so tool-using transcripts authored on any surface
+    /// round-trip through the web surface without losing structure.
     /// </summary>
     public class ChatMessageDto
     {
-        /// <summary>Role: user, assistant, or system.</summary>
+        /// <summary>Role: user, assistant, system, or tool.</summary>
         public string Role { get; set; } = "user";
 
         /// <summary>Message content.</summary>
         public string Content { get; set; } = string.Empty;
+
+        /// <summary>Tool calls requested by the assistant, or null when none.</summary>
+        public List<ChatToolCallDto>? ToolCalls { get; set; } = null;
+
+        /// <summary>The id of the tool call this message is a result for, or null when not a tool result.</summary>
+        public string? ToolCallId { get; set; } = null;
+    }
+
+    /// <summary>
+    /// Maps between the web <see cref="ChatMessageDto"/> and the core <see cref="ConversationMessage"/>,
+    /// preserving tool-call structure in both directions so persisted transcripts stay full-fidelity.
+    /// </summary>
+    public static class ChatMessageMapper
+    {
+        /// <summary>Projects a core message to its DTO, carrying tool calls and tool-call id.</summary>
+        /// <param name="message">The core message.</param>
+        /// <returns>The DTO projection.</returns>
+        public static ChatMessageDto ToDto(ConversationMessage message)
+        {
+            return new ChatMessageDto
+            {
+                Role = message.Role.ToWire(),
+                Content = message.Content ?? string.Empty,
+                ToolCalls = message.ToolCalls == null || message.ToolCalls.Count == 0
+                    ? null
+                    : message.ToolCalls.Select(tc => new ChatToolCallDto { Id = tc.Id ?? string.Empty, Name = tc.Name ?? string.Empty, Arguments = tc.Arguments ?? string.Empty }).ToList(),
+                ToolCallId = message.ToolCallId
+            };
+        }
+
+        /// <summary>Builds a core message from its DTO, carrying tool calls and tool-call id.</summary>
+        /// <param name="dto">The DTO.</param>
+        /// <returns>The core message.</returns>
+        public static ConversationMessage ToModel(ChatMessageDto dto)
+        {
+            return new ConversationMessage
+            {
+                Role = RoleEnumExtensions.ParseRole(dto.Role),
+                Content = dto.Content ?? string.Empty,
+                ToolCalls = dto.ToolCalls == null || dto.ToolCalls.Count == 0
+                    ? null
+                    : dto.ToolCalls.Select(tc => new ToolCall { Id = tc.Id ?? string.Empty, Name = tc.Name ?? string.Empty, Arguments = tc.Arguments ?? string.Empty }).ToList(),
+                ToolCallId = dto.ToolCallId
+            };
+        }
+
+        /// <summary>Projects a list of core messages to DTOs.</summary>
+        /// <param name="messages">The core messages.</param>
+        /// <returns>The DTO list.</returns>
+        public static List<ChatMessageDto> ToDtoList(IEnumerable<ConversationMessage> messages)
+        {
+            return messages.Select(ToDto).ToList();
+        }
+
+        /// <summary>Builds a list of core messages from DTOs.</summary>
+        /// <param name="messages">The DTOs.</param>
+        /// <returns>The core message list.</returns>
+        public static List<ConversationMessage> ToModelList(IEnumerable<ChatMessageDto> messages)
+        {
+            return messages.Select(ToModel).ToList();
+        }
     }
 
     /// <summary>
@@ -126,6 +208,9 @@ namespace Mux.Server.Models
         /// <summary>Always "assistant".</summary>
         public string Role { get; set; } = "assistant";
 
+        /// <summary>The session id the turn was persisted under (server-authored; the browser adopts it).</summary>
+        public string Id { get; set; } = string.Empty;
+
         /// <summary>Assistant text.</summary>
         public string Content { get; set; } = string.Empty;
 
@@ -137,6 +222,41 @@ namespace Mux.Server.Models
 
         /// <summary>Per-turn timing and token statistics.</summary>
         public ChatStats Stats { get; set; } = new ChatStats();
+    }
+
+    /// <summary>
+    /// An approval prompt streamed to the dashboard when a web chat run proposes a tool that requires
+    /// approval (only when the server was started with interactive web tools enabled). The browser answers
+    /// by POSTing a <see cref="ChatApproveRequest"/> to <c>/v1.0/api/chat/approve</c>.
+    /// </summary>
+    public class ChatApprovalRequest
+    {
+        /// <summary>The run id correlating this prompt with its decision.</summary>
+        public string RunId { get; set; } = string.Empty;
+
+        /// <summary>The proposed tool call's id.</summary>
+        public string ToolCallId { get; set; } = string.Empty;
+
+        /// <summary>The proposed tool name.</summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>The proposed tool's raw JSON arguments.</summary>
+        public string Arguments { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// A decision answering a <see cref="ChatApprovalRequest"/>: approve once, approve always, or deny.
+    /// </summary>
+    public class ChatApproveRequest
+    {
+        /// <summary>The run id from the prompt.</summary>
+        public string RunId { get; set; } = string.Empty;
+
+        /// <summary>The tool-call id from the prompt.</summary>
+        public string ToolCallId { get; set; } = string.Empty;
+
+        /// <summary>The decision: "y" (approve), "always" (approve and remember), or "n" (deny).</summary>
+        public string Decision { get; set; } = "n";
     }
 
     /// <summary>

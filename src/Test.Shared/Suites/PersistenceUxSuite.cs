@@ -196,6 +196,26 @@ namespace Test.Shared.Suites
                         }
                     }),
 
+                    Case("RestoreRendersHistoryWhenNoJobs", "A Desktop/Web-authored snapshot (flat history, no jobs) is rendered on restore", async (CancellationToken ct) =>
+                    {
+                        await using (JobManager manager = new JobManager(EchoRunner, maxConcurrency: 2))
+                        using (MuxTuiApp app = new MuxTuiApp(new HeadlessBackend(100, 24), manager, "demo", ApprovalPolicyEnum.AutoApprove))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+
+                            // No Jobs — only the flat ConversationHistory a Desktop or Web session persists.
+                            SessionSnapshot snapshot = new SessionSnapshot { Id = "web1", Title = "From web" };
+                            snapshot.ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.User, Content = "started on web" });
+                            snapshot.ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.Assistant, Content = "picked up in tui" });
+
+                            app.RestoreSession(SessionResumeService.Resume(snapshot));
+
+                            string transcript = Join(app.TranscriptSnapshot());
+                            MuxAssert.Contains("started on web", transcript, "user message from flat history");
+                            MuxAssert.Contains("picked up in tui", transcript, "assistant message from flat history");
+                        }
+                    }),
+
                     // ---- Session browser ----
                     Case("SessionBrowserResumesSelected", "The session browser resumes the selected session", async (CancellationToken ct) =>
                     {
@@ -210,7 +230,9 @@ namespace Test.Shared.Suites
                             {
                                 Feed(backend, app, "/sessions" + "\r");
                                 MuxAssert.IsTrue(app.IsModalActive, "browser open");
-                                Feed(backend, app, "\r"); // select first
+                                Feed(backend, app, "\r"); // select first session -> action menu
+                                await WaitUntilAsync(() => app.IsModalActive, ct).ConfigureAwait(false);
+                                Feed(backend, app, "\r"); // choose Resume (first action)
 
                                 await WaitUntilAsync(() => Join(app.TranscriptSnapshot()).Contains("hi there", StringComparison.Ordinal), ct).ConfigureAwait(false);
                                 MuxAssert.Contains("hi there", Join(app.TranscriptSnapshot()), "resumed transcript");

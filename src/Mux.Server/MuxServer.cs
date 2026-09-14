@@ -39,6 +39,7 @@ namespace Mux.Server
 
         private Webserver? _App;
         private bool _Disposed = false;
+        private readonly bool _AllowInteractiveTools;
 
         #endregion
 
@@ -72,6 +73,8 @@ namespace Mux.Server
         /// pages. Null disables the query endpoints (they return empty results with an enabled=false signal).</param>
         /// <param name="usageRecorder">Optional usage recorder so the server's own chat calls are captured.
         /// Null skips recording server-side calls.</param>
+        /// <param name="allowInteractiveTools">When true, mutating tools proposed during a dashboard chat
+        /// prompt the browser for approval instead of being auto-denied. Defaults to false.</param>
         public MuxServer(
             RestServerSettings settings,
             string version,
@@ -79,7 +82,8 @@ namespace Mux.Server
             Func<List<EndpointConfig>> endpointsProvider,
             Action<string>? logger = null,
             Mux.Core.Telemetry.UsageQueryService? usageQuery = null,
-            Mux.Core.Telemetry.IUsageRecorder? usageRecorder = null)
+            Mux.Core.Telemetry.IUsageRecorder? usageRecorder = null,
+            bool allowInteractiveTools = false)
         {
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Version = version ?? string.Empty;
@@ -88,6 +92,7 @@ namespace Mux.Server
             _Logger = logger;
             _UsageQuery = usageQuery;
             _UsageRecorder = usageRecorder;
+            _AllowInteractiveTools = allowInteractiveTools;
         }
 
         #endregion
@@ -184,7 +189,7 @@ namespace Mux.Server
             new HealthRoutes(_Version, _StartUtc).Register(app);
             new EndpointRoutes(apiKey, _EndpointsProvider).Register(app);
             new SessionRoutes(apiKey, _SessionStore).Register(app);
-            new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder).Register(app);
+            new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder, _SessionStore, _AllowInteractiveTools).Register(app);
             new SettingsRoutes(apiKey).Register(app);
             new McpRoutes(apiKey).Register(app);
             new ConfigRoutes(apiKey).Register(app);

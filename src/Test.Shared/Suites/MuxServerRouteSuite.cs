@@ -134,6 +134,29 @@ namespace Test.Shared.Suites
                             chatReq.Content = new StringContent("{\"endpoint\":\"nope\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}", System.Text.Encoding.UTF8, "application/json");
                             HttpResponseMessage chatRes = http.SendAsync(chatReq).GetAwaiter().GetResult();
                             MuxAssert.AreEqual(404, (int)chatRes.StatusCode, "ChatUnknownEndpointStatus");
+
+                            // Upsert a session carrying an assistant tool call + a tool result, then read it back
+                            // via detail: the tool-call structure must survive the web round trip (not flatten to
+                            // role+content), so a tool-using transcript is portable through the web surface.
+                            string upsertBody =
+                                "{\"id\":\"toolsess\",\"endpointName\":\"unit-ollama\",\"model\":\"gemma3:4b\",\"messages\":[" +
+                                "{\"role\":\"user\",\"content\":\"list files\"}," +
+                                "{\"role\":\"assistant\",\"content\":\"\",\"toolCalls\":[{\"id\":\"tc1\",\"name\":\"glob\",\"arguments\":\"{\\\"pattern\\\":\\\"*\\\"}\"}]}," +
+                                "{\"role\":\"tool\",\"content\":\"a.txt\",\"toolCallId\":\"tc1\"}]}";
+                            using HttpRequestMessage putReq = new HttpRequestMessage(HttpMethod.Put, baseUrl + "/v1.0/api/sessions");
+                            putReq.Headers.Add("Authorization", "Bearer testkey123");
+                            putReq.Content = new StringContent(upsertBody, System.Text.Encoding.UTF8, "application/json");
+                            HttpResponseMessage putRes = http.SendAsync(putReq).GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(200, (int)putRes.StatusCode, "SessionUpsertStatus");
+
+                            using HttpRequestMessage detailReq = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/v1.0/api/sessions/detail?id=toolsess");
+                            detailReq.Headers.Add("Authorization", "Bearer testkey123");
+                            HttpResponseMessage detailRes = http.SendAsync(detailReq).GetAwaiter().GetResult();
+                            string detailBody = detailRes.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(200, (int)detailRes.StatusCode, "SessionDetailStatus");
+                            MuxAssert.Contains("tc1", detailBody, "tool call id round-trips");
+                            MuxAssert.Contains("glob", detailBody, "tool name round-trips");
+                            MuxAssert.Contains("ToolCallId", detailBody, "tool result id round-trips");
                         }
                         finally
                         {
