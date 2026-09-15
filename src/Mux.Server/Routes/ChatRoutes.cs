@@ -94,7 +94,7 @@ namespace Mux.Server.Routes
             {
                 await StreamChatAsync(req.Http).ConfigureAwait(false);
                 return (object?)null;
-            });
+            }, Documentation.ApiDoc.ChatStream);
 
             // Answer an approval prompt raised during an interactive web chat run. The streaming run is
             // blocked awaiting this decision; resolving the pending completion source unblocks it.
@@ -138,7 +138,7 @@ namespace Mux.Server.Routes
 
                 req.Http.Response.StatusCode = 404;
                 return (object)new ApiError("NotFound", "No pending approval for that run and tool call.");
-            });
+            }, Documentation.ApiDoc.ChatApprove);
 
             // Warm (load) a model so the next chat's first token is fast. The dashboard calls this when the
             // chat surface opens and whenever the selected endpoint changes. Best-effort: it probes the model
@@ -179,7 +179,7 @@ namespace Mux.Server.Routes
 
                 ModelLoadResult result = await LlmClient.LoadModelAsync(loadEndpoint, ignoreCert, req.Http.Token).ConfigureAwait(false);
                 return (object)new ModelLoadReply { Ok = result.Success, Reachable = result.Reachable, Error = result.Error };
-            });
+            }, Documentation.ApiDoc.ModelLoad);
 
             app.Post("/v1.0/api/chat", async (req) =>
             {
@@ -284,7 +284,7 @@ namespace Mux.Server.Routes
                     req.Http.Response.StatusCode = 502;
                     return (object)new ApiError("UpstreamError", "The model backend failed: " + ex.Message);
                 }
-            });
+            }, Documentation.ApiDoc.ChatPost);
         }
 
         // Lazily starts the server-lifetime MCP + skills runtimes on the first chat so the dashboard model can

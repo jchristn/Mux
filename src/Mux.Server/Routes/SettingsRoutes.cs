@@ -48,7 +48,7 @@ namespace Mux.Server.Routes
                 MuxSettings settings = SettingsLoader.LoadSettings();
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(SettingsDto.FromSettings(settings)).ConfigureAwait(false);
-            });
+            }, Documentation.ApiDoc.SettingsGet);
 
             app.Put("/v1.0/api/settings", async (req) =>
             {
@@ -89,7 +89,7 @@ namespace Mux.Server.Routes
                     req.Http.Response.StatusCode = 500;
                     return (object)new ApiError("SaveFailed", "Failed to save settings: " + ex.Message);
                 }
-            });
+            }, Documentation.ApiDoc.SettingsPut);
         }
     }
 }

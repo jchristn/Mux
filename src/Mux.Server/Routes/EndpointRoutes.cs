@@ -62,7 +62,7 @@ namespace Mux.Server.Routes
 
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(new ListResponse<EndpointSummary>(items)).ConfigureAwait(false);
-            });
+            }, Documentation.ApiDoc.EndpointsList);
 
             app.Get("/v1.0/api/endpoints/detail", async (req) =>
             {
@@ -71,7 +71,7 @@ namespace Mux.Server.Routes
                 List<EndpointDto> items = _EndpointsProvider().Select(ToDto).ToList();
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(new ListResponse<EndpointDto>(items)).ConfigureAwait(false);
-            });
+            }, Documentation.ApiDoc.EndpointsDetail);
 
             // Save the whole endpoint collection (add/edit/remove client-side, then PUT the full list).
             app.Put("/v1.0/api/endpoints", async (req) =>
@@ -124,7 +124,7 @@ namespace Mux.Server.Routes
                     req.Http.Response.StatusCode = 500;
                     return (object)new ApiError("SaveFailed", "Failed to save endpoints: " + ex.Message);
                 }
-            });
+            }, Documentation.ApiDoc.EndpointsPut);
 
             app.Delete("/v1.0/api/endpoints", async (req) =>
             {
@@ -152,7 +152,7 @@ namespace Mux.Server.Routes
                     req.Http.Response.StatusCode = 500;
                     return (object)new ApiError("DeleteFailed", "Failed to delete endpoint: " + ex.Message);
                 }
-            });
+            }, Documentation.ApiDoc.EndpointsDelete);
         }
 
         private object Unauthorized()

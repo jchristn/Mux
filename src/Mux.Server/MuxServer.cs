@@ -180,8 +180,12 @@ namespace Mux.Server
                 await ctx.Response.Send().ConfigureAwait(false);
             };
 
-            // OpenAPI document generation (Server.UseOpenApi) is a planned follow-up; the exact Watson 7.1.1
-            // OpenAPI configuration surface is being finalized. The server is fully functional without it.
+            // Publish the OpenAPI 3.0 document at /openapi.json and the Swagger UI at /swagger. Both are
+            // registered in Watson's PreAuthentication group and carry no per-handler API-key check, so the
+            // machine-readable docs and the UI are reachable without a key. Every documented operation still
+            // advertises the bearer requirement so generated clients attach the key. See ApiDoc for the full
+            // info block, tag groups, security scheme, component schemas, and per-route metadata.
+            Documentation.ApiDoc.Configure(app, _Version);
         }
 
         private void RegisterRoutes(Webserver app)

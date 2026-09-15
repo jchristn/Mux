@@ -2,6 +2,17 @@
 
 All notable changes to mux are documented here.
 
+## Unreleased
+
+### Added
+
+- **OpenAPI 3.0 document + Swagger UI for `mux serve`.** The local REST server now publishes a complete,
+  example-rich OpenAPI 3.0.3 description at `GET /openapi.json` and an interactive Swagger UI at
+  `GET /swagger` (Watson 7's `UseOpenApi`). Every route carries a summary, description, tag, parameters,
+  request body, and responses; reusable component schemas are documented with example values; the bearer
+  API-key scheme is declared and advertised on every operation. Both doc routes are unauthenticated (reachable
+  without a key even when one is configured), so a client can discover the surface before authenticating.
+
 ## 0.11.0
 
 ### Added

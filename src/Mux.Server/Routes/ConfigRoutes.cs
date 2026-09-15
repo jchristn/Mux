@@ -64,7 +64,7 @@ namespace Mux.Server.Routes
                 }).ToList();
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(new ListResponse<PromptProfileDto>(items)).ConfigureAwait(false);
-            });
+            }, Documentation.ApiDoc.PromptsGet);
 
             app.Put("/v1.0/api/prompts", async (req) =>
             {
@@ -99,7 +99,7 @@ namespace Mux.Server.Routes
                     return await Task.FromResult<object>(new ListResponse<PromptProfileDto>(SettingsLoader.LoadPrompts().Select(p => new PromptProfileDto { Name = p.Name, IsActive = p.IsActive, SystemPrompt = p.SystemPrompt }).ToList())).ConfigureAwait(false);
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("SaveFailed", ex.Message); }
-            });
+            }, Documentation.ApiDoc.PromptsPut);
         }
 
         #endregion
@@ -122,7 +122,7 @@ namespace Mux.Server.Routes
                 }).ToList();
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(new ListResponse<SubagentDto>(items)).ConfigureAwait(false);
-            });
+            }, Documentation.ApiDoc.SubagentsGet);
 
             app.Put("/v1.0/api/subagents", async (req) =>
             {
@@ -147,7 +147,7 @@ namespace Mux.Server.Routes
                     return await Task.FromResult<object>(new ListResponse<SubagentDto>(SettingsLoader.LoadSubagents().Select(s => new SubagentDto { Name = s.Name, Description = s.Description, SystemPrompt = s.SystemPrompt, EndpointName = s.EndpointName, AllowedTools = new List<string>(s.AllowedTools), MaxIterations = s.MaxIterations }).ToList())).ConfigureAwait(false);
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("SaveFailed", ex.Message); }
-            });
+            }, Documentation.ApiDoc.SubagentsPut);
         }
 
         #endregion
@@ -162,7 +162,7 @@ namespace Mux.Server.Routes
                 PluginConfig config = SettingsLoader.LoadPluginConfig();
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(ToDto(config)).ConfigureAwait(false);
-            });
+            }, Documentation.ApiDoc.HooksGet);
 
             app.Put("/v1.0/api/hooks", async (req) =>
             {
@@ -202,7 +202,7 @@ namespace Mux.Server.Routes
                     return await Task.FromResult<object>(ToDto(SettingsLoader.LoadPluginConfig())).ConfigureAwait(false);
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("SaveFailed", ex.Message); }
-            });
+            }, Documentation.ApiDoc.HooksPut);
         }
 
         private static PluginConfigDto ToDto(PluginConfig config)
@@ -241,7 +241,7 @@ namespace Mux.Server.Routes
                 List<KeybindingDto> items = SettingsLoader.LoadKeybindings().Select(kv => new KeybindingDto { CommandId = kv.Key, Chord = kv.Value }).ToList();
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(new ListResponse<KeybindingDto>(items)).ConfigureAwait(false);
-            });
+            }, Documentation.ApiDoc.KeybindingsGet);
 
             app.Put("/v1.0/api/keybindings", async (req) =>
             {
@@ -263,7 +263,7 @@ namespace Mux.Server.Routes
                     return await Task.FromResult<object>(new ListResponse<KeybindingDto>(SettingsLoader.LoadKeybindings().Select(kv => new KeybindingDto { CommandId = kv.Key, Chord = kv.Value }).ToList())).ConfigureAwait(false);
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("SaveFailed", ex.Message); }
-            });
+            }, Documentation.ApiDoc.KeybindingsPut);
         }
 
         #endregion

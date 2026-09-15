@@ -69,7 +69,7 @@ namespace Mux.Server.Routes
                 UsageSummary summary = await _Query.GetSummaryAsync(filter, CancellationToken.None).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 200;
                 return (object)summary;
-            });
+            }, Documentation.ApiDoc.UsageSummary);
 
             app.Get("/v1.0/api/usage/timeseries", async (req) =>
             {
@@ -89,7 +89,7 @@ namespace Mux.Server.Routes
                 List<UsageBucket> buckets = await _Query.GetTimeseriesAsync(filter, bucketMs, CancellationToken.None).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 200;
                 return (object)new ListResponse<UsageBucket>(buckets);
-            });
+            }, Documentation.ApiDoc.UsageTimeseries);
 
             app.Get("/v1.0/api/usage/breakdown", async (req) =>
             {
@@ -106,7 +106,7 @@ namespace Mux.Server.Routes
                 List<UsageBreakdownRow> rows = await _Query.GetBreakdownAsync(dimension, filter, CancellationToken.None).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 200;
                 return (object)new ListResponse<UsageBreakdownRow>(rows);
-            });
+            }, Documentation.ApiDoc.UsageBreakdown);
 
             app.Get("/v1.0/api/usage/events", async (req) =>
             {
@@ -124,7 +124,7 @@ namespace Mux.Server.Routes
                 UsageEventPage result = await _Query.GetEventsAsync(filter, page, pageSize, CancellationToken.None).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 200;
                 return (object)result;
-            });
+            }, Documentation.ApiDoc.UsageEvents);
 
             app.Delete("/v1.0/api/usage/events", async (req) =>
             {
@@ -154,7 +154,7 @@ namespace Mux.Server.Routes
                     req.Http.Response.StatusCode = 500;
                     return (object)new ApiError("DeleteFailed", "Failed to delete usage event: " + ex.Message);
                 }
-            });
+            }, Documentation.ApiDoc.UsageEventsDelete);
 
             app.Get("/v1.0/api/usage/filters", async (req) =>
             {
@@ -169,7 +169,7 @@ namespace Mux.Server.Routes
 
                 req.Http.Response.StatusCode = 200;
                 return (object)dto;
-            });
+            }, Documentation.ApiDoc.UsageFilters);
 
             app.Get("/v1.0/api/usage/pricing", async (req) =>
             {
@@ -178,7 +178,7 @@ namespace Mux.Server.Routes
                 PricingTable table = SettingsLoader.LoadPricing();
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(table).ConfigureAwait(false);
-            });
+            }, Documentation.ApiDoc.UsagePricingGet);
 
             app.Put("/v1.0/api/usage/pricing", async (req) =>
             {
@@ -212,7 +212,7 @@ namespace Mux.Server.Routes
                     req.Http.Response.StatusCode = 500;
                     return (object)new ApiError("SaveFailed", "Failed to save pricing: " + ex.Message);
                 }
-            });
+            }, Documentation.ApiDoc.UsagePricingPut);
         }
 
         #endregion

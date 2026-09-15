@@ -58,10 +58,10 @@ namespace Mux.Server.Routes
                     CanUndo = manager?.CanUndo ?? false,
                     CanRedo = manager?.CanRedo ?? false,
                 };
-            });
+            }, Documentation.ApiDoc.CheckpointsGet);
 
-            app.Post("/v1.0/api/checkpoints/undo", async (req) => await ActAsync(req.Http, undo: true).ConfigureAwait(false));
-            app.Post("/v1.0/api/checkpoints/redo", async (req) => await ActAsync(req.Http, undo: false).ConfigureAwait(false));
+            app.Post("/v1.0/api/checkpoints/undo", async (req) => await ActAsync(req.Http, undo: true).ConfigureAwait(false), Documentation.ApiDoc.CheckpointsUndo);
+            app.Post("/v1.0/api/checkpoints/redo", async (req) => await ActAsync(req.Http, undo: false).ConfigureAwait(false), Documentation.ApiDoc.CheckpointsRedo);
         }
 
         private async Task<object> ActAsync(WatsonWebserver.Core.HttpContextBase ctx, bool undo)

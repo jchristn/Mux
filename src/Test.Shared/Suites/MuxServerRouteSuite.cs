@@ -203,6 +203,99 @@ namespace Test.Shared.Suites
                         }
 
                         return Task.CompletedTask;
+                    }),
+                    new TestCaseDescriptor("MuxServerRoutes", "OpenApiAndSwagger", "OpenAPI document and Swagger UI are complete and unauthenticated", (CancellationToken ct) =>
+                    {
+                        string tempSessions = Path.Combine(Path.GetTempPath(), "mux-test-" + Guid.NewGuid().ToString("N"));
+
+                        // A key IS configured: the OpenAPI/Swagger routes must still be reachable without it.
+                        RestServerSettings rest = new RestServerSettings { Hostname = "127.0.0.1", ApiKey = "testkey123" };
+                        List<EndpointConfig> endpoints = new List<EndpointConfig>
+                        {
+                            new EndpointConfig { Name = "unit-ollama", AdapterType = AdapterTypeEnum.Ollama, BaseUrl = "http://localhost:11434", Model = "gemma3:4b", IsDefault = true }
+                        };
+
+                        MuxServer? server = null;
+                        int port = 0;
+                        for (int bindAttempt = 0; bindAttempt < 10 && server == null; bindAttempt++)
+                        {
+                            port = FreeLoopbackPort();
+                            rest.Port = port;
+                            MuxServer candidate = new MuxServer(rest, "9.9.9-test", new SessionStore(tempSessions), () => endpoints, null);
+                            try { candidate.Start(); server = candidate; }
+                            catch (Exception) { candidate.Dispose(); Thread.Sleep(50); }
+                        }
+
+                        MuxAssert.IsNotNull(server, "server bound to a loopback port");
+                        string baseUrl = "http://127.0.0.1:" + port;
+
+                        try
+                        {
+                            using HttpClient http = new HttpClient();
+                            http.Timeout = TimeSpan.FromSeconds(5);
+
+                            // The OpenAPI document is served anonymously (no Authorization header), with a readiness retry.
+                            string doc = string.Empty;
+                            int docStatus = 0;
+                            for (int attempt = 0; attempt < 20; attempt++)
+                            {
+                                try
+                                {
+                                    HttpResponseMessage r = http.GetAsync(baseUrl + "/openapi.json").GetAwaiter().GetResult();
+                                    docStatus = (int)r.StatusCode;
+                                    doc = r.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                                    break;
+                                }
+                                catch (Exception) { Thread.Sleep(100); }
+                            }
+
+                            MuxAssert.AreEqual(200, docStatus, "OpenApiStatus (unauthenticated)");
+
+                            // It parses as JSON and is a well-formed OpenAPI 3 document.
+                            using System.Text.Json.JsonDocument parsed = System.Text.Json.JsonDocument.Parse(doc);
+                            System.Text.Json.JsonElement root = parsed.RootElement;
+                            MuxAssert.AreEqual("3.0.3", root.GetProperty("openapi").GetString(), "OpenApiVersion");
+                            MuxAssert.AreEqual("mux Local API", root.GetProperty("info").GetProperty("title").GetString(), "OpenApiTitle");
+                            MuxAssert.AreEqual("9.9.9-test", root.GetProperty("info").GetProperty("version").GetString(), "OpenApiDocVersion");
+
+                            // Paths are documented (a representative sample across registrars).
+                            System.Text.Json.JsonElement paths = root.GetProperty("paths");
+                            foreach (string p in new[] { "/v1.0/api/health", "/v1.0/api/endpoints", "/v1.0/api/chat", "/v1.0/api/sessions", "/v1.0/api/usage/summary" })
+                            {
+                                MuxAssert.IsTrue(paths.TryGetProperty(p, out _), "path documented: " + p);
+                            }
+
+                            // The chat operation carries a summary, a tag, and a request body referencing the ChatRequest schema.
+                            System.Text.Json.JsonElement chatPost = paths.GetProperty("/v1.0/api/chat").GetProperty("post");
+                            MuxAssert.IsTrue(chatPost.TryGetProperty("summary", out _), "chat has a summary");
+                            MuxAssert.IsTrue(chatPost.TryGetProperty("requestBody", out _), "chat has a request body");
+                            MuxAssert.Contains("ChatRequest", chatPost.GetProperty("requestBody").ToString(), "chat request body references ChatRequest");
+
+                            // Component schemas and the bearer security scheme are present, and schemas carry examples.
+                            System.Text.Json.JsonElement components = root.GetProperty("components");
+                            System.Text.Json.JsonElement schemas = components.GetProperty("schemas");
+                            foreach (string schema in new[] { "ChatRequest", "EndpointDto", "SessionSaveRequest", "ApiError", "SettingsDto" })
+                            {
+                                MuxAssert.IsTrue(schemas.TryGetProperty(schema, out _), "component schema present: " + schema);
+                            }
+                            MuxAssert.IsTrue(schemas.GetProperty("ChatRequest").TryGetProperty("example", out _), "ChatRequest carries an example object");
+                            MuxAssert.IsTrue(components.GetProperty("securitySchemes").TryGetProperty("bearerAuth", out _), "bearer security scheme present");
+
+                            // The Swagger UI is served (HTML) and is also anonymous.
+                            HttpResponseMessage ui = http.GetAsync(baseUrl + "/swagger").GetAwaiter().GetResult();
+                            string uiBody = ui.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(200, (int)ui.StatusCode, "SwaggerStatus (unauthenticated)");
+                            MuxAssert.Contains("swagger-ui", uiBody, "SwaggerBody");
+                            MuxAssert.Contains("mux Local API", uiBody, "SwaggerTitle");
+                        }
+                        finally
+                        {
+                            server?.Stop();
+                            server?.Dispose();
+                            try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
+                        }
+
+                        return Task.CompletedTask;
                     })
                 });
         }

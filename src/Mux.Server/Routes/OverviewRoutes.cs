@@ -88,7 +88,7 @@ namespace Mux.Server.Routes
 
                 req.Http.Response.StatusCode = 200;
                 return (object)dto;
-            });
+            }, Documentation.ApiDoc.OverviewGet);
         }
 
         private static void LoadSkillCounts(OverviewDto dto)

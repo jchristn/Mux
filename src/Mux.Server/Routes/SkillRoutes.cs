@@ -41,7 +41,7 @@ namespace Mux.Server.Routes
                 List<SkillDto> items = LoadSkills(includeBody: false);
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(new ListResponse<SkillDto>(items)).ConfigureAwait(false);
-            });
+            }, Documentation.ApiDoc.SkillsList);
 
             app.Get("/v1.0/api/skills/detail", async (req) =>
             {
@@ -53,7 +53,7 @@ namespace Mux.Server.Routes
                 if (found == null) { req.Http.Response.StatusCode = 404; return (object)new ApiError("NotFound", "No skill named " + id + "."); }
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(found).ConfigureAwait(false);
-            });
+            }, Documentation.ApiDoc.SkillsDetail);
 
             // Toggle enablement: body { "id": "...", "enabled": true }.
             app.Put("/v1.0/api/skills/enabled", async (req) =>
@@ -71,7 +71,7 @@ namespace Mux.Server.Routes
                     return await Task.FromResult<object>(new ListResponse<SkillDto>(LoadSkills(includeBody: false))).ConfigureAwait(false);
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("SaveFailed", ex.Message); }
-            });
+            }, Documentation.ApiDoc.SkillsEnabled);
 
             app.Delete("/v1.0/api/skills", async (req) =>
             {
@@ -86,7 +86,7 @@ namespace Mux.Server.Routes
                     return await Task.FromResult<object>(new ListResponse<SkillDto>(LoadSkills(includeBody: false))).ConfigureAwait(false);
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("DeleteFailed", ex.Message); }
-            });
+            }, Documentation.ApiDoc.SkillsDelete);
 
             // Create a new skill: body { "name": "...", "body": "<SKILL.md text>" }.
             app.Post("/v1.0/api/skills", async (req) =>
@@ -112,7 +112,7 @@ namespace Mux.Server.Routes
                     return await Task.FromResult<object>(new ListResponse<SkillDto>(LoadSkills(includeBody: false))).ConfigureAwait(false);
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("CreateFailed", ex.Message); }
-            });
+            }, Documentation.ApiDoc.SkillsCreate);
 
             // Overwrite a skill's SKILL.md: body { "id": "...", "body": "..." }.
             app.Put("/v1.0/api/skills/body", async (req) =>
@@ -133,7 +133,7 @@ namespace Mux.Server.Routes
                     return await Task.FromResult<object>(new ListResponse<SkillDto>(LoadSkills(includeBody: false))).ConfigureAwait(false);
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("SaveFailed", ex.Message); }
-            });
+            }, Documentation.ApiDoc.SkillsBody);
         }
 
         private object Unauthorized() => new ApiError("Unauthorized", "Authentication required.");

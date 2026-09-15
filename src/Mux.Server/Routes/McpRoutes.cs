@@ -41,7 +41,7 @@ namespace Mux.Server.Routes
                 List<McpServerDto> items = SettingsLoader.LoadMcpServers().Select(ToDto).ToList();
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(new ListResponse<McpServerDto>(items)).ConfigureAwait(false);
-            });
+            }, Documentation.ApiDoc.McpGet);
 
             app.Put("/v1.0/api/mcp-servers", async (req) =>
             {
@@ -72,7 +72,7 @@ namespace Mux.Server.Routes
                     return (object)new ListResponse<McpServerDto>(SettingsLoader.LoadMcpServers().Select(ToDto).ToList());
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("SaveFailed", "Failed to save MCP servers: " + ex.Message); }
-            });
+            }, Documentation.ApiDoc.McpPut);
 
             app.Delete("/v1.0/api/mcp-servers", async (req) =>
             {
@@ -87,7 +87,7 @@ namespace Mux.Server.Routes
                     return await Task.FromResult<object>(new ListResponse<McpServerDto>(SettingsLoader.LoadMcpServers().Select(ToDto).ToList())).ConfigureAwait(false);
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("DeleteFailed", "Failed to delete MCP server: " + ex.Message); }
-            });
+            }, Documentation.ApiDoc.McpDelete);
         }
 
         private object Unauthorized() => new ApiError("Unauthorized", "Authentication required.");

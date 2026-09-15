@@ -59,8 +59,8 @@ Environment overrides: `MUX_REST_HOST`, `MUX_REST_PORT`, `MUX_REST_APIKEY`. CLI 
 
 ## Authentication
 
-Unless `--no-auth` is set, every route except `/v1.0/api/health` requires the API key, sent as a **bearer
-token**:
+Unless `--no-auth` is set, every route except `/v1.0/api/health`, `/openapi.json`, and `/swagger` requires
+the API key, sent as a **bearer token**:
 
 ```
 Authorization: Bearer <key>
@@ -69,12 +69,28 @@ Authorization: Bearer <key>
 A missing or wrong key returns `401`. (Earlier builds also accepted an `X-Api-Key` header; the server now
 standardizes on the bearer token only.)
 
+## API documentation (OpenAPI / Swagger)
+
+The server publishes a complete, machine-readable **OpenAPI 3.0** description of every route and serves an
+interactive **Swagger UI** to browse and try it:
+
+| Path | Description |
+|---|---|
+| `GET /openapi.json` | The OpenAPI 3.0.3 document: info, tag groups, the bearer security scheme, every operation (summary, description, parameters, request body, responses), and reusable component schemas with example values. |
+| `GET /swagger` | Swagger UI rendered against `/openapi.json`. |
+
+Both are **unauthenticated** even when a key is configured — the usual expectation for API docs — so a client
+can discover the surface before it has a key. Every documented operation still advertises the bearer
+requirement, so a client generated from the document sends `Authorization: Bearer <key>` automatically.
+
 ## Endpoints
 
 All paths are versioned under `/v1.0/api`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
+| GET | `/openapi.json` | none | OpenAPI 3.0 document describing the whole API (see [API documentation](#api-documentation-openapi--swagger)). |
+| GET | `/swagger` | none | Interactive Swagger UI. |
 | GET | `/v1.0/api/health` | none | Status, product version, **`contractVersion`** (the REST/SSE API contract a client negotiates against), pid, uptime. |
 | GET | `/v1.0/api/endpoints` | key | Configured endpoints (name, adapter type, base URL, model, default). **No secrets.** |
 | GET | `/v1.0/api/endpoints/detail` | key | Full endpoint fields for editing, **secrets masked** (`apiKeySet` flag; header/key values blanked). |
@@ -201,10 +217,12 @@ instance host (`MuxServer`), strict C# style, and env-overridable settings.
 Justified single-user deviations: **no multi-tenancy / tenant `RequestContext`** (mux is single-user local;
 auth is one local key), **no database layer / request-history tables** (state is mux's existing file-based
 session store; request logging goes to the logger), and **no dashboard** (the tray agent is the operator
-surface). OpenAPI document generation (`Server.UseOpenApi`) and run-driving routes are documented follow-ups.
+surface). The server publishes a full **OpenAPI 3.0** document and Swagger UI (Watson's `UseOpenApi`); further
+run-driving routes are documented follow-ups.
 
 ## Planned (not yet implemented)
 
 - Per-id session read/delete and run-driving `POST /sessions` / `POST /sessions/{id}/messages`.
 - Full WebSocket per-run event bridge.
-- OpenAPI 3.1 document + generated SDK.
+- Generated client SDKs from the OpenAPI document (the OpenAPI 3.0 document + Swagger UI now ship at
+  `/openapi.json` and `/swagger`).

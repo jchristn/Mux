@@ -66,7 +66,7 @@ namespace Mux.Server.Routes
 
                 req.Http.Response.StatusCode = 200;
                 return (object)new ListResponse<SessionSummary>(items);
-            });
+            }, Documentation.ApiDoc.SessionsList);
 
             // Load a single session's full conversation so the dashboard can open and continue it.
             app.Get("/v1.0/api/sessions/detail", async (req) =>
@@ -90,7 +90,7 @@ namespace Mux.Server.Routes
 
                 req.Http.Response.StatusCode = 200;
                 return (object)detail;
-            });
+            }, Documentation.ApiDoc.SessionsDetail);
 
             // Create or update (upsert) a conversation from the dashboard chat so it is persisted like a TUI or
             // desktop session — appearing in the session list on every surface and reopenable to continue.
@@ -158,7 +158,7 @@ namespace Mux.Server.Routes
                     UpdatedUtc = snapshot.UpdatedUtc,
                     MessageCount = snapshot.ConversationHistory.Count
                 };
-            });
+            }, Documentation.ApiDoc.SessionsPut);
 
             // Render a session to Markdown or HTML and return it for client-side download.
             app.Get("/v1.0/api/sessions/export", async (req) =>
@@ -176,7 +176,7 @@ namespace Mux.Server.Routes
                 string content = ext == "html" ? SessionExporter.ToHtml(snapshot) : SessionExporter.ToMarkdown(snapshot);
                 req.Http.Response.StatusCode = 200;
                 return (object)new SessionExportDto { Format = ext, Filename = id + "." + ext, Content = content };
-            });
+            }, Documentation.ApiDoc.SessionsExport);
 
             app.Delete("/v1.0/api/sessions", async (req) =>
             {
@@ -199,7 +199,7 @@ namespace Mux.Server.Routes
                     return (object)new ListResponse<SessionSummary>(items);
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("DeleteFailed", ex.Message); }
-            });
+            }, Documentation.ApiDoc.SessionsDelete);
         }
 
     }

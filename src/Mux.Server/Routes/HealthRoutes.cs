@@ -46,7 +46,7 @@ namespace Mux.Server.Routes
                 };
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(response).ConfigureAwait(false);
-            });
+            }, Documentation.ApiDoc.HealthGet);
         }
     }
 }
