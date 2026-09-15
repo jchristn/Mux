@@ -33,6 +33,10 @@ interface SeriesPoint {
 interface UsagePayload {
     enabled: boolean;
     range: string;
+    endpoint: string;
+    model: string;
+    endpoints: string[];
+    models: string[];
     kpis: { label: string; value: string }[];
     series: SeriesPoint[];
 }
@@ -46,6 +50,8 @@ interface UsagePayload {
 export class UsagePanel {
     private static current: vscode.WebviewPanel | undefined;
     private static lifecycle: MuxServerLifecycle | undefined;
+    private static endpoint = '';
+    private static model = '';
 
     /**
      * Opens (or reveals) the usage panel and loads the default range.
@@ -65,9 +71,11 @@ export class UsagePanel {
             retainContextWhenHidden: true,
         });
         panel.webview.html = UsagePanel.render();
-        panel.webview.onDidReceiveMessage((message: { type: string; range?: string }) => {
-            if (message.type === 'range' && message.range) {
-                void UsagePanel.load(message.range);
+        panel.webview.onDidReceiveMessage((message: { type: string; range?: string; endpoint?: string; model?: string }) => {
+            if (message.type === 'reload') {
+                UsagePanel.endpoint = message.endpoint ?? '';
+                UsagePanel.model = message.model ?? '';
+                void UsagePanel.load(message.range || 'day');
             }
         });
         panel.onDidDispose(() => {
@@ -84,11 +92,21 @@ export class UsagePanel {
 
         try {
             const client: ApiClient = await UsagePanel.lifecycle.getClient(new vscode.CancellationTokenSource().token);
-            const [summary, buckets] = await Promise.all([client.getUsageSummary(range), client.getUsageTimeseries(range)]);
+            const endpoint = UsagePanel.endpoint || undefined;
+            const model = UsagePanel.model || undefined;
+            const [summary, buckets, filters] = await Promise.all([
+                client.getUsageSummary(range, endpoint, model),
+                client.getUsageTimeseries(range, endpoint, model),
+                client.getUsageFilters().catch(() => ({ Enabled: true, Endpoints: [], Models: [] })),
+            ]);
             const m = summary.Metrics;
             const payload: UsagePayload = {
                 enabled: true,
                 range,
+                endpoint: UsagePanel.endpoint,
+                model: UsagePanel.model,
+                endpoints: filters.Endpoints ?? [],
+                models: filters.Models ?? [],
                 kpis: [
                     { label: vscode.l10n.t('Calls'), value: fmtNum(m.Calls) },
                     { label: vscode.l10n.t('Tokens'), value: fmtNum(m.TotalTokens) },
@@ -114,7 +132,7 @@ export class UsagePanel {
             UsagePanel.current.webview.postMessage(payload);
         } catch (error) {
             logError('Failed to load usage.', error);
-            UsagePanel.current.webview.postMessage({ enabled: false, range, kpis: [], series: [] });
+            UsagePanel.current.webview.postMessage({ enabled: false, range, endpoint: UsagePanel.endpoint, model: UsagePanel.model, endpoints: [], models: [], kpis: [], series: [] });
         }
     }
 
@@ -135,6 +153,7 @@ export class UsagePanel {
             },
             legend: { input: vscode.l10n.t('Prompt'), cached: vscode.l10n.t('Cached'), output: vscode.l10n.t('Output') },
             ranges: { hour: vscode.l10n.t('Hour'), day: vscode.l10n.t('Day'), week: vscode.l10n.t('Week'), month: vscode.l10n.t('Month'), all: vscode.l10n.t('All') },
+            filters: { allEndpoints: vscode.l10n.t('All endpoints'), allModels: vscode.l10n.t('All models') },
         });
 
         return `<!DOCTYPE html>
@@ -149,6 +168,7 @@ export class UsagePanel {
   .seg { display: inline-flex; border: 1px solid var(--vscode-panel-border); border-radius: 6px; overflow: hidden; }
   .seg button { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border: none; padding: 5px 12px; cursor: pointer; }
   .seg button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+  .bar select { background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border)); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px; }
   .kpi { border: 1px solid var(--vscode-panel-border); border-radius: 8px; padding: 12px; background: var(--vscode-editorWidget-background, var(--vscode-editor-background)); }
   .kpi .k-label { font-size: 0.8em; color: var(--vscode-descriptionForeground); }
@@ -175,6 +195,8 @@ export class UsagePanel {
 <h1 id="title"></h1>
 <div class="bar">
   <div class="seg" id="ranges"></div>
+  <select id="endpoint" title="Endpoint"></select>
+  <select id="model" title="Model"></select>
 </div>
 <div class="kpis" id="kpis"></div>
 <div class="chart-head">
@@ -190,17 +212,38 @@ export class UsagePanel {
   let current = null;
   let metric = 'tokens';
   let range = 'day';
+  let endpoint = '';
+  let model = '';
 
   document.getElementById('title').textContent = S.title;
+
+  function reload(){ vscode.postMessage({ type: 'reload', range: range, endpoint: endpoint, model: model }); }
 
   const rangesEl = document.getElementById('ranges');
   ['hour','day','week','month','all'].forEach(function(r){
     const b = document.createElement('button');
     b.textContent = S.ranges[r]; b.dataset.range = r;
     if (r === range) b.classList.add('active');
-    b.addEventListener('click', function(){ range = r; syncActive(rangesEl, 'range', r); vscode.postMessage({ type: 'range', range: r }); });
+    b.addEventListener('click', function(){ range = r; syncActive(rangesEl, 'range', r); reload(); });
     rangesEl.appendChild(b);
   });
+
+  const endpointEl = document.getElementById('endpoint');
+  const modelEl = document.getElementById('model');
+  endpointEl.addEventListener('change', function(){ endpoint = endpointEl.value; reload(); });
+  modelEl.addEventListener('change', function(){ model = modelEl.value; reload(); });
+
+  // (Re)fills a filter <select> with an "all" sentinel plus the distinct values, preserving the selection.
+  function fillSelect(el, allLabel, values, selected){
+    el.textContent = '';
+    const opts = [{ v: '', t: allLabel }].concat((values || []).map(function(v){ return { v: v, t: v }; }));
+    opts.forEach(function(o){
+      const opt = document.createElement('option');
+      opt.value = o.v; opt.textContent = o.t;
+      if (o.v === selected) opt.selected = true;
+      el.appendChild(opt);
+    });
+  }
 
   const metricsEl = document.getElementById('metrics');
   ['tokens','cost','latency','ttft','streaming','throughput'].forEach(function(m){
@@ -368,6 +411,9 @@ export class UsagePanel {
 
   window.addEventListener('message', function(e){
     current = e.data; range = current.range || range; syncActive(rangesEl, 'range', range);
+    endpoint = current.endpoint || ''; model = current.model || '';
+    fillSelect(endpointEl, S.filters.allEndpoints, current.endpoints, endpoint);
+    fillSelect(modelEl, S.filters.allModels, current.models, model);
     renderKpis(current.kpis || []);
     draw();
   });

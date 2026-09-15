@@ -160,6 +160,13 @@ export interface UsageBucket {
     Metrics: UsageMetrics;
 }
 
+/** Distinct endpoints/models for usage filter controls, from `GET /v1.0/api/usage/filters`. */
+export interface UsageFilters {
+    Enabled: boolean;
+    Endpoints: string[];
+    Models: string[];
+}
+
 /** A persisted session summary, as returned by `GET /v1.0/api/sessions`. */
 export interface SessionSummary {
     Id: string;

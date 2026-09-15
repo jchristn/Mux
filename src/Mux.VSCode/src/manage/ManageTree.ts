@@ -168,6 +168,7 @@ export class ManageTreeProvider implements vscode.TreeDataProvider<ManageNode> {
             node.description = `${endpoint.AdapterType} · ${endpoint.Model}${endpoint.IsDefault ? ' · default' : ''}`;
             node.iconPath = new vscode.ThemeIcon(endpoint.IsDefault ? 'star-full' : 'server');
             node.tooltip = endpoint.BaseUrl ?? endpoint.Name;
+            ManageTreeProvider.openOnClick(node, 'mux.manage.editEndpoint');
             return node;
         });
     }
@@ -182,6 +183,7 @@ export class ManageTreeProvider implements vscode.TreeDataProvider<ManageNode> {
             const node = new ManageNode(server.Name, 'mcp', vscode.TreeItemCollapsibleState.None, server);
             node.description = server.Transport ?? '';
             node.iconPath = new vscode.ThemeIcon('plug');
+            ManageTreeProvider.openOnClick(node, 'mux.manage.editMcp');
             return node;
         });
     }
@@ -192,6 +194,7 @@ export class ManageTreeProvider implements vscode.TreeDataProvider<ManageNode> {
             const node = new ManageNode(prompt.Name, 'prompt', vscode.TreeItemCollapsibleState.None, prompt);
             node.description = prompt.IsActive ? vscode.l10n.t('active') : '';
             node.iconPath = new vscode.ThemeIcon(prompt.IsActive ? 'pass-filled' : 'note');
+            ManageTreeProvider.openOnClick(node, 'mux.manage.editPrompt');
             return node;
         });
     }
@@ -207,6 +210,7 @@ export class ManageTreeProvider implements vscode.TreeDataProvider<ManageNode> {
             node.description = subagent.Description;
             node.iconPath = new vscode.ThemeIcon('person');
             node.tooltip = subagent.Description;
+            ManageTreeProvider.openOnClick(node, 'mux.manage.editSubagent');
             return node;
         });
     }
@@ -222,6 +226,7 @@ export class ManageTreeProvider implements vscode.TreeDataProvider<ManageNode> {
             node.description = skill.Enabled ? vscode.l10n.t('enabled') : vscode.l10n.t('disabled');
             node.iconPath = new vscode.ThemeIcon(skill.Enabled ? 'check' : 'circle-slash');
             node.tooltip = skill.Description;
+            ManageTreeProvider.openOnClick(node, 'mux.manage.editSkill');
             return node;
         });
     }
@@ -247,5 +252,16 @@ export class ManageTreeProvider implements vscode.TreeDataProvider<ManageNode> {
 
     private emptyNode(label: string): ManageNode {
         return new ManageNode(label, 'info', vscode.TreeItemCollapsibleState.None);
+    }
+
+    /**
+     * Wires an item node so a single click opens its editor — the same command the context menu runs, invoked
+     * with the node as its argument. This makes the whole row actionable, not just the right-click menu.
+     *
+     * @param node The item node to make clickable.
+     * @param command The edit command to run, passed the node.
+     */
+    private static openOnClick(node: ManageNode, command: string): void {
+        node.command = { command, title: vscode.l10n.t('Edit'), arguments: [node] };
     }
 }

@@ -2,6 +2,14 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 0.11.3
+
+- **Usage charts: endpoint and model filters.** The usage dashboard now has endpoint and model dropdowns
+  next to the range selector, so you can scope tokens, cost, and latency to a single endpoint and/or model
+  (backed by `GET /v1.0/api/usage/filters`).
+- **Click a Manage item to edit it.** Single-clicking an endpoint, MCP server, prompt, subagent, or skill in
+  the Manage tree opens its editor — no need for the right-click menu.
+
 ## 0.11.2
 
 - **Usage charts: axes and a taller plot.** The charts now have Y-axis gridlines with value labels and

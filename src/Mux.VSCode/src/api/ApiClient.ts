@@ -23,6 +23,7 @@ import {
     StreamEvent,
     Subagent,
     UsageBucket,
+    UsageFilters,
     UsageSummary,
 } from './types';
 
@@ -188,15 +189,31 @@ export class ApiClient {
         await this.sendJson('PUT', '/v1.0/api/settings', settings, signal);
     }
 
-    /** Reads a usage summary for a range (`hour`, `day`, `week`, `month`, `all`). */
-    public getUsageSummary(range: string, signal?: AbortSignal): Promise<UsageSummary> {
-        return this.getJson<UsageSummary>(`/v1.0/api/usage/summary?range=${encodeURIComponent(range)}`, signal);
+    /** Reads a usage summary for a range, optionally filtered by endpoint and/or model. */
+    public getUsageSummary(range: string, endpoint?: string, model?: string, signal?: AbortSignal): Promise<UsageSummary> {
+        return this.getJson<UsageSummary>(`/v1.0/api/usage/summary?${this.usageQuery(range, endpoint, model)}`, signal);
     }
 
-    /** Reads a dense, evenly-spaced usage timeseries for charting a range. */
-    public async getUsageTimeseries(range: string, signal?: AbortSignal): Promise<UsageBucket[]> {
-        const response = await this.getJson<{ Items: UsageBucket[] }>(`/v1.0/api/usage/timeseries?range=${encodeURIComponent(range)}`, signal);
+    /** Reads a dense, evenly-spaced usage timeseries for charting, optionally filtered by endpoint/model. */
+    public async getUsageTimeseries(range: string, endpoint?: string, model?: string, signal?: AbortSignal): Promise<UsageBucket[]> {
+        const response = await this.getJson<{ Items: UsageBucket[] }>(`/v1.0/api/usage/timeseries?${this.usageQuery(range, endpoint, model)}`, signal);
         return response.Items ?? [];
+    }
+
+    /** Reads the distinct endpoints/models for the usage filter controls. */
+    public getUsageFilters(signal?: AbortSignal): Promise<UsageFilters> {
+        return this.getJson<UsageFilters>('/v1.0/api/usage/filters', signal);
+    }
+
+    private usageQuery(range: string, endpoint?: string, model?: string): string {
+        const parts = [`range=${encodeURIComponent(range)}`];
+        if (endpoint) {
+            parts.push(`endpoint=${encodeURIComponent(endpoint)}`);
+        }
+        if (model) {
+            parts.push(`model=${encodeURIComponent(model)}`);
+        }
+        return parts.join('&');
     }
 
     /** Reads whether a turn's changes can be undone or redone in a working directory. */
