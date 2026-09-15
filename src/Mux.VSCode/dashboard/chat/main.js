@@ -12,7 +12,16 @@
     const sendButton = document.getElementById('send');
 
     let assistantEl = null;
+    let assistantRaw = '';
     let busy = false;
+
+    function renderMd(text) {
+        try {
+            return typeof renderMarkdown === 'function' ? renderMarkdown(text) : null;
+        } catch (e) {
+            return null;
+        }
+    }
 
     function t(key) {
         return strings[key] || key;
@@ -52,7 +61,14 @@
         removeEmpty();
         const el = document.createElement('div');
         el.className = 'message ' + role;
-        el.textContent = text;
+        // Assistant messages render as Markdown; user/error stay plain text for safety and fidelity.
+        const rendered = role === 'assistant' ? renderMd(text) : null;
+        if (rendered !== null) {
+            el.classList.add('markdown');
+            el.innerHTML = rendered;
+        } else {
+            el.textContent = text;
+        }
         transcript.appendChild(el);
         transcript.scrollTop = transcript.scrollHeight;
         return el;
@@ -60,9 +76,27 @@
 
     function ensureAssistant() {
         if (!assistantEl) {
-            assistantEl = addMessage('assistant', '');
+            removeEmpty();
+            assistantEl = document.createElement('div');
+            assistantEl.className = 'message assistant';
+            assistantRaw = '';
+            transcript.appendChild(assistantEl);
         }
         return assistantEl;
+    }
+
+    // Replaces the streaming plain-text bubble with rendered Markdown once the turn completes.
+    function finalizeAssistant() {
+        if (!assistantEl) {
+            return;
+        }
+        const rendered = renderMd(assistantRaw);
+        if (rendered !== null) {
+            assistantEl.classList.add('markdown');
+            assistantEl.innerHTML = rendered;
+        }
+        assistantEl = null;
+        assistantRaw = '';
     }
 
     function addTool(tool) {
@@ -158,7 +192,9 @@
                 addMessage('user', message.text);
                 break;
             case 'token':
-                ensureAssistant().textContent += message.text;
+                assistantRaw += message.text;
+                // Stream as plain text for responsiveness; Markdown is rendered on completion.
+                ensureAssistant().textContent = assistantRaw;
                 transcript.scrollTop = transcript.scrollHeight;
                 break;
             case 'thinking':
@@ -173,10 +209,11 @@
                 notice.textContent = message.message;
                 break;
             case 'done':
-                assistantEl = null;
+                finalizeAssistant();
                 notice.textContent = '';
                 break;
             case 'stopped':
+                finalizeAssistant();
                 notice.textContent = t('stopped');
                 break;
             case 'error':

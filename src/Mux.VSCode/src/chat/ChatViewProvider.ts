@@ -249,6 +249,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   <button id="send" type="submit">${this.uiStrings()['composer.send']}</button>
 </form>
 <script nonce="${nonce}">window.MUX_STRINGS = ${strings};</script>
+<script nonce="${nonce}" src="${asset('markdown.js')}"></script>
 <script nonce="${nonce}" src="${asset('main.js')}"></script>
 </body>
 </html>`;

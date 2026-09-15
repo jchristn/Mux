@@ -20,7 +20,9 @@ extension passes the workspace directory to the server and the server runs the r
 ## The chat panel
 
 The panel streams a run as it happens: assistant text arrives token by token, tool calls show up as cards that
-move from running to succeeded or failed, and the turn's stats land when it finishes. Stop a run with the
+move from running to succeeded or failed, and the turn's stats land when it finishes. Replies stream as plain
+text for responsiveness and render as Markdown — headings, code blocks, lists, links — once the turn
+completes. Stop a run with the
 button that replaces Send while a turn is active; the incomplete turn is dropped so the conversation stays
 clean.
 

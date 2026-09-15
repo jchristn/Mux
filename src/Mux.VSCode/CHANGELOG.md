@@ -4,6 +4,10 @@ All notable changes to the mux VS Code extension are documented here.
 
 ## 0.2.0
 
+- **Markdown rendering in chat.** Replies stream in as plain text token by token (unchanged responsiveness),
+  then render as Markdown when the turn completes — headings, bold/italic, inline and fenced code, lists,
+  blockquotes, links, and rules. Loaded conversations render the same way. The renderer is dependency-free
+  and HTML-escapes untrusted model output before rendering.
 - **Management view.** A new "Manage" tree in the mux side bar surfaces the server's live configuration and
   lets you change it without leaving the editor: connection status (version, contract, URL) with reconnect;
   endpoints (add / edit / delete / set default via a form); MCP servers (add / edit / delete); prompt
