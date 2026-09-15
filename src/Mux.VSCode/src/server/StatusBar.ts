@@ -18,7 +18,6 @@ export class ConnectionStatusBar implements vscode.Disposable {
      */
     public constructor(lifecycle: MuxServerLifecycle) {
         this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
-        this.item.command = 'mux.reconnect';
         this.render(lifecycle.state);
         this.item.show();
         this.subscription = lifecycle.onDidChangeState((state) => this.render(state));
@@ -27,6 +26,7 @@ export class ConnectionStatusBar implements vscode.Disposable {
     private render(state: ConnectionState): void {
         if (state.connected) {
             this.item.text = '$(check) mux';
+            this.item.command = 'mux.about';
             this.item.tooltip = new vscode.MarkdownString(
                 [
                     `**mux connected**`,
@@ -35,7 +35,7 @@ export class ConnectionStatusBar implements vscode.Disposable {
                     `- Version: ${state.productVersion} (contract ${state.contractVersion})`,
                     `- ${state.ownedByExtension ? 'Started by the extension' : 'Reusing a running server'}`,
                     ``,
-                    `Click to reconnect.`,
+                    `Click for About and the dashboard.`,
                 ].join('\n'),
             );
             this.item.backgroundColor = undefined;
@@ -44,8 +44,11 @@ export class ConnectionStatusBar implements vscode.Disposable {
 
         const connecting = state.detail.startsWith('Connecting') || state.detail.startsWith('Reconnecting');
         this.item.text = connecting ? '$(sync~spin) mux' : '$(warning) mux';
+        // When disconnected, clicking opens actionable help (how to start a server); while connecting, it just
+        // shows progress, so route it to help too rather than leaving a dead click.
+        this.item.command = 'mux.showHelp';
         this.item.tooltip = new vscode.MarkdownString(
-            [`**mux ${connecting ? 'connecting' : 'not connected'}**`, ``, state.detail, ``, `Click to reconnect.`].join('\n'),
+            [`**mux ${connecting ? 'connecting' : 'not connected'}**`, ``, state.detail, ``, `Click for help connecting.`].join('\n'),
         );
         this.item.backgroundColor = connecting ? undefined : new vscode.ThemeColor('statusBarItem.warningBackground');
     }

@@ -41,5 +41,7 @@
   "cmd.manage.deleteMcp": "Padam pelayan MCP",
   "cmd.manage.activatePrompt": "Tetapkan sebagai prompt aktif",
   "cmd.manage.toggleSkill": "Togol kemahiran",
-  "cmd.manage.editSettings": "Edit tetapan"
+  "cmd.manage.editSettings": "Edit tetapan",
+  "cmd.showHelp": "Bantuan menyambung ke mux",
+  "cmd.about": "Perihal mux"
 }

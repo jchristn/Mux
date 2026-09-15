@@ -10,7 +10,11 @@ All notable changes to the mux VS Code extension are documented here.
   profiles (set active); skills (enable / disable); a settings editor; and a usage summary. Everything runs
   over the same local REST API the dashboard and CLI use.
 - **Connection status bar item** showing connected / connecting / not-connected at a glance, with the
-  version and contract in the tooltip; click to reconnect.
+  version and contract in the tooltip. Click it for About when connected, or for connection help when not.
+- **Connection help.** When the extension can't reach a server, it explains why and offers to retry, start
+  `mux serve` in a terminal, or open the relevant settings — instead of a bare error.
+- **About panel** with the logo, the extension and server versions, a link to open the connected server's
+  dashboard (for the richer browser configuration/monitoring surface), and links to GitHub and the docs.
 - Cleaned up the activity-bar icon (a single mux "M" mark instead of the previous "MX").
 
 ## 0.1.1

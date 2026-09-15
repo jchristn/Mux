@@ -88,6 +88,15 @@ through the same local server — so a change you make in the editor shows up ev
 - `mux.context.sources` — the context attached by default.
 - `mux.locale` — a display-language override; empty follows the editor language.
 
+## Status, help, and About
+
+The status-bar item and the top of the **Manage** view show whether the extension is connected. When it is
+not, clicking either opens a help dialog that explains the likely cause and offers to retry the connection,
+start `mux serve` in a terminal for you, or open the server settings — so a failed connection tells you what
+to do rather than just failing. When it is connected, the same click opens **About**: the logo, the extension
+and server versions, links to mux on GitHub and the docs, and a button to open the connected server's
+dashboard, which is the fuller configuration, monitoring, and usage surface in the browser.
+
 ## Troubleshooting
 
 Failures fall into a few classes. When the panel reports it cannot reach a server and auto-start is off, either

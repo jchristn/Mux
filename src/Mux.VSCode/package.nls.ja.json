@@ -41,5 +41,7 @@
   "cmd.manage.deleteMcp": "MCP サーバーを削除",
   "cmd.manage.activatePrompt": "アクティブなプロンプトに設定",
   "cmd.manage.toggleSkill": "スキルを切り替え",
-  "cmd.manage.editSettings": "設定を編集"
+  "cmd.manage.editSettings": "設定を編集",
+  "cmd.showHelp": "mux への接続ヘルプ",
+  "cmd.about": "mux について"
 }

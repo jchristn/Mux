@@ -41,5 +41,7 @@
   "cmd.manage.deleteMcp": "حذف خادم MCP",
   "cmd.manage.activatePrompt": "تعيين كموجّه نشط",
   "cmd.manage.toggleSkill": "تبديل المهارة",
-  "cmd.manage.editSettings": "تعديل الإعدادات"
+  "cmd.manage.editSettings": "تعديل الإعدادات",
+  "cmd.showHelp": "مساعدة الاتصال بـ mux",
+  "cmd.about": "حول mux"
 }

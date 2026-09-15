@@ -173,7 +173,9 @@
       { "command": "mux.manage.deleteMcp", "title": "%cmd.manage.deleteMcp%", "category": "mux" },
       { "command": "mux.manage.activatePrompt", "title": "%cmd.manage.activatePrompt%", "category": "mux" },
       { "command": "mux.manage.toggleSkill", "title": "%cmd.manage.toggleSkill%", "category": "mux" },
-      { "command": "mux.manage.editSettings", "title": "%cmd.manage.editSettings%", "category": "mux" }
+      { "command": "mux.manage.editSettings", "title": "%cmd.manage.editSettings%", "category": "mux" },
+      { "command": "mux.showHelp", "title": "%cmd.showHelp%", "category": "mux" },
+      { "command": "mux.about", "title": "%cmd.about%", "category": "mux", "icon": "$(info)" }
     ],
     "menus": {
       "editor/context": [
@@ -206,6 +208,11 @@
         },
         {
           "command": "mux.manage.refresh",
+          "when": "view == mux.manage",
+          "group": "navigation"
+        },
+        {
+          "command": "mux.about",
           "when": "view == mux.manage",
           "group": "navigation"
         }

@@ -33,6 +33,8 @@
   "cmd.manage.activatePrompt": "Set as active prompt",
   "cmd.manage.toggleSkill": "Toggle skill",
   "cmd.manage.editSettings": "Edit settings",
+  "cmd.showHelp": "Help connecting to mux",
+  "cmd.about": "About mux",
   "config.server.autoStart": "Start a local mux server when none is reachable.",
   "config.server.port": "The mux server port. 0 uses the extension default (8710).",
   "config.server.path": "The mux executable name or full path.",

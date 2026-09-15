@@ -41,5 +41,7 @@
   "cmd.manage.deleteMcp": "Удалить сервер MCP",
   "cmd.manage.activatePrompt": "Сделать активным промптом",
   "cmd.manage.toggleSkill": "Переключить навык",
-  "cmd.manage.editSettings": "Изменить настройки"
+  "cmd.manage.editSettings": "Изменить настройки",
+  "cmd.showHelp": "Помощь с подключением к mux",
+  "cmd.about": "О mux"
 }

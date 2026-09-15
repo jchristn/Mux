@@ -41,5 +41,7 @@
   "cmd.manage.deleteMcp": "Elimina server MCP",
   "cmd.manage.activatePrompt": "Imposta come prompt attivo",
   "cmd.manage.toggleSkill": "Attiva/disattiva competenza",
-  "cmd.manage.editSettings": "Modifica impostazioni"
+  "cmd.manage.editSettings": "Modifica impostazioni",
+  "cmd.showHelp": "Guida alla connessione a mux",
+  "cmd.about": "Informazioni su mux"
 }

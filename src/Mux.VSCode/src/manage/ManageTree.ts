@@ -116,8 +116,20 @@ export class ManageTreeProvider implements vscode.TreeDataProvider<ManageNode> {
         status.iconPath = new vscode.ThemeIcon(state.connected ? 'pass-filled' : 'warning');
         status.tooltip = state.connected
             ? vscode.l10n.t('{0} (contract {1}) at {2}', state.productVersion, state.contractVersion, state.baseUrl)
-            : state.detail;
-        status.command = { command: 'mux.reconnect', title: vscode.l10n.t('Reconnect') };
+            : vscode.l10n.t('{0} — click for help connecting.', state.detail);
+        // When connected the status row opens About (versions + dashboard); when not, it opens the help flow.
+        status.command = state.connected
+            ? { command: 'mux.about', title: vscode.l10n.t('About') }
+            : { command: 'mux.showHelp', title: vscode.l10n.t('Help') };
+
+        // Not connected: show only the status row and a help row — the config sections cannot load, and a wall
+        // of "failed to load" nodes is noise. The help row tells the user exactly what to do.
+        if (!state.connected) {
+            const help = new ManageNode(vscode.l10n.t('How to connect'), 'info', vscode.TreeItemCollapsibleState.None);
+            help.iconPath = new vscode.ThemeIcon('question');
+            help.command = { command: 'mux.showHelp', title: vscode.l10n.t('Help') };
+            return [status, help];
+        }
 
         const section = (label: string, kind: ManageNodeKind, icon: string): ManageNode => {
             const node = new ManageNode(label, kind, vscode.TreeItemCollapsibleState.Collapsed);

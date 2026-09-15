@@ -41,5 +41,7 @@
   "cmd.manage.deleteMcp": "删除 MCP 服务器",
   "cmd.manage.activatePrompt": "设为活动提示词",
   "cmd.manage.toggleSkill": "切换技能",
-  "cmd.manage.editSettings": "编辑设置"
+  "cmd.manage.editSettings": "编辑设置",
+  "cmd.showHelp": "连接 mux 的帮助",
+  "cmd.about": "关于 mux"
 }

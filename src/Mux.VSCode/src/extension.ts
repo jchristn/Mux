@@ -3,8 +3,10 @@ import { ChatViewProvider } from './chat/ChatViewProvider';
 import { EndpointPicker } from './config/endpointPicker';
 import { MuxCodeActionProvider, registerInlineCommands } from './commands/inlineCommands';
 import { workspaceRootPath } from './context/providers';
+import { AboutPanel } from './manage/AboutPanel';
 import { ManageActions } from './manage/actions';
 import { ManageNode, ManageTreeProvider } from './manage/ManageTree';
+import { showConnectionHelp } from './server/help';
 import { MuxServerLifecycle } from './server/lifecycle';
 import { ConnectionStatusBar } from './server/StatusBar';
 import { SessionNode, SessionTreeProvider } from './sessions/SessionTree';
@@ -65,6 +67,8 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.commands.registerCommand('mux.newConversation', () => chat.newConversation()),
         vscode.commands.registerCommand('mux.reconnect', () => lifecycle.reconnect(new vscode.CancellationTokenSource().token)),
+        vscode.commands.registerCommand('mux.showHelp', () => showConnectionHelp(lifecycle)),
+        vscode.commands.registerCommand('mux.about', () => AboutPanel.show(context, lifecycle.state)),
         vscode.commands.registerCommand('mux.selectEndpoint', () => endpointPicker.pick()),
         vscode.commands.registerCommand('mux.setWorkingDirectory', () => showWorkingDirectory()),
         vscode.commands.registerCommand('mux.reviewChanges', () => vscode.commands.executeCommand('workbench.view.scm')),
