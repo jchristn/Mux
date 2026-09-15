@@ -17,6 +17,7 @@ interface Dist {
 /** A per-bucket series point sent to the webview for charting. */
 interface SeriesPoint {
     label: string;
+    xlabel: string;
     input: number;
     cached: number;
     output: number;
@@ -98,6 +99,7 @@ export class UsagePanel {
                 ],
                 series: buckets.map((b) => ({
                     label: new Date(b.BucketStartUnixMs).toLocaleString(),
+                    xlabel: shortLabel(b.BucketStartUnixMs, range),
                     input: b.Metrics.InputTokens ?? 0,
                     cached: b.Metrics.CachedTokens ?? 0,
                     output: b.Metrics.OutputTokens ?? 0,
@@ -152,7 +154,8 @@ export class UsagePanel {
   .kpi .k-label { font-size: 0.8em; color: var(--vscode-descriptionForeground); }
   .kpi .k-value { font-size: 1.4em; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
   .chart-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-  svg { width: 100%; height: 260px; display: block; }
+  svg { width: 100%; height: 455px; display: block; }
+  .grid { stroke: var(--vscode-panel-border); stroke-opacity: 0.4; }
   .bar-primary { fill: var(--vscode-charts-green, var(--vscode-textLink-foreground)); }
   .bar-input { fill: var(--vscode-charts-blue, #4c8bf5); }
   .bar-cached { fill: var(--vscode-charts-yellow, #d7a100); }
@@ -243,17 +246,35 @@ export class UsagePanel {
 
   function frame(pts){
     const chart = document.getElementById('chart');
-    const W = chart.clientWidth || 600, H = 260, pad = 30;
+    const W = chart.clientWidth || 600, H = 455;
+    const padL = 56, padR = 16, padT = 14, padB = 34;
     const svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H });
-    const bw = (W - pad*2) / pts.length;
-    return { chart: chart, W: W, H: H, pad: pad, bw: bw, svg: svg, plot: H - pad*2 };
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    return { chart: chart, W: W, H: H, x0: padL, y0: H - padB, plotW: plotW, plotH: plotH, bw: plotW / pts.length, svg: svg };
   }
 
+  // Y-axis gridlines and value labels (0 → max in quarters) plus the X baseline.
   function drawAxis(f, maxVal){
-    f.svg.appendChild(svgEl('line', { class: 'axis', x1: f.pad, y1: f.H - f.pad, x2: f.W - f.pad, y2: f.H - f.pad }));
-    const label = svgEl('text', { class: 'axis-label', x: 2, y: f.pad });
-    label.textContent = axisMax(maxVal);
-    f.svg.appendChild(label);
+    [0, 0.25, 0.5, 0.75, 1].forEach(function(frac){
+      const yy = f.y0 - frac * f.plotH;
+      f.svg.appendChild(svgEl('line', { class: 'grid', x1: f.x0, y1: yy.toFixed(1), x2: (f.x0 + f.plotW).toFixed(1), y2: yy.toFixed(1) }));
+      const label = svgEl('text', { class: 'axis-label', x: f.x0 - 6, y: (yy + 3).toFixed(1), 'text-anchor': 'end' });
+      label.textContent = axisMax(maxVal * frac);
+      f.svg.appendChild(label);
+    });
+    f.svg.appendChild(svgEl('line', { class: 'axis', x1: f.x0, y1: f.y0, x2: (f.x0 + f.plotW).toFixed(1), y2: f.y0 }));
+  }
+
+  // X-axis time labels: up to six, evenly spaced across the buckets.
+  function drawXLabels(f, pts){
+    const n = pts.length;
+    const step = Math.max(1, Math.floor(n / Math.min(6, n)));
+    for (var i = 0; i < n; i += step){
+      const cx = f.x0 + i*f.bw + f.bw*0.5;
+      const label = svgEl('text', { class: 'axis-label', x: cx.toFixed(1), y: (f.y0 + 16).toFixed(1), 'text-anchor': 'middle' });
+      label.textContent = pts[i].xlabel;
+      f.svg.appendChild(label);
+    }
   }
 
   function draw(){
@@ -273,13 +294,14 @@ export class UsagePanel {
     const max = pts.reduce(function(a,p){ return Math.max(a, val(p)); }, 0);
     if (max <= 0){ return muted(document.getElementById('chart'), S.empty); }
     const f = frame(pts);
+    drawAxis(f, max);
     pts.forEach(function(p, i){
-      const h = Math.max(0, (val(p) / max) * f.plot);
-      const rect = svgEl('rect', { class: 'bar-primary', x: (f.pad + i*f.bw + f.bw*0.15).toFixed(1), y: (f.H - f.pad - h).toFixed(1), width: (f.bw*0.7).toFixed(1), height: h.toFixed(1) });
+      const h = Math.max(0, (val(p) / max) * f.plotH);
+      const rect = svgEl('rect', { class: 'bar-primary', x: (f.x0 + i*f.bw + f.bw*0.15).toFixed(1), y: (f.y0 - h).toFixed(1), width: (f.bw*0.7).toFixed(1), height: h.toFixed(1) });
       const title = svgEl('title'); title.textContent = p.label + ' — ' + fmtVal(val(p)); rect.appendChild(title);
       f.svg.appendChild(rect);
     });
-    drawAxis(f, max);
+    drawXLabels(f, pts);
     f.chart.appendChild(f.svg);
   }
 
@@ -287,21 +309,22 @@ export class UsagePanel {
     const max = pts.reduce(function(a,p){ return Math.max(a, p.input + p.cached + p.output); }, 0);
     if (max <= 0){ return muted(document.getElementById('chart'), S.empty); }
     const f = frame(pts);
+    drawAxis(f, max);
     const parts = [['input','bar-input'],['cached','bar-cached'],['output','bar-output']];
     pts.forEach(function(p, i){
-      let y = f.H - f.pad;
+      let y = f.y0;
       parts.forEach(function(part){
         const v = p[part[0]] || 0;
-        const h = (v / max) * f.plot;
+        const h = (v / max) * f.plotH;
         if (h > 0){
-          const rect = svgEl('rect', { class: part[1], x: (f.pad + i*f.bw + f.bw*0.15).toFixed(1), y: (y - h).toFixed(1), width: (f.bw*0.7).toFixed(1), height: h.toFixed(1) });
+          const rect = svgEl('rect', { class: part[1], x: (f.x0 + i*f.bw + f.bw*0.15).toFixed(1), y: (y - h).toFixed(1), width: (f.bw*0.7).toFixed(1), height: h.toFixed(1) });
           const title = svgEl('title'); title.textContent = p.label + ' — ' + S.legend[part[0]] + ': ' + Math.round(v); rect.appendChild(title);
           f.svg.appendChild(rect);
           y -= h;
         }
       });
     });
-    drawAxis(f, max);
+    drawXLabels(f, pts);
     f.chart.appendChild(f.svg);
     setLegend([
       { color: 'var(--vscode-charts-blue, #4c8bf5)', label: S.legend.input },
@@ -314,11 +337,12 @@ export class UsagePanel {
     const max = pts.reduce(function(a,p){ return Math.max(a, p[key].max); }, 0);
     if (max <= 0){ return muted(document.getElementById('chart'), S.empty); }
     const f = frame(pts);
-    const y = function(v){ return f.H - f.pad - (v / max) * f.plot; };
+    drawAxis(f, max);
+    const y = function(v){ return f.y0 - (v / max) * f.plotH; };
     pts.forEach(function(p, i){
       const d = p[key];
-      const cx = f.pad + i*f.bw + f.bw*0.5;
-      const bx = f.pad + i*f.bw + f.bw*0.3;
+      const cx = f.x0 + i*f.bw + f.bw*0.5;
+      const bx = f.x0 + i*f.bw + f.bw*0.3;
       const boxW = f.bw*0.4;
       // wick min..max
       f.svg.appendChild(svgEl('line', { class: 'candle-wick', x1: cx, y1: y(d.min).toFixed(1), x2: cx, y2: y(d.max).toFixed(1) }));
@@ -333,7 +357,7 @@ export class UsagePanel {
       // p99 tick
       f.svg.appendChild(svgEl('line', { class: 'candle-p99', x1: bx.toFixed(1), y1: y(d.p99).toFixed(1), x2: (bx+boxW).toFixed(1), y2: y(d.p99).toFixed(1) }));
     });
-    drawAxis(f, max);
+    drawXLabels(f, pts);
     f.chart.appendChild(f.svg);
     setLegend([
       { color: 'var(--vscode-charts-green, #3fb950)', label: 'avg–p95' },
@@ -355,6 +379,15 @@ export class UsagePanel {
 
 function fmtNum(n: number): string {
     return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+// A compact x-axis label for a bucket: a time for short ranges, a date for longer ones.
+function shortLabel(unixMs: number, range: string): string {
+    const d = new Date(unixMs);
+    if (range === 'hour' || range === 'day') {
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    return d.toLocaleDateString([], { month: 'numeric', day: 'numeric' });
 }
 
 function dist(d: UsageDistribution | undefined): Dist {

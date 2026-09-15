@@ -2,6 +2,11 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 0.11.2
+
+- **Usage charts: axes and a taller plot.** The charts now have Y-axis gridlines with value labels and
+  X-axis time ticks, and are 75% taller for readability.
+
 ## 0.11.1
 
 - **Fix: Markdown now renders in chat replies.** The Markdown renderer is inlined into the chat page instead
