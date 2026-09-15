@@ -245,7 +245,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         if (event.data.Id) {
                             this.sessionId = event.data.Id;
                         }
-                        this.post({ type: 'done', stats: event.data.Stats });
+                        // Send the server's authoritative full content so the final render can't be missing a
+                        // token that slipped during streaming.
+                        this.post({ type: 'done', stats: event.data.Stats, content: event.data.Content });
                         break;
                     case 'error':
                         this.post({ type: 'error', message: event.data });

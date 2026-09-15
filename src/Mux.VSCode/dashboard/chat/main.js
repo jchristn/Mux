@@ -92,14 +92,37 @@
         return assistant;
     }
 
+    // Accumulates the model's thinking into a collapsible section above the answer, matching the web
+    // dashboard's "💭 Thinking" disclosure. Created on the first thinking token of a turn.
+    function addThinking(text) {
+        const a = ensureAssistant();
+        if (!a.thinking) {
+            const details = document.createElement('details');
+            details.className = 'thinking';
+            const summary = document.createElement('summary');
+            summary.textContent = '💭 ' + t('thinking.label');
+            const tbody = el('div', 'thinking-body');
+            details.appendChild(summary);
+            details.appendChild(tbody);
+            a.wrapper.insertBefore(details, a.body);
+            a.thinking = tbody;
+            a.thinkingRaw = '';
+        }
+        a.thinkingRaw += text;
+        a.thinking.textContent = a.thinkingRaw;
+        scrollToEnd();
+    }
+
     // Replaces the streaming plain-text body with rendered Markdown once the turn completes, and appends the
     // per-turn stats footer (time and tokens), revealed in full on hover — matching the web and desktop apps.
-    function finalizeAssistant(stats) {
+    // Prefers the server's authoritative final content when provided, so a dropped stream token can't leave
+    // the rendered answer incomplete.
+    function finalizeAssistant(stats, content) {
         if (!assistant) {
             return;
         }
         assistant.wrapper.classList.remove('streaming');
-        fillBody(assistant.body, 'assistant', assistantRaw);
+        fillBody(assistant.body, 'assistant', content && content.length ? content : assistantRaw);
         if (stats) {
             assistant.wrapper.appendChild(buildStats(stats));
         }
@@ -291,12 +314,17 @@
             case 'echo':
                 addMessage('user', message.text);
                 break;
-            case 'token':
+            case 'token': {
+                // ensureAssistant() creates the bubble (and resets assistantRaw) on the first token; append
+                // AFTER it so the first token is never wiped by that reset.
+                const a = ensureAssistant();
                 assistantRaw += message.text;
-                ensureAssistant().body.textContent = assistantRaw;
+                a.body.textContent = assistantRaw;
                 scrollToEnd();
                 break;
+            }
             case 'thinking':
+                addThinking(message.text);
                 break;
             case 'tool':
                 addTool(message.tool);
@@ -311,7 +339,7 @@
                 addHelp(message);
                 break;
             case 'done':
-                finalizeAssistant(message.stats);
+                finalizeAssistant(message.stats, message.content);
                 notice.textContent = '';
                 break;
             case 'stopped':

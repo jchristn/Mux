@@ -2,6 +2,15 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 0.11.0
+
+- Aligned the extension version with the rest of the mux product (the .NET assets).
+- **Thinking display.** Model reasoning now streams into a collapsible "💭 Thinking" section above the answer,
+  matching the web dashboard and desktop app.
+- **Fix:** the first token of a reply could be dropped (the streaming buffer was reset after the first token
+  was appended), so a reply like "If I had a name…" rendered as "I had a name…". The final render now also
+  falls back to the server's authoritative full content.
+
 ## 0.2.1
 
 - **Richer usage charts.** The usage dashboard now has six metric views: a stacked token breakdown

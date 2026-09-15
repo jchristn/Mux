@@ -116,6 +116,38 @@ body {
     50% { opacity: 0; }
 }
 
+/* ---- thinking (collapsible) ---- */
+.thinking {
+    margin: 0 0 2px;
+    border-left: 2px solid var(--vscode-panel-border);
+    padding-left: 11px;
+}
+
+.thinking > summary {
+    cursor: pointer;
+    color: var(--vscode-descriptionForeground);
+    font-size: 0.85em;
+    list-style: none;
+    user-select: none;
+}
+
+.thinking > summary::-webkit-details-marker { display: none; }
+
+.thinking > summary:hover { color: var(--vscode-foreground); }
+
+.thinking-body {
+    margin-top: 6px;
+    padding: 8px 10px;
+    background: var(--vscode-textCodeBlock-background);
+    border-radius: 5px;
+    color: var(--vscode-descriptionForeground);
+    font-size: 0.9em;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
 .role-error .msg-body {
     background: var(--vscode-inputValidation-errorBackground);
     border: 1px solid var(--vscode-inputValidation-errorBorder);
