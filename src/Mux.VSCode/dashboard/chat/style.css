@@ -211,6 +211,27 @@ body {
     to { transform: rotate(360deg); }
 }
 
+/* ---- help card ---- */
+.help-card {
+    align-self: stretch;
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+}
+
+.help-title { font-weight: 600; margin-bottom: 8px; }
+
+.help-row { display: flex; gap: 12px; padding: 3px 0; font-size: 0.9em; }
+
+.help-cmd {
+    font-family: var(--vscode-editor-font-family);
+    color: var(--mux-accent);
+    min-width: 110px;
+}
+
+.help-desc { color: var(--vscode-descriptionForeground); }
+
 /* ---- approval ---- */
 .approval {
     align-self: stretch;

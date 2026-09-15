@@ -6,6 +6,7 @@ import { workspaceRootPath } from './context/providers';
 import { AboutPanel } from './manage/AboutPanel';
 import { ManageActions } from './manage/actions';
 import { ManageNode, ManageTreeProvider } from './manage/ManageTree';
+import { UsagePanel } from './manage/UsagePanel';
 import { showConnectionHelp } from './server/help';
 import { MuxServerLifecycle } from './server/lifecycle';
 import { ConnectionStatusBar } from './server/StatusBar';
@@ -50,7 +51,16 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('mux.manage.editMcp', (node: ManageNode) => manageActions.editMcpServer(node)),
         vscode.commands.registerCommand('mux.manage.deleteMcp', (node: ManageNode) => manageActions.deleteMcpServer(node)),
         vscode.commands.registerCommand('mux.manage.activatePrompt', (node: ManageNode) => manageActions.activatePrompt(node)),
+        vscode.commands.registerCommand('mux.manage.addPrompt', () => manageActions.addPrompt()),
+        vscode.commands.registerCommand('mux.manage.editPrompt', (node: ManageNode) => manageActions.editPrompt(node)),
+        vscode.commands.registerCommand('mux.manage.deletePrompt', (node: ManageNode) => manageActions.deletePrompt(node)),
+        vscode.commands.registerCommand('mux.manage.addSubagent', () => manageActions.addSubagent()),
+        vscode.commands.registerCommand('mux.manage.editSubagent', (node: ManageNode) => manageActions.editSubagent(node)),
+        vscode.commands.registerCommand('mux.manage.deleteSubagent', (node: ManageNode) => manageActions.deleteSubagent(node)),
         vscode.commands.registerCommand('mux.manage.toggleSkill', (node: ManageNode) => manageActions.toggleSkill(node)),
+        vscode.commands.registerCommand('mux.manage.addSkill', () => manageActions.addSkill()),
+        vscode.commands.registerCommand('mux.manage.editSkill', (node: ManageNode) => manageActions.editSkill(node)),
+        vscode.commands.registerCommand('mux.manage.deleteSkill', (node: ManageNode) => manageActions.deleteSkill(node)),
         vscode.commands.registerCommand('mux.manage.editSettings', () => manageActions.editSettings()),
     );
 
@@ -69,6 +79,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('mux.reconnect', () => lifecycle.reconnect(new vscode.CancellationTokenSource().token)),
         vscode.commands.registerCommand('mux.showHelp', () => showConnectionHelp(lifecycle)),
         vscode.commands.registerCommand('mux.about', () => AboutPanel.show(context, lifecycle.state)),
+        vscode.commands.registerCommand('mux.usage', () => UsagePanel.show(lifecycle)),
         vscode.commands.registerCommand('mux.selectEndpoint', () => endpointPicker.pick()),
         vscode.commands.registerCommand('mux.setWorkingDirectory', () => showWorkingDirectory()),
         vscode.commands.registerCommand('mux.reviewChanges', () => vscode.commands.executeCommand('workbench.view.scm')),

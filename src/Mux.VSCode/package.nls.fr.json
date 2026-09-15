@@ -43,5 +43,15 @@
   "cmd.manage.toggleSkill": "Activer/désactiver la compétence",
   "cmd.manage.editSettings": "Modifier les paramètres",
   "cmd.showHelp": "Aide pour se connecter à mux",
-  "cmd.about": "À propos de mux"
+  "cmd.about": "À propos de mux",
+  "cmd.manage.addPrompt": "Ajouter un prompt",
+  "cmd.manage.editPrompt": "Modifier le prompt",
+  "cmd.manage.deletePrompt": "Supprimer le prompt",
+  "cmd.manage.addSubagent": "Ajouter un sous-agent",
+  "cmd.manage.editSubagent": "Modifier le sous-agent",
+  "cmd.manage.deleteSubagent": "Supprimer le sous-agent",
+  "cmd.manage.addSkill": "Ajouter une compétence",
+  "cmd.manage.editSkill": "Modifier la compétence",
+  "cmd.manage.deleteSkill": "Supprimer la compétence",
+  "cmd.usage": "Tableau de bord d'utilisation"
 }

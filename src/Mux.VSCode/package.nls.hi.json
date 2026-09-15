@@ -43,5 +43,15 @@
   "cmd.manage.toggleSkill": "स्किल टॉगल करें",
   "cmd.manage.editSettings": "सेटिंग्स संपादित करें",
   "cmd.showHelp": "mux से कनेक्ट करने में सहायता",
-  "cmd.about": "mux के बारे में"
+  "cmd.about": "mux के बारे में",
+  "cmd.manage.addPrompt": "प्रॉम्प्ट जोड़ें",
+  "cmd.manage.editPrompt": "प्रॉम्प्ट संपादित करें",
+  "cmd.manage.deletePrompt": "प्रॉम्प्ट हटाएँ",
+  "cmd.manage.addSubagent": "सबएजेंट जोड़ें",
+  "cmd.manage.editSubagent": "सबएजेंट संपादित करें",
+  "cmd.manage.deleteSubagent": "सबएजेंट हटाएँ",
+  "cmd.manage.addSkill": "स्किल जोड़ें",
+  "cmd.manage.editSkill": "स्किल संपादित करें",
+  "cmd.manage.deleteSkill": "स्किल हटाएँ",
+  "cmd.usage": "उपयोग डैशबोर्ड"
 }

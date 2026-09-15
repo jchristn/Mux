@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ApiClient } from '../api/ApiClient';
-import { EndpointDetail, McpServer, MuxServerSettings } from '../api/types';
+import { EndpointDetail, McpServer, MuxServerSettings, PromptProfile, Subagent } from '../api/types';
 import { MuxServerLifecycle } from '../server/lifecycle';
 import { logError } from '../util/logger';
 import { FormField, FormPanel } from './FormPanel';
@@ -8,6 +8,14 @@ import { ManageNode } from './ManageTree';
 
 /** Adapter types the endpoint form offers, matching the server's kebab-case values. */
 const ADAPTERS = ['ollama', 'openai', 'openai-compatible', 'vllm', 'anthropic', 'gemini', 'azure-openai', 'vertex', 'bedrock'];
+
+/** Splits a textarea value into trimmed, non-empty lines. */
+function splitLines(value: string): string[] {
+    return value
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+}
 
 /**
  * The management actions the tree's context menus invoke. Each obtains a client, mutates through the REST API
@@ -164,7 +172,12 @@ export class ManageActions {
                 { key: 'Transport', label: vscode.l10n.t('Transport'), type: 'select', options: ['stdio', 'http'], value: (existing?.Transport as string) ?? 'stdio' },
                 { key: 'Command', label: vscode.l10n.t('Command (stdio)'), type: 'text', value: (existing?.Command as string) ?? '' },
                 { key: 'Args', label: vscode.l10n.t('Args (one per line, stdio)'), type: 'textarea', value: ((existing?.Args as string[]) ?? []).join('\n') },
+                { key: 'Env', label: vscode.l10n.t('Env (KEY=VALUE per line, stdio)'), type: 'textarea', value: ((existing?.Env as string[]) ?? []).join('\n') },
                 { key: 'Url', label: vscode.l10n.t('URL (http)'), type: 'text', value: (existing?.Url as string) ?? '' },
+                { key: 'McpPath', label: vscode.l10n.t('MCP path (http)'), type: 'text', value: (existing?.McpPath as string) ?? '/mcp' },
+                { key: 'AuthType', label: vscode.l10n.t('Auth (http)'), type: 'select', options: ['none', 'bearer', 'apikey'], value: (existing?.AuthType as string) ?? 'none' },
+                { key: 'AuthHeader', label: vscode.l10n.t('API key header (apikey)'), type: 'text', value: (existing?.AuthHeader as string) ?? 'X-API-Key' },
+                { key: 'AuthSecret', label: vscode.l10n.t('Bearer token / API key'), type: 'password', value: existing?.AuthSecretSet ? true : '', hint: vscode.l10n.t('Leave blank to keep the stored secret.') },
             ];
 
             const result = await FormPanel.show(existing ? vscode.l10n.t('Edit MCP server') : vscode.l10n.t('Add MCP server'), fields);
@@ -172,16 +185,20 @@ export class ManageActions {
                 return;
             }
 
+            const secret = String(result.AuthSecret ?? '').trim();
             const edited: McpServer = {
                 ...(existing ?? {}),
                 Name: String(result.Name).trim(),
                 Transport: String(result.Transport),
                 Command: String(result.Command).trim() || undefined,
-                Args: String(result.Args)
-                    .split('\n')
-                    .map((a) => a.trim())
-                    .filter((a) => a.length > 0),
+                Args: splitLines(String(result.Args)),
+                Env: splitLines(String(result.Env)),
                 Url: String(result.Url).trim() || undefined,
+                McpPath: String(result.McpPath).trim() || undefined,
+                AuthType: String(result.AuthType),
+                AuthHeader: String(result.AuthHeader).trim() || undefined,
+                // Blank preserves the stored secret (write-only field).
+                AuthSecret: secret,
             };
 
             const next = all.filter((s) => s.Name !== (existing?.Name ?? edited.Name));
@@ -229,6 +246,142 @@ export class ManageActions {
         });
     }
 
+    /** Adds a new prompt profile. */
+    public addPrompt(): Promise<void> {
+        return this.editPromptForm(undefined);
+    }
+
+    /** Edits the prompt profile on a node. */
+    public async editPrompt(node: ManageNode): Promise<void> {
+        await this.editPromptForm(node.data as PromptProfile | undefined);
+    }
+
+    private editPromptForm(existing: PromptProfile | undefined): Promise<void> {
+        return this.withClient(async (client) => {
+            const all = await client.getPrompts();
+            const fields: FormField[] = [
+                { key: 'Name', label: vscode.l10n.t('Name'), type: 'text', value: existing?.Name ?? '', required: true },
+                { key: 'SystemPrompt', label: vscode.l10n.t('System prompt'), type: 'textarea', value: existing?.SystemPrompt ?? '', hint: vscode.l10n.t('Blank uses the built-in default. {WorkingDirectory} and {ToolDescriptions} are filled in.') },
+                { key: 'IsActive', label: vscode.l10n.t('Make this the active profile'), type: 'checkbox', value: existing?.IsActive ?? false },
+            ];
+
+            const result = await FormPanel.show(existing ? vscode.l10n.t('Edit prompt') : vscode.l10n.t('Add prompt'), fields);
+            if (!result) {
+                return;
+            }
+
+            const name = String(result.Name).trim();
+            const makeActive = Boolean(result.IsActive);
+            let next = all.filter((p) => p.Name !== (existing?.Name ?? name));
+            if (makeActive) {
+                next = next.map((p) => ({ ...p, IsActive: false }));
+            }
+            next.push({ ...(existing ?? {}), Name: name, SystemPrompt: String(result.SystemPrompt), IsActive: makeActive });
+            // Guarantee at least one active profile.
+            if (!next.some((p) => p.IsActive) && next.length > 0) {
+                next[0].IsActive = true;
+            }
+
+            await client.putPrompts(next);
+            void vscode.window.showInformationMessage(vscode.l10n.t('Saved prompt "{0}".', name));
+            this.refresh();
+        });
+    }
+
+    /** Deletes the prompt profile on a node after confirmation. */
+    public async deletePrompt(node: ManageNode): Promise<void> {
+        const prompt = node.data as PromptProfile | undefined;
+        if (!prompt) {
+            return;
+        }
+
+        await this.withClient(async (client) => {
+            const all = await client.getPrompts();
+            if (all.length <= 1) {
+                void vscode.window.showWarningMessage(vscode.l10n.t('At least one prompt profile is required.'));
+                return;
+            }
+
+            const confirm = await vscode.window.showWarningMessage(vscode.l10n.t('Delete prompt "{0}"?', prompt.Name), { modal: true }, vscode.l10n.t('Delete'));
+            if (!confirm) {
+                return;
+            }
+
+            let next = all.filter((p) => p.Name !== prompt.Name);
+            if (!next.some((p) => p.IsActive) && next.length > 0) {
+                next[0].IsActive = true;
+            }
+            await client.putPrompts(next);
+            this.refresh();
+        });
+    }
+
+    /** Adds a new subagent. */
+    public addSubagent(): Promise<void> {
+        return this.editSubagentForm(undefined);
+    }
+
+    /** Edits the subagent on a node. */
+    public async editSubagent(node: ManageNode): Promise<void> {
+        await this.editSubagentForm(node.data as Subagent | undefined);
+    }
+
+    private editSubagentForm(existing: Subagent | undefined): Promise<void> {
+        return this.withClient(async (client) => {
+            const all = await client.getSubagents();
+            const fields: FormField[] = [
+                { key: 'Name', label: vscode.l10n.t('Name'), type: 'text', value: existing?.Name ?? '', required: true },
+                { key: 'Description', label: vscode.l10n.t('Description'), type: 'text', value: existing?.Description ?? '' },
+                { key: 'SystemPrompt', label: vscode.l10n.t('System prompt'), type: 'textarea', value: existing?.SystemPrompt ?? '' },
+                { key: 'EndpointName', label: vscode.l10n.t('Endpoint (blank inherits default)'), type: 'text', value: existing?.EndpointName ?? '' },
+                { key: 'AllowedTools', label: vscode.l10n.t('Allowed tools (one per line, blank = all)'), type: 'textarea', value: (existing?.AllowedTools ?? []).join('\n') },
+                { key: 'MaxIterations', label: vscode.l10n.t('Max iterations (blank inherits)'), type: 'number', value: existing?.MaxIterations ?? '' },
+            ];
+
+            const result = await FormPanel.show(existing ? vscode.l10n.t('Edit subagent') : vscode.l10n.t('Add subagent'), fields);
+            if (!result) {
+                return;
+            }
+
+            const name = String(result.Name).trim();
+            const iters = String(result.MaxIterations).trim();
+            const edited: Subagent = {
+                ...(existing ?? {}),
+                Name: name,
+                Description: String(result.Description).trim(),
+                SystemPrompt: String(result.SystemPrompt),
+                EndpointName: String(result.EndpointName).trim() || null,
+                AllowedTools: splitLines(String(result.AllowedTools)),
+                MaxIterations: iters ? Number(iters) : null,
+            };
+
+            const next = all.filter((s) => s.Name !== (existing?.Name ?? name));
+            next.push(edited);
+            await client.putSubagents(next);
+            void vscode.window.showInformationMessage(vscode.l10n.t('Saved subagent "{0}".', name));
+            this.refresh();
+        });
+    }
+
+    /** Deletes the subagent on a node after confirmation. */
+    public async deleteSubagent(node: ManageNode): Promise<void> {
+        const subagent = node.data as Subagent | undefined;
+        if (!subagent) {
+            return;
+        }
+
+        const confirm = await vscode.window.showWarningMessage(vscode.l10n.t('Delete subagent "{0}"?', subagent.Name), { modal: true }, vscode.l10n.t('Delete'));
+        if (!confirm) {
+            return;
+        }
+
+        await this.withClient(async (client) => {
+            const all = await client.getSubagents();
+            await client.putSubagents(all.filter((s) => s.Name !== subagent.Name));
+            this.refresh();
+        });
+    }
+
     /** Toggles the skill on a node. */
     public async toggleSkill(node: ManageNode): Promise<void> {
         const skill = node.data as { Name: string; Enabled: boolean } | undefined;
@@ -238,6 +391,76 @@ export class ManageActions {
 
         await this.withClient(async (client) => {
             await client.setSkillEnabled(skill.Name, !skill.Enabled);
+            this.refresh();
+        });
+    }
+
+    /** Creates a new skill from a SKILL.md body. */
+    public addSkill(): Promise<void> {
+        return this.withClient(async (client) => {
+            const template = [
+                '---',
+                'name: my-skill',
+                'description: What this skill does and when to use it.',
+                'mutates: false',
+                'commands: [run]',
+                '---',
+                '',
+                '# My skill',
+                '',
+                'Describe the procedure here.',
+            ].join('\n');
+            const fields: FormField[] = [
+                { key: 'Name', label: vscode.l10n.t('Skill id (lowercase-hyphenated)'), type: 'text', value: '', required: true },
+                { key: 'Body', label: vscode.l10n.t('SKILL.md'), type: 'textarea', value: template },
+            ];
+            const result = await FormPanel.show(vscode.l10n.t('Add skill'), fields);
+            if (!result) {
+                return;
+            }
+
+            await client.createSkill(String(result.Name).trim(), String(result.Body));
+            void vscode.window.showInformationMessage(vscode.l10n.t('Created skill "{0}".', String(result.Name).trim()));
+            this.refresh();
+        });
+    }
+
+    /** Edits a skill's SKILL.md body. */
+    public async editSkill(node: ManageNode): Promise<void> {
+        const skill = node.data as { Name: string } | undefined;
+        if (!skill) {
+            return;
+        }
+
+        await this.withClient(async (client) => {
+            const body = await client.getSkillBody(skill.Name);
+            const result = await FormPanel.show(vscode.l10n.t('Edit skill: {0}', skill.Name), [
+                { key: 'Body', label: vscode.l10n.t('SKILL.md'), type: 'textarea', value: body },
+            ]);
+            if (!result) {
+                return;
+            }
+
+            await client.setSkillBody(skill.Name, String(result.Body));
+            void vscode.window.showInformationMessage(vscode.l10n.t('Saved skill "{0}".', skill.Name));
+            this.refresh();
+        });
+    }
+
+    /** Deletes the skill on a node after confirmation. */
+    public async deleteSkill(node: ManageNode): Promise<void> {
+        const skill = node.data as { Name: string } | undefined;
+        if (!skill) {
+            return;
+        }
+
+        const confirm = await vscode.window.showWarningMessage(vscode.l10n.t('Delete skill "{0}"?', skill.Name), { modal: true }, vscode.l10n.t('Delete'));
+        if (!confirm) {
+            return;
+        }
+
+        await this.withClient(async (client) => {
+            await client.deleteSkill(skill.Name);
             this.refresh();
         });
     }

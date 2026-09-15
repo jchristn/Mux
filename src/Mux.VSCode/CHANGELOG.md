@@ -4,6 +4,14 @@ All notable changes to the mux VS Code extension are documented here.
 
 ## 0.2.0
 
+- **Fuller management.** MCP servers now edit auth (bearer token / API key with a preserved-when-blank
+  secret, header, and path); prompts, subagents, and skills are fully add/edit/delete (skills create and edit
+  their `SKILL.md`); and a **native usage dashboard** (KPIs plus a hand-rolled over-time chart with range and
+  metric toggles) opens from the Manage view or `/usage`.
+- **Chat slash commands.** Type `/help` (or `/?`) for the list; `/new`, `/clear`, `/endpoints`, `/usage`,
+  `/settings`, `/cwd`, `/reconnect`, and `/about` run without leaving the composer.
+- **Fixes.** Markdown now preserves single newlines within a paragraph (replies no longer collapse to one
+  line). The activity-bar icon is the real blocky mux "M" mark, not a plain letter.
 - **Refined chat panel.** Cleaner message layout with role labels, a mux-accent for assistant replies, a
   streaming cursor, rounded chips for tool calls, an auto-growing composer (Enter to send, Shift+Enter for a
   newline), and a tidier empty state — all on VS Code theme tokens.

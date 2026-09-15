@@ -43,7 +43,13 @@ export interface McpServer {
     Transport?: string;
     Command?: string;
     Args?: string[];
+    Env?: string[];
     Url?: string;
+    McpPath?: string;
+    AuthType?: string;
+    AuthHeader?: string;
+    AuthSecret?: string;
+    AuthSecretSet?: boolean;
     [key: string]: unknown;
 }
 
@@ -60,7 +66,9 @@ export interface Subagent {
     Name: string;
     Description: string;
     SystemPrompt?: string;
+    EndpointName?: string | null;
     AllowedTools?: string[];
+    MaxIterations?: number | null;
     [key: string]: unknown;
 }
 
@@ -128,6 +136,12 @@ export interface UsageMetrics {
 export interface UsageSummary {
     FromUnixMs: number;
     ToUnixMs: number;
+    Metrics: UsageMetrics;
+}
+
+/** One time bucket in a usage timeseries. */
+export interface UsageBucket {
+    BucketStartUnixMs: number;
     Metrics: UsageMetrics;
 }
 

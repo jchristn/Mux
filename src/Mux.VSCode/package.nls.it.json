@@ -43,5 +43,15 @@
   "cmd.manage.toggleSkill": "Attiva/disattiva competenza",
   "cmd.manage.editSettings": "Modifica impostazioni",
   "cmd.showHelp": "Guida alla connessione a mux",
-  "cmd.about": "Informazioni su mux"
+  "cmd.about": "Informazioni su mux",
+  "cmd.manage.addPrompt": "Aggiungi prompt",
+  "cmd.manage.editPrompt": "Modifica prompt",
+  "cmd.manage.deletePrompt": "Elimina prompt",
+  "cmd.manage.addSubagent": "Aggiungi subagente",
+  "cmd.manage.editSubagent": "Modifica subagente",
+  "cmd.manage.deleteSubagent": "Elimina subagente",
+  "cmd.manage.addSkill": "Aggiungi competenza",
+  "cmd.manage.editSkill": "Modifica competenza",
+  "cmd.manage.deleteSkill": "Elimina competenza",
+  "cmd.usage": "Dashboard di utilizzo"
 }

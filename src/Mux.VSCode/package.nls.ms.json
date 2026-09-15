@@ -43,5 +43,15 @@
   "cmd.manage.toggleSkill": "Togol kemahiran",
   "cmd.manage.editSettings": "Edit tetapan",
   "cmd.showHelp": "Bantuan menyambung ke mux",
-  "cmd.about": "Perihal mux"
+  "cmd.about": "Perihal mux",
+  "cmd.manage.addPrompt": "Tambah prompt",
+  "cmd.manage.editPrompt": "Edit prompt",
+  "cmd.manage.deletePrompt": "Padam prompt",
+  "cmd.manage.addSubagent": "Tambah subejen",
+  "cmd.manage.editSubagent": "Edit subejen",
+  "cmd.manage.deleteSubagent": "Padam subejen",
+  "cmd.manage.addSkill": "Tambah kemahiran",
+  "cmd.manage.editSkill": "Edit kemahiran",
+  "cmd.manage.deleteSkill": "Padam kemahiran",
+  "cmd.usage": "Papan pemuka penggunaan"
 }

@@ -43,5 +43,15 @@
   "cmd.manage.toggleSkill": "تبديل المهارة",
   "cmd.manage.editSettings": "تعديل الإعدادات",
   "cmd.showHelp": "مساعدة الاتصال بـ mux",
-  "cmd.about": "حول mux"
+  "cmd.about": "حول mux",
+  "cmd.manage.addPrompt": "إضافة موجّه",
+  "cmd.manage.editPrompt": "تعديل الموجّه",
+  "cmd.manage.deletePrompt": "حذف الموجّه",
+  "cmd.manage.addSubagent": "إضافة وكيل فرعي",
+  "cmd.manage.editSubagent": "تعديل الوكيل الفرعي",
+  "cmd.manage.deleteSubagent": "حذف الوكيل الفرعي",
+  "cmd.manage.addSkill": "إضافة مهارة",
+  "cmd.manage.editSkill": "تعديل المهارة",
+  "cmd.manage.deleteSkill": "حذف المهارة",
+  "cmd.usage": "لوحة الاستخدام"
 }

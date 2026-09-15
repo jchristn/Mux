@@ -22,6 +22,7 @@ import {
     SkillSummary,
     StreamEvent,
     Subagent,
+    UsageBucket,
     UsageSummary,
 } from './types';
 
@@ -140,15 +141,41 @@ export class ApiClient {
         return response.Items ?? [];
     }
 
+    /** Replaces the subagent collection. */
+    public async putSubagents(items: Subagent[], signal?: AbortSignal): Promise<void> {
+        await this.sendJson('PUT', '/v1.0/api/subagents', { Items: items }, signal);
+    }
+
     /** Lists skills. */
     public async getSkills(signal?: AbortSignal): Promise<SkillSummary[]> {
         const response = await this.getJson<{ Items: SkillSummary[] }>('/v1.0/api/skills', signal);
         return response.Items ?? [];
     }
 
+    /** Reads one skill's SKILL.md body. */
+    public async getSkillBody(id: string, signal?: AbortSignal): Promise<string> {
+        const detail = await this.getJson<{ Body?: string }>(`/v1.0/api/skills/detail?id=${encodeURIComponent(id)}`, signal);
+        return detail.Body ?? '';
+    }
+
     /** Enables or disables a skill by id. */
     public async setSkillEnabled(id: string, enabled: boolean, signal?: AbortSignal): Promise<void> {
         await this.sendJson('PUT', '/v1.0/api/skills/enabled', { Id: id, Enabled: enabled }, signal);
+    }
+
+    /** Creates a new skill from its SKILL.md body. */
+    public async createSkill(name: string, body: string, signal?: AbortSignal): Promise<void> {
+        await this.sendJson('POST', '/v1.0/api/skills', { Name: name, Body: body }, signal);
+    }
+
+    /** Updates a skill's SKILL.md body. */
+    public async setSkillBody(id: string, body: string, signal?: AbortSignal): Promise<void> {
+        await this.sendJson('PUT', '/v1.0/api/skills/body', { Id: id, Body: body }, signal);
+    }
+
+    /** Deletes a skill by id. */
+    public async deleteSkill(id: string, signal?: AbortSignal): Promise<void> {
+        await this.send('DELETE', `/v1.0/api/skills?id=${encodeURIComponent(id)}`, undefined, signal);
     }
 
     /** Reads the editable settings (secrets masked). */
@@ -164,6 +191,12 @@ export class ApiClient {
     /** Reads a usage summary for a range (`hour`, `day`, `week`, `month`, `all`). */
     public getUsageSummary(range: string, signal?: AbortSignal): Promise<UsageSummary> {
         return this.getJson<UsageSummary>(`/v1.0/api/usage/summary?range=${encodeURIComponent(range)}`, signal);
+    }
+
+    /** Reads a dense, evenly-spaced usage timeseries for charting a range. */
+    public async getUsageTimeseries(range: string, signal?: AbortSignal): Promise<UsageBucket[]> {
+        const response = await this.getJson<{ Items: UsageBucket[] }>(`/v1.0/api/usage/timeseries?range=${encodeURIComponent(range)}`, signal);
+        return response.Items ?? [];
     }
 
     /** Reads whether a turn's changes can be undone or redone in a working directory. */

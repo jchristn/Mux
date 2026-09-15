@@ -43,5 +43,15 @@
   "cmd.manage.toggleSkill": "スキルを切り替え",
   "cmd.manage.editSettings": "設定を編集",
   "cmd.showHelp": "mux への接続ヘルプ",
-  "cmd.about": "mux について"
+  "cmd.about": "mux について",
+  "cmd.manage.addPrompt": "プロンプトを追加",
+  "cmd.manage.editPrompt": "プロンプトを編集",
+  "cmd.manage.deletePrompt": "プロンプトを削除",
+  "cmd.manage.addSubagent": "サブエージェントを追加",
+  "cmd.manage.editSubagent": "サブエージェントを編集",
+  "cmd.manage.deleteSubagent": "サブエージェントを削除",
+  "cmd.manage.addSkill": "スキルを追加",
+  "cmd.manage.editSkill": "スキルを編集",
+  "cmd.manage.deleteSkill": "スキルを削除",
+  "cmd.usage": "使用状況ダッシュボード"
 }

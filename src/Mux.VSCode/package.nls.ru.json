@@ -43,5 +43,15 @@
   "cmd.manage.toggleSkill": "Переключить навык",
   "cmd.manage.editSettings": "Изменить настройки",
   "cmd.showHelp": "Помощь с подключением к mux",
-  "cmd.about": "О mux"
+  "cmd.about": "О mux",
+  "cmd.manage.addPrompt": "Добавить промпт",
+  "cmd.manage.editPrompt": "Изменить промпт",
+  "cmd.manage.deletePrompt": "Удалить промпт",
+  "cmd.manage.addSubagent": "Добавить субагента",
+  "cmd.manage.editSubagent": "Изменить субагента",
+  "cmd.manage.deleteSubagent": "Удалить субагента",
+  "cmd.manage.addSkill": "Добавить навык",
+  "cmd.manage.editSkill": "Изменить навык",
+  "cmd.manage.deleteSkill": "Удалить навык",
+  "cmd.usage": "Панель использования"
 }

@@ -43,5 +43,15 @@
   "cmd.manage.toggleSkill": "切换技能",
   "cmd.manage.editSettings": "编辑设置",
   "cmd.showHelp": "连接 mux 的帮助",
-  "cmd.about": "关于 mux"
+  "cmd.about": "关于 mux",
+  "cmd.manage.addPrompt": "添加提示词",
+  "cmd.manage.editPrompt": "编辑提示词",
+  "cmd.manage.deletePrompt": "删除提示词",
+  "cmd.manage.addSubagent": "添加子代理",
+  "cmd.manage.editSubagent": "编辑子代理",
+  "cmd.manage.deleteSubagent": "删除子代理",
+  "cmd.manage.addSkill": "添加技能",
+  "cmd.manage.editSkill": "编辑技能",
+  "cmd.manage.deleteSkill": "删除技能",
+  "cmd.usage": "使用情况仪表板"
 }

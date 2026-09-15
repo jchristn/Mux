@@ -138,6 +138,20 @@
         return el('div', 'stat-divider');
     }
 
+    function addHelp(help) {
+        removeEmpty();
+        const card = el('div', 'help-card');
+        card.appendChild(withText(el('div', 'help-title'), help.title));
+        (help.items || []).forEach(function (it) {
+            const row = el('div', 'help-row');
+            row.appendChild(withText(el('span', 'help-cmd'), it.cmd));
+            row.appendChild(withText(el('span', 'help-desc'), it.desc));
+            card.appendChild(row);
+        });
+        transcript.appendChild(card);
+        scrollToEnd();
+    }
+
     function addTool(tool) {
         removeEmpty();
         let e = transcript.querySelector('[data-tool="' + tool.Id + '"]');
@@ -292,6 +306,9 @@
                 break;
             case 'notice':
                 notice.textContent = message.message;
+                break;
+            case 'help':
+                addHelp(message);
                 break;
             case 'done':
                 finalizeAssistant(message.stats);

@@ -43,5 +43,15 @@
   "cmd.manage.toggleSkill": "Fähigkeit umschalten",
   "cmd.manage.editSettings": "Einstellungen bearbeiten",
   "cmd.showHelp": "Hilfe zur Verbindung mit mux",
-  "cmd.about": "Über mux"
+  "cmd.about": "Über mux",
+  "cmd.manage.addPrompt": "Prompt hinzufügen",
+  "cmd.manage.editPrompt": "Prompt bearbeiten",
+  "cmd.manage.deletePrompt": "Prompt löschen",
+  "cmd.manage.addSubagent": "Subagent hinzufügen",
+  "cmd.manage.editSubagent": "Subagent bearbeiten",
+  "cmd.manage.deleteSubagent": "Subagent löschen",
+  "cmd.manage.addSkill": "Fähigkeit hinzufügen",
+  "cmd.manage.editSkill": "Fähigkeit bearbeiten",
+  "cmd.manage.deleteSkill": "Fähigkeit löschen",
+  "cmd.usage": "Nutzungs-Dashboard"
 }

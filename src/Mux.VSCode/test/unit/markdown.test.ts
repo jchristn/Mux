@@ -64,6 +64,18 @@ test('renders a blockquote and paragraphs', () => {
     assert.ok(html.includes('<p>plain paragraph</p>'));
 });
 
+test('preserves single newlines within a paragraph as line breaks', () => {
+    const html = renderMarkdown('line one\nline two\nline three');
+    assert.ok(html.includes('line one<br>line two<br>line three'), 'newlines become <br>');
+    assert.ok(html.startsWith('<p>') && html.trim().endsWith('</p>'), 'still one paragraph');
+});
+
+test('separates paragraphs on a blank line', () => {
+    const html = renderMarkdown('para one\n\npara two');
+    assert.ok(html.includes('<p>para one</p>'));
+    assert.ok(html.includes('<p>para two</p>'));
+});
+
 test('empty input yields empty output', () => {
     assert.equal(renderMarkdown(''), '');
 });

@@ -96,7 +96,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private async onMessage(message: InboundMessage): Promise<void> {
         switch (message.type) {
             case 'send':
-                await this.runTurn(message.text);
+                if (message.text.trim().startsWith('/')) {
+                    await this.handleSlash(message.text.trim());
+                } else {
+                    await this.runTurn(message.text);
+                }
                 break;
             case 'stop':
                 this.activeRun?.abort();
@@ -107,6 +111,67 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             default:
                 break;
         }
+    }
+
+    // Handles a slash command typed in the composer, mirroring the TUI and desktop: some print help or clear
+    // the view, others open the corresponding editor surface. Unknown commands show the help card.
+    private async handleSlash(input: string): Promise<void> {
+        const command = input.split(/\s+/)[0].toLowerCase();
+        switch (command) {
+            case '/?':
+            case '/help':
+                this.postHelp();
+                break;
+            case '/clear':
+                this.post({ type: 'reset' });
+                break;
+            case '/new':
+                this.newConversation();
+                break;
+            case '/endpoints':
+            case '/endpoint':
+            case '/models':
+            case '/model':
+                await vscode.commands.executeCommand('mux.selectEndpoint');
+                break;
+            case '/usage':
+                await vscode.commands.executeCommand('mux.usage');
+                break;
+            case '/settings':
+                await vscode.commands.executeCommand('mux.manage.editSettings');
+                break;
+            case '/about':
+                await vscode.commands.executeCommand('mux.about');
+                break;
+            case '/reconnect':
+                await vscode.commands.executeCommand('mux.reconnect');
+                break;
+            case '/cwd':
+                await vscode.commands.executeCommand('mux.setWorkingDirectory');
+                break;
+            default:
+                this.post({ type: 'notice', message: vscode.l10n.t('Unknown command: {0}', command) });
+                this.postHelp();
+                break;
+        }
+    }
+
+    private postHelp(): void {
+        this.post({
+            type: 'help',
+            title: vscode.l10n.t('Chat commands'),
+            items: [
+                { cmd: '/help  /?', desc: vscode.l10n.t('Show this list') },
+                { cmd: '/new', desc: vscode.l10n.t('Start a new conversation') },
+                { cmd: '/clear', desc: vscode.l10n.t('Clear the transcript') },
+                { cmd: '/endpoints', desc: vscode.l10n.t('Choose the endpoint / model') },
+                { cmd: '/usage', desc: vscode.l10n.t('Open the usage dashboard') },
+                { cmd: '/settings', desc: vscode.l10n.t('Edit mux settings') },
+                { cmd: '/cwd', desc: vscode.l10n.t('Show the working directory') },
+                { cmd: '/reconnect', desc: vscode.l10n.t('Reconnect to the server') },
+                { cmd: '/about', desc: vscode.l10n.t('About mux') },
+            ],
+        });
     }
 
     private async answerApproval(runId: string, toolCallId: string, decision: 'y' | 'always' | 'n'): Promise<void> {
