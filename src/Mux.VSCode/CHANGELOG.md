@@ -4,6 +4,11 @@ All notable changes to the mux VS Code extension are documented here.
 
 ## 0.2.0
 
+- **Richer usage charts.** The usage dashboard now has six metric views: a stacked token breakdown
+  (prompt/cached/output), a cost bar, and min–avg–p95–p99–max distribution candlesticks for latency, TTFT,
+  streaming, and throughput — with a legend and per-bar tooltips.
+- **Fully localized panels.** The management forms, About, usage, help, and connection dialogs are translated
+  into all twelve languages (first pass; CJK/Arabic/Hindi benefit from a native review).
 - **Fuller management.** MCP servers now edit auth (bearer token / API key with a preserved-when-blank
   secret, header, and path); prompts, subagents, and skills are fully add/edit/delete (skills create and edit
   their `SKILL.md`); and a **native usage dashboard** (KPIs plus a hand-rolled over-time chart with range and

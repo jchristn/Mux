@@ -116,6 +116,16 @@ export interface MuxServerSettings {
     [key: string]: unknown;
 }
 
+/** A min/avg/p95/p99/max distribution, used for latency/TTFT/streaming/throughput. */
+export interface UsageDistribution {
+    Min: number;
+    Avg: number;
+    P95: number;
+    P99: number;
+    Max: number;
+    Count: number;
+}
+
 /** Aggregate usage metrics from `GET /v1.0/api/usage/summary`. */
 export interface UsageMetrics {
     Calls: number;
@@ -128,7 +138,12 @@ export interface UsageMetrics {
     CostUsd: number;
     AvgTtftMs: number;
     AvgTotalMs: number;
+    AvgStreamMs: number;
     AvgTokensPerSec: number;
+    TotalMsDist?: UsageDistribution;
+    TtftMsDist?: UsageDistribution;
+    StreamMsDist?: UsageDistribution;
+    ThroughputDist?: UsageDistribution;
     [key: string]: unknown;
 }
 
