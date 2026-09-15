@@ -76,6 +76,10 @@ namespace Test.Shared.Suites
                                 MuxAssert.AreEqual(JobState.Queued, second.State, "second queued");
 
                                 releaseFirst.TrySetResult(true);
+                                // Wait for each job's own terminal state — the manager updates job states
+                                // independently, so the last job completing does not guarantee the first's
+                                // state has propagated yet (a race seen on slower runners).
+                                await WaitForStateAsync(first, JobState.Completed, ct).ConfigureAwait(false);
                                 await WaitForStateAsync(second, JobState.Completed, ct).ConfigureAwait(false);
 
                                 MuxAssert.AreEqual(JobState.Completed, first.State, "first completed");
@@ -124,6 +128,10 @@ namespace Test.Shared.Suites
                                 MuxAssert.AreEqual(JobState.Queued, fourth.State, "fourth queued");
 
                                 releaseAll.TrySetResult(true);
+                                // Wait for each job's own terminal state (states propagate independently).
+                                await WaitForStateAsync(first, JobState.Completed, ct).ConfigureAwait(false);
+                                await WaitForStateAsync(second, JobState.Completed, ct).ConfigureAwait(false);
+                                await WaitForStateAsync(third, JobState.Completed, ct).ConfigureAwait(false);
                                 await WaitForStateAsync(fourth, JobState.Completed, ct).ConfigureAwait(false);
 
                                 MuxAssert.AreEqual(JobState.Completed, first.State, "first completed");
@@ -207,6 +215,7 @@ namespace Test.Shared.Suites
                                 MuxAssert.IsTrue(moved, "moved");
 
                                 releaseFirst.TrySetResult(true);
+                                await WaitForStateAsync(first, JobState.Completed, ct).ConfigureAwait(false);
                                 await WaitForStateAsync(second, JobState.Completed, ct).ConfigureAwait(false);
                                 await WaitForStateAsync(third, JobState.Completed, ct).ConfigureAwait(false);
 
