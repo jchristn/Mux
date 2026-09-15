@@ -11,11 +11,18 @@ import {
     ChatStreamRequest,
     CheckpointActionResult,
     CheckpointStatus,
+    EndpointDetail,
     EndpointSummary,
     HealthResponse,
+    McpServer,
+    MuxServerSettings,
+    PromptProfile,
     SessionDetail,
     SessionSummary,
+    SkillSummary,
     StreamEvent,
+    Subagent,
+    UsageSummary,
 } from './types';
 
 /** Options for constructing an {@link ApiClient}. */
@@ -82,6 +89,81 @@ export class ApiClient {
     /** Renders a session to Markdown or HTML for download. */
     public getSessionExport(id: string, format: 'md' | 'html', signal?: AbortSignal): Promise<{ format: string; filename: string; content: string }> {
         return this.getJson(`/v1.0/api/sessions/export?id=${encodeURIComponent(id)}&format=${format}`, signal);
+    }
+
+    /** Lists the full, editable endpoints (secrets masked). */
+    public async getEndpointDetails(signal?: AbortSignal): Promise<EndpointDetail[]> {
+        const response = await this.getJson<{ Items: EndpointDetail[] }>('/v1.0/api/endpoints/detail', signal);
+        return response.Items ?? [];
+    }
+
+    /** Replaces the endpoint collection. A blank ApiKey on an item preserves the stored one. */
+    public async putEndpoints(items: EndpointDetail[], signal?: AbortSignal): Promise<void> {
+        await this.sendJson('PUT', '/v1.0/api/endpoints', { Items: items }, signal);
+    }
+
+    /** Deletes an endpoint by name. */
+    public async deleteEndpoint(name: string, signal?: AbortSignal): Promise<void> {
+        await this.send('DELETE', `/v1.0/api/endpoints?name=${encodeURIComponent(name)}`, undefined, signal);
+    }
+
+    /** Lists configured MCP servers. */
+    public async getMcpServers(signal?: AbortSignal): Promise<McpServer[]> {
+        const response = await this.getJson<{ Items: McpServer[] }>('/v1.0/api/mcp-servers', signal);
+        return response.Items ?? [];
+    }
+
+    /** Replaces the MCP server collection. */
+    public async putMcpServers(items: McpServer[], signal?: AbortSignal): Promise<void> {
+        await this.sendJson('PUT', '/v1.0/api/mcp-servers', { Items: items }, signal);
+    }
+
+    /** Deletes an MCP server by name. */
+    public async deleteMcpServer(name: string, signal?: AbortSignal): Promise<void> {
+        await this.send('DELETE', `/v1.0/api/mcp-servers?name=${encodeURIComponent(name)}`, undefined, signal);
+    }
+
+    /** Lists prompt profiles. */
+    public async getPrompts(signal?: AbortSignal): Promise<PromptProfile[]> {
+        const response = await this.getJson<{ Items: PromptProfile[] }>('/v1.0/api/prompts', signal);
+        return response.Items ?? [];
+    }
+
+    /** Replaces the prompt profile collection (exactly one should be active). */
+    public async putPrompts(items: PromptProfile[], signal?: AbortSignal): Promise<void> {
+        await this.sendJson('PUT', '/v1.0/api/prompts', { Items: items }, signal);
+    }
+
+    /** Lists subagents. */
+    public async getSubagents(signal?: AbortSignal): Promise<Subagent[]> {
+        const response = await this.getJson<{ Items: Subagent[] }>('/v1.0/api/subagents', signal);
+        return response.Items ?? [];
+    }
+
+    /** Lists skills. */
+    public async getSkills(signal?: AbortSignal): Promise<SkillSummary[]> {
+        const response = await this.getJson<{ Items: SkillSummary[] }>('/v1.0/api/skills', signal);
+        return response.Items ?? [];
+    }
+
+    /** Enables or disables a skill by id. */
+    public async setSkillEnabled(id: string, enabled: boolean, signal?: AbortSignal): Promise<void> {
+        await this.sendJson('PUT', '/v1.0/api/skills/enabled', { Id: id, Enabled: enabled }, signal);
+    }
+
+    /** Reads the editable settings (secrets masked). */
+    public getSettings(signal?: AbortSignal): Promise<MuxServerSettings> {
+        return this.getJson<MuxServerSettings>('/v1.0/api/settings', signal);
+    }
+
+    /** Updates settings (validated and clamped server-side). */
+    public async putSettings(settings: MuxServerSettings, signal?: AbortSignal): Promise<void> {
+        await this.sendJson('PUT', '/v1.0/api/settings', settings, signal);
+    }
+
+    /** Reads a usage summary for a range (`hour`, `day`, `week`, `month`, `all`). */
+    public getUsageSummary(range: string, signal?: AbortSignal): Promise<UsageSummary> {
+        return this.getJson<UsageSummary>(`/v1.0/api/usage/summary?range=${encodeURIComponent(range)}`, signal);
     }
 
     /** Reads whether a turn's changes can be undone or redone in a working directory. */

@@ -28,5 +28,18 @@
   "config.approvalPosture.prompt": "在运行会修改文件的工具之前，在编辑器中询问。",
   "config.approvalPosture.autoSafe": "自动批准只读工具；拒绝会修改的工具。",
   "config.context.sources": "默认附加到运行的编辑器上下文。",
-  "config.locale": "显示语言 (BCP 47)。留空则跟随编辑器语言。"
+  "config.locale": "显示语言 (BCP 47)。留空则跟随编辑器语言。",
+  "view.manage.name": "管理",
+  "cmd.reconnect": "重新连接到 mux 服务器",
+  "cmd.manage.refresh": "刷新",
+  "cmd.manage.addEndpoint": "添加端点",
+  "cmd.manage.editEndpoint": "编辑端点",
+  "cmd.manage.deleteEndpoint": "删除端点",
+  "cmd.manage.setDefaultEndpoint": "设为默认",
+  "cmd.manage.addMcp": "添加 MCP 服务器",
+  "cmd.manage.editMcp": "编辑 MCP 服务器",
+  "cmd.manage.deleteMcp": "删除 MCP 服务器",
+  "cmd.manage.activatePrompt": "设为活动提示词",
+  "cmd.manage.toggleSkill": "切换技能",
+  "cmd.manage.editSettings": "编辑设置"
 }

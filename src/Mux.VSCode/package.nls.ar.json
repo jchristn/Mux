@@ -28,5 +28,18 @@
   "config.approvalPosture.prompt": "السؤال في المحرر قبل تشغيل أداة تعدّل الملفات.",
   "config.approvalPosture.autoSafe": "الموافقة تلقائيًا على أدوات القراءة فقط؛ ورفض الأدوات التي تعدّل.",
   "config.context.sources": "سياق المحرر المرفق بالتنفيذ افتراضيًا.",
-  "config.locale": "لغة العرض (BCP 47). الفراغ يتبع لغة المحرر."
+  "config.locale": "لغة العرض (BCP 47). الفراغ يتبع لغة المحرر.",
+  "view.manage.name": "إدارة",
+  "cmd.reconnect": "إعادة الاتصال بخادم mux",
+  "cmd.manage.refresh": "تحديث",
+  "cmd.manage.addEndpoint": "إضافة نقطة نهاية",
+  "cmd.manage.editEndpoint": "تعديل نقطة النهاية",
+  "cmd.manage.deleteEndpoint": "حذف نقطة النهاية",
+  "cmd.manage.setDefaultEndpoint": "تعيين كافتراضي",
+  "cmd.manage.addMcp": "إضافة خادم MCP",
+  "cmd.manage.editMcp": "تعديل خادم MCP",
+  "cmd.manage.deleteMcp": "حذف خادم MCP",
+  "cmd.manage.activatePrompt": "تعيين كموجّه نشط",
+  "cmd.manage.toggleSkill": "تبديل المهارة",
+  "cmd.manage.editSettings": "تعديل الإعدادات"
 }

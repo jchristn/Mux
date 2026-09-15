@@ -28,5 +28,18 @@
   "config.approvalPosture.prompt": "Спрашивать в редакторе перед запуском изменяющего инструмента.",
   "config.approvalPosture.autoSafe": "Автоматически одобрять инструменты только для чтения; отклонять изменяющие.",
   "config.context.sources": "Контекст редактора, прикрепляемый к запуску по умолчанию.",
-  "config.locale": "Язык отображения (BCP 47). Пусто — следует языку редактора."
+  "config.locale": "Язык отображения (BCP 47). Пусто — следует языку редактора.",
+  "view.manage.name": "Управление",
+  "cmd.reconnect": "Переподключиться к серверу mux",
+  "cmd.manage.refresh": "Обновить",
+  "cmd.manage.addEndpoint": "Добавить эндпоинт",
+  "cmd.manage.editEndpoint": "Изменить эндпоинт",
+  "cmd.manage.deleteEndpoint": "Удалить эндпоинт",
+  "cmd.manage.setDefaultEndpoint": "Сделать по умолчанию",
+  "cmd.manage.addMcp": "Добавить сервер MCP",
+  "cmd.manage.editMcp": "Изменить сервер MCP",
+  "cmd.manage.deleteMcp": "Удалить сервер MCP",
+  "cmd.manage.activatePrompt": "Сделать активным промптом",
+  "cmd.manage.toggleSkill": "Переключить навык",
+  "cmd.manage.editSettings": "Изменить настройки"
 }

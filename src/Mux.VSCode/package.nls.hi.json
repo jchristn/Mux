@@ -28,5 +28,18 @@
   "config.approvalPosture.prompt": "फ़ाइल बदलने वाला उपकरण चलाने से पहले संपादक में पूछें।",
   "config.approvalPosture.autoSafe": "केवल-पढ़ने वाले उपकरण स्वतः स्वीकृत करें; बदलने वालों को अस्वीकार करें।",
   "config.context.sources": "डिफ़ॉल्ट रूप से रन के साथ संलग्न संपादक संदर्भ।",
-  "config.locale": "प्रदर्शन भाषा (BCP 47)। खाली होने पर संपादक की भाषा का अनुसरण करता है।"
+  "config.locale": "प्रदर्शन भाषा (BCP 47)। खाली होने पर संपादक की भाषा का अनुसरण करता है।",
+  "view.manage.name": "प्रबंधन",
+  "cmd.reconnect": "mux सर्वर से पुनः कनेक्ट करें",
+  "cmd.manage.refresh": "ताज़ा करें",
+  "cmd.manage.addEndpoint": "एंडपॉइंट जोड़ें",
+  "cmd.manage.editEndpoint": "एंडपॉइंट संपादित करें",
+  "cmd.manage.deleteEndpoint": "एंडपॉइंट हटाएँ",
+  "cmd.manage.setDefaultEndpoint": "डिफ़ॉल्ट के रूप में सेट करें",
+  "cmd.manage.addMcp": "MCP सर्वर जोड़ें",
+  "cmd.manage.editMcp": "MCP सर्वर संपादित करें",
+  "cmd.manage.deleteMcp": "MCP सर्वर हटाएँ",
+  "cmd.manage.activatePrompt": "सक्रिय प्रॉम्प्ट के रूप में सेट करें",
+  "cmd.manage.toggleSkill": "स्किल टॉगल करें",
+  "cmd.manage.editSettings": "सेटिंग्स संपादित करें"
 }

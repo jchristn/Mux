@@ -26,7 +26,10 @@ there, and one you start there opens here.
   a prompt, and see exactly what was sent.
 - **Sessions** — list, resume, rename, duplicate, export, and delete the sessions shared across every mux
   surface.
-- **Endpoint picker** — choose the endpoint runs go against from the status bar.
+- **Manage** — a tree view over the server's live config: connection status, endpoints (add/edit/delete/set
+  default), MCP servers, prompt profiles, skills, a settings editor, and a usage summary.
+- **Endpoint picker** — choose the endpoint runs go against from the status bar, next to a connection-status
+  indicator.
 
 ## Getting started
 

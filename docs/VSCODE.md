@@ -56,6 +56,27 @@ panel with its transcript intact; rename, duplicate, export (Markdown or HTML), 
 context menu. Because this is the same store the terminal UI and desktop app read, a session you started
 anywhere is here, and a session you start here is there.
 
+## Managing mux from the editor
+
+The **Manage** view in the mux side bar gives you the visibility and control the terminal UI and desktop app
+have, without leaving the editor. At the top it shows whether the extension is connected, to which server,
+and at what version and API contract; clicking it (or the status-bar item) reconnects. Below that, each
+section reads the server's live configuration:
+
+- **Endpoints** — add, edit, delete, and set the default from a form (adapter, base URL, model, API key,
+  token/context limits, per-endpoint tool auto-approval). The API key field is blank on edit and leaving it
+  blank keeps the stored key.
+- **MCP Servers** — add, edit, and delete stdio or HTTP servers.
+- **Prompts** — see your prompt profiles and set which one is active.
+- **Subagents** — see the configured subagents and their descriptions.
+- **Skills** — see every discovered skill and toggle it on or off.
+- **Settings** — opens an editor over the server's settings (approval policy, iteration and concurrency
+  limits, compaction, task planning, and more).
+- **Usage** — a quick summary of calls, tokens, cost, errors, and latency for the last day.
+
+Everything here changes the same configuration the CLI, desktop app, and dashboard read, because it goes
+through the same local server — so a change you make in the editor shows up everywhere.
+
 ## Settings
 
 - `mux.server.autoStart` — start a local server when none is reachable. Turn it off to require your own.

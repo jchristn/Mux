@@ -28,5 +28,18 @@
   "config.approvalPosture.prompt": "Demander dans l'éditeur avant d'exécuter un outil qui modifie des fichiers.",
   "config.approvalPosture.autoSafe": "Approuver automatiquement les outils en lecture seule ; refuser ceux qui modifient.",
   "config.context.sources": "Le contexte de l'éditeur joint à une exécution par défaut.",
-  "config.locale": "Langue d'affichage (BCP 47). Vide suit la langue de l'éditeur."
+  "config.locale": "Langue d'affichage (BCP 47). Vide suit la langue de l'éditeur.",
+  "view.manage.name": "Gérer",
+  "cmd.reconnect": "Se reconnecter au serveur mux",
+  "cmd.manage.refresh": "Actualiser",
+  "cmd.manage.addEndpoint": "Ajouter un endpoint",
+  "cmd.manage.editEndpoint": "Modifier l’endpoint",
+  "cmd.manage.deleteEndpoint": "Supprimer l’endpoint",
+  "cmd.manage.setDefaultEndpoint": "Définir par défaut",
+  "cmd.manage.addMcp": "Ajouter un serveur MCP",
+  "cmd.manage.editMcp": "Modifier le serveur MCP",
+  "cmd.manage.deleteMcp": "Supprimer le serveur MCP",
+  "cmd.manage.activatePrompt": "Définir comme prompt actif",
+  "cmd.manage.toggleSkill": "Activer/désactiver la compétence",
+  "cmd.manage.editSettings": "Modifier les paramètres"
 }

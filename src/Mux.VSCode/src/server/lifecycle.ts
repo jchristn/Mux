@@ -8,6 +8,27 @@ import { checkContract } from './contract';
 
 const SECRET_KEY = 'mux.apiKey';
 
+/** The current connection state, surfaced to the status bar and management tree. */
+export interface ConnectionState {
+    /** Whether a compatible server is currently connected. */
+    connected: boolean;
+
+    /** The base URL of the connected (or last-attempted) server. */
+    baseUrl: string;
+
+    /** The server's product version, when connected. */
+    productVersion: string;
+
+    /** The negotiated API contract version, when connected. */
+    contractVersion: string;
+
+    /** Whether the extension started this server (vs. reusing an already-running one). */
+    ownedByExtension: boolean;
+
+    /** A human-readable reason when not connected. */
+    detail: string;
+}
+
 /**
  * Owns the connection to a local `mux serve`. On demand it reuses a reachable, contract-compatible server the
  * extension can authenticate against, or starts one bound to loopback with a key it generates and keeps in
@@ -19,6 +40,18 @@ export class MuxServerLifecycle implements vscode.Disposable {
     private client: ApiClient | undefined;
     private ownedProcess: childProcess.ChildProcess | undefined;
     private connecting: Promise<ApiClient> | undefined;
+    private readonly stateChanged = new vscode.EventEmitter<ConnectionState>();
+    private currentState: ConnectionState = {
+        connected: false,
+        baseUrl: '',
+        productVersion: '',
+        contractVersion: '',
+        ownedByExtension: false,
+        detail: 'Not connected',
+    };
+
+    /** Fires whenever the connection state changes (connected, disconnected, reconnecting). */
+    public readonly onDidChangeState = this.stateChanged.event;
 
     /**
      * Creates the lifecycle.
@@ -27,6 +60,32 @@ export class MuxServerLifecycle implements vscode.Disposable {
      */
     public constructor(context: vscode.ExtensionContext) {
         this.context = context;
+    }
+
+    /** The current connection state. */
+    public get state(): ConnectionState {
+        return this.currentState;
+    }
+
+    private setState(next: Partial<ConnectionState>): void {
+        this.currentState = { ...this.currentState, ...next };
+        this.stateChanged.fire(this.currentState);
+    }
+
+    /**
+     * Drops the cached client and reconnects, firing state changes. Used by the "reconnect" command and after
+     * a config change that may have moved the server.
+     *
+     * @param token A cancellation token.
+     */
+    public async reconnect(token: vscode.CancellationToken): Promise<void> {
+        this.client = undefined;
+        this.setState({ connected: false, detail: 'Reconnecting…' });
+        try {
+            await this.getClient(token);
+        } catch (error) {
+            this.setState({ connected: false, detail: error instanceof Error ? error.message : String(error) });
+        }
     }
 
     /**
@@ -56,6 +115,8 @@ export class MuxServerLifecycle implements vscode.Disposable {
         const port = settings.port > 0 ? settings.port : DEFAULT_PORT;
         const baseUrl = `http://127.0.0.1:${port}`;
 
+        this.setState({ baseUrl, detail: 'Connecting…' });
+
         const existingKey = await this.context.secrets.get(SECRET_KEY);
         const reusable = await this.tryReuse(baseUrl, existingKey ?? null, token);
         if (reusable) {
@@ -64,15 +125,25 @@ export class MuxServerLifecycle implements vscode.Disposable {
         }
 
         if (!settings.autoStart) {
-            throw new Error(`No mux server is reachable at ${baseUrl} and auto-start is disabled. Start one with "mux serve --allow-tools" or enable mux.server.autoStart.`);
+            const message = `No mux server is reachable at ${baseUrl} and auto-start is disabled. Start one with "mux serve --allow-tools" or enable mux.server.autoStart.`;
+            this.setState({ connected: false, detail: message });
+            throw new Error(message);
         }
 
         const key = `mux_${crypto.randomBytes(16).toString('hex')}`;
         await this.spawnServer(settings.muxPath, port, key);
         const client = new ApiClient({ baseUrl, apiKey: key });
-        await this.waitForHealth(client, token);
+        const health = await this.waitForHealth(client, token);
         await this.context.secrets.store(SECRET_KEY, key);
         this.client = client;
+        this.setState({
+            connected: true,
+            baseUrl,
+            productVersion: health.Version,
+            contractVersion: health.ContractVersion,
+            ownedByExtension: true,
+            detail: 'Started by the extension',
+        });
         return client;
     }
 
@@ -88,6 +159,14 @@ export class MuxServerLifecycle implements vscode.Disposable {
             // Confirm the stored key actually authenticates against this server before reusing it.
             await client.getEndpoints(this.abortAfter(token, 2000));
             log(`Reusing mux server at ${baseUrl} (contract ${health.ContractVersion}).`);
+            this.setState({
+                connected: true,
+                baseUrl,
+                productVersion: health.Version,
+                contractVersion: health.ContractVersion,
+                ownedByExtension: false,
+                detail: 'Reusing a running server',
+            });
             return client;
         } catch (error) {
             logError(`Could not reuse a server at ${baseUrl}; will start one.`, error);
@@ -115,7 +194,7 @@ export class MuxServerLifecycle implements vscode.Disposable {
         });
     }
 
-    private async waitForHealth(client: ApiClient, token: vscode.CancellationToken): Promise<void> {
+    private async waitForHealth(client: ApiClient, token: vscode.CancellationToken): Promise<import('../api/types').HealthResponse> {
         const deadline = Date.now() + 15000;
         for (;;) {
             if (token.isCancellationRequested) {
@@ -130,7 +209,7 @@ export class MuxServerLifecycle implements vscode.Disposable {
                 }
 
                 log(`mux server ready (contract ${health.ContractVersion}).`);
-                return;
+                return health;
             } catch (error) {
                 if (Date.now() > deadline) {
                     throw new Error(`The mux server did not become ready in time. ${error instanceof Error ? error.message : ''}`.trim());
@@ -163,6 +242,8 @@ export class MuxServerLifecycle implements vscode.Disposable {
         }
 
         this.client = undefined;
+        this.setState({ connected: false, detail: 'Extension deactivated' });
+        this.stateChanged.dispose();
     }
 }
 

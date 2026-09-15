@@ -12,6 +12,125 @@ export interface EndpointSummary {
     IsDefault: boolean;
 }
 
+/** A custom header on an endpoint (secrets blanked on read, with a set flag). */
+export interface EndpointHeader {
+    Key: string;
+    Value: string;
+    ValueSet?: boolean;
+}
+
+/** A full, editable endpoint as returned by `GET /v1.0/api/endpoints/detail` (secrets masked). */
+export interface EndpointDetail {
+    Name: string;
+    AdapterType: string;
+    BaseUrl?: string | null;
+    Model: string;
+    IsDefault: boolean;
+    MaxTokens?: number;
+    Temperature?: number;
+    ContextWindow?: number;
+    TimeoutMs?: number;
+    AutoApproveTools?: boolean;
+    ShowThinking?: boolean;
+    ApiKey?: string;
+    ApiKeySet?: boolean;
+    Headers?: EndpointHeader[];
+}
+
+/** An MCP server definition as returned by `GET /v1.0/api/mcp-servers`. */
+export interface McpServer {
+    Name: string;
+    Transport?: string;
+    Command?: string;
+    Args?: string[];
+    Url?: string;
+    [key: string]: unknown;
+}
+
+/** A prompt profile as returned by `GET /v1.0/api/prompts`. */
+export interface PromptProfile {
+    Name: string;
+    IsActive: boolean;
+    SystemPrompt: string;
+    [key: string]: unknown;
+}
+
+/** A subagent definition as returned by `GET /v1.0/api/subagents`. */
+export interface Subagent {
+    Name: string;
+    Description: string;
+    SystemPrompt?: string;
+    AllowedTools?: string[];
+    [key: string]: unknown;
+}
+
+/** A skill summary as returned by `GET /v1.0/api/skills`. */
+export interface SkillSummary {
+    Name: string;
+    Title: string;
+    Description: string;
+    Enabled: boolean;
+    Valid: boolean;
+    Mutating: boolean;
+    Commands: number;
+    Errors: string[];
+}
+
+/** The masked REST sub-settings. */
+export interface RestSettings {
+    Enabled: boolean;
+    Hostname: string;
+    Port: number;
+    Ssl: boolean;
+    CorsAllowOrigin: string;
+    ApiKeySet: boolean;
+    ApiKey?: string;
+}
+
+/** The editable settings object as returned by `GET /v1.0/api/settings`. */
+export interface MuxServerSettings {
+    DefaultApprovalPolicy: string;
+    MaxAgentIterations: number;
+    MaxConcurrency: number;
+    ToolTimeoutMs: number;
+    ProcessTimeoutMs: number;
+    AutoCompactEnabled: boolean;
+    CompactionStrategy: string;
+    CompactionPreserveTurns: number;
+    ContextWarningThresholdPercent: number;
+    SkillsEnabled: boolean;
+    TaskPlanningEnabled: boolean;
+    TaskParallelismEnabled: boolean;
+    IgnoreCertErrors: boolean;
+    ShowBoundaryLines: boolean;
+    DefaultEnqueueBehavior: string;
+    Rest: RestSettings;
+    [key: string]: unknown;
+}
+
+/** Aggregate usage metrics from `GET /v1.0/api/usage/summary`. */
+export interface UsageMetrics {
+    Calls: number;
+    Errors: number;
+    ErrorRate: number;
+    InputTokens: number;
+    CachedTokens: number;
+    OutputTokens: number;
+    TotalTokens: number;
+    CostUsd: number;
+    AvgTtftMs: number;
+    AvgTotalMs: number;
+    AvgTokensPerSec: number;
+    [key: string]: unknown;
+}
+
+/** The usage summary response. */
+export interface UsageSummary {
+    FromUnixMs: number;
+    ToUnixMs: number;
+    Metrics: UsageMetrics;
+}
+
 /** A persisted session summary, as returned by `GET /v1.0/api/sessions`. */
 export interface SessionSummary {
     Id: string;

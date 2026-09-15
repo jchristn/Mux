@@ -2,7 +2,7 @@
   "name": "mux-ai",
   "displayName": "mux-ai",
   "description": "mux in your editor — chat, inline commands, native diffs, and shared sessions over the local mux agent.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "icon": "dashboard/media/icon.png",
   "publisher": "usemux",
   "license": "MIT",
@@ -52,6 +52,10 @@
         {
           "id": "mux.sessions",
           "name": "%view.sessions.name%"
+        },
+        {
+          "id": "mux.manage",
+          "name": "%view.manage.name%"
         }
       ]
     },
@@ -61,6 +65,12 @@
         "title": "%cmd.newConversation%",
         "category": "mux",
         "icon": "$(add)"
+      },
+      {
+        "command": "mux.reconnect",
+        "title": "%cmd.reconnect%",
+        "category": "mux",
+        "icon": "$(sync)"
       },
       {
         "command": "mux.explainSelection",
@@ -152,7 +162,18 @@
         "command": "mux.sessions.delete",
         "title": "%cmd.sessions.delete%",
         "category": "mux"
-      }
+      },
+      { "command": "mux.manage.refresh", "title": "%cmd.manage.refresh%", "category": "mux", "icon": "$(refresh)" },
+      { "command": "mux.manage.addEndpoint", "title": "%cmd.manage.addEndpoint%", "category": "mux", "icon": "$(add)" },
+      { "command": "mux.manage.editEndpoint", "title": "%cmd.manage.editEndpoint%", "category": "mux" },
+      { "command": "mux.manage.deleteEndpoint", "title": "%cmd.manage.deleteEndpoint%", "category": "mux" },
+      { "command": "mux.manage.setDefaultEndpoint", "title": "%cmd.manage.setDefaultEndpoint%", "category": "mux" },
+      { "command": "mux.manage.addMcp", "title": "%cmd.manage.addMcp%", "category": "mux", "icon": "$(add)" },
+      { "command": "mux.manage.editMcp", "title": "%cmd.manage.editMcp%", "category": "mux" },
+      { "command": "mux.manage.deleteMcp", "title": "%cmd.manage.deleteMcp%", "category": "mux" },
+      { "command": "mux.manage.activatePrompt", "title": "%cmd.manage.activatePrompt%", "category": "mux" },
+      { "command": "mux.manage.toggleSkill", "title": "%cmd.manage.toggleSkill%", "category": "mux" },
+      { "command": "mux.manage.editSettings", "title": "%cmd.manage.editSettings%", "category": "mux" }
     ],
     "menus": {
       "editor/context": [
@@ -182,9 +203,23 @@
           "command": "mux.sessions.refresh",
           "when": "view == mux.sessions",
           "group": "navigation"
+        },
+        {
+          "command": "mux.manage.refresh",
+          "when": "view == mux.manage",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
+        { "command": "mux.manage.addEndpoint", "when": "view == mux.manage && viewItem == section-endpoints", "group": "inline" },
+        { "command": "mux.manage.addMcp", "when": "view == mux.manage && viewItem == section-mcp", "group": "inline" },
+        { "command": "mux.manage.editEndpoint", "when": "view == mux.manage && viewItem == endpoint", "group": "1@1" },
+        { "command": "mux.manage.setDefaultEndpoint", "when": "view == mux.manage && viewItem == endpoint", "group": "1@2" },
+        { "command": "mux.manage.deleteEndpoint", "when": "view == mux.manage && viewItem == endpoint", "group": "2@1" },
+        { "command": "mux.manage.editMcp", "when": "view == mux.manage && viewItem == mcp", "group": "1@1" },
+        { "command": "mux.manage.deleteMcp", "when": "view == mux.manage && viewItem == mcp", "group": "2@1" },
+        { "command": "mux.manage.activatePrompt", "when": "view == mux.manage && viewItem == prompt", "group": "1@1" },
+        { "command": "mux.manage.toggleSkill", "when": "view == mux.manage && viewItem == skill", "group": "1@1" },
         {
           "command": "mux.sessions.resume",
           "when": "view == mux.sessions",

@@ -28,5 +28,18 @@
   "config.approvalPosture.prompt": "Perguntar no editor antes de executar uma ferramenta que altera arquivos.",
   "config.approvalPosture.autoSafe": "Aprovar automaticamente ferramentas somente leitura; negar as que alteram.",
   "config.context.sources": "O contexto do editor anexado a uma execução por padrão.",
-  "config.locale": "Idioma de exibição (BCP 47). Vazio segue o idioma do editor."
+  "config.locale": "Idioma de exibição (BCP 47). Vazio segue o idioma do editor.",
+  "view.manage.name": "Gerenciar",
+  "cmd.reconnect": "Reconectar ao servidor mux",
+  "cmd.manage.refresh": "Atualizar",
+  "cmd.manage.addEndpoint": "Adicionar endpoint",
+  "cmd.manage.editEndpoint": "Editar endpoint",
+  "cmd.manage.deleteEndpoint": "Excluir endpoint",
+  "cmd.manage.setDefaultEndpoint": "Definir como padrão",
+  "cmd.manage.addMcp": "Adicionar servidor MCP",
+  "cmd.manage.editMcp": "Editar servidor MCP",
+  "cmd.manage.deleteMcp": "Excluir servidor MCP",
+  "cmd.manage.activatePrompt": "Definir como prompt ativo",
+  "cmd.manage.toggleSkill": "Alternar habilidade",
+  "cmd.manage.editSettings": "Editar configurações"
 }

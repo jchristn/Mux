@@ -2,6 +2,17 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 0.2.0
+
+- **Management view.** A new "Manage" tree in the mux side bar surfaces the server's live configuration and
+  lets you change it without leaving the editor: connection status (version, contract, URL) with reconnect;
+  endpoints (add / edit / delete / set default via a form); MCP servers (add / edit / delete); prompt
+  profiles (set active); skills (enable / disable); a settings editor; and a usage summary. Everything runs
+  over the same local REST API the dashboard and CLI use.
+- **Connection status bar item** showing connected / connecting / not-connected at a glance, with the
+  version and contract in the tooltip; click to reconnect.
+- Cleaned up the activity-bar icon (a single mux "M" mark instead of the previous "MX").
+
 ## 0.1.1
 
 - Added the Marketplace listing icon.

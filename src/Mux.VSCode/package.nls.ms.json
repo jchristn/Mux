@@ -28,5 +28,18 @@
   "config.approvalPosture.prompt": "Tanya dalam editor sebelum menjalankan alat yang mengubah fail.",
   "config.approvalPosture.autoSafe": "Luluskan alat baca sahaja secara automatik; tolak yang mengubah.",
   "config.context.sources": "Konteks editor yang dilampirkan pada larian secara lalai.",
-  "config.locale": "Bahasa paparan (BCP 47). Kosong mengikut bahasa editor."
+  "config.locale": "Bahasa paparan (BCP 47). Kosong mengikut bahasa editor.",
+  "view.manage.name": "Urus",
+  "cmd.reconnect": "Sambung semula ke pelayan mux",
+  "cmd.manage.refresh": "Muat semula",
+  "cmd.manage.addEndpoint": "Tambah endpoint",
+  "cmd.manage.editEndpoint": "Edit endpoint",
+  "cmd.manage.deleteEndpoint": "Padam endpoint",
+  "cmd.manage.setDefaultEndpoint": "Tetapkan sebagai lalai",
+  "cmd.manage.addMcp": "Tambah pelayan MCP",
+  "cmd.manage.editMcp": "Edit pelayan MCP",
+  "cmd.manage.deleteMcp": "Padam pelayan MCP",
+  "cmd.manage.activatePrompt": "Tetapkan sebagai prompt aktif",
+  "cmd.manage.toggleSkill": "Togol kemahiran",
+  "cmd.manage.editSettings": "Edit tetapan"
 }

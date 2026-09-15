@@ -28,5 +28,18 @@
   "config.approvalPosture.prompt": "ファイルを変更するツールを実行する前にエディターで確認します。",
   "config.approvalPosture.autoSafe": "読み取り専用ツールを自動承認し、変更するツールは拒否します。",
   "config.context.sources": "既定で実行に添付されるエディターのコンテキスト。",
-  "config.locale": "表示言語 (BCP 47)。空の場合はエディターの言語に従います。"
+  "config.locale": "表示言語 (BCP 47)。空の場合はエディターの言語に従います。",
+  "view.manage.name": "管理",
+  "cmd.reconnect": "mux サーバーに再接続",
+  "cmd.manage.refresh": "更新",
+  "cmd.manage.addEndpoint": "エンドポイントを追加",
+  "cmd.manage.editEndpoint": "エンドポイントを編集",
+  "cmd.manage.deleteEndpoint": "エンドポイントを削除",
+  "cmd.manage.setDefaultEndpoint": "既定に設定",
+  "cmd.manage.addMcp": "MCP サーバーを追加",
+  "cmd.manage.editMcp": "MCP サーバーを編集",
+  "cmd.manage.deleteMcp": "MCP サーバーを削除",
+  "cmd.manage.activatePrompt": "アクティブなプロンプトに設定",
+  "cmd.manage.toggleSkill": "スキルを切り替え",
+  "cmd.manage.editSettings": "設定を編集"
 }
