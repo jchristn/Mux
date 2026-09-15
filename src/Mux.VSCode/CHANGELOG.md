@@ -2,7 +2,7 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
-## 0.2.0
+## 0.2.1
 
 - **Richer usage charts.** The usage dashboard now has six metric views: a stacked token breakdown
   (prompt/cached/output), a cost bar, and min–avg–p95–p99–max distribution candlesticks for latency, TTFT,
