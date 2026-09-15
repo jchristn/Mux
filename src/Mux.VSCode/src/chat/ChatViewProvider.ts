@@ -245,7 +245,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 <div id="transcript" aria-live="polite"></div>
 <div id="notice" role="status"></div>
 <form id="composer">
-  <textarea id="input" rows="2" aria-label="${this.uiStrings()['composer.aria']}"></textarea>
+  <textarea id="input" rows="1" placeholder="${this.uiStrings()['composer.aria']}" aria-label="${this.uiStrings()['composer.aria']}"></textarea>
   <button id="send" type="submit">${this.uiStrings()['composer.send']}</button>
 </form>
 <script nonce="${nonce}">window.MUX_STRINGS = ${strings};</script>
@@ -268,6 +268,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             'approval.deny': vscode.l10n.t('Deny'),
             'thinking.label': vscode.l10n.t('Thinking'),
             'stopped': vscode.l10n.t('(stopped)'),
+            'role.you': vscode.l10n.t('You'),
+            'role.mux': vscode.l10n.t('mux'),
+            'role.error': vscode.l10n.t('Error'),
+            'stats.tokens': vscode.l10n.t('tokens'),
+            'stats.ttft': vscode.l10n.t('Time to first token'),
+            'stats.streaming': vscode.l10n.t('Streaming'),
+            'stats.total': vscode.l10n.t('Total time'),
+            'stats.input': vscode.l10n.t('Input tokens'),
+            'stats.output': vscode.l10n.t('Output tokens'),
+            'stats.totalTokens': vscode.l10n.t('Total tokens'),
         };
     }
 }

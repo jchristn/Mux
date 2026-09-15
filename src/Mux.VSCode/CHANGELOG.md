@@ -4,6 +4,12 @@ All notable changes to the mux VS Code extension are documented here.
 
 ## 0.2.0
 
+- **Refined chat panel.** Cleaner message layout with role labels, a mux-accent for assistant replies, a
+  streaming cursor, rounded chips for tool calls, an auto-growing composer (Enter to send, Shift+Enter for a
+  newline), and a tidier empty state — all on VS Code theme tokens.
+- **Per-turn stats on hover.** Each completed reply shows a small footer (time · tokens); hovering it reveals
+  the full breakdown — time to first token, streaming, total, and input/output/total tokens — like the web
+  dashboard and desktop app.
 - **Markdown rendering in chat.** Replies stream in as plain text token by token (unchanged responsiveness),
   then render as Markdown when the turn completes — headings, bold/italic, inline and fenced code, lists,
   blockquotes, links, and rules. Loaded conversations render the same way. The renderer is dependency-free
