@@ -9,7 +9,7 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.10.0-blue.svg" alt="v0.10.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.11.0-blue.svg" alt="v0.11.0"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="alpha"></a>
 </p>
 
@@ -18,9 +18,9 @@
 
 ## What is mux?
 
-`mux` is an AI coding agent that gives you a Claude Code / Codex-like experience using the backend and model you choose — from the terminal, a web dashboard, or a desktop app. It can run against Ollama, OpenAI, vLLM, LM Studio, Azure OpenAI, or any OpenAI-compatible API.
+`mux` is an AI coding agent that gives you a Claude Code / Codex-like experience using the backend and model you choose — from the terminal, a web dashboard, a desktop app, or your editor. It can run against Ollama, OpenAI, vLLM, LM Studio, Azure OpenAI, or any OpenAI-compatible API.
 
-`mux` can read and write files, run commands, search code, and manage a project across four surfaces that all share one engine (`Mux.Core`):
+`mux` can read and write files, run commands, search code, and manage a project across five surfaces that all share one engine (`Mux.Core`):
 - **Interactive terminal UI** — a full-screen REPL with per-job transcripts, a tool-approval modal, slash commands, and resumable sessions (`mux`).
 - **Non-interactive command surface** — single-shot runs for scripting and automation, including machine-readable `jsonl` output (`mux print`, `mux --print`).
 - **Local web dashboard** — `mux serve` hosts a loopback, token-guarded REST + WebSocket API and a self-contained single-page dashboard (chat, configuration, usage/pricing analytics, sessions), run in the background by a cross-platform system-tray agent. Web chats persist server-side into the shared session store, so they appear (and resume) in the TUI and desktop app too; read-only by default, `mux serve --allow-tools` lets mutating tools prompt the browser for approval.
@@ -77,62 +77,110 @@
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Local REST server & tray agent (`v0.9.0`, opt-in): `mux serve` starts a loopback-bound, token-guarded REST + WebSocket API (Watson 7) over mux's in-process services; a cross-platform Avalonia system-tray agent hosts it in the background with **About / Launch Mux / Exit**. Never auto-starts from a plain run. See `docs/REST_API.md`
 - Usage analytics: every model call is recorded to a local SQLite database (`~/.mux/usage.db`, multi-process safe, no external service) — tokens, cost, time-to-first-token, streaming time, latency, and throughput. See it via `/usage` and the live sidebar cost in the TUI, or the **Usage** and **Pricing** pages on the `mux serve` dashboard (charts over time with endpoint/model filters). Cost derives from an editable `pricing.json`. See `docs/CONFIG.md`
-- Desktop app (`v0.10.0`): `mux Desktop` is a cross-platform Avalonia client that links `Mux.Core` in-process. It offers streaming chat with Markdown, tables, and syntax-highlighted code (with per-response copy), thinking and tool-call cards, and auto-safe tool approvals; **parallel conversation tabs** that each run their own agent turn concurrently (switch tabs mid-turn without blocking); conversations/threads with AI-summarized titles, rename/export/bulk-delete; a command palette (`Ctrl+K`) and slash commands; MCP tools and skills in turns; live context/usage stats and the `mux serve` usage dashboard (candlestick charts with endpoint/conversation filters). Configuration is fully managed in-app — endpoints (with model import and validation), MCP servers (with connectivity checks), prompt profiles, skills, subagents, pricing, hooks, custom commands, keybindings, and web-search providers, plus a grouped settings surface, `/compact` and `/effort`, system/light/dark/**high-contrast** theming, and **full localization in 11 languages** (with right-to-left support for Arabic). Launch it with `run-desktop.bat` / `run-desktop.sh`. See `docs/DESKTOP.md`
+- Desktop app (`v0.11.0`): `mux Desktop` is a cross-platform Avalonia client that links `Mux.Core` in-process. It offers streaming chat with Markdown, tables, and syntax-highlighted code (with per-response copy), thinking and tool-call cards, and auto-safe tool approvals; **parallel conversation tabs** that each run their own agent turn concurrently (switch tabs mid-turn without blocking); conversations/threads with AI-summarized titles, rename/export/bulk-delete; a command palette (`Ctrl+K`) and slash commands; MCP tools and skills in turns; live context/usage stats and the `mux serve` usage dashboard (candlestick charts with endpoint/conversation filters). Configuration is fully managed in-app — endpoints (with model import and validation), MCP servers (with connectivity checks), prompt profiles, skills, subagents, pricing, hooks, custom commands, keybindings, and web-search providers, plus a grouped settings surface, `/compact` and `/effort`, system/light/dark/**high-contrast** theming, and **full localization in 11 languages** (with right-to-left support for Arabic). Launch it with `run-desktop.bat` / `run-desktop.sh`. See `docs/DESKTOP.md`
 - Engine as a library: `Mux.Core` (and `Mux.Search`) publish to NuGet with a symbol package, so you can build your own experiences on the mux engine (`AgentLoop`, `SessionStore`, `McpToolManager`, `UsageQueryService`, `SettingsLoader`)
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
 - Health checks: `mux probe` validates config, backend reachability, auth, and model access
 - Endpoint & model inspection: `mux endpoint list`/`show` report the configured endpoints, and `mux endpoint models` live-enumerates the models each backend advertises (Ollama `/api/tags`, OpenAI-compatible `/v1/models`) — as a table or `--output-format json`
 
-## Quick Start
+## Getting Started
 
-Prerequisites:
-- .NET 8 SDK or later
-- A model runner installed and running separately
+Every surface — the terminal UI, the web dashboard, the desktop app, and the VS Code extension — runs on the
+same `mux` engine and the same configuration under `~/.mux`. Install the CLI once and all four surfaces share
+your endpoints, sessions, and settings. Pick the surface (or surfaces) you want below; they are not mutually
+exclusive, and a conversation started in one resumes in another.
 
-Example with Ollama:
+### Prerequisites
 
-```bash
-ollama pull qwen2.5-coder:7b
-ollama serve
-```
+- **.NET 8 SDK or later** (the install scripts default to .NET 10 when present, otherwise .NET 8).
+- **A model backend.** Anything OpenAI-compatible works, plus native adapters for Anthropic, Gemini, Vertex,
+  and Bedrock. The quickest local start is [Ollama](https://ollama.com):
 
-Install `mux`:
+  ```bash
+  ollama pull qwen2.5-coder:7b
+  ollama serve
+  ```
+
+### Install the CLI (the foundation for every surface)
 
 ```bash
 git clone https://github.com/jchristn/Mux.git
 cd Mux
 
 # Windows
-install-tool.bat
-install-tool.bat net8.0
+install-tool.bat            # or: install-tool.bat net8.0
 
 # Linux / macOS
 chmod +x install-tool.sh
-./install-tool.sh
-./install-tool.sh net8.0
+./install-tool.sh           # or: ./install-tool.sh net8.0
 ```
 
-The install scripts accept an optional target framework argument. They default to `net10.0` when a .NET 10 SDK is installed and otherwise fall back to `net8.0`.
+On first run mux seeds `~/.mux/endpoints.json` (a default local Ollama endpoint) and `~/.mux/settings.json`.
+Set `MUX_CONFIG_DIR` before first launch if you want an isolated config directory. The full walkthrough is in
+[GETTING_STARTED.md](GETTING_STARTED.md).
 
-Run it:
-
-```bash
-mux
-```
-
-On first run, `mux` creates `~/.mux/endpoints.json` with a default local Ollama endpoint and `~/.mux/settings.json` with editable defaults. If you want an isolated config instead, set `MUX_CONFIG_DIR` before first launch.
-
-See [GETTING_STARTED.md](GETTING_STARTED.md) for the full walkthrough.
-
-## Verify It Works
-
-After install, try this prompt to confirm the model and tools are working end to end:
+To confirm the model and tools work end to end, run `mux` and try:
 
 ```text
 mux> create a file called hello.py that prints "hello world", then read it back to verify. if the file already exists, overwrite it. when finished, delete the file.
 ```
 
 You should see `write_file` and `read_file` tool calls, the file created on disk, and the contents read back.
+
+### Terminal UI
+
+The interactive terminal UI is the default surface — just run the command with no arguments:
+
+```bash
+mux
+```
+
+You get a full-screen REPL with per-job transcripts, a job sidebar, a multi-line composer, slash commands and
+key bindings, an interactive tool-approval modal, and autosaved, resumable sessions. Type `/?` (or press `F1`)
+for the command menu, `/endpoint` (or `Ctrl+E`) to switch models, and `/sessions` to browse and resume past
+conversations. For scripting, `mux print --output-format jsonl` runs the same engine non-interactively. See
+[USAGE.md](USAGE.md).
+
+### Web dashboard
+
+Start the local server and open the browser dashboard:
+
+```bash
+mux serve                   # add --allow-tools to let browser chats run mutating tools with approval
+```
+
+`mux serve` hosts a loopback-bound, token-guarded REST + WebSocket API and a self-contained single-page
+dashboard at the printed URL (default `http://127.0.0.1:8710/dashboard`) — chat, configuration, session
+management, and usage/pricing analytics. A cross-platform system-tray agent can host it in the background;
+from the tray you can Launch Dashboard, Launch Terminal, or Launch Desktop. See [docs/REST_API.md](docs/REST_API.md).
+
+### Desktop app
+
+Launch the Avalonia desktop client:
+
+```bash
+# Windows
+run-desktop.bat
+
+# Linux / macOS
+./run-desktop.sh
+```
+
+`mux Desktop` links `Mux.Core` in-process and offers streaming chat with Markdown, tables, and
+syntax-highlighted code; **parallel conversation tabs** that each run their own turn concurrently;
+AI-summarized conversation titles with rename/export/bulk-delete; a command palette (`Ctrl+K`); the full set
+of in-app configuration managers; the usage dashboard; and a UI localized into 11 languages. See
+[docs/DESKTOP.md](docs/DESKTOP.md).
+
+### VS Code extension
+
+Install **mux-ai** from the VS Code Marketplace (or search "mux" in the Extensions panel), then open the mux
+view in the activity bar. On the first message the extension connects to a running `mux serve` or starts one
+for you on loopback with a generated key. You get a streaming chat panel with in-editor tool approvals and
+per-turn stats, inline commands and code actions (explain, fix, generate tests, refactor, commit message,
+summarize diff, review file), editor context injection, a **Manage** view for endpoints / MCP servers /
+prompts / subagents / skills / settings, a native usage dashboard, and the shared session store. Source lives
+in `src/Mux.VSCode`; the full guide is in [docs/VSCODE.md](docs/VSCODE.md).
 
 ## CLI Usage
 

@@ -5,7 +5,7 @@
     <!-- Multi-targets net8.0;net10.0 (inherited from Directory.Build.props) so Test.Shared, which
          builds for both TFMs, can reference this project. In CI, invoke a single TFM by passing
          "-f net10.0" to dotnet run. -->
-    <Version>0.10.0</Version>
+    <Version>0.11.0</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <IsPackable>false</IsPackable>

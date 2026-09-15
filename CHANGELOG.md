@@ -2,10 +2,30 @@
 
 All notable changes to mux are documented here.
 
-## Unreleased
+## 0.11.0
 
 ### Added
 
+- **VS Code extension (`mux-ai`).** A fifth surface: mux in the editor, as a thin client over the local
+  `mux serve` API (`src/Mux.VSCode`, published to the VS Code Marketplace). A streaming chat panel with
+  in-editor tool approvals, Markdown rendering, and per-turn stats on hover; inline commands and code actions
+  (explain, fix, generate tests, refactor, commit message, summarize diff, review file); editor context
+  injection (active file, selection, diagnostics, open tabs, git diff, LSP symbols); a **Manage** view with
+  full CRUD over endpoints, MCP servers (including bearer/API-key auth), prompt profiles, subagents, skills,
+  and settings; a native usage dashboard (stacked token, cost, and latency/TTFT/streaming/throughput
+  candlestick charts); a session tree over the shared store; a connection-status indicator with actionable
+  help and an About panel; chat slash commands (`/help`, `/new`, `/usage`, …); and localization into twelve
+  languages. See `docs/VSCODE.md`.
+- **Change the working directory mid-session (`/cwd`).** The terminal UI and desktop app can now show or
+  change the directory the agent runs in without relaunching — `/cwd` reports it, `/cwd <path>` changes it for
+  subsequent turns (re-probing git checkpoints and re-substituting `{WorkingDirectory}` in the system prompt).
+  Backed by a shared, tested `Mux.Core.Utility.WorkingDirectoryResolver`.
+- **Tray-agent launchers.** The system-tray agent's menu now offers **Launch Dashboard**, **Launch Terminal**,
+  and **Launch Desktop**, so every surface starts from one place.
+- **Server prerequisites for editor runs.** `POST /v1.0/api/chat/stream` accepts an optional `workingDirectory`
+  (validated; resolved request → session → server), and `GET /v1.0/api/health` reports a `contractVersion`
+  clients negotiate against. Server-recorded git checkpoints power undo/redo over REST
+  (`/v1.0/api/checkpoints`).
 - **Cross-surface session portability & parity.** The terminal UI, desktop app, and web dashboard are now
   three windows onto one session store (`~/.mux/sessions`, keyed by a shared session id), so a conversation
   started in any surface can be resumed in any other — in any ordering — with its full transcript intact.
