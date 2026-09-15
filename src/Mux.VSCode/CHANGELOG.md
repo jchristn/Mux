@@ -2,6 +2,12 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 0.11.1
+
+- **Fix: Markdown now renders in chat replies.** The Markdown renderer is inlined into the chat page instead
+  of loaded as a separate script, so it is always defined before the panel runs — previously a reply could
+  render as plain text (raw `**` and code fences).
+
 ## 0.11.0
 
 - Aligned the extension version with the rest of the mux product (the .NET assets).

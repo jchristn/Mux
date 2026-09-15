@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { ApiClient } from '../api/ApiClient';
 import { readSettings } from '../config/settings';
@@ -316,10 +317,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   <button id="send" type="submit">${this.uiStrings()['composer.send']}</button>
 </form>
 <script nonce="${nonce}">window.MUX_STRINGS = ${strings};</script>
-<script nonce="${nonce}" src="${asset('markdown.js')}"></script>
+<script nonce="${nonce}">${this.readAsset('markdown.js')}</script>
 <script nonce="${nonce}" src="${asset('main.js')}"></script>
 </body>
 </html>`;
+    }
+
+    // Reads a dashboard asset from disk to inline into the page. The Markdown renderer is inlined (rather than
+    // loaded as a separate <script src>) so it is guaranteed to be defined before main.js runs — a separate
+    // resource load can silently fail and leave replies rendering as plain text.
+    private readAsset(name: string): string {
+        try {
+            return fs.readFileSync(vscode.Uri.joinPath(this.extensionUri, 'dashboard', 'chat', name).fsPath, 'utf8');
+        } catch (error) {
+            logError(`Failed to read webview asset ${name}.`, error);
+            return '';
+        }
     }
 
     private uiStrings(): Record<string, string> {
