@@ -230,6 +230,7 @@ namespace Mux.Cli.App
                 string hubBaseUrl = (rest.Ssl ? "https" : "http") + "://" + rest.Hostname + ":" + rest.Port;
                 RunPublisher publisher = new RunPublisher(hubBaseUrl, rest.ApiKey);
                 await publisher.StartAsync(Guid.NewGuid().ToString("N"), _MirrorSessionId, _MirrorEndpoint, _MirrorModel, cancellationToken).ConfigureAwait(false);
+                SyncDiagnostics.Log("PUBLISH start hub=" + hubBaseUrl + " session=" + _MirrorSessionId + " keyPresent=" + !string.IsNullOrEmpty(rest.ApiKey) + " connected=" + publisher.IsConnected);
                 return publisher;
             }
             catch (Exception)

@@ -220,6 +220,7 @@ namespace Mux.Cli.App
                 Mux.Core.Sessions.SessionStoreWatcher watcher = new Mux.Core.Sessions.SessionStoreWatcher(_Store.RootDirectory);
                 watcher.Changed += id =>
                 {
+                    SyncDiagnostics.Log("WATCH changed id=" + id + " active=" + _ActiveSessionId + " match=" + string.Equals(id, _ActiveSessionId, StringComparison.Ordinal));
                     if (string.Equals(id, _ActiveSessionId, StringComparison.Ordinal))
                     {
                         _ = ReloadMirroredSessionAsync(id);
@@ -228,6 +229,8 @@ namespace Mux.Cli.App
                 watcher.Start();
                 _StoreWatcher = watcher;
             }
+
+            SyncDiagnostics.Log("TUI start store=" + (_Store?.RootDirectory ?? "<null>") + " launchSession=" + _JobManager.SessionId + " activeSession=" + _ActiveSessionId + " watcherOn=" + (_StoreWatcher != null));
             _OnEndpointSelected = onEndpointSelected;
             _OnValidateModel = onValidateModel;
             _OnPromptProfileSelected = onPromptProfileSelected;
@@ -1294,7 +1297,14 @@ namespace Mux.Cli.App
             await _SaveGate.WaitAsync(_Cts.Token).ConfigureAwait(false);
             try
             {
-                await new SessionService(_Store).PersistConversationAsync(snapshot, _Cts.Token).ConfigureAwait(false);
+                SyncDiagnostics.Log("SAVE begin session=" + snapshot.Id + " count=" + snapshot.ConversationHistory.Count + " store=" + _Store.RootDirectory);
+                SessionSnapshot persisted = await new SessionService(_Store).PersistConversationAsync(snapshot, _Cts.Token).ConfigureAwait(false);
+                SyncDiagnostics.Log("SAVE ok session=" + persisted.Id + " persistedCount=" + persisted.ConversationHistory.Count);
+            }
+            catch (Exception ex)
+            {
+                SyncDiagnostics.Log("SAVE EX session=" + snapshot.Id + " " + ex.GetType().Name + ": " + ex.Message);
+                throw;
             }
             finally
             {
@@ -1909,6 +1919,8 @@ namespace Mux.Cli.App
 
         private void OnTurnComplete(string prompt, AgentEventProjector projector, long totalMs, long ttftMs)
         {
+            SyncDiagnostics.Log("TURN complete active=" + _ActiveSessionId + " answerChars=" + (projector.CapturedAssistantText?.Length ?? 0) + " completed=" + (projector.LastRunCompleted != null) + " cancelled=" + projector.WasCancelled);
+
             // Safety net: dismiss the indicator even if the turn produced no observable output.
             StopThinking();
 
