@@ -1873,9 +1873,19 @@ namespace Mux.Cli.App
 
             Task projection = Task.Run(async () =>
             {
-                await projector.ProjectAsync(job.ReadEventsAsync(_Cts.Token), _Cts.Token).ConfigureAwait(false);
-                long total = stopwatch.ElapsedMilliseconds;
-                OnTurnComplete(prompt, projector, total, ttft[0]);
+                try
+                {
+                    await projector.ProjectAsync(job.ReadEventsAsync(_Cts.Token), _Cts.Token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    // Always finalize the turn — clear the in-flight job, record it, persist it, and start the
+                    // next queued prompt — even if the projection loop faulted. A stuck _ActiveJob would
+                    // otherwise block every subsequent cross-surface reload (the reload guard skips while a turn
+                    // is in flight) and the turn would never be persisted for other surfaces to pick up.
+                    long total = stopwatch.ElapsedMilliseconds;
+                    OnTurnComplete(prompt, projector, total, ttft[0]);
+                }
             });
 
             lock (_Sync)
@@ -4337,15 +4347,17 @@ namespace Mux.Cli.App
                 return;
             }
 
-            int shown;
+            List<ConversationMessage> shownHistory;
             lock (_Sync)
             {
-                shown = _ConversationHistory.Count;
+                shownHistory = new List<ConversationMessage>(_ConversationHistory);
             }
 
             // The producer publishes run_completed slightly BEFORE it finishes persisting the turn, so a single
-            // read can be stale. Poll the shared store until it has more turns than we're showing (a genuine
-            // external addition), or give up. The count check also skips our own just-finished run.
+            // read can be stale. Poll the shared store until it holds a conversation that DIFFERS from what we're
+            // showing, or give up. Comparing content (not just a longer count) also catches a turn another
+            // surface replaced rather than appended (a divergent reconcile keeps the same length), while an
+            // identical store — our own just-persisted turn — is correctly skipped.
             SessionSnapshot? snapshot = null;
             for (int attempt = 0; attempt < 8; attempt++)
             {
@@ -4358,7 +4370,7 @@ namespace Mux.Cli.App
                 SessionSnapshot? candidate;
                 try { candidate = await _Store.LoadAsync(sessionId, _Cts.Token).ConfigureAwait(false); }
                 catch (Exception) { return; }
-                if (candidate != null && candidate.ConversationHistory.Count > shown)
+                if (candidate != null && !HistoryEquals(candidate.ConversationHistory, shownHistory))
                 {
                     snapshot = candidate;
                     break;
@@ -4384,6 +4396,28 @@ namespace Mux.Cli.App
                 RedrawTranscriptFromHistory(reloaded);
                 PostNotice("« synced an update from another surface »");
             });
+        }
+
+        // Compares two conversation histories by length and per-message role + content, so a reload triggers on
+        // any real change — a turn appended, or one replaced by another surface — but not on an identical store
+        // (our own just-persisted turn).
+        private static bool HistoryEquals(IReadOnlyList<ConversationMessage> left, IReadOnlyList<ConversationMessage> right)
+        {
+            if (left.Count != right.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < left.Count; i++)
+            {
+                if (left[i].Role != right[i].Role
+                    || !string.Equals(left[i].Content ?? string.Empty, right[i].Content ?? string.Empty, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private void RedrawTranscriptFromHistory(List<ConversationMessage> history)

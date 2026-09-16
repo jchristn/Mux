@@ -117,19 +117,39 @@ namespace Mux.Core.Runs
                 return;
             }
 
-            string envelope = AgentEventSerializer.ToEnvelopeLine(agentEvent);
-            Dictionary<string, object?> publishFrame = new Dictionary<string, object?>
+            // Publishing is strictly best-effort — it must NEVER throw, because callers publish from inside the
+            // turn's projection loop; an exception here (a serialization edge case, a lock/send fault) would
+            // abort the loop and leave the turn unfinished (no persist, a stuck in-flight flag). Swallow every
+            // failure and mark the connection dead so later events simply no-op.
+            byte[] payload;
+            try
             {
-                ["action"] = "publish",
-                ["runId"] = _RunId,
-                ["sessionId"] = _SessionId,
-                ["endpointName"] = _EndpointName,
-                ["model"] = _Model,
-                ["frame"] = envelope
-            };
-            byte[] payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(publishFrame, _JsonOptions));
+                string envelope = AgentEventSerializer.ToEnvelopeLine(agentEvent);
+                Dictionary<string, object?> publishFrame = new Dictionary<string, object?>
+                {
+                    ["action"] = "publish",
+                    ["runId"] = _RunId,
+                    ["sessionId"] = _SessionId,
+                    ["endpointName"] = _EndpointName,
+                    ["model"] = _Model,
+                    ["frame"] = envelope
+                };
+                payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(publishFrame, _JsonOptions));
+            }
+            catch (Exception)
+            {
+                return;
+            }
 
-            await _SendLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await _SendLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                return;
+            }
+
             try
             {
                 await _Socket.SendAsync(new ArraySegment<byte>(payload), WebSocketMessageType.Text, true, cancellationToken).ConfigureAwait(false);

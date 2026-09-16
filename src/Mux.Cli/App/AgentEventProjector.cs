@@ -174,7 +174,16 @@ namespace Mux.Cli.App
                     OnEvent(agentEvent);
                     if (publisher != null)
                     {
-                        await publisher.PublishAsync(agentEvent, cancellationToken).ConfigureAwait(false);
+                        // Mirror publishing is best-effort and must never interrupt the turn's rendering or
+                        // completion — a publish fault here would otherwise escape and skip OnCompleted.
+                        try
+                        {
+                            await publisher.PublishAsync(agentEvent, cancellationToken).ConfigureAwait(false);
+                        }
+                        catch (Exception)
+                        {
+                            // Ignore — the local turn continues regardless of the hub.
+                        }
                     }
                 }
 
