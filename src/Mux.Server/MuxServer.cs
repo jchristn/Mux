@@ -42,6 +42,7 @@ namespace Mux.Server
         private readonly CheckpointRegistry _Checkpoints = new CheckpointRegistry();
         private readonly RunRegistry _Runs;
         private readonly bool _OwnsRuns;
+        private SessionStoreWatcher? _StoreWatcher;
 
         #endregion
 
@@ -128,6 +129,22 @@ namespace Mux.Server
             _App.WebSocket("/v1.0/ws", bridge.HandleAsync);
 
             _App.Start(_TokenSource.Token);
+
+            // Watch the shared session store so a turn written directly to disk by ANY process — an in-process
+            // terminal or desktop run, or a second server — is rebroadcast to this server's WebSocket clients
+            // (the dashboard and the VS Code extension). Without this, a thin client only learns of turns this
+            // particular server persisted; with it, every store change reaches every connected surface,
+            // independent of which hub or run produced it.
+            SessionStoreWatcher watcher = new SessionStoreWatcher(_SessionStore.RootDirectory);
+            watcher.Changed += id =>
+            {
+                _Runs.NotifyTranscriptChanged(id);
+                _Runs.NotifySessionsChanged(id);
+            };
+            watcher.Removed += id => _Runs.NotifySessionsChanged(id);
+            watcher.Start();
+            _StoreWatcher = watcher;
+
             _Logger?.Invoke(_Header + "listening on " + BaseUrl);
         }
 
@@ -154,6 +171,7 @@ namespace Mux.Server
         {
             if (_Disposed) return;
             Stop();
+            try { _StoreWatcher?.Dispose(); } catch (Exception) { }
             try { _App?.Dispose(); } catch (Exception) { }
             if (_OwnsRuns) { try { _Runs.Dispose(); } catch (Exception) { } }
             try { _TokenSource.Dispose(); } catch (Exception) { }

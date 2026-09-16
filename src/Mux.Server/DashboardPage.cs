@@ -1115,26 +1115,32 @@ function watchConvo(id){
   ws.onclose=function(){if(convoWatch===ws)convoWatch=null; if(!ws._stop)reconnectWatch(id);};
   ws.onmessage=function(m){
     var ev;try{ev=JSON.parse(m.data);}catch(e){return;}
-    if(!ev||ev.eventType!=="run_completed")return;
+    // React to a run finishing elsewhere OR a bare transcript change (an in-process surface's turn, or an
+    // upsert) — both mean the persisted transcript for this session grew.
+    if(!ev||(ev.eventType!=="run_completed"&&ev.eventType!=="transcript_changed"))return;
     // Ignore our own in-progress run (SSE already renders it and refreshes on done); only react to runs
     // completing elsewhere for the conversation we're viewing.
-    if(busy||id!==currentSessionId)return;
-    // The producer publishes run_completed slightly BEFORE it finishes persisting the turn to the shared
-    // store — so a single delayed fetch can read stale content. Poll until the store actually has more
-    // messages than we're showing (the new turn landed), or give up after a few tries.
-    var before=messages.length,tries=0;
-    function pull(){
-      if(id!==currentSessionId)return;
-      api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
-        if(id!==currentSessionId)return;
-        var msgs=((d&&d.Messages)||[]).map(function(mm){return {role:mm.Role,content:mm.Content};});
-        if(msgs.length>before||tries>=8){
-          messages=msgs;setChatTitle((d&&d.Title)||"");renderMessages();loadConvos();
-        }else{tries++;setTimeout(pull,400);}
-      }).catch(function(){if(tries<8){tries++;setTimeout(pull,400);}});
-    }
-    setTimeout(pull,250);
+    reloadOpenTranscript(id);
   };
+}
+// Reload the open transcript from the shared store, polling until the persisted turn count actually grows
+// (the producer persists slightly AFTER it signals, so a single fetch can read stale content). Shared by the
+// session-scoped watch (transcript_changed / run_completed) and the global list watch (sessions_changed for
+// the open conversation), so content lands even if only one of the two signals arrives.
+function reloadOpenTranscript(id){
+  if(busy||id!==currentSessionId)return;
+  var before=messages.length,tries=0;
+  function pull(){
+    if(id!==currentSessionId)return;
+    api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
+      if(id!==currentSessionId)return;
+      var msgs=((d&&d.Messages)||[]).map(function(mm){return {role:mm.Role,content:mm.Content};});
+      if(msgs.length>before||tries>=8){
+        messages=msgs;setChatTitle((d&&d.Title)||"");renderMessages();loadConvos();
+      }else{tries++;setTimeout(pull,400);}
+    }).catch(function(){if(tries<8){tries++;setTimeout(pull,400);}});
+  }
+  setTimeout(pull,250);
 }
 function newChat(){stopConvoWatch();messages=[];currentSessionId=null;currentModel="";setChatTitle("");renderMessages();highlightConvo();var c=el("composer");if(c)c.focus();}
 function persistConvo(){
@@ -1167,7 +1173,7 @@ function startSessionsWatch(){
   ws.onopen=function(){try{ws.send(JSON.stringify({action:"subscribe",all:true}));}catch(e){}};
   ws.onerror=function(){};
   ws.onclose=function(){if(sessionsWatch===ws)sessionsWatch=null;setTimeout(startSessionsWatch,3000);};
-  ws.onmessage=function(m){var ev;try{ev=JSON.parse(m.data);}catch(e){return;}if(ev&&ev.eventType==="sessions_changed"){setTimeout(loadConvos,400);}};
+  ws.onmessage=function(m){var ev;try{ev=JSON.parse(m.data);}catch(e){return;}if(ev&&ev.eventType==="sessions_changed"){setTimeout(loadConvos,400);if(ev.sessionId&&ev.sessionId===currentSessionId){reloadOpenTranscript(currentSessionId);}}};
 }
 // Tell the hub this surface changed the list (rename/delete) so others refresh; refresh is only a fallback.
 function notifySessionsChanged(id){ if(sessionsWatch&&sessionsWatch.readyState===1){try{sessionsWatch.send(JSON.stringify({action:"notify",sessionId:id||""}));}catch(e){}} }

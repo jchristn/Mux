@@ -92,6 +92,7 @@ namespace Mux.Desktop.Shell
         private string _MirrorSession = string.Empty;
         // Global list watch: refreshes the sidebar whenever any conversation-list change is broadcast.
         private Mux.Core.Runs.SessionMirrorClient? _SessionsMirror;
+        private Mux.Core.Sessions.SessionStoreWatcher? _StoreWatcher;
         private readonly StackPanel _DefaultTranscript = new StackPanel { Margin = new Thickness(24, 16, 24, 16), Spacing = 14 };
         private readonly AgentLoopTurnRunner _FallbackRunner;
         private static readonly SemaphoreSlim _CheckpointGate = new SemaphoreSlim(1, 1);
@@ -299,6 +300,7 @@ namespace Mux.Desktop.Shell
             base.OnClosed(e);
             try { if (_Mirror != null) { _ = _Mirror.DisposeAsync(); } } catch (Exception) { }
             try { if (_SessionsMirror != null) { _ = _SessionsMirror.DisposeAsync(); } } catch (Exception) { }
+            try { _StoreWatcher?.Dispose(); } catch (Exception) { }
             try { _Mcp?.Dispose(); } catch (Exception) { }
             try { _Skills?.Dispose(); } catch (Exception) { }
         }
@@ -348,6 +350,7 @@ namespace Mux.Desktop.Shell
             base.OnOpened(e);
             _ = LoadThreadsAsync();
             StartSessionsWatch();
+            StartStoreWatch();
 
             // Land the caret in the composer immediately so the user can start typing without clicking in.
             Dispatcher.UIThread.Post(() => _Composer?.Focus(), DispatcherPriority.Input);
@@ -1993,6 +1996,31 @@ namespace Mux.Desktop.Shell
             _ = client.StartAllAsync(CancellationToken.None);
         }
 
+        // Watch the shared session store directly. This is the reliable cross-surface path — independent of the
+        // WebSocket hub — because every surface reads and writes the same files: any write by another process
+        // (a terminal or another desktop, a server run) refreshes the thread list, and reloads the focused
+        // conversation when it is the one that changed.
+        private void StartStoreWatch()
+        {
+            if (_StoreWatcher != null)
+            {
+                return;
+            }
+
+            Mux.Core.Sessions.SessionStoreWatcher watcher = new Mux.Core.Sessions.SessionStoreWatcher(_Store.RootDirectory);
+            watcher.Changed += id => Dispatcher.UIThread.Post(() =>
+            {
+                _ = LoadThreadsAsync();
+                if (_Workspace.ActiveTab != null && string.Equals(_Workspace.ActiveTab.Id, id, StringComparison.Ordinal))
+                {
+                    _ = OnExternalRunCompletedAsync(id);
+                }
+            });
+            watcher.Removed += id => Dispatcher.UIThread.Post(() => { _ = LoadThreadsAsync(); });
+            watcher.Start();
+            _StoreWatcher = watcher;
+        }
+
         // Point the cross-surface mirror at the focused conversation (on by default). When a run for it
         // finishes on another surface, the transcript reloads from the shared store. Best-effort.
         private void StartMirrorForActive(string sessionId)
@@ -2023,6 +2051,7 @@ namespace Mux.Desktop.Shell
             Mux.Core.Runs.SessionMirrorClient client = new Mux.Core.Runs.SessionMirrorClient(hubBaseUrl, rest.ApiKey);
             string watched = sessionId;
             client.RunCompleted += () => Dispatcher.UIThread.Post(() => { _ = OnExternalRunCompletedAsync(watched); });
+            client.TranscriptChanged += () => Dispatcher.UIThread.Post(() => { _ = OnExternalRunCompletedAsync(watched); });
             _Mirror = client;
             _ = client.StartAsync(sessionId, CancellationToken.None);
         }
@@ -2768,6 +2797,16 @@ namespace Mux.Desktop.Shell
             catch (Exception)
             {
                 // Best-effort persistence.
+            }
+
+            // Signal the hub that this session's transcript changed so every other surface viewing it reloads.
+            // Desktop also publishes its run frames (for live token streaming to monitors), but the explicit
+            // transcript signal is what reaches viewers attached only session-scoped and covers title-only saves.
+            Mux.Core.Runs.SessionMirrorClient? mirror = _Mirror;
+            if (mirror != null && !string.IsNullOrEmpty(snapshot.Id) && string.Equals(snapshot.Id, _MirrorSession, StringComparison.Ordinal))
+            {
+                try { await mirror.NotifyTranscriptChangedAsync(snapshot.Id, CancellationToken.None); }
+                catch (Exception) { /* best-effort cross-surface notify */ }
             }
 
             // Once the conversation crosses the threshold, replace the heuristic title with an AI summary

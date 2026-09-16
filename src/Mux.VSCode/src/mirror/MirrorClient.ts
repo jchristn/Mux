@@ -22,6 +22,10 @@ export interface MirrorHandlers {
 
     /** The hub reported a conversation-list change (only in `all` mode). Refresh the list. */
     onSessionsChanged?: (sessionId: string) => void;
+
+    /** The subscribed session's persisted transcript changed (a turn was appended by any surface, including
+     * one that did not stream a run through this hub). Reload the open transcript. */
+    onTranscriptChanged?: () => void;
 }
 
 /** Live-mirrors a session's run over the mux WebSocket bridge. */
@@ -118,6 +122,11 @@ export class MirrorClient {
 
             if (obj && obj.eventType === 'sessions_changed') {
                 this.handlers?.onSessionsChanged?.(typeof obj.sessionId === 'string' ? obj.sessionId : '');
+                return;
+            }
+
+            if (obj && obj.eventType === 'transcript_changed') {
+                this.handlers?.onTranscriptChanged?.();
                 return;
             }
 

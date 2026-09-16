@@ -237,6 +237,23 @@ registry, and each carries one pre-serialized canonical envelope:
   "model": "gpt-4o", "frame": "{\"eventType\":\"assistant_text\",\"text\":\"…\"}" }
 ```
 
+**Signal a transcript change** (how an in-process surface tells others to reload an open conversation without
+streaming a whole run through the hub). After persisting a turn to the shared store, send:
+
+```json
+{ "action": "notify-transcript", "sessionId": "9f1c…" }
+```
+
+The hub broadcasts a `transcript_changed` event (`{ "eventType": "transcript_changed", "sessionId": "9f1c…" }`)
+to every session-scoped subscriber of that id, and refreshes the conversation list too. `transcript_changed`
+is the message-level counterpart to the list-level `sessions_changed`: a surface viewing the conversation
+reloads its transcript on it, exactly as it does on `run_completed`. The server fires it automatically on every
+turn persist (a streamed run and the `PUT /v1.0/api/sessions` upsert) **and whenever any process changes a
+session file on disk** — the server watches the session-store directory, so a turn written straight to the
+shared store by an in-process terminal or desktop run (or by a second server) is rebroadcast to this server's
+subscribers too. A viewer therefore reloads whether or not the writer drove a run through this hub, and even
+when the writer is on a different hub that shares the same store.
+
 **Answer an approval over the socket.** When the server runs with `--allow-tools`, a proposed mutating tool
 raises an `approval_required`/`tool_call_proposed` event; answer it on the same socket:
 

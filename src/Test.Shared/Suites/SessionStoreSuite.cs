@@ -213,6 +213,29 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(1, focused.Count, "focused unchanged");
                         MuxAssert.AreEqual(2, jobMessages.Count, "jobMessages unchanged");
                         await Task.CompletedTask.ConfigureAwait(false);
+                    }),
+                    Case("WatcherFiresChangedOnWriteAndRemovedOnDelete", "SessionStoreWatcher raises Changed on a save and Removed on a delete", async (SessionStore store, string dir, CancellationToken ct) =>
+                    {
+                        // This is the foundation of cross-surface consume: every surface (and the server) watches
+                        // this directory, so a save by any process must raise Changed with the session id, and a
+                        // delete must raise Removed. Debounced, so allow a moment.
+                        TaskCompletionSource<string> changed = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                        TaskCompletionSource<string> removed = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+                        using SessionStoreWatcher watcher = new SessionStoreWatcher(dir);
+                        watcher.Changed += id => { if (id == "watched") changed.TrySetResult(id); };
+                        watcher.Removed += id => { if (id == "watched") removed.TrySetResult(id); };
+                        watcher.Start();
+
+                        // A save (atomic temp + move) must surface as Changed("watched").
+                        await store.SaveAsync(BuildRichSnapshot("watched", "Watched session"), ct).ConfigureAwait(false);
+                        Task won = await Task.WhenAny(changed.Task, Task.Delay(TimeSpan.FromSeconds(4), ct)).ConfigureAwait(false);
+                        MuxAssert.IsTrue(ReferenceEquals(won, changed.Task) && changed.Task.IsCompleted, "watcher raised Changed for the saved session");
+
+                        // A delete must surface as Removed("watched").
+                        await store.DeleteAsync("watched", ct).ConfigureAwait(false);
+                        Task wonDel = await Task.WhenAny(removed.Task, Task.Delay(TimeSpan.FromSeconds(4), ct)).ConfigureAwait(false);
+                        MuxAssert.IsTrue(ReferenceEquals(wonDel, removed.Task) && removed.Task.IsCompleted, "watcher raised Removed for the deleted session");
                     })
                 });
         }

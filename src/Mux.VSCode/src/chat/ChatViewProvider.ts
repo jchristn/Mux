@@ -33,6 +33,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private activeRunId: string | undefined;
     private mirror: MirrorClient | undefined;
     private syncWatch: MirrorClient | undefined;
+    private syncSessionId = '';
+    private listWatch: MirrorClient | undefined;
     private client: ApiClient | undefined;
 
     /**
@@ -170,10 +172,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
      * @param sessionId The session to keep in sync.
      */
     private startSessionSync(client: ApiClient, sessionId: string): void {
-        this.stopSessionSync();
         if (!sessionId) {
             return;
         }
+
+        // Already watching this session — keep the live subscription rather than tearing it down and racing a
+        // reconnect on every turn.
+        if (this.syncWatch && this.syncSessionId === sessionId) {
+            return;
+        }
+
+        this.stopSessionSync();
+        this.syncSessionId = sessionId;
+        this.ensureListWatch(client);
 
         const watch = new MirrorClient(client.serverBaseUrl, client.serverApiKey);
         this.syncWatch = watch;
@@ -181,6 +192,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             onEvent: (event) => {
                 // Only react to a run finishing elsewhere; ignore our own in-flight turn.
                 if (event.kind === 'done' && !this.activeRun && this.sessionId === sessionId) {
+                    void this.reloadSessionSilent(sessionId);
+                }
+            },
+            onTranscriptChanged: () => {
+                // A turn was persisted for this session by a surface that did not stream a run through this
+                // hub (an in-process TUI/desktop turn, or an upsert). Reload the same way.
+                if (!this.activeRun && this.sessionId === sessionId) {
                     void this.reloadSessionSilent(sessionId);
                 }
             },
@@ -195,10 +213,48 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         });
     }
 
+    /**
+     * Starts a single, persistent global "all" watch for the panel's lifetime (reconnecting internally). This
+     * is the reliable cross-surface signal: the hub emits sessions_changed on EVERY store write — including
+     * in-process desktop/TUI turns and turns whose session-scoped transcript_changed raced the subscription —
+     * so reloading the open transcript here guarantees content lands even when the per-session socket misses a
+     * frame. Idempotent: it attaches once and is reused across session switches.
+     *
+     * @param client The connected API client (source of the hub URL + key).
+     */
+    private ensureListWatch(client: ApiClient): void {
+        if (this.listWatch) {
+            return;
+        }
+
+        const watch = new MirrorClient(client.serverBaseUrl, client.serverApiKey);
+        this.listWatch = watch;
+        watch.startAll({
+            onEvent: () => {
+                /* list mode carries no run frames */
+            },
+            onSessionsChanged: (sid: string) => {
+                void vscode.commands.executeCommand('mux.sessions.refresh');
+                if (sid && sid === this.sessionId && !this.activeRun) {
+                    void this.reloadSessionSilent(this.sessionId);
+                }
+            },
+            onError: () => {
+                /* best-effort */
+            },
+            onClose: () => {
+                if (this.listWatch === watch) {
+                    this.listWatch = undefined;
+                }
+            },
+        });
+    }
+
     /** Stops the cross-surface sync watcher. Safe to call when none is running. */
     private stopSessionSync(): void {
         this.syncWatch?.stop();
         this.syncWatch = undefined;
+        this.syncSessionId = '';
     }
 
     private async reloadSessionSilent(id: string): Promise<void> {
@@ -402,6 +458,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         assistant = event.data.Content || assistant;
                         if (event.data.Id) {
                             this.sessionId = event.data.Id;
+                            // Now that this conversation is persisted with an id, keep it live-synced so a turn
+                            // added to it on another surface reloads here — a locally-created conversation was
+                            // previously never subscribed (only manual tree-resume was), so it never updated.
+                            this.startSessionSync(client, this.sessionId);
                         }
                         // Send the server's authoritative full content so the final render can't be missing a
                         // token that slipped during streaming.

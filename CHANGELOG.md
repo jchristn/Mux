@@ -2,6 +2,40 @@
 
 All notable changes to mux are documented here.
 
+## 0.12.2
+
+### Fixed
+
+- **Cross-surface conversation sync, made reliable through the shared store.** A turn made on one surface now
+  appears in the same conversation open on every other surface (terminal, desktop, web, VS Code) without a
+  manual refresh, the conversation list stays live everywhere, and a turn is never silently overwritten by a
+  surface that hadn't seen it. The fix makes the on-disk session store the trigger rather than depending on a
+  run streaming through one hub:
+  - **The server watches the session-store directory** and rebroadcasts any change — including a turn written
+    straight to disk by an in-process terminal or desktop run, or by a second server — to its WebSocket
+    clients. A thin client (the dashboard, the VS Code extension) therefore learns of every write regardless of
+    which hub or run produced it, which also survives a fragmented hub (any server watching the shared store
+    tells its own clients).
+  - **The terminal and desktop apps watch the store directly**, so they reload the open conversation and
+    refresh the list on any external write without depending on the hub at all. This fixes the desktop list
+    that never live-refreshed.
+  - **The terminal UI now follows the conversation you actually have open.** Its live sync was anchored to the
+    (read-only) session the process launched with, so a conversation resumed from `/sessions` never updated;
+    it now re-anchors to the resumed session, and the reload is marshaled onto the UI loop so the transcript
+    actually repaints.
+  - **The VS Code extension now keeps a conversation live-synced whenever it has one open** — a locally created
+    or streamed conversation, not only one manually resumed from the tree — so it reloads when the turn was
+    made elsewhere.
+  - A message-level `transcript_changed` WebSocket event (distinct from the list-level `sessions_changed`) and
+    a `notify-transcript` action carry the signal; every turn persist fires it.
+  - **The thin clients also reload the open transcript on the list-level `sessions_changed` signal**, not only
+    the per-session `transcript_changed`. Because `sessions_changed` fires on every store write and rides the
+    surface's persistent global watch (which reconnects independently), content still lands when the
+    session-scoped subscription missed a frame or hadn't finished attaching — the case where a conversation
+    appeared in the list but its messages did not.
+  - Because a stale tray-agent hub runs the old bridge and silently breaks this sync, the product version bump
+    forces the agent launcher to replace an older running hub with this build.
+
 ## 0.12.0
 
 ### Added

@@ -111,6 +111,11 @@ namespace Mux.Cli.App
         // reloads this transcript automatically. On by default.
         private Mux.Core.Runs.SessionMirrorClient? _Mirror;
         private string _MirrorSession = string.Empty;
+        private Mux.Core.Sessions.SessionStoreWatcher? _StoreWatcher;
+        // The session currently shown in the transcript. Distinct from the (read-only) JobManager.SessionId
+        // because resuming a session from /sessions changes what is displayed without reconstructing the job
+        // manager; cross-surface reload must follow the displayed session, not the one the process launched with.
+        private string _ActiveSessionId = string.Empty;
         private readonly object _ThinkingSync = new object();
         private PaneLineHandle? _ThinkingHandle;
         private CancellationTokenSource? _ThinkingCts;
@@ -205,6 +210,24 @@ namespace Mux.Cli.App
             _JobManager = jobManager ?? throw new ArgumentNullException(nameof(jobManager));
             _ApprovalPolicy = approvalPolicy;
             _Store = sessionStore;
+            _ActiveSessionId = _JobManager.SessionId;
+
+            // Watch the shared session store directly, so a turn written by ANY other surface (server-driven or
+            // in-process) reloads the open conversation here — independent of the WebSocket hub, which is only a
+            // best-effort accelerator. This is the reliable path: every surface shares these files.
+            if (_Store != null)
+            {
+                Mux.Core.Sessions.SessionStoreWatcher watcher = new Mux.Core.Sessions.SessionStoreWatcher(_Store.RootDirectory);
+                watcher.Changed += id =>
+                {
+                    if (string.Equals(id, _ActiveSessionId, StringComparison.Ordinal))
+                    {
+                        _ = ReloadMirroredSessionAsync(id);
+                    }
+                };
+                watcher.Start();
+                _StoreWatcher = watcher;
+            }
             _OnEndpointSelected = onEndpointSelected;
             _OnValidateModel = onValidateModel;
             _OnPromptProfileSelected = onPromptProfileSelected;
@@ -1257,6 +1280,16 @@ namespace Mux.Cli.App
             {
                 _SaveGate.Release();
             }
+
+            // The TUI drives the engine in its own process and writes the store directly, so no run flows
+            // through the hub. Signal the hub that this session's transcript changed so every other surface
+            // viewing it reloads — this is what carries a TUI turn to the web/desktop/editor.
+            Mux.Core.Runs.SessionMirrorClient? mirror = _Mirror;
+            if (mirror != null && !string.IsNullOrEmpty(snapshot.Id))
+            {
+                try { await mirror.NotifyTranscriptChangedAsync(snapshot.Id, _Cts.Token).ConfigureAwait(false); }
+                catch (Exception) { /* best-effort cross-surface notify */ }
+            }
         }
 
         /// <summary>
@@ -1494,6 +1527,7 @@ namespace Mux.Cli.App
             {
             }
 
+            try { _StoreWatcher?.Dispose(); } catch (Exception) { }
             _App.KeyFilter = null;
             _App.Stop();
             _App.Dispose();
@@ -2792,6 +2826,10 @@ namespace Mux.Cli.App
             {
                 case 0:
                     RestoreSession(SessionResumeService.Resume(session));
+                    // The displayed conversation is now this session — point live cross-surface sync at it so a
+                    // turn added elsewhere reloads here (the read-only JobManager.SessionId cannot change).
+                    _ActiveSessionId = session.Id;
+                    StartSessionMirror(session.Id);
                     break;
                 case 1:
                     await RenameSessionAsync(manager, session).ConfigureAwait(false);
@@ -4276,6 +4314,7 @@ namespace Mux.Cli.App
             Mux.Core.Runs.SessionMirrorClient client = new Mux.Core.Runs.SessionMirrorClient(hubBaseUrl, rest.ApiKey);
             string watched = target;
             client.RunCompleted += () => { _ = ReloadMirroredSessionAsync(watched); };
+            client.TranscriptChanged += () => { _ = ReloadMirroredSessionAsync(watched); };
             _Mirror = client;
             _ = client.StartAsync(target, CancellationToken.None);
         }
@@ -4284,7 +4323,7 @@ namespace Mux.Cli.App
         // — unless it's our own in-flight turn, or the store has nothing new (our own just-finished run).
         private async Task ReloadMirroredSessionAsync(string sessionId)
         {
-            if (_ActiveJob != null || _Store == null || !string.Equals(_JobManager.SessionId, sessionId, StringComparison.Ordinal))
+            if (_ActiveJob != null || _Store == null || !string.Equals(_ActiveSessionId, sessionId, StringComparison.Ordinal))
             {
                 return;
             }
@@ -4302,7 +4341,7 @@ namespace Mux.Cli.App
             for (int attempt = 0; attempt < 8; attempt++)
             {
                 await Task.Delay(350).ConfigureAwait(false);
-                if (_ActiveJob != null || !string.Equals(_JobManager.SessionId, sessionId, StringComparison.Ordinal))
+                if (_ActiveJob != null || !string.Equals(_ActiveSessionId, sessionId, StringComparison.Ordinal))
                 {
                     return;
                 }
@@ -4322,14 +4361,20 @@ namespace Mux.Cli.App
                 return;
             }
 
-            lock (_Sync)
+            // The change arrives on a background thread (a store-watcher timer or the mirror socket); the redraw
+            // touches the TUI's panes, so marshal it onto the application loop thread.
+            List<ConversationMessage> reloaded = snapshot.ConversationHistory;
+            _App.Post(() =>
             {
-                _ConversationHistory.Clear();
-                _ConversationHistory.AddRange(snapshot.ConversationHistory);
-            }
+                lock (_Sync)
+                {
+                    _ConversationHistory.Clear();
+                    _ConversationHistory.AddRange(reloaded);
+                }
 
-            RedrawTranscriptFromHistory(snapshot.ConversationHistory);
-            PostNotice("« synced an update from another surface »");
+                RedrawTranscriptFromHistory(reloaded);
+                PostNotice("« synced an update from another surface »");
+            });
         }
 
         private void RedrawTranscriptFromHistory(List<ConversationMessage> history)

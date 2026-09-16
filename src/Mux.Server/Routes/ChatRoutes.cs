@@ -678,6 +678,12 @@ namespace Mux.Server.Routes
                 }
 
                 await _SessionStore.SaveAsync(snapshot, CancellationToken.None).ConfigureAwait(false);
+
+                // Tell every surface viewing this session to reload the transcript. The run's own
+                // run_completed already reaches same-hub run subscribers, but transcript_changed is the
+                // uniform signal that also reaches viewers attached only session-scoped, and it fires for the
+                // upsert path too.
+                _Runs.NotifyTranscriptChanged(sessionId);
             }
             catch (Exception)
             {

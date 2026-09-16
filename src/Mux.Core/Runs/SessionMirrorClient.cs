@@ -39,6 +39,12 @@ namespace Mux.Core.Runs
         /// <summary>Raised when a <c>run_completed</c> frame arrives — a run for the session finished.</summary>
         public event Action? RunCompleted;
 
+        /// <summary>Raised when a <c>transcript_changed</c> frame arrives — the session's persisted transcript
+        /// changed (a turn was appended by any surface, including one persisted without a run in the hub's
+        /// registry). A viewer reloads the open transcript on this the same way it does on
+        /// <see cref="RunCompleted"/>.</summary>
+        public event Action? TranscriptChanged;
+
         /// <summary>Raised (with the affected session id, possibly empty) when the hub signals that the
         /// conversation list changed. Only fires when subscribed via <see cref="StartAllAsync"/>.</summary>
         public event Action<string>? SessionsChanged;
@@ -116,6 +122,32 @@ namespace Mux.Core.Runs
             try
             {
                 string frame = "{\"action\":\"notify\",\"sessionId\":" + JsonSerializer.Serialize(sessionId ?? string.Empty) + "}";
+                await socket.SendAsync(Encoding.UTF8.GetBytes(frame), WebSocketMessageType.Text, true, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // Best-effort.
+            }
+        }
+
+        /// <summary>
+        /// Signals the hub that this surface appended a turn to a session's transcript, so every other surface
+        /// viewing that session reloads it. Sent over the same socket the client already holds. Best-effort — a
+        /// no-op when not connected.
+        /// </summary>
+        /// <param name="sessionId">The session whose transcript changed.</param>
+        /// <param name="cancellationToken">A token to cancel the send.</param>
+        public async Task NotifyTranscriptChangedAsync(string sessionId, CancellationToken cancellationToken)
+        {
+            ClientWebSocket? socket = _Socket;
+            if (socket == null || socket.State != WebSocketState.Open || string.IsNullOrEmpty(sessionId))
+            {
+                return;
+            }
+
+            try
+            {
+                string frame = "{\"action\":\"notify-transcript\",\"sessionId\":" + JsonSerializer.Serialize(sessionId) + "}";
                 await socket.SendAsync(Encoding.UTF8.GetBytes(frame), WebSocketMessageType.Text, true, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception)
@@ -255,6 +287,10 @@ namespace Mux.Core.Runs
                 if (eventType == "run_completed")
                 {
                     RunCompleted?.Invoke();
+                }
+                else if (eventType == "transcript_changed")
+                {
+                    TranscriptChanged?.Invoke();
                 }
                 else if (eventType == "sessions_changed")
                 {

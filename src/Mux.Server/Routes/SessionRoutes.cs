@@ -152,6 +152,7 @@ namespace Mux.Server.Routes
                     return (object)new ApiError("SaveFailed", ex.Message);
                 }
 
+                _Runs?.NotifyTranscriptChanged(snapshot.Id);
                 _Runs?.NotifySessionsChanged(snapshot.Id);
                 req.Http.Response.StatusCode = 200;
                 return (object)new SessionSummary

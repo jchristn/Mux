@@ -2,6 +2,14 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 0.12.2
+
+- **Live cross-surface transcript sync, now reliable.** A conversation open in the editor reloads when a turn
+  is added to it from another surface (terminal, desktop, web) — even a turn written straight to the shared
+  store with no run through the hub, because the server now watches the store and rebroadcasts changes. The
+  extension also keeps a conversation live-synced whenever it has one open (a locally created or streamed
+  conversation, not only one resumed from the tree), so it no longer silently misses external updates.
+
 ## 0.11.3
 
 - **Usage charts: endpoint and model filters.** The usage dashboard now has endpoint and model dropdowns

@@ -83,6 +83,7 @@ namespace Mux.Server.Runs
             bool subscribed = false;
             Action<RunHandle>? watcher = null;
             Action<string>? sessionsListener = null;
+            Action<string>? transcriptListener = null;
 
             void Attach(RunHandle handle, bool closeOnComplete)
             {
@@ -120,6 +121,15 @@ namespace Mux.Server.Runs
                     {
                         // A surface signalled an out-of-band conversation-list change (rename/duplicate/delete).
                         _Runs.NotifySessionsChanged(frame.SessionId ?? string.Empty);
+                    }
+                    else if (action == "notify-transcript")
+                    {
+                        // An in-process surface persisted a turn to a session without driving a run through this
+                        // hub. Tell session-scoped viewers to reload the transcript, and refresh the list too
+                        // (the session's updated time and ordering changed).
+                        string changed = frame.SessionId ?? string.Empty;
+                        _Runs.NotifyTranscriptChanged(changed);
+                        _Runs.NotifySessionsChanged(changed);
                     }
                     else if (action == "subscribe" && frame.All && sessionsListener == null)
                     {
@@ -163,6 +173,18 @@ namespace Mux.Server.Runs
                                 }
                             };
                             _Runs.RunRegistered += watcher;
+
+                            // Also reload on a transcript change that carried no run through this hub — an
+                            // in-process surface's turn, or a bare session upsert. This is the signal a viewer
+                            // needs when the writer did not stream a run here.
+                            transcriptListener = sid =>
+                            {
+                                if (string.Equals(sid, targetSession, StringComparison.Ordinal))
+                                {
+                                    _ = SafeSendAsync(session, sendLock, TranscriptChangedFrame(sid), ctx.Token);
+                                }
+                            };
+                            _Runs.AddTranscriptListener(transcriptListener);
                         }
                     }
                     else if (action == "approve")
@@ -200,6 +222,11 @@ namespace Mux.Server.Runs
                 if (sessionsListener != null)
                 {
                     _Runs.RemoveSessionsListener(sessionsListener);
+                }
+
+                if (transcriptListener != null)
+                {
+                    _Runs.RemoveTranscriptListener(transcriptListener);
                 }
 
                 List<RunHandle> attachedSnapshot;
@@ -333,6 +360,11 @@ namespace Mux.Server.Runs
         private static string SessionsChangedFrame(string sessionId)
         {
             return "{\"eventType\":\"sessions_changed\",\"sessionId\":" + JsonSerializer.Serialize(sessionId ?? string.Empty) + "}";
+        }
+
+        private static string TranscriptChangedFrame(string sessionId)
+        {
+            return "{\"eventType\":\"transcript_changed\",\"sessionId\":" + JsonSerializer.Serialize(sessionId ?? string.Empty) + "}";
         }
 
         private static string ErrorFrame(string code, string message)

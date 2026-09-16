@@ -647,6 +647,233 @@ namespace Test.Shared.Suites
                             server?.Dispose();
                             try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
                         }
+                    }),
+                    new TestCaseDescriptor("MuxServerRoutes", "SessionSubscriberGetsTranscriptChangedOnUpsert", "A session-scoped subscriber receives transcript_changed when that session's turn is persisted", async (CancellationToken ct) =>
+                    {
+                        // The heart of the cross-surface fix: persisting a turn for session S must tell a viewer
+                        // subscribed to S to reload the OPEN transcript (not just refresh the list). This is what
+                        // carries a turn made on one surface into a conversation held open on another.
+                        string tempSessions = Path.Combine(Path.GetTempPath(), "mux-test-" + Guid.NewGuid().ToString("N"));
+                        RestServerSettings rest = new RestServerSettings { Hostname = "127.0.0.1", ApiKey = "testkey123" };
+                        List<EndpointConfig> endpoints = new List<EndpointConfig>();
+
+                        MuxServer? server = null;
+                        int port = 0;
+                        for (int bindAttempt = 0; bindAttempt < 10 && server == null; bindAttempt++)
+                        {
+                            port = FreeLoopbackPort();
+                            rest.Port = port;
+                            MuxServer candidate = new MuxServer(rest, "9.9.9-test", new SessionStore(tempSessions), () => endpoints, null);
+                            try { candidate.Start(); server = candidate; }
+                            catch (Exception) { candidate.Dispose(); Thread.Sleep(50); }
+                        }
+
+                        MuxAssert.IsNotNull(server, "server bound to a loopback port");
+                        string baseUrl = "http://127.0.0.1:" + port;
+
+                        try
+                        {
+                            using HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                            for (int attempt = 0; attempt < 20; attempt++)
+                            {
+                                try { http.GetAsync(baseUrl + "/v1.0/api/health").GetAwaiter().GetResult(); break; }
+                                catch (Exception) { Thread.Sleep(100); }
+                            }
+
+                            using ClientWebSocket ws = new ClientWebSocket();
+                            await ws.ConnectAsync(new Uri("ws://127.0.0.1:" + port + "/v1.0/ws?apiKey=testkey123"), ct).ConfigureAwait(false);
+                            await ReceiveTextAsync(ws, ct).ConfigureAwait(false); // server.connected
+                            await SendTextAsync(ws, "{\"action\":\"subscribe\",\"sessionId\":\"tc-1\"}", ct).ConfigureAwait(false);
+                            await Task.Delay(200, ct).ConfigureAwait(false); // let the transcript listener register
+
+                            using HttpRequestMessage put = new HttpRequestMessage(HttpMethod.Put, baseUrl + "/v1.0/api/sessions");
+                            put.Headers.Add("Authorization", "Bearer testkey123");
+                            put.Content = new StringContent("{\"id\":\"tc-1\",\"title\":\"T\",\"endpointName\":\"local\",\"model\":\"m\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}", System.Text.Encoding.UTF8, "application/json");
+                            http.SendAsync(put).GetAwaiter().GetResult();
+
+                            string frame = await ReceiveTextAsync(ws, ct).ConfigureAwait(false);
+                            MuxAssert.Contains("transcript_changed", frame, "the session subscriber is told the transcript changed");
+                            MuxAssert.Contains("tc-1", frame, "the transcript_changed frame carries the session id");
+                        }
+                        finally
+                        {
+                            server?.Stop();
+                            server?.Dispose();
+                            try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
+                        }
+                    }),
+                    new TestCaseDescriptor("MuxServerRoutes", "MirrorClientRaisesTranscriptChanged", "SessionMirrorClient raises TranscriptChanged when an in-process surface signals notify-transcript", async (CancellationToken ct) =>
+                    {
+                        // The in-process producer path: a TUI/desktop turn writes the store directly and sends a
+                        // notify-transcript over the socket; a consumer mirror for that session must raise its
+                        // TranscriptChanged event so the other surface reloads.
+                        string tempSessions = Path.Combine(Path.GetTempPath(), "mux-test-" + Guid.NewGuid().ToString("N"));
+                        RestServerSettings rest = new RestServerSettings { Hostname = "127.0.0.1", ApiKey = "testkey123" };
+                        List<EndpointConfig> endpoints = new List<EndpointConfig>();
+
+                        MuxServer? server = null;
+                        int port = 0;
+                        for (int bindAttempt = 0; bindAttempt < 10 && server == null; bindAttempt++)
+                        {
+                            port = FreeLoopbackPort();
+                            rest.Port = port;
+                            MuxServer candidate = new MuxServer(rest, "9.9.9-test", new SessionStore(tempSessions), () => endpoints, null);
+                            try { candidate.Start(); server = candidate; }
+                            catch (Exception) { candidate.Dispose(); Thread.Sleep(50); }
+                        }
+
+                        MuxAssert.IsNotNull(server, "server bound to a loopback port");
+                        string baseUrl = "http://127.0.0.1:" + port;
+
+                        Mux.Core.Runs.SessionMirrorClient? mirror = null;
+                        try
+                        {
+                            using (HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
+                            {
+                                for (int attempt = 0; attempt < 20; attempt++)
+                                {
+                                    try { http.GetAsync(baseUrl + "/v1.0/api/health").GetAwaiter().GetResult(); break; }
+                                    catch (Exception) { Thread.Sleep(100); }
+                                }
+                            }
+
+                            TaskCompletionSource<bool> changed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                            mirror = new Mux.Core.Runs.SessionMirrorClient(baseUrl, "testkey123");
+                            mirror.TranscriptChanged += () => changed.TrySetResult(true);
+                            await mirror.StartAsync("tc-mirror", ct).ConfigureAwait(false);
+                            await Task.Delay(250, ct).ConfigureAwait(false); // let the transcript listener register
+
+                            using (ClientWebSocket producer = new ClientWebSocket())
+                            {
+                                await producer.ConnectAsync(new Uri("ws://127.0.0.1:" + port + "/v1.0/ws?apiKey=testkey123"), ct).ConfigureAwait(false);
+                                await ReceiveTextAsync(producer, ct).ConfigureAwait(false); // server.connected
+                                await SendTextAsync(producer, "{\"action\":\"notify-transcript\",\"sessionId\":\"tc-mirror\"}", ct).ConfigureAwait(false);
+                            }
+
+                            Task finished = await Task.WhenAny(changed.Task, Task.Delay(TimeSpan.FromSeconds(4), ct)).ConfigureAwait(false);
+                            MuxAssert.IsTrue(ReferenceEquals(finished, changed.Task) && changed.Task.IsCompleted, "the consumer mirror raised TranscriptChanged for the notify-transcript signal");
+                        }
+                        finally
+                        {
+                            if (mirror != null) { await mirror.DisposeAsync().ConfigureAwait(false); }
+                            server?.Stop();
+                            server?.Dispose();
+                            try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
+                        }
+                    }),
+                    new TestCaseDescriptor("MuxServerRoutes", "StoreWriteBroadcastsTranscriptChanged", "The server's store watcher rebroadcasts a direct-to-disk session write to a WebSocket subscriber", async (CancellationToken ct) =>
+                    {
+                        // The reliability fix: a turn written straight to the shared store by ANOTHER process (an
+                        // in-process TUI/desktop run) — with no run and no notify through this server — must still
+                        // reach a thin client, because the server watches the store directory and rebroadcasts.
+                        string tempSessions = Path.Combine(Path.GetTempPath(), "mux-test-" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(tempSessions);
+                        RestServerSettings rest = new RestServerSettings { Hostname = "127.0.0.1", ApiKey = "testkey123" };
+                        List<EndpointConfig> endpoints = new List<EndpointConfig>();
+
+                        MuxServer? server = null;
+                        int port = 0;
+                        for (int bindAttempt = 0; bindAttempt < 10 && server == null; bindAttempt++)
+                        {
+                            port = FreeLoopbackPort();
+                            rest.Port = port;
+                            MuxServer candidate = new MuxServer(rest, "9.9.9-test", new SessionStore(tempSessions), () => endpoints, null);
+                            try { candidate.Start(); server = candidate; }
+                            catch (Exception) { candidate.Dispose(); Thread.Sleep(50); }
+                        }
+
+                        MuxAssert.IsNotNull(server, "server bound to a loopback port");
+
+                        try
+                        {
+                            using (HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
+                            {
+                                for (int attempt = 0; attempt < 20; attempt++)
+                                {
+                                    try { http.GetAsync("http://127.0.0.1:" + port + "/v1.0/api/health").GetAwaiter().GetResult(); break; }
+                                    catch (Exception) { Thread.Sleep(100); }
+                                }
+                            }
+
+                            using ClientWebSocket ws = new ClientWebSocket();
+                            await ws.ConnectAsync(new Uri("ws://127.0.0.1:" + port + "/v1.0/ws?apiKey=testkey123"), ct).ConfigureAwait(false);
+                            await ReceiveTextAsync(ws, ct).ConfigureAwait(false); // server.connected
+                            await SendTextAsync(ws, "{\"action\":\"subscribe\",\"sessionId\":\"watch-1\"}", ct).ConfigureAwait(false);
+                            await Task.Delay(200, ct).ConfigureAwait(false);
+
+                            // Simulate an in-process surface writing the store directly (no run, no notify).
+                            SessionStore external = new SessionStore(tempSessions);
+                            SessionSnapshot snapshot = new SessionSnapshot { Id = "watch-1", Title = "Direct write" };
+                            snapshot.ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.User, Content = "written straight to disk" });
+                            await external.SaveAsync(snapshot, ct).ConfigureAwait(false);
+
+                            string frame = await ReceiveTextAsync(ws, ct).ConfigureAwait(false);
+                            MuxAssert.Contains("transcript_changed", frame, "the server watcher rebroadcast the external write");
+                            MuxAssert.Contains("watch-1", frame, "the rebroadcast carries the changed session id");
+                        }
+                        finally
+                        {
+                            server?.Stop();
+                            server?.Dispose();
+                            try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
+                        }
+                    }),
+                    new TestCaseDescriptor("MuxServerRoutes", "StoreWriteBroadcastsSessionsChangedToAll", "The store watcher rebroadcasts a direct-to-disk write as sessions_changed to a global (all) subscriber", async (CancellationToken ct) =>
+                    {
+                        // The list-sync half of the reliability fix: a thin client (dashboard, VS Code) that is NOT
+                        // viewing a session still learns of a new/updated conversation written straight to the shared
+                        // store by another process — because the server watcher also raises sessions_changed to
+                        // every "all" subscriber. This is the signal the surfaces reload their open transcript on.
+                        string tempSessions = Path.Combine(Path.GetTempPath(), "mux-test-" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(tempSessions);
+                        RestServerSettings rest = new RestServerSettings { Hostname = "127.0.0.1", ApiKey = "testkey123" };
+                        List<EndpointConfig> endpoints = new List<EndpointConfig>();
+
+                        MuxServer? server = null;
+                        int port = 0;
+                        for (int bindAttempt = 0; bindAttempt < 10 && server == null; bindAttempt++)
+                        {
+                            port = FreeLoopbackPort();
+                            rest.Port = port;
+                            MuxServer candidate = new MuxServer(rest, "9.9.9-test", new SessionStore(tempSessions), () => endpoints, null);
+                            try { candidate.Start(); server = candidate; }
+                            catch (Exception) { candidate.Dispose(); Thread.Sleep(50); }
+                        }
+
+                        MuxAssert.IsNotNull(server, "server bound to a loopback port");
+
+                        try
+                        {
+                            using (HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
+                            {
+                                for (int attempt = 0; attempt < 20; attempt++)
+                                {
+                                    try { http.GetAsync("http://127.0.0.1:" + port + "/v1.0/api/health").GetAwaiter().GetResult(); break; }
+                                    catch (Exception) { Thread.Sleep(100); }
+                                }
+                            }
+
+                            using ClientWebSocket ws = new ClientWebSocket();
+                            await ws.ConnectAsync(new Uri("ws://127.0.0.1:" + port + "/v1.0/ws?apiKey=testkey123"), ct).ConfigureAwait(false);
+                            await ReceiveTextAsync(ws, ct).ConfigureAwait(false); // server.connected
+                            await SendTextAsync(ws, "{\"action\":\"subscribe\",\"all\":true}", ct).ConfigureAwait(false);
+                            await Task.Delay(200, ct).ConfigureAwait(false);
+
+                            SessionStore external = new SessionStore(tempSessions);
+                            SessionSnapshot snapshot = new SessionSnapshot { Id = "list-1", Title = "Direct write" };
+                            snapshot.ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.User, Content = "new conversation from another process" });
+                            await external.SaveAsync(snapshot, ct).ConfigureAwait(false);
+
+                            string frame = await ReceiveTextAsync(ws, ct).ConfigureAwait(false);
+                            MuxAssert.Contains("sessions_changed", frame, "the watcher rebroadcast the external write as a list change");
+                            MuxAssert.Contains("list-1", frame, "the sessions_changed frame carries the changed session id");
+                        }
+                        finally
+                        {
+                            server?.Stop();
+                            server?.Dispose();
+                            try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
+                        }
                     })
                 });
         }

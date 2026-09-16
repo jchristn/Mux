@@ -22,6 +22,7 @@ namespace Mux.Core.Runs
 
         private readonly ConcurrentDictionary<string, RunHandle> _Runs = new ConcurrentDictionary<string, RunHandle>();
         private readonly List<Action<string>> _SessionsListeners = new List<Action<string>>();
+        private readonly List<Action<string>> _TranscriptListeners = new List<Action<string>>();
         private readonly object _ListenerSync = new object();
         private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
         private readonly Task _EvictionLoop;
@@ -78,6 +79,48 @@ namespace Mux.Core.Runs
             foreach (Action<string> listener in listeners)
             {
                 try { listener(sessionId ?? string.Empty); }
+                catch (Exception) { /* a listener must never break the notifier */ }
+            }
+        }
+
+        /// <summary>
+        /// Registers a listener notified with a session id whenever that session's persisted transcript
+        /// changed — a turn was appended by any surface, including a turn persisted without a run in this
+        /// registry (an in-process surface's write signalled over the socket, or a bare session upsert). A
+        /// surface subscribed to the session uses this to reload the open transcript, distinct from the
+        /// list-level <see cref="AddSessionsListener"/> hint that only refreshes the conversation list.
+        /// </summary>
+        /// <param name="listener">The callback. Ignored when null.</param>
+        public void AddTranscriptListener(Action<string> listener)
+        {
+            if (listener == null) return;
+            lock (_ListenerSync) { _TranscriptListeners.Add(listener); }
+        }
+
+        /// <summary>Removes a previously-added transcript listener.</summary>
+        /// <param name="listener">The callback to remove.</param>
+        public void RemoveTranscriptListener(Action<string> listener)
+        {
+            if (listener == null) return;
+            lock (_ListenerSync) { _TranscriptListeners.Remove(listener); }
+        }
+
+        /// <summary>
+        /// Notifies all transcript listeners that a specific session's persisted transcript changed, so a
+        /// surface viewing that session reloads it. Fired on every turn persist (server-side and by an
+        /// in-process surface signalling over the socket).
+        /// </summary>
+        /// <param name="sessionId">The affected session id. Empty is ignored (a transcript change is always
+        /// about a specific session).</param>
+        public void NotifyTranscriptChanged(string sessionId)
+        {
+            if (string.IsNullOrEmpty(sessionId)) return;
+
+            List<Action<string>> listeners;
+            lock (_ListenerSync) { listeners = new List<Action<string>>(_TranscriptListeners); }
+            foreach (Action<string> listener in listeners)
+            {
+                try { listener(sessionId); }
                 catch (Exception) { /* a listener must never break the notifier */ }
             }
         }
