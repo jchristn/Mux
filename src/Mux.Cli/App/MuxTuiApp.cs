@@ -1936,8 +1936,14 @@ namespace Mux.Cli.App
                 bool completed = projector.LastRunCompleted != null;
                 if (!projector.WasCancelled && (!string.IsNullOrEmpty(answer) || completed))
                 {
+                    string thinking = projector.CapturedThinkingText;
                     _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.User, Content = prompt });
-                    _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.Assistant, Content = answer });
+                    _ConversationHistory.Add(new ConversationMessage
+                    {
+                        Role = RoleEnum.Assistant,
+                        Content = answer,
+                        Reasoning = string.IsNullOrEmpty(thinking) ? null : thinking
+                    });
                 }
 
                 _StatsAggregator.RecordTurn(projector.LastRunCompleted, totalMs, ttftMs);
@@ -4419,7 +4425,6 @@ namespace Mux.Cli.App
                 }
 
                 RedrawTranscriptFromHistory(reloaded);
-                PostNotice("« synced an update from another surface »");
             });
         }
 

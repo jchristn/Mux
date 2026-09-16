@@ -867,6 +867,7 @@ namespace Mux.Server.Documentation
             {
                 ["Role"] = Pstr("Role: `user`, `assistant`, `system`, or `tool`."),
                 ["Content"] = Pstr("Message content."),
+                ["Reasoning"] = PstrNullable("The assistant's reasoning (\"thinking\") for this message, or null. Persisted with the conversation so every surface can show it; never sent back to the model."),
                 ["ToolCalls"] = new M { Type = "array", Items = Ref("ChatToolCallDto"), Nullable = true, Description = "Tool calls requested by the assistant, or null." },
                 ["ToolCallId"] = PstrNullable("The id of the tool call this message answers, or null.")
             }, new Dictionary<string, object?> { ["Role"] = "user", ["Content"] = "Explain this function." },

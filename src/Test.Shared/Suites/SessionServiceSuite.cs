@@ -134,6 +134,30 @@ namespace Test.Shared.Suites
                             try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch (Exception) { }
                         }
                     }),
+                    new TestCaseDescriptor("SessionService", "PersistPreservesAssistantReasoning", "An assistant message's reasoning round-trips through persist and load", async (CancellationToken ct) =>
+                    {
+                        string dir = TempDir();
+                        try
+                        {
+                            SessionStore store = new SessionStore(dir);
+                            SessionService service = new SessionService(store);
+
+                            SessionSnapshot snap = new SessionSnapshot { Id = "s", Title = "T" };
+                            snap.ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.User, Content = "hi" });
+                            snap.ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.Assistant, Content = "hello", Reasoning = "the user greeted me, so I greet back" });
+                            await service.PersistConversationAsync(snap, ct).ConfigureAwait(false);
+
+                            SessionSnapshot? reloaded = await store.LoadAsync("s", ct).ConfigureAwait(false);
+                            MuxAssert.IsNotNull(reloaded, "reloaded");
+                            MuxAssert.AreEqual(2, reloaded!.ConversationHistory.Count, "message count");
+                            MuxAssert.AreEqual("the user greeted me, so I greet back", reloaded.ConversationHistory[1].Reasoning ?? string.Empty, "reasoning preserved");
+                            MuxAssert.IsTrue(reloaded.ConversationHistory[0].Reasoning == null, "user message has no reasoning");
+                        }
+                        finally
+                        {
+                            try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch (Exception) { }
+                        }
+                    }),
                     new TestCaseDescriptor("SessionService", "SubscriptionRaisesFreshSnapshotOnWrite", "SessionTranscriptSubscription raises the fresh full snapshot when the watched session is written", async (CancellationToken ct) =>
                     {
                         string dir = TempDir();

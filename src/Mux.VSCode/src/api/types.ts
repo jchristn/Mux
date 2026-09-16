@@ -189,6 +189,7 @@ export interface ToolCallDto {
 export interface ChatMessageDto {
     Role: string;
     Content: string;
+    Reasoning?: string | null;
     ToolCalls?: ToolCallDto[] | null;
     ToolCallId?: string | null;
 }

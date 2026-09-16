@@ -13,6 +13,7 @@ namespace Mux.Core.Models
 
         private RoleEnum _Role = RoleEnum.User;
         private string? _Content = null;
+        private string? _Reasoning = null;
         private List<ToolCall>? _ToolCalls = null;
         private string? _ToolCallId = null;
 
@@ -49,6 +50,19 @@ namespace Mux.Core.Models
         {
             get => _Content;
             set => _Content = value;
+        }
+
+        /// <summary>
+        /// The assistant's reasoning ("thinking") text for this message, or null when the model produced none
+        /// (or the message is not an assistant message). Persisted with the conversation so every surface can
+        /// show a collapsible thinking section that survives reloads, but never sent back to the model
+        /// (<see cref="Mux.Core.Llm.LlmClient"/> maps only role, content, and tool calls into a request).
+        /// </summary>
+        [JsonPropertyName("reasoning")]
+        public string? Reasoning
+        {
+            get => _Reasoning;
+            set => _Reasoning = value;
         }
 
         /// <summary>

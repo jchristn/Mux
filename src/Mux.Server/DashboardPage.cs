@@ -1094,7 +1094,7 @@ function doDeleteMultiple(ids){
 }
 function openConvo(id){
   api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
-    messages=((d&&d.Messages)||[]).map(function(m){return {role:m.Role,content:m.Content};});
+    messages=((d&&d.Messages)||[]).map(function(m){return {role:m.Role,content:m.Content,thinking:m.Reasoning||null};});
     currentSessionId=(d&&d.Id)||id;currentModel=(d&&d.Model)||"";
     if(d&&d.EndpointName){var sel=el("endpointSelect");if(sel){for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===d.EndpointName){sel.selectedIndex=i;break;}}}}
     setChatTitle((d&&d.Title)||"");renderMessages();highlightConvo();
@@ -1139,7 +1139,7 @@ function reloadOpenTranscript(id){
     if(id!==currentSessionId)return;
     api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
       if(id!==currentSessionId)return;
-      var msgs=((d&&d.Messages)||[]).map(function(mm){return {role:mm.Role,content:mm.Content};});
+      var msgs=((d&&d.Messages)||[]).map(function(mm){return {role:mm.Role,content:mm.Content,thinking:mm.Reasoning||null};});
       if(msgs.length>before||tries>=8){
         messages=msgs;setChatTitle((d&&d.Title)||"");renderMessages();loadConvos();
       }else{tries++;setTimeout(pull,400);}
@@ -1151,14 +1151,14 @@ function newChat(){stopConvoWatch();messages=[];currentSessionId=null;currentMod
 function persistConvo(){
   var real=messages.filter(function(m){return !m.typing&&!m.local;});
   if(!real.length)return;
-  var payload={Id:currentSessionId||"",Title:"",EndpointName:el("endpointSelect").value||"",Model:currentModel||"",Messages:real.map(function(m){return {Role:m.role,Content:m.content};})};
+  var payload={Id:currentSessionId||"",Title:"",EndpointName:el("endpointSelect").value||"",Model:currentModel||"",Messages:real.map(function(m){return {Role:m.role,Content:m.content,Reasoning:m.thinking||null};})};
   api("/v1.0/api/sessions","PUT",payload).then(function(s){if(s&&s.Id){currentSessionId=s.Id;setChatTitle(s.Title||"");}loadConvos();}).catch(function(){});
 }
 function renameConvo(id){
   var cur="";var e=document.querySelector('#convoList .convo-item[data-id="'+id+'"] .ct');if(e)cur=e.getAttribute("title")||e.textContent;
   var val=window.prompt("Rename conversation",cur);if(val==null)return;val=val.trim();if(!val)return;
   api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
-    var payload={Id:id,Title:val,EndpointName:(d&&d.EndpointName)||"",Model:(d&&d.Model)||"",Messages:((d&&d.Messages)||[]).map(function(m){return {Role:m.Role,Content:m.Content};})};
+    var payload={Id:id,Title:val,EndpointName:(d&&d.EndpointName)||"",Model:(d&&d.Model)||"",Messages:((d&&d.Messages)||[]).map(function(m){return {Role:m.Role,Content:m.Content,Reasoning:m.Reasoning||null};})};
     return api("/v1.0/api/sessions","PUT",payload);
   }).then(function(s){if(id===currentSessionId&&s)setChatTitle(s.Title||"");loadConvos();notifySessionsChanged(id);}).catch(function(e){toast(e.message,true);});
 }

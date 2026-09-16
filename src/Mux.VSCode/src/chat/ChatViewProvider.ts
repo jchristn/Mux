@@ -27,7 +27,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private readonly extensionUri: vscode.Uri;
     private readonly lifecycle: MuxServerLifecycle;
     private view: vscode.WebviewView | undefined;
-    private history: Array<{ role: string; content: string }> = [];
+    private history: Array<{ role: string; content: string; reasoning?: string | null }> = [];
     private sessionId = '';
     private activeRun: AbortController | undefined;
     private activeRunId: string | undefined;
@@ -153,7 +153,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             this.sessionId = detail.Id;
             this.history = detail.Messages
                 .filter((m) => m.Role === 'user' || m.Role === 'assistant')
-                .map((m) => ({ role: m.Role, content: m.Content }));
+                .map((m) => ({ role: m.Role, content: m.Content, reasoning: m.Reasoning ?? null }));
             this.post({ type: 'load', messages: this.history, title: detail.Title });
             this.startSessionSync(client, detail.Id);
         } catch (error) {
@@ -277,7 +277,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
                 const messages = detail.Messages
                     .filter((m) => m.Role === 'user' || m.Role === 'assistant')
-                    .map((m) => ({ role: m.Role, content: m.Content }));
+                    .map((m) => ({ role: m.Role, content: m.Content, reasoning: m.Reasoning ?? null }));
                 if (messages.length > before || attempt === 7) {
                     this.history = messages;
                     this.post({ type: 'load', messages: this.history, title: detail.Title });

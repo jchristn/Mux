@@ -451,6 +451,7 @@ namespace Mux.Server.Routes
             System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
             long ttftMs = -1;
             System.Text.StringBuilder content = new System.Text.StringBuilder();
+            System.Text.StringBuilder thinking = new System.Text.StringBuilder();
             RunCompletedEvent? runCompleted = null;
             string? errorMessage = null;
 
@@ -522,6 +523,7 @@ namespace Mux.Server.Routes
                             break;
                         case AssistantThinkingEvent thinkingEvent:
                             if (string.IsNullOrEmpty(thinkingEvent.Text)) break;
+                            thinking.Append(thinkingEvent.Text);
                             await ctx.Response.SendEvent(new ServerSentEvent { Event = "thinking", Data = JsonSerializer.Serialize(thinkingEvent.Text) }, false, ctx.Token).ConfigureAwait(false);
                             break;
                         case ToolCallProposedEvent proposed:
@@ -558,7 +560,7 @@ namespace Mux.Server.Routes
                 // durable without depending on a follow-up PUT from the browser, and appears (and is
                 // resumable) on every surface. Best-effort and non-cancellable (the client may have already
                 // disconnected once the run finished).
-                await PersistTurnAsync(sessionId, endpoint, runDirectory, history, prompt, content.ToString()).ConfigureAwait(false);
+                await PersistTurnAsync(sessionId, endpoint, runDirectory, history, prompt, content.ToString(), thinking.ToString()).ConfigureAwait(false);
 
                 ChatReply reply = new ChatReply
                 {
@@ -637,7 +639,8 @@ namespace Mux.Server.Routes
             string workingDirectory,
             List<ConversationMessage> priorFromRequest,
             string prompt,
-            string assistantText)
+            string assistantText,
+            string assistantThinking)
         {
             if (_SessionStore == null || string.IsNullOrWhiteSpace(sessionId))
             {
@@ -660,7 +663,12 @@ namespace Mux.Server.Routes
                 List<ConversationMessage> updated = new List<ConversationMessage>(prior)
                 {
                     new ConversationMessage { Role = RoleEnum.User, Content = prompt },
-                    new ConversationMessage { Role = RoleEnum.Assistant, Content = assistantText }
+                    new ConversationMessage
+                    {
+                        Role = RoleEnum.Assistant,
+                        Content = assistantText,
+                        Reasoning = string.IsNullOrEmpty(assistantThinking) ? null : assistantThinking
+                    }
                 };
 
                 snapshot.ConversationHistory = updated;

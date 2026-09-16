@@ -3111,6 +3111,11 @@ namespace Mux.Desktop.Shell
             }
             else if (message.Role == RoleEnum.Assistant && !string.IsNullOrEmpty(message.Content))
             {
+                if (!string.IsNullOrEmpty(message.Reasoning))
+                {
+                    AddPersistedThinkingSection(message.Reasoning!);
+                }
+
                 AddAssistantMarkdownBubble(message.Content!);
             }
             else if (message.Role == RoleEnum.System && !string.IsNullOrEmpty(message.Content)
@@ -3118,6 +3123,23 @@ namespace Mux.Desktop.Shell
             {
                 AddNotice("🗜 " + L("main.earlierSummarized"), isError: false);
             }
+        }
+
+        // Renders a collapsible "💭 Thinking" section above a persisted assistant bubble, so reasoning captured
+        // during the turn survives a reload and a cross-surface open — matching the live streaming disclosure.
+        private void AddPersistedThinkingSection(string reasoning)
+        {
+            TextBlock text = new TextBlock
+            {
+                Text = reasoning,
+                Foreground = _Theme.Muted,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                FontFamily = new FontFamily("Cascadia Mono,Consolas,Menlo,monospace")
+            };
+            CollapsibleSection section = new CollapsibleSection("💭 " + L("main.thinking"), _Theme, expanded: _AutoExpandThinking);
+            section.Body.Children.Add(text);
+            _Transcript.Children.Add(section.Root);
         }
 
         private void AddUserBubble(string text)

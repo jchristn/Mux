@@ -83,6 +83,25 @@
         return m;
     }
 
+    // Renders a persisted message, including a collapsed "💭 Thinking" disclosure when the assistant message
+    // carries reasoning — so thinking survives a reload and appears the same as it did while streaming.
+    function addHistoryMessage(item) {
+        const m = createMessage(item.role);
+        if (item.role === 'assistant' && item.reasoning) {
+            const details = document.createElement('details');
+            details.className = 'thinking';
+            const summary = document.createElement('summary');
+            summary.textContent = '💭 ' + t('thinking.label');
+            const tbody = el('div', 'thinking-body');
+            tbody.textContent = item.reasoning;
+            details.appendChild(summary);
+            details.appendChild(tbody);
+            m.wrapper.insertBefore(details, m.body);
+        }
+        fillBody(m.body, item.role, item.content);
+        return m;
+    }
+
     function ensureAssistant() {
         if (!assistant) {
             assistant = createMessage('assistant');
@@ -307,7 +326,7 @@
                 transcript.textContent = '';
                 assistant = null;
                 (message.messages || []).forEach(function (m) {
-                    addMessage(m.role, m.content);
+                    addHistoryMessage(m);
                 });
                 renderEmpty();
                 break;

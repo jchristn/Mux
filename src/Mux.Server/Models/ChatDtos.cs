@@ -34,6 +34,9 @@ namespace Mux.Server.Models
         /// <summary>Message content.</summary>
         public string Content { get; set; } = string.Empty;
 
+        /// <summary>The assistant's reasoning ("thinking") for this message, or null when none.</summary>
+        public string? Reasoning { get; set; } = null;
+
         /// <summary>Tool calls requested by the assistant, or null when none.</summary>
         public List<ChatToolCallDto>? ToolCalls { get; set; } = null;
 
@@ -56,6 +59,7 @@ namespace Mux.Server.Models
             {
                 Role = message.Role.ToWire(),
                 Content = message.Content ?? string.Empty,
+                Reasoning = string.IsNullOrEmpty(message.Reasoning) ? null : message.Reasoning,
                 ToolCalls = message.ToolCalls == null || message.ToolCalls.Count == 0
                     ? null
                     : message.ToolCalls.Select(tc => new ChatToolCallDto { Id = tc.Id ?? string.Empty, Name = tc.Name ?? string.Empty, Arguments = tc.Arguments ?? string.Empty }).ToList(),
@@ -72,6 +76,7 @@ namespace Mux.Server.Models
             {
                 Role = RoleEnumExtensions.ParseRole(dto.Role),
                 Content = dto.Content ?? string.Empty,
+                Reasoning = string.IsNullOrEmpty(dto.Reasoning) ? null : dto.Reasoning,
                 ToolCalls = dto.ToolCalls == null || dto.ToolCalls.Count == 0
                     ? null
                     : dto.ToolCalls.Select(tc => new ToolCall { Id = tc.Id ?? string.Empty, Name = tc.Name ?? string.Empty, Arguments = tc.Arguments ?? string.Empty }).ToList(),

@@ -124,6 +124,15 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
+        /// The full assistant reasoning ("thinking") text emitted across the run, or empty when the model
+        /// produced none. Persisted with the assistant turn so other surfaces can show it.
+        /// </summary>
+        public string CapturedThinkingText
+        {
+            get => _Projection.ThinkingText;
+        }
+
+        /// <summary>
         /// The final <see cref="RunCompletedEvent"/> observed for this run, or null when the run produced
         /// none. Carries the engine's end-of-run summary (estimated tokens, duration, counts).
         /// </summary>

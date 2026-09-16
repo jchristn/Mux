@@ -134,10 +134,12 @@ namespace Mux.Desktop.Services
                 return;
             }
 
+            string thinking = projection.ThinkingText;
             _History.Add(new ConversationMessage
             {
                 Role = RoleEnum.Assistant,
-                Content = answer
+                Content = answer,
+                Reasoning = string.IsNullOrEmpty(thinking) ? null : thinking
             });
         }
 
