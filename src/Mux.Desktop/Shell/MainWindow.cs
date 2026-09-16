@@ -1913,10 +1913,16 @@ namespace Mux.Desktop.Shell
 
         private async Task OpenThreadAsync(string id)
         {
-            // If this thread already has a live tab (possibly mid-turn), just activate it — never reload or
-            // reset it, so a background turn keeps streaming into its own transcript.
+            // If this thread already has a live tab, reconcile it with the store before showing it — it may
+            // have grown on another surface since we last rendered it (the "reopened a session but it showed a
+            // stale/empty transcript" case). Never disturb a tab mid-turn: its own streaming owns the transcript.
             if (_Tabs.TryGetValue(id, out TabContext? existing))
             {
+                if (existing.TurnCts == null && !existing.IsBusy)
+                {
+                    await ReloadTabFromStoreAsync(existing);
+                }
+
                 ActivateContext(existing);
                 OpenOrFocusTab(existing.Id, existing.Title);
                 return;
@@ -1959,6 +1965,50 @@ namespace Mux.Desktop.Shell
 
             ActivateContext(context);
             OpenOrFocusTab(snapshot.Id, snapshot.Title);
+        }
+
+        // Re-render an already-open tab from the shared store when the store has more turns than the tab is
+        // showing (a turn was added on another surface). No-op when nothing new landed, so reopening a current
+        // tab never flickers. The caller guarantees the tab is not mid-turn.
+        private async Task ReloadTabFromStoreAsync(TabContext context)
+        {
+            SessionSnapshot? snapshot;
+            try
+            {
+                snapshot = await _Store.LoadAsync(context.Id, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                return;
+            }
+
+            if (snapshot == null)
+            {
+                return;
+            }
+
+            int shown = context.Conversation?.History.Count ?? 0;
+            if (snapshot.ConversationHistory.Count <= shown)
+            {
+                return;
+            }
+
+            context.Transcript.Children.Clear();
+            TabContext? previousRender = _RenderCtx;
+            _RenderCtx = context;
+            try
+            {
+                foreach (ConversationMessage message in snapshot.ConversationHistory)
+                {
+                    RenderPersistedMessage(message);
+                }
+            }
+            finally
+            {
+                _RenderCtx = previousRender;
+            }
+
+            AttachConversation(context, new ConversationService(context.Runner, snapshot.ConversationHistory));
         }
 
         // Make a tab the visible/active one: show its transcript, and reflect its title, endpoint, context
@@ -2768,31 +2818,26 @@ namespace Mux.Desktop.Shell
                 }
             }
 
-            // Load the existing snapshot first so fields this surface does not author — the CLI's job
-            // projection, prompt history, compaction count — are preserved on every save instead of being
-            // silently dropped. This keeps a session fully portable when it round-trips TUI → Desktop → TUI.
-            SessionSnapshot snapshot;
-            try
+            // Persist through the shared SessionService: it reconciles against the store so a save can never
+            // truncate a conversation another surface extended (anti-truncation), and preserves fields this
+            // surface does not author — the CLI's job projection, prompt history, compaction count — so a
+            // session stays fully portable when it round-trips TUI → Desktop → TUI.
+            SessionSnapshot snapshot = new SessionSnapshot
             {
-                snapshot = await _Store.LoadAsync(context.Id, CancellationToken.None) ?? new SessionSnapshot { CreatedUtc = context.CreatedUtc };
-            }
-            catch (Exception)
-            {
-                snapshot = new SessionSnapshot { CreatedUtc = context.CreatedUtc };
-            }
-
-            snapshot.Id = context.Id;
-            snapshot.Title = context.Title;
-            snapshot.TitlePinned = context.TitlePinned;
-            snapshot.UpdatedUtc = DateTime.UtcNow;
-            snapshot.EndpointName = context.Runner.EndpointName ?? string.Empty;
-            snapshot.Model = SelectedModel() ?? string.Empty;
-            snapshot.WorkingDirectory = context.Runner.WorkingDirectory ?? string.Empty;
-            snapshot.ConversationHistory = new List<ConversationMessage>(conversation.History);
+                Id = context.Id,
+                Title = context.Title,
+                TitlePinned = context.TitlePinned,
+                CreatedUtc = context.CreatedUtc,
+                UpdatedUtc = DateTime.UtcNow,
+                EndpointName = context.Runner.EndpointName ?? string.Empty,
+                Model = SelectedModel() ?? string.Empty,
+                WorkingDirectory = context.Runner.WorkingDirectory ?? string.Empty,
+                ConversationHistory = new List<ConversationMessage>(conversation.History)
+            };
 
             try
             {
-                await _Store.SaveAsync(snapshot, CancellationToken.None);
+                await new SessionService(_Store).PersistConversationAsync(snapshot, CancellationToken.None);
             }
             catch (Exception)
             {

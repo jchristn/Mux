@@ -677,7 +677,9 @@ namespace Mux.Server.Routes
                     snapshot.Title = SessionTitleHelper.Normalize(prompt, SessionTitleHelper.DefaultTitle);
                 }
 
-                await _SessionStore.SaveAsync(snapshot, CancellationToken.None).ConfigureAwait(false);
+                // Persist through the shared service so the web/editor path uses the same anti-truncation
+                // reconcile and field-preservation as the terminal and desktop apps.
+                await new SessionService(_SessionStore).PersistConversationAsync(snapshot, CancellationToken.None).ConfigureAwait(false);
 
                 // Tell every surface viewing this session to reload the transcript. The run's own
                 // run_completed already reaches same-hub run subscribers, but transcript_changed is the

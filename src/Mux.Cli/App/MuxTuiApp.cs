@@ -1270,11 +1270,14 @@ namespace Mux.Cli.App
             SessionSnapshot snapshot = BuildSnapshot();
 
             // Serialize writes so a background autosave and an explicit/manual save never race on the
-            // same session file (each SaveAsync is an atomic temp+move; two at once can collide).
+            // same session file (each SaveAsync is an atomic temp+move; two at once can collide). Persist
+            // through the shared SessionService so the terminal uses the same anti-truncation reconcile and
+            // field-preservation as the desktop and server — a save can never shorten a conversation another
+            // surface extended.
             await _SaveGate.WaitAsync(_Cts.Token).ConfigureAwait(false);
             try
             {
-                await _Store.SaveAsync(snapshot, _Cts.Token).ConfigureAwait(false);
+                await new SessionService(_Store).PersistConversationAsync(snapshot, _Cts.Token).ConfigureAwait(false);
             }
             finally
             {

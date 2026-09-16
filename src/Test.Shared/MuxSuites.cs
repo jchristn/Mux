@@ -116,6 +116,9 @@ namespace Test.Shared
                     // Mux.Core / Sessions persistence suite (M4).
                     SessionStoreSuite.Create(),
 
+                    // Mux.Core / consolidated session lifecycle (merge policy + shared persist).
+                    SessionServiceSuite.Create(),
+
                     // Mux.Core / Sessions shared management verbs (cross-surface parity).
                     SessionManagerSuite.Create(),
 
