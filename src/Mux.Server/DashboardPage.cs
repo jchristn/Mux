@@ -171,7 +171,12 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .stattip .r{display:flex;justify-content:space-between;gap:18px;padding:2px 0}
 .stattip .r span:first-child{color:var(--muted)}
 .stattip .r span:last-child{font-variant-numeric:tabular-nums}
-.think{color:var(--muted);font-size:12px;line-height:1.5;white-space:pre-wrap;border-left:2px solid var(--border);padding:2px 0 2px 8px;margin:0 0 8px 0;max-height:240px;overflow:auto}
+.think{border-left:2px solid var(--border);padding:0 0 0 8px;margin:0 0 8px 0}
+.think>summary{color:var(--muted);font-size:12px;cursor:pointer;list-style:none;user-select:none;padding:2px 0}
+.think>summary::-webkit-details-marker{display:none}
+.think>summary::before{content:"\25B8 ";color:var(--muted)}
+.think[open]>summary::before{content:"\25BE "}
+.think .think-body{color:var(--muted);font-size:12px;line-height:1.5;white-space:pre-wrap;padding:2px 0 4px 0;max-height:240px;overflow:auto}
 .tools{display:flex;flex-direction:column;gap:3px;margin:0 0 8px 0}
 .toolrow{font-size:12px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .toolrow.ok{color:var(--accent)}
@@ -710,7 +715,7 @@ en:{
 "home.default":"Default endpoint","home.defaultHint":"The model used when none is specified.","home.env":"Environment","home.envHint":"This server and its active configuration.","home.recent":"Recent sessions","home.quick":"Quick actions","home.version":"Version","home.uptime":"Uptime","home.activePrompt":"Active prompt","home.auth":"Auth","home.configDir":"Configuration directory","home.authOn":"required (bearer token)","home.authOff":"disabled","home.noDefault":"No default endpoint is set.","home.manageEp":"Manage endpoints","home.msg":"msg",
 "kpi.endpoints":"Endpoints","kpi.mcp":"MCP servers","kpi.prompts":"Prompts","kpi.subagents":"Subagents","kpi.skills":"Skills","kpi.hookscmds":"Hooks & commands","kpi.keybindings":"Keybindings","kpi.sessions":"Sessions","kpi.totalMsg":"Total messages",
 "quick.newchat":"New chat","quick.addep":"Add endpoint","quick.sessions":"Sessions","quick.settings":"Settings",
-"chat.endpoint":"Endpoint","chat.disclaimer":"mux is using the specified model. Verify important results.","chat.empty":"Pick an endpoint and start chatting with your model.",
+"chat.endpoint":"Endpoint","chat.disclaimer":"mux is using the specified model. Verify important results.","chat.empty":"Pick an endpoint and start chatting with your model.","chat.thinking":"Thinking",
 "col.name":"Name","col.adapter":"Adapter","col.model":"Model","col.auth":"Auth","col.transport":"Transport","col.target":"Target","col.systemPrompt":"System prompt","col.description":"Description","col.tools":"Tools","col.event":"Event","col.command":"Command","col.blocking":"Blocking","col.commandId":"Command id","col.chord":"Chord","col.cmds":"Cmds","col.state":"State","col.title":"Title","col.updated":"Updated",
 "tag.default":"default","tag.active":"active","tag.enabled":"enabled","tag.disabled":"disabled","tag.invalid":"invalid","tag.yes":"yes","tag.no":"no",
 "set.agent":"Agent","set.context":"Context","set.features":"Features","set.rest":"REST server","set.restReq":"restart required",
@@ -1005,7 +1010,7 @@ function renderMessages(){
   var html="";
   for(var i=0;i<messages.length;i++){
     var m=messages[i];
-    var think=(m.role==="assistant"&&m.thinking)?'<div class="think">💭 '+esc(m.thinking).replace(/\n/g,"<br>")+'</div>':'';
+    var think=(m.role==="assistant"&&m.thinking)?'<details class="think"'+(m.typing?' open':'')+'><summary>💭 '+esc(t("chat.thinking")||"Thinking")+'</summary><div class="think-body">'+esc(m.thinking).replace(/\n/g,"<br>")+'</div></details>':'';
     var body=m.typing?'<div class="thinking"><span></span><span></span><span></span></div>':(m.role==="assistant"?md(m.content):"<p>"+esc(m.content).replace(/\n/g,"<br>")+"</p>");
     var cp=(m.role==="assistant"&&!m.typing&&!m.local&&m.content)?'<button class="msgcopy" title="Copy response to the clipboard" onclick="copyMsg('+i+',this)">⧉</button>':'';
     var toolsHtml="";
