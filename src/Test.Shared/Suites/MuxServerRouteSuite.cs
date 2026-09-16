@@ -597,6 +597,56 @@ namespace Test.Shared.Suites
                             server?.Dispose();
                             try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
                         }
+                    }),
+                    new TestCaseDescriptor("MuxServerRoutes", "AllSubscriberGetsSessionsChangedOnUpsert", "An `all` subscriber receives sessions_changed when a session is upserted over REST", async (CancellationToken ct) =>
+                    {
+                        string tempSessions = Path.Combine(Path.GetTempPath(), "mux-test-" + Guid.NewGuid().ToString("N"));
+                        RestServerSettings rest = new RestServerSettings { Hostname = "127.0.0.1", ApiKey = "testkey123" };
+                        List<EndpointConfig> endpoints = new List<EndpointConfig>();
+
+                        MuxServer? server = null;
+                        int port = 0;
+                        for (int bindAttempt = 0; bindAttempt < 10 && server == null; bindAttempt++)
+                        {
+                            port = FreeLoopbackPort();
+                            rest.Port = port;
+                            MuxServer candidate = new MuxServer(rest, "9.9.9-test", new SessionStore(tempSessions), () => endpoints, null);
+                            try { candidate.Start(); server = candidate; }
+                            catch (Exception) { candidate.Dispose(); Thread.Sleep(50); }
+                        }
+
+                        MuxAssert.IsNotNull(server, "server bound to a loopback port");
+                        string baseUrl = "http://127.0.0.1:" + port;
+
+                        try
+                        {
+                            using HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                            for (int attempt = 0; attempt < 20; attempt++)
+                            {
+                                try { http.GetAsync(baseUrl + "/v1.0/api/health").GetAwaiter().GetResult(); break; }
+                                catch (Exception) { Thread.Sleep(100); }
+                            }
+
+                            using ClientWebSocket ws = new ClientWebSocket();
+                            await ws.ConnectAsync(new Uri("ws://127.0.0.1:" + port + "/v1.0/ws?apiKey=testkey123"), ct).ConfigureAwait(false);
+                            await ReceiveTextAsync(ws, ct).ConfigureAwait(false); // server.connected
+                            await SendTextAsync(ws, "{\"action\":\"subscribe\",\"all\":true}", ct).ConfigureAwait(false);
+                            await Task.Delay(200, ct).ConfigureAwait(false);
+
+                            using HttpRequestMessage put = new HttpRequestMessage(HttpMethod.Put, baseUrl + "/v1.0/api/sessions");
+                            put.Headers.Add("Authorization", "Bearer testkey123");
+                            put.Content = new StringContent("{\"id\":\"sc-1\",\"title\":\"T\",\"endpointName\":\"local\",\"model\":\"m\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}", System.Text.Encoding.UTF8, "application/json");
+                            http.SendAsync(put).GetAwaiter().GetResult();
+
+                            string frame = await ReceiveTextAsync(ws, ct).ConfigureAwait(false);
+                            MuxAssert.Contains("sessions_changed", frame, "the all-subscriber is notified of the list change");
+                        }
+                        finally
+                        {
+                            server?.Stop();
+                            server?.Dispose();
+                            try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
+                        }
                     })
                 });
         }

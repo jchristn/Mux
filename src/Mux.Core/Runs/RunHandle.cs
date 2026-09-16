@@ -55,7 +55,20 @@ namespace Mux.Core.Runs
         private int _MaxBufferedEvents = 512;
         private int _SubscriberQueueCapacity = 1024;
         private bool _Completed;
+        private bool _CompletedFired;
         private bool _Disposed;
+
+        #endregion
+
+        #region Public-Events
+
+        /// <summary>
+        /// Raised exactly once when the run reaches a terminal state (from an applied <c>run_completed</c>
+        /// event, an <see cref="ApplyEnvelope"/> terminal frame, or <see cref="MarkTerminal"/>). The registry
+        /// uses this to broadcast a "conversations changed" notification so every surface can refresh its list.
+        /// Handlers must not throw.
+        /// </summary>
+        public event Action? Completed;
 
         #endregion
 
@@ -397,6 +410,7 @@ namespace Mux.Core.Runs
         public void MarkTerminal(RunStatusEnum status)
         {
             List<Channel<string>> targets;
+            bool fireCompleted = false;
 
             lock (_Sync)
             {
@@ -404,6 +418,7 @@ namespace Mux.Core.Runs
                 _Status = status;
                 _CompletedUtc = DateTime.UtcNow;
                 _Completed = true;
+                if (!_CompletedFired) { _CompletedFired = true; fireCompleted = true; }
                 targets = new List<Channel<string>>(_Subscribers);
                 _Subscribers.Clear();
             }
@@ -411,6 +426,11 @@ namespace Mux.Core.Runs
             foreach (Channel<string> channel in targets)
             {
                 channel.Writer.TryComplete();
+            }
+
+            if (fireCompleted)
+            {
+                RaiseCompleted();
             }
         }
 
@@ -443,6 +463,7 @@ namespace Mux.Core.Runs
         private void FanOut(string frame, bool terminal)
         {
             List<Channel<string>> targets;
+            bool fireCompleted = false;
             lock (_Sync)
             {
                 _Ring.Add(frame);
@@ -455,6 +476,7 @@ namespace Mux.Core.Runs
                 {
                     _CompletedUtc = DateTime.UtcNow;
                     _Completed = true;
+                    if (!_CompletedFired) { _CompletedFired = true; fireCompleted = true; }
                 }
 
                 targets = new List<Channel<string>>(_Subscribers);
@@ -472,6 +494,17 @@ namespace Mux.Core.Runs
                     channel.Writer.TryComplete();
                 }
             }
+
+            if (fireCompleted)
+            {
+                RaiseCompleted();
+            }
+        }
+
+        private void RaiseCompleted()
+        {
+            try { Completed?.Invoke(); }
+            catch (Exception) { /* a listener must never break the run */ }
         }
 
         private static RunStatusEnum MapStatus(string status)

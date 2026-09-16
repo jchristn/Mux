@@ -25,6 +25,7 @@ namespace Mux.Core.Runs
         private ClientWebSocket? _Socket;
         private Task? _ReceiveLoop;
         private string _SessionId = string.Empty;
+        private bool _All;
         private TimeSpan _ReconnectDelay = TimeSpan.FromSeconds(2);
         private bool _Disposed;
 
@@ -37,6 +38,10 @@ namespace Mux.Core.Runs
 
         /// <summary>Raised when a <c>run_completed</c> frame arrives — a run for the session finished.</summary>
         public event Action? RunCompleted;
+
+        /// <summary>Raised (with the affected session id, possibly empty) when the hub signals that the
+        /// conversation list changed. Only fires when subscribed via <see cref="StartAllAsync"/>.</summary>
+        public event Action<string>? SessionsChanged;
 
         #endregion
 
@@ -77,6 +82,46 @@ namespace Mux.Core.Runs
             _SessionId = sessionId;
             _ReceiveLoop = Task.Run(() => ConnectLoopAsync(_Cts.Token));
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Starts a resilient global subscription that raises <see cref="SessionsChanged"/> whenever the hub
+        /// reports a conversation-list change (any run completing, or a rename/delete signalled by a surface).
+        /// A surface uses this to refresh its conversation list live. Non-blocking; reconnects like
+        /// <see cref="StartAsync"/>.
+        /// </summary>
+        /// <param name="cancellationToken">Unused beyond the client's own lifetime token.</param>
+        /// <returns>A completed task; the connection runs in the background.</returns>
+        public Task StartAllAsync(CancellationToken cancellationToken)
+        {
+            _All = true;
+            _ReceiveLoop = Task.Run(() => ConnectLoopAsync(_Cts.Token));
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Signals the hub that this surface changed the conversation list out of band (a rename, duplicate,
+        /// or delete) so other surfaces refresh. Best-effort — a no-op when not connected.
+        /// </summary>
+        /// <param name="sessionId">The affected session id, or empty.</param>
+        /// <param name="cancellationToken">A token to cancel the send.</param>
+        public async Task NotifySessionsChangedAsync(string sessionId, CancellationToken cancellationToken)
+        {
+            ClientWebSocket? socket = _Socket;
+            if (socket == null || socket.State != WebSocketState.Open)
+            {
+                return;
+            }
+
+            try
+            {
+                string frame = "{\"action\":\"notify\",\"sessionId\":" + JsonSerializer.Serialize(sessionId ?? string.Empty) + "}";
+                await socket.SendAsync(Encoding.UTF8.GetBytes(frame), WebSocketMessageType.Text, true, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // Best-effort.
+            }
         }
 
         /// <summary>Stops the subscription and releases the socket. Safe to call more than once.</summary>
@@ -120,7 +165,9 @@ namespace Mux.Core.Runs
 
         private async Task ConnectLoopAsync(CancellationToken token)
         {
-            string subscribe = "{\"action\":\"subscribe\",\"sessionId\":" + JsonSerializer.Serialize(_SessionId) + "}";
+            string subscribe = _All
+                ? "{\"action\":\"subscribe\",\"all\":true}"
+                : "{\"action\":\"subscribe\",\"sessionId\":" + JsonSerializer.Serialize(_SessionId) + "}";
             while (!token.IsCancellationRequested)
             {
                 ClientWebSocket socket = new ClientWebSocket();
@@ -204,9 +251,15 @@ namespace Mux.Core.Runs
             try
             {
                 using JsonDocument doc = JsonDocument.Parse(frame);
-                if (doc.RootElement.TryGetProperty("eventType", out JsonElement type) && type.GetString() == "run_completed")
+                string eventType = doc.RootElement.TryGetProperty("eventType", out JsonElement type) ? (type.GetString() ?? string.Empty) : string.Empty;
+                if (eventType == "run_completed")
                 {
                     RunCompleted?.Invoke();
+                }
+                else if (eventType == "sessions_changed")
+                {
+                    string sessionId = doc.RootElement.TryGetProperty("sessionId", out JsonElement sid) ? (sid.GetString() ?? string.Empty) : string.Empty;
+                    SessionsChanged?.Invoke(sessionId);
                 }
             }
             catch (Exception)

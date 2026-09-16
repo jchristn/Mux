@@ -19,6 +19,9 @@ export interface MirrorHandlers {
 
     /** The socket closed (run ended, server closed, or {@link MirrorClient.stop} was called). */
     onClose: () => void;
+
+    /** The hub reported a conversation-list change (only in `all` mode). Refresh the list. */
+    onSessionsChanged?: (sessionId: string) => void;
 }
 
 /** Live-mirrors a session's run over the mux WebSocket bridge. */
@@ -28,6 +31,7 @@ export class MirrorClient {
     private socket: WebSocket | undefined;
     private stopped = false;
     private sessionId = '';
+    private all = false;
     private handlers: MirrorHandlers | undefined;
 
     /**
@@ -51,7 +55,21 @@ export class MirrorClient {
      */
     public start(sessionId: string, handlers: MirrorHandlers): void {
         this.stopped = false;
+        this.all = false;
         this.sessionId = sessionId;
+        this.handlers = handlers;
+        this.connect();
+    }
+
+    /**
+     * Subscribes to global conversation-list changes (reconnecting like {@link start}). `handlers.onSessionsChanged`
+     * fires whenever the hub reports a list change so the caller can refresh its session list.
+     *
+     * @param handlers Callbacks; only `onSessionsChanged` is used in this mode.
+     */
+    public startAll(handlers: MirrorHandlers): void {
+        this.stopped = false;
+        this.all = true;
         this.handlers = handlers;
         this.connect();
     }
@@ -78,7 +96,7 @@ export class MirrorClient {
 
         socket.on('open', () => {
             try {
-                socket.send(JSON.stringify({ action: 'subscribe', sessionId: this.sessionId }));
+                socket.send(JSON.stringify(this.all ? { action: 'subscribe', all: true } : { action: 'subscribe', sessionId: this.sessionId }));
             } catch {
                 // The close handler will reconnect.
             }
@@ -95,6 +113,11 @@ export class MirrorClient {
             const obj = frame as Record<string, unknown>;
             if (obj && obj.eventType === 'error') {
                 this.handlers?.onError(typeof obj.message === 'string' ? obj.message : 'The mirror subscription was rejected.');
+                return;
+            }
+
+            if (obj && obj.eventType === 'sessions_changed') {
+                this.handlers?.onSessionsChanged?.(typeof obj.sessionId === 'string' ? obj.sessionId : '');
                 return;
             }
 

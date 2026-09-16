@@ -7,6 +7,7 @@ namespace Mux.Server.Routes
     using System.Threading.Tasks;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Runs;
     using Mux.Core.Sessions;
     using Mux.Server.Models;
     using WatsonWebserver;
@@ -24,16 +25,20 @@ namespace Mux.Server.Routes
 
         private readonly string? _ApiKey;
         private readonly SessionStore _SessionStore;
+        private readonly RunRegistry? _Runs;
 
         /// <summary>
         /// Instantiate.
         /// </summary>
         /// <param name="apiKey">Configured API key, or null for no-auth.</param>
         /// <param name="sessionStore">Session store.</param>
-        public SessionRoutes(string? apiKey, SessionStore sessionStore)
+        /// <param name="runs">Optional run registry; when set, upserts and deletes broadcast a conversation-list
+        /// change so every surface refreshes its list without a manual refresh.</param>
+        public SessionRoutes(string? apiKey, SessionStore sessionStore, RunRegistry? runs = null)
         {
             _ApiKey = apiKey;
             _SessionStore = sessionStore ?? throw new ArgumentNullException(nameof(sessionStore));
+            _Runs = runs;
         }
 
         /// <summary>
@@ -147,6 +152,7 @@ namespace Mux.Server.Routes
                     return (object)new ApiError("SaveFailed", ex.Message);
                 }
 
+                _Runs?.NotifySessionsChanged(snapshot.Id);
                 req.Http.Response.StatusCode = 200;
                 return (object)new SessionSummary
                 {
@@ -188,6 +194,7 @@ namespace Mux.Server.Routes
                 try
                 {
                     await _SessionStore.DeleteAsync(id, req.Http.Token).ConfigureAwait(false);
+                    _Runs?.NotifySessionsChanged(id);
                     IReadOnlyList<SessionSnapshot> snapshots = await _SessionStore.ListAsync(req.Http.Token).ConfigureAwait(false);
                     List<SessionSummary> items = new List<SessionSummary>();
                     foreach (SessionSnapshot snapshot in snapshots)

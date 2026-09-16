@@ -82,6 +82,7 @@ namespace Mux.Server.Runs
             RunHandle? approvalTarget = null;
             bool subscribed = false;
             Action<RunHandle>? watcher = null;
+            Action<string>? sessionsListener = null;
 
             void Attach(RunHandle handle, bool closeOnComplete)
             {
@@ -115,7 +116,19 @@ namespace Mux.Server.Runs
                     }
 
                     string action = (frame.Action ?? string.Empty).ToLowerInvariant();
-                    if (action == "subscribe" && !subscribed)
+                    if (action == "notify")
+                    {
+                        // A surface signalled an out-of-band conversation-list change (rename/duplicate/delete).
+                        _Runs.NotifySessionsChanged(frame.SessionId ?? string.Empty);
+                    }
+                    else if (action == "subscribe" && frame.All && sessionsListener == null)
+                    {
+                        // Global list-change notifications: refresh a surface's conversation list whenever any
+                        // run completes or a surface signals a change. Independent of any run subscription.
+                        sessionsListener = sid => { _ = SafeSendAsync(session, sendLock, SessionsChangedFrame(sid), ctx.Token); };
+                        _Runs.AddSessionsListener(sessionsListener);
+                    }
+                    else if (action == "subscribe" && !subscribed)
                     {
                         if (!string.IsNullOrWhiteSpace(frame.RunId))
                         {
@@ -182,6 +195,11 @@ namespace Mux.Server.Runs
                 if (watcher != null)
                 {
                     _Runs.RunRegistered -= watcher;
+                }
+
+                if (sessionsListener != null)
+                {
+                    _Runs.RemoveSessionsListener(sessionsListener);
                 }
 
                 List<RunHandle> attachedSnapshot;
@@ -310,6 +328,11 @@ namespace Mux.Server.Runs
         private string ConnectedFrame()
         {
             return "{\"eventType\":\"server.connected\",\"product\":\"mux\",\"version\":" + JsonSerializer.Serialize(_Version) + "}";
+        }
+
+        private static string SessionsChangedFrame(string sessionId)
+        {
+            return "{\"eventType\":\"sessions_changed\",\"sessionId\":" + JsonSerializer.Serialize(sessionId ?? string.Empty) + "}";
         }
 
         private static string ErrorFrame(string code, string message)

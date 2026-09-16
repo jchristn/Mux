@@ -1081,7 +1081,7 @@ function doDeleteMultiple(ids){
     api("/v1.0/api/sessions?id="+encodeURIComponent(id),"DELETE").then(function(){ok++;},function(){fail++;}).then(function(){
       done++;if(done!==ids.length)return;
       if(ids.indexOf(currentSessionId)>=0)newChat();
-      loadConvos();
+      loadConvos();notifySessionsChanged("");
       var msg=(fail===0)?("Deleted "+ok+" conversation"+(ok===1?"":"s")+"."):("Deleted "+ok+", failed to delete "+fail+".");
       openModal(fail===0?"Deleted":"Completed with errors",'<p style="margin:0">'+esc(msg)+'</p>',[{label:"OK",primary:true}]);
     });
@@ -1149,13 +1149,28 @@ function renameConvo(id){
   api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
     var payload={Id:id,Title:val,EndpointName:(d&&d.EndpointName)||"",Model:(d&&d.Model)||"",Messages:((d&&d.Messages)||[]).map(function(m){return {Role:m.Role,Content:m.Content};})};
     return api("/v1.0/api/sessions","PUT",payload);
-  }).then(function(s){if(id===currentSessionId&&s)setChatTitle(s.Title||"");loadConvos();}).catch(function(e){toast(e.message,true);});
+  }).then(function(s){if(id===currentSessionId&&s)setChatTitle(s.Title||"");loadConvos();notifySessionsChanged(id);}).catch(function(e){toast(e.message,true);});
 }
 function deleteConvo(id){
   confirmModal("Delete this conversation?",function(){
-    api("/v1.0/api/sessions?id="+encodeURIComponent(id),"DELETE").then(function(){if(id===currentSessionId)newChat();loadConvos();toast("Deleted");}).catch(function(e){toast(e.message,true);});
+    api("/v1.0/api/sessions?id="+encodeURIComponent(id),"DELETE").then(function(){if(id===currentSessionId)newChat();loadConvos();notifySessionsChanged(id);toast("Deleted");}).catch(function(e){toast(e.message,true);});
   });
 }
+// Global conversation-list sync: a persistent subscription that refreshes the sidebar whenever the hub
+// reports any list change (a run finishing anywhere, or a rename/delete on another surface). Reconnects.
+var sessionsWatch=null;
+function startSessionsWatch(){
+  if(typeof WebSocket==="undefined"||sessionsWatch)return;
+  var url=(location.protocol==="https:"?"wss":"ws")+"://"+location.host+"/v1.0/ws"+(API_KEY?("?apiKey="+encodeURIComponent(API_KEY)):"");
+  var ws;try{ws=new WebSocket(url);}catch(e){setTimeout(startSessionsWatch,3000);return;}
+  sessionsWatch=ws;
+  ws.onopen=function(){try{ws.send(JSON.stringify({action:"subscribe",all:true}));}catch(e){}};
+  ws.onerror=function(){};
+  ws.onclose=function(){if(sessionsWatch===ws)sessionsWatch=null;setTimeout(startSessionsWatch,3000);};
+  ws.onmessage=function(m){var ev;try{ev=JSON.parse(m.data);}catch(e){return;}if(ev&&ev.eventType==="sessions_changed"){setTimeout(loadConvos,400);}};
+}
+// Tell the hub this surface changed the list (rename/delete) so others refresh; refresh is only a fallback.
+function notifySessionsChanged(id){ if(sessionsWatch&&sessionsWatch.readyState===1){try{sessionsWatch.send(JSON.stringify({action:"notify",sessionId:id||""}));}catch(e){}} }
 
 var CHAT_HELP="**Chat commands**\n\n"+
 "- `/?`, `/help` — show this list\n"+
@@ -1364,7 +1379,7 @@ function warmModel(){
   }).catch(function(){if(st){st.textContent="✗ unreachable";st.className="model-status err";}});
 }
 
-function loadChat(){loadConvos();warmModel();}
+function loadChat(){loadConvos();warmModel();startSessionsWatch();}
 
 function loadSettings(){
   api("/v1.0/api/settings").then(function(s){

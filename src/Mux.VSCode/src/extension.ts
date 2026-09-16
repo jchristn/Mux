@@ -8,6 +8,7 @@ import { ManageActions } from './manage/actions';
 import { ManageNode, ManageTreeProvider } from './manage/ManageTree';
 import { UsagePanel } from './manage/UsagePanel';
 import { showConnectionHelp } from './server/help';
+import { MirrorClient } from './mirror/MirrorClient';
 import { MuxServerLifecycle } from './server/lifecycle';
 import { ConnectionStatusBar } from './server/StatusBar';
 import { SessionNode, SessionTreeProvider } from './sessions/SessionTree';
@@ -32,6 +33,31 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const sessions = new SessionTreeProvider(lifecycle, (id) => chat.loadSession(id));
     context.subscriptions.push(vscode.window.registerTreeDataProvider('mux.sessions', sessions));
+
+    // Global conversation-list sync: once connected, subscribe to the hub's list-change notifications and
+    // refresh the session tree live (a run finishing anywhere, or a rename/delete on any surface). No manual
+    // refresh needed. Started on first connect so activation stays network-free.
+    let sessionsWatch: MirrorClient | undefined;
+    const ensureSessionsWatch = async (): Promise<void> => {
+        if (sessionsWatch) {
+            return;
+        }
+        try {
+            const client = await lifecycle.getClient(new vscode.CancellationTokenSource().token);
+            const watcher = new MirrorClient(client.serverBaseUrl, client.serverApiKey);
+            sessionsWatch = watcher;
+            watcher.startAll({
+                onEvent: () => {},
+                onError: () => {},
+                onClose: () => {},
+                onSessionsChanged: () => void vscode.commands.executeCommand('mux.sessions.refresh'),
+            });
+            context.subscriptions.push({ dispose: () => watcher.stop() });
+        } catch {
+            /* not connected yet; retry on the next state change */
+        }
+    };
+    context.subscriptions.push(lifecycle.onDidChangeState((state) => { if (state.connected) { void ensureSessionsWatch(); } }));
 
     const endpointPicker = new EndpointPicker(lifecycle);
     context.subscriptions.push(endpointPicker);

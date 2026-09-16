@@ -90,6 +90,8 @@ namespace Mux.Desktop.Shell
         // (dashboard, TUI, VS Code, another desktop) reloads this transcript automatically. On by default.
         private Mux.Core.Runs.SessionMirrorClient? _Mirror;
         private string _MirrorSession = string.Empty;
+        // Global list watch: refreshes the sidebar whenever any conversation-list change is broadcast.
+        private Mux.Core.Runs.SessionMirrorClient? _SessionsMirror;
         private readonly StackPanel _DefaultTranscript = new StackPanel { Margin = new Thickness(24, 16, 24, 16), Spacing = 14 };
         private readonly AgentLoopTurnRunner _FallbackRunner;
         private static readonly SemaphoreSlim _CheckpointGate = new SemaphoreSlim(1, 1);
@@ -296,6 +298,7 @@ namespace Mux.Desktop.Shell
         {
             base.OnClosed(e);
             try { if (_Mirror != null) { _ = _Mirror.DisposeAsync(); } } catch (Exception) { }
+            try { if (_SessionsMirror != null) { _ = _SessionsMirror.DisposeAsync(); } } catch (Exception) { }
             try { _Mcp?.Dispose(); } catch (Exception) { }
             try { _Skills?.Dispose(); } catch (Exception) { }
         }
@@ -344,6 +347,7 @@ namespace Mux.Desktop.Shell
         {
             base.OnOpened(e);
             _ = LoadThreadsAsync();
+            StartSessionsWatch();
 
             // Land the caret in the composer immediately so the user can start typing without clicking in.
             Dispatcher.UIThread.Post(() => _Composer?.Focus(), DispatcherPriority.Input);
@@ -624,6 +628,7 @@ namespace Mux.Desktop.Shell
                 return;
             }
 
+            NotifySessionsChanged(string.Empty);
             bool activeDeleted = _Active != null && deleted.Contains(_Active.Id);
             foreach (string id in deleted)
             {
@@ -1968,6 +1973,26 @@ namespace Mux.Desktop.Shell
             StartMirrorForActive(context.Id);
         }
 
+        // Subscribe to global conversation-list changes so the sidebar refreshes live when a run finishes on
+        // any surface, or a rename/delete happens elsewhere. Best-effort; reconnects internally.
+        private void StartSessionsWatch()
+        {
+            if (_SessionsMirror != null)
+            {
+                return;
+            }
+
+            Mux.Core.Models.RestServerSettings rest;
+            try { rest = SettingsLoader.LoadSettings().Rest; }
+            catch (Exception) { return; }
+
+            string hubBaseUrl = (rest.Ssl ? "https" : "http") + "://" + rest.Hostname + ":" + rest.Port;
+            Mux.Core.Runs.SessionMirrorClient client = new Mux.Core.Runs.SessionMirrorClient(hubBaseUrl, rest.ApiKey);
+            client.SessionsChanged += sid => Dispatcher.UIThread.Post(() => { _ = LoadThreadsAsync(); });
+            _SessionsMirror = client;
+            _ = client.StartAllAsync(CancellationToken.None);
+        }
+
         // Point the cross-surface mirror at the focused conversation (on by default). When a run for it
         // finishes on another surface, the transcript reloads from the shared store. Best-effort.
         private void StartMirrorForActive(string sessionId)
@@ -2831,6 +2856,17 @@ namespace Mux.Desktop.Shell
             }
 
             await LoadThreadsAsync();
+            NotifySessionsChanged(id);
+        }
+
+        // Broadcast a conversation-list change (rename/delete) to the hub so other surfaces refresh live.
+        private void NotifySessionsChanged(string id)
+        {
+            Mux.Core.Runs.SessionMirrorClient? client = _SessionsMirror;
+            if (client != null)
+            {
+                _ = client.NotifySessionsChangedAsync(id ?? string.Empty, CancellationToken.None);
+            }
         }
 
         private async Task DeleteThreadAsync(string id, string title)
@@ -2842,6 +2878,7 @@ namespace Mux.Desktop.Shell
             }
 
             await _Threads.DeleteAsync(id, CancellationToken.None);
+            NotifySessionsChanged(id);
 
             bool wasActive = _Active != null && string.Equals(id, _Active.Id, StringComparison.Ordinal);
 

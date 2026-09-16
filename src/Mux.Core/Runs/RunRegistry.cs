@@ -21,6 +21,8 @@ namespace Mux.Core.Runs
         #region Private-Members
 
         private readonly ConcurrentDictionary<string, RunHandle> _Runs = new ConcurrentDictionary<string, RunHandle>();
+        private readonly List<Action<string>> _SessionsListeners = new List<Action<string>>();
+        private readonly object _ListenerSync = new object();
         private readonly CancellationTokenSource _Cts = new CancellationTokenSource();
         private readonly Task _EvictionLoop;
         private readonly TimeSpan _PollInterval = TimeSpan.FromMilliseconds(500);
@@ -38,6 +40,47 @@ namespace Mux.Core.Runs
         /// to a session sees the next run for it the moment it begins. Handlers must not throw.
         /// </summary>
         public event Action<RunHandle>? RunRegistered;
+
+        #endregion
+
+        #region Sessions-Notifications
+
+        /// <summary>
+        /// Registers a listener notified (with the affected session id, possibly empty) whenever the
+        /// conversation list may have changed — a run completed, or a surface signalled a rename/delete via
+        /// <see cref="NotifySessionsChanged"/>. Surfaces use this to refresh their conversation list live
+        /// instead of relying on a manual refresh.
+        /// </summary>
+        /// <param name="listener">The callback. Ignored when null.</param>
+        public void AddSessionsListener(Action<string> listener)
+        {
+            if (listener == null) return;
+            lock (_ListenerSync) { _SessionsListeners.Add(listener); }
+        }
+
+        /// <summary>Removes a previously-added sessions listener.</summary>
+        /// <param name="listener">The callback to remove.</param>
+        public void RemoveSessionsListener(Action<string> listener)
+        {
+            if (listener == null) return;
+            lock (_ListenerSync) { _SessionsListeners.Remove(listener); }
+        }
+
+        /// <summary>
+        /// Notifies all sessions listeners that the conversation list may have changed. Called on run
+        /// completion and when a surface signals an out-of-band change (rename/duplicate/delete).
+        /// </summary>
+        /// <param name="sessionId">The affected session id, or empty for a non-specific change.</param>
+        public void NotifySessionsChanged(string sessionId)
+        {
+            List<Action<string>> listeners;
+            lock (_ListenerSync) { listeners = new List<Action<string>>(_SessionsListeners); }
+            foreach (Action<string> listener in listeners)
+            {
+                try { listener(sessionId ?? string.Empty); }
+                catch (Exception) { /* a listener must never break the notifier */ }
+            }
+        }
 
         #endregion
 
@@ -84,6 +127,7 @@ namespace Mux.Core.Runs
             if (string.IsNullOrEmpty(runId)) throw new ArgumentException("Run id is required.", nameof(runId));
 
             RunHandle handle = new RunHandle(runId, sessionId, endpointName, model, externalToken);
+            handle.Completed += () => NotifySessionsChanged(handle.SessionId);
             _Runs[runId] = handle;
             RaiseRegistered(handle);
             return handle;
@@ -115,6 +159,7 @@ namespace Mux.Core.Runs
 
             if (created)
             {
+                handle.Completed += () => NotifySessionsChanged(handle.SessionId);
                 RaiseRegistered(handle);
             }
 

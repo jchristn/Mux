@@ -9,8 +9,11 @@ namespace Mux.Server.Runs
     /// </summary>
     public sealed class ClientFrame
     {
-        /// <summary>The control action: <c>subscribe</c>, <c>approve</c>, or <c>publish</c>.</summary>
+        /// <summary>The control action: <c>subscribe</c>, <c>approve</c>, <c>publish</c>, or <c>notify</c>.</summary>
         public string? Action { get; set; }
+
+        /// <summary>When true on a subscribe, receive global <c>sessions_changed</c> notifications (list changes).</summary>
+        public bool All { get; set; }
 
         /// <summary>The run id to subscribe to, or the run being published.</summary>
         public string? RunId { get; set; }

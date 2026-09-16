@@ -203,7 +203,7 @@ namespace Mux.Server
             string? apiKey = _Settings.ApiKey;
             new HealthRoutes(_Version, _StartUtc).Register(app);
             new EndpointRoutes(apiKey, _EndpointsProvider).Register(app);
-            new SessionRoutes(apiKey, _SessionStore).Register(app);
+            new SessionRoutes(apiKey, _SessionStore, _Runs).Register(app);
             new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder, _SessionStore, _AllowInteractiveTools, _Checkpoints, _Runs).Register(app);
             new CheckpointRoutes(apiKey, _Checkpoints).Register(app);
             new SettingsRoutes(apiKey).Register(app);
