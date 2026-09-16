@@ -48,7 +48,7 @@ namespace Mux.Core.Sessions
                 normalized = normalized.Substring(6).Trim();
             }
 
-            normalized = normalized.Trim(' ', '"', '\'', '`');
+            normalized = StripWrappingQuotes(normalized.Trim());
 
             while (normalized.EndsWith(".", StringComparison.Ordinal)
                 || normalized.EndsWith(":", StringComparison.Ordinal)
@@ -63,6 +63,32 @@ namespace Mux.Core.Sessions
             }
 
             return string.IsNullOrWhiteSpace(normalized) ? fallback : normalized;
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        // Removes a matching pair of surrounding quotes the model sometimes wraps a whole title in (for example
+        // "My Title" or 'My Title'), one pair at a time. Only strips when the first and last characters are the
+        // same quote character, so a quote that is genuinely part of the title — a lone trailing quote as in
+        // say "web1" — is never dropped.
+        private static string StripWrappingQuotes(string value)
+        {
+            while (value.Length >= 2)
+            {
+                char first = value[0];
+                if ((first == '"' || first == '\'' || first == '`') && value[value.Length - 1] == first)
+                {
+                    value = value.Substring(1, value.Length - 2).Trim();
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            return value;
         }
 
         #endregion

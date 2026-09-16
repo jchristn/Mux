@@ -35,6 +35,22 @@ namespace Test.Shared.Suites
                         string normalized = SessionTitleHelper.Normalize("  ", "Current title");
                         MuxAssert.AreEqual("Current title", normalized, "fallback title");
                         return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("SessionTitleHelper", "NormalizeKeepsTrailingContentQuote", "A quote that is part of the title (say \"web1\") keeps its closing quote", (CancellationToken ct) =>
+                    {
+                        // The title is not wrapped in quotes — the closing quote belongs to the content and must
+                        // not be stripped (the "last character truncated" bug).
+                        string normalized = SessionTitleHelper.Normalize("say \"web1\"", "Fallback");
+                        MuxAssert.AreEqual("say \"web1\"", normalized, "closing content quote preserved");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("SessionTitleHelper", "NormalizeUnwrapsMatchingQuotePair", "A title fully wrapped in a matching quote pair is unwrapped", (CancellationToken ct) =>
+                    {
+                        string normalized = SessionTitleHelper.Normalize("\"say web1\"", "Fallback");
+                        MuxAssert.AreEqual("say web1", normalized, "wrapping quotes removed");
+                        return Task.CompletedTask;
                     })
                 });
         }
