@@ -1,7 +1,6 @@
 namespace Mux.Server.Routes
 {
     using System;
-    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
@@ -18,6 +17,7 @@ namespace Mux.Server.Routes
     using Mux.Core.Skills;
     using Mux.Core.Telemetry;
     using Mux.Core.Tools;
+    using Mux.Core.Runs;
     using Mux.Server.Models;
     using WatsonWebserver;
     using WatsonWebserver.Core;
@@ -39,12 +39,7 @@ namespace Mux.Server.Routes
         private readonly SessionStore? _SessionStore;
         private readonly bool _AllowInteractiveTools;
         private readonly CheckpointRegistry? _Checkpoints;
-
-        // Pending tool approvals for interactive web chats, keyed by "runId:toolCallId". The streaming run
-        // registers a completion source and streams an "approval" event; the browser answers via
-        // POST /v1.0/api/chat/approve, which resolves the source. Server-lifetime.
-        private readonly ConcurrentDictionary<string, TaskCompletionSource<string>> _PendingApprovals =
-            new ConcurrentDictionary<string, TaskCompletionSource<string>>();
+        private readonly RunRegistry _Runs;
 
         // Server-lifetime tool runtimes, created lazily on the first chat so MCP servers are connected once
         // and reused across requests. Not disposed — they live for the server process.
@@ -62,13 +57,16 @@ namespace Mux.Server.Routes
         /// <param name="sessionStore">Optional session store so streamed web chats are persisted server-side (into the shared session store) keyed by session id. Null disables server-side persistence.</param>
         /// <param name="allowInteractiveTools">When true, mutating tools proposed during a web chat prompt the browser for approval instead of being auto-denied. Defaults to false (read-only web chat).</param>
         /// <param name="checkpoints">Optional checkpoint registry so each run records a pre-turn git snapshot for undo/redo. Null disables checkpointing.</param>
+        /// <param name="runs">The run registry tracking each streamed run so it can be inspected, canceled, and mirrored over the WebSocket bridge.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpointsProvider"/> or <paramref name="runs"/> is null.</exception>
         public ChatRoutes(
             string? apiKey,
             Func<List<EndpointConfig>> endpointsProvider,
-            IUsageRecorder? usageRecorder = null,
-            SessionStore? sessionStore = null,
-            bool allowInteractiveTools = false,
-            CheckpointRegistry? checkpoints = null)
+            IUsageRecorder? usageRecorder,
+            SessionStore? sessionStore,
+            bool allowInteractiveTools,
+            CheckpointRegistry? checkpoints,
+            RunRegistry runs)
         {
             _ApiKey = apiKey;
             _EndpointsProvider = endpointsProvider ?? throw new ArgumentNullException(nameof(endpointsProvider));
@@ -76,6 +74,7 @@ namespace Mux.Server.Routes
             _SessionStore = sessionStore;
             _AllowInteractiveTools = allowInteractiveTools;
             _Checkpoints = checkpoints;
+            _Runs = runs ?? throw new ArgumentNullException(nameof(runs));
         }
 
         /// <summary>
@@ -122,16 +121,15 @@ namespace Mux.Server.Routes
                     return (object)new ApiError("BadRequest", "'runId' and 'toolCallId' are required.");
                 }
 
-                string key = decision.RunId + ":" + decision.ToolCallId;
-                if (_PendingApprovals.TryRemove(key, out TaskCompletionSource<string>? source))
+                string verdict = (decision.Decision ?? "n").Trim().ToLowerInvariant();
+                if (verdict != "y" && verdict != "always")
                 {
-                    string verdict = (decision.Decision ?? "n").Trim().ToLowerInvariant();
-                    if (verdict != "y" && verdict != "always")
-                    {
-                        verdict = "n";
-                    }
+                    verdict = "n";
+                }
 
-                    source.TrySetResult(verdict);
+                if (_Runs.TryGet(decision.RunId, out RunHandle? handle) && handle != null
+                    && handle.ResolveApproval(decision.ToolCallId, verdict))
+                {
                     req.Http.Response.StatusCode = 200;
                     return (object)new { ok = true };
                 }
@@ -432,13 +430,23 @@ namespace Mux.Server.Routes
                 settings.TaskPlanningEnabled,
                 null);
 
-            // A per-run id correlating interactive approval prompts with their decisions.
+            // A per-run id correlating interactive approval prompts with their decisions, and the addressable
+            // run handle other surfaces cancel, inspect, and mirror. The handle's token is linked to the
+            // request token, so a client disconnect and an explicit cancel both stop the run.
             string runId = Guid.NewGuid().ToString("N");
+            RunHandle runHandle = _Runs.Create(runId, sessionId, endpoint.Name, endpoint.Model, ctx.Token);
 
             // Everything validated — switch the response into Server-Sent Events mode and stream.
             ctx.Response.StatusCode = 200;
             ctx.Response.ContentType = "text/event-stream";
             ctx.Response.ServerSentEvents = true;
+
+            // Announce the run/session ids first so the client can address the run (cancel, WS subscribe).
+            await ctx.Response.SendEvent(new ServerSentEvent
+            {
+                Event = "run",
+                Data = JsonSerializer.Serialize(new ChatRunEvent { RunId = runId, SessionId = sessionId })
+            }, false, ctx.Token).ConfigureAwait(false);
 
             System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
             long ttftMs = -1;
@@ -459,7 +467,7 @@ namespace Mux.Server.Routes
                     // prompt the browser for approval over the SSE channel.
                     ApprovalPolicy = ApprovalPolicyEnum.AutoSafe,
                     PromptUserFunc = _AllowInteractiveTools
-                        ? toolCall => RequestBrowserApprovalAsync(ctx, runId, toolCall)
+                        ? toolCall => RequestBrowserApprovalAsync(ctx, runHandle, toolCall)
                         : (Func<ToolCall, Task<string>>)(_ => Task.FromResult("n")),
                     WorkingDirectory = runDirectory,
                     MuxSettings = settings,
@@ -485,10 +493,10 @@ namespace Mux.Server.Routes
                 {
                     try
                     {
-                        Mux.Core.Checkpoints.CheckpointManager? checkpointManager = await _Checkpoints.GetOrCreateAsync(runDirectory, ctx.Token).ConfigureAwait(false);
+                        Mux.Core.Checkpoints.CheckpointManager? checkpointManager = await _Checkpoints.GetOrCreateAsync(runDirectory, runHandle.Token).ConfigureAwait(false);
                         if (checkpointManager != null)
                         {
-                            await checkpointManager.RecordAsync(CheckpointLabel(prompt), ctx.Token).ConfigureAwait(false);
+                            await checkpointManager.RecordAsync(CheckpointLabel(prompt), runHandle.Token).ConfigureAwait(false);
                         }
                     }
                     catch (Exception)
@@ -498,8 +506,12 @@ namespace Mux.Server.Routes
                 }
 
                 using AgentLoop loop = new AgentLoop(options);
-                await foreach (AgentEvent agentEvent in loop.RunAsync(prompt, ctx.Token).ConfigureAwait(false))
+                await foreach (AgentEvent agentEvent in loop.RunAsync(prompt, runHandle.Token).ConfigureAwait(false))
                 {
+                    // Update the addressable run state and fan the event out to WebSocket subscribers using
+                    // the canonical envelope before projecting the dashboard-shaped SSE event below.
+                    runHandle.ApplyEvent(agentEvent);
+
                     switch (agentEvent)
                     {
                         case AssistantTextEvent textEvent:
@@ -574,10 +586,26 @@ namespace Mux.Server.Routes
             }
             catch (OperationCanceledException)
             {
-                // The client disconnected; nothing more to send.
+                // The run was canceled (explicit cancel request or client disconnect). Publish a terminal
+                // run_completed(status=canceled) so WebSocket subscribers observe closure, then best-effort
+                // notify the SSE client (which may already be gone).
+                runHandle.ApplyEvent(new RunCompletedEvent { RunId = runId, SessionId = sessionId, Status = "canceled" });
+                try
+                {
+                    await ctx.Response.SendEvent(new ServerSentEvent
+                    {
+                        Event = "canceled",
+                        Data = JsonSerializer.Serialize(new ChatRunEvent { RunId = runId, SessionId = sessionId })
+                    }, true, ctx.Token).ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    // Best-effort — the connection may already be gone.
+                }
             }
             catch (Exception ex)
             {
+                runHandle.MarkTerminal(RunStatusEnum.Failed);
                 try
                 {
                     await ctx.Response.SendEvent(new ServerSentEvent
@@ -590,6 +618,12 @@ namespace Mux.Server.Routes
                 {
                     // Best-effort — the connection may already be gone.
                 }
+            }
+            finally
+            {
+                // Guarantee the handle reaches a terminal state (no-op when already terminal) so the registry
+                // can evict it after the retention window.
+                runHandle.MarkTerminal(RunStatusEnum.Completed);
             }
         }
 
@@ -652,14 +686,19 @@ namespace Mux.Server.Routes
         }
 
         // Streams an approval prompt to the browser and blocks the run until the browser answers (via
-        // POST /v1.0/api/chat/approve), the request is cancelled, or a timeout elapses. Returns "y"/"always"
-        // to approve or "n" to deny. Only used when the server was started with interactive web tools enabled.
-        private async Task<string> RequestBrowserApprovalAsync(HttpContextBase ctx, string runId, ToolCall toolCall)
+        // POST /v1.0/api/chat/approve or an "approve" WebSocket frame), the run is cancelled, or a timeout
+        // elapses. The pending approval is registered on the run handle so either transport can resolve it.
+        // Returns "y"/"always" to approve or "n" to deny. Only used when the server was started with
+        // interactive web tools enabled.
+        private async Task<string> RequestBrowserApprovalAsync(HttpContextBase ctx, RunHandle handle, ToolCall toolCall)
         {
             string toolCallId = toolCall?.Id ?? string.Empty;
-            string key = runId + ":" + toolCallId;
-            TaskCompletionSource<string> source = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _PendingApprovals[key] = source;
+            if (string.IsNullOrEmpty(toolCallId))
+            {
+                return "n";
+            }
+
+            TaskCompletionSource<string> source = handle.RegisterApproval(toolCallId);
 
             try
             {
@@ -668,7 +707,7 @@ namespace Mux.Server.Routes
                     Event = "approval",
                     Data = JsonSerializer.Serialize(new ChatApprovalRequest
                     {
-                        RunId = runId,
+                        RunId = handle.RunId,
                         ToolCallId = toolCallId,
                         Name = toolCall?.Name ?? string.Empty,
                         Arguments = toolCall?.Arguments ?? string.Empty
@@ -677,13 +716,13 @@ namespace Mux.Server.Routes
             }
             catch (Exception)
             {
-                _PendingApprovals.TryRemove(key, out _);
+                handle.ResolveApproval(toolCallId, "n");
                 return "n";
             }
 
             try
             {
-                Task delay = Task.Delay(TimeSpan.FromMinutes(5), ctx.Token);
+                Task delay = Task.Delay(TimeSpan.FromMinutes(5), handle.Token);
                 Task finished = await Task.WhenAny(source.Task, delay).ConfigureAwait(false);
                 if (finished == source.Task)
                 {
@@ -694,11 +733,8 @@ namespace Mux.Server.Routes
             {
                 // Fall through to deny on cancellation/timeout.
             }
-            finally
-            {
-                _PendingApprovals.TryRemove(key, out _);
-            }
 
+            handle.ResolveApproval(toolCallId, "n");
             return "n";
         }
 

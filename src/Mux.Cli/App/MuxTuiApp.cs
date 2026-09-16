@@ -107,6 +107,10 @@ namespace Mux.Cli.App
         private readonly MenuBar _MenuBar;
         private Job? _ActiveJob;
         private bool _TurnInFlight;
+        // Consumes the fabric: mirrors the current conversation so a run finishing on any other surface
+        // reloads this transcript automatically. On by default.
+        private Mux.Core.Runs.SessionMirrorClient? _Mirror;
+        private string _MirrorSession = string.Empty;
         private readonly object _ThinkingSync = new object();
         private PaneLineHandle? _ThinkingHandle;
         private CancellationTokenSource? _ThinkingCts;
@@ -584,10 +588,14 @@ namespace Mux.Cli.App
                     // flush on the first rendered frame, exactly as a typed prompt would.
                     SubmitInitialPrompt();
 
+                    // Mirror the current conversation so runs on other surfaces sync in automatically.
+                    StartSessionMirror(_JobManager.SessionId);
+
                     await _App.RunAsync(loopCts.Token).ConfigureAwait(false);
                 }
                 finally
                 {
+                    if (_Mirror != null) { _ = _Mirror.DisposeAsync(); }
                     loopCts.Cancel();
                     try
                     {
@@ -1797,6 +1805,8 @@ namespace Mux.Cli.App
                 .GetResult();
 
             AgentEventProjector projector = new AgentEventProjector(_Conversation);
+            // Publish this turn to the hub so it can be mirrored live on any surface (keyed by session id).
+            projector.EnableMirrorPublishing(_JobManager.SessionId, _EndpointName, string.Empty);
             Stopwatch stopwatch = Stopwatch.StartNew();
             long[] ttft = { -1 };
             projector.FirstTokenReceived += () => ttft[0] = stopwatch.ElapsedMilliseconds;
@@ -2888,6 +2898,9 @@ namespace Mux.Cli.App
             {
                 _Conversation.WriteLine(Text.From("⚠ interrupted — re-run required").Yellow());
             }
+
+            // Re-point the cross-surface mirror at the resumed conversation.
+            StartSessionMirror(_JobManager.SessionId);
         }
 
         private void WriteNotice(string text)
@@ -4230,6 +4243,93 @@ namespace Mux.Cli.App
 
             RedrawTranscriptFromHistory(result.History);
             PostNotice(result.Message);
+        }
+
+        // Point the cross-surface mirror at a session (on by default). When a run for it finishes on another
+        // surface, the transcript reloads from the shared store. Best-effort.
+        private void StartSessionMirror(string? sessionId)
+        {
+            string target = sessionId ?? string.Empty;
+            if (string.Equals(target, _MirrorSession, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _MirrorSession = target;
+            Mux.Core.Runs.SessionMirrorClient? previous = _Mirror;
+            _Mirror = null;
+            if (previous != null)
+            {
+                _ = previous.DisposeAsync();
+            }
+
+            if (string.IsNullOrEmpty(target) || _Store == null)
+            {
+                return;
+            }
+
+            Mux.Core.Models.RestServerSettings rest;
+            try { rest = SettingsLoader.LoadSettings().Rest; }
+            catch (Exception) { return; }
+
+            string hubBaseUrl = (rest.Ssl ? "https" : "http") + "://" + rest.Hostname + ":" + rest.Port;
+            Mux.Core.Runs.SessionMirrorClient client = new Mux.Core.Runs.SessionMirrorClient(hubBaseUrl, rest.ApiKey);
+            string watched = target;
+            client.RunCompleted += () => { _ = ReloadMirroredSessionAsync(watched); };
+            _Mirror = client;
+            _ = client.StartAsync(target, CancellationToken.None);
+        }
+
+        // A run for the mirrored session finished (possibly elsewhere). Reload from the shared store and redraw
+        // — unless it's our own in-flight turn, or the store has nothing new (our own just-finished run).
+        private async Task ReloadMirroredSessionAsync(string sessionId)
+        {
+            if (_ActiveJob != null || _Store == null || !string.Equals(_JobManager.SessionId, sessionId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            int shown;
+            lock (_Sync)
+            {
+                shown = _ConversationHistory.Count;
+            }
+
+            // The producer publishes run_completed slightly BEFORE it finishes persisting the turn, so a single
+            // read can be stale. Poll the shared store until it has more turns than we're showing (a genuine
+            // external addition), or give up. The count check also skips our own just-finished run.
+            SessionSnapshot? snapshot = null;
+            for (int attempt = 0; attempt < 8; attempt++)
+            {
+                await Task.Delay(350).ConfigureAwait(false);
+                if (_ActiveJob != null || !string.Equals(_JobManager.SessionId, sessionId, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                SessionSnapshot? candidate;
+                try { candidate = await _Store.LoadAsync(sessionId, _Cts.Token).ConfigureAwait(false); }
+                catch (Exception) { return; }
+                if (candidate != null && candidate.ConversationHistory.Count > shown)
+                {
+                    snapshot = candidate;
+                    break;
+                }
+            }
+
+            if (snapshot == null)
+            {
+                return;
+            }
+
+            lock (_Sync)
+            {
+                _ConversationHistory.Clear();
+                _ConversationHistory.AddRange(snapshot.ConversationHistory);
+            }
+
+            RedrawTranscriptFromHistory(snapshot.ConversationHistory);
+            PostNotice("« synced an update from another surface »");
         }
 
         private void RedrawTranscriptFromHistory(List<ConversationMessage> history)

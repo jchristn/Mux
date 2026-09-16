@@ -63,6 +63,9 @@ namespace Mux.Server.Documentation
         /// <summary>Usage telemetry and pricing.</summary>
         public const string TagUsage = "Usage";
 
+        /// <summary>Run lifecycle: list, inspect, and cancel active runs.</summary>
+        public const string TagRuns = "Runs";
+
         #endregion
 
         #region Configuration
@@ -148,7 +151,8 @@ namespace Mux.Server.Documentation
                 new OpenApiTag { Name = TagMcp, Description = "Manage Model Context Protocol servers (stdio and HTTP)." },
                 new OpenApiTag { Name = TagSkills, Description = "Discover, enable/disable, create, edit, and delete skills." },
                 new OpenApiTag { Name = TagSettings, Description = "Read and update the editable server settings (secrets masked)." },
-                new OpenApiTag { Name = TagUsage, Description = "Query usage telemetry (summary, time series, breakdowns, events) and manage pricing." }
+                new OpenApiTag { Name = TagUsage, Description = "Query usage telemetry (summary, time series, breakdowns, events) and manage pricing." },
+                new OpenApiTag { Name = TagRuns, Description = "List active and recently-finished runs, inspect a run's state and task plan, and cancel a run." }
             };
 
             RegisterSchemas(settings.Schemas);
@@ -634,6 +638,34 @@ namespace Mux.Server.Documentation
             .WithResponse(200, Ok("PricingTable"))
             .WithResponse(400, BadRequest())
             .WithResponse(401, Unauthorized());
+
+        // --- Runs ---
+
+        /// <summary>Metadata for <c>GET /v1.0/api/runs</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> RunsList = m => Sec(Init(m, TagRuns,
+            "List runs",
+            "Returns active and recently-finished runs as summaries, most-recently-started first. Terminal runs are retained briefly (a few minutes) for inspection, then evicted.",
+            operationId: "listRuns"))
+            .WithResponse(200, OkList("RunSummaryDto"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/runs/{runId}</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> RunsGet = m => Sec(Init(m, TagRuns,
+            "Inspect a run",
+            "Returns the full live state of a run: status, counters, the currently executing tool, the last error, and the current task-plan checklist. The `{runId}` path segment is the run id from the chat stream's `run` event.",
+            operationId: "getRun"))
+            .WithResponse(200, Ok("RunStateReply"))
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
+        /// <summary>Metadata for <c>POST /v1.0/api/runs/{runId}/cancel</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> RunsCancel = m => Sec(Init(m, TagRuns,
+            "Cancel a run",
+            "Requests cooperative cancellation of an active run: the run's cancellation token is tripped so the agent loop and any in-flight tool stop at the next check, and a terminal `run_completed` (status `canceled`) is published to any stream subscribers. Returns 404 when the run is unknown or already finished.",
+            operationId: "cancelRun"))
+            .WithResponse(200, Ok("RunCancelReply"))
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, RespJson("No active run with that id.", Ref("ApiError")));
 
         #endregion
 
@@ -1256,6 +1288,65 @@ namespace Mux.Server.Documentation
                     }
                 }
             };
+
+            s["RunTaskDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Id"] = Pstr("The task id."),
+                ["Title"] = Pstr("The task title."),
+                ["Status"] = Pstr("Task status: `pending`, `in_progress`, `completed`, `failed`, `skipped`, or `blocked`.")
+            }, new Dictionary<string, object?> { ["Id"] = "t1", ["Title"] = "Add the interface", ["Status"] = "in_progress" });
+
+            s["RunSummaryDto"] = Obj(new Dictionary<string, M>
+            {
+                ["RunId"] = Pstr("The run correlation id."),
+                ["SessionId"] = Pstr("The session id the run belongs to (may be empty)."),
+                ["EndpointName"] = Pstr("The endpoint the run targets."),
+                ["Model"] = Pstr("The model the run targets."),
+                ["Status"] = Pstr("Lifecycle status: `running`, `awaiting_approval`, `completed`, `failed`, or `canceled`."),
+                ["IsTerminal"] = Pbool("Whether the run has reached a terminal status."),
+                ["StartedUtc"] = Pstr("When the run started (UTC).", "date-time"),
+                ["CompletedUtc"] = new M { Type = "string", Format = "date-time", Nullable = true, Description = "When the run finished (UTC), or null while running." }
+            }, new Dictionary<string, object?>
+            {
+                ["RunId"] = "8b2f…", ["SessionId"] = "9f1c…", ["EndpointName"] = "openai-gpt4o", ["Model"] = "gpt-4o",
+                ["Status"] = "running", ["IsTerminal"] = false, ["StartedUtc"] = "2026-09-15T12:00:00Z"
+            });
+
+            s["RunStateReply"] = Obj(new Dictionary<string, M>
+            {
+                ["RunId"] = Pstr("The run correlation id."),
+                ["SessionId"] = Pstr("The session id the run belongs to (may be empty)."),
+                ["EndpointName"] = Pstr("The endpoint the run targets."),
+                ["Model"] = Pstr("The model the run targets."),
+                ["Status"] = Pstr("Lifecycle status: `running`, `awaiting_approval`, `completed`, `failed`, or `canceled`."),
+                ["IsTerminal"] = Pbool("Whether the run has reached a terminal status."),
+                ["StartedUtc"] = Pstr("When the run started (UTC).", "date-time"),
+                ["CompletedUtc"] = new M { Type = "string", Format = "date-time", Nullable = true, Description = "When the run finished (UTC), or null while running." },
+                ["IterationsCompleted"] = Pint("Iterations completed (populated at run completion)."),
+                ["ToolCallCount"] = Pint("Tool calls handled (populated at run completion)."),
+                ["ErrorCount"] = Pint("Error events observed during the run."),
+                ["InputTokens"] = Pint("Provider-reported input tokens."),
+                ["OutputTokens"] = Pint("Provider-reported output tokens."),
+                ["TotalTokens"] = Pint("Provider-reported total tokens."),
+                ["FinalEstimatedTokens"] = Pint("Estimated final context tokens."),
+                ["CurrentToolName"] = PstrNullable("The tool currently executing, or null."),
+                ["LastError"] = PstrNullable("The most recent error message, or null."),
+                ["TotalTaskCount"] = Pint("Total tasks in the current task-plan snapshot."),
+                ["CompletedTaskCount"] = Pint("Completed tasks in the current task-plan snapshot."),
+                ["Tasks"] = Parr(Ref("RunTaskDto"), "The current task-plan checklist (empty when the run has no plan).")
+            }, new Dictionary<string, object?>
+            {
+                ["RunId"] = "8b2f…", ["SessionId"] = "9f1c…", ["EndpointName"] = "openai-gpt4o", ["Model"] = "gpt-4o",
+                ["Status"] = "running", ["IsTerminal"] = false, ["StartedUtc"] = "2026-09-15T12:00:00Z",
+                ["IterationsCompleted"] = 0, ["ToolCallCount"] = 0, ["ErrorCount"] = 0, ["TotalTaskCount"] = 3, ["CompletedTaskCount"] = 1
+            });
+
+            s["RunCancelReply"] = Obj(new Dictionary<string, M>
+            {
+                ["Ok"] = Pbool("Always true on success."),
+                ["RunId"] = Pstr("The run id that was canceled."),
+                ["Status"] = Pstr("The resulting status (`canceled`).")
+            }, new Dictionary<string, object?> { ["Ok"] = true, ["RunId"] = "8b2f…", ["Status"] = "canceled" });
         }
 
         #endregion

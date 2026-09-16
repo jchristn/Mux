@@ -11,6 +11,7 @@ namespace Mux.Desktop.Conversation
     using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Prompting;
+    using Mux.Core.Runs;
     using Mux.Core.Settings;
     using Mux.Core.Skills;
     using Mux.Core.Telemetry;
@@ -92,6 +93,7 @@ namespace Mux.Desktop.Conversation
             get => _SessionId;
             set => _SessionId = value;
         }
+
 
         /// <summary>The working directory tools execute in. Defaults to the process working directory.</summary>
         public string WorkingDirectory
@@ -252,10 +254,27 @@ namespace Mux.Desktop.Conversation
                     builtInTools.Count);
             }
 
-            using AgentLoop loop = new AgentLoop(options);
-            await foreach (AgentEvent agentEvent in loop.RunAsync(prompt, token))
+            // Publish this run to the hub so any surface can mirror it live (keyed by session id). Best-effort:
+            // if no hub is reachable the publisher stays disconnected and publishing is a no-op — the run is
+            // unaffected. The hub is the configured rest endpoint (the tray agent, or the desktop's own
+            // embedded server when that is what bound the port).
+            RestServerSettings rest = settings.Rest;
+            string hubBaseUrl = (rest.Ssl ? "https" : "http") + "://" + rest.Hostname + ":" + rest.Port;
+            RunPublisher publisher = new RunPublisher(hubBaseUrl, rest.ApiKey);
+            await publisher.StartAsync(Guid.NewGuid().ToString("N"), _SessionId ?? string.Empty, endpoint.Name, endpoint.Model, token).ConfigureAwait(false);
+
+            try
             {
-                yield return agentEvent;
+                using AgentLoop loop = new AgentLoop(options);
+                await foreach (AgentEvent agentEvent in loop.RunAsync(prompt, token))
+                {
+                    await publisher.PublishAsync(agentEvent, token).ConfigureAwait(false);
+                    yield return agentEvent;
+                }
+            }
+            finally
+            {
+                await publisher.DisposeAsync().ConfigureAwait(false);
             }
         }
     }

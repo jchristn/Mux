@@ -90,8 +90,8 @@ The current local REST server, dashboard, and tray agent are the right foundatio
 
 | Capability | Needed Work |
 |---|---|
-| Run-driving API | Session CRUD (`/v1.0/api/sessions` create/list/detail/upsert/delete), streamed run events (`/v1.0/api/chat/stream` SSE: text, thinking, tool calls, completion), server-side persistence, resume-by-id, and browser-approved mutating tools (`--allow-tools`) all ship. Remaining: an explicit cancel-run route (cancel is client-abort today) and a task-state inspection route. |
-| Complete WebSocket bridge | Stream the same event contract used by headless JSONL: assistant text, tool calls, tool results, task updates, errors, and completion. |
+| Run-driving API | Session CRUD (`/v1.0/api/sessions` create/list/detail/upsert/delete), streamed run events (`/v1.0/api/chat/stream` SSE: `run`, text, thinking, tool calls, completion), server-side persistence, resume-by-id, and browser-approved mutating tools (`--allow-tools`) all ship. **Cancel-run (`POST /v1.0/api/runs/{runId}/cancel`) and run-state inspection (`GET /v1.0/api/runs`, `GET /v1.0/api/runs/{runId}`) now ship** (delivered v0.12.0). Remaining: run-driving `POST /sessions/{id}/messages` (append-to-session) rather than the chat-stream body. |
+| ~~Complete WebSocket bridge~~ (delivered v0.12.0) | `/v1.0/ws` now authenticates the upgrade, subscribes by run/session id, and replays-then-tails the canonical event envelope — byte-identical to headless JSONL (one shared serializer) — including assistant text, thinking, tool calls/results, task updates, errors, and completion, plus over-socket approvals. |
 | OpenAPI document | Publish a complete OpenAPI 3.1 document for the local server and generate typed SDKs from it. |
 | Client auth model | Move local secrets into OS-protected storage where possible, preserve loopback safety, and provide clear remote-binding warnings. |
 | Versioned contracts | Treat REST, WebSocket, and JSONL schemas as versioned APIs with compatibility notes. |

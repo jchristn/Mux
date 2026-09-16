@@ -86,6 +86,10 @@ namespace Mux.Desktop.Shell
         private readonly Dictionary<string, TabContext> _Tabs = new Dictionary<string, TabContext>(StringComparer.Ordinal);
         private TabContext? _Active;
         private TabContext? _RenderCtx;
+        // Consumes the fabric: mirrors the focused conversation so a run finishing on any other surface
+        // (dashboard, TUI, VS Code, another desktop) reloads this transcript automatically. On by default.
+        private Mux.Core.Runs.SessionMirrorClient? _Mirror;
+        private string _MirrorSession = string.Empty;
         private readonly StackPanel _DefaultTranscript = new StackPanel { Margin = new Thickness(24, 16, 24, 16), Spacing = 14 };
         private readonly AgentLoopTurnRunner _FallbackRunner;
         private static readonly SemaphoreSlim _CheckpointGate = new SemaphoreSlim(1, 1);
@@ -225,6 +229,8 @@ namespace Mux.Desktop.Shell
             AgentLoopTurnRunner runner = new AgentLoopTurnRunner(_ConfigDirectory, ApproveToolAsync, _UsageRecorder);
             runner.Mcp = _Mcp;
             runner.Skills = _Skills;
+            // The runner publishes every turn to the hub itself (best-effort) so desktop runs are mirrorable
+            // live on any surface; no per-runner wiring is needed here.
             return runner;
         }
 
@@ -289,6 +295,7 @@ namespace Mux.Desktop.Shell
         protected override void OnClosed(EventArgs e)
         {
             base.OnClosed(e);
+            try { if (_Mirror != null) { _ = _Mirror.DisposeAsync(); } } catch (Exception) { }
             try { _Mcp?.Dispose(); } catch (Exception) { }
             try { _Skills?.Dispose(); } catch (Exception) { }
         }
@@ -1958,6 +1965,99 @@ namespace Mux.Desktop.Shell
             UpdateEmptyState();
             RefreshThreadSelection();
             UpdateSendButton();
+            StartMirrorForActive(context.Id);
+        }
+
+        // Point the cross-surface mirror at the focused conversation (on by default). When a run for it
+        // finishes on another surface, the transcript reloads from the shared store. Best-effort.
+        private void StartMirrorForActive(string sessionId)
+        {
+            if (string.Equals(sessionId, _MirrorSession, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _MirrorSession = sessionId ?? string.Empty;
+            Mux.Core.Runs.SessionMirrorClient? previous = _Mirror;
+            _Mirror = null;
+            if (previous != null)
+            {
+                _ = previous.DisposeAsync();
+            }
+
+            if (string.IsNullOrEmpty(sessionId))
+            {
+                return;
+            }
+
+            Mux.Core.Models.RestServerSettings rest;
+            try { rest = SettingsLoader.LoadSettings().Rest; }
+            catch (Exception) { return; }
+
+            string hubBaseUrl = (rest.Ssl ? "https" : "http") + "://" + rest.Hostname + ":" + rest.Port;
+            Mux.Core.Runs.SessionMirrorClient client = new Mux.Core.Runs.SessionMirrorClient(hubBaseUrl, rest.ApiKey);
+            string watched = sessionId;
+            client.RunCompleted += () => Dispatcher.UIThread.Post(() => { _ = OnExternalRunCompletedAsync(watched); });
+            _Mirror = client;
+            _ = client.StartAsync(sessionId, CancellationToken.None);
+        }
+
+        // A run for a watched session finished (possibly on another surface). Reload the focused conversation
+        // from the shared store — unless it is the tab's own in-flight turn (that renders itself).
+        private async Task OnExternalRunCompletedAsync(string sessionId)
+        {
+            if (_Active == null || !string.Equals(_Active.Id, sessionId, StringComparison.Ordinal))
+            {
+                await LoadThreadsAsync();
+                return;
+            }
+
+            if (_Active.TurnCts != null || _Active.IsBusy)
+            {
+                return;
+            }
+
+            // The producer publishes run_completed slightly BEFORE it finishes persisting the turn, so a single
+            // read can be stale. Poll the shared store until it genuinely has more turns than we're showing
+            // (a run added by ANOTHER surface), or give up. The count check also skips our own just-completed
+            // run (already rendered) so there is no flicker.
+            int shown = _Conversation?.History.Count ?? 0;
+            SessionSnapshot? snapshot = null;
+            for (int attempt = 0; attempt < 8; attempt++)
+            {
+                await Task.Delay(350);
+                if (_Active == null || !string.Equals(_Active.Id, sessionId, StringComparison.Ordinal) || _Active.TurnCts != null || _Active.IsBusy)
+                {
+                    return;
+                }
+
+                SessionSnapshot? candidate = await _Store.LoadAsync(sessionId, CancellationToken.None);
+                if (candidate != null && candidate.ConversationHistory.Count > shown)
+                {
+                    snapshot = candidate;
+                    break;
+                }
+            }
+
+            if (snapshot == null)
+            {
+                return;
+            }
+
+            TabContext context = _Active;
+            AttachConversation(context, new ConversationService(context.Runner, snapshot.ConversationHistory));
+            ResetStreamingState();
+            context.Transcript.Children.Clear();
+            WithContext(context, () =>
+            {
+                foreach (ConversationMessage message in snapshot.ConversationHistory)
+                {
+                    RenderPersistedMessage(message);
+                }
+            });
+
+            UpdateEmptyState();
+            await LoadThreadsAsync();
         }
 
         // Point the shared model picker at the active tab's endpoint without changing it.

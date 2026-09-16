@@ -8,6 +8,9 @@ namespace Mux.Cli.App
     using Mux.Core.Agent;
     using Mux.Core.Conversation;
     using Mux.Core.Enums;
+    using Mux.Core.Models;
+    using Mux.Core.Runs;
+    using Mux.Core.Settings;
     using Mux.Core.Tasks;
     using Mux.Core.Tools;
     using TUIKit;
@@ -43,6 +46,10 @@ namespace Mux.Cli.App
         private readonly Dictionary<string, PaneLineHandle> _ToolLines = new Dictionary<string, PaneLineHandle>(StringComparer.Ordinal);
         private readonly List<PaneLineHandle> _AssistantLines = new List<PaneLineHandle>();
         private readonly List<PaneLineHandle> _TaskLines = new List<PaneLineHandle>();
+        private bool _MirrorEnabled;
+        private string _MirrorSessionId = string.Empty;
+        private string _MirrorEndpoint = string.Empty;
+        private string _MirrorModel = string.Empty;
 
         #endregion
 
@@ -159,11 +166,16 @@ namespace Mux.Cli.App
         {
             if (events is null) throw new ArgumentNullException(nameof(events));
 
+            RunPublisher? publisher = await StartMirrorPublisherAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 await foreach (AgentEvent agentEvent in events.WithCancellation(cancellationToken).ConfigureAwait(false))
                 {
                     OnEvent(agentEvent);
+                    if (publisher != null)
+                    {
+                        await publisher.PublishAsync(agentEvent, cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 OnCompleted();
@@ -171,6 +183,49 @@ namespace Mux.Cli.App
             catch (OperationCanceledException)
             {
                 OnCancelled();
+            }
+            finally
+            {
+                if (publisher != null)
+                {
+                    await publisher.DisposeAsync().ConfigureAwait(false);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Enables publishing this turn's run to the hub (the configured rest server) so it can be mirrored
+        /// live on any surface. Call before <see cref="ProjectAsync"/>. Best-effort — a missing hub is a no-op.
+        /// </summary>
+        /// <param name="sessionId">The session id the run belongs to (mirror clients subscribe by session).</param>
+        /// <param name="endpointName">The endpoint the run targets.</param>
+        /// <param name="model">The model the run targets.</param>
+        public void EnableMirrorPublishing(string sessionId, string endpointName, string model)
+        {
+            _MirrorEnabled = true;
+            _MirrorSessionId = sessionId ?? string.Empty;
+            _MirrorEndpoint = endpointName ?? string.Empty;
+            _MirrorModel = model ?? string.Empty;
+        }
+
+        private async Task<RunPublisher?> StartMirrorPublisherAsync(CancellationToken cancellationToken)
+        {
+            if (!_MirrorEnabled)
+            {
+                return null;
+            }
+
+            try
+            {
+                RestServerSettings rest = SettingsLoader.LoadSettings().Rest;
+                string hubBaseUrl = (rest.Ssl ? "https" : "http") + "://" + rest.Hostname + ":" + rest.Port;
+                RunPublisher publisher = new RunPublisher(hubBaseUrl, rest.ApiKey);
+                await publisher.StartAsync(Guid.NewGuid().ToString("N"), _MirrorSessionId, _MirrorEndpoint, _MirrorModel, cancellationToken).ConfigureAwait(false);
+                return publisher;
+            }
+            catch (Exception)
+            {
+                return null;
             }
         }
 

@@ -2,9 +2,37 @@
 
 All notable changes to mux are documented here.
 
-## Unreleased
+## 0.12.0
 
 ### Added
+
+- **Run lifecycle: cancel, inspect, and a live WebSocket event bridge.** `mux serve` now tracks each streamed
+  run as a first-class, addressable object. New routes: `GET /v1.0/api/runs` (list active + recently-finished
+  runs), `GET /v1.0/api/runs/{runId}` (inspect status, counters, current tool, and the task-plan checklist),
+  and `POST /v1.0/api/runs/{runId}/cancel` (cooperative server-side cancellation — trips the run's linked
+  cancellation token so the agent loop and any in-flight tool stop). The chat stream now emits a `run` event
+  first (carrying the run and session ids). The `/v1.0/ws` WebSocket is now a real per-run event bridge:
+  authenticate the upgrade (bearer header or `?apiKey=`), subscribe by run or session id, and replay-then-tail
+  the **canonical event envelope** — byte-identical to the `mux print --output-format jsonl` contract, because
+  both now share one serializer (`Mux.Core.Agent.AgentEventSerializer`). Approvals can be answered over the
+  socket too.
+- **Stop actually stops, everywhere.** The web dashboard and the VS Code extension (**mux: Stop the current
+  run**) now cancel the run server-side rather than only aborting the local stream, so a stopped run no longer
+  keeps running on the server.
+- **Live session mirroring — a shared run fabric across every surface.** A run on any surface can be watched
+  live, read-only, on any other. The run types (`RunRegistry`/`RunHandle`/`RunStatusEnum`/`RunSubscription`)
+  moved into `Mux.Core`, and the run stream now carries pre-serialized canonical envelope frames so a run
+  driven in another process is indistinguishable from a local one. The WebSocket bridge gained a **publish**
+  action (a producer streams its run into the hub) and **session-scoped subscribe** (attach to a session and
+  receive whatever run happens there — current or future — without erroring when idle; this is what makes
+  mirroring "on by default"). A new `Mux.Core.RunPublisher` is the producer client. **Every surface
+  participates:** `mux serve`/dashboard/VS Code produce natively; the **desktop app** and the **terminal**
+  publish their in-process runs to the hub; and each surface ensures the hub (the tray agent) is running,
+  starting it if needed. **Every surface also consumes by default** — opening a conversation subscribes to
+  its session and reflects a run finishing on any other surface with no manual refresh (web dashboard, VS
+  Code, desktop, and the terminal/TUI, via `Mux.Core.Runs.SessionMirrorClient`), each de-duplicating its own
+  in-flight run. Explicit read-only tails remain (`mux mirror <sessionId>`; dashboard `/mirror on|off`).
+  `MuxServer` accepts an externally-owned registry so a host process can expose its own runs.
 
 - **OpenAPI 3.0 document + Swagger UI for `mux serve`.** The local REST server now publishes a complete,
   example-rich OpenAPI 3.0.3 description at `GET /openapi.json` and an interactive Swagger UI at

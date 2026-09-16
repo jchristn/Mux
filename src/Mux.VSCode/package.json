@@ -2,9 +2,9 @@
   "name": "mux-ai",
   "displayName": "mux-ai",
   "description": "mux in your editor — chat, inline commands, native diffs, and shared sessions over the local mux agent.",
-  "version": "0.11.3",
+  "version": "0.12.1",
   "icon": "dashboard/media/icon.png",
-  "publisher": "usemux",
+  "publisher": "joelchristner",
   "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
@@ -71,6 +71,18 @@
         "title": "%cmd.reconnect%",
         "category": "mux",
         "icon": "$(sync)"
+      },
+      {
+        "command": "mux.cancelRun",
+        "title": "%cmd.cancelRun%",
+        "category": "mux",
+        "icon": "$(stop-circle)"
+      },
+      {
+        "command": "mux.mirrorSession",
+        "title": "%cmd.mirrorSession%",
+        "category": "mux",
+        "icon": "$(broadcast)"
       },
       {
         "command": "mux.explainSelection",
@@ -163,29 +175,129 @@
         "title": "%cmd.sessions.delete%",
         "category": "mux"
       },
-      { "command": "mux.manage.refresh", "title": "%cmd.manage.refresh%", "category": "mux", "icon": "$(refresh)" },
-      { "command": "mux.manage.addEndpoint", "title": "%cmd.manage.addEndpoint%", "category": "mux", "icon": "$(add)" },
-      { "command": "mux.manage.editEndpoint", "title": "%cmd.manage.editEndpoint%", "category": "mux" },
-      { "command": "mux.manage.deleteEndpoint", "title": "%cmd.manage.deleteEndpoint%", "category": "mux" },
-      { "command": "mux.manage.setDefaultEndpoint", "title": "%cmd.manage.setDefaultEndpoint%", "category": "mux" },
-      { "command": "mux.manage.addMcp", "title": "%cmd.manage.addMcp%", "category": "mux", "icon": "$(add)" },
-      { "command": "mux.manage.editMcp", "title": "%cmd.manage.editMcp%", "category": "mux" },
-      { "command": "mux.manage.deleteMcp", "title": "%cmd.manage.deleteMcp%", "category": "mux" },
-      { "command": "mux.manage.activatePrompt", "title": "%cmd.manage.activatePrompt%", "category": "mux" },
-      { "command": "mux.manage.addPrompt", "title": "%cmd.manage.addPrompt%", "category": "mux", "icon": "$(add)" },
-      { "command": "mux.manage.editPrompt", "title": "%cmd.manage.editPrompt%", "category": "mux" },
-      { "command": "mux.manage.deletePrompt", "title": "%cmd.manage.deletePrompt%", "category": "mux" },
-      { "command": "mux.manage.addSubagent", "title": "%cmd.manage.addSubagent%", "category": "mux", "icon": "$(add)" },
-      { "command": "mux.manage.editSubagent", "title": "%cmd.manage.editSubagent%", "category": "mux" },
-      { "command": "mux.manage.deleteSubagent", "title": "%cmd.manage.deleteSubagent%", "category": "mux" },
-      { "command": "mux.manage.toggleSkill", "title": "%cmd.manage.toggleSkill%", "category": "mux" },
-      { "command": "mux.manage.addSkill", "title": "%cmd.manage.addSkill%", "category": "mux", "icon": "$(add)" },
-      { "command": "mux.manage.editSkill", "title": "%cmd.manage.editSkill%", "category": "mux" },
-      { "command": "mux.manage.deleteSkill", "title": "%cmd.manage.deleteSkill%", "category": "mux" },
-      { "command": "mux.manage.editSettings", "title": "%cmd.manage.editSettings%", "category": "mux" },
-      { "command": "mux.usage", "title": "%cmd.usage%", "category": "mux", "icon": "$(graph)" },
-      { "command": "mux.showHelp", "title": "%cmd.showHelp%", "category": "mux" },
-      { "command": "mux.about", "title": "%cmd.about%", "category": "mux", "icon": "$(info)" }
+      {
+        "command": "mux.manage.refresh",
+        "title": "%cmd.manage.refresh%",
+        "category": "mux",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mux.manage.addEndpoint",
+        "title": "%cmd.manage.addEndpoint%",
+        "category": "mux",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mux.manage.editEndpoint",
+        "title": "%cmd.manage.editEndpoint%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.deleteEndpoint",
+        "title": "%cmd.manage.deleteEndpoint%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.setDefaultEndpoint",
+        "title": "%cmd.manage.setDefaultEndpoint%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.addMcp",
+        "title": "%cmd.manage.addMcp%",
+        "category": "mux",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mux.manage.editMcp",
+        "title": "%cmd.manage.editMcp%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.deleteMcp",
+        "title": "%cmd.manage.deleteMcp%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.activatePrompt",
+        "title": "%cmd.manage.activatePrompt%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.addPrompt",
+        "title": "%cmd.manage.addPrompt%",
+        "category": "mux",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mux.manage.editPrompt",
+        "title": "%cmd.manage.editPrompt%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.deletePrompt",
+        "title": "%cmd.manage.deletePrompt%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.addSubagent",
+        "title": "%cmd.manage.addSubagent%",
+        "category": "mux",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mux.manage.editSubagent",
+        "title": "%cmd.manage.editSubagent%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.deleteSubagent",
+        "title": "%cmd.manage.deleteSubagent%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.toggleSkill",
+        "title": "%cmd.manage.toggleSkill%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.addSkill",
+        "title": "%cmd.manage.addSkill%",
+        "category": "mux",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mux.manage.editSkill",
+        "title": "%cmd.manage.editSkill%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.deleteSkill",
+        "title": "%cmd.manage.deleteSkill%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.editSettings",
+        "title": "%cmd.manage.editSettings%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.usage",
+        "title": "%cmd.usage%",
+        "category": "mux",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "mux.showHelp",
+        "title": "%cmd.showHelp%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.about",
+        "title": "%cmd.about%",
+        "category": "mux",
+        "icon": "$(info)"
+      }
     ],
     "menus": {
       "editor/context": [
@@ -228,25 +340,101 @@
         }
       ],
       "view/item/context": [
-        { "command": "mux.manage.addEndpoint", "when": "view == mux.manage && viewItem == section-endpoints", "group": "inline" },
-        { "command": "mux.manage.addMcp", "when": "view == mux.manage && viewItem == section-mcp", "group": "inline" },
-        { "command": "mux.manage.addPrompt", "when": "view == mux.manage && viewItem == section-prompts", "group": "inline" },
-        { "command": "mux.manage.addSubagent", "when": "view == mux.manage && viewItem == section-subagents", "group": "inline" },
-        { "command": "mux.manage.addSkill", "when": "view == mux.manage && viewItem == section-skills", "group": "inline" },
-        { "command": "mux.usage", "when": "view == mux.manage && viewItem == section-usage", "group": "inline" },
-        { "command": "mux.manage.editEndpoint", "when": "view == mux.manage && viewItem == endpoint", "group": "1@1" },
-        { "command": "mux.manage.setDefaultEndpoint", "when": "view == mux.manage && viewItem == endpoint", "group": "1@2" },
-        { "command": "mux.manage.deleteEndpoint", "when": "view == mux.manage && viewItem == endpoint", "group": "2@1" },
-        { "command": "mux.manage.editMcp", "when": "view == mux.manage && viewItem == mcp", "group": "1@1" },
-        { "command": "mux.manage.deleteMcp", "when": "view == mux.manage && viewItem == mcp", "group": "2@1" },
-        { "command": "mux.manage.activatePrompt", "when": "view == mux.manage && viewItem == prompt", "group": "1@1" },
-        { "command": "mux.manage.editPrompt", "when": "view == mux.manage && viewItem == prompt", "group": "1@2" },
-        { "command": "mux.manage.deletePrompt", "when": "view == mux.manage && viewItem == prompt", "group": "2@1" },
-        { "command": "mux.manage.editSubagent", "when": "view == mux.manage && viewItem == subagent", "group": "1@1" },
-        { "command": "mux.manage.deleteSubagent", "when": "view == mux.manage && viewItem == subagent", "group": "2@1" },
-        { "command": "mux.manage.toggleSkill", "when": "view == mux.manage && viewItem == skill", "group": "1@1" },
-        { "command": "mux.manage.editSkill", "when": "view == mux.manage && viewItem == skill", "group": "1@2" },
-        { "command": "mux.manage.deleteSkill", "when": "view == mux.manage && viewItem == skill", "group": "2@1" },
+        {
+          "command": "mux.manage.addEndpoint",
+          "when": "view == mux.manage && viewItem == section-endpoints",
+          "group": "inline"
+        },
+        {
+          "command": "mux.manage.addMcp",
+          "when": "view == mux.manage && viewItem == section-mcp",
+          "group": "inline"
+        },
+        {
+          "command": "mux.manage.addPrompt",
+          "when": "view == mux.manage && viewItem == section-prompts",
+          "group": "inline"
+        },
+        {
+          "command": "mux.manage.addSubagent",
+          "when": "view == mux.manage && viewItem == section-subagents",
+          "group": "inline"
+        },
+        {
+          "command": "mux.manage.addSkill",
+          "when": "view == mux.manage && viewItem == section-skills",
+          "group": "inline"
+        },
+        {
+          "command": "mux.usage",
+          "when": "view == mux.manage && viewItem == section-usage",
+          "group": "inline"
+        },
+        {
+          "command": "mux.manage.editEndpoint",
+          "when": "view == mux.manage && viewItem == endpoint",
+          "group": "1@1"
+        },
+        {
+          "command": "mux.manage.setDefaultEndpoint",
+          "when": "view == mux.manage && viewItem == endpoint",
+          "group": "1@2"
+        },
+        {
+          "command": "mux.manage.deleteEndpoint",
+          "when": "view == mux.manage && viewItem == endpoint",
+          "group": "2@1"
+        },
+        {
+          "command": "mux.manage.editMcp",
+          "when": "view == mux.manage && viewItem == mcp",
+          "group": "1@1"
+        },
+        {
+          "command": "mux.manage.deleteMcp",
+          "when": "view == mux.manage && viewItem == mcp",
+          "group": "2@1"
+        },
+        {
+          "command": "mux.manage.activatePrompt",
+          "when": "view == mux.manage && viewItem == prompt",
+          "group": "1@1"
+        },
+        {
+          "command": "mux.manage.editPrompt",
+          "when": "view == mux.manage && viewItem == prompt",
+          "group": "1@2"
+        },
+        {
+          "command": "mux.manage.deletePrompt",
+          "when": "view == mux.manage && viewItem == prompt",
+          "group": "2@1"
+        },
+        {
+          "command": "mux.manage.editSubagent",
+          "when": "view == mux.manage && viewItem == subagent",
+          "group": "1@1"
+        },
+        {
+          "command": "mux.manage.deleteSubagent",
+          "when": "view == mux.manage && viewItem == subagent",
+          "group": "2@1"
+        },
+        {
+          "command": "mux.manage.toggleSkill",
+          "when": "view == mux.manage && viewItem == skill",
+          "group": "1@1"
+        },
+        {
+          "command": "mux.manage.editSkill",
+          "when": "view == mux.manage && viewItem == skill",
+          "group": "1@2"
+        },
+        {
+          "command": "mux.manage.deleteSkill",
+          "when": "view == mux.manage && viewItem == skill",
+          "group": "2@1"
+        },
         {
           "command": "mux.sessions.resume",
           "when": "view == mux.sessions",
@@ -357,9 +545,13 @@
     "@types/mocha": "^10.0.6",
     "@types/node": "^20.14.0",
     "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.18.1",
     "@vscode/test-electron": "^2.4.0",
     "glob": "^10.5.0",
     "mocha": "^10.4.0",
     "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
   }
 }

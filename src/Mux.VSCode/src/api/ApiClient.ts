@@ -51,6 +51,16 @@ export class ApiClient {
         this.apiKey = options.apiKey;
     }
 
+    /** The normalized server base URL (no trailing slash). Used to derive the WebSocket URL for mirroring. */
+    public get serverBaseUrl(): string {
+        return this.baseUrl;
+    }
+
+    /** The bearer API key, or null when the server runs with `--no-auth`. */
+    public get serverApiKey(): string | null {
+        return this.apiKey;
+    }
+
     /** Reads the server health, including the negotiated contract version. */
     public getHealth(signal?: AbortSignal): Promise<HealthResponse> {
         return this.getJson<HealthResponse>('/v1.0/api/health', signal);
@@ -234,6 +244,25 @@ export class ApiClient {
     /** Answers an approval prompt raised during an interactive run. */
     public async approve(runId: string, toolCallId: string, decision: 'y' | 'always' | 'n', signal?: AbortSignal): Promise<void> {
         await this.sendJson('POST', '/v1.0/api/chat/approve', { RunId: runId, ToolCallId: toolCallId, Decision: decision }, signal);
+    }
+
+    /**
+     * Requests server-side cancellation of a run so it stops even if this client's stream is not aborted.
+     * Swallows a 404 (the run already finished or is unknown) so a redundant cancel is harmless.
+     *
+     * @param runId The run id from the stream's `run` event.
+     * @param signal An optional abort signal for the cancel request itself.
+     */
+    public async cancelRun(runId: string, signal?: AbortSignal): Promise<void> {
+        try {
+            await this.send('POST', `/v1.0/api/runs/${encodeURIComponent(runId)}/cancel`, undefined, signal);
+        } catch (error) {
+            if (error instanceof ApiError && error.status === 404) {
+                return;
+            }
+
+            throw error;
+        }
     }
 
     /**

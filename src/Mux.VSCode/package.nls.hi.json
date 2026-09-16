@@ -31,6 +31,8 @@
   "config.locale": "प्रदर्शन भाषा (BCP 47)। खाली होने पर संपादक की भाषा का अनुसरण करता है।",
   "view.manage.name": "प्रबंधन",
   "cmd.reconnect": "mux सर्वर से पुनः कनेक्ट करें",
+  "cmd.cancelRun": "Stop the current run",
+  "cmd.mirrorSession": "Mirror a session's live run",
   "cmd.manage.refresh": "ताज़ा करें",
   "cmd.manage.addEndpoint": "एंडपॉइंट जोड़ें",
   "cmd.manage.editEndpoint": "एंडपॉइंट संपादित करें",

@@ -119,6 +119,20 @@ namespace Mux.Server.Models
     }
 
     /// <summary>
+    /// The first event streamed on a chat run, announcing the run and session ids so the client can address
+    /// the run (for example to cancel it via <c>POST /v1.0/api/runs/{runId}/cancel</c> or to subscribe over
+    /// the WebSocket bridge).
+    /// </summary>
+    public class ChatRunEvent
+    {
+        /// <summary>The run correlation id.</summary>
+        public string RunId { get; set; } = string.Empty;
+
+        /// <summary>The session id the run belongs to.</summary>
+        public string SessionId { get; set; } = string.Empty;
+    }
+
+    /// <summary>
     /// A tool-call lifecycle event streamed to the dashboard chat: the call's id and name and its status
     /// ("running", "ok", or "fail"), plus elapsed time when completed.
     /// </summary>

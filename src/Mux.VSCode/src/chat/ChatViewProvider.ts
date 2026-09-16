@@ -6,6 +6,7 @@ import { readSettings } from '../config/settings';
 import { collectContext, workspaceRootPath } from '../context/providers';
 import { composePrompt } from '../context/composePrompt';
 import { MuxServerLifecycle } from '../server/lifecycle';
+import { MirrorClient } from '../mirror/MirrorClient';
 import { log, logError } from '../util/logger';
 
 /** Messages the webview posts to the extension host. */
@@ -29,6 +30,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private history: Array<{ role: string; content: string }> = [];
     private sessionId = '';
     private activeRun: AbortController | undefined;
+    private activeRunId: string | undefined;
+    private mirror: MirrorClient | undefined;
+    private syncWatch: MirrorClient | undefined;
     private client: ApiClient | undefined;
 
     /**
@@ -55,9 +59,81 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     /** Starts a new, empty conversation bound to this workspace. */
     public newConversation(): void {
+        this.stopMirror();
+        this.stopSessionSync();
         this.history = [];
         this.sessionId = '';
         this.post({ type: 'reset' });
+    }
+
+    /**
+     * Live-mirrors a session's run into the panel, read-only: subscribes to the mux server's WebSocket bridge
+     * by session id and renders the canonical events as they arrive. Used to watch a run started on another
+     * surface (the desktop app's embedded server, the dashboard, or a `mux serve`). Any in-flight local turn
+     * or prior mirror is stopped first.
+     *
+     * @param sessionId The session to mirror.
+     */
+    public async startMirror(sessionId: string): Promise<void> {
+        if (!sessionId) {
+            return;
+        }
+
+        await vscode.commands.executeCommand('mux.chat.focus');
+        this.cancelActiveRun();
+        this.stopMirror();
+
+        let client: ApiClient;
+        try {
+            client = await this.lifecycle.getClient(new vscode.CancellationTokenSource().token);
+        } catch (error) {
+            this.post({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+            return;
+        }
+
+        const mirror = new MirrorClient(client.serverBaseUrl, client.serverApiKey);
+        this.mirror = mirror;
+        this.post({ type: 'notice', message: vscode.l10n.t('Mirroring the live run for this session (read-only).') });
+        this.post({ type: 'busy', busy: true });
+
+        mirror.start(sessionId, {
+            onEvent: (event) => {
+                switch (event.kind) {
+                    case 'text':
+                        this.post({ type: 'token', text: event.text });
+                        break;
+                    case 'thinking':
+                        this.post({ type: 'thinking', text: event.text });
+                        break;
+                    case 'tool':
+                        this.post({ type: 'tool', tool: { Id: event.id, Name: event.name, Status: event.status, ElapsedMs: event.ms } });
+                        break;
+                    case 'error':
+                        this.post({ type: 'error', message: event.message });
+                        break;
+                    case 'done':
+                        this.post({ type: 'notice', message: vscode.l10n.t('Mirrored run finished ({0}).', event.status) });
+                        break;
+                    default:
+                        break;
+                }
+            },
+            onError: (message) => {
+                this.post({ type: 'error', message });
+            },
+            onClose: () => {
+                if (this.mirror === mirror) {
+                    this.mirror = undefined;
+                }
+                this.post({ type: 'busy', busy: false });
+            },
+        });
+    }
+
+    /** Stops any active mirror session. Safe to call when none is running. */
+    public stopMirror(): void {
+        this.mirror?.stop();
+        this.mirror = undefined;
     }
 
     /**
@@ -70,15 +146,92 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         await vscode.commands.executeCommand('mux.chat.focus');
         try {
             const client = await this.lifecycle.getClient(new vscode.CancellationTokenSource().token);
+            this.client = client;
             const detail = await client.getSessionDetail(id);
             this.sessionId = detail.Id;
             this.history = detail.Messages
                 .filter((m) => m.Role === 'user' || m.Role === 'assistant')
                 .map((m) => ({ role: m.Role, content: m.Content }));
             this.post({ type: 'load', messages: this.history, title: detail.Title });
+            this.startSessionSync(client, detail.Id);
         } catch (error) {
             logError('Failed to load a session into the panel.', error);
             this.post({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+        }
+    }
+
+    /**
+     * Keeps the open conversation in sync across surfaces (mirroring on by default): subscribes to the
+     * session on the hub and, when a run finishes for it elsewhere (the desktop, the terminal, the dashboard,
+     * another window), reloads the transcript so new messages appear without a manual refresh. A locally-driven
+     * turn is ignored here (the streaming path already renders it). Replaces any prior sync watch.
+     *
+     * @param client The connected API client (source of the hub URL + key).
+     * @param sessionId The session to keep in sync.
+     */
+    private startSessionSync(client: ApiClient, sessionId: string): void {
+        this.stopSessionSync();
+        if (!sessionId) {
+            return;
+        }
+
+        const watch = new MirrorClient(client.serverBaseUrl, client.serverApiKey);
+        this.syncWatch = watch;
+        watch.start(sessionId, {
+            onEvent: (event) => {
+                // Only react to a run finishing elsewhere; ignore our own in-flight turn.
+                if (event.kind === 'done' && !this.activeRun && this.sessionId === sessionId) {
+                    void this.reloadSessionSilent(sessionId);
+                }
+            },
+            onError: () => {
+                /* best-effort sync */
+            },
+            onClose: () => {
+                if (this.syncWatch === watch) {
+                    this.syncWatch = undefined;
+                }
+            },
+        });
+    }
+
+    /** Stops the cross-surface sync watcher. Safe to call when none is running. */
+    private stopSessionSync(): void {
+        this.syncWatch?.stop();
+        this.syncWatch = undefined;
+    }
+
+    private async reloadSessionSilent(id: string): Promise<void> {
+        // The producer publishes run_completed slightly BEFORE it finishes persisting the turn, so a single
+        // fetch can read stale content. Poll until the store has more messages than we're showing (the new
+        // turn landed), or give up after a few tries.
+        const before = this.history.length;
+        for (let attempt = 0; attempt < 8; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, 350));
+            if (this.sessionId !== id || this.activeRun) {
+                return;
+            }
+
+            try {
+                const client = this.client ?? (await this.lifecycle.getClient(new vscode.CancellationTokenSource().token));
+                const detail = await client.getSessionDetail(id);
+                if (this.sessionId !== id) {
+                    return;
+                }
+
+                const messages = detail.Messages
+                    .filter((m) => m.Role === 'user' || m.Role === 'assistant')
+                    .map((m) => ({ role: m.Role, content: m.Content }));
+                if (messages.length > before || attempt === 7) {
+                    this.history = messages;
+                    this.post({ type: 'load', messages: this.history, title: detail.Title });
+                    await vscode.commands.executeCommand('mux.sessions.refresh');
+                    return;
+                }
+            } catch (error) {
+                logError('Failed to sync a session update.', error);
+                return;
+            }
         }
     }
 
@@ -104,7 +257,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 }
                 break;
             case 'stop':
-                this.activeRun?.abort();
+                this.cancelActiveRun();
+                this.stopMirror();
                 break;
             case 'approve':
                 await this.answerApproval(message.runId, message.toolCallId, message.decision);
@@ -228,6 +382,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 controller.signal,
             )) {
                 switch (event.event) {
+                    case 'run':
+                        this.activeRunId = event.data.RunId;
+                        break;
                     case 'token':
                         assistant += event.data;
                         this.post({ type: 'token', text: event.data });
@@ -271,7 +428,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }
         } finally {
             this.activeRun = undefined;
+            this.activeRunId = undefined;
             this.post({ type: 'busy', busy: false });
+        }
+    }
+
+    /**
+     * Cancels the active turn: aborts the local stream and asks the server to cancel the run so it stops
+     * server-side (not just in this editor). Safe to call when nothing is running. Invoked by the composer
+     * Stop button and the <c>mux.cancelRun</c> command.
+     */
+    public cancelActiveRun(): void {
+        const runId = this.activeRunId;
+        const client = this.client;
+        this.activeRun?.abort();
+        if (runId && client) {
+            void client.cancelRun(runId).catch(() => {
+                // Best-effort: the run may already have finished.
+            });
         }
     }
 

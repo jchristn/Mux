@@ -6,10 +6,13 @@ namespace Test.Shared.Suites
     using System.Net;
     using System.Net.Http;
     using System.Net.Sockets;
+    using System.Net.WebSockets;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Runs;
     using Mux.Core.Sessions;
     using Mux.Server;
     using Touchstone.Core;
@@ -260,7 +263,7 @@ namespace Test.Shared.Suites
 
                             // Paths are documented (a representative sample across registrars).
                             System.Text.Json.JsonElement paths = root.GetProperty("paths");
-                            foreach (string p in new[] { "/v1.0/api/health", "/v1.0/api/endpoints", "/v1.0/api/chat", "/v1.0/api/sessions", "/v1.0/api/usage/summary" })
+                            foreach (string p in new[] { "/v1.0/api/health", "/v1.0/api/endpoints", "/v1.0/api/chat", "/v1.0/api/sessions", "/v1.0/api/usage/summary", "/v1.0/api/runs" })
                             {
                                 MuxAssert.IsTrue(paths.TryGetProperty(p, out _), "path documented: " + p);
                             }
@@ -274,7 +277,7 @@ namespace Test.Shared.Suites
                             // Component schemas and the bearer security scheme are present, and schemas carry examples.
                             System.Text.Json.JsonElement components = root.GetProperty("components");
                             System.Text.Json.JsonElement schemas = components.GetProperty("schemas");
-                            foreach (string schema in new[] { "ChatRequest", "EndpointDto", "SessionSaveRequest", "ApiError", "SettingsDto" })
+                            foreach (string schema in new[] { "ChatRequest", "EndpointDto", "SessionSaveRequest", "ApiError", "SettingsDto", "RunStateReply", "RunSummaryDto" })
                             {
                                 MuxAssert.IsTrue(schemas.TryGetProperty(schema, out _), "component schema present: " + schema);
                             }
@@ -296,8 +299,334 @@ namespace Test.Shared.Suites
                         }
 
                         return Task.CompletedTask;
+                    }),
+                    new TestCaseDescriptor("MuxServerRoutes", "RunRoutesListInspectCancel", "Run routes gate on auth, list runs, and 404 for unknown ids", (CancellationToken ct) =>
+                    {
+                        string tempSessions = Path.Combine(Path.GetTempPath(), "mux-test-" + Guid.NewGuid().ToString("N"));
+                        RestServerSettings rest = new RestServerSettings { Hostname = "127.0.0.1", ApiKey = "testkey123" };
+                        List<EndpointConfig> endpoints = new List<EndpointConfig>
+                        {
+                            new EndpointConfig { Name = "unit-ollama", AdapterType = AdapterTypeEnum.Ollama, BaseUrl = "http://localhost:11434", Model = "gemma3:4b", IsDefault = true }
+                        };
+
+                        MuxServer? server = null;
+                        int port = 0;
+                        for (int bindAttempt = 0; bindAttempt < 10 && server == null; bindAttempt++)
+                        {
+                            port = FreeLoopbackPort();
+                            rest.Port = port;
+                            MuxServer candidate = new MuxServer(rest, "9.9.9-test", new SessionStore(tempSessions), () => endpoints, null);
+                            try { candidate.Start(); server = candidate; }
+                            catch (Exception) { candidate.Dispose(); Thread.Sleep(50); }
+                        }
+
+                        MuxAssert.IsNotNull(server, "server bound to a loopback port");
+                        string baseUrl = "http://127.0.0.1:" + port;
+
+                        try
+                        {
+                            using HttpClient http = new HttpClient();
+                            http.Timeout = TimeSpan.FromSeconds(5);
+
+                            // Readiness.
+                            for (int attempt = 0; attempt < 20; attempt++)
+                            {
+                                try { http.GetAsync(baseUrl + "/v1.0/api/health").GetAwaiter().GetResult(); break; }
+                                catch (Exception) { Thread.Sleep(100); }
+                            }
+
+                            // List without a key -> 401 (negative).
+                            HttpResponseMessage listNoKey = http.GetAsync(baseUrl + "/v1.0/api/runs").GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(401, (int)listNoKey.StatusCode, "RunsListNoKeyStatus");
+
+                            // List with the key -> 200 and the list envelope (no active runs yet).
+                            using HttpRequestMessage listReq = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/v1.0/api/runs");
+                            listReq.Headers.Add("Authorization", "Bearer testkey123");
+                            HttpResponseMessage listRes = http.SendAsync(listReq).GetAwaiter().GetResult();
+                            string listBody = listRes.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(200, (int)listRes.StatusCode, "RunsListStatus");
+                            MuxAssert.Contains("Items", listBody, "RunsListEnvelope");
+
+                            // Inspect an unknown run -> 404 (negative).
+                            using HttpRequestMessage getReq = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/v1.0/api/runs/nope");
+                            getReq.Headers.Add("Authorization", "Bearer testkey123");
+                            HttpResponseMessage getRes = http.SendAsync(getReq).GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(404, (int)getRes.StatusCode, "RunGetUnknownStatus");
+
+                            // Cancel without a key -> 401 (negative).
+                            HttpResponseMessage cancelNoKey = http.PostAsync(baseUrl + "/v1.0/api/runs/nope/cancel", new StringContent(string.Empty)).GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(401, (int)cancelNoKey.StatusCode, "RunCancelNoKeyStatus");
+
+                            // Cancel an unknown run with the key -> 404 (negative).
+                            using HttpRequestMessage cancelReq = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/v1.0/api/runs/nope/cancel");
+                            cancelReq.Headers.Add("Authorization", "Bearer testkey123");
+                            HttpResponseMessage cancelRes = http.SendAsync(cancelReq).GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(404, (int)cancelRes.StatusCode, "RunCancelUnknownStatus");
+                        }
+                        finally
+                        {
+                            server?.Stop();
+                            server?.Dispose();
+                            try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
+                        }
+
+                        return Task.CompletedTask;
+                    }),
+                    new TestCaseDescriptor("MuxServerRoutes", "InjectedRegistryExposesHostRuns", "A server built with a shared registry exposes runs recorded by the host (the desktop producer path)", (CancellationToken ct) =>
+                    {
+                        string tempSessions = Path.Combine(Path.GetTempPath(), "mux-test-" + Guid.NewGuid().ToString("N"));
+                        RestServerSettings rest = new RestServerSettings { Hostname = "127.0.0.1", ApiKey = "testkey123" };
+                        List<EndpointConfig> endpoints = new List<EndpointConfig>();
+
+                        // A registry owned by the "host" (as the desktop app owns EmbeddedServerService.SharedRuns).
+                        using RunRegistry shared = new RunRegistry();
+                        RunHandle hostRun = shared.Create("mirror-run", "sess-x", "local", "m", ct);
+                        hostRun.ApplyEvent(new Mux.Core.Agent.AssistantTextEvent { Text = "in-process output" });
+
+                        MuxServer? server = null;
+                        int port = 0;
+                        for (int bindAttempt = 0; bindAttempt < 10 && server == null; bindAttempt++)
+                        {
+                            port = FreeLoopbackPort();
+                            rest.Port = port;
+                            MuxServer candidate = new MuxServer(rest, "9.9.9-test", new SessionStore(tempSessions), () => endpoints, null, null, null, false, shared);
+                            try { candidate.Start(); server = candidate; }
+                            catch (Exception) { candidate.Dispose(); Thread.Sleep(50); }
+                        }
+
+                        MuxAssert.IsNotNull(server, "server bound to a loopback port");
+                        string baseUrl = "http://127.0.0.1:" + port;
+
+                        try
+                        {
+                            using HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                            for (int attempt = 0; attempt < 20; attempt++)
+                            {
+                                try { http.GetAsync(baseUrl + "/v1.0/api/health").GetAwaiter().GetResult(); break; }
+                                catch (Exception) { Thread.Sleep(100); }
+                            }
+
+                            using HttpRequestMessage listReq = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/v1.0/api/runs");
+                            listReq.Headers.Add("Authorization", "Bearer testkey123");
+                            HttpResponseMessage listRes = http.SendAsync(listReq).GetAwaiter().GetResult();
+                            string listBody = listRes.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(200, (int)listRes.StatusCode, "SharedRunsListStatus");
+                            MuxAssert.Contains("mirror-run", listBody, "host-recorded run is exposed by the server");
+
+                            using HttpRequestMessage getReq = new HttpRequestMessage(HttpMethod.Get, baseUrl + "/v1.0/api/runs/mirror-run");
+                            getReq.Headers.Add("Authorization", "Bearer testkey123");
+                            HttpResponseMessage getRes = http.SendAsync(getReq).GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(200, (int)getRes.StatusCode, "SharedRunDetailStatus");
+                        }
+                        finally
+                        {
+                            server?.Stop();
+                            server?.Dispose();
+                            try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
+                        }
+
+                        return Task.CompletedTask;
+                    }),
+                    new TestCaseDescriptor("MuxServerRoutes", "WebSocketBridgeAuthAndSubscribe", "The WebSocket bridge authenticates the upgrade and answers subscribe frames", async (CancellationToken ct) =>
+                    {
+                        string tempSessions = Path.Combine(Path.GetTempPath(), "mux-test-" + Guid.NewGuid().ToString("N"));
+                        RestServerSettings rest = new RestServerSettings { Hostname = "127.0.0.1", ApiKey = "testkey123" };
+                        List<EndpointConfig> endpoints = new List<EndpointConfig>
+                        {
+                            new EndpointConfig { Name = "unit-ollama", AdapterType = AdapterTypeEnum.Ollama, BaseUrl = "http://localhost:11434", Model = "gemma3:4b", IsDefault = true }
+                        };
+
+                        MuxServer? server = null;
+                        int port = 0;
+                        for (int bindAttempt = 0; bindAttempt < 10 && server == null; bindAttempt++)
+                        {
+                            port = FreeLoopbackPort();
+                            rest.Port = port;
+                            MuxServer candidate = new MuxServer(rest, "9.9.9-test", new SessionStore(tempSessions), () => endpoints, null);
+                            try { candidate.Start(); server = candidate; }
+                            catch (Exception) { candidate.Dispose(); Thread.Sleep(50); }
+                        }
+
+                        MuxAssert.IsNotNull(server, "server bound to a loopback port");
+
+                        try
+                        {
+                            // Readiness.
+                            using (HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
+                            {
+                                for (int attempt = 0; attempt < 20; attempt++)
+                                {
+                                    try { http.GetAsync("http://127.0.0.1:" + port + "/v1.0/api/health").GetAwaiter().GetResult(); break; }
+                                    catch (Exception) { Thread.Sleep(100); }
+                                }
+                            }
+
+                            // Unauthorized: connect without the key -> the first frame is an unauthorized error (negative).
+                            using (ClientWebSocket wsNoKey = new ClientWebSocket())
+                            {
+                                await wsNoKey.ConnectAsync(new Uri("ws://127.0.0.1:" + port + "/v1.0/ws"), ct).ConfigureAwait(false);
+                                string first = await ReceiveTextAsync(wsNoKey, ct).ConfigureAwait(false);
+                                MuxAssert.Contains("unauthorized", first, "unauthenticated upgrade is rejected with an error frame");
+                            }
+
+                            // Authorized: connect with the key -> server.connected, then subscribe to an unknown run -> not_found.
+                            using (ClientWebSocket ws = new ClientWebSocket())
+                            {
+                                await ws.ConnectAsync(new Uri("ws://127.0.0.1:" + port + "/v1.0/ws?apiKey=testkey123"), ct).ConfigureAwait(false);
+                                string connected = await ReceiveTextAsync(ws, ct).ConfigureAwait(false);
+                                MuxAssert.Contains("server.connected", connected, "authorized connect announces the server");
+
+                                // A malformed frame is ignored (must not crash the session).
+                                await SendTextAsync(ws, "this is not json", ct).ConfigureAwait(false);
+
+                                await SendTextAsync(ws, "{\"action\":\"subscribe\",\"runId\":\"does-not-exist\"}", ct).ConfigureAwait(false);
+                                string reply = await ReceiveTextAsync(ws, ct).ConfigureAwait(false);
+                                MuxAssert.Contains("not_found", reply, "subscribing to an unknown run returns a not_found error (malformed frame was ignored)");
+                            }
+
+                            // Publish a run's events over the socket (the in-process producer path); the hub
+                            // materializes the run and relays frames to a separate subscriber.
+                            using (ClientWebSocket producer = new ClientWebSocket())
+                            {
+                                await producer.ConnectAsync(new Uri("ws://127.0.0.1:" + port + "/v1.0/ws?apiKey=testkey123"), ct).ConfigureAwait(false);
+                                await ReceiveTextAsync(producer, ct).ConfigureAwait(false); // server.connected
+                                await SendTextAsync(producer, "{\"action\":\"publish\",\"runId\":\"pub-1\",\"sessionId\":\"sess-pub\",\"endpointName\":\"local\",\"model\":\"m\",\"frame\":\"{\\\"eventType\\\":\\\"assistant_text\\\",\\\"text\\\":\\\"published hello\\\"}\"}", ct).ConfigureAwait(false);
+
+                                // The published run now shows up over REST.
+                                bool appeared = false;
+                                using HttpClient http2 = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                                for (int i = 0; i < 30 && !appeared; i++)
+                                {
+                                    using HttpRequestMessage runsReq = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:" + port + "/v1.0/api/runs");
+                                    runsReq.Headers.Add("Authorization", "Bearer testkey123");
+                                    string runsBody = http2.SendAsync(runsReq).GetAwaiter().GetResult().Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                                    if (runsBody.Contains("pub-1")) { appeared = true; break; }
+                                    Thread.Sleep(100);
+                                }
+                                MuxAssert.IsTrue(appeared, "a published run is registered in the hub and listed over REST");
+
+                                // A subscriber to that run replays the published frame.
+                                using ClientWebSocket sub2 = new ClientWebSocket();
+                                await sub2.ConnectAsync(new Uri("ws://127.0.0.1:" + port + "/v1.0/ws?apiKey=testkey123"), ct).ConfigureAwait(false);
+                                await ReceiveTextAsync(sub2, ct).ConfigureAwait(false); // server.connected
+                                await SendTextAsync(sub2, "{\"action\":\"subscribe\",\"runId\":\"pub-1\"}", ct).ConfigureAwait(false);
+                                string mirrored = await ReceiveTextAsync(sub2, ct).ConfigureAwait(false);
+                                MuxAssert.Contains("published hello", mirrored, "a subscriber receives the published run's frames");
+                            }
+
+                            // Session-scoped subscribe with no run yet: no error, and a run that starts LATER
+                            // for that session streams in (this is what makes "mirror on by default" work when
+                            // you open an idle conversation).
+                            using (ClientWebSocket sessionSub = new ClientWebSocket())
+                            {
+                                await sessionSub.ConnectAsync(new Uri("ws://127.0.0.1:" + port + "/v1.0/ws?apiKey=testkey123"), ct).ConfigureAwait(false);
+                                await ReceiveTextAsync(sessionSub, ct).ConfigureAwait(false); // server.connected
+                                await SendTextAsync(sessionSub, "{\"action\":\"subscribe\",\"sessionId\":\"sess-live\"}", ct).ConfigureAwait(false);
+                                await Task.Delay(200, ct).ConfigureAwait(false); // let the session watcher register
+
+                                using (ClientWebSocket producer2 = new ClientWebSocket())
+                                {
+                                    await producer2.ConnectAsync(new Uri("ws://127.0.0.1:" + port + "/v1.0/ws?apiKey=testkey123"), ct).ConfigureAwait(false);
+                                    await ReceiveTextAsync(producer2, ct).ConfigureAwait(false); // server.connected
+                                    await SendTextAsync(producer2, "{\"action\":\"publish\",\"runId\":\"live-1\",\"sessionId\":\"sess-live\",\"endpointName\":\"local\",\"model\":\"m\",\"frame\":\"{\\\"eventType\\\":\\\"assistant_text\\\",\\\"text\\\":\\\"live mirror text\\\"}\"}", ct).ConfigureAwait(false);
+                                }
+
+                                string streamed = await ReceiveTextAsync(sessionSub, ct).ConfigureAwait(false);
+                                MuxAssert.Contains("live mirror text", streamed, "a session subscriber receives a run that starts after it subscribed");
+                            }
+                        }
+                        finally
+                        {
+                            server?.Stop();
+                            server?.Dispose();
+                            try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
+                        }
+                    }),
+                    new TestCaseDescriptor("MuxServerRoutes", "SessionMirrorClientConsumesPublishedRun", "SessionMirrorClient (the desktop/TUI consumer) raises RunCompleted for a run published to the hub", async (CancellationToken ct) =>
+                    {
+                        string tempSessions = Path.Combine(Path.GetTempPath(), "mux-test-" + Guid.NewGuid().ToString("N"));
+                        RestServerSettings rest = new RestServerSettings { Hostname = "127.0.0.1", ApiKey = "testkey123" };
+                        List<EndpointConfig> endpoints = new List<EndpointConfig>();
+
+                        MuxServer? server = null;
+                        int port = 0;
+                        for (int bindAttempt = 0; bindAttempt < 10 && server == null; bindAttempt++)
+                        {
+                            port = FreeLoopbackPort();
+                            rest.Port = port;
+                            MuxServer candidate = new MuxServer(rest, "9.9.9-test", new SessionStore(tempSessions), () => endpoints, null);
+                            try { candidate.Start(); server = candidate; }
+                            catch (Exception) { candidate.Dispose(); Thread.Sleep(50); }
+                        }
+
+                        MuxAssert.IsNotNull(server, "server bound to a loopback port");
+                        string baseUrl = "http://127.0.0.1:" + port;
+
+                        Mux.Core.Runs.SessionMirrorClient? mirror = null;
+                        try
+                        {
+                            using (HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) })
+                            {
+                                for (int attempt = 0; attempt < 20; attempt++)
+                                {
+                                    try { http.GetAsync(baseUrl + "/v1.0/api/health").GetAwaiter().GetResult(); break; }
+                                    catch (Exception) { Thread.Sleep(100); }
+                                }
+                            }
+
+                            TaskCompletionSource<bool> completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                            mirror = new Mux.Core.Runs.SessionMirrorClient(baseUrl, "testkey123");
+                            mirror.RunCompleted += () => completed.TrySetResult(true);
+                            await mirror.StartAsync("sess-consumer", ct).ConfigureAwait(false);
+                            await Task.Delay(250, ct).ConfigureAwait(false); // let the session watcher register
+
+                            using (ClientWebSocket producer = new ClientWebSocket())
+                            {
+                                await producer.ConnectAsync(new Uri("ws://127.0.0.1:" + port + "/v1.0/ws?apiKey=testkey123"), ct).ConfigureAwait(false);
+                                await ReceiveTextAsync(producer, ct).ConfigureAwait(false); // server.connected
+                                await SendTextAsync(producer, "{\"action\":\"publish\",\"runId\":\"cons-1\",\"sessionId\":\"sess-consumer\",\"endpointName\":\"local\",\"model\":\"m\",\"frame\":\"{\\\"eventType\\\":\\\"run_completed\\\",\\\"status\\\":\\\"completed\\\"}\"}", ct).ConfigureAwait(false);
+                            }
+
+                            Task finished = await Task.WhenAny(completed.Task, Task.Delay(TimeSpan.FromSeconds(4), ct)).ConfigureAwait(false);
+                            MuxAssert.IsTrue(ReferenceEquals(finished, completed.Task) && completed.Task.IsCompleted, "the consumer client raised RunCompleted for the published run");
+                        }
+                        finally
+                        {
+                            if (mirror != null) { await mirror.DisposeAsync().ConfigureAwait(false); }
+                            server?.Stop();
+                            server?.Dispose();
+                            try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
+                        }
                     })
                 });
+        }
+
+        private static async Task SendTextAsync(ClientWebSocket ws, string text, CancellationToken ct)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(text);
+            await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+        }
+
+        private static async Task<string> ReceiveTextAsync(ClientWebSocket ws, CancellationToken ct)
+        {
+            using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+            byte[] buffer = new byte[8192];
+            StringBuilder sb = new StringBuilder();
+            while (true)
+            {
+                WebSocketReceiveResult result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), timeout.Token).ConfigureAwait(false);
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    return sb.ToString();
+                }
+
+                sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
+                if (result.EndOfMessage)
+                {
+                    return sb.ToString();
+                }
+            }
         }
 
         private static int FreeLoopbackPort()

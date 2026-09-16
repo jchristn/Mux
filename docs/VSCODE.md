@@ -23,12 +23,19 @@ The panel streams a run as it happens: assistant text arrives token by token, to
 move from running to succeeded or failed, and the turn's stats land when it finishes. Replies stream as plain
 text for responsiveness and render as Markdown — headings, code blocks, lists, links — once the turn
 completes. Stop a run with the
-button that replaces Send while a turn is active; the incomplete turn is dropped so the conversation stays
-clean.
+button that replaces Send while a turn is active, or run **mux: Stop the current run** from the command
+palette. Stopping now cancels the run **server-side** — it POSTs to `/v1.0/api/runs/{runId}/cancel` so the
+agent loop and any in-flight tool actually stop, not just the editor's view of the stream — and the incomplete
+turn is dropped so the conversation stays clean.
 
 If you start `mux serve --allow-tools` (or let the extension start the server, which passes that flag), a tool
 that would change files prompts you in the panel — approve once, approve for the rest of the session, or deny.
 Without that flag the server denies mutating tools outright, and a run can read but not write.
+
+**Mirror a live run.** Run **mux: Mirror a session's live run** from the command palette and pick a session:
+the panel then live-tails that session's run read-only over the WebSocket bridge. Use it to watch a run
+started on another surface — the desktop app (with its embedded server on), the web dashboard, or a
+`mux serve` — as it happens. Stop mirroring with the Stop button or by starting a new conversation.
 
 ## Inline commands
 

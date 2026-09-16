@@ -11,3 +11,4 @@ tsconfig.json
 .gitignore
 .eslintrc*
 node_modules/**
+!node_modules/ws/**

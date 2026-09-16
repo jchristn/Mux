@@ -81,6 +81,7 @@ namespace Test.Shared
                     // REST server (v0.9.0): settings + live route behavior.
                     RestServerSettingsSuite.Create(),
                     MuxServerRouteSuite.Create(),
+                    RunRegistrySuite.Create(),
                     SessionTitleHelperSuite.Create(),
 
                     // Mux.Desktop.Core logic suites (localization, formatters, thread/usage/conversation services).
@@ -106,6 +107,7 @@ namespace Test.Shared
                     CommandRuntimeResolverSuite.Create(),
                     EndpointCommandParserSuite.Create(),
                     StructuredOutputFormatterSuite.Create(),
+                    AgentEventSerializerSuite.Create(),
                     CliCommandSuite.Create(),
 
                     // Mux.Search unit suite (ported from Test.Xunit/Search).

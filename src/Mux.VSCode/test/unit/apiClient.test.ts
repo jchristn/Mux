@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import { afterEach, test } from 'node:test';
+import { ApiClient } from '../../src/api/ApiClient';
+
+const realFetch = globalThis.fetch;
+
+afterEach(() => {
+    globalThis.fetch = realFetch;
+});
+
+interface CapturedCall {
+    url: string;
+    method: string;
+    authorization: string | undefined;
+}
+
+function stubFetch(status: number): CapturedCall {
+    const captured: CapturedCall = { url: '', method: '', authorization: undefined };
+    globalThis.fetch = (async (input: unknown, init?: { method?: string; headers?: Record<string, string> }) => {
+        captured.url = String(input);
+        captured.method = init?.method ?? 'GET';
+        captured.authorization = init?.headers?.Authorization;
+        return new Response(status >= 400 ? '{"error":"x"}' : '', { status });
+    }) as typeof fetch;
+    return captured;
+}
+
+test('cancelRun posts to the run cancel route with the bearer key', async () => {
+    const captured = stubFetch(200);
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710/', apiKey: 'secret' });
+    await client.cancelRun('run-42');
+    assert.equal(captured.url, 'http://127.0.0.1:8710/v1.0/api/runs/run-42/cancel');
+    assert.equal(captured.method, 'POST');
+    assert.equal(captured.authorization, 'Bearer secret');
+});
+
+test('cancelRun swallows a 404 so a redundant cancel is harmless', async () => {
+    stubFetch(404);
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
+    await client.cancelRun('gone'); // must not throw
+});
+
+test('cancelRun rethrows a non-404 error', async () => {
+    stubFetch(500);
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
+    await assert.rejects(() => client.cancelRun('boom'));
+});

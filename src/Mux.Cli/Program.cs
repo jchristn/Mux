@@ -61,7 +61,8 @@ namespace Mux.Cli
                 || a == "endpoint"
                 || a == "serve"
                 || a == "export"
-                || a == "plugin");
+                || a == "plugin"
+                || a == "mirror");
 
             if (!isNonInteractiveCommand && !Console.IsOutputRedirected)
             {
@@ -107,6 +108,7 @@ USAGE:
     mux endpoint <list|ls|show|models> [OPTIONS] Inspect endpoints and enumerate models
     mux export <id> [OPTIONS]            Export a saved session to Markdown or HTML
     mux plugin list [OPTIONS]            List configured event hooks and custom commands
+    mux mirror <sessionId> [OPTIONS]     Live-tail a run on a running mux server (read-only)
 
 OPTIONS:
     -h, --help, /?                       Show this help message and exit
@@ -298,6 +300,15 @@ CONFIG:
                 {
                     string[] commandArgs = args.Skip(1).ToArray();
                     return new Mux.Cli.Commands.ExportCommand()
+                        .RunAsync(commandArgs, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+
+                if (args.Length > 0 && string.Equals(args[0], "mirror", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] commandArgs = args.Skip(1).ToArray();
+                    return new Mux.Cli.Commands.MirrorCommand()
                         .RunAsync(commandArgs, CancellationToken.None)
                         .GetAwaiter()
                         .GetResult();

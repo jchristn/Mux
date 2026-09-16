@@ -4,7 +4,7 @@
  * blocks through here.
  */
 
-import { ChatApprovalRequest, ChatDone, ChatToolEvent, StreamEvent } from './types';
+import { ChatApprovalRequest, ChatDone, ChatRunEvent, ChatToolEvent, StreamEvent } from './types';
 
 /** A raw SSE block split into its `event` name and concatenated `data` payload. */
 export interface RawSseBlock {
@@ -58,6 +58,10 @@ export function toStreamEvent(block: RawSseBlock): StreamEvent | null {
     }
 
     switch (block.event) {
+        case 'run':
+            return { event: 'run', data: payload as ChatRunEvent };
+        case 'canceled':
+            return { event: 'canceled', data: payload as ChatRunEvent };
         case 'token':
             return typeof payload === 'string' ? { event: 'token', data: payload } : null;
         case 'thinking':

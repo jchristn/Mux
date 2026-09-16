@@ -147,6 +147,9 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .bubble pre{background:#2f343a;color:#f6f8fa;border:1px solid #4b5563;border-radius:6px;padding:12px;overflow:auto;font-size:13px}
 .bubble code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
 .bubble :not(pre)>code{background:color-mix(in srgb,var(--text) 8%,transparent);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+.bubble table.mdtable{border-collapse:collapse;margin:.5em 0;font-size:13px;display:block;overflow-x:auto;max-width:100%}
+.bubble table.mdtable th,.bubble table.mdtable td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+.bubble table.mdtable th{background:var(--panel-2);font-weight:600}
 .bubble p{margin:.4em 0}
 .bubble p:first-child{margin-top:0}.bubble p:last-child{margin-bottom:0}
 .bubble h1,.bubble h2,.bubble h3,.bubble h4,.bubble h5,.bubble h6{margin:.6em 0 .3em;line-height:1.25}
@@ -938,6 +941,7 @@ function api(path,method,body){
 /* minimal, safe markdown. Everything is escaped first; block elements (code fences, headings,
    lists, blockquotes, paragraphs) are emitted as real HTML so inline transforms and newline
    handling never leak into a code block. */
+function splitRow(s){ var t=s.trim().replace(/^\|/,"").replace(/\|$/,""); return t.split("|").map(function(c){return c.trim();}); }
 function inline(s){
   s=esc(s);
   s=s.replace(/`([^`]+)`/g,function(m,c){return "<code>"+c+"</code>";});
@@ -967,6 +971,16 @@ function md(text){
     if(/^\s*[-*+]\s+/.test(line)){ flush(); html+="<ul>"; while(i<lines.length&&/^\s*[-*+]\s+/.test(lines[i])){ html+="<li>"+inline(lines[i].replace(/^\s*[-*+]\s+/,""))+"</li>"; i++; } html+="</ul>"; continue; }
     if(/^\s*\d+\.\s+/.test(line)){ flush(); html+="<ol>"; while(i<lines.length&&/^\s*\d+\.\s+/.test(lines[i])){ html+="<li>"+inline(lines[i].replace(/^\s*\d+\.\s+/,""))+"</li>"; i++; } html+="</ol>"; continue; }
     if(/^\s*>\s?/.test(line)){ flush(); var q=[]; while(i<lines.length&&/^\s*>\s?/.test(lines[i])){ q.push(lines[i].replace(/^\s*>\s?/,"")); i++; } html+="<blockquote>"+q.map(inline).join("<br>")+"</blockquote>"; continue; }
+    /* GFM table: a header row containing a pipe, immediately followed by a --- separator row. */
+    if(line.indexOf("|")>=0 && i+1<lines.length && /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)+\|?\s*$/.test(lines[i+1])){
+      flush();
+      var header=splitRow(line); i+=2; var rows=[];
+      while(i<lines.length && lines[i].indexOf("|")>=0 && !/^\s*$/.test(lines[i])){ rows.push(splitRow(lines[i])); i++; }
+      html+='<table class="mdtable"><thead><tr>'+header.map(function(c){return "<th>"+inline(c)+"</th>";}).join("")+"</tr></thead><tbody>";
+      rows.forEach(function(r){ html+="<tr>"+r.map(function(c){return "<td>"+inline(c)+"</td>";}).join("")+"</tr>"; });
+      html+="</tbody></table>";
+      continue;
+    }
     para.push(line); i++;
   }
   flush();
@@ -1079,9 +1093,50 @@ function openConvo(id){
     currentSessionId=(d&&d.Id)||id;currentModel=(d&&d.Model)||"";
     if(d&&d.EndpointName){var sel=el("endpointSelect");if(sel){for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===d.EndpointName){sel.selectedIndex=i;break;}}}}
     setChatTitle((d&&d.Title)||"");renderMessages();highlightConvo();
+    watchConvo(currentSessionId);
   }).catch(function(e){toast(e.message,true);});
 }
-function newChat(){messages=[];currentSessionId=null;currentModel="";setChatTitle("");renderMessages();highlightConvo();var c=el("composer");if(c)c.focus();}
+// Passive cross-surface sync: while a conversation is open, subscribe to its session on the hub. When a run
+// finishes for it on ANOTHER surface (desktop, TUI, another browser), reload the transcript and list so new
+// messages appear without a manual refresh. Enabled by default; disabled per conversation via "/mirror off".
+var convoWatch=null;
+function stopConvoWatch(){if(convoWatch){convoWatch._stop=true;try{convoWatch.close();}catch(e){}convoWatch=null;}}
+// Reconnect the passive watch for a session if it's still the one we're viewing (covers a hub that wasn't
+// ready when we first connected, or a dropped socket).
+function reconnectWatch(id){ if(id===currentSessionId&&!mirrorDisabled[id]&&!convoWatch){ setTimeout(function(){ if(id===currentSessionId&&!mirrorDisabled[id]&&!convoWatch)watchConvo(id); },2000); } }
+function watchConvo(id){
+  stopConvoWatch();
+  if(!id||mirrorDisabled[id]||typeof WebSocket==="undefined")return;
+  var url=(location.protocol==="https:"?"wss":"ws")+"://"+location.host+"/v1.0/ws"+(API_KEY?("?apiKey="+encodeURIComponent(API_KEY)):"");
+  var ws;try{ws=new WebSocket(url);}catch(e){reconnectWatch(id);return;}
+  convoWatch=ws;
+  ws.onopen=function(){try{ws.send(JSON.stringify({action:"subscribe",sessionId:id}));}catch(e){}};
+  ws.onerror=function(){};
+  ws.onclose=function(){if(convoWatch===ws)convoWatch=null; if(!ws._stop)reconnectWatch(id);};
+  ws.onmessage=function(m){
+    var ev;try{ev=JSON.parse(m.data);}catch(e){return;}
+    if(!ev||ev.eventType!=="run_completed")return;
+    // Ignore our own in-progress run (SSE already renders it and refreshes on done); only react to runs
+    // completing elsewhere for the conversation we're viewing.
+    if(busy||id!==currentSessionId)return;
+    // The producer publishes run_completed slightly BEFORE it finishes persisting the turn to the shared
+    // store — so a single delayed fetch can read stale content. Poll until the store actually has more
+    // messages than we're showing (the new turn landed), or give up after a few tries.
+    var before=messages.length,tries=0;
+    function pull(){
+      if(id!==currentSessionId)return;
+      api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
+        if(id!==currentSessionId)return;
+        var msgs=((d&&d.Messages)||[]).map(function(mm){return {role:mm.Role,content:mm.Content};});
+        if(msgs.length>before||tries>=8){
+          messages=msgs;setChatTitle((d&&d.Title)||"");renderMessages();loadConvos();
+        }else{tries++;setTimeout(pull,400);}
+      }).catch(function(){if(tries<8){tries++;setTimeout(pull,400);}});
+    }
+    setTimeout(pull,250);
+  };
+}
+function newChat(){stopConvoWatch();messages=[];currentSessionId=null;currentModel="";setChatTitle("");renderMessages();highlightConvo();var c=el("composer");if(c)c.focus();}
 function persistConvo(){
   var real=messages.filter(function(m){return !m.typing&&!m.local;});
   if(!real.length)return;
@@ -1106,6 +1161,7 @@ var CHAT_HELP="**Chat commands**\n\n"+
 "- `/?`, `/help` — show this list\n"+
 "- `/new`, `/clear` — start a new conversation\n"+
 "- `/context`, `/stats` — show the last turn's timing and tokens\n"+
+"- `/mirror on|off` (or `/mirror <sessionId>`) — live-mirror a run happening on another surface (read-only)\n"+
 "- `/usage` — open usage analytics\n"+
 "- `/endpoints`, `/models` — manage model endpoints\n"+
 "- `/mcp` — manage MCP servers\n"+
@@ -1138,6 +1194,7 @@ function handleChatCommand(text){
     case "?": case "help": case "menu": messages.push({role:"assistant",content:CHAT_HELP,local:true});renderMessages();return;
     case "new": case "clear": newChat();return;
     case "context": case "stats": showChatStats();return;
+    case "mirror": mirrorSession(text);return;
     case "usage": switchView("usage");return;
     case "endpoints": case "endpoint": case "models": case "model": switchView("endpoints");return;
     case "mcp": case "mcps": switchView("mcp");return;
@@ -1170,10 +1227,51 @@ function sendChat(){
 }
 
 var currentAbort=null;
-function endChat(){busy=false;currentAbort=null;el("sendBtn").textContent="➤";el("sendBtn").title="Send";el("sendBtn").style.background="";}
-// Stop the in-flight response. Abort the stream and drop the incomplete turn (both the empty assistant
+var currentRunId=null;
+var currentMirror=null;
+function endChat(){busy=false;currentAbort=null;currentRunId=null;if(currentMirror){try{currentMirror.close();}catch(e){}currentMirror=null;}el("sendBtn").textContent="➤";el("sendBtn").title="Send";el("sendBtn").style.background="";}
+// Stop the in-flight response. Ask the server to cancel the run (so it actually stops server-side, not just
+// in this browser), then abort the local stream and drop the incomplete turn (both the empty assistant
 // bubble and the user prompt that started it) so the model history stays clean — matching the TUI/desktop.
-function stopChat(){if(currentAbort){try{currentAbort.abort();}catch(e){}}}
+function stopChat(){
+  if(currentRunId){api("/v1.0/api/runs/"+encodeURIComponent(currentRunId)+"/cancel","POST").catch(function(){});}
+  if(currentAbort){try{currentAbort.abort();}catch(e){}}
+  if(currentMirror){try{currentMirror.close();}catch(e){}currentMirror=null;busy=false;endChat();toast("Mirror stopped");}
+}
+// Per-conversation mirror preference. Mirroring is ON by default; "/mirror off" disables it for the open
+// conversation, "/mirror on" re-enables and attaches. A session id present in this set is disabled.
+var mirrorDisabled={};
+// Live-mirror another surface's run: subscribe to the WebSocket bridge by session id and render the canonical
+// event envelope read-only. "/mirror on" / "/mirror off" toggle it for the open conversation; "/mirror
+// <sessionId>" mirrors a specific one.
+function mirrorSession(text){
+  var arg="";var sp=(text||"").indexOf(" ");if(sp>0)arg=text.slice(sp+1).trim();
+  if(arg.toLowerCase()==="off"){if(currentSessionId)mirrorDisabled[currentSessionId]=true;stopConvoWatch();if(currentMirror){try{currentMirror.close();}catch(e){}currentMirror=null;busy=false;endChat();}toast("Mirroring off for this conversation");return;}
+  if(arg.toLowerCase()==="on"){if(currentSessionId)delete mirrorDisabled[currentSessionId];watchConvo(currentSessionId);toast("Mirroring on for this conversation");return;}
+  if(busy){toast("Finish or stop the current run first",true);return;}
+  if(typeof WebSocket==="undefined"){toast("This browser has no WebSocket support",true);return;}
+  var id=arg||currentSessionId;
+  if(!id){toast("Usage: /mirror <sessionId> (or open a conversation first)",true);return;}
+  var url=(location.protocol==="https:"?"wss":"ws")+"://"+location.host+"/v1.0/ws"+(API_KEY?("?apiKey="+encodeURIComponent(API_KEY)):"");
+  var ws;try{ws=new WebSocket(url);}catch(e){toast("Could not open a mirror connection",true);return;}
+  currentMirror=ws;
+  var typing={role:"assistant",content:"",typing:true};
+  messages.push(typing);renderMessages();busy=true;el("sendBtn").textContent="■";el("sendBtn").title="Stop mirroring";el("sendBtn").style.background="#e5534b";
+  toast("Mirroring "+id+" (read-only)");
+  ws.onopen=function(){try{ws.send(JSON.stringify({action:"subscribe",sessionId:id}));}catch(e){}};
+  ws.onerror=function(){toast("Mirror connection error",true);};
+  ws.onclose=function(){if(currentMirror===ws){typing.typing=false;renderMessages();endChat();}};
+  ws.onmessage=function(m){
+    var ev;try{ev=JSON.parse(m.data);}catch(e){return;}
+    var t=ev&&ev.eventType;
+    if(t==="error"){toast(String(ev.message||"mirror error"),true);return;}
+    if(t==="assistant_text"){typing.typing=false;typing.content+=(ev.text||"");renderMessages();}
+    else if(t==="assistant_thinking"){typing.thinking=(typing.thinking||"")+(ev.text||"");renderMessages();}
+    else if(t==="tool_call_proposed"){if(!typing.tools)typing.tools=[];var tc=(ev.toolCall)||{};typing.tools.push({id:tc.id||"",name:tc.name||"",status:"running",ms:0});renderMessages();}
+    else if(t==="tool_call_completed"){if(!typing.tools)typing.tools=[];var ok=ev.result&&ev.result.success;var found=null;for(var k=0;k<typing.tools.length;k++){if(typing.tools[k].id===ev.toolCallId){found=typing.tools[k];break;}}if(found){found.status=ok?"ok":"fail";found.ms=ev.elapsedMs||0;}else{typing.tools.push({id:ev.toolCallId||"",name:ev.toolName||"",status:ok?"ok":"fail",ms:ev.elapsedMs||0});}renderMessages();}
+    else if(t==="run_completed"){typing.typing=false;renderMessages();toast("Mirrored run finished ("+(ev.status||"")+")");try{ws.close();}catch(e){}}
+  };
+}
 function dropIncompleteTurn(typing){
   var i=messages.indexOf(typing);if(i>=0)messages.splice(i,1);
   if(messages.length&&messages[messages.length-1].role==="user")messages.pop();
@@ -1220,13 +1318,15 @@ function handleSse(block,typing){
   }
   if(!data)return;
   var parsed;try{parsed=JSON.parse(data);}catch(e){return;}
-  if(ev==="thinking"){typing.thinking=(typing.thinking||"")+parsed;renderMessages();}
+  if(ev==="run"){if(parsed&&parsed.RunId){currentRunId=parsed.RunId;}}
+  else if(ev==="canceled"){typing.typing=false;dropIncompleteTurn(typing);endChat();toast("Stopped");}
+  else if(ev==="thinking"){typing.thinking=(typing.thinking||"")+parsed;renderMessages();}
   else if(ev==="tool"){if(!typing.tools)typing.tools=[];var tc=null;for(var k=0;k<typing.tools.length;k++){if(typing.tools[k].id===parsed.Id){tc=typing.tools[k];break;}}if(tc){tc.status=parsed.Status;tc.ms=parsed.ElapsedMs;}else{typing.tools.push({id:parsed.Id,name:parsed.Name,status:parsed.Status,ms:parsed.ElapsedMs});}renderMessages();}
   else if(ev==="token"){typing.typing=false;typing.content+=parsed;renderMessages();}
   else if(ev==="approval"){handleApproval(parsed);}
   // The server persists the turn itself (server-authored, full-fidelity), so adopt the id it assigned and
   // refresh the list rather than PUTting the browser's flattened copy back over it.
-  else if(ev==="done"){typing.typing=false;typing.content=(parsed&&parsed.Content)||typing.content;typing.model=(parsed&&parsed.Model)||"";typing.stats=(parsed&&parsed.Stats)||null;if(typing.model)currentModel=typing.model;if(parsed&&parsed.Id){currentSessionId=parsed.Id;}renderMessages();endChat();loadConvos();}
+  else if(ev==="done"){typing.typing=false;typing.content=(parsed&&parsed.Content)||typing.content;typing.model=(parsed&&parsed.Model)||"";typing.stats=(parsed&&parsed.Stats)||null;if(typing.model)currentModel=typing.model;if(parsed&&parsed.Id){currentSessionId=parsed.Id;}renderMessages();endChat();loadConvos();watchConvo(currentSessionId);}
   else if(ev==="error"){typing.typing=false;typing.content="⚠️ "+parsed;renderMessages();toast(String(parsed),true);endChat();}
 }
 

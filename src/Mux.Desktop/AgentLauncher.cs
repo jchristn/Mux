@@ -4,6 +4,8 @@ namespace Mux.Desktop
     using System.Diagnostics;
     using System.IO;
     using System.Linq;
+    using System.Net.Http;
+    using System.Text.Json;
 
     /// <summary>
     /// Best-effort launcher that starts the mux tray agent — which hosts the background REST server, usage
@@ -36,7 +38,17 @@ namespace Mux.Desktop
 
                 if (IsRunning())
                 {
-                    return;
+                    // A tray agent is already running. Keep it only when it is this build — an older agent has
+                    // a stale WebSocket bridge and dashboard and silently breaks cross-surface sync. Replace it
+                    // only on a definitive version mismatch; if we cannot determine the version (starting up, or
+                    // an unrelated same-named process), leave it alone rather than risk killing a healthy one.
+                    string? version = ProbeAgentVersion();
+                    if (version == null || string.Equals(version, Mux.Core.Settings.Defaults.ProductVersion, StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    KillAgents();
                 }
 
                 string? executable = LocateAgentExecutable();
@@ -83,6 +95,56 @@ namespace Mux.Desktop
             {
                 // If we cannot enumerate processes, assume it is running so we never spawn a duplicate.
                 return true;
+            }
+        }
+
+        // Probes the configured hub's health endpoint for the running agent's product version. Returns null
+        // when it cannot be determined (unreachable, non-2xx, or unparseable) — the caller treats null as
+        // "leave the agent alone".
+        private static string? ProbeAgentVersion()
+        {
+            try
+            {
+                Mux.Core.Models.RestServerSettings rest = Mux.Core.Settings.SettingsLoader.LoadSettings().Rest;
+                string url = (rest.Ssl ? "https" : "http") + "://" + rest.Hostname + ":" + rest.Port + "/v1.0/api/health";
+                using HttpClient http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+                HttpResponseMessage response = http.GetAsync(url).GetAwaiter().GetResult();
+                if (!response.IsSuccessStatusCode)
+                {
+                    return null;
+                }
+
+                string body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                using JsonDocument doc = JsonDocument.Parse(body);
+                return doc.RootElement.TryGetProperty("Version", out JsonElement v) ? v.GetString() : null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        // Stops all running tray-agent processes (used to replace a stale one). Best-effort.
+        private static void KillAgents()
+        {
+            try
+            {
+                foreach (Process process in Process.GetProcessesByName(ProcessName))
+                {
+                    try
+                    {
+                        process.Kill(true);
+                        process.WaitForExit(3000);
+                    }
+                    catch (Exception)
+                    {
+                        // Best-effort per process.
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Best-effort.
             }
         }
 

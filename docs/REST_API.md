@@ -109,7 +109,7 @@ All paths are versioned under `/v1.0/api`.
 | GET | `/v1.0/api/sessions/export?id=<id>&format=md\|html` | key | Render a session → `{ "format", "filename", "content" }` for download. |
 | DELETE | `/v1.0/api/sessions?id=<id>` | key | Delete a session. |
 | POST | `/v1.0/api/chat` | key | Plain (tool-free) chat completion against a configured endpoint. Body: `{ "endpoint": "<name>", "messages": [{ "role": "user", "content": "…" }] }` → `{ "role": "assistant", "content": "…", "endpoint", "model", "stats": { "ttftMs", "streamingMs", "totalMs", "inputTokens", "outputTokens", "totalTokens" } }`. |
-| POST | `/v1.0/api/chat/stream` | key | Agentic run over Server-Sent Events (`token`/`thinking`/`tool`/`approval`/`done`/`error`). Body adds optional `id` (session), `workingDirectory` (the directory tools resolve paths against — must exist, else `400`; falls back to the session's recorded directory, then the server's), and, with `mux serve --allow-tools`, mutating tools raise an `approval` event answered by `POST /v1.0/api/chat/approve`. Persists the turn to the shared session store. |
+| POST | `/v1.0/api/chat/stream` | key | Agentic run over Server-Sent Events (`run`/`token`/`thinking`/`tool`/`approval`/`done`/`canceled`/`error`). The first event is `run` — `{ "RunId", "SessionId" }` — so the client can address the run (cancel it via `POST /v1.0/api/runs/{runId}/cancel`, or subscribe over the WebSocket). Body adds optional `id` (session), `workingDirectory` (the directory tools resolve paths against — must exist, else `400`; falls back to the session's recorded directory, then the server's), and, with `mux serve --allow-tools`, mutating tools raise an `approval` event answered by `POST /v1.0/api/chat/approve`. Persists the turn to the shared session store. |
 | GET | `/v1.0/api/settings` | key | Editable settings subset, **secrets masked** (`rest.apiKeySet` instead of the key). |
 | PUT | `/v1.0/api/settings` | key | Update settings (validated/clamped, written to `settings.json`). The REST API key changes only when a non-blank `rest.apiKey` is supplied. |
 | GET | `/v1.0/api/usage/summary` | key | Window KPI summary. Query: `from`/`to` (epoch ms) or `range=hour\|day\|week\|month\|all`, plus `endpoint`, `model`, `callKind`. Returns `{ FromUnixMs, ToUnixMs, Metrics }`. |
@@ -120,11 +120,19 @@ All paths are versioned under `/v1.0/api`.
 | GET | `/v1.0/api/usage/filters` | key | Distinct endpoints/models for filter controls plus `{ Enabled }` (false when telemetry is off). |
 | GET | `/v1.0/api/usage/pricing` | key | The model pricing table from `pricing.json` (`{ version, models }`). |
 | PUT | `/v1.0/api/usage/pricing` | key | Replace the pricing table. Returns the saved table. |
+| GET | `/v1.0/api/runs` | key | List active and recently-finished runs as summaries (most-recently-started first). Returns `{ Items: [ { RunId, SessionId, EndpointName, Model, Status, IsTerminal, StartedUtc, CompletedUtc } ], Count }`. Terminal runs are retained ~5 minutes for inspection, then evicted. |
+| GET | `/v1.0/api/runs/{runId}` | key | Inspect one run: status, counters, current tool, last error, and the task-plan checklist. `404` when the run is unknown or evicted. |
+| POST | `/v1.0/api/runs/{runId}/cancel` | key | Cooperatively cancel a run (trips its cancellation token; publishes a terminal `run_completed` with status `canceled` to stream subscribers). `200` `{ Ok, RunId, Status }` on success; `404` when the run is unknown or already finished. |
 | GET | `/dashboard` | none¹ | The web dashboard (HTML). |
-| GET | `/v1.0/ws` | (WebSocket) | Live event stream; first frame is `server.connected`. |
+| GET | `/v1.0/ws` | key² | Live per-run event stream — subscribe by run or session id and replay + tail the canonical event envelope. See [WebSocket](#websocket). |
 
 ¹ The dashboard page itself is served anonymously over loopback with the API key injected into the page, so
 its own API calls are authenticated. Do not expose a non-loopback `hostname` without a strong `apiKey`.
+
+² When an API key is configured, the WebSocket upgrade must carry it. Browsers cannot set headers on a
+WebSocket, so pass it as a query parameter: `ws://127.0.0.1:<port>/v1.0/ws?apiKey=<key>` (native clients may
+instead send `Authorization: Bearer <key>`). An unauthenticated upgrade receives a single `error` frame and
+is closed.
 
 ## Web dashboard
 
@@ -189,15 +197,61 @@ Health response:
 
 ## WebSocket
 
-Connect to `ws://127.0.0.1:<port>/v1.0/ws`. The server sends a first text frame:
+Connect to `ws://127.0.0.1:<port>/v1.0/ws` (add `?apiKey=<key>` when a key is configured — see footnote ²).
+The server sends a first text frame:
 
 ```json
-{ "eventType": "server.connected", "product": "mux", "version": "0.9.0" }
+{ "eventType": "server.connected", "product": "mux", "version": "0.12.0" }
 ```
 
-The event envelope reuses the `eventType` shape of the `mux print --output-format jsonl` contract. A full
-per-run event bridge (`assistant_text` / `tool_call_*` / `task_plan_updated` / `run_completed`) is a planned
-follow-up.
+**Subscribe to a run.** Send a subscribe frame naming a run id (from the chat stream's `run` event):
+
+```json
+{ "action": "subscribe", "runId": "8b2f…" }
+```
+
+The bridge replays the events the run has already emitted, then live-tails the rest, framing each as the
+**canonical event envelope** — byte-for-byte the same `eventType` shape that `mux print --output-format jsonl`
+emits (`run_started`, `assistant_text`, `assistant_thinking`, `tool_call_proposed`, `tool_call_completed`,
+`context_compacted`, `task_plan_updated`, `error`, `run_completed`). A run-scoped subscription closes the
+socket when the run reaches a terminal state. A subscribe frame for an unknown **run** id returns an `error`
+frame with code `not_found`.
+
+**Subscribe to a session** (what "mirror on by default" uses). Name a `sessionId` instead of a `runId`:
+
+```json
+{ "action": "subscribe", "sessionId": "9f1c…" }
+```
+
+The bridge attaches to any run already in flight for that session and to future runs as they start, streaming
+each run's frames. It does **not** error when the session is currently idle — the socket stays open and the
+next run for the session streams in the moment it begins. This lets a surface subscribe when a conversation is
+opened and simply see whatever run happens there, from any surface.
+
+**Publish a run** (how a surface that runs the engine in its own process — the desktop app, the terminal —
+feeds the hub so others can mirror it). Send `publish` frames; the first materializes the run in the hub's
+registry, and each carries one pre-serialized canonical envelope:
+
+```json
+{ "action": "publish", "runId": "8b2f…", "sessionId": "9f1c…", "endpointName": "openai-gpt4o",
+  "model": "gpt-4o", "frame": "{\"eventType\":\"assistant_text\",\"text\":\"…\"}" }
+```
+
+**Answer an approval over the socket.** When the server runs with `--allow-tools`, a proposed mutating tool
+raises an `approval_required`/`tool_call_proposed` event; answer it on the same socket:
+
+```json
+{ "action": "approve", "runId": "8b2f…", "toolCallId": "call_1", "decision": "y" }
+```
+
+`decision` is `y` (approve once), `always` (approve and remember), or `n` (deny). This resolves the same
+pending approval the `POST /v1.0/api/chat/approve` route does.
+
+**Mirroring runs started elsewhere.** The registry the bridge reads is a `Mux.Core` type a host process can
+share. The desktop app records its in-process runs into the registry its embedded server exposes, so
+subscribing by that run's session id mirrors a desktop run live. Consumers ship on every surface:
+`mux mirror <sessionId>` (terminal), `/mirror <sessionId>` (dashboard), and *Mirror a session's live run*
+(VS Code).
 
 ## Security posture
 
@@ -223,6 +277,6 @@ run-driving routes are documented follow-ups.
 ## Planned (not yet implemented)
 
 - Per-id session read/delete and run-driving `POST /sessions` / `POST /sessions/{id}/messages`.
-- Full WebSocket per-run event bridge.
+- A task-state route beyond `GET /v1.0/api/runs/{runId}` (for example historical/persisted run state).
 - Generated client SDKs from the OpenAPI document (the OpenAPI 3.0 document + Swagger UI now ship at
   `/openapi.json` and `/swagger`).

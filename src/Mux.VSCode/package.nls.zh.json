@@ -31,6 +31,8 @@
   "config.locale": "显示语言 (BCP 47)。留空则跟随编辑器语言。",
   "view.manage.name": "管理",
   "cmd.reconnect": "重新连接到 mux 服务器",
+  "cmd.cancelRun": "Stop the current run",
+  "cmd.mirrorSession": "Mirror a session's live run",
   "cmd.manage.refresh": "刷新",
   "cmd.manage.addEndpoint": "添加端点",
   "cmd.manage.editEndpoint": "编辑端点",

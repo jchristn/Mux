@@ -253,6 +253,12 @@ export interface ChatDone {
     Stats: ChatStats;
 }
 
+/** The run/session announcement streamed first, as `run`, so the client can address the run (cancel, subscribe). */
+export interface ChatRunEvent {
+    RunId: string;
+    SessionId: string;
+}
+
 /** A tool lifecycle event streamed as `tool`. */
 export interface ChatToolEvent {
     Id: string;
@@ -270,13 +276,15 @@ export interface ChatApprovalRequest {
 }
 
 /**
- * A parsed Server-Sent Event from a streamed run. The `event` names match the server: `token`, `thinking`,
- * `tool`, `approval`, `done`, and `error`.
+ * A parsed Server-Sent Event from a streamed run. The `event` names match the server: `run`, `token`,
+ * `thinking`, `tool`, `approval`, `done`, `canceled`, and `error`.
  */
 export type StreamEvent =
+    | { event: 'run'; data: ChatRunEvent }
     | { event: 'token'; data: string }
     | { event: 'thinking'; data: string }
     | { event: 'tool'; data: ChatToolEvent }
     | { event: 'approval'; data: ChatApprovalRequest }
     | { event: 'done'; data: ChatDone }
+    | { event: 'canceled'; data: ChatRunEvent }
     | { event: 'error'; data: string };

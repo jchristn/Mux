@@ -2,17 +2,16 @@ namespace Mux.Server
 {
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics;
-    using System.Net.WebSockets;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Runs;
     using Mux.Core.Sessions;
     using Mux.Server.Models;
     using Mux.Server.Routes;
+    using Mux.Server.Runs;
     using WatsonWebserver;
     using WatsonWebserver.Core;
-    using WatsonWebserver.Core.WebSockets;
 
     /// <summary>
     /// Hosts mux's optional local REST + WebSocket API on Watson 7. The server is opt-in and binds to
@@ -41,6 +40,8 @@ namespace Mux.Server
         private bool _Disposed = false;
         private readonly bool _AllowInteractiveTools;
         private readonly CheckpointRegistry _Checkpoints = new CheckpointRegistry();
+        private readonly RunRegistry _Runs;
+        private readonly bool _OwnsRuns;
 
         #endregion
 
@@ -76,6 +77,10 @@ namespace Mux.Server
         /// Null skips recording server-side calls.</param>
         /// <param name="allowInteractiveTools">When true, mutating tools proposed during a dashboard chat
         /// prompt the browser for approval instead of being auto-denied. Defaults to false.</param>
+        /// <param name="runs">An externally-owned run registry to share (so a host process such as the desktop
+        /// app can register its in-process runs and have them mirrored over this server's WebSocket bridge).
+        /// When null, the server creates and owns its own registry. An injected registry is not disposed by
+        /// the server.</param>
         public MuxServer(
             RestServerSettings settings,
             string version,
@@ -84,7 +89,8 @@ namespace Mux.Server
             Action<string>? logger = null,
             Mux.Core.Telemetry.UsageQueryService? usageQuery = null,
             Mux.Core.Telemetry.IUsageRecorder? usageRecorder = null,
-            bool allowInteractiveTools = false)
+            bool allowInteractiveTools = false,
+            RunRegistry? runs = null)
         {
             _Settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _Version = version ?? string.Empty;
@@ -94,6 +100,8 @@ namespace Mux.Server
             _UsageQuery = usageQuery;
             _UsageRecorder = usageRecorder;
             _AllowInteractiveTools = allowInteractiveTools;
+            _Runs = runs ?? new RunRegistry();
+            _OwnsRuns = runs == null;
         }
 
         #endregion
@@ -116,7 +124,8 @@ namespace Mux.Server
 
             ConfigureServer(_App);
             RegisterRoutes(_App);
-            _App.WebSocket("/v1.0/ws", HandleWebSocketAsync);
+            WebSocketBridge bridge = new WebSocketBridge(_Settings.ApiKey, _Runs, _Version);
+            _App.WebSocket("/v1.0/ws", bridge.HandleAsync);
 
             _App.Start(_TokenSource.Token);
             _Logger?.Invoke(_Header + "listening on " + BaseUrl);
@@ -146,6 +155,7 @@ namespace Mux.Server
             if (_Disposed) return;
             Stop();
             try { _App?.Dispose(); } catch (Exception) { }
+            if (_OwnsRuns) { try { _Runs.Dispose(); } catch (Exception) { } }
             try { _TokenSource.Dispose(); } catch (Exception) { }
             _Disposed = true;
         }
@@ -194,7 +204,7 @@ namespace Mux.Server
             new HealthRoutes(_Version, _StartUtc).Register(app);
             new EndpointRoutes(apiKey, _EndpointsProvider).Register(app);
             new SessionRoutes(apiKey, _SessionStore).Register(app);
-            new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder, _SessionStore, _AllowInteractiveTools, _Checkpoints).Register(app);
+            new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder, _SessionStore, _AllowInteractiveTools, _Checkpoints, _Runs).Register(app);
             new CheckpointRoutes(apiKey, _Checkpoints).Register(app);
             new SettingsRoutes(apiKey).Register(app);
             new McpRoutes(apiKey).Register(app);
@@ -202,6 +212,7 @@ namespace Mux.Server
             new SkillRoutes(apiKey).Register(app);
             new OverviewRoutes(apiKey, _EndpointsProvider, _SessionStore, _Version, _StartUtc).Register(app);
             new UsageRoutes(apiKey, _UsageQuery).Register(app);
+            new RunRoutes(apiKey, _Runs).Register(app);
         }
 
         private void ApplyCors(HttpContextBase ctx)
@@ -230,22 +241,6 @@ namespace Mux.Server
             ctx.Response.StatusCode = 404;
             ctx.Response.ContentType = "application/json";
             await ctx.Response.Send("{\"error\":\"NotFound\",\"message\":\"No matching route.\"}").ConfigureAwait(false);
-        }
-
-        private async Task HandleWebSocketAsync(HttpContextBase ctx, WebSocketSession session)
-        {
-            // Reuse the JSONL-style event envelope: the first frame announces the connection. A fuller
-            // per-run event bridge (assistant_text / tool_call_* / run_completed) is a documented follow-up.
-            string hello = "{\"eventType\":\"server.connected\",\"product\":\"mux\",\"version\":\"" + _Version + "\"}";
-            await session.SendTextAsync(hello, ctx.Token).ConfigureAwait(false);
-
-            await foreach (WebSocketMessage message in session.ReadMessagesAsync(ctx.Token).ConfigureAwait(false))
-            {
-                if (message.MessageType == WebSocketMessageType.Text)
-                {
-                    await session.SendTextAsync("{\"eventType\":\"ack\"}", ctx.Token).ConfigureAwait(false);
-                }
-            }
         }
 
         #endregion

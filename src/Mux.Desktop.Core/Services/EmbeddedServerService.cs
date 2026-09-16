@@ -4,6 +4,7 @@ namespace Mux.Desktop.Services
     using System.Collections.Generic;
     using System.IO;
     using Mux.Core.Models;
+    using Mux.Core.Runs;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
     using Mux.Core.Telemetry;
@@ -25,6 +26,7 @@ namespace Mux.Desktop.Services
         private static readonly EmbeddedServerService _Instance = new EmbeddedServerService();
         private readonly object _Sync = new object();
 
+        private readonly RunRegistry _Runs = new RunRegistry();
         private MuxServer? _Server;
         private UsageTelemetry? _Telemetry;
         private string? _BaseUrl;
@@ -48,6 +50,17 @@ namespace Mux.Desktop.Services
         public static EmbeddedServerService Instance
         {
             get => _Instance;
+        }
+
+        /// <summary>
+        /// The process-wide run registry the desktop records its in-process runs into. When the embedded
+        /// server is running it exposes this same registry over the WebSocket bridge, so a desktop run can be
+        /// mirrored live by another surface (the dashboard or the VS Code extension). Always non-null, so the
+        /// turn runner can record unconditionally whether or not the server is up.
+        /// </summary>
+        public RunRegistry SharedRuns
+        {
+            get => _Runs;
         }
 
         /// <summary>Whether the embedded server is currently listening.</summary>
@@ -200,7 +213,9 @@ namespace Mux.Desktop.Services
                         () => SettingsLoader.LoadEndpoints(),
                         logger: null,
                         usageQuery: usageQuery,
-                        usageRecorder: telemetry.Recorder);
+                        usageRecorder: telemetry.Recorder,
+                        allowInteractiveTools: false,
+                        runs: _Runs);
 
                     server.Start();
 

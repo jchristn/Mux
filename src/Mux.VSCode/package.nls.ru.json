@@ -31,6 +31,8 @@
   "config.locale": "Язык отображения (BCP 47). Пусто — следует языку редактора.",
   "view.manage.name": "Управление",
   "cmd.reconnect": "Переподключиться к серверу mux",
+  "cmd.cancelRun": "Stop the current run",
+  "cmd.mirrorSession": "Mirror a session's live run",
   "cmd.manage.refresh": "Обновить",
   "cmd.manage.addEndpoint": "Добавить эндпоинт",
   "cmd.manage.editEndpoint": "Изменить эндпоинт",

@@ -31,6 +31,8 @@
   "config.locale": "Langue d'affichage (BCP 47). Vide suit la langue de l'éditeur.",
   "view.manage.name": "Gérer",
   "cmd.reconnect": "Se reconnecter au serveur mux",
+  "cmd.cancelRun": "Stop the current run",
+  "cmd.mirrorSession": "Mirror a session's live run",
   "cmd.manage.refresh": "Actualiser",
   "cmd.manage.addEndpoint": "Ajouter un endpoint",
   "cmd.manage.editEndpoint": "Modifier l’endpoint",

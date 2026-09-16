@@ -76,6 +76,27 @@ export function activate(context: vscode.ExtensionContext): void {
 
     context.subscriptions.push(
         vscode.commands.registerCommand('mux.newConversation', () => chat.newConversation()),
+        vscode.commands.registerCommand('mux.cancelRun', () => chat.cancelActiveRun()),
+        vscode.commands.registerCommand('mux.mirrorSession', async () => {
+            try {
+                const client = await lifecycle.getClient(new vscode.CancellationTokenSource().token);
+                const sessions = await client.getSessions();
+                if (sessions.length === 0) {
+                    void vscode.window.showInformationMessage(vscode.l10n.t('No sessions to mirror yet.'));
+                    return;
+                }
+
+                const pick = await vscode.window.showQuickPick(
+                    sessions.map((s) => ({ label: s.Title || s.Id, description: s.Id })),
+                    { placeHolder: vscode.l10n.t('Pick a session to mirror its live run') },
+                );
+                if (pick?.description) {
+                    await chat.startMirror(pick.description);
+                }
+            } catch (error) {
+                void vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+            }
+        }),
         vscode.commands.registerCommand('mux.reconnect', () => lifecycle.reconnect(new vscode.CancellationTokenSource().token)),
         vscode.commands.registerCommand('mux.showHelp', () => showConnectionHelp(lifecycle)),
         vscode.commands.registerCommand('mux.about', () => AboutPanel.show(context, lifecycle.state)),

@@ -49,3 +49,17 @@ test('drainBuffer decodes an approval event', () => {
     assert.equal(drained.events.length, 1);
     assert.equal(drained.events[0].event, 'approval');
 });
+
+test('toStreamEvent decodes the run announcement carrying the run and session ids', () => {
+    const event = toStreamEvent({ event: 'run', data: '{"RunId":"r1","SessionId":"s1"}' });
+    assert.equal(event?.event, 'run');
+    if (event?.event === 'run') {
+        assert.equal(event.data.RunId, 'r1');
+        assert.equal(event.data.SessionId, 's1');
+    }
+});
+
+test('toStreamEvent decodes a canceled terminal event', () => {
+    const event = toStreamEvent({ event: 'canceled', data: '{"RunId":"r1","SessionId":"s1"}' });
+    assert.equal(event?.event, 'canceled');
+});
