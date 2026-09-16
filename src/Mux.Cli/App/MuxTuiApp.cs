@@ -1249,7 +1249,7 @@ namespace Mux.Cli.App
             // session started on another surface is resumed here (_ActiveSessionId points at it), a turn made in
             // it must be written back to THAT session's file so every surface watching it picks the turn up —
             // otherwise the turn lands in the terminal's original launch session and appears nowhere else.
-            return SessionSnapshotBuilder.Build(
+            SessionSnapshot snapshot = SessionSnapshotBuilder.Build(
                 _JobManager,
                 string.IsNullOrEmpty(_ActiveSessionId) ? _JobManager.SessionId : _ActiveSessionId,
                 _Title,
@@ -1258,6 +1258,19 @@ namespace Mux.Cli.App
                 _PromptHistory.Snapshot(),
                 DateTime.UtcNow,
                 _HookWorkingDirectory);
+
+            // The flat conversation history other surfaces read must be the FULL visible transcript. The
+            // snapshot builder derives it from the focused job, but the focused job never advances past the
+            // first turn, so it would persist only turn one — leaving every later terminal turn invisible to
+            // other surfaces (and, with the anti-truncation reconcile, dropped entirely). _ConversationHistory
+            // is the authoritative running transcript (maintained on every turn and on cross-surface reload),
+            // so persist that.
+            lock (_Sync)
+            {
+                snapshot.ConversationHistory = new List<ConversationMessage>(_ConversationHistory);
+            }
+
+            return snapshot;
         }
 
         /// <summary>
