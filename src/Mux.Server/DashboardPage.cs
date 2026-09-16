@@ -239,7 +239,7 @@ table.grid td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-
 .modal-body{padding:16px 20px;overflow:auto}
 .modal-body .field{grid-template-columns:190px 1fr}
 .modal-foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px}
-.btn.danger{background:var(--danger)}
+.btn.danger{background:var(--danger);color:#fff}
 @media(max-width:820px){.modal-body .field{grid-template-columns:1fr}}
 @media(max-width:820px){.app{grid-template-columns:1fr}.sidebar{display:none}.field{grid-template-columns:1fr}}
 /* ================= UX polish ================= */
@@ -387,7 +387,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 .udetail-kv .v{font-family:monospace;font-size:13px;color:var(--text);word-break:break-word}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;cursor:pointer;text-align:left;box-shadow:var(--shadow);transition:transform .1s,border-color .12s;display:flex;flex-direction:column;gap:5px;font-family:inherit}
 .kpi:hover{border-color:var(--accent);transform:translateY(-1px)}
-.kpi .kv{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+.kpi .kv{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;color:var(--text)}
 .kpi .kl{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
 .homegrid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
 @media(max-width:900px){.homegrid{grid-template-columns:1fr}}

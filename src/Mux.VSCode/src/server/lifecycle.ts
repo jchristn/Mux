@@ -1,8 +1,7 @@
 import * as childProcess from 'child_process';
-import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { ApiClient } from '../api/ApiClient';
-import { DEFAULT_PORT, readSettings } from '../config/settings';
+import { DEFAULT_PORT, readSettings, readSharedRest } from '../config/settings';
 import { log, logError } from '../util/logger';
 import { checkContract } from './contract';
 
@@ -112,13 +111,18 @@ export class MuxServerLifecycle implements vscode.Disposable {
 
     private async connect(token: vscode.CancellationToken): Promise<ApiClient> {
         const settings = readSettings();
-        const port = settings.port > 0 ? settings.port : DEFAULT_PORT;
+        // Join the SAME hub as every other surface: prefer mux's shared settings.json (port + apiKey), so
+        // the extension reuses the tray agent and speaks with the shared key rather than its own.
+        const shared = readSharedRest();
+        const port = settings.port > 0 ? settings.port : shared.port && shared.port > 0 ? shared.port : DEFAULT_PORT;
         const baseUrl = `http://127.0.0.1:${port}`;
 
         this.setState({ baseUrl, detail: 'Connecting…' });
 
-        const existingKey = await this.context.secrets.get(SECRET_KEY);
-        const reusable = await this.tryReuse(baseUrl, existingKey ?? null, token);
+        // The shared key is authoritative; fall back to a previously-stored one only when settings.json has none.
+        const sharedKey = shared.apiKey ?? null;
+        const storedKey = sharedKey ?? (await this.context.secrets.get(SECRET_KEY)) ?? null;
+        const reusable = await this.tryReuse(baseUrl, storedKey, token);
         if (reusable) {
             this.client = reusable;
             return reusable;
@@ -130,11 +134,15 @@ export class MuxServerLifecycle implements vscode.Disposable {
             throw new Error(message);
         }
 
-        const key = `mux_${crypto.randomBytes(16).toString('hex')}`;
-        await this.spawnServer(settings.muxPath, port, key);
+        // Spawn without imposing a key when settings.json has none — `mux serve` generates and persists one
+        // there, which we then read back so the whole system shares it. When a shared key exists, use it.
+        await this.spawnServer(settings.muxPath, port, sharedKey);
+        const key = sharedKey ?? (await this.waitForSharedKey(token));
         const client = new ApiClient({ baseUrl, apiKey: key });
         const health = await this.waitForHealth(client, token);
-        await this.context.secrets.store(SECRET_KEY, key);
+        if (key) {
+            await this.context.secrets.store(SECRET_KEY, key);
+        }
         this.client = client;
         this.setState({
             connected: true,
@@ -145,6 +153,28 @@ export class MuxServerLifecycle implements vscode.Disposable {
             detail: 'Started by the extension',
         });
         return client;
+    }
+
+    // Polls mux's shared settings.json for the API key a freshly-spawned `mux serve` persists there, so the
+    // extension uses the same key every other surface does. Returns null (no-auth) if none appears.
+    private async waitForSharedKey(token: vscode.CancellationToken): Promise<string | null> {
+        const deadline = Date.now() + 8000;
+        for (;;) {
+            if (token.isCancellationRequested) {
+                return null;
+            }
+
+            const key = readSharedRest().apiKey ?? null;
+            if (key) {
+                return key;
+            }
+
+            if (Date.now() > deadline) {
+                return null;
+            }
+
+            await delay(250);
+        }
     }
 
     private async tryReuse(baseUrl: string, key: string | null, token: vscode.CancellationToken): Promise<ApiClient | undefined> {
@@ -174,14 +204,16 @@ export class MuxServerLifecycle implements vscode.Disposable {
         }
     }
 
-    private spawnServer(muxPath: string, port: number, key: string): Promise<void> {
+    private spawnServer(muxPath: string, port: number, key: string | null): Promise<void> {
         return new Promise((resolve, reject) => {
             log(`Starting mux serve on 127.0.0.1:${port}.`);
-            const child = childProcess.spawn(
-                muxPath,
-                ['serve', '--allow-tools', '--host', '127.0.0.1', '--port', String(port), '--api-key', key],
-                { stdio: 'ignore', windowsHide: true },
-            );
+            const args = ['serve', '--allow-tools', '--host', '127.0.0.1', '--port', String(port)];
+            if (key) {
+                // Impose the shared key. With none, `mux serve` generates and persists one to settings.json.
+                args.push('--api-key', key);
+            }
+
+            const child = childProcess.spawn(muxPath, args, { stdio: 'ignore', windowsHide: true });
 
             child.on('error', (error) => {
                 logError('Failed to start mux serve.', error);
