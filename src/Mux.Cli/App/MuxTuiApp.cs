@@ -1245,9 +1245,13 @@ namespace Mux.Cli.App
         /// <returns>The session snapshot.</returns>
         public SessionSnapshot BuildSnapshot()
         {
+            // Persist under the session actually shown in the transcript, not the immutable launch id. When a
+            // session started on another surface is resumed here (_ActiveSessionId points at it), a turn made in
+            // it must be written back to THAT session's file so every surface watching it picks the turn up —
+            // otherwise the turn lands in the terminal's original launch session and appears nowhere else.
             return SessionSnapshotBuilder.Build(
                 _JobManager,
-                _JobManager.SessionId,
+                string.IsNullOrEmpty(_ActiveSessionId) ? _JobManager.SessionId : _ActiveSessionId,
                 _Title,
                 _EndpointName,
                 _Model,
@@ -1842,8 +1846,10 @@ namespace Mux.Cli.App
                 .GetResult();
 
             AgentEventProjector projector = new AgentEventProjector(_Conversation);
-            // Publish this turn to the hub so it can be mirrored live on any surface (keyed by session id).
-            projector.EnableMirrorPublishing(_JobManager.SessionId, _EndpointName, string.Empty);
+            // Publish this turn to the hub keyed by the session actually shown (a resumed foreign session, or the
+            // launch session), so live subscribers for that session — not the terminal's launch id — receive it.
+            string produceSessionId = string.IsNullOrEmpty(_ActiveSessionId) ? _JobManager.SessionId : _ActiveSessionId;
+            projector.EnableMirrorPublishing(produceSessionId, _EndpointName, string.Empty);
             Stopwatch stopwatch = Stopwatch.StartNew();
             long[] ttft = { -1 };
             projector.FirstTokenReceived += () => ttft[0] = stopwatch.ElapsedMilliseconds;
