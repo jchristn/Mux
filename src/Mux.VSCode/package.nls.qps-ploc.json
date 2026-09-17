@@ -57,5 +57,6 @@
   "config.context.sources": "⟦The editor context attached to a run by default.····················⟧",
   "config.locale": "⟦Display language override (BCP 47). Empty follows the editor language.····························⟧",
   "cmd.manage.editCatalog": "[Ëdït prömpt övërrïdë]",
-  "cmd.manage.resetCatalog": "[Rësët tö dëfäült]"
+  "cmd.manage.resetCatalog": "[Rësët tö dëfäült]",
+  "config.context.largeFileMode": "⟦How a large active file becomes editor context: inherit the server setting, or force map, summarize, or truncate.··········⟧"
 }

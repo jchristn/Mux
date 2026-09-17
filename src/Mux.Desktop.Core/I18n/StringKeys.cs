@@ -176,6 +176,12 @@ namespace Mux.Desktop.I18n
         /// <summary>Settings tooltip: inline threshold.</summary>
         public const string SettingsInlineThresholdTip = "settings.inlineThreshold.tip";
 
+        /// <summary>Settings label: inline context-window fraction.</summary>
+        public const string SettingsInlineContextWindowFraction = "settings.inlineContextWindowFraction";
+
+        /// <summary>Settings tooltip: inline context-window fraction.</summary>
+        public const string SettingsInlineContextWindowFractionTip = "settings.inlineContextWindowFraction.tip";
+
         /// <summary>Settings label: summary chunk lines.</summary>
         public const string SettingsSummaryChunkLines = "settings.summaryChunkLines";
 

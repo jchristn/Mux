@@ -55,11 +55,16 @@ namespace Mux.Server.Routes
                     return (object)new ApiError("BadRequest", "A 'content' field is required.");
                 }
 
-                ContextSettings settings = LoadContextSettings();
+                MuxSettings mux = LoadSettingsSafe();
+                ContextSettings settings = mux.Context;
                 ContextSettings.TryNormalizeLargeFileMode(payload.Mode ?? settings.LargeFileMode, out string modeString);
                 FileContextMode mode = ToMode(modeString);
 
-                int inlineThreshold = payload.InlineThresholdBytes ?? settings.InlineThresholdBytes;
+                // The endpoint (client-selected or the default) sizes the inline threshold from its context
+                // window; an explicit InlineThresholdBytes on the request overrides that.
+                EndpointConfig? endpoint = ResolveEndpoint(payload.EndpointName);
+                int inlineThreshold = payload.InlineThresholdBytes
+                    ?? settings.ResolveInlineThresholdBytes(endpoint?.ContextWindow ?? 0, mux.TokenEstimationRatio, settings.InlineThresholdBytes);
                 int headLines = payload.HeadLines ?? 40;
                 int chunkLines = payload.SummaryChunkLines ?? settings.SummaryChunkLines;
 
@@ -67,7 +72,6 @@ namespace Mux.Server.Routes
                 string modelKey = string.Empty;
                 if (mode == FileContextMode.Summarize)
                 {
-                    EndpointConfig? endpoint = ResolveDefaultEndpoint();
                     if (endpoint == null)
                     {
                         mode = FileContextMode.Map;
@@ -114,15 +118,18 @@ namespace Mux.Server.Routes
             return response.Content?.Trim() ?? string.Empty;
         }
 
-        private EndpointConfig? ResolveDefaultEndpoint()
+        private EndpointConfig? ResolveEndpoint(string? name)
         {
             List<EndpointConfig> endpoints = _EndpointsProvider();
-            return endpoints.FirstOrDefault(e => e.IsDefault) ?? endpoints.FirstOrDefault();
+            EndpointConfig? byName = string.IsNullOrWhiteSpace(name)
+                ? null
+                : endpoints.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+            return byName ?? endpoints.FirstOrDefault(e => e.IsDefault) ?? endpoints.FirstOrDefault();
         }
 
-        private static ContextSettings LoadContextSettings()
+        private static MuxSettings LoadSettingsSafe()
         {
-            try { return SettingsLoader.LoadSettings().Context; } catch (Exception) { return new ContextSettings(); }
+            try { return SettingsLoader.LoadSettings(); } catch (Exception) { return new MuxSettings(); }
         }
 
         private static FileContextMode ToMode(string normalized)

@@ -84,8 +84,11 @@ namespace Mux.Server.Models
         /// <summary>Large-file mode (map/summarize/truncate).</summary>
         public string LargeFileMode { get; set; } = "map";
 
-        /// <summary>Inline size gate in bytes.</summary>
+        /// <summary>Inline size gate in bytes (fallback when the endpoint's context window is unknown).</summary>
         public int InlineThresholdBytes { get; set; } = 65536;
+
+        /// <summary>Fraction of the endpoint's context window a file may occupy before it is mapped/summarized.</summary>
+        public double InlineContextWindowFraction { get; set; } = 0.25;
 
         /// <summary>Lines per summarizer chunk.</summary>
         public int SummaryChunkLines { get; set; } = 400;
@@ -125,6 +128,7 @@ namespace Mux.Server.Models
                 DefaultEnqueueBehavior = settings.DefaultEnqueueBehavior,
                 LargeFileMode = settings.Context.LargeFileMode,
                 InlineThresholdBytes = settings.Context.InlineThresholdBytes,
+                InlineContextWindowFraction = settings.Context.InlineContextWindowFraction,
                 SummaryChunkLines = settings.Context.SummaryChunkLines,
                 SummaryCacheEnabled = settings.Context.SummaryCacheEnabled,
                 SummaryCacheRetentionDays = settings.Context.SummaryCacheRetentionDays,
@@ -165,6 +169,7 @@ namespace Mux.Server.Models
             settings.DefaultEnqueueBehavior = DefaultEnqueueBehavior;
             settings.Context.LargeFileMode = LargeFileMode;
             settings.Context.InlineThresholdBytes = InlineThresholdBytes;
+            settings.Context.InlineContextWindowFraction = InlineContextWindowFraction;
             settings.Context.SummaryChunkLines = SummaryChunkLines;
             settings.Context.SummaryCacheEnabled = SummaryCacheEnabled;
             settings.Context.SummaryCacheRetentionDays = SummaryCacheRetentionDays;

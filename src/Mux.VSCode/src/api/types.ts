@@ -78,6 +78,31 @@ export interface PromptCatalogEntry {
     Editable: boolean;
 }
 
+/** A request to build a model-context block, sent to `POST /v1.0/api/context/file`. Field names are
+ * lower-camel; the server parses them case-insensitively against its PascalCase DTO. */
+export interface FileContextRequest {
+    /** The file path (for the map note and outline heuristics). */
+    path: string;
+
+    /** The full file contents. */
+    content: string;
+
+    /** Large-file mode override (`map`/`summarize`/`truncate`); omit to use the server's configured default. */
+    mode?: string;
+
+    /** The endpoint whose context window sizes the inline threshold; omit to use the default endpoint. */
+    endpointName?: string;
+
+    /** Explicit inline size gate in bytes; omit to derive it from the endpoint's context window. */
+    inlineThresholdBytes?: number;
+
+    /** Leading lines to include in a map/truncation. */
+    headLines?: number;
+
+    /** Lines per summarizer chunk. */
+    summaryChunkLines?: number;
+}
+
 /** A built file-context block, as returned by `POST /v1.0/api/context/file`. */
 export interface FileContextResponse {
     /** The context block text to inline (whole file, structural map, or summary). */

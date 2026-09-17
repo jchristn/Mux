@@ -1374,6 +1374,7 @@ namespace Mux.Core.Settings
             {
                 LargeFileMode = source.LargeFileMode,
                 InlineThresholdBytes = source.InlineThresholdBytes,
+                InlineContextWindowFraction = source.InlineContextWindowFraction,
                 SummaryChunkLines = source.SummaryChunkLines,
                 SummaryCacheEnabled = source.SummaryCacheEnabled,
                 SummaryCacheRetentionDays = source.SummaryCacheRetentionDays

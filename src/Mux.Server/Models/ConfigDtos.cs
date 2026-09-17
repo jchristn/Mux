@@ -202,7 +202,11 @@ namespace Mux.Server.Models
         /// <summary>Large-file mode: <c>map</c>, <c>summarize</c>, or <c>truncate</c>. Null uses the configured default.</summary>
         public string? Mode { get; set; }
 
-        /// <summary>Inline size gate in bytes. Null uses the configured default.</summary>
+        /// <summary>The endpoint whose context window sizes the inline threshold (and, for summarize, runs the
+        /// summarizer). Null or unknown uses the default endpoint.</summary>
+        public string? EndpointName { get; set; }
+
+        /// <summary>Explicit inline size gate in bytes; overrides the context-window-derived threshold. Null derives it from the endpoint's context window.</summary>
         public int? InlineThresholdBytes { get; set; }
 
         /// <summary>Leading lines to include in a map/truncation. Null uses a default.</summary>

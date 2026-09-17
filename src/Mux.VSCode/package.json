@@ -539,6 +539,17 @@
           ],
           "description": "%config.context.sources%"
         },
+        "mux.context.largeFileMode": {
+          "type": "string",
+          "enum": [
+            "inherit",
+            "map",
+            "summarize",
+            "truncate"
+          ],
+          "default": "inherit",
+          "description": "%config.context.largeFileMode%"
+        },
         "mux.locale": {
           "type": "string",
           "default": "",

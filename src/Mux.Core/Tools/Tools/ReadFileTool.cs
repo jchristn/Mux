@@ -9,7 +9,6 @@ namespace Mux.Core.Tools.Tools
     using Mux.Core.Context;
     using Mux.Core.Models;
     using Mux.Core.Prompting;
-    using Mux.Core.Settings;
     using Mux.Core.Tools;
 
     /// <summary>
@@ -17,6 +16,32 @@ namespace Mux.Core.Tools.Tools
     /// </summary>
     public class ReadFileTool : IToolExecutor
     {
+        #region Private-Members
+
+        private readonly ContextSettings _Context;
+        private readonly double _TokenEstimationRatio;
+        private readonly int _ContextWindowTokens;
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ReadFileTool"/> class.
+        /// </summary>
+        /// <param name="settings">The effective settings supplying the large-file mode, inline threshold, and
+        /// token-estimation ratio; null uses defaults. Captured once so a read does not re-read settings from disk.</param>
+        /// <param name="contextWindowTokens">The active endpoint's context window in tokens, so the
+        /// inline-vs-map threshold scales with the model; 0 (the default) falls back to the fixed byte threshold.</param>
+        public ReadFileTool(MuxSettings? settings = null, int contextWindowTokens = 0)
+        {
+            _Context = settings?.Context ?? new ContextSettings();
+            _TokenEstimationRatio = settings != null ? settings.TokenEstimationRatio : 3.5;
+            _ContextWindowTokens = Math.Max(0, contextWindowTokens);
+        }
+
+        #endregion
+
         #region Public-Members
 
         /// <summary>
@@ -91,6 +116,13 @@ namespace Mux.Core.Tools.Tools
 
                 FileInfo fileInfo = new FileInfo(resolvedPath);
 
+                // The inline cap scales with the active endpoint's context window when it is known (a wide
+                // window inlines larger files), bounded by the absolute read cap; when the window is unknown it
+                // is the absolute read cap — the historical behavior.
+                int inlineCap = Math.Min(
+                    ToolSafetyLimits.MaxReadFileBytes,
+                    _Context.ResolveInlineThresholdBytes(_ContextWindowTokens, _TokenEstimationRatio, ToolSafetyLimits.MaxReadFileBytes));
+
                 // Beyond the absolute cap the file is refused outright — too large to load even for a map.
                 if (fileInfo.Length > ToolSafetyLimits.MaxMappableFileBytes)
                 {
@@ -110,10 +142,9 @@ namespace Mux.Core.Tools.Tools
                 // under truncate/refuse mode, the strict refusal) instead of being read whole. An explicit
                 // offset/limit falls through to paged reading below, so the map's "page with offset/limit"
                 // advice keeps working.
-                if (fileInfo.Length > ToolSafetyLimits.MaxReadFileBytes && !hasExplicitRange)
+                if (fileInfo.Length > inlineCap && !hasExplicitRange)
                 {
-                    ContextSettings context = SettingsLoader.LoadSettings().Context;
-                    ContextSettings.TryNormalizeLargeFileMode(context.LargeFileMode, out string normalizedMode);
+                    ContextSettings.TryNormalizeLargeFileMode(_Context.LargeFileMode, out string normalizedMode);
                     if (string.Equals(normalizedMode, "truncate", StringComparison.Ordinal))
                     {
                         return new ToolResult
@@ -123,7 +154,7 @@ namespace Mux.Core.Tools.Tools
                             Content = JsonSerializer.Serialize(new
                             {
                                 error = "file_too_large",
-                                message = $"File size ({fileInfo.Length} bytes) exceeds maximum allowed ({ToolSafetyLimits.MaxReadFileBytes} bytes): {resolvedPath}. Use read_file with offset and limit to read a specific range."
+                                message = $"File size ({fileInfo.Length} bytes) exceeds the inline limit ({inlineCap} bytes) for the active model's context window: {resolvedPath}. Use read_file with offset and limit to read a specific range."
                             })
                         };
                     }
@@ -131,7 +162,7 @@ namespace Mux.Core.Tools.Tools
                     string largeContent = await File.ReadAllTextAsync(resolvedPath, cancellationToken).ConfigureAwait(false);
                     FileContextBuilder builder = new FileContextBuilder(null);
                     FileContextResult mapped = await builder.BuildAsync(
-                        new FileContextRequest(resolvedPath, largeContent, FileContextMode.Map, 1, 40, context.SummaryChunkLines, null, string.Empty),
+                        new FileContextRequest(resolvedPath, largeContent, FileContextMode.Map, 1, 40, _Context.SummaryChunkLines, null, string.Empty),
                         null,
                         cancellationToken).ConfigureAwait(false);
                     return new ToolResult

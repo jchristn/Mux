@@ -41,13 +41,17 @@ namespace Mux.Core.Tools
         /// <param name="subagentExecutor">The executor that runs a delegated subagent, or null when subagent
         /// delegation is not active. The <c>spawn_subagent</c> tool is registered only when both
         /// <paramref name="subagents"/> (non-empty) and this executor are supplied.</param>
+        /// <param name="contextWindowTokens">The active endpoint's context window in tokens, passed to
+        /// <see cref="ReadFileTool"/> so its inline-vs-map threshold scales with the model; 0 (the default)
+        /// falls back to the fixed byte threshold.</param>
         public BuiltInToolRegistry(
             MuxSettings? muxSettings = null,
             TaskPlan? taskPlan = null,
             SubagentRegistry? subagents = null,
-            ISubagentExecutor? subagentExecutor = null)
+            ISubagentExecutor? subagentExecutor = null,
+            int contextWindowTokens = 0)
         {
-            RegisterTool(new ReadFileTool(), ToolMutationKind.ReadOnly);
+            RegisterTool(new ReadFileTool(muxSettings, contextWindowTokens), ToolMutationKind.ReadOnly);
             RegisterTool(new WriteFileTool(), ToolMutationKind.Mutating);
             RegisterTool(new EditFileTool(), ToolMutationKind.Mutating);
             RegisterTool(new MultiEditTool(), ToolMutationKind.Mutating);

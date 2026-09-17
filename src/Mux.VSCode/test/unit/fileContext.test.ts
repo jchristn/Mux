@@ -1,12 +1,54 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { resolveFileContext } from '../../src/context/fileContext';
+import {
+    computeInlineThresholdBytes,
+    resolveFileContext,
+    DEFAULT_INLINE_THRESHOLD_BYTES,
+} from '../../src/context/fileContext';
 import { composePrompt } from '../../src/context/composePrompt';
 import { FileContextResponse } from '../../src/api/types';
 
 function mapResponse(text: string): FileContextResponse {
     return { Text: text, Mode: 'map', Inlined: false, OutlineEntryCount: 2, FromCache: false };
 }
+
+test('computeInlineThresholdBytes scales with the context window and falls back when unknown', () => {
+    assert.equal(computeInlineThresholdBytes(undefined), DEFAULT_INLINE_THRESHOLD_BYTES, 'unknown window falls back');
+    assert.equal(computeInlineThresholdBytes(0), DEFAULT_INLINE_THRESHOLD_BYTES, 'zero window falls back');
+    assert.equal(computeInlineThresholdBytes(200000), Math.floor(0.25 * 200000 * 3.5), 'wide window scales up (175000)');
+    assert.ok(computeInlineThresholdBytes(200000) > computeInlineThresholdBytes(8000), 'a wider window inlines more');
+    assert.equal(computeInlineThresholdBytes(100), 1024, 'a tiny window is floored so a small inline is still allowed');
+});
+
+test('resolveFileContext forwards the mode and endpoint to the fetcher for a large file', async () => {
+    const big = 'x'.repeat(500);
+    let seen: { mode?: string; endpointName?: string } = {};
+    await resolveFileContext('big.ts', big, {
+        inlineThresholdBytes: 100,
+        mode: 'summarize',
+        endpointName: 'claude',
+        fetcher: async (request) => {
+            seen = { mode: request.mode, endpointName: request.endpointName };
+            return mapResponse('summary …');
+        },
+    });
+    assert.equal(seen.mode, 'summarize', 'mode is forwarded');
+    assert.equal(seen.endpointName, 'claude', 'endpoint is forwarded');
+});
+
+test('resolveFileContext forwards an undefined mode when inheriting the server default', async () => {
+    const big = 'x'.repeat(500);
+    let sawMode: string | undefined = 'unset';
+    await resolveFileContext('big.ts', big, {
+        inlineThresholdBytes: 100,
+        mode: undefined,
+        fetcher: async (request) => {
+            sawMode = request.mode;
+            return mapResponse('map …');
+        },
+    });
+    assert.equal(sawMode, undefined, 'inherit sends no mode so the server decides');
+});
 
 test('resolveFileContext inlines a small file whole without calling the server', async () => {
     let called = false;

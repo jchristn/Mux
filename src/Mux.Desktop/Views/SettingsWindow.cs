@@ -45,6 +45,7 @@ namespace Mux.Desktop.Views
 
         private readonly ComboBox _LargeFileMode = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly TextBox _InlineThresholdBytes = new TextBox();
+        private readonly TextBox _InlineContextWindowFraction = new TextBox();
         private readonly TextBox _SummaryChunkLines = new TextBox();
         private readonly CheckBox _SummaryCacheEnabled = new CheckBox();
         private readonly TextBox _SummaryCacheRetentionDays = new TextBox();
@@ -142,6 +143,7 @@ namespace Mux.Desktop.Views
             _ContextSafetyMargin.Text = _Settings.ContextWindowSafetyMarginPercent.ToString(CultureInfo.InvariantCulture);
             _TokenEstimationRatio.Text = _Settings.TokenEstimationRatio.ToString(CultureInfo.InvariantCulture);
             _InlineThresholdBytes.Text = _Settings.Context.InlineThresholdBytes.ToString(CultureInfo.InvariantCulture);
+            _InlineContextWindowFraction.Text = _Settings.Context.InlineContextWindowFraction.ToString(CultureInfo.InvariantCulture);
             _SummaryChunkLines.Text = _Settings.Context.SummaryChunkLines.ToString(CultureInfo.InvariantCulture);
             _SummaryCacheEnabled.IsChecked = _Settings.Context.SummaryCacheEnabled;
             _SummaryCacheRetentionDays.Text = _Settings.Context.SummaryCacheRetentionDays.ToString(CultureInfo.InvariantCulture);
@@ -202,6 +204,7 @@ namespace Mux.Desktop.Views
             form.Children.Add(Section(Localizer.T(StringKeys.SettingsLargeFilesSection)));
             form.Children.Add(LabeledRow(Localizer.T(StringKeys.SettingsLargeFileMode), _LargeFileMode, Localizer.T(StringKeys.SettingsLargeFileModeTip)));
             form.Children.Add(LabeledRow(Localizer.T(StringKeys.SettingsInlineThreshold), _InlineThresholdBytes, Localizer.T(StringKeys.SettingsInlineThresholdTip)));
+            form.Children.Add(LabeledRow(Localizer.T(StringKeys.SettingsInlineContextWindowFraction), _InlineContextWindowFraction, Localizer.T(StringKeys.SettingsInlineContextWindowFractionTip)));
             form.Children.Add(LabeledRow(Localizer.T(StringKeys.SettingsSummaryChunkLines), _SummaryChunkLines, Localizer.T(StringKeys.SettingsSummaryChunkLinesTip)));
             form.Children.Add(_SummaryCacheEnabled.Tip(Localizer.T(StringKeys.SettingsSummaryCacheTip)));
             form.Children.Add(LabeledRow(Localizer.T(StringKeys.SettingsSummaryCacheRetention), _SummaryCacheRetentionDays, Localizer.T(StringKeys.SettingsSummaryCacheRetentionTip)));
@@ -285,6 +288,11 @@ namespace Mux.Desktop.Views
                 _Settings.TokenEstimationRatio = ratio;
             }
 
+            if (double.TryParse(_InlineContextWindowFraction.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double inlineFraction))
+            {
+                _Settings.Context.InlineContextWindowFraction = inlineFraction;
+            }
+
             string budgetText = (_MaxTokenBudget.Text ?? string.Empty).Trim();
             _Settings.MaxTokenBudget = budgetText.Length > 0 && int.TryParse(budgetText, out int budget) ? budget : (int?)null;
 
@@ -327,6 +335,7 @@ namespace Mux.Desktop.Views
             _SkillRefreshInterval.Text = _Settings.SkillRefreshIntervalSeconds.ToString(CultureInfo.InvariantCulture);
             _TokenEstimationRatio.Text = _Settings.TokenEstimationRatio.ToString(CultureInfo.InvariantCulture);
             _InlineThresholdBytes.Text = _Settings.Context.InlineThresholdBytes.ToString(CultureInfo.InvariantCulture);
+            _InlineContextWindowFraction.Text = _Settings.Context.InlineContextWindowFraction.ToString(CultureInfo.InvariantCulture);
             _SummaryChunkLines.Text = _Settings.Context.SummaryChunkLines.ToString(CultureInfo.InvariantCulture);
             _SummaryCacheRetentionDays.Text = _Settings.Context.SummaryCacheRetentionDays.ToString(CultureInfo.InvariantCulture);
         }

@@ -58,11 +58,13 @@ test('buildFileContext posts to the context route and returns the built block', 
     }) as typeof fetch;
 
     const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: 'secret' });
-    const result = await client.buildFileContext({ path: 'src/big.cs', content: 'x'.repeat(100), mode: 'map' });
+    const result = await client.buildFileContext({ path: 'src/big.cs', content: 'x'.repeat(100), mode: 'summarize', endpointName: 'claude' });
 
     assert.equal(capturedUrl, 'http://127.0.0.1:8710/v1.0/api/context/file');
     assert.equal(capturedMethod, 'POST');
     assert.equal(result.Mode, 'map');
     assert.equal(result.OutlineEntryCount, 3);
     assert.ok(capturedBody.includes('src/big.cs'), 'the request carries the file path');
+    assert.ok(capturedBody.includes('summarize'), 'the request carries the mode');
+    assert.ok(capturedBody.includes('claude'), 'the request carries the selected endpoint');
 });

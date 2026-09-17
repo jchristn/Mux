@@ -11,8 +11,10 @@ All notable changes to the mux VS Code extension are documented here.
   subagent personas are listed read-through with a deep link to the subagent editor.
 - **Smart large-file context.** The active file is no longer hard-sliced at 8000 characters: a small file is
   inlined whole, and a large file is sent to the server to be turned into a structural map (or summary) with
-  line ranges, which is inlined verbatim. The LSP outline now emits line ranges. If the server is unreachable
-  the extension falls back to the previous truncation.
+  line ranges, which is inlined verbatim. "Large" now scales with the selected endpoint's context window (a
+  wider window inlines bigger files), and a new `mux.context.largeFileMode` setting (inherit/map/summarize/
+  truncate) controls the mode from the editor. The LSP outline now emits line ranges. If the server is
+  unreachable the extension falls back to the previous truncation.
 
 ## 0.12.2
 

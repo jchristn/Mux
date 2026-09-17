@@ -15,6 +15,7 @@ namespace Mux.Core.Models
 
         private string _LargeFileMode = "map";
         private int _InlineThresholdBytes = 65536;
+        private double _InlineContextWindowFraction = 0.25;
         private int _SummaryChunkLines = 400;
         private bool _SummaryCacheEnabled = true;
         private int _SummaryCacheRetentionDays = 7;
@@ -45,6 +46,20 @@ namespace Mux.Core.Models
         {
             get => _InlineThresholdBytes;
             set => _InlineThresholdBytes = Math.Clamp(value, 1024, 10_485_760);
+        }
+
+        /// <summary>
+        /// The fraction of the selected endpoint's context window a single file may occupy before it is mapped
+        /// or summarized instead of inlined whole. So "too large to inline" scales with the model: a wide
+        /// context window inlines much larger files than a narrow one. Applied via
+        /// <see cref="ResolveInlineThresholdBytes"/>; when the endpoint reports no context window,
+        /// <see cref="InlineThresholdBytes"/> is used instead. Clamped to the range 0.05–0.9. Defaults to 0.25.
+        /// </summary>
+        [JsonPropertyName("inlineContextWindowFraction")]
+        public double InlineContextWindowFraction
+        {
+            get => _InlineContextWindowFraction;
+            set => _InlineContextWindowFraction = Math.Clamp(value, 0.05, 0.9);
         }
 
         /// <summary>
@@ -83,6 +98,31 @@ namespace Mux.Core.Models
         #endregion
 
         #region Public-Methods
+
+        /// <summary>
+        /// Resolves the effective inline size threshold in bytes: below or at it a file is inlined whole, above
+        /// it the file is mapped or summarized. When the endpoint reports a context window, the threshold is
+        /// <see cref="InlineContextWindowFraction"/> of that window converted to bytes (tokens ×
+        /// <paramref name="tokenEstimationRatio"/>), so it scales with the model; otherwise
+        /// <paramref name="fallbackBytes"/> is used. The result is floored at 1024 bytes so even a tiny window
+        /// still permits a small inline.
+        /// </summary>
+        /// <param name="contextWindowTokens">The selected endpoint's context window in tokens; 0 or negative means unknown.</param>
+        /// <param name="tokenEstimationRatio">Estimated characters (≈ bytes) per token; 0 or negative means unknown.</param>
+        /// <param name="fallbackBytes">The byte threshold to use when the context window is unknown (floored at 1).</param>
+        /// <returns>The effective inline threshold in bytes.</returns>
+        public int ResolveInlineThresholdBytes(int contextWindowTokens, double tokenEstimationRatio, int fallbackBytes)
+        {
+            if (contextWindowTokens <= 0 || tokenEstimationRatio <= 0)
+            {
+                return Math.Max(1, fallbackBytes);
+            }
+
+            double derived = _InlineContextWindowFraction * contextWindowTokens * tokenEstimationRatio;
+            if (derived < 1024) derived = 1024;
+            if (derived > int.MaxValue) return int.MaxValue;
+            return (int)derived;
+        }
 
         /// <summary>
         /// Normalizes a large-file-mode string to one of <c>map</c>, <c>summarize</c>, or <c>truncate</c>.

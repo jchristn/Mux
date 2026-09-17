@@ -63,6 +63,7 @@ namespace Mux.Cli.App
             1,                                // Show boundary lines
             _LargeFileModes.Length,           // Large-file mode
             1,                                // Inline threshold bytes
+            1,                                // Inline context-window fraction
             1,                                // Summary chunk lines
             1,                                // Summary cache enabled
             1,                                // Summary cache retention days
@@ -95,6 +96,7 @@ namespace Mux.Cli.App
         private readonly Checkbox _ShowBoundaryLines;
         private readonly RadioGroup _LargeFileMode;
         private readonly TextField _InlineThresholdBytes;
+        private readonly TextField _InlineContextWindowFraction;
         private readonly TextField _SummaryChunkLines;
         private readonly Checkbox _SummaryCacheEnabled;
         private readonly TextField _SummaryCacheRetentionDays;
@@ -145,6 +147,7 @@ namespace Mux.Cli.App
             _LargeFileMode = new RadioGroup(_LargeFileModes);
             SelectRadio(_LargeFileMode, _LargeFileModes, _Settings.Context.LargeFileMode);
             _InlineThresholdBytes = new TextField { Value = _Settings.Context.InlineThresholdBytes.ToString(CultureInfo.InvariantCulture) };
+            _InlineContextWindowFraction = new TextField { Value = _Settings.Context.InlineContextWindowFraction.ToString(CultureInfo.InvariantCulture) };
             _SummaryChunkLines = new TextField { Value = _Settings.Context.SummaryChunkLines.ToString(CultureInfo.InvariantCulture) };
             _SummaryCacheEnabled = new Checkbox("Cache large-file summaries", _Settings.Context.SummaryCacheEnabled);
             _SummaryCacheRetentionDays = new TextField { Value = _Settings.Context.SummaryCacheRetentionDays.ToString(CultureInfo.InvariantCulture) };
@@ -172,6 +175,7 @@ namespace Mux.Cli.App
             _Form.Add("Boundary lines", _ShowBoundaryLines);
             _Form.Add("Large-file mode", _LargeFileMode);
             _Form.Add("Inline threshold (bytes)", _InlineThresholdBytes, () => ValidateInt(_InlineThresholdBytes.Value, "Inline threshold", 1024, 10485760));
+            _Form.Add("Inline context-window fraction", _InlineContextWindowFraction, () => ValidateDouble(_InlineContextWindowFraction.Value, "Inline context-window fraction", 0.05, 0.9));
             _Form.Add("Summary chunk lines", _SummaryChunkLines, () => ValidateInt(_SummaryChunkLines.Value, "Summary chunk lines", 50, 5000));
             _Form.Add("Summary cache", _SummaryCacheEnabled);
             _Form.Add("Summary cache retention (days)", _SummaryCacheRetentionDays, () => ValidateInt(_SummaryCacheRetentionDays.Value, "Summary cache retention", 1, 365));
@@ -314,6 +318,7 @@ namespace Mux.Cli.App
             _Settings.ShowBoundaryLines = _ShowBoundaryLines.Checked;
             _Settings.Context.LargeFileMode = _LargeFileMode.SelectedOption;
             _Settings.Context.InlineThresholdBytes = ParseInt(_InlineThresholdBytes.Value);
+            _Settings.Context.InlineContextWindowFraction = ParseDouble(_InlineContextWindowFraction.Value);
             _Settings.Context.SummaryChunkLines = ParseInt(_SummaryChunkLines.Value);
             _Settings.Context.SummaryCacheEnabled = _SummaryCacheEnabled.Checked;
             _Settings.Context.SummaryCacheRetentionDays = ParseInt(_SummaryCacheRetentionDays.Value);

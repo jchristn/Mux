@@ -10,6 +10,9 @@ export type ContextSource = 'activeFile' | 'selection' | 'diagnostics' | 'openTa
 /** How mutating tools are handled during a run. */
 export type ApprovalPosture = 'prompt' | 'auto-safe';
 
+/** How a large active file becomes context: inherit the server's setting, or force a mode. */
+export type LargeFileMode = 'inherit' | 'map' | 'summarize' | 'truncate';
+
 /** The extension's resolved settings. */
 export interface MuxSettings {
     /** Start a local server when none is reachable. */
@@ -29,6 +32,9 @@ export interface MuxSettings {
 
     /** The enabled context sources. */
     contextSources: ContextSource[];
+
+    /** How a large active file becomes context: inherit the server's setting, or force map/summarize/truncate. */
+    largeFileMode: LargeFileMode;
 
     /** The display locale override; empty follows the editor language. */
     locale: string;
@@ -78,6 +84,7 @@ export function readSettings(): MuxSettings {
         defaultEndpoint: config.get<string>('defaultEndpoint', ''),
         approvalPosture: config.get<ApprovalPosture>('approvalPosture', 'prompt'),
         contextSources: config.get<ContextSource[]>('context.sources', ['activeFile', 'selection', 'diagnostics']),
+        largeFileMode: config.get<LargeFileMode>('context.largeFileMode', 'inherit'),
         locale: config.get<string>('locale', ''),
     };
 }

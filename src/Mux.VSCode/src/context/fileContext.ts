@@ -7,15 +7,39 @@
 
 import { FileContextResponse } from '../api/types';
 
-/** The default inline size gate in bytes (64 KiB), matching the server's default. */
+/** The default inline size gate in bytes (64 KiB), used when the endpoint reports no context window. */
 export const DEFAULT_INLINE_THRESHOLD_BYTES = 65536;
+
+/** Fraction of the context window a file may occupy before it is mapped/summarized (local heuristic mirroring
+ * the server default; the server applies the authoritative, configurable value when it builds the block). */
+export const INLINE_CONTEXT_WINDOW_FRACTION = 0.25;
+
+/** Estimated characters (≈ bytes) per token, mirroring the server's default token-estimation ratio. */
+export const CHARS_PER_TOKEN = 3.5;
 
 /** Builds a file-context block from the server. Injected so the resolver stays testable and `vscode`-free. */
 export type FileContextFetcher = (request: {
     path: string;
     content: string;
     mode?: string;
+    endpointName?: string;
 }) => Promise<FileContextResponse>;
+
+/**
+ * Computes the local inline-vs-fetch byte threshold from an endpoint's context window: a file at or below
+ * `fraction × window × charsPerToken` inlines locally (no round-trip), larger files are fetched from the
+ * server (which re-decides with the authoritative, configurable threshold). Falls back to
+ * {@link DEFAULT_INLINE_THRESHOLD_BYTES} when the window is unknown or non-positive.
+ *
+ * @param contextWindowTokens The selected endpoint's context window in tokens, if known.
+ * @returns The inline threshold in bytes (floored at 1024).
+ */
+export function computeInlineThresholdBytes(contextWindowTokens?: number): number {
+    if (!contextWindowTokens || contextWindowTokens <= 0) {
+        return DEFAULT_INLINE_THRESHOLD_BYTES;
+    }
+    return Math.max(1024, Math.floor(INLINE_CONTEXT_WINDOW_FRACTION * contextWindowTokens * CHARS_PER_TOKEN));
+}
 
 /** The resolved context for a file. */
 export interface ResolvedFileContext {
@@ -44,13 +68,14 @@ export function utf8ByteLength(text: string): number {
  *
  * @param path The file path sent to the server.
  * @param content The full file contents.
- * @param options The threshold, an optional mode override (undefined lets the server decide), and the fetcher.
+ * @param options The threshold, an optional mode override (undefined lets the server decide), the endpoint
+ * whose context window the server sizes against, and the fetcher.
  * @returns The resolved content and how it was produced.
  */
 export async function resolveFileContext(
     path: string,
     content: string,
-    options: { inlineThresholdBytes?: number; mode?: string; fetcher: FileContextFetcher },
+    options: { inlineThresholdBytes?: number; mode?: string; endpointName?: string; fetcher: FileContextFetcher },
 ): Promise<ResolvedFileContext> {
     const body = content ?? '';
     const threshold = options.inlineThresholdBytes ?? DEFAULT_INLINE_THRESHOLD_BYTES;
@@ -60,7 +85,7 @@ export async function resolveFileContext(
     }
 
     try {
-        const response = await options.fetcher({ path, content: body, mode: options.mode });
+        const response = await options.fetcher({ path, content: body, mode: options.mode, endpointName: options.endpointName });
         return { content: response.Text ?? body, noTruncate: true, mode: response.Mode || 'map', usedFallback: false };
     } catch {
         // Server unreachable or errored: keep the original content and let the per-item cap truncate it.

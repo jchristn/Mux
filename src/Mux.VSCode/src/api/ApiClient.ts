@@ -13,6 +13,7 @@ import {
     CheckpointStatus,
     EndpointDetail,
     EndpointSummary,
+    FileContextRequest,
     FileContextResponse,
     HealthResponse,
     McpServer,
@@ -167,10 +168,7 @@ export class ApiClient {
      * @param signal An optional abort signal.
      * @returns The built block and the mode actually used.
      */
-    public buildFileContext(
-        request: { path: string; content: string; mode?: string; inlineThresholdBytes?: number; headLines?: number; summaryChunkLines?: number },
-        signal?: AbortSignal,
-    ): Promise<FileContextResponse> {
+    public buildFileContext(request: FileContextRequest, signal?: AbortSignal): Promise<FileContextResponse> {
         return this.sendJson<FileContextResponse>('POST', '/v1.0/api/context/file', request, signal);
     }
 

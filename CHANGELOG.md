@@ -30,7 +30,11 @@ All notable changes to mux are documented here.
   `read_file` now returns a map instead of `file_too_large` by default (an explicit `offset`/`limit` still
   pages the exact range), a new route `POST /v1.0/api/context/file` lets a thin client offload
   mapping/summarizing to the server, and the VS Code extension replaced its 8000-character active-file slice
-  with the same map/summary (falling back to truncation only when the server is unreachable).
+  with the same map/summary (falling back to truncation only when the server is unreachable). "Too large to
+  inline" scales with the model: the threshold is a fraction of the selected endpoint's context window
+  (`inlineContextWindowFraction`, default 25%, with `inlineThresholdBytes` as the fallback when the window is
+  unknown), applied to both `read_file` and the eager path. The VS Code extension exposes its own
+  `mux.context.largeFileMode` (inherit/map/summarize/truncate) instead of silently inheriting the server's.
 
 ### Fixed
 

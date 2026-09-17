@@ -57,5 +57,6 @@
   "cmd.manage.deleteSkill": "Padam kemahiran",
   "cmd.usage": "Papan pemuka penggunaan",
   "cmd.manage.editCatalog": "Edit gantian prompt",
-  "cmd.manage.resetCatalog": "Set semula ke lalai"
+  "cmd.manage.resetCatalog": "Set semula ke lalai",
+  "config.context.largeFileMode": "Cara fail aktif yang besar menjadi konteks editor: warisi tetapan pelayan, atau paksa map, summarize atau truncate."
 }

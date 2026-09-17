@@ -57,5 +57,6 @@
   "cmd.manage.deleteSkill": "Excluir habilidade",
   "cmd.usage": "Painel de uso",
   "cmd.manage.editCatalog": "Editar substituição de prompt",
-  "cmd.manage.resetCatalog": "Redefinir para o padrão"
+  "cmd.manage.resetCatalog": "Redefinir para o padrão",
+  "config.context.largeFileMode": "Como um arquivo ativo grande se torna contexto do editor: herdar a configuração do servidor ou forçar map, summarize ou truncate."
 }

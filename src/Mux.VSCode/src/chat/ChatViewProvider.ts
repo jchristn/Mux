@@ -2,10 +2,10 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { ApiClient } from '../api/ApiClient';
-import { readSettings } from '../config/settings';
+import { LargeFileMode, readSettings } from '../config/settings';
 import { collectContext, workspaceRootPath } from '../context/providers';
 import { ContextItem, composePrompt } from '../context/composePrompt';
-import { resolveFileContext } from '../context/fileContext';
+import { computeInlineThresholdBytes, resolveFileContext } from '../context/fileContext';
 import { MuxServerLifecycle } from '../server/lifecycle';
 import { MirrorClient } from '../mirror/MirrorClient';
 import { log, logError } from '../util/logger';
@@ -400,13 +400,38 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
      * letting it be hard-truncated. Small files are left whole; when the server call fails the original
      * content is kept and marked truncatable, so {@link composePrompt}'s per-item cap applies as the fallback.
      */
-    private async applyLargeFileContext(items: ContextItem[], client: ApiClient, signal: AbortSignal): Promise<void> {
-        for (const item of items) {
-            if (item.kind !== 'activeFile' || !item.path) {
-                continue;
-            }
+    private async applyLargeFileContext(
+        items: ContextItem[],
+        client: ApiClient,
+        signal: AbortSignal,
+        endpointName: string | undefined,
+        largeFileMode: LargeFileMode,
+    ): Promise<void> {
+        const active = items.filter((item) => item.kind === 'activeFile' && item.path);
+        if (active.length === 0) {
+            return;
+        }
 
-            const resolved = await resolveFileContext(item.path, item.content, {
+        // Size the inline-vs-fetch decision by the selected endpoint's context window (a wide window inlines
+        // larger files); fall back to the fixed default when the window is unknown or the lookup fails.
+        let contextWindow: number | undefined;
+        if (endpointName) {
+            try {
+                const details = await client.getEndpointDetails(signal);
+                contextWindow = details.find((e) => e.Name === endpointName)?.ContextWindow;
+            } catch {
+                contextWindow = undefined;
+            }
+        }
+
+        const threshold = computeInlineThresholdBytes(contextWindow);
+        const mode = largeFileMode === 'inherit' ? undefined : largeFileMode;
+
+        for (const item of active) {
+            const resolved = await resolveFileContext(item.path as string, item.content, {
+                inlineThresholdBytes: threshold,
+                mode,
+                endpointName,
                 fetcher: (request) => client.buildFileContext(request, signal),
             });
             item.content = resolved.content;
@@ -437,7 +462,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
             const settings = readSettings();
             const collected = await collectContext(settings.contextSources, workspaceRootPath());
-            await this.applyLargeFileContext(collected.items, client, controller.signal);
+            await this.applyLargeFileContext(collected.items, client, controller.signal, endpoint, settings.largeFileMode);
             const composed = composePrompt(text, collected.items);
             if (collected.unavailable.length > 0) {
                 this.post({ type: 'notice', message: vscode.l10n.t('Not attached: {0}', collected.unavailable.join(', ')) });

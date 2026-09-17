@@ -674,7 +674,8 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
           <div class="field"><label>Warning threshold % <span class="sub">(50–95)</span></label><input type="number" id="s_contextWarningThresholdPercent" title="Warn about context pressure once usage passes this percent of the budget (50-95)." min="50" max="95"></div>
           <div class="field"><label>Large-file mode</label>
             <select id="s_largeFileMode" title="How a file over the inline threshold becomes context: map (structural outline with line ranges), summarize (map-reduce summary with pointers), or truncate (head slice / strict cap)."><option>map</option><option>summarize</option><option>truncate</option></select></div>
-          <div class="field"><label>Inline threshold <span class="sub">(bytes)</span></label><input type="number" id="s_inlineThresholdBytes" title="Files at or below this size are inlined whole; larger files follow the large-file mode." min="1024"></div>
+          <div class="field"><label>Inline context-window fraction <span class="sub">(0.05–0.9)</span></label><input type="number" id="s_inlineContextWindowFraction" title="Fraction of the selected endpoint's context window a file may occupy before it is mapped or summarized. When the endpoint reports a context window this scales the inline threshold to the model; otherwise the byte threshold below applies." step="0.05" min="0.05" max="0.9"></div>
+          <div class="field"><label>Inline threshold <span class="sub">(bytes, fallback)</span></label><input type="number" id="s_inlineThresholdBytes" title="Inline size gate used when the endpoint reports no context window; files at or below it are inlined whole, larger files follow the large-file mode." min="1024"></div>
           <div class="field"><label>Summary chunk lines</label><input type="number" id="s_summaryChunkLines" title="Lines per chunk when summarizing a large file." min="50"></div>
           <div class="field"><label>Summary cache</label><input type="checkbox" id="s_summaryCacheEnabled" title="Cache large-file summaries by content hash so an unchanged file is not re-summarized every turn."></div>
           <div class="field"><label>Summary cache retention <span class="sub">(days)</span></label><input type="number" id="s_summaryCacheRetentionDays" title="How long summary-cache entries are kept before a periodic cleanup deletes them." min="1" max="365"></div>
@@ -1416,6 +1417,7 @@ function loadSettings(){
     el("s_contextWarningThresholdPercent").value=s.ContextWarningThresholdPercent;
     el("s_largeFileMode").value=s.LargeFileMode;
     el("s_inlineThresholdBytes").value=s.InlineThresholdBytes;
+    el("s_inlineContextWindowFraction").value=s.InlineContextWindowFraction;
     el("s_summaryChunkLines").value=s.SummaryChunkLines;
     el("s_summaryCacheEnabled").checked=s.SummaryCacheEnabled;
     el("s_summaryCacheRetentionDays").value=s.SummaryCacheRetentionDays;
@@ -1448,6 +1450,7 @@ function saveSettings(){
     ContextWarningThresholdPercent:parseInt(el("s_contextWarningThresholdPercent").value,10),
     LargeFileMode:el("s_largeFileMode").value,
     InlineThresholdBytes:parseInt(el("s_inlineThresholdBytes").value,10),
+    InlineContextWindowFraction:parseFloat(el("s_inlineContextWindowFraction").value),
     SummaryChunkLines:parseInt(el("s_summaryChunkLines").value,10),
     SummaryCacheEnabled:el("s_summaryCacheEnabled").checked,
     SummaryCacheRetentionDays:parseInt(el("s_summaryCacheRetentionDays").value,10),

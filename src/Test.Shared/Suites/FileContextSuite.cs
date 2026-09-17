@@ -164,11 +164,10 @@ namespace Test.Shared.Suites
                     {
                         MuxSettings settings = new MuxSettings();
                         settings.Context.LargeFileMode = "truncate";
-                        SettingsLoader.SaveSettings(settings);
 
                         string path = Path.Combine(dir, "big.cs");
                         File.WriteAllText(path, SampleCode);
-                        ReadFileTool tool = new ReadFileTool();
+                        ReadFileTool tool = new ReadFileTool(settings);
                         ToolResult result = await tool.ExecuteAsync("tc", Args(path), dir, ct).ConfigureAwait(false);
                         MuxAssert.IsFalse(result.Success, "truncate mode refuses");
                         MuxAssert.Contains("file_too_large", result.Content ?? string.Empty, "refusal error");
@@ -198,6 +197,36 @@ namespace Test.Shared.Suites
                     {
                         ToolSafetyLimits.MaxReadFileBytes = savedMax;
                     }
+                }),
+
+                Case("ResolveInlineThresholdScalesWithWindow", "The inline threshold scales with the endpoint context window and falls back to bytes when unknown", (string dir, CancellationToken ct) =>
+                {
+                    ContextSettings ctx = new ContextSettings();
+                    MuxAssert.AreEqual(4096, ctx.ResolveInlineThresholdBytes(0, 3.5, 4096), "fallback when window unknown");
+                    MuxAssert.AreEqual((int)(0.25 * 100000 * 3.5), ctx.ResolveInlineThresholdBytes(100000, 3.5, 4096), "scales with window");
+                    MuxAssert.AreEqual(1024, ctx.ResolveInlineThresholdBytes(100, 3.5, 4096), "floored at 1024");
+                    return Task.CompletedTask;
+                }),
+
+                Case("AgentReadFileMapsWhenWindowSmallInlinesWhenLarge", "read_file maps a mid-size file under a small context window but inlines it under a large one", async (string dir, CancellationToken ct) =>
+                {
+                    // ~1.7 KB of content; no ToolSafetyLimits mutation, so only the window-derived cap decides.
+                    string content = string.Concat(System.Linq.Enumerable.Repeat("public void Method();\n", 80));
+                    string path = Path.Combine(dir, "mid.cs");
+                    File.WriteAllText(path, content);
+
+                    // Small window (1000 tokens -> ~875-byte inline cap) => the file is mapped.
+                    ReadFileTool small = new ReadFileTool(new MuxSettings(), 1000);
+                    ToolResult smallResult = await small.ExecuteAsync("tc", Args(path), dir, ct).ConfigureAwait(false);
+                    MuxAssert.IsTrue(smallResult.Success, "small-window read succeeds");
+                    MuxAssert.Contains("Structural map", smallResult.Content ?? string.Empty, "small window maps the file");
+
+                    // Large window (200000 tokens -> ~175 KB inline cap) => the same file inlines whole.
+                    ReadFileTool large = new ReadFileTool(new MuxSettings(), 200000);
+                    ToolResult largeResult = await large.ExecuteAsync("tc", Args(path), dir, ct).ConfigureAwait(false);
+                    MuxAssert.IsTrue(largeResult.Success, "large-window read succeeds");
+                    MuxAssert.IsFalse((largeResult.Content ?? string.Empty).Contains("Structural map"), "large window inlines the file");
+                    MuxAssert.Contains("public void Method();", largeResult.Content ?? string.Empty, "inlined content present");
                 })
             };
 

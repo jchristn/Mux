@@ -1061,7 +1061,8 @@ namespace Mux.Server.Documentation
                 ["Path"] = Pstr("The file path (used for the map note and outline heuristics)."),
                 ["Content"] = Pstr("The full file contents."),
                 ["Mode"] = PstrNullable("Large-file mode: `map`, `summarize`, or `truncate`. Null uses the configured default."),
-                ["InlineThresholdBytes"] = PintNullable("Inline size gate in bytes. Null uses the configured default."),
+                ["EndpointName"] = PstrNullable("The endpoint whose context window sizes the inline threshold. Null uses the default endpoint."),
+                ["InlineThresholdBytes"] = PintNullable("Explicit inline size gate in bytes; overrides the context-window-derived threshold. Null derives it from the endpoint's context window."),
                 ["HeadLines"] = PintNullable("Leading lines to include in a map/truncation. Null uses a default."),
                 ["SummaryChunkLines"] = PintNullable("Lines per summarizer chunk. Null uses the configured default.")
             }, new Dictionary<string, object?> { ["Path"] = "src/big.cs", ["Content"] = "…file contents…", ["Mode"] = "map", ["InlineThresholdBytes"] = null, ["HeadLines"] = null, ["SummaryChunkLines"] = null });
