@@ -9,9 +9,20 @@ This document outlines the work needed to move mux from a capable local-first co
 
 ## Current Position
 
-mux already has strong bones: backend-agnostic endpoint configuration, interactive and headless execution, structured JSON/JSONL output, MCP support, skills, task tracking, subagents, undo/redo, local session export, a local REST server, and a web dashboard. Sessions are now portable across surfaces — the TUI, desktop app, and web dashboard read and write one session store (resume/rename/duplicate/export/delete on every surface, a working directory recorded per session and changeable mid-run with `/cwd`), web chats persist server-side, and a system-tray launcher brings up all three front ends.
+mux already has strong bones: backend-agnostic endpoint configuration, interactive and headless execution, structured JSON/JSONL output, MCP support, skills, task tracking, subagents, undo/redo, local session export, a local REST server, and a web dashboard. It now runs on **five surfaces** — terminal UI, desktop app, web dashboard, VS Code extension, and headless CLI — and they are no longer just five clients that happen to share a session file. As of **0.12.2** they share a live run fabric: sessions are portable across every surface (resume/rename/duplicate/export/delete everywhere, a working directory recorded per session and changeable mid-run with `/cwd`, web chats persisted server-side), a run started on any surface can be watched live and read-only on any other, and a turn made on one surface appears in the same conversation open elsewhere without a manual refresh. The `mux serve` REST server publishes a complete OpenAPI 3.0.3 document with Swagger UI, tracks each run as an addressable object with cancel/inspect routes, and exposes a WebSocket bridge whose event envelope is byte-identical to the headless JSONL contract.
 
-The main gap is not raw capability. The main gap is product finish: the first-run path, provider convenience, editor integration, desktop control surface, and extension/runtime story need to feel coherent and dependable without requiring the user to assemble too much by hand.
+The main gap is not raw capability, and it is increasingly not the control plane either — that has largely converged. The remaining gap is product finish at the edges: the first-run path, provider onboarding convenience, the desktop app's job/approval depth, the extension/package runtime story, and legible context/prompt handling (the large-file truncation and universal-prompt work now scoped for 0.13.0 in `CONTEXT_AND_SUMMARIZATION.md`).
+
+### Recent Momentum (last three days, 0.11.0 → 0.12.2)
+
+The control-plane vision in sections 2–3 moved from "planned" to "shipped" in a concentrated burst:
+
+- **Run lifecycle became a first-class object (0.12.0).** `GET /v1.0/api/runs`, `GET /v1.0/api/runs/{runId}`, and `POST /v1.0/api/runs/{runId}/cancel` ship; Stop now cancels server-side (dashboard + VS Code) rather than only aborting a local stream.
+- **The WebSocket bridge is real (0.12.0).** `/v1.0/ws` authenticates the upgrade, subscribes by run **or** session id, replays-then-tails the canonical envelope (one shared `AgentEventSerializer`, byte-identical to JSONL), and carries over-socket approvals.
+- **Live session mirroring across all surfaces (0.12.0).** `RunRegistry`/`RunHandle`/`RunPublisher`/`SessionMirrorClient` moved into `Mux.Core`; every surface both publishes its in-process runs to the hub and consumes others' by default. Mirroring is on by default via session-scoped subscribe.
+- **Cross-surface sync made reliable (0.12.2).** A `SessionStoreWatcher` makes the on-disk store the trigger rather than any single hub — the server rebroadcasts external writes, and the TUI/desktop watch the store directly. Session persist/open consolidated into a shared `Mux.Core.Sessions.SessionService` with an anti-truncation `SessionMergePolicy`, so a turn is never silently overwritten by a surface that hadn't seen it.
+- **OpenAPI 3.0.3 + Swagger UI shipped** for `mux serve` — discovery works before authenticating.
+- **VS Code matured into a full fifth surface (0.11.x).** Streaming chat with in-editor approvals and Markdown, per-turn stats, inline code actions, editor+LSP context injection, full Manage CRUD (endpoints/MCP-with-auth/prompts/subagents/skills/settings), native usage charts, slash commands, and localization into twelve languages.
 
 ## 1. Out-Of-Box Polish
 
@@ -92,7 +103,7 @@ The current local REST server, dashboard, and tray agent are the right foundatio
 |---|---|
 | Run-driving API | Session CRUD (`/v1.0/api/sessions` create/list/detail/upsert/delete), streamed run events (`/v1.0/api/chat/stream` SSE: `run`, text, thinking, tool calls, completion), server-side persistence, resume-by-id, and browser-approved mutating tools (`--allow-tools`) all ship. **Cancel-run (`POST /v1.0/api/runs/{runId}/cancel`) and run-state inspection (`GET /v1.0/api/runs`, `GET /v1.0/api/runs/{runId}`) now ship** (delivered v0.12.0). Remaining: run-driving `POST /sessions/{id}/messages` (append-to-session) rather than the chat-stream body. |
 | ~~Complete WebSocket bridge~~ (delivered v0.12.0) | `/v1.0/ws` now authenticates the upgrade, subscribes by run/session id, and replays-then-tails the canonical event envelope — byte-identical to headless JSONL (one shared serializer) — including assistant text, thinking, tool calls/results, task updates, errors, and completion, plus over-socket approvals. |
-| OpenAPI document | Publish a complete OpenAPI 3.1 document for the local server and generate typed SDKs from it. |
+| ~~OpenAPI document~~ (delivered) | A complete, example-rich **OpenAPI 3.0.3** document (`GET /openapi.json`) and interactive **Swagger UI** (`GET /swagger`) now ship for `mux serve` — every route carries summary/description/tag/parameters/body/responses, component schemas have examples, and the bearer scheme is declared; both doc routes are reachable pre-auth for discovery. Remaining: generate typed SDKs from it and move 3.0.3 → 3.1. |
 | Client auth model | Move local secrets into OS-protected storage where possible, preserve loopback safety, and provide clear remote-binding warnings. |
 | Versioned contracts | Treat REST, WebSocket, and JSONL schemas as versioned APIs with compatibility notes. |
 
@@ -109,15 +120,20 @@ The current local REST server, dashboard, and tray agent are the right foundatio
 
 ### IDE Extension Surface
 
-A first VS Code extension has landed in `src/Mux.VSCode`, planned in `archive/VSCODE_EXTENSION.md`. It is a thin
-client over the local `mux serve` API — a streaming chat panel with in-editor approvals, inline commands and
-code actions, editor context injection, and the shared session tree, with the agent loop staying in
-`Mux.Core`. The rows below track what remains (LSP awareness, live session mirroring over the WebSocket
-bridge, and a propose-before-write diff mode), each dependent on server work called out in the plan.
+The VS Code extension in `src/Mux.VSCode` (planned in `archive/VSCODE_EXTENSION.md`) has matured into a full
+fifth surface. It is a thin client over the local `mux serve` API — a streaming chat panel with in-editor
+approvals, Markdown rendering, per-turn stats, inline commands and code actions, editor + LSP context
+injection, a Manage view with full CRUD (endpoints, MCP with auth, prompts, subagents, skills, settings),
+native usage charts, slash commands, twelve-language localization, and the shared session tree — with the
+agent loop staying in `Mux.Core`. **Live session mirroring over the WebSocket bridge now ships** (0.12.0):
+the extension unified onto the shared hub and key, publishes and consumes runs, and keeps an open
+conversation live-synced through the store watcher (0.12.2). The rows below track what remains — deeper
+LSP-as-tools awareness and a propose-before-write native diff mode — each dependent on server work called
+out in the plan (the file-context route for large files is scoped in `CONTEXT_AND_SUMMARIZATION.md`).
 
 | Capability | Needed Work |
 |---|---|
-| Context injection | Send current file, selection, diagnostics, open tabs, project tree, terminal output, and git diff into a mux run. |
+| Context injection | Current file, selection, diagnostics, open tabs, git diff, and LSP symbols already inject into a mux run. Remaining: project tree and terminal output; and replacing the 8000-char active-file hard-slice with the map/summarize file-context route (scoped for 0.13.0). |
 | Inline commands | Explain selection, fix diagnostic, generate tests, refactor selected code, write commit message, summarize diff, and review current file. |
 | Diff workflow | Show proposed edits as native editor diffs; accept/reject file or hunk; restore checkpoint; open changed files after a run. |
 | LSP awareness | Use language-server symbols, definitions, references, hover text, diagnostics, and call hierarchy as context and tools. |
@@ -133,7 +149,7 @@ bridge, and a propose-before-write diff mode), each dependent on server work cal
 |---|---|
 | Good | A dashboard can chat, edit settings, and inspect sessions. |
 | Very good | A desktop app can manage sessions/jobs/config, and an editor extension can pass file/selection/diff context. |
-| Excellent | The editor, desktop app, TUI, and headless modes all control the same local run engine with shared sessions, approvals, events, and stable APIs. |
+| Excellent — **substantially reached (0.12.2)** | The editor, desktop app, TUI, and headless modes now control the same local run engine with shared sessions, live-mirrored events over one canonical envelope, over-socket approvals, and an OpenAPI-documented REST surface. What keeps it from "fully done" is contract *stability* (REST/WS/JSONL are complete but not yet versioned-and-frozen) and the desktop job/approval **depth** (a full job center and diff-preview approvals are still shallow). |
 
 ## 4. Best-In-Class Hackability
 
