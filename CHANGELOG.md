@@ -6,6 +6,25 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **Adaptive endpoint configuration with flexible API-key placement.** Configuring an endpoint now shows only
+  the fields that apply to the selected adapter (base URL and model for everyone; region/project for
+  Vertex/Bedrock; api-version for Azure; a custom-headers editor for the HTTP adapters) on every surface —
+  web dashboard, terminal, desktop, and VS Code. Critically, the OpenAI-family adapters
+  (`ollama`/`openai`/`openai-compatible`/`vllm`) gained an **auth-placement** control: the API key can be sent
+  as an `Authorization: Bearer` header (the default), a caller-named header, or a query-string parameter —
+  so services that authenticate with a custom header or a query-string value, not a bearer token, are now
+  first-class. Backed by a new `AuthPlacement` model on the endpoint (persisted and exposed over REST) and a
+  query-string auth handler in the engine; native adapters keep their fixed credential scheme.
+- **Usage charts in the terminal.** `/usage` now renders KPI lines plus a tokens-per-day line chart, a
+  cost-per-day bar chart, and a top-models-by-cost bar chart (using TUIKit's chart widgets), matching the
+  spirit of the web/desktop/VS Code usage views. The min–avg–p95–p99–max "candlestick" distribution view is
+  planned for a future TUIKit release (tracked in TUIKit's `ADDITIONAL_GRAPHS.md`).
+- **First-run setup wizard on every UI surface.** On a fresh install — no user-configured endpoint yet — each
+  surface (terminal, desktop, web, VS Code) guides you through defining your first endpoint, checking its
+  connectivity, and sending your first prompt, then records completion so it does not reappear. Re-run it any
+  time (`/setup` in the terminal, "mux: Run setup wizard" in VS Code, a command on desktop, a "Setup wizard"
+  button on the web dashboard). The trigger disregards the built-in seed endpoint, so a brand-new install is
+  guided rather than silently treated as already configured.
 - **Universal prompt management.** Every string mux feeds a model is now legible and editable — no prompt is
   buried in a `.cs` file. A single code-defined catalog (`PromptCatalog`) inventories every model-facing
   prompt with a sensible default, grouped by kind (compaction, task-planning, title generation, tool-section

@@ -4,6 +4,14 @@ All notable changes to the mux VS Code extension are documented here.
 
 ## 0.12.3
 
+- **Adaptive endpoint form + flexible API-key placement.** The endpoint editor now shows only the fields that
+  apply to the chosen adapter (region/project for Vertex/Bedrock, api-version for Azure, a custom-headers
+  editor for HTTP adapters), and the OpenAI-family adapters gained an API-key **placement** control — send the
+  key as a bearer header, a custom header, or a query-string parameter — for services that don't use bearer
+  tokens. Fields show/hide live as you change the adapter or placement.
+- **First-run setup wizard.** On a fresh install the extension guides you through defining an endpoint,
+  checking connectivity, and sending a first prompt, then records completion (shared with every other surface
+  via the server) so it doesn't reappear. Re-run it any time with **mux: Run setup wizard**.
 - **Operational prompt catalog in the management tree.** Under **Prompts**, every model-facing prompt now
   appears grouped by kind with a custom/default indicator; click an entry to edit its override or reset it to
   the default (`mux.manage.editCatalog` / `mux.manage.resetCatalog`, backed by the server's prompt-catalog
