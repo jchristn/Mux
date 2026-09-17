@@ -1700,6 +1700,10 @@ function openEp(i,prefill,onSaved){var isEdit=i>=0,e=isEdit?Object.assign({},_ep
     if(!v.Name){toast(t("toast.nameReq"),true);return;}
     v.Headers=epTextToHeaders(v.HeadersText);delete v.HeadersText;
     var list=_ep.slice();if(isEdit)list[i]=v;else list.push(v);
+    // Enforce a single default: when this endpoint is marked default, demote every other one so the
+    // saved list has exactly one (the server keeps the first default it sees, so the intended one must be
+    // the only one flagged).
+    if(v.IsDefault){for(var j=0;j<list.length;j++){if(list[j]!==v)list[j].IsDefault=false;}}
     saveCollection("/v1.0/api/endpoints",list,function(items){_ep=items;closeModal();renderEp();loadEndpoints();if(onSaved)onSaved(v);});});}
 function epIndexByName(name){for(var i=0;i<_ep.length;i++){if(_ep[i]&&_ep[i].Name===name)return i;}return -1;}
 function delEp(name){confirmModal('Delete endpoint "'+name+'"?',function(){
