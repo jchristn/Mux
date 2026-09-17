@@ -32,6 +32,7 @@ namespace Mux.Core.Models
         private string? _SkillsDirectory = null;
         private bool _TaskPlanningEnabled = true;
         private bool _TaskParallelismEnabled = false;
+        private bool _SetupCompleted = false;
         private ExternalSearchSettings _ExternalSearch = new ExternalSearchSettings();
         private ContextSettings _Context = new ContextSettings();
         private RestServerSettings _Rest = new RestServerSettings();
@@ -327,6 +328,19 @@ namespace Mux.Core.Models
         {
             get => _TaskParallelismEnabled;
             set => _TaskParallelismEnabled = value;
+        }
+
+        /// <summary>
+        /// Whether the first-run setup wizard has been completed (or explicitly dismissed) on this machine.
+        /// Once true, the wizard is not shown automatically again; a user can still re-run it from any surface.
+        /// Defaults to false so a fresh install is guided through defining an endpoint, checking connectivity,
+        /// and sending a first prompt. See <see cref="Mux.Core.Setup.SetupState"/>.
+        /// </summary>
+        [JsonPropertyName("setupCompleted")]
+        public bool SetupCompleted
+        {
+            get => _SetupCompleted;
+            set => _SetupCompleted = value;
         }
 
         /// <summary>

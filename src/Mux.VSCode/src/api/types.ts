@@ -34,6 +34,16 @@ export interface EndpointDetail {
     ShowThinking?: boolean;
     ApiKey?: string;
     ApiKeySet?: boolean;
+    /** How the API key is presented for the OpenAI-family adapters: 'bearer' (default), 'header', or 'query'. */
+    AuthPlacement?: string;
+    /** Header or query-string parameter name that carries the API key for header/query placement. */
+    AuthParameterName?: string;
+    /** Cloud region (vertex/bedrock). */
+    Region?: string;
+    /** Google Cloud project id (vertex). */
+    Project?: string;
+    /** Azure OpenAI api-version. */
+    ApiVersion?: string;
     Headers?: EndpointHeader[];
 }
 

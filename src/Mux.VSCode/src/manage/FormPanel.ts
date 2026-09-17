@@ -1,6 +1,19 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
+/**
+ * One clause of a field's visibility rule: the field is shown only when the current value of the control named
+ * {@link key} is one of {@link anyOf}. Multiple clauses on a field are ANDed together. Clauses are declarative
+ * (not functions) so they serialize into the webview, which re-evaluates them live as other controls change.
+ */
+export interface ShowIfClause {
+    /** The key of the control this clause depends on. */
+    key: string;
+
+    /** The values of that control for which the field is shown. */
+    anyOf: string[];
+}
+
 /** A single field in a {@link FormPanel}. */
 export interface FormField {
     /** The value key returned in the result object. */
@@ -23,6 +36,9 @@ export interface FormField {
 
     /** When true, an empty value is rejected on submit. */
     required?: boolean;
+
+    /** Optional visibility rule; when present the field is shown only while every clause matches. */
+    showIf?: ShowIfClause[];
 }
 
 /**
@@ -75,7 +91,7 @@ export class FormPanel {
         const nonce = crypto.randomBytes(16).toString('hex');
         const csp = `default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';`;
         const controls = fields.map((f) => FormPanel.control(f)).join('\n');
-        const fieldsJson = JSON.stringify(fields.map((f) => ({ key: f.key, type: f.type })));
+        const fieldsJson = JSON.stringify(fields.map((f) => ({ key: f.key, type: f.type, showIf: f.showIf ?? null })));
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -120,6 +136,32 @@ ${controls}
   const vscode = acquireVsCodeApi();
   const fields = ${fieldsJson};
   const required = ${JSON.stringify(fields.filter((f) => f.required).map((f) => f.key))};
+  function currentValue(key) {
+    const el = document.getElementById('f_' + key);
+    if (!el) return '';
+    const f = fields.find((x) => x.key === key);
+    return (f && f.type === 'checkbox') ? el.checked : el.value;
+  }
+  // A field is visible only when every showIf clause matches the current value of the control it names.
+  function isVisible(f) {
+    if (!f.showIf) return true;
+    for (const clause of f.showIf) {
+      if (clause.anyOf.indexOf(String(currentValue(clause.key))) < 0) return false;
+    }
+    return true;
+  }
+  function applyVisibility() {
+    for (const f of fields) {
+      const wrap = document.getElementById('field_' + f.key);
+      if (wrap) wrap.style.display = isVisible(f) ? '' : 'none';
+    }
+  }
+  // Re-evaluate visibility whenever any control changes, and once on load.
+  for (const f of fields) {
+    const el = document.getElementById('f_' + f.key);
+    if (el) { el.addEventListener('change', applyVisibility); el.addEventListener('input', applyVisibility); }
+  }
+  applyVisibility();
   document.getElementById('cancel').addEventListener('click', () => vscode.postMessage({ type: 'cancel' }));
   document.getElementById('form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -130,6 +172,8 @@ ${controls}
       values[f.key] = f.type === 'checkbox' ? el.checked : el.value;
     }
     for (const key of required) {
+      const rf = fields.find((x) => x.key === key);
+      if (rf && !isVisible(rf)) continue;
       if (!String(values[key] || '').trim()) {
         document.getElementById('error').textContent = 'Please fill in all required fields.';
         return;
@@ -147,10 +191,11 @@ ${controls}
         const label = `<label for="${id}">${FormPanel.escape(field.label)}${field.required ? ' *' : ''}</label>`;
         const hint = field.hint ? `<div class="hint">${FormPanel.escape(field.hint)}</div>` : '';
 
+        const wrapId = `field_${field.key}`;
         let control: string;
         switch (field.type) {
             case 'checkbox':
-                return `<div class="field"><div class="check"><input type="checkbox" id="${id}" ${field.value ? 'checked' : ''} /><label for="${id}" style="margin:0">${FormPanel.escape(field.label)}</label></div>${hint}</div>`;
+                return `<div class="field" id="${wrapId}"><div class="check"><input type="checkbox" id="${id}" ${field.value ? 'checked' : ''} /><label for="${id}" style="margin:0">${FormPanel.escape(field.label)}</label></div>${hint}</div>`;
             case 'select':
                 control = `<select id="${id}">${(field.options ?? [])
                     .map((o) => `<option value="${FormPanel.escape(o)}" ${String(field.value) === o ? 'selected' : ''}>${FormPanel.escape(o)}</option>`)
@@ -170,7 +215,7 @@ ${controls}
                 break;
         }
 
-        return `<div class="field">${label}${control}${hint}</div>`;
+        return `<div class="field" id="${wrapId}">${label}${control}${hint}</div>`;
     }
 
     private static escape(text: string): string {

@@ -296,6 +296,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.effort", "Reasoning effort", null, OpenEffortSelector, "Model", new[] { "effort", "reasoning", "reasoning-effort" }));
             _Catalog.Add(new CommandDescriptor("mux.compact", "Compact conversation", null, CompactConversation, "Session", new[] { "compact", "compress", "summarize" }));
             _Catalog.Add(new CommandDescriptor("mux.settings", "Settings", null, OpenSettingsModal, "Model", new[] { "settings", "config", "preferences", "prefs" }));
+            _Catalog.Add(new CommandDescriptor("mux.setup", "Setup wizard", null, OpenSetupWizard, "Model", new[] { "setup", "wizard", "onboarding", "getting-started" }));
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.theme.dark", "Dark mode", null, () => ApplyThemeByName("dark", persist: true), "View", new[] { "dark" }));
             _Catalog.Add(new CommandDescriptor("mux.theme.light", "Light mode", null, () => ApplyThemeByName("light", persist: true), "View", new[] { "light" }));
@@ -617,6 +618,11 @@ namespace Mux.Cli.App
 
                     // Mirror the current conversation so runs on other surfaces sync in automatically.
                     StartSessionMirror(_JobManager.SessionId);
+
+                    // First run: with no usable endpoint and setup not yet completed, guide the user through
+                    // defining an endpoint, checking connectivity, and sending a first prompt. Runs as a
+                    // background task so it layers modals over the loop rather than blocking startup.
+                    MaybeStartFirstRunWizard();
 
                     await _App.RunAsync(loopCts.Token).ConfigureAwait(false);
                 }
@@ -3414,6 +3420,120 @@ namespace Mux.Cli.App
             }
         }
 
+        /// <summary>
+        /// Opens the first-run setup wizard on demand (the <c>/setup</c> command). Guides the user through
+        /// defining an endpoint, checking connectivity, and sending a first prompt. Safe to call at any time.
+        /// </summary>
+        public void OpenSetupWizard()
+        {
+            _ = RunFirstRunWizardAsync();
+        }
+
+        // Shows the first-run wizard automatically when there is no usable endpoint and setup has not been
+        // completed. Best-effort and non-fatal: any failure to read state simply skips the auto-prompt.
+        private void MaybeStartFirstRunWizard()
+        {
+            try
+            {
+                MuxSettings settings = SettingsLoader.LoadSettings();
+                if (Mux.Core.Setup.SetupState.NeedsSetup(LoadEndpointsSafe(), settings.SetupCompleted))
+                {
+                    _ = RunFirstRunWizardAsync();
+                }
+            }
+            catch (Exception)
+            {
+                // A settings/endpoints read failure must not block startup; the user can run /setup manually.
+            }
+        }
+
+        // Runs the guided first-run wizard: welcome, define an endpoint (reusing the endpoint form), validate
+        // connectivity (reusing the model probe), then hand off to the composer for the first message. Records
+        // SetupCompleted when the user finishes or explicitly skips, so it never nags again; a mid-wizard
+        // cancel leaves the flag unset so an unconfigured user is offered it again next launch.
+        private async Task RunFirstRunWizardAsync()
+        {
+            SelectModal intro = new SelectModal(
+                "Welcome to mux — set up your first endpoint now?",
+                new List<string> { "Set up now", "Skip for now" });
+            _App.Modals.Push(intro);
+            object? introResult = await intro.Completion.ConfigureAwait(false);
+            int choice = introResult is int c ? c : -1;
+            if (choice != 0)
+            {
+                // Skipped (or dismissed): remember it so the wizard does not reappear; /setup re-runs it.
+                MarkSetupComplete();
+                WriteNotice("Setup skipped — run /setup any time to configure an endpoint.");
+                return;
+            }
+
+            EndpointFormModal form = new EndpointFormModal("Setup — define your first endpoint");
+            _App.Modals.Push(form);
+            object? formResult = await form.Completion.ConfigureAwait(false);
+            if (formResult is not EndpointConfig endpoint)
+            {
+                WriteNotice("Setup cancelled — run /setup any time to finish.");
+                return;
+            }
+
+            SaveEndpoint(endpoint, isNew: true, previousName: null);
+            SwitchEndpoint(endpoint);
+
+            if (_OnValidateModel != null)
+            {
+                WriteNotice($"Checking connectivity to {endpoint.Name}…");
+                ModelLoadResult result;
+                try
+                {
+                    result = await _OnValidateModel(endpoint, _Cts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    result = ModelLoadResult.Fail(ex.Message);
+                }
+
+                MuxBoxModal check = new MuxBoxModal("Setup — connectivity", BuildValidationLines(endpoint, result), "Enter to continue");
+                _App.Modals.Push(check);
+                await check.Completion.ConfigureAwait(false);
+            }
+
+            List<string> finish = new List<string>
+            {
+                "✓ You're all set.",
+                string.Empty,
+                "Type your first message in the box below and press Enter to send it.",
+                "Re-run this wizard any time with /setup.",
+            };
+            MuxBoxModal done = new MuxBoxModal("Setup complete", finish, "Enter to start");
+            _App.Modals.Push(done);
+            await done.Completion.ConfigureAwait(false);
+
+            MarkSetupComplete();
+        }
+
+        // Persists SetupCompleted = true so the wizard is not shown automatically again. Best-effort: a save
+        // failure surfaces as a notice but never interrupts the session.
+        private void MarkSetupComplete()
+        {
+            try
+            {
+                MuxSettings settings = SettingsLoader.LoadSettings();
+                if (!settings.SetupCompleted)
+                {
+                    settings.SetupCompleted = true;
+                    SettingsLoader.SaveSettings(settings);
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Could not save setup state: " + ex.Message);
+            }
+        }
+
         private async Task EditEndpointFormAsync(List<EndpointConfig> endpoints)
         {
             List<string> names = new List<string>();
@@ -4541,8 +4661,68 @@ namespace Mux.Cli.App
 
         private void OpenUsageView()
         {
-            List<string> lines = BuildUsageLines();
-            _App.Modals.Push(new MuxBoxModal("Usage", lines, "Enter / Esc to close", centered: false));
+            if (_UsageQuery == null)
+            {
+                _App.Modals.Push(new MuxBoxModal("Usage", BuildUsageLines(), "Enter / Esc to close", centered: false));
+                return;
+            }
+
+            try
+            {
+                UsageChartData data = BuildUsageChartData();
+                _App.Modals.Push(new UsageChartsModal("Usage", data));
+            }
+            catch (Exception ex)
+            {
+                List<string> error = new List<string>
+                {
+                    "Failed to read usage telemetry:",
+                    ex.Message
+                };
+                _App.Modals.Push(new MuxBoxModal("Usage", error, "Enter / Esc to close", centered: false));
+            }
+        }
+
+        private UsageChartData BuildUsageChartData()
+        {
+            UsageChartData data = new UsageChartData();
+            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            long day = 24L * 60L * 60L * 1000L;
+
+            Mux.Core.Telemetry.UsageSummary today = _UsageQuery!.GetSummaryAsync(WindowFilter(now, day), _Cts.Token).GetAwaiter().GetResult();
+            Mux.Core.Telemetry.UsageSummary week = _UsageQuery.GetSummaryAsync(WindowFilter(now, 7L * day), _Cts.Token).GetAwaiter().GetResult();
+
+            data.HeaderLines.Add("24h:  " + KpiLine(today.Metrics));
+            data.HeaderLines.Add("7d:   " + KpiLine(week.Metrics));
+
+            List<Mux.Core.Telemetry.UsageBucket> series = _UsageQuery.GetTimeseriesAsync(WindowFilter(now, 7L * day), day, _Cts.Token).GetAwaiter().GetResult();
+            foreach (Mux.Core.Telemetry.UsageBucket bucket in series)
+            {
+                data.TokensPerDay.Add(bucket.Metrics.TotalTokens);
+                data.CostPerDay.Add(bucket.Metrics.CostUsd);
+                data.DayLabels.Add(DateTimeOffset.FromUnixTimeMilliseconds(bucket.BucketStartUnixMs).ToLocalTime().ToString("ddd", System.Globalization.CultureInfo.InvariantCulture));
+            }
+
+            List<Mux.Core.Telemetry.UsageBreakdownRow> topModels = _UsageQuery.GetBreakdownAsync("model", WindowFilter(now, 7L * day), _Cts.Token).GetAwaiter().GetResult();
+            int shown = 0;
+            foreach (Mux.Core.Telemetry.UsageBreakdownRow row in topModels)
+            {
+                if (shown >= 5)
+                {
+                    break;
+                }
+
+                shown++;
+                data.ModelLabels.Add(row.Value);
+                data.ModelCosts.Add(row.Metrics.CostUsd);
+            }
+
+            return data;
+        }
+
+        private static string KpiLine(Mux.Core.Telemetry.UsageMetrics m)
+        {
+            return TokShort(m.TotalTokens) + " tok · " + UsdShort(m.CostUsd) + " · " + m.Calls + " calls · " + m.Errors + " err";
         }
 
         private List<string> BuildUsageLines()

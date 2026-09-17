@@ -1664,7 +1664,11 @@ function renderEp(){renderGrid("endpoints_list",
    {h:t("col.model"),get:function(e){return esc(e.Model||"")}},
    {h:t("col.auth"),w:"60px",tip:"Whether an API key is stored for this endpoint (never shown)",get:function(e){return e.ApiKeySet?'🔑':'<span class="muted">—</span>'}}],
   _ep,{icon:"🔌",msg:t("empty.endpoints"),add:"+ "+t("add.endpoint")});}
-function epUsesKey(v){return v.AdapterType==="anthropic"||v.AdapterType==="gemini"||v.AdapterType==="azure-openai";}
+function epIsOpenAiFamily(v){return v.AdapterType==="ollama"||v.AdapterType==="openai"||v.AdapterType==="openai-compatible"||v.AdapterType==="vllm";}
+function epUsesKey(v){return epIsOpenAiFamily(v)||v.AdapterType==="anthropic"||v.AdapterType==="gemini"||v.AdapterType==="azure-openai";}
+function epUsesParamName(v){return epIsOpenAiFamily(v)&&(v.AuthPlacement==="header"||v.AuthPlacement==="query");}
+function epHeadersToText(hs){return (hs||[]).map(function(h){return h.Key+":"+(h.Value?" "+h.Value:"");});}
+function epTextToHeaders(lines){return (lines||[]).map(function(ln){var i=ln.indexOf(":");var k=(i<0?ln:ln.slice(0,i)).trim();var val=(i<0?"":ln.slice(i+1)).trim();return {Key:k,Value:val};}).filter(function(h){return h.Key;});}
 function epFields(isEdit){return [
   {type:"section",label:"Connection"},
   {id:"Name",label:"Name",disabled:isEdit,tip:"A unique name you use to select this endpoint (e.g. with --endpoint). Cannot be changed after creation."},
@@ -1682,14 +1686,19 @@ function epFields(isEdit){return [
   {id:"ShowThinking",label:"Show thinking",type:"checkbox",tip:"Display the model's reasoning ('thinking') output separately from its answer, when the model produces it."},
   {id:"MaxAgentIterations",label:"Max agent iterations",sub:"(blank = global)",type:"number",nullable:true,tip:"Cap on model turns per run for this endpoint. Leave blank to inherit the global setting."},
   {type:"section",label:"Authentication"},
-  {id:"ApiKey",label:"API key",type:"password",placeholder:"(unchanged)",showIf:epUsesKey,tip:"Secret key for this provider. Never shown; leave blank to keep the stored key unchanged."},
+  {id:"AuthPlacement",label:"API key placement",type:"select",options:["bearer","header","query"],showIf:epIsOpenAiFamily,tip:"How the API key is sent for OpenAI-compatible endpoints: as an Authorization: Bearer header (default), a custom header, or a query-string parameter. Use header or query for services that don't accept bearer tokens."},
+  {id:"ApiKey",label:"API key",type:"password",placeholder:"(unchanged)",showIf:epUsesKey,tip:"Secret key for this provider. Never shown; leave blank to keep the stored key unchanged. Supports ${VAR} environment references."},
+  {id:"AuthParameterName",label:"Parameter name",placeholder:"x-api-key / key",showIf:epUsesParamName,tip:"The header name (header placement) or query-string parameter name (query placement) that carries the API key, e.g. x-api-key or key."},
   {id:"Region",label:"Region",sub:"(cloud region)",showIf:function(v){return v.AdapterType==="vertex"||v.AdapterType==="bedrock";},tip:"Cloud region hosting the model, e.g. us-central1 (Vertex) or us-east-1 (Bedrock)."},
   {id:"Project",label:"Project",sub:"(GCP project id)",showIf:function(v){return v.AdapterType==="vertex";},tip:"The Google Cloud project id that owns the Vertex AI resources."},
-  {id:"ApiVersion",label:"API version",showIf:function(v){return v.AdapterType==="azure-openai";},tip:"The Azure OpenAI api-version query value, e.g. 2024-10-21."}];}
-function openEp(i,prefill){var isEdit=i>=0,e=isEdit?_ep[i]:(prefill||{AdapterType:"ollama",MaxTokens:8192,Temperature:0.1,ContextWindow:32768,TimeoutMs:120000});
+  {id:"ApiVersion",label:"API version",showIf:function(v){return v.AdapterType==="azure-openai";},tip:"The Azure OpenAI api-version query value, e.g. 2024-10-21."},
+  {type:"section",label:"Custom headers"},
+  {id:"HeadersText",label:"Headers",sub:"(Name: Value per line)",type:"lines",rows:3,showIf:epUsesKey,tip:"Extra HTTP headers sent with every request, one 'Name: Value' per line. For an existing header, leave the value blank to keep the stored one. Applied in addition to the API-key placement above."}];}
+function openEp(i,prefill){var isEdit=i>=0,e=isEdit?Object.assign({},_ep[i]):(prefill||{AdapterType:"ollama",MaxTokens:8192,Temperature:0.1,ContextWindow:32768,TimeoutMs:120000,AuthPlacement:"bearer"});
+  e.HeadersText=epHeadersToText(e.Headers);
   formModal(isEdit?"Edit endpoint":"Add endpoint",epFields(isEdit),e,function(v){
     if(!v.Name){toast(t("toast.nameReq"),true);return;}
-    v.Headers=(isEdit&&_ep[i].Headers)?_ep[i].Headers:[];
+    v.Headers=epTextToHeaders(v.HeadersText);delete v.HeadersText;
     var list=_ep.slice();if(isEdit)list[i]=v;else list.push(v);
     saveCollection("/v1.0/api/endpoints",list,function(items){_ep=items;closeModal();renderEp();loadEndpoints();});});}
 function delEp(name){confirmModal('Delete endpoint "'+name+'"?',function(){

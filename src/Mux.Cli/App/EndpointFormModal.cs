@@ -12,12 +12,14 @@ namespace Mux.Cli.App
 
     /// <summary>
     /// A single modal form for creating or editing an endpoint. It hosts a <see cref="Form"/> with fields
-    /// for the name, adapter type, base URL, model, an optional API key, and every tunable endpoint
-    /// parameter (default flag, max output tokens, temperature, context window, timeout, tool auto-approval,
-    /// and the optional max-agent-iterations override), navigated with Tab; Enter validates and returns a
-    /// populated <see cref="EndpointConfig"/> (via <see cref="Modal.Completion"/>), and Escape cancels
-    /// (returns null). Fields that are not surfaced here — the nested <see cref="EndpointConfig.Quirks"/>
-    /// and any non-<c>Authorization</c> headers — are carried over unchanged from the edited endpoint.
+    /// for the name, adapter type, base URL, model, an optional API key, the API-key placement (bearer /
+    /// header / query) and its parameter name, and every tunable endpoint parameter (default flag, max output
+    /// tokens, temperature, context window, timeout, tool auto-approval, and the optional max-agent-iterations
+    /// override), navigated with Tab; Enter validates and returns a populated <see cref="EndpointConfig"/>
+    /// (via <see cref="Modal.Completion"/>), and Escape cancels (returns null). The placement fields let the
+    /// key be sent as a bearer header (the default), a caller-named header, or a query-string parameter — the
+    /// last two for services that do not accept bearer tokens. Fields that are not surfaced here — the nested
+    /// <see cref="EndpointConfig.Quirks"/> and any custom headers — are carried over unchanged.
     /// </summary>
     public sealed class EndpointFormModal : Modal
     {
@@ -36,6 +38,7 @@ namespace Mux.Cli.App
         private const string OpenAiDefaultBaseUrl = "http://localhost:11434/v1";
 
         private static readonly string[] _Adapters = { "openai-compatible", "ollama", "openai", "vllm" };
+        private static readonly string[] _Placements = { "bearer", "header", "query" };
 
         // Per-field widget row heights, in the same order fields are added to the form below. Used to
         // compute the focused field's vertical offset so the modal can scroll a form that is taller than
@@ -48,6 +51,8 @@ namespace Mux.Cli.App
             1,                    // Base URL
             1,                    // Model
             1,                    // API key
+            1,                    // API key placement
+            1,                    // Auth parameter name
             1,                    // Default endpoint
             1,                    // Max output tokens
             1,                    // Temperature
@@ -70,6 +75,8 @@ namespace Mux.Cli.App
         private readonly TextField _BaseUrl;
         private readonly TextField _Model;
         private readonly TextField _ApiKey;
+        private readonly TextField _AuthPlacement;
+        private readonly TextField _AuthParameterName;
         private readonly Checkbox _Default;
         private readonly TextField _MaxTokens;
         private readonly TextField _Temperature;
@@ -105,6 +112,8 @@ namespace Mux.Cli.App
             _BaseUrl = new TextField();
             _Model = new TextField();
             _ApiKey = new TextField();
+            _AuthPlacement = new TextField();
+            _AuthParameterName = new TextField();
             _Default = new Checkbox("Use as default endpoint", source.IsDefault);
             _MaxTokens = new TextField();
             _Temperature = new TextField();
@@ -127,7 +136,14 @@ namespace Mux.Cli.App
 
                 _BaseUrl.Value = existing.BaseUrl;
                 _Model.Value = existing.Model;
-                if (existing.Headers != null && existing.Headers.TryGetValue("Authorization", out string? auth) && auth != null)
+
+                // Prefer the endpoint's own API key; fall back to a legacy Authorization: Bearer header so
+                // endpoints saved before the auth-placement model still populate the key field on edit.
+                if (!string.IsNullOrEmpty(existing.ApiKey))
+                {
+                    _ApiKey.Value = existing.ApiKey!;
+                }
+                else if (existing.Headers != null && existing.Headers.TryGetValue("Authorization", out string? auth) && auth != null)
                 {
                     _ApiKey.Value = auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? auth.Substring(7) : auth;
                 }
@@ -136,6 +152,9 @@ namespace Mux.Cli.App
             {
                 _BaseUrl.Value = DefaultBaseUrlFor(ParseAdapter(_Adapter.SelectedOption));
             }
+
+            _AuthPlacement.Value = AuthPlacementEnumConverter.ToWire(source.AuthPlacement);
+            _AuthParameterName.Value = source.AuthParameterName ?? string.Empty;
 
             _MaxTokens.Value = source.MaxTokens.ToString(CultureInfo.InvariantCulture);
             _Temperature.Value = source.Temperature.ToString(CultureInfo.InvariantCulture);
@@ -157,6 +176,8 @@ namespace Mux.Cli.App
             _Form.Add("Base URL", _BaseUrl, () => _BaseUrl.Value.Trim().Length == 0 ? "Base URL is required." : null);
             _Form.Add("Model", _Model, () => _Model.Value.Trim().Length == 0 ? "Model is required." : null);
             _Form.Add("API key (optional)", _ApiKey);
+            _Form.Add("API key placement (bearer/header/query)", _AuthPlacement, () => ValidatePlacement(_AuthPlacement.Value));
+            _Form.Add("Auth parameter name (for header/query)", _AuthParameterName, () => ValidateParameterName(_AuthPlacement.Value, _AuthParameterName.Value));
             _Form.Add("Default", _Default);
             _Form.Add("Max output tokens", _MaxTokens, () => ValidateInt(_MaxTokens.Value, "Max output tokens", 1024, 131072));
             _Form.Add("Temperature", _Temperature, () => ValidateDouble(_Temperature.Value, "Temperature", 0.0, 2.0));
@@ -300,6 +321,7 @@ namespace Mux.Cli.App
             }
 
             AdapterTypeEnum adapterType = ParseAdapter(_Adapter.SelectedOption);
+            string apiKey = _ApiKey.Value.Trim();
 
             EndpointConfig endpoint = new EndpointConfig
             {
@@ -317,12 +339,20 @@ namespace Mux.Cli.App
                 ReasoningEffort = BuildReasoningConfig(),
                 ShowThinking = _ShowThinking.Checked,
 
+                // The key is stored on the endpoint and placed by AuthPlacement (bearer header, a caller-named
+                // header, or a query-string parameter) — the engine applies it, so no Authorization header is
+                // written here.
+                ApiKey = apiKey.Length > 0 ? apiKey : null,
+                AuthPlacement = AuthPlacementEnumConverter.Parse(_AuthPlacement.Value),
+                AuthParameterName = _AuthParameterName.Value.Trim().Length > 0 ? _AuthParameterName.Value.Trim() : null,
+
                 // The quirks object is not editable here; carry it over so an edit never silently resets a
                 // hand-tuned backend behavior profile back to the adapter defaults.
                 Quirks = _Existing?.Quirks
             };
 
-            // Preserve any custom headers other than Authorization, which is owned by the API key field.
+            // Preserve any custom headers other than Authorization: the API key is now carried on the endpoint
+            // (see AuthPlacement above), so a stale legacy Authorization header is intentionally dropped.
             if (_Existing?.Headers != null)
             {
                 foreach (KeyValuePair<string, string> header in _Existing.Headers)
@@ -332,12 +362,6 @@ namespace Mux.Cli.App
                         endpoint.Headers[header.Key] = header.Value;
                     }
                 }
-            }
-
-            string apiKey = _ApiKey.Value.Trim();
-            if (apiKey.Length > 0)
-            {
-                endpoint.Headers["Authorization"] = "Bearer " + apiKey;
             }
 
             Close(endpoint);
@@ -464,6 +488,28 @@ namespace Mux.Cli.App
             }
 
             return config;
+        }
+
+        private static string? ValidatePlacement(string value)
+        {
+            string trimmed = (value ?? string.Empty).Trim().ToLowerInvariant();
+            if (trimmed.Length == 0 || Array.IndexOf(_Placements, trimmed) >= 0)
+            {
+                return null;
+            }
+
+            return "Placement must be " + string.Join(", ", _Placements) + ".";
+        }
+
+        private static string? ValidateParameterName(string placement, string parameterName)
+        {
+            AuthPlacementEnum resolved = AuthPlacementEnumConverter.Parse(placement);
+            if (resolved != AuthPlacementEnum.Bearer && (parameterName ?? string.Empty).Trim().Length == 0)
+            {
+                return "Auth parameter name is required for header or query placement.";
+            }
+
+            return null;
         }
 
         private static string? ValidateOptionalEffort(string value)

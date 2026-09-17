@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ApiClient } from '../api/ApiClient';
-import { EndpointDetail, McpServer, MuxServerSettings, PromptCatalogEntry, PromptProfile, Subagent } from '../api/types';
+import { EndpointDetail, EndpointHeader, McpServer, MuxServerSettings, PromptCatalogEntry, PromptProfile, Subagent } from '../api/types';
 import { MuxServerLifecycle } from '../server/lifecycle';
 import { logError } from '../util/logger';
 import { FormField, FormPanel } from './FormPanel';
@@ -15,6 +15,25 @@ function splitLines(value: string): string[] {
         .split('\n')
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
+}
+
+/** Renders an endpoint's headers as "Name: Value" lines for the custom-headers editor (values are blanked on read). */
+function endpointHeadersToText(headers: EndpointHeader[] | undefined): string {
+    return (headers ?? [])
+        .map((h) => (h.Value && h.Value.length > 0 ? `${h.Key}: ${h.Value}` : `${h.Key}:`))
+        .join('\n');
+}
+
+/** Parses "Name: Value" lines into header entries, splitting on the first colon; a blank value preserves the stored one server-side. */
+function endpointTextToHeaders(value: string): EndpointHeader[] {
+    return splitLines(value)
+        .map((line) => {
+            const idx = line.indexOf(':');
+            const key = (idx < 0 ? line : line.slice(0, idx)).trim();
+            const val = idx < 0 ? '' : line.slice(idx + 1).trim();
+            return { Key: key, Value: val };
+        })
+        .filter((h) => h.Key.length > 0);
 }
 
 /**
@@ -65,16 +84,27 @@ export class ManageActions {
     }
 
     private async editEndpointFormWith(client: ApiClient, all: EndpointDetail[], existing: EndpointDetail | undefined): Promise<void> {
+        // The OpenAI-family adapters honor a configurable auth placement; everything except the cloud-IAM
+        // adapters (vertex/bedrock) takes an API key and custom headers. These drive the adaptive visibility.
+        const openAiFamily = ['ollama', 'openai', 'openai-compatible', 'vllm'];
+        const usesKey = [...openAiFamily, 'anthropic', 'gemini', 'azure-openai'];
+
         const fields: FormField[] = [
             { key: 'Name', label: vscode.l10n.t('Name'), type: 'text', value: existing?.Name ?? '', required: true },
             { key: 'AdapterType', label: vscode.l10n.t('Adapter'), type: 'select', options: ADAPTERS, value: existing?.AdapterType ?? 'openai-compatible' },
             { key: 'BaseUrl', label: vscode.l10n.t('Base URL'), type: 'text', value: existing?.BaseUrl ?? '', hint: vscode.l10n.t('The API base URL, e.g. http://localhost:11434/v1') },
             { key: 'Model', label: vscode.l10n.t('Model'), type: 'text', value: existing?.Model ?? '', required: true },
-            { key: 'ApiKey', label: vscode.l10n.t('API key'), type: 'password', value: existing?.ApiKeySet ? true : '', hint: vscode.l10n.t('Leave blank to keep the stored key.') },
+            { key: 'AuthPlacement', label: vscode.l10n.t('API key placement'), type: 'select', options: ['bearer', 'header', 'query'], value: existing?.AuthPlacement ?? 'bearer', hint: vscode.l10n.t('How the API key is sent: an Authorization: Bearer header, a custom header, or a query-string parameter.'), showIf: [{ key: 'AdapterType', anyOf: openAiFamily }] },
+            { key: 'ApiKey', label: vscode.l10n.t('API key'), type: 'password', value: existing?.ApiKeySet ? true : '', hint: vscode.l10n.t('Leave blank to keep the stored key.'), showIf: [{ key: 'AdapterType', anyOf: usesKey }] },
+            { key: 'AuthParameterName', label: vscode.l10n.t('Parameter name'), type: 'text', value: existing?.AuthParameterName ?? '', hint: vscode.l10n.t('Header or query-string parameter that carries the key, e.g. x-api-key or key.'), showIf: [{ key: 'AdapterType', anyOf: openAiFamily }, { key: 'AuthPlacement', anyOf: ['header', 'query'] }] },
+            { key: 'Region', label: vscode.l10n.t('Region'), type: 'text', value: existing?.Region ?? '', hint: vscode.l10n.t('Cloud region, e.g. us-central1 (Vertex) or us-east-1 (Bedrock).'), showIf: [{ key: 'AdapterType', anyOf: ['vertex', 'bedrock'] }] },
+            { key: 'Project', label: vscode.l10n.t('Project'), type: 'text', value: existing?.Project ?? '', hint: vscode.l10n.t('Google Cloud project id.'), showIf: [{ key: 'AdapterType', anyOf: ['vertex'] }] },
+            { key: 'ApiVersion', label: vscode.l10n.t('API version'), type: 'text', value: existing?.ApiVersion ?? '', hint: vscode.l10n.t('Azure OpenAI api-version, e.g. 2024-10-21.'), showIf: [{ key: 'AdapterType', anyOf: ['azure-openai'] }] },
             { key: 'MaxTokens', label: vscode.l10n.t('Max tokens'), type: 'number', value: existing?.MaxTokens ?? 8192 },
             { key: 'Temperature', label: vscode.l10n.t('Temperature'), type: 'number', value: existing?.Temperature ?? 0.1 },
             { key: 'ContextWindow', label: vscode.l10n.t('Context window'), type: 'number', value: existing?.ContextWindow ?? 32768 },
             { key: 'TimeoutMs', label: vscode.l10n.t('Timeout (ms)'), type: 'number', value: existing?.TimeoutMs ?? 120000 },
+            { key: 'Headers', label: vscode.l10n.t('Custom headers'), type: 'textarea', value: endpointHeadersToText(existing?.Headers), hint: vscode.l10n.t('Extra HTTP headers, one "Name: Value" per line. Leave a value blank to keep the stored one.'), showIf: [{ key: 'AdapterType', anyOf: usesKey }] },
             { key: 'IsDefault', label: vscode.l10n.t('Default endpoint'), type: 'checkbox', value: existing?.IsDefault ?? false },
             { key: 'AutoApproveTools', label: vscode.l10n.t('Auto-approve tools for this endpoint'), type: 'checkbox', value: existing?.AutoApproveTools ?? false },
             { key: 'ShowThinking', label: vscode.l10n.t('Show model thinking'), type: 'checkbox', value: existing?.ShowThinking ?? false },
@@ -98,6 +128,12 @@ export class ManageActions {
             TimeoutMs: Number(result.TimeoutMs) || undefined,
             AutoApproveTools: Boolean(result.AutoApproveTools),
             ShowThinking: Boolean(result.ShowThinking),
+            AuthPlacement: String(result.AuthPlacement ?? 'bearer'),
+            AuthParameterName: String(result.AuthParameterName ?? '').trim(),
+            Region: String(result.Region ?? '').trim(),
+            Project: String(result.Project ?? '').trim(),
+            ApiVersion: String(result.ApiVersion ?? '').trim(),
+            Headers: endpointTextToHeaders(String(result.Headers ?? '')),
         };
 
         // A blank API key preserves the stored one (write-only field).

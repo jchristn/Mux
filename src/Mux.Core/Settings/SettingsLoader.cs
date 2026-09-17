@@ -1356,6 +1356,7 @@ namespace Mux.Core.Settings
                 SkillsDirectory = settings.SkillsDirectory,
                 TaskPlanningEnabled = settings.TaskPlanningEnabled,
                 TaskParallelismEnabled = settings.TaskParallelismEnabled,
+                SetupCompleted = settings.SetupCompleted,
                 ExternalSearch = NormalizeExternalSearchSettings(settings.ExternalSearch),
                 Context = NormalizeContextSettings(settings.Context),
                 Rest = NormalizeRestServerSettings(settings.Rest),
