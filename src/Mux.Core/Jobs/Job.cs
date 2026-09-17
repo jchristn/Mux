@@ -394,6 +394,16 @@ namespace Mux.Core.Jobs
             lock (_SyncRoot)
             {
                 JobState previous = _State;
+
+                // Terminal states are final. Once a job has completed, failed, or been cancelled, a late or
+                // spurious transition — a scheduler re-evaluation, or a write-lease-wait callback that fires
+                // after the worker already finished — must not resurrect it to a running or queued state. This
+                // guards against a Completed→Running race being observed by callers that poll the state.
+                if (IsTerminalState(previous) && !IsTerminalState(state))
+                {
+                    return previous;
+                }
+
                 _State = state;
 
                 if (state == JobState.Running && !_StartedUtc.HasValue)

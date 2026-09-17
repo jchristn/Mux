@@ -1952,8 +1952,10 @@ namespace Mux.Cli.App
                 _ActiveJob = null;
 
                 // Start the next queued prompt in order — unless the queue is paused for editing, in which
-                // case the shell goes idle and resumes when the editor closes.
-                if (!_QueuePaused && _PendingPrompts.Count > 0)
+                // case the shell goes idle and resumes when the editor closes. Never advance the queue while
+                // the app is shutting down: a turn whose projection ended because the app was disposed must not
+                // dequeue and launch the next prompt (which would echo it and start a doomed turn).
+                if (!_QueuePaused && !_Cts.IsCancellationRequested && _PendingPrompts.Count > 0)
                 {
                     next = _PendingPrompts[0];
                     _PendingPrompts.RemoveAt(0);
