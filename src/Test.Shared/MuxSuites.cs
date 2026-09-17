@@ -76,6 +76,7 @@ namespace Test.Shared
 
                     // Settings + non-interactive CLI command unit suites (ported from Test.Xunit).
                     EndpointConfigSuite.Create(),
+                    EndpointAuthPlacementSuite.Create(),
                     SettingsLoaderSuite.Create(),
 
                     // REST server (v0.9.0): settings + live route behavior.

@@ -69,7 +69,13 @@ namespace Mux.Core.Llm
             // A mux-owned transport carries certificate policy and per-endpoint headers. Streaming
             // responses stay open for minutes, so the transport timeout is disabled and per-request
             // timeouts are enforced by PolyPrompt via TimeoutMs.
-            _HttpClient = MuxHttpClientFactory.Create(ignoreCertErrors);
+            //
+            // For the OpenAI-family HTTP adapters the endpoint's auth placement decides where the API key
+            // goes: a bearer header (handed to the PolyPrompt client below), a caller-named header (applied to
+            // the transport by ApplyEndpointHeaders), or a caller-named query-string parameter (appended by a
+            // delegating handler installed here). Native adapters carry a fixed scheme and are unaffected.
+            DelegatingHandler? authHandler = BuildQueryStringAuthHandler(_Endpoint);
+            _HttpClient = MuxHttpClientFactory.Create(ignoreCertErrors, authHandler);
             _HttpClient.Timeout = Timeout.InfiniteTimeSpan;
             ApplyEndpointHeaders();
 
@@ -550,18 +556,70 @@ namespace Mux.Core.Llm
 
         private void ApplyEndpointHeaders()
         {
-            if (_Endpoint.Headers == null)
+            if (_Endpoint.Headers != null)
             {
-                return;
-            }
-
-            foreach (KeyValuePair<string, string> header in _Endpoint.Headers)
-            {
-                if (!string.IsNullOrEmpty(header.Key))
+                foreach (KeyValuePair<string, string> header in _Endpoint.Headers)
                 {
-                    _HttpClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
+                    if (!string.IsNullOrEmpty(header.Key))
+                    {
+                        _HttpClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
+                    }
                 }
             }
+
+            // Header auth placement (OpenAI-family only): send the API key as a caller-named header. An
+            // explicit Headers entry with the same name (added above) wins, so a hand-crafted header is never
+            // clobbered by the generated one.
+            if (IsOpenAiFamilyAdapter(_Endpoint.AdapterType)
+                && _Endpoint.AuthPlacement == AuthPlacementEnum.Header
+                && !string.IsNullOrWhiteSpace(_Endpoint.AuthParameterName))
+            {
+                string? key = ResolveConfigValue(_Endpoint.ApiKey);
+                if (!string.IsNullOrEmpty(key)
+                    && !_HttpClient.DefaultRequestHeaders.Contains(_Endpoint.AuthParameterName!))
+                {
+                    _HttpClient.DefaultRequestHeaders.TryAddWithoutValidation(_Endpoint.AuthParameterName!, key);
+                }
+            }
+        }
+
+        // Builds a query-string auth handler when the endpoint (an OpenAI-family adapter) requests query
+        // placement and has both a key and a parameter name; otherwise null (no handler is installed).
+        private static DelegatingHandler? BuildQueryStringAuthHandler(EndpointConfig endpoint)
+        {
+            if (!IsOpenAiFamilyAdapter(endpoint.AdapterType)
+                || endpoint.AuthPlacement != AuthPlacementEnum.Query
+                || string.IsNullOrWhiteSpace(endpoint.AuthParameterName))
+            {
+                return null;
+            }
+
+            string? key = ResolveConfigValue(endpoint.ApiKey);
+            if (string.IsNullOrEmpty(key))
+            {
+                return null;
+            }
+
+            return new QueryStringAuthHandler(endpoint.AuthParameterName!, key!);
+        }
+
+        // The OpenAI-family HTTP adapters share a single OpenAI-compatible wire protocol and so honor the
+        // configurable auth placement. Native adapters (anthropic, gemini, azure-openai, vertex, bedrock)
+        // carry a fixed credential scheme and ignore placement.
+        private static bool IsOpenAiFamilyAdapter(AdapterTypeEnum type)
+        {
+            return type == AdapterTypeEnum.OpenAi
+                || type == AdapterTypeEnum.Vllm
+                || type == AdapterTypeEnum.OpenAiCompatible
+                || type == AdapterTypeEnum.Ollama;
+        }
+
+        // The bearer key to hand a PolyPrompt OpenAI-family client: the resolved key only when placement is
+        // bearer. For header/query placement the key is applied to the transport instead, so the client must
+        // not also send an Authorization header.
+        private static string? OpenAiFamilyBearerKey(EndpointConfig endpoint, string? resolvedApiKey)
+        {
+            return endpoint.AuthPlacement == AuthPlacementEnum.Bearer ? resolvedApiKey : null;
         }
 
         private static bool IsNetworkFailure(Pp.ToolChatStreamingResponse response)
@@ -829,8 +887,9 @@ namespace Mux.Core.Llm
                     // Pass the API key through: a local Ollama needs none (a blank key resolves to null and
                     // sends no auth), but an authenticated Ollama-compatible gateway expects the key as an
                     // Authorization: Bearer header — which PolyPrompt's OllamaClient sends when given a key.
-                    // Without this, the endpoint's "API key" field was silently ignored for Ollama.
-                    client = new OllamaClient(NormalizeOllamaBaseUrl(endpoint.BaseUrl), apiKey: apiKey, logging: SilentLogging, httpClient: httpClient);
+                    // Honor the auth placement: only bearer placement hands the key to the client; header and
+                    // query placements apply it to the transport instead (see the constructor).
+                    client = new OllamaClient(NormalizeOllamaBaseUrl(endpoint.BaseUrl), apiKey: OpenAiFamilyBearerKey(endpoint, apiKey), logging: SilentLogging, httpClient: httpClient);
                     break;
                 case AdapterTypeEnum.Anthropic:
                     // Anthropic authenticates with an API key sent as x-api-key; PolyPrompt's client attaches
@@ -900,9 +959,11 @@ namespace Mux.Core.Llm
                 case AdapterTypeEnum.Vllm:
                 case AdapterTypeEnum.OpenAiCompatible:
                 default:
-                    // The OpenAI family authenticates via Headers (e.g. Authorization: Bearer ${KEY}), which
-                    // mux applies to the injected transport, so no api key is passed to the client.
-                    client = new OpenAiClient(endpoint.BaseUrl, apiKey: null, logging: SilentLogging, httpClient: httpClient);
+                    // The OpenAI family authenticates by the endpoint's auth placement. Bearer placement hands
+                    // the key to the client (sent as Authorization: Bearer); header and query placements apply
+                    // it to the transport instead (see the constructor). A hand-written Authorization entry in
+                    // Headers still works when no API key is set (the key resolves to null and none is sent).
+                    client = new OpenAiClient(endpoint.BaseUrl, apiKey: OpenAiFamilyBearerKey(endpoint, apiKey), logging: SilentLogging, httpClient: httpClient);
                     break;
             }
 

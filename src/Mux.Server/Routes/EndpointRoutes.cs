@@ -185,7 +185,9 @@ namespace Mux.Server.Routes
                 ApiKey = null,
                 Region = e.Region,
                 Project = e.Project,
-                ApiVersion = e.ApiVersion
+                ApiVersion = e.ApiVersion,
+                AuthPlacement = AuthPlacementEnumConverter.ToWire(e.AuthPlacement),
+                AuthParameterName = e.AuthParameterName
             };
 
             if (e.Headers != null)
@@ -220,6 +222,8 @@ namespace Mux.Server.Routes
                 Region = string.IsNullOrWhiteSpace(dto.Region) ? null : dto.Region,
                 Project = string.IsNullOrWhiteSpace(dto.Project) ? null : dto.Project,
                 ApiVersion = string.IsNullOrWhiteSpace(dto.ApiVersion) ? null : dto.ApiVersion,
+                AuthPlacement = AuthPlacementEnumConverter.Parse(dto.AuthPlacement),
+                AuthParameterName = string.IsNullOrWhiteSpace(dto.AuthParameterName) ? null : dto.AuthParameterName.Trim(),
                 Headers = new Dictionary<string, string>(),
                 // Reasoning effort is not edited from the dashboard yet; preserve whatever was configured.
                 ReasoningEffort = prior?.ReasoningEffort?.Clone(),

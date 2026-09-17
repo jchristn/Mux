@@ -1933,7 +1933,7 @@ namespace Mux.Cli.App
                 // preserves alternation). Only a cancelled/stopped turn, or one that ended with no answer AND
                 // no completion (errored / timed out), is dropped, so an interrupted turn never leaves a
                 // dangling user message that the next turn would batch with the new prompt.
-                string answer = projector.CapturedAssistantText;
+                string? answer = projector.CapturedAssistantText;
                 bool completed = projector.LastRunCompleted != null;
                 if (!projector.WasCancelled && (!string.IsNullOrEmpty(answer) || completed))
                 {
@@ -1942,7 +1942,7 @@ namespace Mux.Cli.App
                     _ConversationHistory.Add(new ConversationMessage
                     {
                         Role = RoleEnum.Assistant,
-                        Content = answer,
+                        Content = answer ?? string.Empty,
                         Reasoning = string.IsNullOrEmpty(thinking) ? null : thinking
                     });
                 }

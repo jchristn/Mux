@@ -67,6 +67,15 @@ namespace Mux.Server.Models
         /// <summary>Azure OpenAI api-version.</summary>
         public string? ApiVersion { get; set; }
 
+        /// <summary>
+        /// How the API key is presented for the OpenAI-family adapters: <c>bearer</c> (default), <c>header</c>,
+        /// or <c>query</c>. Ignored by native adapters (anthropic/gemini/azure-openai/vertex/bedrock).
+        /// </summary>
+        public string AuthPlacement { get; set; } = "bearer";
+
+        /// <summary>Header or query-string parameter name that carries the API key for header/query placement.</summary>
+        public string? AuthParameterName { get; set; }
+
         /// <summary>Header entries; values are blanked on read and preserved-on-blank on write.</summary>
         public List<HeaderDto> Headers { get; set; } = new List<HeaderDto>();
     }

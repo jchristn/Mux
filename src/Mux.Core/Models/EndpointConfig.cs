@@ -31,6 +31,8 @@ namespace Mux.Core.Models
         private string? _Region = null;
         private string? _Project = null;
         private string? _ApiVersion = null;
+        private AuthPlacementEnum _AuthPlacement = AuthPlacementEnum.Bearer;
+        private string? _AuthParameterName = null;
 
         #endregion
 
@@ -259,6 +261,35 @@ namespace Mux.Core.Models
         {
             get => _ApiVersion;
             set => _ApiVersion = value;
+        }
+
+        /// <summary>
+        /// How <see cref="ApiKey"/> is presented to the service for the OpenAI-family HTTP adapters
+        /// (<c>openai</c>, <c>openai-compatible</c>, <c>vllm</c>, <c>ollama</c>): as an
+        /// <c>Authorization: Bearer</c> header (the default), as a caller-named header, or as a caller-named
+        /// query-string parameter. This is required for services that authenticate with a query-string value
+        /// or a custom header rather than a bearer token. Native adapters (<c>anthropic</c>, <c>gemini</c>,
+        /// <c>azure-openai</c>, <c>vertex</c>, <c>bedrock</c>) carry a fixed scheme and ignore this.
+        /// </summary>
+        [JsonPropertyName("authPlacement")]
+        public AuthPlacementEnum AuthPlacement
+        {
+            get => _AuthPlacement;
+            set => _AuthPlacement = value;
+        }
+
+        /// <summary>
+        /// The header name (for <see cref="AuthPlacementEnum.Header"/>) or query-string parameter name (for
+        /// <see cref="AuthPlacementEnum.Query"/>) that carries <see cref="ApiKey"/>. Ignored when
+        /// <see cref="AuthPlacement"/> is <see cref="AuthPlacementEnum.Bearer"/>. Common values: <c>x-api-key</c>,
+        /// <c>api-key</c>, or <c>key</c>.
+        /// </summary>
+        [JsonPropertyName("authParameterName")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? AuthParameterName
+        {
+            get => _AuthParameterName;
+            set => _AuthParameterName = value;
         }
 
         #endregion
