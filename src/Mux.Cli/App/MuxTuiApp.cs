@@ -66,6 +66,7 @@ namespace Mux.Cli.App
         private readonly JobManager _JobManager;
         private readonly ApprovalPolicyEnum _ApprovalPolicy;
         private readonly SessionStore? _Store;
+        private readonly bool _EnableFirstRunWizard;
         private readonly Mux.Core.Telemetry.UsageQueryService? _UsageQuery;
         private readonly Mux.Core.Telemetry.PricingTable _Pricing = new Mux.Core.Telemetry.PricingTable();
         private Mux.Core.Checkpoints.CheckpointManager? _CheckpointManager;
@@ -199,8 +200,10 @@ namespace Mux.Cli.App
             Mux.Core.Checkpoints.CheckpointManager? checkpointManager = null,
             Mux.Core.Plugins.PluginRegistry? pluginRegistry = null,
             string? workingDirectory = null,
-            Mux.Core.Telemetry.UsageQueryService? usageQuery = null)
+            Mux.Core.Telemetry.UsageQueryService? usageQuery = null,
+            bool enableFirstRunWizard = false)
         {
+            _EnableFirstRunWizard = enableFirstRunWizard;
             _CheckpointManager = checkpointManager;
             _PluginRegistry = pluginRegistry;
             _UsageQuery = usageQuery;
@@ -3433,6 +3436,13 @@ namespace Mux.Cli.App
         // completed. Best-effort and non-fatal: any failure to read state simply skips the auto-prompt.
         private void MaybeStartFirstRunWizard()
         {
+            // Off unless the real launcher opted in, so test harnesses that drive the run loop are never
+            // interrupted by an onboarding modal.
+            if (!_EnableFirstRunWizard)
+            {
+                return;
+            }
+
             try
             {
                 MuxSettings settings = SettingsLoader.LoadSettings();

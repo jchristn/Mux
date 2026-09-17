@@ -6,6 +6,7 @@ namespace Test.Shared.Suites
     using System.Threading.Tasks;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Settings;
     using Mux.Core.Setup;
     using Touchstone.Core;
 
@@ -61,6 +62,36 @@ namespace Test.Shared.Suites
                     new TestCaseDescriptor(SuiteId, "CompletedFlagSuppressesSetup", "The completed flag suppresses the wizard even with no endpoint", (CancellationToken ct) =>
                     {
                         MuxAssert.IsFalse(SetupState.NeedsSetup(null, true), "completed flag suppresses the wizard");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "SeedEndpointDoesNotCountAsUsable", "The untouched first-run seed does not suppress the wizard", (CancellationToken ct) =>
+                    {
+                        List<EndpointConfig> seedOnly = new List<EndpointConfig> { SettingsLoader.CreateSeedEndpoint() };
+                        MuxAssert.IsFalse(SetupState.HasUsableEndpoint(seedOnly), "seed alone is not usable");
+                        MuxAssert.IsTrue(SetupState.NeedsSetup(seedOnly, false), "fresh install with only the seed needs setup");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "EditedSeedCountsAsUsable", "A seed whose model was changed counts as a real endpoint", (CancellationToken ct) =>
+                    {
+                        EndpointConfig edited = SettingsLoader.CreateSeedEndpoint();
+                        edited.Model = "llama3.1:8b";
+                        List<EndpointConfig> endpoints = new List<EndpointConfig> { edited };
+                        MuxAssert.IsTrue(SetupState.HasUsableEndpoint(endpoints), "edited seed is usable");
+                        MuxAssert.IsFalse(SetupState.NeedsSetup(endpoints, false), "no setup needed once the seed is edited");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "SeedPlusRealEndpointSuppressesSetup", "A real endpoint alongside the seed suppresses the wizard", (CancellationToken ct) =>
+                    {
+                        List<EndpointConfig> endpoints = new List<EndpointConfig>
+                        {
+                            SettingsLoader.CreateSeedEndpoint(),
+                            new EndpointConfig { Name = "mine", AdapterType = AdapterTypeEnum.OpenAi, BaseUrl = "http://x", Model = "gpt-5" }
+                        };
+                        MuxAssert.IsTrue(SetupState.HasUsableEndpoint(endpoints), "real endpoint is usable");
+                        MuxAssert.IsFalse(SetupState.NeedsSetup(endpoints, false), "no setup needed with a real endpoint");
                         return Task.CompletedTask;
                     }),
 

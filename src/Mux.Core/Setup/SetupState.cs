@@ -2,6 +2,7 @@ namespace Mux.Core.Setup
 {
     using System.Collections.Generic;
     using Mux.Core.Models;
+    using Mux.Core.Settings;
 
     /// <summary>
     /// Shared logic for deciding whether the first-run setup wizard should be shown. Every surface (TUI,
@@ -13,11 +14,12 @@ namespace Mux.Core.Setup
     public static class SetupState
     {
         /// <summary>
-        /// Determines whether at least one configured endpoint is usable — that is, it names a model. An
-        /// endpoint with no model cannot serve a request, so it does not count toward "already set up".
+        /// Determines whether at least one configured endpoint is usable — that is, it names a model and is
+        /// not the untouched first-run seed. An endpoint with no model cannot serve a request, and the seed is
+        /// present on every fresh install, so neither counts toward "already set up".
         /// </summary>
         /// <param name="endpoints">The configured endpoints, or null.</param>
-        /// <returns>True when at least one endpoint names a model.</returns>
+        /// <returns>True when at least one real endpoint names a model.</returns>
         public static bool HasUsableEndpoint(IEnumerable<EndpointConfig>? endpoints)
         {
             if (endpoints == null)
@@ -27,7 +29,9 @@ namespace Mux.Core.Setup
 
             foreach (EndpointConfig endpoint in endpoints)
             {
-                if (endpoint != null && !string.IsNullOrWhiteSpace(endpoint.Model))
+                if (endpoint != null
+                    && !string.IsNullOrWhiteSpace(endpoint.Model)
+                    && !SettingsLoader.IsSeedEndpoint(endpoint))
                 {
                     return true;
                 }

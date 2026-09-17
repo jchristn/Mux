@@ -630,7 +630,8 @@ CONFIG:
                     checkpointManager: checkpointManager,
                     pluginRegistry: pluginRegistry,
                     workingDirectory: runtime.WorkingDirectory,
-                    usageQuery: usageTelemetry.CreateQueryService(() => SettingsLoader.LoadPricing()));
+                    usageQuery: usageTelemetry.CreateQueryService(() => SettingsLoader.LoadPricing()),
+                    enableFirstRunWizard: true);
 
                 // Expose the shell so MCP connection notices (raised on the runtime's background thread once
                 // Start() is called below) can be written into the transcript.

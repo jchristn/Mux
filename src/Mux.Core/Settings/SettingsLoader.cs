@@ -72,6 +72,56 @@ namespace Mux.Core.Settings
             return new ConfigDirectoryOverrideScope(previous);
         }
 
+        /// <summary>The name of the endpoint seeded into a fresh configuration on first run.</summary>
+        public const string SeedEndpointName = "ollama-local";
+
+        /// <summary>The model of the endpoint seeded into a fresh configuration on first run.</summary>
+        public const string SeedEndpointModel = "qwen2.5-coder:7b";
+
+        private const string SeedEndpointBaseUrl = "http://localhost:11434";
+
+        /// <summary>
+        /// Creates the default endpoint seeded into a fresh configuration on first run — a local Ollama
+        /// endpoint pointed at <c>qwen2.5-coder:7b</c>. Single-sourced so the first-run wizard can recognize
+        /// (and disregard) the untouched seed via <see cref="IsSeedEndpoint"/>.
+        /// </summary>
+        /// <returns>The seed endpoint.</returns>
+        public static EndpointConfig CreateSeedEndpoint()
+        {
+            return new EndpointConfig
+            {
+                Name = SeedEndpointName,
+                AdapterType = AdapterTypeEnum.Ollama,
+                BaseUrl = SeedEndpointBaseUrl,
+                Model = SeedEndpointModel,
+                IsDefault = true,
+                MaxTokens = 8192,
+                Temperature = 0.1,
+                ContextWindow = 32768,
+                TimeoutMs = 120000,
+                Headers = new Dictionary<string, string>(),
+                AutoApproveTools = false,
+                MaxAgentIterations = null,
+                Quirks = null
+            };
+        }
+
+        /// <summary>
+        /// Determines whether an endpoint is the unmodified first-run seed. A fresh install always has the
+        /// seed, so it must not be treated as user-provided configuration when deciding whether to offer the
+        /// setup wizard. Any edit to its name, adapter, model, or base URL makes it a real endpoint.
+        /// </summary>
+        /// <param name="endpoint">The endpoint to test.</param>
+        /// <returns>True when the endpoint matches the untouched seed.</returns>
+        public static bool IsSeedEndpoint(EndpointConfig? endpoint)
+        {
+            return endpoint != null
+                && string.Equals(endpoint.Name, SeedEndpointName, StringComparison.Ordinal)
+                && endpoint.AdapterType == AdapterTypeEnum.Ollama
+                && string.Equals(endpoint.Model, SeedEndpointModel, StringComparison.Ordinal)
+                && string.Equals((endpoint.BaseUrl ?? string.Empty).TrimEnd('/'), SeedEndpointBaseUrl, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// Ensures the mux configuration directory exists, creating it and seeding
         /// default configuration files if necessary.
@@ -87,26 +137,9 @@ namespace Mux.Core.Settings
             string endpointsPath = Path.Combine(configDir, "endpoints.json");
             if (!File.Exists(endpointsPath))
             {
-                EndpointConfig defaultEndpoint = new EndpointConfig
-                {
-                    Name = "ollama-local",
-                    AdapterType = AdapterTypeEnum.Ollama,
-                    BaseUrl = "http://localhost:11434",
-                    Model = "qwen2.5-coder:7b",
-                    IsDefault = true,
-                    MaxTokens = 8192,
-                    Temperature = 0.1,
-                    ContextWindow = 32768,
-                    TimeoutMs = 120000,
-                    Headers = new Dictionary<string, string>(),
-                    AutoApproveTools = false,
-                    MaxAgentIterations = null,
-                    Quirks = null
-                };
-
                 EndpointsFile root = new EndpointsFile
                 {
-                    Endpoints = new List<EndpointConfig> { defaultEndpoint }
+                    Endpoints = new List<EndpointConfig> { CreateSeedEndpoint() }
                 };
 
                 string defaultEndpoints = JsonSerializer.Serialize(root, _JsonWriteOptions);

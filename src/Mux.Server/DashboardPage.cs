@@ -1709,12 +1709,15 @@ function delEp(name){confirmModal('Delete endpoint "'+name+'"?',function(){
 /* Shown automatically when no endpoint names a model and setup has not been completed; re-runnable from the
    Endpoints toolbar. Reuses the adaptive endpoint form (openEp), the model-load probe (warmModel's route) for
    the connectivity check, and the chat composer for the first prompt. */
+// The untouched first-run seed (ollama-local / qwen2.5-coder:7b) is present on every fresh install, so it must
+// not count as user configuration when deciding whether to offer the setup wizard. Mirrors SettingsLoader.IsSeedEndpoint.
+function epIsSeed(e){return e&&e.Name==="ollama-local"&&e.AdapterType==="ollama"&&e.Model==="qwen2.5-coder:7b"&&(""+(e.BaseUrl||"")).replace(/\/+$/,"")==="http://localhost:11434";}
 function maybeStartWizard(){
   api("/v1.0/api/settings").then(function(s){
     if(s&&s.SetupCompleted)return;
     api("/v1.0/api/endpoints").then(function(r){
       var items=(r&&r.Items)||[];
-      var hasUsable=items.some(function(e){return e&&e.Model&&(""+e.Model).trim().length>0;});
+      var hasUsable=items.some(function(e){return e&&e.Model&&(""+e.Model).trim().length>0&&!epIsSeed(e);});
       if(!hasUsable)startSetupWizard();
     }).catch(function(){});
   }).catch(function(){});

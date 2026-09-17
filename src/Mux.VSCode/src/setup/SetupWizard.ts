@@ -69,7 +69,21 @@ export class SetupWizard {
     }
 
     private static hasUsableEndpoint(endpoints: EndpointDetail[]): boolean {
-        return endpoints.some((endpoint) => typeof endpoint.Model === 'string' && endpoint.Model.trim().length > 0);
+        return endpoints.some(
+            (endpoint) =>
+                typeof endpoint.Model === 'string' && endpoint.Model.trim().length > 0 && !SetupWizard.isSeedEndpoint(endpoint),
+        );
+    }
+
+    // The untouched first-run seed (ollama-local / qwen2.5-coder:7b) ships on every fresh install, so it must
+    // not count as user configuration when deciding whether to offer the wizard. Mirrors SettingsLoader.IsSeedEndpoint.
+    private static isSeedEndpoint(endpoint: EndpointDetail): boolean {
+        return (
+            endpoint.Name === 'ollama-local' &&
+            endpoint.AdapterType === 'ollama' &&
+            endpoint.Model === 'qwen2.5-coder:7b' &&
+            (endpoint.BaseUrl ?? '').replace(/\/+$/, '') === 'http://localhost:11434'
+        );
     }
 
     private async run(client: ApiClient): Promise<void> {
