@@ -69,7 +69,9 @@ namespace Mux.Cli.App
 
             if (_Data.Distributions.Count > 0)
             {
-                _LatencyChart = new BoxPlotChart { ShowAxis = true };
+                // Vertical orientation (one column per metric) suits a KPI panel better than the horizontal
+                // rows and reads like the web/desktop candlestick view.
+                _LatencyChart = new BoxPlotChart { ShowAxis = true, Orientation = BoxPlotOrientation.Vertical };
                 foreach (UsageDistributionEntry d in _Data.Distributions)
                 {
                     // Min / Avg / P95 / P99 / Max maps onto the box-plot's five-number summary; BoxSummary
@@ -186,7 +188,8 @@ namespace Mux.Cli.App
             return Math.Min(8, Math.Max(1, chart.Count));
         }
 
-        // A box-plot draws one row per category plus a shared axis row.
+        // A vertical box-plot is a 2-D plot that fills the height it is given (one column per category), so
+        // allocate a fixed, readable height rather than scaling by category count.
         private static int EstimateBoxPlotHeight(BoxPlotChart? chart)
         {
             if (chart == null)
@@ -194,7 +197,7 @@ namespace Mux.Cli.App
                 return 0;
             }
 
-            return Math.Min(8, Math.Max(1, chart.Count) + 1);
+            return 10;
         }
 
         private static string Trim(string text, int width)

@@ -17,8 +17,8 @@ All notable changes to mux are documented here.
   query-string auth handler in the engine; native adapters keep their fixed credential scheme.
 - **Usage charts in the terminal.** `/usage` now renders KPI lines plus a tokens-per-day line chart, a
   cost-per-day bar chart, a top-models-by-cost bar chart, and a min–avg–p95–p99–max latency **distribution**
-  (TTFT / total / streaming) drawn as a box-and-whisker chart — matching the web/desktop/VS Code usage views.
-  The distribution view uses TUIKit 0.13.0's new `BoxPlotChart` widget.
+  (TTFT / total / streaming) drawn as a vertical box-and-whisker chart — matching the web/desktop/VS Code
+  usage views. The distribution view uses TUIKit 0.13.1's new `BoxPlotChart` widget (vertical orientation).
 - **First-run setup wizard on every UI surface.** On a fresh install — no user-configured endpoint yet — each
   surface (terminal, desktop, web, VS Code) guides you through defining your first endpoint, checking its
   connectivity, and sending your first prompt, then records completion so it does not reappear. Re-run it any

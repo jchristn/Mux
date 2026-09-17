@@ -251,10 +251,16 @@ namespace Test.Shared.Suites
                             using (CancellationTokenSource runCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
                             {
                                 Task run = app.RunAsync(runCts.Token);
-                                // The real launch shows the startup splash (no --prompt). The wizard must appear
-                                // ABOVE it — assert the top modal is the wizard, not merely that a modal exists.
-                                await WaitUntilAsync(() => app.ModalCount >= 2, ct).ConfigureAwait(false);
-                                MuxAssert.IsTrue(app.ModalCount >= 2, "the setup wizard modal is shown above the splash on first run");
+
+                                // The real launch shows the startup splash (no --prompt). The wizard must wait
+                                // for the splash to be dismissed and render in its place — never stacked on top.
+                                await WaitUntilAsync(() => app.ModalCount >= 1, ct).ConfigureAwait(false);
+                                MuxAssert.AreEqual(1, app.ModalCount, "only the splash is shown; the wizard is deferred, not stacked");
+                                MuxAssert.DoesNotContain("Set up now", backend.PeekOutput(), "the wizard is not rendered over the splash");
+
+                                backend.FeedInput(" "); // any key dismisses the splash
+                                await WaitUntilAsync(() => backend.PeekOutput().Contains("Set up now", StringComparison.Ordinal), ct).ConfigureAwait(false);
+                                MuxAssert.Contains("Set up now", backend.PeekOutput(), "the wizard appears after the splash is dismissed");
 
                                 runCts.Cancel();
                                 try { await run.ConfigureAwait(false); } catch (OperationCanceledException) { }

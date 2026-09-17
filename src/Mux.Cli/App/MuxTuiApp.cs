@@ -67,6 +67,7 @@ namespace Mux.Cli.App
         private readonly ApprovalPolicyEnum _ApprovalPolicy;
         private readonly SessionStore? _Store;
         private readonly bool _EnableFirstRunWizard;
+        private readonly MuxBoxModal? _SplashModal;
         private readonly Mux.Core.Telemetry.UsageQueryService? _UsageQuery;
         private readonly Mux.Core.Telemetry.PricingTable _Pricing = new Mux.Core.Telemetry.PricingTable();
         private Mux.Core.Checkpoints.CheckpointManager? _CheckpointManager;
@@ -365,7 +366,9 @@ namespace Mux.Cli.App
 
             if (showSplash)
             {
-                _App.Modals.Push(new MuxBoxModal("mux", MuxBanner.SplashLines(Defaults.ProductVersion), "press any key to start", centered: true));
+                MuxBoxModal splash = new MuxBoxModal("mux", MuxBanner.SplashLines(Defaults.ProductVersion), "press any key to start", centered: true);
+                _SplashModal = splash;
+                _App.Modals.Push(splash);
             }
 
             // Fire session-start hooks in the background so a slow hook never delays the shell coming up.
@@ -624,10 +627,10 @@ namespace Mux.Cli.App
                     StartSessionMirror(_JobManager.SessionId);
 
                     // First run: with no usable endpoint and setup not yet completed, guide the user through
-                    // defining an endpoint, checking connectivity, and sending a first prompt. Posted onto the
-                    // loop so it runs on the first frame — pushing a modal before RunAsync starts targets a
-                    // not-yet-live modal stack and is lost.
-                    _App.Post(MaybeStartFirstRunWizard);
+                    // defining an endpoint, checking connectivity, and sending a first prompt. Deferred until
+                    // after the startup splash is dismissed so the wizard renders in its place, never stacked
+                    // on top of it.
+                    StartFirstRunWizardWhenReady();
 
                     await _App.RunAsync(loopCts.Token).ConfigureAwait(false);
                 }
@@ -3432,6 +3435,41 @@ namespace Mux.Cli.App
         public void OpenSetupWizard()
         {
             _ = RunFirstRunWizardAsync();
+        }
+
+        // Schedules the first-run wizard. When the startup splash is showing, it waits for the user to dismiss
+        // the splash and only then launches the wizard, so the wizard replaces the splash rather than stacking
+        // over it. With no splash it launches on the next frame.
+        private void StartFirstRunWizardWhenReady()
+        {
+            if (!_EnableFirstRunWizard)
+            {
+                return;
+            }
+
+            if (_SplashModal != null)
+            {
+                _ = WaitForSplashThenStartWizardAsync();
+            }
+            else
+            {
+                _App.Post(MaybeStartFirstRunWizard);
+            }
+        }
+
+        private async Task WaitForSplashThenStartWizardAsync()
+        {
+            try
+            {
+                await _SplashModal!.Completion.ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // If the splash faults or is cancelled, still offer the wizard.
+            }
+
+            // Marshal back onto the loop thread to push the wizard's first modal on the next frame.
+            _App.Post(MaybeStartFirstRunWizard);
         }
 
         // Shows the first-run wizard automatically when there is no usable endpoint and setup has not been
