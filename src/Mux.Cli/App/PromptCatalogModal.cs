@@ -27,7 +27,7 @@ namespace Mux.Cli.App
         private const int PadY = 1;
 
         private readonly List<PromptDefinition> _Entries;
-        private readonly TextEditor _Editor = new TextEditor();
+        private readonly TextEditor _Editor = new TextEditor { WordWrap = true };
 
         private PromptResolver _Resolver;
         private int _Selected;

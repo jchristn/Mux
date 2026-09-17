@@ -20,7 +20,7 @@ namespace Mux.Cli.App
         private const int PadY = 1;
 
         private readonly string _Title;
-        private readonly TextEditor _Editor = new TextEditor { IsFocused = true };
+        private readonly TextEditor _Editor = new TextEditor { IsFocused = true, WordWrap = true };
         private Rect _EditorRect;
 
         #endregion

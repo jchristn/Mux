@@ -273,6 +273,23 @@ namespace Test.Shared.Suites
                         }
                     }),
 
+                    new TestCaseDescriptor(SuiteId, "ComposerGrowsWhenLineWraps", "Typing a line longer than the composer width grows the composer to its wrapped rows", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(30, 12);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            MuxAssert.AreEqual(1, app.ComposerRowCount, "composer starts at one row");
+                            backend.FeedInput("the quick brown fox jumps over the lazy dog again and again");
+                            for (int i = 0; i < 80; i++)
+                            {
+                                app.PumpInputOnce();
+                            }
+
+                            MuxAssert.IsTrue(app.ComposerRowCount > 1, "composer grew to fit the wrapped line (rows=" + app.ComposerRowCount + ")");
+                        }
+                    }),
+
                     new TestCaseDescriptor(SuiteId, "HomePaneShownBeforeAnyJob", "Before any job the home pane is focused", async (CancellationToken ct) =>
                     {
                         HeadlessBackend backend = new HeadlessBackend(80, 24);

@@ -36,7 +36,7 @@ namespace Mux.Cli.App
         }
 
         private readonly List<PromptProfile> _Profiles;
-        private readonly TextEditor _Editor = new TextEditor { IsFocused = true };
+        private readonly TextEditor _Editor = new TextEditor { IsFocused = true, WordWrap = true };
         private readonly TextField _Name = new TextField();
 
         private int _SelectedProfile;
