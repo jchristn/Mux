@@ -4717,49 +4717,36 @@ namespace Mux.Cli.App
                 return;
             }
 
-            try
-            {
-                UsageChartData data = BuildUsageChartData();
-                _App.Modals.Push(new UsageChartsModal("Usage", data));
-            }
-            catch (Exception ex)
-            {
-                List<string> error = new List<string>
-                {
-                    "Failed to read usage telemetry:",
-                    ex.Message
-                };
-                _App.Modals.Push(new MuxBoxModal("Usage", error, "Enter / Esc to close", centered: false));
-            }
+            // The paged charts modal queries per range through this provider (it handles its own errors), so
+            // the view stays a pure renderer and switching range re-queries without reopening.
+            _App.Modals.Push(new UsageChartsModal("Usage", BuildUsageChartData, Mux.Core.Telemetry.UsageRange.Day));
         }
 
-        private UsageChartData BuildUsageChartData()
+        private UsageChartData BuildUsageChartData(Mux.Core.Telemetry.UsageRange range)
         {
             UsageChartData data = new UsageChartData();
             long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            long day = 24L * 60L * 60L * 1000L;
+            Mux.Core.Telemetry.UsageWindow window = Mux.Core.Telemetry.UsageWindow.Compute(range, now);
+            Mux.Core.Telemetry.UsageFilter filter = new Mux.Core.Telemetry.UsageFilter { FromUnixMs = window.FromUnixMs, ToUnixMs = window.ToUnixMs };
 
-            Mux.Core.Telemetry.UsageSummary today = _UsageQuery!.GetSummaryAsync(WindowFilter(now, day), _Cts.Token).GetAwaiter().GetResult();
-            Mux.Core.Telemetry.UsageSummary week = _UsageQuery.GetSummaryAsync(WindowFilter(now, 7L * day), _Cts.Token).GetAwaiter().GetResult();
+            Mux.Core.Telemetry.UsageSummary summary = _UsageQuery!.GetSummaryAsync(filter, _Cts.Token).GetAwaiter().GetResult();
+            data.HeaderLines.Add(KpiLine(summary.Metrics));
 
-            data.HeaderLines.Add("24h:  " + KpiLine(today.Metrics));
-            data.HeaderLines.Add("7d:   " + KpiLine(week.Metrics));
-
-            List<Mux.Core.Telemetry.UsageBucket> series = _UsageQuery.GetTimeseriesAsync(WindowFilter(now, 7L * day), day, _Cts.Token).GetAwaiter().GetResult();
+            List<Mux.Core.Telemetry.UsageBucket> series = _UsageQuery.GetTimeseriesAsync(filter, window.BucketMs, _Cts.Token).GetAwaiter().GetResult();
             foreach (Mux.Core.Telemetry.UsageBucket bucket in series)
             {
-                data.TokensPerDay.Add(bucket.Metrics.TotalTokens);
-                data.CostPerDay.Add(bucket.Metrics.CostUsd);
-                data.DayLabels.Add(DateTimeOffset.FromUnixTimeMilliseconds(bucket.BucketStartUnixMs).ToLocalTime().ToString("ddd", System.Globalization.CultureInfo.InvariantCulture));
+                data.TokensPerBucket.Add(bucket.Metrics.TotalTokens);
+                data.CostPerBucket.Add(bucket.Metrics.CostUsd);
+                data.BucketLabels.Add(FormatBucketLabel(bucket.BucketStartUnixMs, range));
             }
 
-            // Latency distributions (7d) as min/avg/p95/p99/max box-and-whisker rows. Only include a metric
-            // when it has samples, so an idle window renders no empty rows.
-            AddDistribution(data, "TTFT", week.Metrics.TtftMsDist);
-            AddDistribution(data, "Total", week.Metrics.TotalMsDist);
-            AddDistribution(data, "Stream", week.Metrics.StreamMsDist);
+            // Latency distributions as min/avg/p95/p99/max box-and-whisker columns. Only include a metric
+            // when it has samples, so an idle range renders no empty columns.
+            AddDistribution(data, "TTFT", summary.Metrics.TtftMsDist);
+            AddDistribution(data, "Total", summary.Metrics.TotalMsDist);
+            AddDistribution(data, "Stream", summary.Metrics.StreamMsDist);
 
-            List<Mux.Core.Telemetry.UsageBreakdownRow> topModels = _UsageQuery.GetBreakdownAsync("model", WindowFilter(now, 7L * day), _Cts.Token).GetAwaiter().GetResult();
+            List<Mux.Core.Telemetry.UsageBreakdownRow> topModels = _UsageQuery.GetBreakdownAsync("model", filter, _Cts.Token).GetAwaiter().GetResult();
             int shown = 0;
             foreach (Mux.Core.Telemetry.UsageBreakdownRow row in topModels)
             {
@@ -4774,6 +4761,21 @@ namespace Mux.Cli.App
             }
 
             return data;
+        }
+
+        private static string FormatBucketLabel(long unixMs, Mux.Core.Telemetry.UsageRange range)
+        {
+            DateTimeOffset t = DateTimeOffset.FromUnixTimeMilliseconds(unixMs).ToLocalTime();
+            switch (range)
+            {
+                case Mux.Core.Telemetry.UsageRange.Hour:
+                case Mux.Core.Telemetry.UsageRange.Day:
+                    return t.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+                case Mux.Core.Telemetry.UsageRange.Week:
+                    return t.ToString("ddd", System.Globalization.CultureInfo.InvariantCulture);
+                default:
+                    return t.ToString("MM/dd", System.Globalization.CultureInfo.InvariantCulture);
+            }
         }
 
         private static string KpiLine(Mux.Core.Telemetry.UsageMetrics m)

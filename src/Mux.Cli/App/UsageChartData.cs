@@ -3,24 +3,25 @@ namespace Mux.Cli.App
     using System.Collections.Generic;
 
     /// <summary>
-    /// A plain, pre-computed snapshot of usage telemetry for <see cref="UsageChartsModal"/> to render. Holds
-    /// the KPI header lines, a per-day tokens and cost series (with matching day labels), and a top-models
-    /// breakdown (labels with matching costs). Keeping it free of any query or widget dependency makes the
-    /// chart modal a pure view and lets the data assembly be unit-tested on its own.
+    /// A plain, pre-computed snapshot of usage telemetry for one time range, rendered by
+    /// <see cref="UsageChartsModal"/>. Holds the KPI header lines, a per-bucket tokens and cost series (with
+    /// matching bucket labels), a top-models breakdown (labels with matching costs), and latency
+    /// distributions. Free of any query or widget dependency so the chart modal stays a pure view and the
+    /// assembly can be unit-tested on its own.
     /// </summary>
     public sealed class UsageChartData
     {
-        /// <summary>KPI summary lines shown above the charts (for example tokens/cost/calls for each window).</summary>
+        /// <summary>KPI summary lines shown in the header (tokens/cost/calls for the selected range).</summary>
         public List<string> HeaderLines { get; } = new List<string>();
 
-        /// <summary>Total tokens per day over the trailing window, oldest first.</summary>
-        public List<double> TokensPerDay { get; } = new List<double>();
+        /// <summary>Total tokens per bucket over the range, oldest first; parallel to <see cref="BucketLabels"/>.</summary>
+        public List<double> TokensPerBucket { get; } = new List<double>();
 
-        /// <summary>Total cost (USD) per day over the trailing window, oldest first; parallel to <see cref="DayLabels"/>.</summary>
-        public List<double> CostPerDay { get; } = new List<double>();
+        /// <summary>Total cost (USD) per bucket over the range, oldest first; parallel to <see cref="BucketLabels"/>.</summary>
+        public List<double> CostPerBucket { get; } = new List<double>();
 
-        /// <summary>Short day labels (for example "Mon") parallel to <see cref="TokensPerDay"/> and <see cref="CostPerDay"/>.</summary>
-        public List<string> DayLabels { get; } = new List<string>();
+        /// <summary>Short time labels (range-appropriate, e.g. "14:20", "Mon", "09/17") parallel to the per-bucket series.</summary>
+        public List<string> BucketLabels { get; } = new List<string>();
 
         /// <summary>Model names for the top-models-by-cost breakdown, highest first; parallel to <see cref="ModelCosts"/>.</summary>
         public List<string> ModelLabels { get; } = new List<string>();

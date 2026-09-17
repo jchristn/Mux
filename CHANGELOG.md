@@ -15,10 +15,12 @@ All notable changes to mux are documented here.
   so services that authenticate with a custom header or a query-string value, not a bearer token, are now
   first-class. Backed by a new `AuthPlacement` model on the endpoint (persisted and exposed over REST) and a
   query-string auth handler in the engine; native adapters keep their fixed credential scheme.
-- **Usage charts in the terminal.** `/usage` now renders KPI lines plus a tokens-per-day line chart, a
-  cost-per-day bar chart, a top-models-by-cost bar chart, and a min–avg–p95–p99–max latency **distribution**
-  (TTFT / total / streaming) drawn as a vertical box-and-whisker chart — matching the web/desktop/VS Code
-  usage views. The distribution view uses TUIKit 0.13.1's new `BoxPlotChart` widget (vertical orientation).
+- **Usage analytics in the terminal.** `/usage` opens a full-screen, **paged** analytics view — one chart per
+  page (tokens over time, cost over time, top models by cost, and a min–avg–p95–p99–max latency
+  **distribution**), navigated with ←/→. A **range picker** (keys 1–4: last hour / day / week / month)
+  re-queries live, on the same window+bucket grid the web and desktop use. Time-series pages carry a labeled
+  Y axis and X-axis time ticks; the latency page uses TUIKit 0.13.1's new vertical `BoxPlotChart`. Reaches
+  parity with the web/desktop/VS Code usage dashboards.
 - **First-run setup wizard on every UI surface.** On a fresh install — no user-configured endpoint yet — each
   surface (terminal, desktop, web, VS Code) guides you through defining your first endpoint, checking its
   connectivity, and sending your first prompt, then records completion so it does not reappear. Re-run it any

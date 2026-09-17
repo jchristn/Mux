@@ -1,17 +1,20 @@
 namespace Test.Shared.Suites
 {
+    using System;
     using System.Collections.Generic;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Cli.App;
+    using Mux.Core.Telemetry;
     using Touchstone.Core;
     using TUIKit;
+    using TUIKit.Input;
 
     /// <summary>
-    /// Touchstone suite for <see cref="UsageChartsModal"/>: it renders the KPI header and chart sections into
-    /// a headless surface without overflowing or throwing, degrades to just the header when a series is empty,
-    /// and closes on Enter/Escape.
+    /// Touchstone suite for <see cref="UsageChartsModal"/>: the paged, range-aware usage view renders one
+    /// chart per page with axis labels, navigates pages with the arrow keys, switches range with the number
+    /// keys (re-querying its provider), surfaces provider errors, and closes on Enter/Escape.
     /// </summary>
     public static class UsageChartsModalSuite
     {
@@ -25,50 +28,74 @@ namespace Test.Shared.Suites
         {
             return new TestSuiteDescriptor(
                 SuiteId,
-                "Usage charts modal rendering",
+                "Usage charts modal: paging, ranges, and axes",
                 new List<TestCaseDescriptor>
                 {
-                    new TestCaseDescriptor(SuiteId, "RendersHeaderAndCharts", "The modal renders KPI header and chart sections", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "FirstPageTokensWithAxes", "The first page shows tokens over time with X/Y axis labels", (CancellationToken ct) =>
                     {
-                        UsageChartData data = SampleData();
-                        UsageChartsModal modal = new UsageChartsModal("Usage", data);
-                        // Tall enough to hold every section: header, tokens line chart, cost bar chart (one row
-                        // per day), top-models bar chart, and the latency distribution box-plot all fit without
-                        // the last section being room-skipped. Truncation on a short terminal is covered separately.
-                        string rendered = Render(modal, 80, 44);
+                        UsageChartsModal modal = new UsageChartsModal("Usage", r => SampleData(), UsageRange.Day);
+                        string rendered = Render(modal, 120, 40);
 
-                        MuxAssert.Contains("Usage", rendered, "title drawn");
-                        MuxAssert.Contains("24h:", rendered, "24h KPI line drawn");
-                        MuxAssert.Contains("Tokens per day", rendered, "tokens section heading drawn");
-                        MuxAssert.Contains("Top models by cost", rendered, "models section heading drawn");
-                        MuxAssert.Contains("Latency distribution", rendered, "latency distribution section heading drawn");
-                        MuxAssert.Contains("Enter / Esc to close", rendered, "hint drawn");
+                        MuxAssert.Contains("Tokens over time", rendered, "page title");
+                        MuxAssert.Contains("Last day", rendered, "range label");
+                        MuxAssert.Contains("page 1/4", rendered, "page indicator");
+                        MuxAssert.Contains("9k", rendered, "Y-axis max token label");
+                        MuxAssert.Contains("Mon", rendered, "X-axis time label");
+                        MuxAssert.Contains("Esc close", rendered, "footer hint");
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor(SuiteId, "EmptySeriesRendersHeaderOnly", "With no series the modal still renders the header without throwing", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "ArrowKeysPageThroughCharts", "Right arrow pages through cost, models, and latency views", (CancellationToken ct) =>
                     {
-                        UsageChartData data = new UsageChartData();
-                        data.HeaderLines.Add("24h:  0 tok · $0.00 · 0 calls · 0 err");
-                        UsageChartsModal modal = new UsageChartsModal("Usage", data);
-                        string rendered = Render(modal, 80, 24);
+                        UsageChartsModal modal = new UsageChartsModal("Usage", r => SampleData(), UsageRange.Day);
 
-                        MuxAssert.Contains("24h:", rendered, "header drawn");
-                        MuxAssert.DoesNotContain("Tokens per day", rendered, "no chart section when series empty");
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Right));
+                        MuxAssert.Contains("Cost over time", Render(modal, 120, 40), "second page is cost");
+
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Right));
+                        MuxAssert.Contains("Top models by cost", Render(modal, 120, 40), "third page is models");
+
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Right));
+                        string latency = Render(modal, 120, 40);
+                        MuxAssert.Contains("Latency distribution", latency, "fourth page is latency");
+                        MuxAssert.Contains("milliseconds", latency, "latency Y-axis unit label");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "NumberKeysSwitchRange", "Number keys switch the range and re-query the provider", (CancellationToken ct) =>
+                    {
+                        UsageRange requested = UsageRange.Day;
+                        UsageChartsModal modal = new UsageChartsModal("Usage", r => { requested = r; return SampleData(); }, UsageRange.Day);
+
+                        modal.HandleKey(KeyEvent.Char('3')); // week
+                        MuxAssert.AreEqual(UsageRange.Week, requested, "provider queried for the week range");
+                        MuxAssert.Contains("Last week", Render(modal, 120, 40), "range label updated");
+
+                        modal.HandleKey(KeyEvent.Char('1')); // hour
+                        MuxAssert.AreEqual(UsageRange.Hour, requested, "provider queried for the hour range");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "ProviderErrorSurfaces", "A provider failure is shown rather than thrown", (CancellationToken ct) =>
+                    {
+                        UsageChartsModal modal = new UsageChartsModal("Usage", r => throw new InvalidOperationException("db locked"), UsageRange.Day);
+                        string rendered = Render(modal, 120, 40);
+                        MuxAssert.Contains("Failed to read usage", rendered, "error surfaced");
+                        MuxAssert.Contains("db locked", rendered, "error detail surfaced");
                         return Task.CompletedTask;
                     }),
 
                     new TestCaseDescriptor(SuiteId, "NarrowSurfaceDoesNotThrow", "Rendering onto a tiny surface truncates without throwing", (CancellationToken ct) =>
                     {
-                        UsageChartsModal modal = new UsageChartsModal("Usage", SampleData());
-                        Render(modal, 12, 6);
+                        UsageChartsModal modal = new UsageChartsModal("Usage", r => SampleData(), UsageRange.Day);
+                        Render(modal, 14, 7);
                         return Task.CompletedTask;
                     }),
 
                     new TestCaseDescriptor(SuiteId, "EnterClosesModal", "Enter closes the modal with a null result", (CancellationToken ct) =>
                     {
-                        UsageChartsModal modal = new UsageChartsModal("Usage", SampleData());
-                        bool handled = modal.HandleKey(TUIKit.Input.KeyEvent.Special(TUIKit.Input.KeyCode.Enter));
+                        UsageChartsModal modal = new UsageChartsModal("Usage", r => SampleData(), UsageRange.Day);
+                        bool handled = modal.HandleKey(KeyEvent.Special(KeyCode.Enter));
                         MuxAssert.IsTrue(handled, "Enter handled");
                         MuxAssert.IsTrue(modal.Completion.IsCompleted, "modal completed");
                         return Task.CompletedTask;
@@ -79,16 +106,15 @@ namespace Test.Shared.Suites
         private static UsageChartData SampleData()
         {
             UsageChartData data = new UsageChartData();
-            data.HeaderLines.Add("24h:  12.3k tok · $0.45 · 8 calls · 0 err");
-            data.HeaderLines.Add("7d:   98k tok · $3.20 · 64 calls · 1 err");
-            string[] days = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
+            data.HeaderLines.Add("98k tok · $3.20 · 64 calls · 1 err");
+            string[] labels = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
             double[] tokens = { 1000, 4000, 2500, 8000, 6000, 1500, 9000 };
             double[] costs = { 0.10, 0.40, 0.25, 0.80, 0.60, 0.15, 0.90 };
-            for (int i = 0; i < days.Length; i++)
+            for (int i = 0; i < labels.Length; i++)
             {
-                data.DayLabels.Add(days[i]);
-                data.TokensPerDay.Add(tokens[i]);
-                data.CostPerDay.Add(costs[i]);
+                data.BucketLabels.Add(labels[i]);
+                data.TokensPerBucket.Add(tokens[i]);
+                data.CostPerBucket.Add(costs[i]);
             }
 
             data.ModelLabels.Add("gpt-5");
