@@ -4737,14 +4737,11 @@ namespace Mux.Cli.App
             {
                 data.TokensPerBucket.Add(bucket.Metrics.TotalTokens);
                 data.CostPerBucket.Add(bucket.Metrics.CostUsd);
+                data.TtftMsPerBucket.Add(bucket.Metrics.AvgTtftMs);
+                data.TotalMsPerBucket.Add(bucket.Metrics.AvgTotalMs);
+                data.StreamMsPerBucket.Add(bucket.Metrics.AvgStreamMs);
                 data.BucketLabels.Add(FormatBucketLabel(bucket.BucketStartUnixMs, range));
             }
-
-            // Latency distributions as min/avg/p95/p99/max box-and-whisker columns. Only include a metric
-            // when it has samples, so an idle range renders no empty columns.
-            AddDistribution(data, "TTFT", summary.Metrics.TtftMsDist);
-            AddDistribution(data, "Total", summary.Metrics.TotalMsDist);
-            AddDistribution(data, "Stream", summary.Metrics.StreamMsDist);
 
             List<Mux.Core.Telemetry.UsageBreakdownRow> topModels = _UsageQuery.GetBreakdownAsync("model", filter, _Cts.Token).GetAwaiter().GetResult();
             int shown = 0;
@@ -4781,16 +4778,6 @@ namespace Mux.Cli.App
         private static string KpiLine(Mux.Core.Telemetry.UsageMetrics m)
         {
             return TokShort(m.TotalTokens) + " tok · " + UsdShort(m.CostUsd) + " · " + m.Calls + " calls · " + m.Errors + " err";
-        }
-
-        private static void AddDistribution(UsageChartData data, string label, Mux.Core.Telemetry.UsageDistribution dist)
-        {
-            if (dist == null || dist.Count <= 0)
-            {
-                return;
-            }
-
-            data.Distributions.Add(new UsageDistributionEntry(label, dist.Min, dist.Avg, dist.P95, dist.P99, dist.Max));
         }
 
         private List<string> BuildUsageLines()

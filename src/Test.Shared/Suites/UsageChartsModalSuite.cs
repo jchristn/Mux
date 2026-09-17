@@ -38,27 +38,31 @@ namespace Test.Shared.Suites
 
                         MuxAssert.Contains("Tokens over time", rendered, "page title");
                         MuxAssert.Contains("Last day", rendered, "range label");
-                        MuxAssert.Contains("page 1/4", rendered, "page indicator");
+                        MuxAssert.Contains("page 1/6", rendered, "page indicator");
                         MuxAssert.Contains("9k", rendered, "Y-axis max token label");
                         MuxAssert.Contains("Mon", rendered, "X-axis time label");
                         MuxAssert.Contains("Esc close", rendered, "footer hint");
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor(SuiteId, "ArrowKeysPageThroughCharts", "Right arrow pages through cost, models, and latency views", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "ArrowKeysPageThroughCharts", "Right arrow pages through cost, the three latency metrics, and models", (CancellationToken ct) =>
                     {
                         UsageChartsModal modal = new UsageChartsModal("Usage", r => SampleData(), UsageRange.Day);
 
                         modal.HandleKey(KeyEvent.Special(KeyCode.Right));
-                        MuxAssert.Contains("Cost over time", Render(modal, 120, 40), "second page is cost");
+                        MuxAssert.Contains("Cost over time", Render(modal, 120, 40), "page 2 is cost");
 
                         modal.HandleKey(KeyEvent.Special(KeyCode.Right));
-                        MuxAssert.Contains("Top models by cost", Render(modal, 120, 40), "third page is models");
+                        MuxAssert.Contains("Time to first token", Render(modal, 120, 40), "page 3 is TTFT");
 
                         modal.HandleKey(KeyEvent.Special(KeyCode.Right));
-                        string latency = Render(modal, 120, 40);
-                        MuxAssert.Contains("Latency distribution", latency, "fourth page is latency");
-                        MuxAssert.Contains("milliseconds", latency, "latency Y-axis unit label");
+                        MuxAssert.Contains("Total latency", Render(modal, 120, 40), "page 4 is total latency");
+
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Right));
+                        MuxAssert.Contains("Streaming time", Render(modal, 120, 40), "page 5 is streaming time");
+
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Right));
+                        MuxAssert.Contains("Top models by cost", Render(modal, 120, 40), "page 6 is models");
                         return Task.CompletedTask;
                     }),
 
@@ -110,19 +114,23 @@ namespace Test.Shared.Suites
             string[] labels = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
             double[] tokens = { 1000, 4000, 2500, 8000, 6000, 1500, 9000 };
             double[] costs = { 0.10, 0.40, 0.25, 0.80, 0.60, 0.15, 0.90 };
+            double[] ttft = { 200, 340, 260, 900, 500, 180, 700 };
+            double[] total = { 800, 2600, 1400, 6400, 3200, 900, 5000 };
+            double[] stream = { 600, 2200, 1100, 5400, 2600, 700, 4200 };
             for (int i = 0; i < labels.Length; i++)
             {
                 data.BucketLabels.Add(labels[i]);
                 data.TokensPerBucket.Add(tokens[i]);
                 data.CostPerBucket.Add(costs[i]);
+                data.TtftMsPerBucket.Add(ttft[i]);
+                data.TotalMsPerBucket.Add(total[i]);
+                data.StreamMsPerBucket.Add(stream[i]);
             }
 
             data.ModelLabels.Add("gpt-5");
             data.ModelCosts.Add(2.10);
             data.ModelLabels.Add("claude-opus-4-8");
             data.ModelCosts.Add(1.10);
-            data.Distributions.Add(new UsageDistributionEntry("TTFT", 120, 340, 900, 1400, 2100));
-            data.Distributions.Add(new UsageDistributionEntry("Total", 800, 2600, 6400, 9200, 15000));
             return data;
         }
 

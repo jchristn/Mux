@@ -10,12 +10,12 @@ namespace Mux.Cli.App
     using TUIKit.Widgets;
 
     /// <summary>
-    /// A large, paged usage-analytics view. Each chart is its own page — tokens over time, cost over time,
-    /// top models by cost, and the latency distribution — navigated with the arrow keys; the time range
-    /// (last hour / day / week / month) is chosen with the number keys and re-queried through an injected
-    /// data provider so the modal itself performs no I/O. Time-series pages draw a labeled Y axis and X-axis
-    /// time ticks; the models page shows category labels with a value scale; the latency page uses the
-    /// box-plot's own value axis. Enter or Escape closes it.
+    /// A large, paged usage-analytics view. Each metric is its own page — tokens, cost, time-to-first-token,
+    /// total latency, streaming time (all as bar charts over time), and top models by cost — navigated with
+    /// the arrow keys. The time range (last hour / day / week / month) is chosen with the number keys and
+    /// re-queried through an injected data provider so the modal performs no I/O. Over-time pages draw a
+    /// labeled Y axis and several X-axis time ticks; the models page shows category labels with a value scale.
+    /// Enter or Escape closes it.
     /// </summary>
     public sealed class UsageChartsModal : Modal
     {
@@ -23,15 +23,20 @@ namespace Mux.Cli.App
 
         private const int PadX = 2;
         private const int PadY = 1;
-        private const int YAxisWidth = 9;
+        private const int YAxisWidth = 10;
+
+        // Eighth-block glyphs (U+2581..U+2588) for sub-cell bar heights.
+        private static readonly string[] _Eighths = { "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█" };
 
         private static readonly UsageRange[] _Ranges = { UsageRange.Hour, UsageRange.Day, UsageRange.Week, UsageRange.Month };
         private static readonly string[] _PageTitles =
         {
             "Tokens over time",
             "Cost over time",
-            "Top models by cost",
-            "Latency distribution (ms)"
+            "Time to first token (ms)",
+            "Total latency (ms)",
+            "Streaming time (ms)",
+            "Top models by cost"
         };
 
         private readonly string _Title;
@@ -103,7 +108,6 @@ namespace Mux.Cli.App
             int screenWidth = surface.Size.Width;
             int screenHeight = surface.Size.Height;
 
-            // Fill most of the screen so the charts are readable.
             int boxWidth = Math.Max(24, screenWidth - 2);
             int boxHeight = Math.Max(10, screenHeight - 2);
             int boxX = Math.Max(0, (screenWidth - boxWidth) / 2);
@@ -122,7 +126,6 @@ namespace Mux.Cli.App
             CellStyle heading = CellStyle.Default.WithForeground(Color.FromPalette(6));
             CellStyle muted = CellStyle.Default.WithForeground(Color.FromPalette(8));
 
-            // Header: page/range line, then the KPI line.
             string header = _PageTitles[_Page] + "   ·   " + RangeLabel(_Range) + "   ·   page " + (_Page + 1) + "/" + _PageTitles.Length;
             surface.DrawText(contentX, firstRow, Trim(header, contentW), heading);
             string kpi = _Error.Length > 0 ? _Error : (_Data.HeaderLines.Count > 0 ? _Data.HeaderLines[0] : "No usage in this range.");
@@ -132,7 +135,7 @@ namespace Mux.Cli.App
             int chartBottom = footerRow - 1;
             if (chartBottom >= chartTop && _Error.Length == 0)
             {
-                RenderPage(surface, contentX, chartTop, contentW, chartBottom - chartTop + 1, text, muted);
+                RenderPage(surface, contentX, chartTop, contentW, chartBottom - chartTop + 1, muted);
             }
 
             surface.DrawText(contentX, footerRow, Trim("←/→ page · 1 hour · 2 day · 3 week · 4 month · Esc close", contentW), muted);
@@ -156,27 +159,33 @@ namespace Mux.Cli.App
             }
         }
 
-        private void RenderPage(ISurface surface, int x, int y, int w, int h, CellStyle text, CellStyle muted)
+        private void RenderPage(ISurface surface, int x, int y, int w, int h, CellStyle muted)
         {
             switch (_Page)
             {
                 case 0:
-                    RenderTimeSeries(surface, x, y, w, h, _Data.TokensPerBucket, v => FmtTokens(v), Color.FromPalette(6), text, muted);
+                    RenderBars(surface, x, y, w, h, _Data.TokensPerBucket, v => FmtTokens(v), Color.FromPalette(6), muted);
                     break;
                 case 1:
-                    RenderTimeSeries(surface, x, y, w, h, _Data.CostPerBucket, v => FmtUsd(v), Color.FromPalette(2), text, muted);
+                    RenderBars(surface, x, y, w, h, _Data.CostPerBucket, v => FmtUsd(v), Color.FromPalette(2), muted);
                     break;
                 case 2:
-                    RenderModels(surface, x, y, w, h, text, muted);
+                    RenderBars(surface, x, y, w, h, _Data.TtftMsPerBucket, v => FmtMs(v), Color.FromPalette(4), muted);
+                    break;
+                case 3:
+                    RenderBars(surface, x, y, w, h, _Data.TotalMsPerBucket, v => FmtMs(v), Color.FromPalette(5), muted);
+                    break;
+                case 4:
+                    RenderBars(surface, x, y, w, h, _Data.StreamMsPerBucket, v => FmtMs(v), Color.FromPalette(3), muted);
                     break;
                 default:
-                    RenderLatency(surface, x, y, w, h, muted);
+                    RenderModels(surface, x, y, w, h, muted);
                     break;
             }
         }
 
-        // A vertical line chart with a labeled Y axis (left gutter) and X-axis time ticks (bottom row).
-        private void RenderTimeSeries(ISurface surface, int x, int y, int w, int h, List<double> values, Func<double, string> fmt, Color color, CellStyle text, CellStyle muted)
+        // A vertical bar chart over time with a labeled Y axis (left gutter) and several X-axis time ticks.
+        private void RenderBars(ISurface surface, int x, int y, int w, int h, List<double> values, Func<double, string> fmt, Color color, CellStyle muted)
         {
             if (values.Count == 0 || w <= YAxisWidth + 2 || h < 3)
             {
@@ -190,11 +199,18 @@ namespace Mux.Cli.App
                 if (v > max) max = v;
             }
 
+            if (max <= 0.0)
+            {
+                surface.DrawText(x, y, Trim("No activity in this range.", w), muted);
+                return;
+            }
+
             int plotX = x + YAxisWidth;
             int plotW = w - YAxisWidth;
             int plotH = h - 1; // reserve the bottom row for X labels
+            CellStyle barStyle = CellStyle.Default.WithForeground(color);
 
-            // Y-axis labels: max at the top, half in the middle, 0 at the bottom.
+            // Y axis: labels at top (max), middle, and bottom (0), with a divider column.
             DrawRightAligned(surface, x, y, YAxisWidth - 1, fmt(max), muted);
             DrawRightAligned(surface, x, y + (plotH / 2), YAxisWidth - 1, fmt(max / 2.0), muted);
             DrawRightAligned(surface, x, y + plotH - 1, YAxisWidth - 1, fmt(0), muted);
@@ -203,29 +219,58 @@ namespace Mux.Cli.App
                 surface.Set(x + YAxisWidth - 1, y + row, Cell.Glyph("│", muted, 1));
             }
 
-            LineChart chart = new LineChart(values) { Color = color };
-            BlitWidget(surface, chart, plotX, y, plotW, plotH);
-
-            // X-axis time ticks: first, middle, last bucket label.
-            int labelRow = y + plotH;
-            List<string> labels = _Data.BucketLabels;
-            if (labels.Count > 0)
+            // One column per bucket, spread across the plot width; when there are more buckets than columns,
+            // adjacent buckets are averaged into each column.
+            int cols = Math.Min(values.Count, plotW);
+            for (int c = 0; c < cols; c++)
             {
-                surface.DrawText(plotX, labelRow, Trim(labels[0], plotW), muted);
-                if (labels.Count > 2)
+                double v = AggregateColumn(values, c, cols);
+                double cells = (v / max) * plotH;
+                int full = (int)cells;
+                int rem = (int)Math.Round((cells - full) * 8.0);
+                if (rem >= 8) { full++; rem = 0; }
+                if (full > plotH) { full = plotH; rem = 0; }
+
+                int barX = plotX + (cols <= 1 ? 0 : (int)Math.Round(c * (double)(plotW - 1) / (cols - 1)));
+                for (int r = 0; r < full; r++)
                 {
-                    string mid = labels[labels.Count / 2];
-                    surface.DrawText(plotX + Math.Max(0, (plotW - mid.Length) / 2), labelRow, mid, muted);
+                    surface.Set(barX, y + plotH - 1 - r, Cell.Glyph("█", barStyle, 1));
                 }
 
-                string last = labels[labels.Count - 1];
-                surface.DrawText(plotX + Math.Max(0, plotW - last.Length), labelRow, last, muted);
+                if (rem > 0 && full < plotH)
+                {
+                    surface.Set(barX, y + plotH - 1 - full, Cell.Glyph(_Eighths[rem - 1], barStyle, 1));
+                }
+            }
+
+            DrawXAxisLabels(surface, plotX, y + plotH, plotW, muted);
+        }
+
+        // Draws up to six evenly-spaced bucket labels along the X axis.
+        private void DrawXAxisLabels(ISurface surface, int plotX, int row, int plotW, CellStyle muted)
+        {
+            List<string> labels = _Data.BucketLabels;
+            if (labels.Count == 0)
+            {
+                return;
+            }
+
+            int desired = Math.Max(2, Math.Min(6, plotW / 10));
+            int count = Math.Min(desired, labels.Count);
+            for (int i = 0; i < count; i++)
+            {
+                int labelIndex = count == 1 ? labels.Count - 1 : (int)Math.Round(i * (double)(labels.Count - 1) / (count - 1));
+                string label = labels[labelIndex];
+                int pos = count == 1 ? 0 : (int)Math.Round(i * (double)(plotW - label.Length) / (count - 1));
+                if (pos < 0) pos = 0;
+                if (pos + label.Length > plotW) pos = Math.Max(0, plotW - label.Length);
+                surface.DrawText(plotX + pos, row, label, muted);
             }
         }
 
-        // A horizontal bar chart: BarChart draws the category (Y) labels and bars itself; a bottom line
-        // provides the value (X) scale.
-        private void RenderModels(ISurface surface, int x, int y, int w, int h, CellStyle text, CellStyle muted)
+        // A horizontal bar chart: BarChart draws the category (Y) labels and bars; a bottom line gives the
+        // value (X) scale.
+        private void RenderModels(ISurface surface, int x, int y, int w, int h, CellStyle muted)
         {
             if (_Data.ModelLabels.Count == 0)
             {
@@ -246,28 +291,25 @@ namespace Mux.Cli.App
             surface.DrawText(x, y + plotH, Trim("cost (USD) →  0 to " + FmtUsd(max), w), muted);
         }
 
-        // A vertical box-and-whisker chart with its own value axis and per-column category labels.
-        private void RenderLatency(ISurface surface, int x, int y, int w, int h, CellStyle muted)
+        private static double AggregateColumn(List<double> values, int column, int columns)
         {
-            if (_Data.Distributions.Count == 0)
+            if (values.Count <= columns)
             {
-                surface.DrawText(x, y, Trim("No latency samples in this range.", w), muted);
-                return;
+                return values[column];
             }
 
-            BoxPlotChart chart = new BoxPlotChart
+            int from = (int)((long)column * values.Count / columns);
+            int to = (int)((long)(column + 1) * values.Count / columns);
+            if (to <= from) to = from + 1;
+            if (to > values.Count) to = values.Count;
+
+            double sum = 0.0;
+            for (int i = from; i < to; i++)
             {
-                Orientation = BoxPlotOrientation.Vertical,
-                ShowAxis = true,
-                ShowValues = true
-            };
-            foreach (UsageDistributionEntry d in _Data.Distributions)
-            {
-                chart.Add(d.Label, d.Min, d.Avg, d.P95, d.P99, d.Max);
+                sum += values[i];
             }
 
-            surface.DrawText(x, y, Trim("Y: milliseconds — box spans avg→p99, marker p95, whiskers min…max", w), muted);
-            BlitWidget(surface, chart, x, y + 1, w, h - 1);
+            return sum / (to - from);
         }
 
         private static void BlitWidget(ISurface surface, IWidget widget, int x, int y, int w, int h)
@@ -315,6 +357,12 @@ namespace Mux.Cli.App
         private static string FmtUsd(double value)
         {
             return "$" + value.ToString(value >= 100 ? "0" : "0.00", CultureInfo.InvariantCulture);
+        }
+
+        private static string FmtMs(double value)
+        {
+            if (value >= 1000) return (value / 1000.0).ToString("0.#", CultureInfo.InvariantCulture) + "s";
+            return value.ToString("0", CultureInfo.InvariantCulture);
         }
 
         private static string Trim(string text, int width)
