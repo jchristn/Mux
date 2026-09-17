@@ -324,6 +324,10 @@ body {
 }
 .msg-body.markdown a { color: var(--vscode-textLink-foreground); }
 .msg-body.markdown hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 12px 0; }
+.msg-body.markdown table { border-collapse: collapse; margin: 8px 0; display: block; overflow-x: auto; max-width: 100%; }
+.msg-body.markdown th, .msg-body.markdown td { border: 1px solid var(--vscode-panel-border); padding: 4px 9px; text-align: left; }
+.msg-body.markdown th { font-weight: 600; background: var(--vscode-editorWidget-background, rgba(127,127,127,0.1)); }
+.msg-body.markdown tbody tr:nth-child(even) td { background: var(--vscode-editorWidget-background, rgba(127,127,127,0.04)); }
 
 /* ---- notice + composer ---- */
 #notice {

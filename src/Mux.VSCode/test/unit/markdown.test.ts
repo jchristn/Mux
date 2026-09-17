@@ -76,6 +76,28 @@ test('separates paragraphs on a blank line', () => {
     assert.ok(html.includes('<p>para two</p>'));
 });
 
+test('renders a GFM pipe table with header and body cells', () => {
+    const html = renderMarkdown('| Name | Role |\n| --- | --- |\n| Ada | **Eng** |\n| Grace | Admiral |');
+    assert.ok(html.includes('<table>'), 'table element');
+    assert.ok(html.includes('<thead><tr><th>Name</th><th>Role</th></tr></thead>'), 'header cells');
+    assert.ok(html.includes('<td>Ada</td>'), 'body cell');
+    assert.ok(html.includes('<strong>Eng</strong>'), 'inline formatting inside a cell');
+    assert.ok(html.includes('<td>Grace</td>') && html.includes('<td>Admiral</td>'), 'second row');
+});
+
+test('applies table column alignment from the delimiter row', () => {
+    const html = renderMarkdown('| L | C | R |\n| :--- | :---: | ---: |\n| a | b | c |');
+    assert.ok(html.includes('<th style="text-align:left">L</th>'), 'left');
+    assert.ok(html.includes('<th style="text-align:center">C</th>'), 'center');
+    assert.ok(html.includes('<th style="text-align:right">R</th>'), 'right');
+});
+
+test('a pipe line without a delimiter row is not a table', () => {
+    const html = renderMarkdown('a | b | c');
+    assert.ok(!html.includes('<table>'), 'no table');
+    assert.ok(html.includes('<p>'), 'plain paragraph');
+});
+
 test('empty input yields empty output', () => {
     assert.equal(renderMarkdown(''), '');
 });
