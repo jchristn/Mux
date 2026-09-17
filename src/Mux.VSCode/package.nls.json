@@ -45,6 +45,7 @@
   "cmd.manage.deleteSkill": "Delete skill",
   "cmd.manage.editSettings": "Edit settings",
   "cmd.usage": "Usage dashboard",
+  "cmd.runSetup": "Run setup wizard",
   "cmd.showHelp": "Help connecting to mux",
   "cmd.about": "About mux",
   "config.server.autoStart": "Start a local mux server when none is reachable.",

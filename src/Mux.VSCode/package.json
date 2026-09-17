@@ -298,6 +298,12 @@
         "icon": "$(graph)"
       },
       {
+        "command": "mux.setup",
+        "title": "%cmd.runSetup%",
+        "category": "mux",
+        "icon": "$(rocket)"
+      },
+      {
         "command": "mux.showHelp",
         "title": "%cmd.showHelp%",
         "category": "mux"

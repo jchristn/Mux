@@ -853,6 +853,19 @@ namespace Mux.Desktop.I18n
                 { "settings.summaryCache.tip", "Cache large-file summaries by content hash so an unchanged file is not re-summarized every turn." },
                 { "settings.summaryCacheRetention", "Summary cache retention (days)" },
                 { "settings.summaryCacheRetention.tip", "How long summary-cache entries are kept before a periodic cleanup deletes them." },
+                { "main.palette.setup", "Setup wizard" },
+                { "main.palette.setup.desc", "Re-run first-run setup: define an endpoint and check connectivity" },
+                { "setup.wizard.title", "Set up mux" },
+                { "setup.wizard.welcome.heading", "Welcome to mux" },
+                { "setup.wizard.welcome.body", "Let's connect your first model endpoint so you can start chatting. It only takes a moment: pick a provider, enter its details, and we'll check the connection for you." },
+                { "setup.wizard.welcome.setup", "Set up now" },
+                { "setup.wizard.welcome.setup.tip", "Define your first endpoint and validate its connectivity." },
+                { "setup.wizard.welcome.skip", "Skip for now" },
+                { "setup.wizard.welcome.skip.tip", "Skip setup for now. Re-run it any time from the command palette (Ctrl+K)." },
+                { "setup.wizard.finish.heading", "You're all set" },
+                { "setup.wizard.finish.body", "Your endpoint is saved and ready. Type a message in the composer and press Enter to send your first prompt. You can re-run this wizard any time from the command palette (Ctrl+K)." },
+                { "setup.wizard.finish.start", "Start chatting" },
+                { "setup.wizard.finish.start.tip", "Close the wizard and jump to the composer." },
             };
 
             all["es"] = new Dictionary<string, string>(StringComparer.Ordinal)

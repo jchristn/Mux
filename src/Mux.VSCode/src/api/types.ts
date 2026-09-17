@@ -179,6 +179,8 @@ export interface MuxServerSettings {
     SkillsEnabled: boolean;
     TaskPlanningEnabled: boolean;
     TaskParallelismEnabled: boolean;
+    /** Whether the first-run setup wizard has been completed or dismissed on this machine. */
+    SetupCompleted: boolean;
     IgnoreCertErrors: boolean;
     ShowBoundaryLines: boolean;
     DefaultEnqueueBehavior: string;

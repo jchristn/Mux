@@ -56,6 +56,7 @@
   "cmd.manage.editSkill": "Modifier la compétence",
   "cmd.manage.deleteSkill": "Supprimer la compétence",
   "cmd.usage": "Tableau de bord d'utilisation",
+  "cmd.runSetup": "Lancer l'assistant de configuration",
   "cmd.manage.editCatalog": "Modifier la substitution du prompt",
   "cmd.manage.resetCatalog": "Réinitialiser par défaut",
   "config.context.largeFileMode": "Comment un fichier actif volumineux devient du contexte d’éditeur : hériter du réglage du serveur ou forcer map, summarize ou truncate."

@@ -565,7 +565,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 
     <!-- Endpoints --><div class="view" id="view-endpoints"><div class="padw">
       <div class="pagehead"><div class="desc">Model endpoints in <code>endpoints.json</code>. Secrets are never shown; leave a secret blank to keep it.</div>
-        <div class="row"><button class="btn secondary" id="endpoints_reload" title="Reload this list from disk, discarding unsaved changes" data-i18n="act.reload">Reload</button><button class="btn" id="endpoints_add" title="Create a new endpoint">+ <span data-i18n="add.endpoint">Add endpoint</span></button></div></div>
+        <div class="row"><button class="btn secondary" id="endpoints_setup" title="Run the guided first-run setup wizard">🧭 Setup wizard</button><button class="btn secondary" id="endpoints_reload" title="Reload this list from disk, discarding unsaved changes" data-i18n="act.reload">Reload</button><button class="btn" id="endpoints_add" title="Create a new endpoint">+ <span data-i18n="add.endpoint">Add endpoint</span></button></div></div>
       <div id="endpoints_list"></div></div></div>
 
     <!-- MCP --><div class="view" id="view-mcp"><div class="padw">
@@ -1694,15 +1694,77 @@ function epFields(isEdit){return [
   {id:"ApiVersion",label:"API version",showIf:function(v){return v.AdapterType==="azure-openai";},tip:"The Azure OpenAI api-version query value, e.g. 2024-10-21."},
   {type:"section",label:"Custom headers"},
   {id:"HeadersText",label:"Headers",sub:"(Name: Value per line)",type:"lines",rows:3,showIf:epUsesKey,tip:"Extra HTTP headers sent with every request, one 'Name: Value' per line. For an existing header, leave the value blank to keep the stored one. Applied in addition to the API-key placement above."}];}
-function openEp(i,prefill){var isEdit=i>=0,e=isEdit?Object.assign({},_ep[i]):(prefill||{AdapterType:"ollama",MaxTokens:8192,Temperature:0.1,ContextWindow:32768,TimeoutMs:120000,AuthPlacement:"bearer"});
+function openEp(i,prefill,onSaved){var isEdit=i>=0,e=isEdit?Object.assign({},_ep[i]):(prefill||{AdapterType:"ollama",MaxTokens:8192,Temperature:0.1,ContextWindow:32768,TimeoutMs:120000,AuthPlacement:"bearer"});
   e.HeadersText=epHeadersToText(e.Headers);
   formModal(isEdit?"Edit endpoint":"Add endpoint",epFields(isEdit),e,function(v){
     if(!v.Name){toast(t("toast.nameReq"),true);return;}
     v.Headers=epTextToHeaders(v.HeadersText);delete v.HeadersText;
     var list=_ep.slice();if(isEdit)list[i]=v;else list.push(v);
-    saveCollection("/v1.0/api/endpoints",list,function(items){_ep=items;closeModal();renderEp();loadEndpoints();});});}
+    saveCollection("/v1.0/api/endpoints",list,function(items){_ep=items;closeModal();renderEp();loadEndpoints();if(onSaved)onSaved(v);});});}
+function epIndexByName(name){for(var i=0;i<_ep.length;i++){if(_ep[i]&&_ep[i].Name===name)return i;}return -1;}
 function delEp(name){confirmModal('Delete endpoint "'+name+'"?',function(){
   api("/v1.0/api/endpoints?name="+encodeURIComponent(name),"DELETE").then(function(r){_ep=(r&&r.Items)||[];renderEp();toast("Deleted");loadEndpoints();}).catch(function(e){toast(e.message,true);});});}
+
+/* ================= First-run setup wizard ================= */
+/* Shown automatically when no endpoint names a model and setup has not been completed; re-runnable from the
+   Endpoints toolbar. Reuses the adaptive endpoint form (openEp), the model-load probe (warmModel's route) for
+   the connectivity check, and the chat composer for the first prompt. */
+function maybeStartWizard(){
+  api("/v1.0/api/settings").then(function(s){
+    if(s&&s.SetupCompleted)return;
+    api("/v1.0/api/endpoints").then(function(r){
+      var items=(r&&r.Items)||[];
+      var hasUsable=items.some(function(e){return e&&e.Model&&(""+e.Model).trim().length>0;});
+      if(!hasUsable)startSetupWizard();
+    }).catch(function(){});
+  }).catch(function(){});
+}
+function startSetupWizard(){wizWelcome();}
+function wizMarkComplete(then){
+  api("/v1.0/api/settings").then(function(s){s=s||{};s.SetupCompleted=true;return api("/v1.0/api/settings","PUT",s);})
+    .then(function(){if(then)then();})
+    .catch(function(e){toast("Could not save setup state: "+e.message,true);if(then)then();});
+}
+function wizWelcome(){
+  openModal("Welcome to mux",
+    '<p style="margin:0 0 10px">Let’s get you set up. This quick wizard will:</p>'+
+    '<ol style="margin:0 0 4px 18px;padding:0;line-height:1.7">'+
+      '<li>Define your first endpoint (the model server mux talks to)</li>'+
+      '<li>Check that it’s reachable</li>'+
+      '<li>Send your first message</li>'+
+    '</ol>',
+    [{label:"Skip for now",onClick:function(){wizMarkComplete(closeModal);}},
+     {label:"Set up now",primary:true,onClick:wizStepEndpoint}]);
+}
+function wizStepEndpoint(){switchView("endpoints");
+  api("/v1.0/api/endpoints").then(function(r){
+    var items=(r&&r.Items)||[];
+    var prefill=(items.length===0)?{AdapterType:"ollama",MaxTokens:8192,Temperature:0.1,ContextWindow:32768,TimeoutMs:120000,AuthPlacement:"bearer",IsDefault:true}:null;
+    openEp(-1,prefill,function(saved){wizStepValidate(saved);});
+  }).catch(function(){openEp(-1,null,function(saved){wizStepValidate(saved);});});}
+function wizStepValidate(saved){
+  var name=(saved&&saved.Name)||"";
+  openModal("Checking connectivity",'<p style="margin:0">⏳ Contacting '+esc(name)+'…</p>',[]);
+  api("/v1.0/api/model/load","POST",{Endpoint:name}).then(function(r){
+    var msg;
+    if(r&&r.Ok)msg="✓ <b>"+esc(name)+"</b> is ready — the endpoint responded successfully.";
+    else if(r&&r.Reachable)msg="⚠ <b>"+esc(name)+"</b> is reachable, but the validation request did not succeed. Normal chats may still work.";
+    else msg="✗ <b>"+esc(name)+"</b> is unreachable. You can continue and fix the endpoint later.";
+    wizShowValidateResult(saved,msg);
+  }).catch(function(e){wizShowValidateResult(saved,"✗ Could not reach <b>"+esc(name)+"</b>: "+esc(e.message));});
+}
+function wizShowValidateResult(saved,msg){
+  openModal("Checking connectivity",'<p style="margin:0">'+msg+'</p>',
+    [{label:"Edit endpoint",onClick:function(){var idx=epIndexByName(saved&&saved.Name);if(idx>=0)openEp(idx,null,function(s2){wizStepValidate(s2);});else openEp(-1,saved,function(s2){wizStepValidate(s2);});}},
+     {label:"Continue",primary:true,onClick:wizStepFirstPrompt}]);
+}
+function wizStepFirstPrompt(){
+  wizMarkComplete(function(){
+    closeModal();switchView("chat");loadEndpoints();
+    setTimeout(function(){var c=el("composer");if(c)c.focus();},60);
+    toast("You’re all set — type your first message and press Enter.");
+  });
+}
 
 /* ================= MCP servers ================= */
 var _mcp=[];
@@ -2201,7 +2263,7 @@ document.addEventListener("keydown",function(e){
 });
 /* per-domain add/reload buttons */
 function on(id,fn){var e=el(id);if(e)e.addEventListener("click",fn);}
-on("endpoints_add",function(){openEp(-1);});on("endpoints_reload",loadEndpointsAdmin);
+on("endpoints_add",function(){openEp(-1);});on("endpoints_reload",loadEndpointsAdmin);on("endpoints_setup",startSetupWizard);
 on("mcp_add",function(){openMcp(-1);});on("mcp_reload",loadMcp);
 on("prompts_add",function(){openPr(-1);});on("prompts_reload",loadPrompts);on("catalog_reload",loadCatalog);
 on("subagents_add",function(){openSa(-1);});on("subagents_reload",loadSubagents);
@@ -2245,6 +2307,7 @@ document.title="mux · "+viewTitle("home");
 loadStatus();setInterval(loadStatus,15000);
 loadEndpoints();
 loadHome();
+maybeStartWizard();
 </script>
 </body>
 </html>

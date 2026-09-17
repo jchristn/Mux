@@ -56,6 +56,7 @@
   "cmd.manage.editSkill": "स्किल संपादित करें",
   "cmd.manage.deleteSkill": "स्किल हटाएँ",
   "cmd.usage": "उपयोग डैशबोर्ड",
+  "cmd.runSetup": "सेटअप विज़ार्ड चलाएँ",
   "cmd.manage.editCatalog": "प्रॉम्प्ट ओवरराइड संपादित करें",
   "cmd.manage.resetCatalog": "डिफ़ॉल्ट पर रीसेट करें",
   "config.context.largeFileMode": "एक बड़ी सक्रिय फ़ाइल एडिटर संदर्भ कैसे बनती है: सर्वर सेटिंग इनहेरिट करें, या map, summarize या truncate को बाध्य करें।"

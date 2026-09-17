@@ -56,6 +56,7 @@
   "cmd.manage.editSkill": "スキルを編集",
   "cmd.manage.deleteSkill": "スキルを削除",
   "cmd.usage": "使用状況ダッシュボード",
+  "cmd.runSetup": "セットアップウィザードを実行",
   "cmd.manage.editCatalog": "プロンプトの上書きを編集",
   "cmd.manage.resetCatalog": "既定に戻す",
   "config.context.largeFileMode": "大きなアクティブ ファイルをエディターのコンテキストにする方法：サーバー設定を継承するか、map・summarize・truncate を強制します。"

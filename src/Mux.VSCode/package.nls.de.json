@@ -56,6 +56,7 @@
   "cmd.manage.editSkill": "Fähigkeit bearbeiten",
   "cmd.manage.deleteSkill": "Fähigkeit löschen",
   "cmd.usage": "Nutzungs-Dashboard",
+  "cmd.runSetup": "Einrichtungsassistent ausführen",
   "cmd.manage.editCatalog": "Prompt-Überschreibung bearbeiten",
   "cmd.manage.resetCatalog": "Auf Standard zurücksetzen",
   "config.context.largeFileMode": "Wie eine große aktive Datei zu Editor-Kontext wird: die Servereinstellung übernehmen oder map, summarize oder truncate erzwingen."

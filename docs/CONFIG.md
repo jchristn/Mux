@@ -107,7 +107,9 @@ Fields:
 | `quirks` | object or null | backend behavior flags |
 | `reasoningEffort` | object or null | optional reasoning effort. Omit (or `null`) to send no reasoning field. A `level` (`minimal`, `low`, `medium`, `high`) drives provider defaults; optional `openAiValue`, `geminiThinkingBudget` (`-1`..`32768`), and `ollamaThink` (`low`/`medium`/`high`/`true`/`false`) override individual per-provider values |
 | `showThinking` | bool | whether the model's reasoning ("thinking") is captured and displayed when this endpoint is active. Defaults to false; toggle live with `/thinking` or override a headless run with `--show-thinking` |
-| `apiKey` | string or null | API key for adapters that pass a key to the client rather than a raw header: `anthropic` (`x-api-key`), `gemini` (URL key), and `azure-openai` (`api-key` header). Literal value or a `${VAR}` reference. Ignored by the OpenAI family (use `headers`) and by `vertex`/`bedrock` (environment credentials) |
+| `apiKey` | string or null | API key. For the OpenAI family (`ollama`/`openai`/`openai-compatible`/`vllm`) it is placed per `authPlacement` (below). For `anthropic` (`x-api-key`), `gemini` (URL key), and `azure-openai` (`api-key` header) it is passed to the provider's client. Literal value or a `${VAR}` reference. Ignored by `vertex`/`bedrock` (environment credentials) |
+| `authPlacement` | string | how `apiKey` is presented for the OpenAI family: `bearer` (default — `Authorization: Bearer <key>`), `header` (a custom header named by `authParameterName`), or `query` (a query-string parameter named by `authParameterName`). Use `header`/`query` for services that don't accept bearer tokens. Ignored by the native adapters, which carry a fixed scheme |
+| `authParameterName` | string or null | the header name (`header` placement) or query-string parameter name (`query` placement) that carries `apiKey`, e.g. `x-api-key` or `key`. Ignored when `authPlacement` is `bearer` |
 | `region` | string or null | cloud region for `vertex` (e.g. `us-central1`) and `bedrock` (e.g. `us-east-1`). Literal or `${VAR}` |
 | `project` | string or null | Google Cloud project id, required by `vertex`. Literal or `${VAR}` |
 | `apiVersion` | string or null | optional Azure OpenAI `api-version` for `azure-openai`; `null` uses PolyPrompt's default |
@@ -121,6 +123,25 @@ Header values support environment expansion:
   }
 }
 ```
+
+For the OpenAI family you can instead set `apiKey` and let `authPlacement` decide where it goes — no
+hand-written header needed. This is the way to reach services that authenticate with a **custom header** or a
+**query-string value** rather than a bearer token:
+
+```json
+{
+  "endpoints": [
+    { "name": "bearer-svc", "adapterType": "openai-compatible", "baseUrl": "https://api.example.com/v1",
+      "model": "some-model", "apiKey": "${SVC_KEY}", "authPlacement": "bearer" },
+    { "name": "header-svc", "adapterType": "openai-compatible", "baseUrl": "https://api.example.com/v1",
+      "model": "some-model", "apiKey": "${SVC_KEY}", "authPlacement": "header", "authParameterName": "x-api-key" },
+    { "name": "query-svc",  "adapterType": "openai-compatible", "baseUrl": "https://api.example.com/v1",
+      "model": "some-model", "apiKey": "${SVC_KEY}", "authPlacement": "query",  "authParameterName": "api_key" }
+  ]
+}
+```
+
+`headers` still applies on top of the placed key, so you can add arbitrary custom headers alongside it.
 
 ### Frontier and cloud provider adapters
 
@@ -248,6 +269,7 @@ Example:
   "skillsDirectory": null,
   "taskPlanningEnabled": true,
   "taskParallelismEnabled": false,
+  "setupCompleted": false,
   "externalSearch": {
     "enabled": false,
     "allowFallback": true,
@@ -280,6 +302,7 @@ Fields:
 | `maxConcurrency` | int | maximum number of interactive jobs allowed to run at once; clamped to `1-32`, default `3` |
 | `taskPlanningEnabled` | bool | offer the `plan_tasks`/`update_task` tools and teach the model to decompose large requests into a tracked task plan; default `true` |
 | `taskParallelismEnabled` | bool | allow the opt-in orchestration engine to run independent tasks as parallel jobs under the shared write lease; has no effect unless `taskPlanningEnabled` is also true; default `false` |
+| `setupCompleted` | bool | set once the first-run setup wizard has been completed or dismissed on this machine; when `false` and no endpoint names a model, each surface offers the wizard on launch. Re-run it any time (`/setup` in the terminal, the Setup entry on the other surfaces); default `false` |
 | `defaultEnqueueBehavior` | string | how the interactive shell handles a submit while a job is active: `ask` (show the chooser), `run_now`, `queue_after` (both start a new job — the concurrency cap governs parallelism), or `add_to_focused` (append to the focused job); default `ask` |
 | `externalSearch` | object | optional Tavily/You.com provider configuration for the `web_search` tool |
 

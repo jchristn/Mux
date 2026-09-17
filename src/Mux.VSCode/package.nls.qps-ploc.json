@@ -45,6 +45,7 @@
   "cmd.manage.deleteSkill": "⟦Delete skill·····⟧",
   "cmd.manage.editSettings": "⟦Edit settings······⟧",
   "cmd.usage": "⟦Usage dashboard······⟧",
+  "cmd.runSetup": "⟦Run setup wizard·······⟧",
   "cmd.showHelp": "⟦Help connecting to mux·········⟧",
   "cmd.about": "⟦About mux····⟧",
   "config.server.autoStart": "⟦Start a local mux server when none is reachable.····················⟧",
@@ -56,7 +57,7 @@
   "config.approvalPosture.autoSafe": "⟦Auto-approve read-only tools; deny mutating ones.····················⟧",
   "config.context.sources": "⟦The editor context attached to a run by default.····················⟧",
   "config.locale": "⟦Display language override (BCP 47). Empty follows the editor language.····························⟧",
-  "cmd.manage.editCatalog": "[Ëdït prömpt övërrïdë]",
-  "cmd.manage.resetCatalog": "[Rësët tö dëfäült]",
-  "config.context.largeFileMode": "⟦How a large active file becomes editor context: inherit the server setting, or force map, summarize, or truncate.··········⟧"
+  "cmd.manage.editCatalog": "⟦Edit prompt override········⟧",
+  "cmd.manage.resetCatalog": "⟦Reset to default·······⟧",
+  "config.context.largeFileMode": "⟦How a large active file becomes editor context: inherit the server’s setting, or force map, summarize, or truncate.··············································⟧"
 }

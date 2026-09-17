@@ -148,6 +148,7 @@ namespace Mux.Desktop.Shell
         private DateTime _CurrentCreatedUtc { get => Ctx?.CreatedUtc ?? default; set { if (Ctx != null) { Ctx.CreatedUtc = value; } } }
         private bool _SidebarCollapsed;
         private bool _AutoExpandThinking;
+        private bool _SetupChecked;
         private bool _ConversationsOpen = true;
         private bool _ManageOpen;
         private ColumnDefinition? _SidebarColumn;
@@ -319,6 +320,7 @@ namespace Mux.Desktop.Shell
             List<PaletteCommand> commands = new List<PaletteCommand>
             {
                 new PaletteCommand(L("main.palette.newConversation"), L("main.palette.newConversation.desc"), () => _ = NewChatAsync()),
+                new PaletteCommand(L("main.palette.setup"), L("main.palette.setup.desc"), OpenSetupWizard),
                 new PaletteCommand(L("main.palette.usage"), L("main.palette.usage.desc"), OpenUsageWindow),
                 new PaletteCommand(L("main.palette.endpoints"), L("main.palette.endpoints.desc"), OpenEndpointsWindow),
                 new PaletteCommand(L("main.palette.mcp"), L("main.palette.mcp.desc"), OpenMcpServersWindow),
@@ -354,6 +356,62 @@ namespace Mux.Desktop.Shell
 
             // Land the caret in the composer immediately so the user can start typing without clicking in.
             Dispatcher.UIThread.Post(() => _Composer?.Focus(), DispatcherPriority.Input);
+
+            // Offer the first-run setup wizard once the shell is visible, when there is no usable endpoint and
+            // setup has not been completed or dismissed (shared cross-surface trigger). Deferred so the modal
+            // has this window as its owner.
+            Dispatcher.UIThread.Post(() => _ = MaybeRunSetupWizardAsync(), DispatcherPriority.Background);
+        }
+
+        // Shows the first-run setup wizard automatically when SetupState says it is needed. Runs at most once
+        // per window. Best-effort: any failure to read state simply skips the auto-prompt (the command palette
+        // still offers it manually).
+        private async Task MaybeRunSetupWizardAsync()
+        {
+            if (_SetupChecked)
+            {
+                return;
+            }
+
+            _SetupChecked = true;
+
+            bool needsSetup;
+            try
+            {
+                MuxSettings settings = SettingsLoader.LoadSettings();
+                needsSetup = Mux.Core.Setup.SetupState.NeedsSetup(SettingsLoader.LoadEndpoints(), settings.SetupCompleted);
+            }
+            catch (Exception)
+            {
+                // A settings/endpoints read failure must not block startup; the wizard stays available manually.
+                return;
+            }
+
+            if (needsSetup)
+            {
+                await RunSetupWizardAsync();
+            }
+        }
+
+        // Opens the first-run setup wizard on demand (command palette). Guides the user through defining an
+        // endpoint, checking connectivity, and starting their first message. Safe to call at any time.
+        private void OpenSetupWizard()
+        {
+            _ = RunSetupWizardAsync();
+        }
+
+        // Runs the guided wizard modally, then — if an endpoint was created — refreshes the model picker and
+        // focuses the composer so the user can send a first prompt immediately.
+        private async Task RunSetupWizardAsync()
+        {
+            SetupWizardWindow wizard = new SetupWizardWindow();
+            await wizard.ShowDialog(this);
+
+            if (wizard.EndpointCreated)
+            {
+                PopulateModelPicker();
+                _Composer?.Focus();
+            }
         }
 
         // ---- layout ------------------------------------------------------------------------------

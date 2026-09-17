@@ -56,6 +56,7 @@
   "cmd.manage.editSkill": "Editar habilidad",
   "cmd.manage.deleteSkill": "Eliminar habilidad",
   "cmd.usage": "Panel de uso",
+  "cmd.runSetup": "Ejecutar asistente de configuración",
   "cmd.manage.editCatalog": "Editar anulación de prompt",
   "cmd.manage.resetCatalog": "Restablecer al valor predeterminado",
   "config.context.largeFileMode": "Cómo un archivo activo grande se convierte en contexto del editor: heredar la configuración del servidor o forzar map, summarize o truncate."

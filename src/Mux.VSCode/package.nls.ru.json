@@ -56,6 +56,7 @@
   "cmd.manage.editSkill": "Изменить навык",
   "cmd.manage.deleteSkill": "Удалить навык",
   "cmd.usage": "Панель использования",
+  "cmd.runSetup": "Запустить мастер настройки",
   "cmd.manage.editCatalog": "Изменить переопределение промпта",
   "cmd.manage.resetCatalog": "Сбросить к значению по умолчанию",
   "config.context.largeFileMode": "Как большой активный файл становится контекстом редактора: наследовать настройку сервера или принудительно применять map, summarize или truncate."

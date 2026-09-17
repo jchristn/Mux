@@ -56,6 +56,7 @@
   "cmd.manage.editSkill": "编辑技能",
   "cmd.manage.deleteSkill": "删除技能",
   "cmd.usage": "使用情况仪表板",
+  "cmd.runSetup": "运行设置向导",
   "cmd.manage.editCatalog": "编辑提示词覆盖",
   "cmd.manage.resetCatalog": "重置为默认",
   "config.context.largeFileMode": "较大的活动文件如何成为编辑器上下文：继承服务器设置，或强制使用 map、summarize 或 truncate。"

@@ -10,6 +10,7 @@ import { UsagePanel } from './manage/UsagePanel';
 import { showConnectionHelp, showMuxNotInstalled } from './server/help';
 import { MirrorClient } from './mirror/MirrorClient';
 import { MuxServerLifecycle } from './server/lifecycle';
+import { SetupWizard } from './setup/SetupWizard';
 import { readSettings } from './config/settings';
 import { ConnectionStatusBar } from './server/StatusBar';
 import { SessionNode, SessionTreeProvider } from './sessions/SessionTree';
@@ -68,6 +69,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const manage = new ManageTreeProvider(lifecycle);
     context.subscriptions.push(vscode.window.registerTreeDataProvider('mux.manage', manage));
     const manageActions = new ManageActions(lifecycle, () => manage.refresh());
+    const setupWizard = new SetupWizard(lifecycle, manageActions);
     context.subscriptions.push(
         vscode.commands.registerCommand('mux.manage.refresh', () => manage.refresh()),
         vscode.commands.registerCommand('mux.manage.addEndpoint', () => manageActions.addEndpoint()),
@@ -130,6 +132,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('mux.showHelp', () => showConnectionHelp(lifecycle)),
         vscode.commands.registerCommand('mux.about', () => AboutPanel.show(context, lifecycle.state)),
         vscode.commands.registerCommand('mux.usage', () => UsagePanel.show(lifecycle)),
+        vscode.commands.registerCommand('mux.setup', () => setupWizard.runManually()),
         vscode.commands.registerCommand('mux.selectEndpoint', () => endpointPicker.pick()),
         vscode.commands.registerCommand('mux.setWorkingDirectory', () => showWorkingDirectory()),
         vscode.commands.registerCommand('mux.reviewChanges', () => vscode.commands.executeCommand('workbench.view.scm')),
@@ -156,6 +159,11 @@ export function activate(context: vscode.ExtensionContext): void {
     // than letting the first chat fail with a confusing timeout. Runs in the background so activation stays
     // network-free, and is shown at most once per install (until mux appears, then it re-arms).
     void notifyIfMuxMissing(context, lifecycle);
+
+    // First run: when a reachable server has no usable endpoint and setup has not been completed, guide the
+    // user through defining one, checking connectivity, and sending a first prompt. Runs in the background so
+    // activation stays network-free; it is silent when no server is reachable or setup is not needed.
+    void setupWizard.maybeRunOnStartup();
 }
 
 const MUX_MISSING_NOTIFIED_KEY = 'mux.notifiedMuxMissing';

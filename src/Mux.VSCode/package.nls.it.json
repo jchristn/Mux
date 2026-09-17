@@ -56,6 +56,7 @@
   "cmd.manage.editSkill": "Modifica competenza",
   "cmd.manage.deleteSkill": "Elimina competenza",
   "cmd.usage": "Dashboard di utilizzo",
+  "cmd.runSetup": "Esegui configurazione guidata",
   "cmd.manage.editCatalog": "Modifica override del prompt",
   "cmd.manage.resetCatalog": "Ripristina predefinito",
   "config.context.largeFileMode": "Come un file attivo di grandi dimensioni diventa contesto dell’editor: eredita l’impostazione del server oppure forza map, summarize o truncate."
