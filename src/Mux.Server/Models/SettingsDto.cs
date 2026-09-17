@@ -72,6 +72,9 @@ namespace Mux.Server.Models
         /// <summary>Task parallelism enabled.</summary>
         public bool TaskParallelismEnabled { get; set; }
 
+        /// <summary>Whether the first-run setup wizard has been completed or dismissed on this machine.</summary>
+        public bool SetupCompleted { get; set; }
+
         /// <summary>Ignore TLS certificate errors.</summary>
         public bool IgnoreCertErrors { get; set; }
 
@@ -123,6 +126,7 @@ namespace Mux.Server.Models
                 SkillsEnabled = settings.SkillsEnabled,
                 TaskPlanningEnabled = settings.TaskPlanningEnabled,
                 TaskParallelismEnabled = settings.TaskParallelismEnabled,
+                SetupCompleted = settings.SetupCompleted,
                 IgnoreCertErrors = settings.IgnoreCertErrors,
                 ShowBoundaryLines = settings.ShowBoundaryLines,
                 DefaultEnqueueBehavior = settings.DefaultEnqueueBehavior,
@@ -164,6 +168,7 @@ namespace Mux.Server.Models
             settings.SkillsEnabled = SkillsEnabled;
             settings.TaskPlanningEnabled = TaskPlanningEnabled;
             settings.TaskParallelismEnabled = TaskParallelismEnabled;
+            settings.SetupCompleted = SetupCompleted;
             settings.IgnoreCertErrors = IgnoreCertErrors;
             settings.ShowBoundaryLines = ShowBoundaryLines;
             settings.DefaultEnqueueBehavior = DefaultEnqueueBehavior;
