@@ -1,6 +1,6 @@
 @echo off
 REM Build and run the mux terminal UI (TUI) from source (bin output) instead of the installed
-REM global 'mux' tool. IMPORTANT: 'dotnet build' does NOT update the global 'mux' tool — that
+REM global 'mux' tool. IMPORTANT: 'dotnet build' does NOT update the global 'mux' tool -- that
 REM requires reinstall-tool.bat. Use this script to test terminal changes against the current
 REM build without reinstalling, so the TUI always matches the freshly built desktop/agent/web.
 REM The TUI runs against the directory you launch this script from (its working directory).
