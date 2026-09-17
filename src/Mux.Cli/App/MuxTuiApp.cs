@@ -178,6 +178,7 @@ namespace Mux.Cli.App
         /// <param name="pluginRegistry">Optional plugin registry supplying event hooks and custom slash commands. Null disables the plugin surface.</param>
         /// <param name="workingDirectory">The working directory used for hooks, custom commands, and session export. Null uses the process current directory.</param>
         /// <param name="usageQuery">Optional usage-telemetry query service backing the <c>/usage</c> view. Null disables it (the command reports telemetry unavailable).</param>
+        /// <param name="enableFirstRunWizard">When true, the first-run setup wizard is offered on launch if no endpoint is configured and setup has not been completed. Off by default so test harnesses driving the run loop are not interrupted; the production launcher opts in.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
             ITerminalBackend backend,
@@ -4714,6 +4715,12 @@ namespace Mux.Cli.App
                 data.DayLabels.Add(DateTimeOffset.FromUnixTimeMilliseconds(bucket.BucketStartUnixMs).ToLocalTime().ToString("ddd", System.Globalization.CultureInfo.InvariantCulture));
             }
 
+            // Latency distributions (7d) as min/avg/p95/p99/max box-and-whisker rows. Only include a metric
+            // when it has samples, so an idle window renders no empty rows.
+            AddDistribution(data, "TTFT", week.Metrics.TtftMsDist);
+            AddDistribution(data, "Total", week.Metrics.TotalMsDist);
+            AddDistribution(data, "Stream", week.Metrics.StreamMsDist);
+
             List<Mux.Core.Telemetry.UsageBreakdownRow> topModels = _UsageQuery.GetBreakdownAsync("model", WindowFilter(now, 7L * day), _Cts.Token).GetAwaiter().GetResult();
             int shown = 0;
             foreach (Mux.Core.Telemetry.UsageBreakdownRow row in topModels)
@@ -4734,6 +4741,16 @@ namespace Mux.Cli.App
         private static string KpiLine(Mux.Core.Telemetry.UsageMetrics m)
         {
             return TokShort(m.TotalTokens) + " tok · " + UsdShort(m.CostUsd) + " · " + m.Calls + " calls · " + m.Errors + " err";
+        }
+
+        private static void AddDistribution(UsageChartData data, string label, Mux.Core.Telemetry.UsageDistribution dist)
+        {
+            if (dist == null || dist.Count <= 0)
+            {
+                return;
+            }
+
+            data.Distributions.Add(new UsageDistributionEntry(label, dist.Min, dist.Avg, dist.P95, dist.P99, dist.Max));
         }
 
         private List<string> BuildUsageLines()

@@ -32,15 +32,16 @@ namespace Test.Shared.Suites
                     {
                         UsageChartData data = SampleData();
                         UsageChartsModal modal = new UsageChartsModal("Usage", data);
-                        // Tall enough to hold every section: the header, the tokens line chart, the cost bar
-                        // chart (one row per day), and the top-models bar chart all fit without the last
-                        // section being room-skipped. Truncation on a short terminal is covered separately.
-                        string rendered = Render(modal, 80, 32);
+                        // Tall enough to hold every section: header, tokens line chart, cost bar chart (one row
+                        // per day), top-models bar chart, and the latency distribution box-plot all fit without
+                        // the last section being room-skipped. Truncation on a short terminal is covered separately.
+                        string rendered = Render(modal, 80, 44);
 
                         MuxAssert.Contains("Usage", rendered, "title drawn");
                         MuxAssert.Contains("24h:", rendered, "24h KPI line drawn");
                         MuxAssert.Contains("Tokens per day", rendered, "tokens section heading drawn");
                         MuxAssert.Contains("Top models by cost", rendered, "models section heading drawn");
+                        MuxAssert.Contains("Latency distribution", rendered, "latency distribution section heading drawn");
                         MuxAssert.Contains("Enter / Esc to close", rendered, "hint drawn");
                         return Task.CompletedTask;
                     }),
@@ -94,6 +95,8 @@ namespace Test.Shared.Suites
             data.ModelCosts.Add(2.10);
             data.ModelLabels.Add("claude-opus-4-8");
             data.ModelCosts.Add(1.10);
+            data.Distributions.Add(new UsageDistributionEntry("TTFT", 120, 340, 900, 1400, 2100));
+            data.Distributions.Add(new UsageDistributionEntry("Total", 800, 2600, 6400, 9200, 15000));
             return data;
         }
 

@@ -247,12 +247,14 @@ namespace Test.Shared.Suites
 
                             HeadlessBackend backend = new HeadlessBackend(80, 24);
                             await using (JobManager manager = NewManager(EchoRunner))
-                            using (MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove, enableFirstRunWizard: true))
+                            using (MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove, showSplash: true, enableFirstRunWizard: true))
                             using (CancellationTokenSource runCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
                             {
                                 Task run = app.RunAsync(runCts.Token);
-                                await WaitUntilAsync(() => app.IsModalActive, ct).ConfigureAwait(false);
-                                MuxAssert.IsTrue(app.IsModalActive, "the setup wizard modal is shown on first run");
+                                // The real launch shows the startup splash (no --prompt). The wizard must appear
+                                // ABOVE it — assert the top modal is the wizard, not merely that a modal exists.
+                                await WaitUntilAsync(() => app.ModalCount >= 2, ct).ConfigureAwait(false);
+                                MuxAssert.IsTrue(app.ModalCount >= 2, "the setup wizard modal is shown above the splash on first run");
 
                                 runCts.Cancel();
                                 try { await run.ConfigureAwait(false); } catch (OperationCanceledException) { }

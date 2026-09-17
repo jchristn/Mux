@@ -27,5 +27,8 @@ namespace Mux.Cli.App
 
         /// <summary>Costs (USD) parallel to <see cref="ModelLabels"/>.</summary>
         public List<double> ModelCosts { get; } = new List<double>();
+
+        /// <summary>Latency distributions (min/avg/p95/p99/max, ms) rendered as a box-and-whisker chart.</summary>
+        public List<UsageDistributionEntry> Distributions { get; } = new List<UsageDistributionEntry>();
     }
 }

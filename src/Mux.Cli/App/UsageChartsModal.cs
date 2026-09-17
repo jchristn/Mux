@@ -9,11 +9,10 @@ namespace Mux.Cli.App
 
     /// <summary>
     /// A modal that renders usage telemetry as charts rather than plain text: KPI header lines, a per-day
-    /// tokens line chart and cost bar chart over the trailing window, and a "top models by cost" bar chart.
-    /// It uses only the chart widgets available in the pinned TUIKit release (<see cref="LineChart"/>,
-    /// <see cref="BarChart"/>); percentile-distribution ("candlestick") views await the widgets planned in
-    /// TUIKit's ADDITIONAL_GRAPHS.md. The caller supplies a fully-populated <see cref="UsageChartData"/> so
-    /// the modal performs no I/O. Enter or Escape closes it.
+    /// tokens line chart and cost bar chart over the trailing window, a "top models by cost" bar chart, and a
+    /// latency distribution (min/avg/p95/p99/max) box-and-whisker chart. It uses TUIKit's chart widgets
+    /// (<see cref="LineChart"/>, <see cref="BarChart"/>, <see cref="BoxPlotChart"/>). The caller supplies a
+    /// fully-populated <see cref="UsageChartData"/> so the modal performs no I/O. Enter or Escape closes it.
     /// </summary>
     public sealed class UsageChartsModal : Modal
     {
@@ -27,6 +26,7 @@ namespace Mux.Cli.App
         private readonly LineChart? _TokensChart;
         private readonly BarChart? _CostChart;
         private readonly BarChart? _ModelsChart;
+        private readonly BoxPlotChart? _LatencyChart;
 
         #endregion
 
@@ -64,6 +64,17 @@ namespace Mux.Cli.App
                 for (int i = 0; i < _Data.ModelLabels.Count; i++)
                 {
                     _ModelsChart.Add(_Data.ModelLabels[i], _Data.ModelCosts[i]);
+                }
+            }
+
+            if (_Data.Distributions.Count > 0)
+            {
+                _LatencyChart = new BoxPlotChart { ShowAxis = true };
+                foreach (UsageDistributionEntry d in _Data.Distributions)
+                {
+                    // Min / Avg / P95 / P99 / Max maps onto the box-plot's five-number summary; BoxSummary
+                    // sorts defensively so a non-monotone sample still renders.
+                    _LatencyChart.Add(d.Label, d.Min, d.Avg, d.P95, d.P99, d.Max);
                 }
             }
         }
@@ -121,6 +132,7 @@ namespace Mux.Cli.App
             y = DrawSection(surface, "Tokens per day", _TokensChart, 5, contentX, y, contentWidth, lastContentRow, heading);
             y = DrawSection(surface, "Cost per day", _CostChart, EstimateBarHeight(_CostChart), contentX, y, contentWidth, lastContentRow, heading);
             y = DrawSection(surface, "Top models by cost", _ModelsChart, EstimateBarHeight(_ModelsChart), contentX, y, contentWidth, lastContentRow, heading);
+            y = DrawSection(surface, "Latency distribution (ms): min·avg·p95·p99·max", _LatencyChart, EstimateBoxPlotHeight(_LatencyChart), contentX, y, contentWidth, lastContentRow, heading);
 
             int hintRow = boxY + boxHeight - 1 - PadY;
             surface.DrawText(contentX, hintRow, Trim("Enter / Esc to close", contentWidth), heading);
@@ -172,6 +184,17 @@ namespace Mux.Cli.App
             }
 
             return Math.Min(8, Math.Max(1, chart.Count));
+        }
+
+        // A box-plot draws one row per category plus a shared axis row.
+        private static int EstimateBoxPlotHeight(BoxPlotChart? chart)
+        {
+            if (chart == null)
+            {
+                return 0;
+            }
+
+            return Math.Min(8, Math.Max(1, chart.Count) + 1);
         }
 
         private static string Trim(string text, int width)
