@@ -4,7 +4,7 @@
   "description": "mux in your editor — chat, inline commands, native diffs, and shared sessions over the local mux agent.",
   "version": "0.12.3",
   "icon": "dashboard/media/icon.png",
-  "publisher": "joelchristner",
+  "publisher": "usemux",
   "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
