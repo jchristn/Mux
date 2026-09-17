@@ -140,6 +140,21 @@ namespace Test.Shared
                     // Prompt-profile resolution + prompt editor modal.
                     PromptsSuite.Create(),
 
+                    // Prompt catalog foundation: catalog, resolver, operational overrides, validation.
+                    PromptCatalogSuite.Create(),
+
+                    // TUI operational-prompt catalog browser modal.
+                    PromptCatalogModalSuite.Create(),
+
+                    // Desktop operational-prompt catalog view-model logic.
+                    DesktopPromptCatalogSuite.Create(),
+
+                    // Surface-wiring correctness: Prompts/Pricing collision regression + edit-gating contract.
+                    SurfaceWiringSuite.Create(),
+
+                    // Large-file context: map/summarize/truncate builder, summary cache, agent read_file path.
+                    FileContextSuite.Create(),
+
                     // Mux.Cli command surfaces: slash / keybinding / menu (M10).
                     CommandSurfacesSuite.Create(),
 

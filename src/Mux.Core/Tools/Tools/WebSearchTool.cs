@@ -6,6 +6,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Search.Models;
     using Mux.Search.Services;
 
@@ -29,7 +30,7 @@ namespace Mux.Core.Tools.Tools
         public string Name => "web_search";
 
         /// <inheritdoc />
-        public string Description => "Searches the public web using configured external search providers and returns structured results with URLs and snippets.";
+        public string Description => PromptResolver.Shared.GetEffective("tool.web_search");
 
         /// <inheritdoc />
         public object ParametersSchema => new

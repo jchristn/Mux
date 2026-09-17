@@ -34,6 +34,7 @@ namespace Mux.Cli.App
         private static readonly string[] _ApprovalPolicies = { "ask", "auto", "deny" };
         private static readonly string[] _EnqueueBehaviors = { "ask", "run_now", "queue_after", "add_to_focused" };
         private static readonly string[] _CompactionStrategies = { "summary", "trim" };
+        private static readonly string[] _LargeFileModes = { "map", "summarize", "truncate" };
 
         // Per-field widget row heights, in the same order fields are added to the form below. Used to
         // compute the focused field's vertical offset so the modal can scroll a form taller than the box.
@@ -60,6 +61,11 @@ namespace Mux.Cli.App
             1,                                // Task parallelism enabled
             1,                                // Ignore cert errors
             1,                                // Show boundary lines
+            _LargeFileModes.Length,           // Large-file mode
+            1,                                // Inline threshold bytes
+            1,                                // Summary chunk lines
+            1,                                // Summary cache enabled
+            1,                                // Summary cache retention days
         };
 
         private readonly string _Title;
@@ -87,6 +93,11 @@ namespace Mux.Cli.App
         private readonly Checkbox _TaskParallelism;
         private readonly Checkbox _IgnoreCertErrors;
         private readonly Checkbox _ShowBoundaryLines;
+        private readonly RadioGroup _LargeFileMode;
+        private readonly TextField _InlineThresholdBytes;
+        private readonly TextField _SummaryChunkLines;
+        private readonly Checkbox _SummaryCacheEnabled;
+        private readonly TextField _SummaryCacheRetentionDays;
         private string _Error = string.Empty;
 
         #endregion
@@ -131,6 +142,12 @@ namespace Mux.Cli.App
             _TaskParallelism = new Checkbox("Allow task parallelism", _Settings.TaskParallelismEnabled);
             _IgnoreCertErrors = new Checkbox("Ignore TLS certificate errors", _Settings.IgnoreCertErrors);
             _ShowBoundaryLines = new Checkbox("Show boundary lines", _Settings.ShowBoundaryLines);
+            _LargeFileMode = new RadioGroup(_LargeFileModes);
+            SelectRadio(_LargeFileMode, _LargeFileModes, _Settings.Context.LargeFileMode);
+            _InlineThresholdBytes = new TextField { Value = _Settings.Context.InlineThresholdBytes.ToString(CultureInfo.InvariantCulture) };
+            _SummaryChunkLines = new TextField { Value = _Settings.Context.SummaryChunkLines.ToString(CultureInfo.InvariantCulture) };
+            _SummaryCacheEnabled = new Checkbox("Cache large-file summaries", _Settings.Context.SummaryCacheEnabled);
+            _SummaryCacheRetentionDays = new TextField { Value = _Settings.Context.SummaryCacheRetentionDays.ToString(CultureInfo.InvariantCulture) };
 
             _Form = new Form();
             _Form.Add("Max agent iterations", _MaxAgentIterations, () => ValidateInt(_MaxAgentIterations.Value, "Max agent iterations", 1, 100));
@@ -153,6 +170,11 @@ namespace Mux.Cli.App
             _Form.Add("Task parallelism", _TaskParallelism);
             _Form.Add("Ignore cert errors", _IgnoreCertErrors);
             _Form.Add("Boundary lines", _ShowBoundaryLines);
+            _Form.Add("Large-file mode", _LargeFileMode);
+            _Form.Add("Inline threshold (bytes)", _InlineThresholdBytes, () => ValidateInt(_InlineThresholdBytes.Value, "Inline threshold", 1024, 10485760));
+            _Form.Add("Summary chunk lines", _SummaryChunkLines, () => ValidateInt(_SummaryChunkLines.Value, "Summary chunk lines", 50, 5000));
+            _Form.Add("Summary cache", _SummaryCacheEnabled);
+            _Form.Add("Summary cache retention (days)", _SummaryCacheRetentionDays, () => ValidateInt(_SummaryCacheRetentionDays.Value, "Summary cache retention", 1, 365));
         }
 
         #endregion
@@ -290,6 +312,11 @@ namespace Mux.Cli.App
             _Settings.TaskParallelismEnabled = _TaskParallelism.Checked;
             _Settings.IgnoreCertErrors = _IgnoreCertErrors.Checked;
             _Settings.ShowBoundaryLines = _ShowBoundaryLines.Checked;
+            _Settings.Context.LargeFileMode = _LargeFileMode.SelectedOption;
+            _Settings.Context.InlineThresholdBytes = ParseInt(_InlineThresholdBytes.Value);
+            _Settings.Context.SummaryChunkLines = ParseInt(_SummaryChunkLines.Value);
+            _Settings.Context.SummaryCacheEnabled = _SummaryCacheEnabled.Checked;
+            _Settings.Context.SummaryCacheRetentionDays = ParseInt(_SummaryCacheRetentionDays.Value);
 
             Close(_Settings);
         }

@@ -56,12 +56,7 @@ namespace Mux.Server.Routes
             app.Get("/v1.0/api/prompts", async (req) =>
             {
                 if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();
-                List<PromptProfileDto> items = SettingsLoader.LoadPrompts().Select(p => new PromptProfileDto
-                {
-                    Name = p.Name,
-                    IsActive = p.IsActive,
-                    SystemPrompt = p.SystemPrompt
-                }).ToList();
+                List<PromptProfileDto> items = SettingsLoader.LoadPrompts().Select(ToDto).ToList();
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(new ListResponse<PromptProfileDto>(items)).ConfigureAwait(false);
             }, Documentation.ApiDoc.PromptsGet);
@@ -88,18 +83,31 @@ namespace Mux.Server.Routes
                             Name = dto.Name.Trim(),
                             IsActive = dto.IsActive,
                             SystemPrompt = dto.SystemPrompt ?? string.Empty,
-                            // Preserve the advanced prompt fields not edited from the dashboard.
-                            ToolsDisabledPrompt = prior?.ToolsDisabledPrompt ?? string.Empty,
-                            CompactionPrompt = prior?.CompactionPrompt ?? string.Empty
+                            // All three prompt fields are now editable; a null field falls back to the prior
+                            // stored value so a client that omits a field does not clear it.
+                            ToolsDisabledPrompt = dto.ToolsDisabledPrompt ?? prior?.ToolsDisabledPrompt ?? string.Empty,
+                            CompactionPrompt = dto.CompactionPrompt ?? prior?.CompactionPrompt ?? string.Empty
                         });
                     }
 
                     SettingsLoader.SavePrompts(merged);
                     req.Http.Response.StatusCode = 200;
-                    return await Task.FromResult<object>(new ListResponse<PromptProfileDto>(SettingsLoader.LoadPrompts().Select(p => new PromptProfileDto { Name = p.Name, IsActive = p.IsActive, SystemPrompt = p.SystemPrompt }).ToList())).ConfigureAwait(false);
+                    return await Task.FromResult<object>(new ListResponse<PromptProfileDto>(SettingsLoader.LoadPrompts().Select(ToDto).ToList())).ConfigureAwait(false);
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("SaveFailed", ex.Message); }
             }, Documentation.ApiDoc.PromptsPut);
+        }
+
+        private static PromptProfileDto ToDto(PromptProfile profile)
+        {
+            return new PromptProfileDto
+            {
+                Name = profile.Name,
+                IsActive = profile.IsActive,
+                SystemPrompt = profile.SystemPrompt,
+                ToolsDisabledPrompt = profile.ToolsDisabledPrompt,
+                CompactionPrompt = profile.CompactionPrompt
+            };
         }
 
         #endregion

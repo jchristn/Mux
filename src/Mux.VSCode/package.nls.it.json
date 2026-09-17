@@ -55,5 +55,7 @@
   "cmd.manage.addSkill": "Aggiungi competenza",
   "cmd.manage.editSkill": "Modifica competenza",
   "cmd.manage.deleteSkill": "Elimina competenza",
-  "cmd.usage": "Dashboard di utilizzo"
+  "cmd.usage": "Dashboard di utilizzo",
+  "cmd.manage.editCatalog": "Modifica override del prompt",
+  "cmd.manage.resetCatalog": "Ripristina predefinito"
 }

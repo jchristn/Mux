@@ -55,5 +55,7 @@
   "cmd.manage.addSkill": "Fähigkeit hinzufügen",
   "cmd.manage.editSkill": "Fähigkeit bearbeiten",
   "cmd.manage.deleteSkill": "Fähigkeit löschen",
-  "cmd.usage": "Nutzungs-Dashboard"
+  "cmd.usage": "Nutzungs-Dashboard",
+  "cmd.manage.editCatalog": "Prompt-Überschreibung bearbeiten",
+  "cmd.manage.resetCatalog": "Auf Standard zurücksetzen"
 }

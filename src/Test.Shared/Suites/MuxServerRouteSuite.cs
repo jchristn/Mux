@@ -263,7 +263,7 @@ namespace Test.Shared.Suites
 
                             // Paths are documented (a representative sample across registrars).
                             System.Text.Json.JsonElement paths = root.GetProperty("paths");
-                            foreach (string p in new[] { "/v1.0/api/health", "/v1.0/api/endpoints", "/v1.0/api/chat", "/v1.0/api/sessions", "/v1.0/api/usage/summary", "/v1.0/api/runs" })
+                            foreach (string p in new[] { "/v1.0/api/health", "/v1.0/api/endpoints", "/v1.0/api/chat", "/v1.0/api/sessions", "/v1.0/api/usage/summary", "/v1.0/api/runs", "/v1.0/api/prompts/catalog" })
                             {
                                 MuxAssert.IsTrue(paths.TryGetProperty(p, out _), "path documented: " + p);
                             }
@@ -277,7 +277,7 @@ namespace Test.Shared.Suites
                             // Component schemas and the bearer security scheme are present, and schemas carry examples.
                             System.Text.Json.JsonElement components = root.GetProperty("components");
                             System.Text.Json.JsonElement schemas = components.GetProperty("schemas");
-                            foreach (string schema in new[] { "ChatRequest", "EndpointDto", "SessionSaveRequest", "ApiError", "SettingsDto", "RunStateReply", "RunSummaryDto" })
+                            foreach (string schema in new[] { "ChatRequest", "EndpointDto", "SessionSaveRequest", "ApiError", "SettingsDto", "RunStateReply", "RunSummaryDto", "PromptCatalogEntryDto", "PromptOverrideDto" })
                             {
                                 MuxAssert.IsTrue(schemas.TryGetProperty(schema, out _), "component schema present: " + schema);
                             }
@@ -296,6 +296,100 @@ namespace Test.Shared.Suites
                             server?.Stop();
                             server?.Dispose();
                             try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
+                        }
+
+                        return Task.CompletedTask;
+                    }),
+                    new TestCaseDescriptor("MuxServerRoutes", "PromptCatalogRoutesAndProfileDto", "The prompt catalog lists/overrides/resets over HTTP and the profile DTO round-trips all three prompts", (CancellationToken ct) =>
+                    {
+                        string tempSessions = Path.Combine(Path.GetTempPath(), "mux-test-" + Guid.NewGuid().ToString("N"));
+                        string tempConfig = Path.Combine(Path.GetTempPath(), "mux-cfg-" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(tempConfig);
+                        // Isolate config so the override/profile writes never touch the developer's real ~/.mux.
+                        string? originalConfig = Environment.GetEnvironmentVariable("MUX_CONFIG_DIR");
+                        Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", tempConfig);
+
+                        RestServerSettings rest = new RestServerSettings { Hostname = "127.0.0.1", ApiKey = "testkey123" };
+                        List<EndpointConfig> endpoints = new List<EndpointConfig>
+                        {
+                            new EndpointConfig { Name = "unit-ollama", AdapterType = AdapterTypeEnum.Ollama, BaseUrl = "http://localhost:11434", Model = "gemma3:4b", IsDefault = true }
+                        };
+
+                        MuxServer? server = null;
+                        int port = 0;
+                        for (int bindAttempt = 0; bindAttempt < 10 && server == null; bindAttempt++)
+                        {
+                            port = FreeLoopbackPort();
+                            rest.Port = port;
+                            MuxServer candidate = new MuxServer(rest, "9.9.9-test", new SessionStore(tempSessions), () => endpoints, null);
+                            try { candidate.Start(); server = candidate; }
+                            catch (Exception) { candidate.Dispose(); Thread.Sleep(50); }
+                        }
+
+                        MuxAssert.IsNotNull(server, "server bound to a loopback port");
+                        string baseUrl = "http://127.0.0.1:" + port;
+
+                        try
+                        {
+                            using HttpClient http = new HttpClient();
+                            http.Timeout = TimeSpan.FromSeconds(5);
+                            for (int attempt = 0; attempt < 20; attempt++)
+                            {
+                                try { http.GetAsync(baseUrl + "/v1.0/api/health").GetAwaiter().GetResult(); break; }
+                                catch (Exception) { Thread.Sleep(100); }
+                            }
+
+                            // Catalog GET without a key -> 401.
+                            HttpResponseMessage noKey = http.GetAsync(baseUrl + "/v1.0/api/prompts/catalog").GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(401, (int)noKey.StatusCode, "CatalogNoKeyStatus");
+
+                            // Catalog GET with the key -> 200 and lists representative entries.
+                            string listBody = GetAuthed(http, baseUrl + "/v1.0/api/prompts/catalog");
+                            MuxAssert.Contains("tool.read_file", listBody, "catalog lists a tool description");
+                            MuxAssert.Contains("compaction.user", listBody, "catalog lists the compaction framing");
+
+                            // Set a valid override -> 200, reported overridden, effective reflects it.
+                            string setResp = PutAuthed(http, baseUrl + "/v1.0/api/prompts/catalog", "{\"key\":\"compaction.user\",\"content\":\"Summarize the earlier turns below:\"}", out int setStatus);
+                            MuxAssert.AreEqual(200, setStatus, "SetOverrideStatus");
+                            MuxAssert.Contains("\"Overridden\":true", setResp, "override in effect");
+                            MuxAssert.Contains("Summarize the earlier turns below:", setResp, "effective reflects the override");
+
+                            // GET reflects the override.
+                            MuxAssert.Contains("Summarize the earlier turns below:", GetAuthed(http, baseUrl + "/v1.0/api/prompts/catalog"), "list reflects the override");
+
+                            // Reset with blank content -> 200, no longer overridden.
+                            string resetResp = PutAuthed(http, baseUrl + "/v1.0/api/prompts/catalog", "{\"key\":\"compaction.user\",\"content\":\"\"}", out int resetStatus);
+                            MuxAssert.AreEqual(200, resetStatus, "ResetStatus");
+                            MuxAssert.Contains("\"Overridden\":false", resetResp, "override cleared");
+
+                            // Dropping a required placeholder is rejected.
+                            PutAuthed(http, baseUrl + "/v1.0/api/prompts/catalog", "{\"key\":\"tool.run_process\",\"content\":\"no tokens here\"}", out int badPlaceholder);
+                            MuxAssert.AreEqual(400, badPlaceholder, "MissingPlaceholderRejected");
+
+                            // A profile-scoped key has no operational override.
+                            PutAuthed(http, baseUrl + "/v1.0/api/prompts/catalog", "{\"key\":\"system\",\"content\":\"x\"}", out int profileScoped);
+                            MuxAssert.AreEqual(400, profileScoped, "ProfileScopeRejected");
+
+                            // An unknown key is rejected.
+                            PutAuthed(http, baseUrl + "/v1.0/api/prompts/catalog", "{\"key\":\"no.such.key\",\"content\":\"x\"}", out int unknownKey);
+                            MuxAssert.AreEqual(400, unknownKey, "UnknownKeyRejected");
+
+                            // Profile DTO gap fix: all three prompt fields round-trip through PUT and GET.
+                            string profileBody = "{\"items\":[{\"name\":\"Custom\",\"isActive\":true,\"systemPrompt\":\"S\",\"toolsDisabledPrompt\":\"TD\",\"compactionPrompt\":\"CP\"}]}";
+                            string putProfileResp = PutAuthed(http, baseUrl + "/v1.0/api/prompts", profileBody, out int putProfileStatus);
+                            MuxAssert.AreEqual(200, putProfileStatus, "PutProfileStatus");
+                            MuxAssert.Contains("\"CompactionPrompt\":\"CP\"", putProfileResp, "compaction prompt round-trips in the PUT response");
+                            string getProfile = GetAuthed(http, baseUrl + "/v1.0/api/prompts");
+                            MuxAssert.Contains("\"ToolsDisabledPrompt\":\"TD\"", getProfile, "tools-disabled prompt exposed on GET");
+                            MuxAssert.Contains("\"CompactionPrompt\":\"CP\"", getProfile, "compaction prompt exposed on GET");
+                        }
+                        finally
+                        {
+                            server?.Stop();
+                            server?.Dispose();
+                            Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", originalConfig);
+                            try { if (Directory.Exists(tempSessions)) Directory.Delete(tempSessions, true); } catch (Exception) { }
+                            try { if (Directory.Exists(tempConfig)) Directory.Delete(tempConfig, true); } catch (Exception) { }
                         }
 
                         return Task.CompletedTask;
@@ -913,6 +1007,24 @@ namespace Test.Shared.Suites
             int port = ((IPEndPoint)listener.LocalEndpoint).Port;
             listener.Stop();
             return port;
+        }
+
+        private static string GetAuthed(HttpClient http, string url)
+        {
+            using HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Add("Authorization", "Bearer testkey123");
+            HttpResponseMessage res = http.SendAsync(req).GetAwaiter().GetResult();
+            return res.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        }
+
+        private static string PutAuthed(HttpClient http, string url, string body, out int status)
+        {
+            using HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Put, url);
+            req.Headers.Add("Authorization", "Bearer testkey123");
+            req.Content = new StringContent(body, Encoding.UTF8, "application/json");
+            HttpResponseMessage res = http.SendAsync(req).GetAwaiter().GetResult();
+            status = (int)res.StatusCode;
+            return res.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         }
     }
 }

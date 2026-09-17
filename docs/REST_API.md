@@ -97,7 +97,10 @@ All paths are versioned under `/v1.0/api`.
 | PUT | `/v1.0/api/endpoints` | key | Replace the endpoint collection (`{ "items": [ … ] }`). A blank secret preserves the stored one. |
 | DELETE | `/v1.0/api/endpoints?name=<name>` | key | Delete an endpoint. |
 | GET/PUT/DELETE | `/v1.0/api/mcp-servers` | key | CRUD over MCP servers (auth secret masked/preserved). DELETE takes `?name=`. |
-| GET/PUT | `/v1.0/api/prompts` | key | Prompt profiles (name, active, system prompt). |
+| GET/PUT | `/v1.0/api/prompts` | key | Prompt profiles (name, active, and all three prompt fields: `systemPrompt`, `toolsDisabledPrompt`, `compactionPrompt`). On PUT a blank field inherits the built-in default; a `null` (omitted) advanced field preserves the stored value. |
+| GET | `/v1.0/api/prompts/catalog` | key | The operational prompt catalog: every model-facing prompt grouped by kind, with its coded default, current effective value, required placeholders, `Overridden` flag, and whether it is `Editable`. Returns `{ "items": [ … ] }`. |
+| PUT | `/v1.0/api/prompts/catalog` | key | Set or clear one global-scoped override: `{ "key": "<catalog key>", "content": "<text>" }`. A blank/omitted `content` clears the override (restores the default). Rejects an unknown or profile-scoped key (`400`) and an override that drops a required placeholder (`400`). Returns the updated entry. |
+| POST | `/v1.0/api/context/file` | key | Build a model-context block from a file: `{ "path", "content", "mode"?, "inlineThresholdBytes"?, "headLines"?, "summaryChunkLines"? }`. A file at or below the inline threshold returns whole; a larger file is **mapped** (a structural outline with line ranges), **summarized** (an iterative map-reduce summary the server runs), or **truncated**, per `mode` (default from settings). Returns `{ "Text", "Mode", "Inlined", "OutlineEntryCount", "FromCache" }`. Lets a thin client offload mapping/summarizing to the server. |
 | GET/PUT | `/v1.0/api/subagents` | key | Subagent definitions. |
 | GET/PUT | `/v1.0/api/hooks` | key | Plugin config: `{ "hooks": [ … ], "commands": [ … ] }`. |
 | GET/PUT | `/v1.0/api/keybindings` | key | Command-id → chord overrides. |
@@ -133,6 +136,46 @@ its own API calls are authenticated. Do not expose a non-loopback `hostname` wit
 WebSocket, so pass it as a query parameter: `ws://127.0.0.1:<port>/v1.0/ws?apiKey=<key>` (native clients may
 instead send `Authorization: Bearer <key>`). An unauthenticated upgrade receives a single `error` frame and
 is closed.
+
+## Prompt management
+
+Every string the model reads is addressable in one of two places:
+
+- **Prompt profiles** (`/v1.0/api/prompts`) hold the switchable persona prompts — `systemPrompt`,
+  `toolsDisabledPrompt`, and `compactionPrompt`. Exactly one profile is active; a blank field inherits the
+  built-in default. All three are editable over REST (earlier releases exposed only `systemPrompt`).
+- **The operational prompt catalog** (`/v1.0/api/prompts/catalog`) is a single, code-defined inventory of
+  every other model-facing prompt, grouped by *kind*: `compaction`, `task-planning`, `title-generation`,
+  `tool-section`, `tool-description`, `tool-result`, and `diagnostics`. Each entry ships with a sensible coded
+  default, so the catalog is fully populated out of the box. A user override for a global-scoped entry is
+  stored in the `operational` map of `~/.mux/prompts.json`; an absent key resolves to the default.
+
+Set an override with `PUT /v1.0/api/prompts/catalog` (`{ "key", "content" }`); clear it (restore the default)
+by sending blank `content`. Overrides are validated: an override that drops a placeholder the prompt requires
+(for example `{ToolName}` in `result.unknown_tool`, or `{OperatingSystem}`/`{Shell}`/`{ShellArgsHint}` in
+`tool.run_process`) is rejected with `400`. Subagent personas are not in the catalog — they keep their own
+home in `subagents.json` and are edited through `/v1.0/api/subagents`.
+
+## Large-file context
+
+Instead of truncating a large file (or, for the agent's own `read_file` tool, refusing it outright), mux turns
+it into a navigable block. The behavior is a `context` settings group in `settings.json` (also editable on
+every Settings page):
+
+- `largeFileMode` — `map` (default), `summarize`, or `truncate`. **Map** emits a structural outline with line
+  ranges plus the first lines, so the model can pull an exact range with `read_file(offset, limit)` — ground
+  truth, instant, and free. **Summarize** runs an iterative map-reduce and emits a dense summary that still
+  carries line-range pointers. **Truncate** keeps the strict head-slice / refusal for anyone who wants the cap.
+- `inlineThresholdBytes` — files at or below this size inline whole (default 64 KiB).
+- `summaryChunkLines` — lines per chunk when summarizing (default 400).
+- `summaryCacheEnabled` / `summaryCacheRetentionDays` — summaries are cached on disk, content-addressed by
+  hash (so an edit misses automatically), under `~/.mux/cache/file-summaries/`, and a periodic pass evicts
+  entries older than the retention window (default 7 days).
+
+The agent's `read_file` tool applies the same setting: a file over its inline cap returns a structural map
+(default) rather than a `file_too_large` refusal, while an explicit `offset`/`limit` still pages the exact
+range the map points at. Summarizing needs a model call, so the tool itself maps; a thin client asks the
+server to summarize via `POST /v1.0/api/context/file`, which runs the summarizer and serves the cache.
 
 ## Web dashboard
 

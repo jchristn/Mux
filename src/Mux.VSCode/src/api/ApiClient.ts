@@ -13,9 +13,11 @@ import {
     CheckpointStatus,
     EndpointDetail,
     EndpointSummary,
+    FileContextResponse,
     HealthResponse,
     McpServer,
     MuxServerSettings,
+    PromptCatalogEntry,
     PromptProfile,
     SessionDetail,
     SessionSummary,
@@ -144,6 +146,32 @@ export class ApiClient {
     /** Replaces the prompt profile collection (exactly one should be active). */
     public async putPrompts(items: PromptProfile[], signal?: AbortSignal): Promise<void> {
         await this.sendJson('PUT', '/v1.0/api/prompts', { Items: items }, signal);
+    }
+
+    /** Lists the operational prompt catalog (every model-facing prompt with its default, effective value, and overridden flag). */
+    public async getPromptCatalog(signal?: AbortSignal): Promise<PromptCatalogEntry[]> {
+        const response = await this.getJson<{ Items: PromptCatalogEntry[] }>('/v1.0/api/prompts/catalog', signal);
+        return response.Items ?? [];
+    }
+
+    /** Sets or clears one operational-prompt override. A blank `content` clears it (restores the default). */
+    public async putPromptOverride(key: string, content: string, signal?: AbortSignal): Promise<void> {
+        await this.sendJson('PUT', '/v1.0/api/prompts/catalog', { key, content }, signal);
+    }
+
+    /**
+     * Builds a model-context block from a file's contents. Small files return whole; large files are mapped,
+     * summarized, or truncated per the server's configured mode (or an explicit `mode` override).
+     *
+     * @param request The file path, content, and optional mode/threshold overrides.
+     * @param signal An optional abort signal.
+     * @returns The built block and the mode actually used.
+     */
+    public buildFileContext(
+        request: { path: string; content: string; mode?: string; inlineThresholdBytes?: number; headLines?: number; summaryChunkLines?: number },
+        signal?: AbortSignal,
+    ): Promise<FileContextResponse> {
+        return this.sendJson<FileContextResponse>('POST', '/v1.0/api/context/file', request, signal);
     }
 
     /** Lists subagents. */

@@ -2,6 +2,18 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 0.12.3
+
+- **Operational prompt catalog in the management tree.** Under **Prompts**, every model-facing prompt now
+  appears grouped by kind with a custom/default indicator; click an entry to edit its override or reset it to
+  the default (`mux.manage.editCatalog` / `mux.manage.resetCatalog`, backed by the server's prompt-catalog
+  routes). The prompt-profile form now edits all three prompt fields (system, tools-disabled, compaction), and
+  subagent personas are listed read-through with a deep link to the subagent editor.
+- **Smart large-file context.** The active file is no longer hard-sliced at 8000 characters: a small file is
+  inlined whole, and a large file is sent to the server to be turned into a structural map (or summary) with
+  line ranges, which is inlined verbatim. The LSP outline now emits line ranges. If the server is unreachable
+  the extension falls back to the previous truncation.
+
 ## 0.12.2
 
 - **Live cross-surface transcript sync, now reliable.** A conversation open in the editor reloads when a turn

@@ -6,6 +6,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
 
     /// <summary>
     /// Reads metadata about a file or directory (size, timestamps, attributes).
@@ -22,8 +23,7 @@ namespace Mux.Core.Tools.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Returns metadata about a file or directory including size, creation time, "
-            + "last modified time, last access time, and attributes. Works for both files and directories.";
+        public string Description => PromptResolver.Shared.GetEffective("tool.file_metadata");
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.

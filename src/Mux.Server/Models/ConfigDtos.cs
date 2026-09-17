@@ -121,7 +121,8 @@ namespace Mux.Server.Models
         public string? AuthSecret { get; set; }
     }
 
-    /// <summary>A prompt profile projected for editing.</summary>
+    /// <summary>A prompt profile projected for editing. All three prompt fields are editable; a blank field
+    /// inherits the built-in default for that prompt.</summary>
     public sealed class PromptProfileDto
     {
         /// <summary>Profile name.</summary>
@@ -132,6 +133,102 @@ namespace Mux.Server.Models
 
         /// <summary>System prompt override (blank inherits the built-in default).</summary>
         public string SystemPrompt { get; set; } = string.Empty;
+
+        /// <summary>Tools-disabled system prompt override (blank inherits the built-in default). Null (omitted
+        /// on write) preserves the stored value, so a partial update never clears it; blank clears it.</summary>
+        public string? ToolsDisabledPrompt { get; set; }
+
+        /// <summary>Compaction system prompt override (blank inherits the built-in default). Null (omitted on
+        /// write) preserves the stored value, so a partial update never clears it; blank clears it.</summary>
+        public string? CompactionPrompt { get; set; }
+    }
+
+    /// <summary>One operational-prompt catalog entry projected for the dashboard: its metadata, coded default,
+    /// current effective value, and whether an override is in effect.</summary>
+    public sealed class PromptCatalogEntryDto
+    {
+        /// <summary>Stable catalog key (for example <c>tool.read_file</c>).</summary>
+        public string Key { get; set; } = string.Empty;
+
+        /// <summary>Kind wire string used to group the entry (for example <c>tool-description</c>).</summary>
+        public string Kind { get; set; } = string.Empty;
+
+        /// <summary>Where an override is stored: <c>Profile</c>, <c>Global</c>, or <c>External</c>.</summary>
+        public string Scope { get; set; } = string.Empty;
+
+        /// <summary>Short human label.</summary>
+        public string DisplayName { get; set; } = string.Empty;
+
+        /// <summary>One-line explanation of the prompt's purpose.</summary>
+        public string Description { get; set; } = string.Empty;
+
+        /// <summary>Placeholder tokens an override must preserve (for example <c>{ToolName}</c>).</summary>
+        public List<string> Placeholders { get; set; } = new List<string>();
+
+        /// <summary>The coded default content.</summary>
+        public string Default { get; set; } = string.Empty;
+
+        /// <summary>The current effective content (the override when set, otherwise the default).</summary>
+        public string Effective { get; set; } = string.Empty;
+
+        /// <summary>Whether a non-empty override is currently in effect.</summary>
+        public bool Overridden { get; set; }
+
+        /// <summary>Whether this entry can carry an operational override (true only for global-scoped entries).</summary>
+        public bool Editable { get; set; }
+    }
+
+    /// <summary>A request to set or clear one operational-prompt override. A blank or null <see cref="Content"/>
+    /// clears the override (restoring the default).</summary>
+    public sealed class PromptOverrideDto
+    {
+        /// <summary>The catalog key to override.</summary>
+        public string Key { get; set; } = string.Empty;
+
+        /// <summary>The override text; blank or null clears the override.</summary>
+        public string? Content { get; set; }
+    }
+
+    /// <summary>A request to build a model-context block from a file's contents. Omitted fields fall back to
+    /// the server's <c>context</c> settings.</summary>
+    public sealed class FileContextRequestDto
+    {
+        /// <summary>The file path (used for the map note and outline heuristics).</summary>
+        public string Path { get; set; } = string.Empty;
+
+        /// <summary>The full file contents.</summary>
+        public string Content { get; set; } = string.Empty;
+
+        /// <summary>Large-file mode: <c>map</c>, <c>summarize</c>, or <c>truncate</c>. Null uses the configured default.</summary>
+        public string? Mode { get; set; }
+
+        /// <summary>Inline size gate in bytes. Null uses the configured default.</summary>
+        public int? InlineThresholdBytes { get; set; }
+
+        /// <summary>Leading lines to include in a map/truncation. Null uses a default.</summary>
+        public int? HeadLines { get; set; }
+
+        /// <summary>Lines per summarizer chunk. Null uses the configured default.</summary>
+        public int? SummaryChunkLines { get; set; }
+    }
+
+    /// <summary>A built file-context block.</summary>
+    public sealed class FileContextResponseDto
+    {
+        /// <summary>The context block text to feed the model.</summary>
+        public string Text { get; set; } = string.Empty;
+
+        /// <summary>The mode actually used: <c>map</c>, <c>summarize</c>, or <c>truncate</c>.</summary>
+        public string Mode { get; set; } = string.Empty;
+
+        /// <summary>Whether the file was small enough to be inlined whole.</summary>
+        public bool Inlined { get; set; }
+
+        /// <summary>The number of outline entries emitted.</summary>
+        public int OutlineEntryCount { get; set; }
+
+        /// <summary>Whether a summary was served from the cache.</summary>
+        public bool FromCache { get; set; }
     }
 
     /// <summary>A keybinding override projected for editing.</summary>

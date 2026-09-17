@@ -7,6 +7,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
 
     /// <summary>
     /// Performs a single exact string replacement in a file.
@@ -24,8 +25,7 @@ namespace Mux.Core.Tools.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Performs an exact string replacement in a file. Finds old_string and replaces it with new_string. "
-            + "Returns an error if the old_string is not found or matches multiple locations (ambiguous).";
+        public string Description => PromptResolver.Shared.GetEffective("tool.edit_file");
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.

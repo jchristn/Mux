@@ -10,6 +10,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
 
     /// <summary>
     /// Searches files recursively for lines matching a regular expression pattern.
@@ -33,8 +34,7 @@ namespace Mux.Core.Tools.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Searches files recursively for lines matching a regular expression. "
-            + "Returns matching lines with file path and line number. Limited to the first 100 matches.";
+        public string Description => PromptResolver.Shared.GetEffective("tool.grep");
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.

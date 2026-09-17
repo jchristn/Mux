@@ -55,5 +55,7 @@
   "cmd.manage.addSkill": "スキルを追加",
   "cmd.manage.editSkill": "スキルを編集",
   "cmd.manage.deleteSkill": "スキルを削除",
-  "cmd.usage": "使用状況ダッシュボード"
+  "cmd.usage": "使用状況ダッシュボード",
+  "cmd.manage.editCatalog": "プロンプトの上書きを編集",
+  "cmd.manage.resetCatalog": "既定に戻す"
 }

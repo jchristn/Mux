@@ -13,6 +13,7 @@ namespace Mux.Core.Agent
     using Mux.Core.Jobs;
     using Mux.Core.Llm;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Core.Settings;
     using Mux.Core.Telemetry;
     using Mux.Core.Tools;
@@ -27,7 +28,7 @@ namespace Mux.Core.Agent
 
         private const int InRunCompactionTargetPercent = 60;
         private const int InRunProtectedTailMessageCount = 6;
-        private const string SyntheticSummaryPrefix = "[mux summary generated automatically; older conversation condensed]";
+        private static readonly string SyntheticSummaryPrefix = PromptCatalog.SyntheticSummaryPrefix;
 
         private AgentLoopOptions _Options;
         private LlmClient _LlmClient;
@@ -343,7 +344,7 @@ namespace Mux.Core.Agent
                         {
                             Role = RoleEnum.Tool,
                             ToolCallId = toolCall.Id,
-                            Content = JsonSerializer.Serialize(new { error = "tool_call_denied", message = "The user denied this tool call." })
+                            Content = JsonSerializer.Serialize(new { error = "tool_call_denied", message = PromptResolver.Shared.GetEffective("result.tool_call_denied") })
                         });
                         continue;
                     }
@@ -917,10 +918,10 @@ namespace Mux.Core.Agent
         {
             string compactableDigest = BuildConversationDigest(messagesToCompact, maxChars: 12000);
             string systemPrompt = string.IsNullOrWhiteSpace(_Options.CompactionSystemPrompt)
-                ? Mux.Core.Settings.Defaults.CompactionSystemPrompt
+                ? PromptCatalog.DefaultFor("compaction.system")
                 : _Options.CompactionSystemPrompt;
             string userPrompt =
-                $"Compact this older conversation history:{Environment.NewLine}{Environment.NewLine}{compactableDigest}";
+                $"{PromptResolver.Shared.GetEffective("compaction.user")}{Environment.NewLine}{Environment.NewLine}{compactableDigest}";
 
             string summary = RunSidecarPromptAsync(systemPrompt, userPrompt, cancellationToken)
                 .GetAwaiter()
@@ -1060,7 +1061,7 @@ namespace Mux.Core.Agent
             int half = Math.Max(1, (maxChars - 24) / 2);
             return digest.Substring(0, half).TrimEnd()
                 + Environment.NewLine
-                + "...[conversation truncated]..."
+                + PromptResolver.Shared.GetEffective("digest.truncation-marker")
                 + Environment.NewLine
                 + digest.Substring(Math.Max(0, digest.Length - half)).TrimStart();
         }
@@ -1201,7 +1202,7 @@ namespace Mux.Core.Agent
             {
                 ToolCallId = toolCall.Id,
                 Success = false,
-                Content = JsonSerializer.Serialize(new { error = "unknown_tool", message = $"Tool '{toolCall.Name}' is not registered and no external executor is configured." })
+                Content = JsonSerializer.Serialize(new { error = "unknown_tool", message = PromptResolver.Shared.Resolve("result.unknown_tool", new Dictionary<string, string> { { "{ToolName}", toolCall.Name } }) })
             };
         }
 
@@ -1209,7 +1210,7 @@ namespace Mux.Core.Agent
         {
             if (!ToolGovernance.IsPermitted(toolCall.Name, _Options.AllowedTools, _Options.DeniedTools))
             {
-                return $"Tool '{toolCall.Name}' is not permitted by the configured tool policy (--allow-tools/--deny-tools).";
+                return PromptResolver.Shared.Resolve("result.tool_policy_denied", new Dictionary<string, string> { { "{ToolName}", toolCall.Name } });
             }
 
             if (_Options.SandboxPosture == SandboxPostureEnum.ReadOnly

@@ -81,6 +81,21 @@ namespace Mux.Server.Models
         /// <summary>Default enqueue behavior.</summary>
         public string DefaultEnqueueBehavior { get; set; } = "ask";
 
+        /// <summary>Large-file mode (map/summarize/truncate).</summary>
+        public string LargeFileMode { get; set; } = "map";
+
+        /// <summary>Inline size gate in bytes.</summary>
+        public int InlineThresholdBytes { get; set; } = 65536;
+
+        /// <summary>Lines per summarizer chunk.</summary>
+        public int SummaryChunkLines { get; set; } = 400;
+
+        /// <summary>Whether summarized large-file context is cached.</summary>
+        public bool SummaryCacheEnabled { get; set; } = true;
+
+        /// <summary>Summary-cache retention in days.</summary>
+        public int SummaryCacheRetentionDays { get; set; } = 7;
+
         /// <summary>REST server settings (API key masked).</summary>
         public RestSettingsDto Rest { get; set; } = new RestSettingsDto();
 
@@ -108,6 +123,11 @@ namespace Mux.Server.Models
                 IgnoreCertErrors = settings.IgnoreCertErrors,
                 ShowBoundaryLines = settings.ShowBoundaryLines,
                 DefaultEnqueueBehavior = settings.DefaultEnqueueBehavior,
+                LargeFileMode = settings.Context.LargeFileMode,
+                InlineThresholdBytes = settings.Context.InlineThresholdBytes,
+                SummaryChunkLines = settings.Context.SummaryChunkLines,
+                SummaryCacheEnabled = settings.Context.SummaryCacheEnabled,
+                SummaryCacheRetentionDays = settings.Context.SummaryCacheRetentionDays,
                 Rest = new RestSettingsDto
                 {
                     Enabled = settings.Rest.Enabled,
@@ -143,6 +163,11 @@ namespace Mux.Server.Models
             settings.IgnoreCertErrors = IgnoreCertErrors;
             settings.ShowBoundaryLines = ShowBoundaryLines;
             settings.DefaultEnqueueBehavior = DefaultEnqueueBehavior;
+            settings.Context.LargeFileMode = LargeFileMode;
+            settings.Context.InlineThresholdBytes = InlineThresholdBytes;
+            settings.Context.SummaryChunkLines = SummaryChunkLines;
+            settings.Context.SummaryCacheEnabled = SummaryCacheEnabled;
+            settings.Context.SummaryCacheRetentionDays = SummaryCacheRetentionDays;
 
             if (Rest != null)
             {

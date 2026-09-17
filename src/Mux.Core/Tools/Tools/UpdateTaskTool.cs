@@ -7,6 +7,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading.Tasks;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Core.Tasks;
     using Mux.Core.Tools;
 
@@ -47,10 +48,7 @@ namespace Mux.Core.Tools.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Updates the status of one task in the current plan. "
-            + "Set status to in_progress when you start a task and completed when you finish it; keep exactly one task "
-            + "in_progress at a time. Use blocked (with a note) when a task cannot proceed, skipped when it is no longer needed, "
-            + "and failed (a note is required) when an attempt failed.";
+        public string Description => PromptResolver.Shared.GetEffective("tool.update_task");
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.

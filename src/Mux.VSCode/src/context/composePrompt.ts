@@ -14,6 +14,12 @@ export interface ContextItem {
 
     /** The raw content. */
     content: string;
+
+    /** The file's path, when the item is backed by a file (used to build server-side large-file context). */
+    path?: string;
+
+    /** When true, the item is exempt from the per-item cap — its content is already a bounded map or summary. */
+    noTruncate?: boolean;
 }
 
 /** The result of composing a prompt. */
@@ -50,7 +56,7 @@ export function composePrompt(userMessage: string, items: ContextItem[], perItem
 
     for (const item of items) {
         let body = item.content ?? '';
-        if (body.length > perItemCharCap) {
+        if (!item.noTruncate && body.length > perItemCharCap) {
             body = `${body.slice(0, perItemCharCap)}\n… [truncated ${body.length - perItemCharCap} characters]`;
             truncated.push(item.label);
         }

@@ -7,6 +7,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Core.Subagents;
     using Mux.Core.Tools;
 
@@ -59,10 +60,7 @@ namespace Mux.Core.Tools.Tools
             get
             {
                 StringBuilder builder = new StringBuilder();
-                builder.Append("Delegates a self-contained sub-task to a named subagent that runs in its own isolated ");
-                builder.Append("conversation and returns only its final answer. Use this to hand off focused work ");
-                builder.Append("(a review, a scoped search, a mechanical change) so your own context stays clean. ");
-                builder.Append("Available subagents:");
+                builder.Append(PromptResolver.Shared.GetEffective("tool.spawn_subagent"));
                 foreach (SubagentDefinition definition in _Registry.Definitions)
                 {
                     builder.Append(' ');

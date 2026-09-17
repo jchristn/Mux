@@ -25,6 +25,7 @@ namespace Mux.Desktop.Views
         private static readonly string[] ApprovalValues = { "ask", "auto", "deny" };
         private static readonly string[] CompactionValues = { "summary", "trim" };
         private static readonly string[] EnqueueValues = { "ask", "run_now", "queue_after", "add_to_focused" };
+        private static readonly string[] LargeFileModeValues = { "map", "summarize", "truncate" };
 
         private readonly MuxSettings _Settings;
         private readonly Action<string>? _OnThemeMode;
@@ -41,6 +42,12 @@ namespace Mux.Desktop.Views
         private readonly TextBox _ContextWarningThreshold = new TextBox();
         private readonly TextBox _ContextSafetyMargin = new TextBox();
         private readonly TextBox _TokenEstimationRatio = new TextBox();
+
+        private readonly ComboBox _LargeFileMode = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
+        private readonly TextBox _InlineThresholdBytes = new TextBox();
+        private readonly TextBox _SummaryChunkLines = new TextBox();
+        private readonly CheckBox _SummaryCacheEnabled = new CheckBox();
+        private readonly TextBox _SummaryCacheRetentionDays = new TextBox();
 
         private readonly TextBox _MaxConcurrency = new TextBox();
         private readonly ComboBox _EnqueueBehavior = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -114,6 +121,10 @@ namespace Mux.Desktop.Views
             };
             _EnqueueBehavior.SelectedIndex = IndexOfValue(EnqueueValues, _Settings.DefaultEnqueueBehavior, 0);
 
+            _LargeFileMode.ItemsSource = new List<string> { "map", "summarize", "truncate" };
+            _LargeFileMode.SelectedIndex = IndexOfValue(LargeFileModeValues, _Settings.Context.LargeFileMode, 0);
+            _SummaryCacheEnabled.Content = Localizer.T(StringKeys.SettingsSummaryCacheLabel);
+
             _AutoCompact.Content = Localizer.T("settings.autoCompact");
             _TaskPlanning.Content = Localizer.T("settings.taskPlanning");
             _TaskParallelism.Content = Localizer.T("settings.taskParallel");
@@ -130,6 +141,10 @@ namespace Mux.Desktop.Views
             _ContextWarningThreshold.Text = _Settings.ContextWarningThresholdPercent.ToString(CultureInfo.InvariantCulture);
             _ContextSafetyMargin.Text = _Settings.ContextWindowSafetyMarginPercent.ToString(CultureInfo.InvariantCulture);
             _TokenEstimationRatio.Text = _Settings.TokenEstimationRatio.ToString(CultureInfo.InvariantCulture);
+            _InlineThresholdBytes.Text = _Settings.Context.InlineThresholdBytes.ToString(CultureInfo.InvariantCulture);
+            _SummaryChunkLines.Text = _Settings.Context.SummaryChunkLines.ToString(CultureInfo.InvariantCulture);
+            _SummaryCacheEnabled.IsChecked = _Settings.Context.SummaryCacheEnabled;
+            _SummaryCacheRetentionDays.Text = _Settings.Context.SummaryCacheRetentionDays.ToString(CultureInfo.InvariantCulture);
             _MaxConcurrency.Text = _Settings.MaxConcurrency.ToString(CultureInfo.InvariantCulture);
             _TaskPlanning.IsChecked = _Settings.TaskPlanningEnabled;
             _TaskParallelism.IsChecked = _Settings.TaskParallelismEnabled;
@@ -183,6 +198,13 @@ namespace Mux.Desktop.Views
             form.Children.Add(LabeledRow(Localizer.T("settings.warnThreshold"), _ContextWarningThreshold, Localizer.T("settings.warnThreshold.tip")));
             form.Children.Add(LabeledRow(Localizer.T("settings.safetyMargin"), _ContextSafetyMargin, Localizer.T("settings.safetyMargin.tip")));
             form.Children.Add(LabeledRow(Localizer.T("settings.tokenRatio"), _TokenEstimationRatio, Localizer.T("settings.tokenRatio.tip")));
+
+            form.Children.Add(Section(Localizer.T(StringKeys.SettingsLargeFilesSection)));
+            form.Children.Add(LabeledRow(Localizer.T(StringKeys.SettingsLargeFileMode), _LargeFileMode, Localizer.T(StringKeys.SettingsLargeFileModeTip)));
+            form.Children.Add(LabeledRow(Localizer.T(StringKeys.SettingsInlineThreshold), _InlineThresholdBytes, Localizer.T(StringKeys.SettingsInlineThresholdTip)));
+            form.Children.Add(LabeledRow(Localizer.T(StringKeys.SettingsSummaryChunkLines), _SummaryChunkLines, Localizer.T(StringKeys.SettingsSummaryChunkLinesTip)));
+            form.Children.Add(_SummaryCacheEnabled.Tip(Localizer.T(StringKeys.SettingsSummaryCacheTip)));
+            form.Children.Add(LabeledRow(Localizer.T(StringKeys.SettingsSummaryCacheRetention), _SummaryCacheRetentionDays, Localizer.T(StringKeys.SettingsSummaryCacheRetentionTip)));
 
             form.Children.Add(Section(Localizer.T("settings.sec.jobs")));
             form.Children.Add(LabeledRow(Localizer.T("settings.maxConcurrency"), _MaxConcurrency, Localizer.T("settings.maxConcurrency.tip")));
@@ -244,8 +266,12 @@ namespace Mux.Desktop.Views
             _Settings.DefaultApprovalPolicy = ValueAt(ApprovalValues, _ApprovalPolicy.SelectedIndex, _Settings.DefaultApprovalPolicy);
             _Settings.CompactionStrategy = ValueAt(CompactionValues, _CompactionStrategy.SelectedIndex, _Settings.CompactionStrategy);
             _Settings.DefaultEnqueueBehavior = ValueAt(EnqueueValues, _EnqueueBehavior.SelectedIndex, _Settings.DefaultEnqueueBehavior);
+            _Settings.Context.LargeFileMode = ValueAt(LargeFileModeValues, _LargeFileMode.SelectedIndex, _Settings.Context.LargeFileMode);
 
             AssignInt(_MaxIterations, value => _Settings.MaxAgentIterations = value);
+            AssignInt(_InlineThresholdBytes, value => _Settings.Context.InlineThresholdBytes = value);
+            AssignInt(_SummaryChunkLines, value => _Settings.Context.SummaryChunkLines = value);
+            AssignInt(_SummaryCacheRetentionDays, value => _Settings.Context.SummaryCacheRetentionDays = value);
             AssignInt(_CompactionPreserveTurns, value => _Settings.CompactionPreserveTurns = value);
             AssignInt(_ContextWarningThreshold, value => _Settings.ContextWarningThresholdPercent = value);
             AssignInt(_ContextSafetyMargin, value => _Settings.ContextWindowSafetyMarginPercent = value);
@@ -272,6 +298,7 @@ namespace Mux.Desktop.Views
             _Settings.ShowBoundaryLines = _ShowBoundaryLines.IsChecked ?? _Settings.ShowBoundaryLines;
             _Settings.SkillsEnabled = _SkillsEnabled.IsChecked ?? _Settings.SkillsEnabled;
             _Settings.Telemetry.Enabled = _Telemetry.IsChecked ?? _Settings.Telemetry.Enabled;
+            _Settings.Context.SummaryCacheEnabled = _SummaryCacheEnabled.IsChecked ?? _Settings.Context.SummaryCacheEnabled;
 
             try
             {
@@ -299,6 +326,9 @@ namespace Mux.Desktop.Views
             _ProcessTimeout.Text = _Settings.ProcessTimeoutMs.ToString(CultureInfo.InvariantCulture);
             _SkillRefreshInterval.Text = _Settings.SkillRefreshIntervalSeconds.ToString(CultureInfo.InvariantCulture);
             _TokenEstimationRatio.Text = _Settings.TokenEstimationRatio.ToString(CultureInfo.InvariantCulture);
+            _InlineThresholdBytes.Text = _Settings.Context.InlineThresholdBytes.ToString(CultureInfo.InvariantCulture);
+            _SummaryChunkLines.Text = _Settings.Context.SummaryChunkLines.ToString(CultureInfo.InvariantCulture);
+            _SummaryCacheRetentionDays.Text = _Settings.Context.SummaryCacheRetentionDays.ToString(CultureInfo.InvariantCulture);
         }
 
         private static void AssignInt(TextBox box, Action<int> assign)

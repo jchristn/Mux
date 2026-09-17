@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>0.12.2</Version>
+    <Version>0.12.3</Version>
     <Title>Mux.Core</Title>
     <PackageId>Mux.Core</PackageId>
     <Description>The mux engine: agent loop with streaming events, built-in tools, MCP client, skills, subagents, session persistence, checkpoints, approval/sandbox governance, and usage telemetry — backend-agnostic across Ollama, OpenAI, Azure, Anthropic, Gemini, Vertex, Bedrock, and any OpenAI-compatible API. Build your own experiences on top of mux.</Description>

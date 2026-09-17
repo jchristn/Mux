@@ -11,6 +11,7 @@ namespace Mux.Cli.Commands
     using Mux.Cli.Rendering;
     using Mux.Core.Llm;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Core.Utility;
 
     /// <summary>
@@ -177,13 +178,13 @@ namespace Mux.Cli.Commands
                     new ConversationMessage
                     {
                         Role = Mux.Core.Enums.RoleEnum.System,
-                        Content = "You are mux probe mode. Reply with a brief confirmation that includes the word OK."
+                        Content = PromptResolver.Shared.GetEffective("probe.system")
                     },
                     new ConversationMessage
                     {
                         Role = Mux.Core.Enums.RoleEnum.User,
                         Content = string.IsNullOrWhiteSpace(settings.ProbePrompt)
-                            ? "Respond with OK and a short confirmation."
+                            ? PromptResolver.Shared.GetEffective("probe.user")
                             : settings.ProbePrompt!
                     }
                 };

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { MuxServerLifecycle } from '../server/lifecycle';
 import { logError } from '../util/logger';
+import { CatalogGroup, groupCatalogByKind } from './catalog';
 
 /**
  * The kind of a management tree node, used to route context-menu actions and to pick an icon. Section nodes
@@ -18,6 +19,10 @@ export type ManageNodeKind =
     | 'endpoint'
     | 'mcp'
     | 'prompt'
+    | 'catalog-group'
+    | 'catalog-entry'
+    | 'catalog-subagents'
+    | 'catalog-subagent'
     | 'subagent'
     | 'skill'
     | 'settings'
@@ -90,6 +95,10 @@ export class ManageTreeProvider implements vscode.TreeDataProvider<ManageNode> {
                     return await this.mcpNodes();
                 case 'section-prompts':
                     return await this.promptNodes();
+                case 'catalog-group':
+                    return this.catalogEntryNodes(element.data as CatalogGroup | undefined);
+                case 'catalog-subagents':
+                    return await this.catalogSubagentNodes();
                 case 'section-subagents':
                     return await this.subagentNodes();
                 case 'section-skills':
@@ -189,12 +198,66 @@ export class ManageTreeProvider implements vscode.TreeDataProvider<ManageNode> {
     }
 
     private async promptNodes(): Promise<ManageNode[]> {
-        const prompts = await (await this.client()).getPrompts();
-        return prompts.map((prompt) => {
+        const client = await this.client();
+        const prompts = await client.getPrompts();
+        const nodes: ManageNode[] = prompts.map((prompt) => {
             const node = new ManageNode(prompt.Name, 'prompt', vscode.TreeItemCollapsibleState.None, prompt);
             node.description = prompt.IsActive ? vscode.l10n.t('active') : '';
             node.iconPath = new vscode.ThemeIcon(prompt.IsActive ? 'pass-filled' : 'note');
             ManageTreeProvider.openOnClick(node, 'mux.manage.editPrompt');
+            return node;
+        });
+
+        // The operational prompt catalog, grouped by kind: every other model-facing prompt, editable in place.
+        try {
+            const catalog = await client.getPromptCatalog();
+            for (const group of groupCatalogByKind(catalog)) {
+                const groupNode = new ManageNode(ManageTreeProvider.kindLabel(group.kind), 'catalog-group', vscode.TreeItemCollapsibleState.Collapsed, group);
+                groupNode.iconPath = new vscode.ThemeIcon('symbol-namespace');
+                groupNode.description = String(group.entries.length);
+                nodes.push(groupNode);
+            }
+        } catch (error) {
+            logError('Failed to load the prompt catalog.', error);
+        }
+
+        // Subagent personas live in subagents.json, not the catalog — surface them here read-through, with a
+        // click that deep-links to the existing subagent editor.
+        const personas = new ManageNode(vscode.l10n.t('Subagent personas'), 'catalog-subagents', vscode.TreeItemCollapsibleState.Collapsed);
+        personas.iconPath = new vscode.ThemeIcon('organization');
+        personas.tooltip = vscode.l10n.t('Subagent personas are edited in the Subagents section.');
+        nodes.push(personas);
+
+        return nodes;
+    }
+
+    private catalogEntryNodes(group: CatalogGroup | undefined): ManageNode[] {
+        if (!group || group.entries.length === 0) {
+            return [];
+        }
+
+        return group.entries.map((entry) => {
+            const node = new ManageNode(entry.DisplayName, 'catalog-entry', vscode.TreeItemCollapsibleState.None, entry);
+            node.description = entry.Overridden ? vscode.l10n.t('custom') : vscode.l10n.t('default');
+            node.iconPath = new vscode.ThemeIcon(entry.Overridden ? 'pencil' : 'note');
+            node.tooltip = entry.Editable ? entry.Description : `${entry.Description} ${vscode.l10n.t('(edited in the prompt profile)')}`;
+            ManageTreeProvider.openOnClick(node, 'mux.manage.editCatalog');
+            return node;
+        });
+    }
+
+    private async catalogSubagentNodes(): Promise<ManageNode[]> {
+        const subagents = await (await this.client()).getSubagents();
+        if (subagents.length === 0) {
+            return [this.emptyNode(vscode.l10n.t('No subagents configured'))];
+        }
+
+        return subagents.map((subagent) => {
+            const node = new ManageNode(subagent.Name, 'catalog-subagent', vscode.TreeItemCollapsibleState.None, subagent);
+            node.description = subagent.Description;
+            node.iconPath = new vscode.ThemeIcon('person');
+            node.tooltip = vscode.l10n.t('Edit this persona in the Subagents editor.');
+            ManageTreeProvider.openOnClick(node, 'mux.manage.editSubagent');
             return node;
         });
     }
@@ -263,5 +326,21 @@ export class ManageTreeProvider implements vscode.TreeDataProvider<ManageNode> {
      */
     private static openOnClick(node: ManageNode, command: string): void {
         node.command = { command, title: vscode.l10n.t('Edit'), arguments: [node] };
+    }
+
+    /**
+     * Renders a catalog kind wire string (for example `tool-description`) as a readable group label
+     * (`Tool description`). Falls back to the raw kind if it is empty.
+     *
+     * @param kind The kind wire string.
+     * @returns A human-readable label.
+     */
+    private static kindLabel(kind: string): string {
+        if (!kind) {
+            return kind;
+        }
+
+        const spaced = kind.replace(/-/g, ' ');
+        return spaced.charAt(0).toUpperCase() + spaced.slice(1);
     }
 }

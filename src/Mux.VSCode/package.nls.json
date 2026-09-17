@@ -55,5 +55,7 @@
   "config.approvalPosture.prompt": "Prompt in the editor before running a mutating tool.",
   "config.approvalPosture.autoSafe": "Auto-approve read-only tools; deny mutating ones.",
   "config.context.sources": "The editor context attached to a run by default.",
-  "config.locale": "Display language override (BCP 47). Empty follows the editor language."
+  "config.locale": "Display language override (BCP 47). Empty follows the editor language.",
+  "cmd.manage.editCatalog": "Edit prompt override",
+  "cmd.manage.resetCatalog": "Reset to default"
 }

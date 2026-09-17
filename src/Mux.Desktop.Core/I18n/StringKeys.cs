@@ -128,5 +128,70 @@ namespace Mux.Desktop.I18n
 
         /// <summary>Action: Reload.</summary>
         public const string ActReload = "act.reload";
+
+        /// <summary>Action: Reset.</summary>
+        public const string ActReset = "act.reset";
+
+        /// <summary>Action: View.</summary>
+        public const string ActView = "act.view";
+
+        // --- Operational prompt catalog + large-file context settings ---
+
+        /// <summary>Operational-prompt catalog section title.</summary>
+        public const string PromptCatalogTitle = "prompt.catalog.title";
+
+        /// <summary>Operational-prompt catalog section description.</summary>
+        public const string PromptCatalogDesc = "prompt.catalog.desc";
+
+        /// <summary>Catalog table "Kind" column header.</summary>
+        public const string PromptCatalogKind = "prompt.catalog.col.kind";
+
+        /// <summary>Catalog "custom" (overridden) indicator.</summary>
+        public const string PromptCatalogCustom = "prompt.catalog.custom";
+
+        /// <summary>Catalog edit-dialog title prefix.</summary>
+        public const string PromptCatalogEdit = "prompt.catalog.edit";
+
+        /// <summary>Read-only note shown for a profile-scoped catalog entry.</summary>
+        public const string PromptCatalogPersonaNote = "prompt.catalog.personaNote";
+
+        /// <summary>Label prefix listing required placeholders in the catalog edit dialog.</summary>
+        public const string PromptCatalogPlaceholders = "prompt.catalog.placeholders";
+
+        /// <summary>Validation message prefix for a missing required placeholder.</summary>
+        public const string PromptCatalogMissingPlaceholders = "prompt.catalog.missingPlaceholders";
+
+        /// <summary>Settings section header for large-file context.</summary>
+        public const string SettingsLargeFilesSection = "settings.sec.largeFiles";
+
+        /// <summary>Settings label: large-file mode.</summary>
+        public const string SettingsLargeFileMode = "settings.largeFileMode";
+
+        /// <summary>Settings tooltip: large-file mode.</summary>
+        public const string SettingsLargeFileModeTip = "settings.largeFileMode.tip";
+
+        /// <summary>Settings label: inline threshold.</summary>
+        public const string SettingsInlineThreshold = "settings.inlineThreshold";
+
+        /// <summary>Settings tooltip: inline threshold.</summary>
+        public const string SettingsInlineThresholdTip = "settings.inlineThreshold.tip";
+
+        /// <summary>Settings label: summary chunk lines.</summary>
+        public const string SettingsSummaryChunkLines = "settings.summaryChunkLines";
+
+        /// <summary>Settings tooltip: summary chunk lines.</summary>
+        public const string SettingsSummaryChunkLinesTip = "settings.summaryChunkLines.tip";
+
+        /// <summary>Settings label: summary cache checkbox.</summary>
+        public const string SettingsSummaryCacheLabel = "settings.summaryCache.label";
+
+        /// <summary>Settings tooltip: summary cache checkbox.</summary>
+        public const string SettingsSummaryCacheTip = "settings.summaryCache.tip";
+
+        /// <summary>Settings label: summary cache retention.</summary>
+        public const string SettingsSummaryCacheRetention = "settings.summaryCacheRetention";
+
+        /// <summary>Settings tooltip: summary cache retention.</summary>
+        public const string SettingsSummaryCacheRetentionTip = "settings.summaryCacheRetention.tip";
     }
 }

@@ -9,6 +9,7 @@ namespace Mux.Desktop.Views
     using Mux.Core.Models;
     using Mux.Core.Settings;
     using Mux.Desktop.I18n;
+    using Mux.Desktop.Prompting;
 
     /// <summary>
     /// A manager for prompt profiles (parity with the TUI's <c>/prompt</c>): a sortable table with per-row
@@ -19,6 +20,8 @@ namespace Mux.Desktop.Views
     {
         private readonly List<PromptProfile> _Prompts;
         private readonly DataTableView<PromptProfile> _Table;
+        private readonly PromptCatalogViewModel _Catalog = new PromptCatalogViewModel();
+        private readonly DataTableView<PromptCatalogRow> _CatalogTable;
 
         /// <summary>
         /// Instantiate the prompts manager.
@@ -33,16 +36,18 @@ namespace Mux.Desktop.Views
 
             Title = Localizer.T("prompt.title");
             Icon = IconResources.LoadWindowIcon();
-            Width = 860;
-            Height = 560;
+            Width = 900;
+            Height = 720;
             MinWidth = 640;
-            MinHeight = 360;
+            MinHeight = 480;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = theme.Surface;
 
             _Table = new DataTableView<PromptProfile>(BuildColumns(), BuildActions, OnEdit);
+            _CatalogTable = new DataTableView<PromptCatalogRow>(BuildCatalogColumns(), BuildCatalogActions, OnEditCatalog);
             Content = BuildLayout(theme);
             Refresh();
+            RefreshCatalog();
         }
 
         private static List<TableColumn<PromptProfile>> BuildColumns()
@@ -99,14 +104,91 @@ namespace Mux.Desktop.Views
             DockPanel.SetDock(header, Dock.Top);
             root.Children.Add(header);
 
-            _Table.Margin = new Thickness(0, 14, 0, 0);
-            root.Children.Add(_Table);
+            Grid grid = new Grid { Margin = new Thickness(0, 14, 0, 0) };
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            grid.RowDefinitions.Add(new RowDefinition(new GridLength(3, GridUnitType.Star)));
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            grid.RowDefinitions.Add(new RowDefinition(new GridLength(2, GridUnitType.Star)));
+
+            TextBlock profilesLabel = new TextBlock { Text = Localizer.T("prompt.title"), FontWeight = FontWeight.SemiBold, Foreground = theme.Muted, Margin = new Thickness(0, 0, 0, 6) };
+            Grid.SetRow(profilesLabel, 0);
+            grid.Children.Add(profilesLabel);
+
+            Grid.SetRow(_Table, 1);
+            grid.Children.Add(_Table);
+
+            StackPanel catalogHeader = new StackPanel { Margin = new Thickness(0, 16, 0, 6), Spacing = 2 };
+            catalogHeader.Children.Add(new TextBlock { Text = Localizer.T(StringKeys.PromptCatalogTitle), FontWeight = FontWeight.SemiBold, Foreground = theme.Text });
+            catalogHeader.Children.Add(new TextBlock { Text = Localizer.T(StringKeys.PromptCatalogDesc), Foreground = theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+            Grid.SetRow(catalogHeader, 2);
+            grid.Children.Add(catalogHeader);
+
+            Grid.SetRow(_CatalogTable, 3);
+            grid.Children.Add(_CatalogTable);
+
+            root.Children.Add(grid);
             return root;
         }
 
         private void Refresh()
         {
             _Table.SetRows(_Prompts);
+        }
+
+        private void RefreshCatalog()
+        {
+            _CatalogTable.SetRows(_Catalog.Rows);
+        }
+
+        private static List<TableColumn<PromptCatalogRow>> BuildCatalogColumns()
+        {
+            return new List<TableColumn<PromptCatalogRow>>
+            {
+                new TableColumn<PromptCatalogRow>(Localizer.T(StringKeys.PromptCatalogKind), r => r.Kind, new GridLength(2, GridUnitType.Star), r => r.Kind),
+                new TableColumn<PromptCatalogRow>(Localizer.T("col.name"), r => r.DisplayName, new GridLength(3, GridUnitType.Star), r => r.DisplayName, r => r.Overridden ? Localizer.T(StringKeys.PromptCatalogCustom) : null),
+                new TableColumn<PromptCatalogRow>(Localizer.T("prompt.systemPrompt"), r => Preview(r.Effective), new GridLength(5, GridUnitType.Star))
+            };
+        }
+
+        private IReadOnlyList<TableRowAction<PromptCatalogRow>> BuildCatalogActions(PromptCatalogRow row)
+        {
+            List<TableRowAction<PromptCatalogRow>> actions = new List<TableRowAction<PromptCatalogRow>>
+            {
+                new TableRowAction<PromptCatalogRow>(row.Editable ? Localizer.T("act.edit") : Localizer.T(StringKeys.ActView), r => OnEditCatalog(r))
+            };
+
+            if (row.Editable && row.Overridden)
+            {
+                actions.Add(new TableRowAction<PromptCatalogRow>(Localizer.T(StringKeys.ActReset), r => OnResetCatalog(r)));
+            }
+
+            return actions;
+        }
+
+        private async void OnEditCatalog(PromptCatalogRow row)
+        {
+            if (!row.Editable)
+            {
+                await new ConfirmDialog(row.DisplayName, row.Description + "\n\n" + Localizer.T(StringKeys.PromptCatalogPersonaNote) + "\n\n" + row.Effective, Localizer.T(StringKeys.ActClose), destructive: false).ShowDialog<bool>(this);
+                return;
+            }
+
+            PromptCatalogEditDialog dialog = new PromptCatalogEditDialog(row);
+            if (await dialog.ShowDialog<bool>(this))
+            {
+                if (!_Catalog.TrySetOverride(row.Key, dialog.Content, out string error))
+                {
+                    await new ConfirmDialog(Localizer.T("prompt.title"), error, Localizer.T(StringKeys.ActClose), destructive: false).ShowDialog<bool>(this);
+                }
+
+                RefreshCatalog();
+            }
+        }
+
+        private void OnResetCatalog(PromptCatalogRow row)
+        {
+            _Catalog.Reset(row.Key);
+            RefreshCatalog();
         }
 
         private async void OnAdd()

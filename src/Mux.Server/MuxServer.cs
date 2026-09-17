@@ -38,6 +38,7 @@ namespace Mux.Server
 
         private Webserver? _App;
         private bool _Disposed = false;
+        private System.Threading.Timer? _SummaryCacheTimer;
         private readonly bool _AllowInteractiveTools;
         private readonly CheckpointRegistry _Checkpoints = new CheckpointRegistry();
         private readonly RunRegistry _Runs;
@@ -145,7 +146,27 @@ namespace Mux.Server
             watcher.Start();
             _StoreWatcher = watcher;
 
+            // Opportunistically evict stale large-file summary-cache entries on start and on a low-frequency
+            // timer, so the cache never grows without bound; the sweep is best-effort and off the request path.
+            _SummaryCacheTimer = new System.Threading.Timer(_ => EvictSummaryCache(), null, TimeSpan.FromSeconds(5), TimeSpan.FromHours(6));
+
             _Logger?.Invoke(_Header + "listening on " + BaseUrl);
+        }
+
+        private void EvictSummaryCache()
+        {
+            try
+            {
+                Mux.Core.Models.ContextSettings context = Mux.Core.Settings.SettingsLoader.LoadSettings().Context;
+                if (context.SummaryCacheEnabled)
+                {
+                    new Mux.Core.Context.FileSummaryCache(null).Evict(context.SummaryCacheRetentionDays);
+                }
+            }
+            catch (Exception)
+            {
+                // Best-effort background maintenance; never surface a failure.
+            }
         }
 
         /// <summary>
@@ -171,6 +192,7 @@ namespace Mux.Server
         {
             if (_Disposed) return;
             Stop();
+            try { _SummaryCacheTimer?.Dispose(); } catch (Exception) { }
             try { _StoreWatcher?.Dispose(); } catch (Exception) { }
             try { _App?.Dispose(); } catch (Exception) { }
             if (_OwnsRuns) { try { _Runs.Dispose(); } catch (Exception) { } }
@@ -227,6 +249,8 @@ namespace Mux.Server
             new SettingsRoutes(apiKey).Register(app);
             new McpRoutes(apiKey).Register(app);
             new ConfigRoutes(apiKey).Register(app);
+            new PromptCatalogRoutes(apiKey).Register(app);
+            new ContextRoutes(apiKey, _EndpointsProvider).Register(app);
             new SkillRoutes(apiKey).Register(app);
             new OverviewRoutes(apiKey, _EndpointsProvider, _SessionStore, _Version, _StartUtc).Register(app);
             new UsageRoutes(apiKey, _UsageQuery).Register(app);

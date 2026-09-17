@@ -42,6 +42,9 @@ namespace Mux.Server.Documentation
         /// <summary>Prompt profiles.</summary>
         public const string TagPrompts = "Prompts";
 
+        /// <summary>Large-file context blocks.</summary>
+        public const string TagContext = "Context";
+
         /// <summary>Subagent definitions.</summary>
         public const string TagSubagents = "Subagents";
 
@@ -152,7 +155,8 @@ namespace Mux.Server.Documentation
                 new OpenApiTag { Name = TagSkills, Description = "Discover, enable/disable, create, edit, and delete skills." },
                 new OpenApiTag { Name = TagSettings, Description = "Read and update the editable server settings (secrets masked)." },
                 new OpenApiTag { Name = TagUsage, Description = "Query usage telemetry (summary, time series, breakdowns, events) and manage pricing." },
-                new OpenApiTag { Name = TagRuns, Description = "List active and recently-finished runs, inspect a run's state and task plan, and cancel a run." }
+                new OpenApiTag { Name = TagRuns, Description = "List active and recently-finished runs, inspect a run's state and task plan, and cancel a run." },
+                new OpenApiTag { Name = TagContext, Description = "Build a model-context block (map, summary, or truncation) from a large file." }
             };
 
             RegisterSchemas(settings.Schemas);
@@ -376,6 +380,36 @@ namespace Mux.Server.Documentation
             operationId: "putPrompts"))
             .WithRequestBody(BodyList("PromptProfileDto", "The complete desired prompt-profile set."))
             .WithResponse(200, OkList("PromptProfileDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/prompts/catalog</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> PromptCatalogGet = m => Sec(Init(m, TagPrompts,
+            "List the operational prompt catalog",
+            "Returns every operational prompt the model reads, grouped by kind, with its coded default, current effective value, required placeholders, and whether an override is in effect.",
+            operationId: "listPromptCatalog"))
+            .WithResponse(200, OkList("PromptCatalogEntryDto"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>PUT /v1.0/api/prompts/catalog</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> PromptCatalogPut = m => Sec(Init(m, TagPrompts,
+            "Set or clear an operational prompt override",
+            "Stores an override for a global-scoped prompt `Key`; a blank or omitted `Content` clears the override and restores the default. Rejects an unknown or profile-scoped key, and an override that drops a required placeholder. Returns the updated entry.",
+            operationId: "putPromptCatalog"))
+            .WithRequestBody(Body("PromptOverrideDto", "The prompt key to override and its content (blank clears the override)."))
+            .WithResponse(200, Ok("PromptCatalogEntryDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        // --- Context ---
+
+        /// <summary>Metadata for <c>POST /v1.0/api/context/file</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ContextFilePost = m => Sec(Init(m, TagContext,
+            "Build a file-context block",
+            "Turns a file's contents into a model-context block. A file at or below the inline threshold is returned whole; a larger file is mapped (a structural outline with line ranges), summarized (an iterative map-reduce summary — the server runs the model call), or truncated, per the requested `Mode` (default from settings). Lets a thin client offload mapping and summarizing to the server.",
+            operationId: "buildFileContext"))
+            .WithRequestBody(Body("FileContextRequestDto", "The file contents and optional mode/threshold overrides."))
+            .WithResponse(200, Ok("FileContextResponseDto"))
             .WithResponse(400, BadRequest())
             .WithResponse(401, Unauthorized());
 
@@ -991,8 +1025,55 @@ namespace Mux.Server.Documentation
             {
                 ["Name"] = Pstr("Profile name."),
                 ["IsActive"] = Pbool("Whether this profile is active."),
-                ["SystemPrompt"] = Pstr("System prompt override (blank inherits the built-in default).")
-            }, new Dictionary<string, object?> { ["Name"] = "concise", ["IsActive"] = true, ["SystemPrompt"] = "Be concise and cite files." });
+                ["SystemPrompt"] = Pstr("System prompt override (blank inherits the built-in default)."),
+                ["ToolsDisabledPrompt"] = PstrNullable("Tools-disabled system prompt override (blank inherits the default; null on write preserves the stored value)."),
+                ["CompactionPrompt"] = PstrNullable("Compaction system prompt override (blank inherits the default; null on write preserves the stored value).")
+            }, new Dictionary<string, object?> { ["Name"] = "concise", ["IsActive"] = true, ["SystemPrompt"] = "Be concise and cite files.", ["ToolsDisabledPrompt"] = "", ["CompactionPrompt"] = "" });
+
+            s["PromptCatalogEntryDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Key"] = Pstr("Stable catalog key (for example `tool.read_file`)."),
+                ["Kind"] = Pstr("Kind wire string used to group the entry (for example `tool-description`)."),
+                ["Scope"] = Pstr("Where an override is stored: `Profile`, `Global`, or `External`."),
+                ["DisplayName"] = Pstr("Short human label."),
+                ["Description"] = Pstr("One-line explanation of the prompt's purpose."),
+                ["Placeholders"] = Parr(Pstr("A placeholder token."), "Placeholder tokens an override must preserve (for example `{ToolName}`)."),
+                ["Default"] = Pstr("The coded default content."),
+                ["Effective"] = Pstr("The current effective content (the override when set, otherwise the default)."),
+                ["Overridden"] = Pbool("Whether a non-empty override is currently in effect."),
+                ["Editable"] = Pbool("Whether this entry can carry an operational override (true only for global-scoped entries).")
+            }, new Dictionary<string, object?>
+            {
+                ["Key"] = "compaction.user", ["Kind"] = "compaction", ["Scope"] = "Global",
+                ["DisplayName"] = "Compaction user framing", ["Description"] = "The instruction that introduces the older history to compact.",
+                ["Placeholders"] = new object[] { }, ["Default"] = "Compact this older conversation history:",
+                ["Effective"] = "Compact this older conversation history:", ["Overridden"] = false, ["Editable"] = true
+            });
+
+            s["PromptOverrideDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Key"] = Pstr("The catalog key to override."),
+                ["Content"] = PstrNullable("The override text; blank or null clears the override.")
+            }, new Dictionary<string, object?> { ["Key"] = "compaction.user", ["Content"] = "Summarize the earlier conversation below:" });
+
+            s["FileContextRequestDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Path"] = Pstr("The file path (used for the map note and outline heuristics)."),
+                ["Content"] = Pstr("The full file contents."),
+                ["Mode"] = PstrNullable("Large-file mode: `map`, `summarize`, or `truncate`. Null uses the configured default."),
+                ["InlineThresholdBytes"] = PintNullable("Inline size gate in bytes. Null uses the configured default."),
+                ["HeadLines"] = PintNullable("Leading lines to include in a map/truncation. Null uses a default."),
+                ["SummaryChunkLines"] = PintNullable("Lines per summarizer chunk. Null uses the configured default.")
+            }, new Dictionary<string, object?> { ["Path"] = "src/big.cs", ["Content"] = "…file contents…", ["Mode"] = "map", ["InlineThresholdBytes"] = null, ["HeadLines"] = null, ["SummaryChunkLines"] = null });
+
+            s["FileContextResponseDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Text"] = Pstr("The context block text to feed the model."),
+                ["Mode"] = Pstr("The mode actually used: `map`, `summarize`, or `truncate`."),
+                ["Inlined"] = Pbool("Whether the file was small enough to be inlined whole."),
+                ["OutlineEntryCount"] = Pint("The number of outline entries emitted."),
+                ["FromCache"] = Pbool("Whether a summary was served from the cache.")
+            }, new Dictionary<string, object?> { ["Text"] = "Structural map (12 entries): …", ["Mode"] = "map", ["Inlined"] = false, ["OutlineEntryCount"] = 12, ["FromCache"] = false });
 
             s["SubagentDto"] = Obj(new Dictionary<string, M>
             {

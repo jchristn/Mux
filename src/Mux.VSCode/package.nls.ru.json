@@ -55,5 +55,7 @@
   "cmd.manage.addSkill": "Добавить навык",
   "cmd.manage.editSkill": "Изменить навык",
   "cmd.manage.deleteSkill": "Удалить навык",
-  "cmd.usage": "Панель использования"
+  "cmd.usage": "Панель использования",
+  "cmd.manage.editCatalog": "Изменить переопределение промпта",
+  "cmd.manage.resetCatalog": "Сбросить к значению по умолчанию"
 }

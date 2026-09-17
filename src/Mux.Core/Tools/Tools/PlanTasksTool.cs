@@ -6,6 +6,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Core.Tasks;
     using Mux.Core.Tools;
 
@@ -47,10 +48,7 @@ namespace Mux.Core.Tools.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Establishes or replaces the plan of tasks for the current request. "
-            + "Call this at the start of any request that will take more than a couple of steps or spans several files, "
-            + "then keep the plan current with update_task. Each task has a stable id, a short title, and optional dependsOn "
-            + "ids of tasks that must complete first. Re-calling replaces the whole plan.";
+        public string Description => PromptResolver.Shared.GetEffective("tool.plan_tasks");
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.

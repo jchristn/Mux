@@ -53,12 +53,47 @@ export interface McpServer {
     [key: string]: unknown;
 }
 
-/** A prompt profile as returned by `GET /v1.0/api/prompts`. */
+/** A prompt profile as returned by `GET /v1.0/api/prompts`. All three prompt fields are editable; a blank
+ * field inherits the built-in default. */
 export interface PromptProfile {
     Name: string;
     IsActive: boolean;
     SystemPrompt: string;
+    ToolsDisabledPrompt?: string;
+    CompactionPrompt?: string;
     [key: string]: unknown;
+}
+
+/** One operational-prompt catalog entry, as returned by `GET /v1.0/api/prompts/catalog`. */
+export interface PromptCatalogEntry {
+    Key: string;
+    Kind: string;
+    Scope: string;
+    DisplayName: string;
+    Description: string;
+    Placeholders: string[];
+    Default: string;
+    Effective: string;
+    Overridden: boolean;
+    Editable: boolean;
+}
+
+/** A built file-context block, as returned by `POST /v1.0/api/context/file`. */
+export interface FileContextResponse {
+    /** The context block text to inline (whole file, structural map, or summary). */
+    Text: string;
+
+    /** The mode actually used: `map`, `summarize`, or `truncate`. */
+    Mode: string;
+
+    /** Whether the file was small enough to be inlined whole. */
+    Inlined: boolean;
+
+    /** The number of outline entries emitted (0 when inlined or summarized). */
+    OutlineEntryCount: number;
+
+    /** Whether a summary was served from the server's cache. */
+    FromCache: boolean;
 }
 
 /** A subagent definition as returned by `GET /v1.0/api/subagents`. */

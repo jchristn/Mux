@@ -55,5 +55,7 @@
   "cmd.manage.addSkill": "添加技能",
   "cmd.manage.editSkill": "编辑技能",
   "cmd.manage.deleteSkill": "删除技能",
-  "cmd.usage": "使用情况仪表板"
+  "cmd.usage": "使用情况仪表板",
+  "cmd.manage.editCatalog": "编辑提示词覆盖",
+  "cmd.manage.resetCatalog": "重置为默认"
 }

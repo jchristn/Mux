@@ -1,6 +1,7 @@
 namespace Mux.Core.Tools.Tools
 {
     using System;
+    using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
     using System.Runtime.InteropServices;
@@ -9,6 +10,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Core.Tools;
 
     /// <summary>
@@ -34,10 +36,14 @@ namespace Mux.Core.Tools.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Runs a shell command and captures its output. "
-            + $"Current runtime: {GetOperatingSystemLabel()} using shell {GetShellProgram()} {GetShellInvocationArgsHint()}. "
-            + "Use commands that are valid for that shell and operating system. "
-            + "Returns stdout, stderr, exit code, and whether the process timed out.";
+        public string Description => PromptResolver.Shared.Resolve(
+            "tool.run_process",
+            new Dictionary<string, string>
+            {
+                { "{OperatingSystem}", GetOperatingSystemLabel() },
+                { "{Shell}", GetShellProgram() },
+                { "{ShellArgsHint}", GetShellInvocationArgsHint() }
+            });
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.

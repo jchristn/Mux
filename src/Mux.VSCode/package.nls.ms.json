@@ -55,5 +55,7 @@
   "cmd.manage.addSkill": "Tambah kemahiran",
   "cmd.manage.editSkill": "Edit kemahiran",
   "cmd.manage.deleteSkill": "Padam kemahiran",
-  "cmd.usage": "Papan pemuka penggunaan"
+  "cmd.usage": "Papan pemuka penggunaan",
+  "cmd.manage.editCatalog": "Edit gantian prompt",
+  "cmd.manage.resetCatalog": "Set semula ke lalai"
 }

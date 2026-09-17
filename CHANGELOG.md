@@ -2,6 +2,44 @@
 
 All notable changes to mux are documented here.
 
+## 0.12.3
+
+### Added
+
+- **Universal prompt management.** Every string mux feeds a model is now legible and editable — no prompt is
+  buried in a `.cs` file. A single code-defined catalog (`PromptCatalog`) inventories every model-facing
+  prompt with a sensible default, grouped by kind (compaction, task-planning, title generation, tool-section
+  lead-ins, all tool descriptions, tool-result payloads, and diagnostics), and one resolver (`PromptResolver`)
+  is the single read path — an override else the coded default, with runtime placeholder substitution.
+  Overrides persist to a forward-tolerant `operational` map in `~/.mux/prompts.json`; a missing key resolves
+  to the default and deleting it is the reset. Overrides are validated so an edit can't drop a required
+  placeholder. Persona prompts stay in the switchable prompt profiles, which now expose all three fields
+  (system, tools-disabled, and compaction) on every surface — earlier releases hid the latter two. Every
+  surface (web dashboard, terminal, desktop, VS Code) can browse the catalog by kind and edit or reset any
+  entry; subagent personas are surfaced read-through and deep-link to the subagent editor. New REST routes
+  `GET`/`PUT /v1.0/api/prompts/catalog` expose it, and the duplicated compaction literals are consolidated
+  into the catalog. See `docs/PROMPTS.md`.
+- **Smart large-file context.** A file too big to inline is no longer truncated (or, for the agent's own
+  `read_file` tool, refused outright) — it becomes a navigable block. The default **map** mode emits a
+  structural outline with line ranges plus the first lines, so the model can pull an exact range with
+  `read_file(offset, limit)`; **summarize** runs an iterative map-reduce and emits a dense summary that keeps
+  line-range pointers; **truncate** preserves the strict head-slice/refusal. Summaries are cached on disk,
+  content-addressed by hash (an edit misses automatically), under `~/.mux/cache/file-summaries/`, with a
+  periodic eviction pass. The behavior is a `context` settings group (`largeFileMode`, `inlineThresholdBytes`,
+  `summaryChunkLines`, `summaryCacheEnabled`, `summaryCacheRetentionDays`) surfaced on every Settings page.
+  `read_file` now returns a map instead of `file_too_large` by default (an explicit `offset`/`limit` still
+  pages the exact range), a new route `POST /v1.0/api/context/file` lets a thin client offload
+  mapping/summarizing to the server, and the VS Code extension replaced its 8000-character active-file slice
+  with the same map/summary (falling back to truncation only when the server is unreachable).
+
+### Fixed
+
+- **Web dashboard Prompts/Pricing cross-wiring.** Clicking a row in the **Prompts** list opened the **Edit
+  model pricing** dialog: the two dashboard sections had defined functions with the same names
+  (`openPr`/`prFields`/`delPr`), and JavaScript hoisting made the pricing definitions win. The pricing trio is
+  renamed (`openPrice`/`priceFields`/`delPrice`) so the Prompts row and add button open the prompt editor, and
+  a regression test now fails if any duplicate management-function name is reintroduced.
+
 ## 0.12.2
 
 ### Fixed

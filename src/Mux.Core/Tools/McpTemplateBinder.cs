@@ -8,6 +8,7 @@ namespace Mux.Core.Tools
     using System.Threading.Tasks;
     using Mux.Core.Agent;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
 
     /// <summary>
     /// Binds the currently discovered MCP tools onto an interactive <see cref="AgentLoopOptions"/> template:
@@ -64,8 +65,7 @@ namespace Mux.Core.Tools
             }
 
             StringBuilder builder = new StringBuilder();
-            builder.Append("\n\nThe following tools are provided by connected MCP (Model Context Protocol) servers ");
-            builder.Append("and can be called exactly like the built-in tools:\n");
+            builder.Append("\n\n").Append(PromptResolver.Shared.GetEffective("section.mcp")).Append('\n');
             foreach (ToolDefinition tool in mcpTools)
             {
                 builder.Append($"- {tool.Name}: {tool.Description}\n");

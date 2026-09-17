@@ -6,7 +6,10 @@ namespace Mux.Core.Tools.Tools
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Context;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
+    using Mux.Core.Settings;
     using Mux.Core.Tools;
 
     /// <summary>
@@ -24,8 +27,7 @@ namespace Mux.Core.Tools.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Reads a file from the filesystem and returns its contents with line numbers (like cat -n). "
-            + "Supports optional offset and limit parameters to read a specific range of lines.";
+        public string Description => PromptResolver.Shared.GetEffective("tool.read_file");
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.
@@ -75,6 +77,7 @@ namespace Mux.Core.Tools.Tools
 
                 int offset = GetOptionalInt(arguments, "offset", 1);
                 int limit = GetOptionalInt(arguments, "limit", -1);
+                bool hasExplicitRange = arguments.TryGetProperty("offset", out _) || arguments.TryGetProperty("limit", out _);
 
                 if (!File.Exists(resolvedPath))
                 {
@@ -87,7 +90,9 @@ namespace Mux.Core.Tools.Tools
                 }
 
                 FileInfo fileInfo = new FileInfo(resolvedPath);
-                if (fileInfo.Length > ToolSafetyLimits.MaxReadFileBytes)
+
+                // Beyond the absolute cap the file is refused outright — too large to load even for a map.
+                if (fileInfo.Length > ToolSafetyLimits.MaxMappableFileBytes)
                 {
                     return new ToolResult
                     {
@@ -96,8 +101,44 @@ namespace Mux.Core.Tools.Tools
                         Content = JsonSerializer.Serialize(new
                         {
                             error = "file_too_large",
-                            message = $"File size ({fileInfo.Length} bytes) exceeds maximum allowed ({ToolSafetyLimits.MaxReadFileBytes} bytes): {resolvedPath}"
+                            message = $"File size ({fileInfo.Length} bytes) exceeds the maximum readable size ({ToolSafetyLimits.MaxMappableFileBytes} bytes): {resolvedPath}. Use grep to search it, or read_file with offset and limit for a specific range."
                         })
+                    };
+                }
+
+                // A file over the inline cap, with no explicit range requested, becomes a structural map (or,
+                // under truncate/refuse mode, the strict refusal) instead of being read whole. An explicit
+                // offset/limit falls through to paged reading below, so the map's "page with offset/limit"
+                // advice keeps working.
+                if (fileInfo.Length > ToolSafetyLimits.MaxReadFileBytes && !hasExplicitRange)
+                {
+                    ContextSettings context = SettingsLoader.LoadSettings().Context;
+                    ContextSettings.TryNormalizeLargeFileMode(context.LargeFileMode, out string normalizedMode);
+                    if (string.Equals(normalizedMode, "truncate", StringComparison.Ordinal))
+                    {
+                        return new ToolResult
+                        {
+                            ToolCallId = toolCallId,
+                            Success = false,
+                            Content = JsonSerializer.Serialize(new
+                            {
+                                error = "file_too_large",
+                                message = $"File size ({fileInfo.Length} bytes) exceeds maximum allowed ({ToolSafetyLimits.MaxReadFileBytes} bytes): {resolvedPath}. Use read_file with offset and limit to read a specific range."
+                            })
+                        };
+                    }
+
+                    string largeContent = await File.ReadAllTextAsync(resolvedPath, cancellationToken).ConfigureAwait(false);
+                    FileContextBuilder builder = new FileContextBuilder(null);
+                    FileContextResult mapped = await builder.BuildAsync(
+                        new FileContextRequest(resolvedPath, largeContent, FileContextMode.Map, 1, 40, context.SummaryChunkLines, null, string.Empty),
+                        null,
+                        cancellationToken).ConfigureAwait(false);
+                    return new ToolResult
+                    {
+                        ToolCallId = toolCallId,
+                        Success = true,
+                        Content = mapped.Text
                     };
                 }
 

@@ -23,11 +23,13 @@ there, and one you start there opens here.
 - **Inline commands** — Explain selection, Fix this problem, Generate tests, Refactor selection, Write commit
   message, Summarize diff, Review current file. The first three are also code actions.
 - **Editor context** — attach the active file, selection, diagnostics, open tabs, or the working-tree diff to
-  a prompt, and see exactly what was sent.
+  a prompt, and see exactly what was sent. A large active file becomes a structural map (or summary) with line
+  ranges instead of being truncated.
 - **Sessions** — list, resume, rename, duplicate, export, and delete the sessions shared across every mux
   surface.
 - **Manage** — a tree view over the server's live config: connection status, endpoints (add/edit/delete/set
-  default), MCP servers, prompt profiles, skills, a settings editor, and a usage summary.
+  default), MCP servers, prompt profiles and the operational prompt catalog (edit/reset by kind), skills, a
+  settings editor, and a usage summary.
 - **Endpoint picker** — choose the endpoint runs go against from the status bar, next to a connection-status
   indicator.
 

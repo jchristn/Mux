@@ -128,12 +128,12 @@ namespace Mux.Desktop.Conversation
                     new ConversationMessage
                     {
                         Role = RoleEnum.System,
-                        Content = "You write concise, descriptive titles for chat conversations. Reply with ONLY the title: 3 to 7 words, Title Case, no surrounding quotes and no trailing punctuation."
+                        Content = PromptResolver.Shared.GetEffective("title.system")
                     },
                     new ConversationMessage
                     {
                         Role = RoleEnum.User,
-                        Content = "Write a short title that summarizes this conversation:\n\n" + BuildTitleTranscript(history)
+                        Content = PromptResolver.Shared.GetEffective("title.user") + "\n\n" + BuildTitleTranscript(history)
                     }
                 };
 

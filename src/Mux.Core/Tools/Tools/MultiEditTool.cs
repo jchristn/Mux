@@ -7,6 +7,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
 
     /// <summary>
     /// Performs multiple sequential string replacements in a single file atomically.
@@ -24,8 +25,7 @@ namespace Mux.Core.Tools.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Performs multiple sequential string replacements in a single file. "
-            + "All edits are validated before any are applied. Each edit modifies the working content for subsequent edits.";
+        public string Description => PromptResolver.Shared.GetEffective("tool.multi_edit");
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.

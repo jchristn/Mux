@@ -6,6 +6,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
 
     /// <summary>
     /// Writes content to a file, creating parent directories as needed.
@@ -23,8 +24,7 @@ namespace Mux.Core.Tools.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Writes content to a file. Creates parent directories if they do not exist. "
-            + "Preserves original line ending style for existing files; uses platform default for new files.";
+        public string Description => PromptResolver.Shared.GetEffective("tool.write_file");
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.

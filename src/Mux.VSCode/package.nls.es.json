@@ -55,5 +55,7 @@
   "cmd.manage.addSkill": "Añadir habilidad",
   "cmd.manage.editSkill": "Editar habilidad",
   "cmd.manage.deleteSkill": "Eliminar habilidad",
-  "cmd.usage": "Panel de uso"
+  "cmd.usage": "Panel de uso",
+  "cmd.manage.editCatalog": "Editar anulación de prompt",
+  "cmd.manage.resetCatalog": "Restablecer al valor predeterminado"
 }

@@ -8,6 +8,7 @@ namespace Mux.Core.Agent
     using Mux.Core.Enums;
     using Mux.Core.Llm;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Core.Settings;
 
     /// <summary>
@@ -23,7 +24,7 @@ namespace Mux.Core.Agent
         /// The marker prefixed to a synthetic summary message, matching the agent loop so subsequent
         /// automatic compactions recognize and re-summarize it correctly.
         /// </summary>
-        public const string SummaryPrefix = "[mux summary generated automatically; older conversation condensed]";
+        public static readonly string SummaryPrefix = PromptCatalog.SyntheticSummaryPrefix;
 
         /// <summary>
         /// Assembles the compacted conversation from a plan and a generated summary: a single system summary
@@ -126,14 +127,14 @@ namespace Mux.Core.Agent
                 return CompactionResult.NothingToDo("The conversation is short enough that there is nothing to compact.");
             }
 
-            string systemPrompt = string.IsNullOrWhiteSpace(compactionSystemPrompt) ? Defaults.CompactionSystemPrompt : compactionSystemPrompt!;
+            string systemPrompt = string.IsNullOrWhiteSpace(compactionSystemPrompt) ? PromptCatalog.DefaultFor("compaction.system") : compactionSystemPrompt!;
             List<ConversationMessage> messages = new List<ConversationMessage>
             {
                 new ConversationMessage { Role = RoleEnum.System, Content = systemPrompt },
                 new ConversationMessage
                 {
                     Role = RoleEnum.User,
-                    Content = "Compact this older conversation history:" + Environment.NewLine + Environment.NewLine + BuildDigest(plan.MessagesToCompact, 12000)
+                    Content = PromptResolver.Shared.GetEffective("compaction.user") + Environment.NewLine + Environment.NewLine + BuildDigest(plan.MessagesToCompact, 12000)
                 }
             };
 

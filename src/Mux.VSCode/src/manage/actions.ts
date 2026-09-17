@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ApiClient } from '../api/ApiClient';
-import { EndpointDetail, McpServer, MuxServerSettings, PromptProfile, Subagent } from '../api/types';
+import { EndpointDetail, McpServer, MuxServerSettings, PromptCatalogEntry, PromptProfile, Subagent } from '../api/types';
 import { MuxServerLifecycle } from '../server/lifecycle';
 import { logError } from '../util/logger';
 import { FormField, FormPanel } from './FormPanel';
@@ -259,31 +259,100 @@ export class ManageActions {
     private editPromptForm(existing: PromptProfile | undefined): Promise<void> {
         return this.withClient(async (client) => {
             const all = await client.getPrompts();
-            const fields: FormField[] = [
-                { key: 'Name', label: vscode.l10n.t('Name'), type: 'text', value: existing?.Name ?? '', required: true },
-                { key: 'SystemPrompt', label: vscode.l10n.t('System prompt'), type: 'textarea', value: existing?.SystemPrompt ?? '', hint: vscode.l10n.t('Blank uses the built-in default. {WorkingDirectory} and {ToolDescriptions} are filled in.') },
-                { key: 'IsActive', label: vscode.l10n.t('Make this the active profile'), type: 'checkbox', value: existing?.IsActive ?? false },
-            ];
+            await this.showPromptForm(client, all, existing);
+        });
+    }
 
-            const result = await FormPanel.show(existing ? vscode.l10n.t('Edit prompt') : vscode.l10n.t('Add prompt'), fields);
-            if (!result) {
-                return;
-            }
+    private async showPromptForm(client: ApiClient, all: PromptProfile[], existing: PromptProfile | undefined): Promise<void> {
+        const fields: FormField[] = [
+            { key: 'Name', label: vscode.l10n.t('Name'), type: 'text', value: existing?.Name ?? '', required: true },
+            { key: 'SystemPrompt', label: vscode.l10n.t('System prompt'), type: 'textarea', value: existing?.SystemPrompt ?? '', hint: vscode.l10n.t('Blank uses the built-in default. {WorkingDirectory} and {ToolDescriptions} are filled in.') },
+            { key: 'ToolsDisabledPrompt', label: vscode.l10n.t('System prompt (tools disabled)'), type: 'textarea', value: existing?.ToolsDisabledPrompt ?? '', hint: vscode.l10n.t('Used when the endpoint has no tool support. Blank inherits the default.') },
+            { key: 'CompactionPrompt', label: vscode.l10n.t('Compaction system prompt'), type: 'textarea', value: existing?.CompactionPrompt ?? '', hint: vscode.l10n.t('The system prompt for automatic history compaction. Blank inherits the default.') },
+            { key: 'IsActive', label: vscode.l10n.t('Make this the active profile'), type: 'checkbox', value: existing?.IsActive ?? false },
+        ];
 
-            const name = String(result.Name).trim();
-            const makeActive = Boolean(result.IsActive);
-            let next = all.filter((p) => p.Name !== (existing?.Name ?? name));
-            if (makeActive) {
-                next = next.map((p) => ({ ...p, IsActive: false }));
-            }
-            next.push({ ...(existing ?? {}), Name: name, SystemPrompt: String(result.SystemPrompt), IsActive: makeActive });
-            // Guarantee at least one active profile.
-            if (!next.some((p) => p.IsActive) && next.length > 0) {
-                next[0].IsActive = true;
-            }
+        const result = await FormPanel.show(existing ? vscode.l10n.t('Edit prompt') : vscode.l10n.t('Add prompt'), fields);
+        if (!result) {
+            return;
+        }
 
-            await client.putPrompts(next);
-            void vscode.window.showInformationMessage(vscode.l10n.t('Saved prompt "{0}".', name));
+        const name = String(result.Name).trim();
+        const makeActive = Boolean(result.IsActive);
+        let next = all.filter((p) => p.Name !== (existing?.Name ?? name));
+        if (makeActive) {
+            next = next.map((p) => ({ ...p, IsActive: false }));
+        }
+        next.push({
+            ...(existing ?? {}),
+            Name: name,
+            SystemPrompt: String(result.SystemPrompt),
+            ToolsDisabledPrompt: String(result.ToolsDisabledPrompt),
+            CompactionPrompt: String(result.CompactionPrompt),
+            IsActive: makeActive,
+        });
+        // Guarantee at least one active profile.
+        if (!next.some((p) => p.IsActive) && next.length > 0) {
+            next[0].IsActive = true;
+        }
+
+        await client.putPrompts(next);
+        void vscode.window.showInformationMessage(vscode.l10n.t('Saved prompt "{0}".', name));
+        this.refresh();
+    }
+
+    /** Edits an operational-prompt catalog entry: a global entry edits its override; a profile-scoped entry deep-links to the profile editor. */
+    public async editCatalog(node: ManageNode): Promise<void> {
+        const entry = node.data as PromptCatalogEntry | undefined;
+        if (!entry) {
+            return;
+        }
+
+        if (!entry.Editable) {
+            void vscode.window.showInformationMessage(vscode.l10n.t('"{0}" is part of a prompt profile — opening the profile editor.', entry.DisplayName));
+            await this.withClient(async (client) => {
+                const all = await client.getPrompts();
+                const active = all.find((p) => p.IsActive) ?? all[0];
+                await this.showPromptForm(client, all, active);
+            });
+            return;
+        }
+
+        const hint = entry.Placeholders.length > 0
+            ? vscode.l10n.t('{0} Keep these placeholders: {1}', entry.Description, entry.Placeholders.join(', '))
+            : entry.Description;
+        const result = await FormPanel.show(vscode.l10n.t('Edit prompt: {0}', entry.DisplayName), [
+            { key: 'Content', label: entry.DisplayName, type: 'textarea', value: entry.Effective, hint },
+        ]);
+        if (!result) {
+            return;
+        }
+
+        await this.withClient(async (client) => {
+            await client.putPromptOverride(entry.Key, String(result.Content));
+            void vscode.window.showInformationMessage(vscode.l10n.t('Saved prompt "{0}".', entry.DisplayName));
+            this.refresh();
+        });
+    }
+
+    /** Clears an operational-prompt override on a node, restoring the built-in default. */
+    public async resetCatalog(node: ManageNode): Promise<void> {
+        const entry = node.data as PromptCatalogEntry | undefined;
+        if (!entry || !entry.Editable) {
+            return;
+        }
+
+        const confirm = await vscode.window.showWarningMessage(
+            vscode.l10n.t('Reset "{0}" to its default?', entry.DisplayName),
+            { modal: true },
+            vscode.l10n.t('Reset'),
+        );
+        if (!confirm) {
+            return;
+        }
+
+        await this.withClient(async (client) => {
+            await client.putPromptOverride(entry.Key, '');
             this.refresh();
         });
     }

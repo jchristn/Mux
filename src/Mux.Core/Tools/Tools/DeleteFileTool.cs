@@ -6,6 +6,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
 
     /// <summary>
     /// Deletes a file from the filesystem.
@@ -22,7 +23,7 @@ namespace Mux.Core.Tools.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Deletes a file from the filesystem. Returns an error if the file does not exist.";
+        public string Description => PromptResolver.Shared.GetEffective("tool.delete_file");
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.

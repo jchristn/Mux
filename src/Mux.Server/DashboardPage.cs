@@ -576,7 +576,11 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
     <!-- Prompts --><div class="view" id="view-prompts"><div class="padw">
       <div class="pagehead"><div class="desc">Prompt profiles in <code>prompts.json</code>. A blank system prompt inherits the built-in default.</div>
         <div class="row"><button class="btn secondary" id="prompts_reload" title="Reload this list from disk, discarding unsaved changes" data-i18n="act.reload">Reload</button><button class="btn" id="prompts_add" title="Create a new profile">+ <span data-i18n="add.profile">Add profile</span></button></div></div>
-      <div id="prompts_list"></div></div></div>
+      <div id="prompts_list"></div>
+      <div class="pagehead" style="margin-top:24px"><div class="desc"><span data-i18n="prompts.catalogHead">Operational prompts</span> — every other prompt the model reads, grouped by kind. Edit or reset any; a blank override restores the built-in default. Persona rows (system, tools-disabled) are edited in the active profile above.</div>
+        <div class="row"><button class="btn secondary" id="catalog_reload" title="Reload the catalog from disk, discarding unsaved changes" data-i18n="act.reload">Reload</button></div></div>
+      <div id="catalog_list"></div>
+      <p class="hint" style="margin-top:12px">Subagent personas are prompts too, but they live with their subagents — edit them in the <button class="btn secondary" data-goto="subagents" style="padding:2px 8px" data-i18n="nav.subagents">Subagents</button> view.</p></div></div>
 
     <!-- Subagents --><div class="view" id="view-subagents"><div class="padw">
       <div class="pagehead"><div class="desc">Subagents in <code>subagents.json</code> the model can delegate to via <code>spawn_subagent</code>.</div>
@@ -668,6 +672,12 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
             <select id="s_compactionStrategy" title="How history is compacted: 'summary' condenses it; 'trim' drops the oldest turns."><option>summary</option><option>trim</option></select></div>
           <div class="field"><label>Preserve turns <span class="sub">(1–10)</span></label><input type="number" id="s_compactionPreserveTurns" title="How many recent user turns to always keep uncompacted (1-10)." min="1" max="10"></div>
           <div class="field"><label>Warning threshold % <span class="sub">(50–95)</span></label><input type="number" id="s_contextWarningThresholdPercent" title="Warn about context pressure once usage passes this percent of the budget (50-95)." min="50" max="95"></div>
+          <div class="field"><label>Large-file mode</label>
+            <select id="s_largeFileMode" title="How a file over the inline threshold becomes context: map (structural outline with line ranges), summarize (map-reduce summary with pointers), or truncate (head slice / strict cap)."><option>map</option><option>summarize</option><option>truncate</option></select></div>
+          <div class="field"><label>Inline threshold <span class="sub">(bytes)</span></label><input type="number" id="s_inlineThresholdBytes" title="Files at or below this size are inlined whole; larger files follow the large-file mode." min="1024"></div>
+          <div class="field"><label>Summary chunk lines</label><input type="number" id="s_summaryChunkLines" title="Lines per chunk when summarizing a large file." min="50"></div>
+          <div class="field"><label>Summary cache</label><input type="checkbox" id="s_summaryCacheEnabled" title="Cache large-file summaries by content hash so an unchanged file is not re-summarized every turn."></div>
+          <div class="field"><label>Summary cache retention <span class="sub">(days)</span></label><input type="number" id="s_summaryCacheRetentionDays" title="How long summary-cache entries are kept before a periodic cleanup deletes them." min="1" max="365"></div>
         </div>
         <div class="card">
           <h2 data-i18n="set.features">Features</h2>
@@ -706,7 +716,7 @@ en:{
 "nav.home":"Home","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"MCP Servers","nav.prompts":"Prompts","nav.subagents":"Subagents","nav.hooks":"Hooks","nav.commands":"Commands","nav.keybindings":"Keybindings","nav.skills":"Skills","nav.sessions":"Sessions","nav.settings":"Settings","grp.observability":"Observability","nav.usage":"Usage","nav.pricing":"Pricing",
 "grp.config":"Configuration","grp.system":"System",
 "vt.mcp":"MCP Servers","vt.hooks":"Event Hooks","vt.commands":"Custom Commands",
-"act.reload":"Reload","act.save":"Save","act.cancel":"Cancel","act.close":"Close","act.delete":"Delete","act.edit":"Edit","act.duplicate":"Duplicate","act.viewjson":"View JSON","act.copyjson":"Copy JSON","act.copy":"Copy","act.retry":"Retry","act.view":"View","act.enable":"Enable","act.disable":"Disable","act.confirm":"Confirm","act.savesettings":"Save settings","act.allsessions":"All sessions",
+"act.reload":"Reload","act.save":"Save","act.cancel":"Cancel","act.close":"Close","act.delete":"Delete","act.edit":"Edit","act.duplicate":"Duplicate","act.viewjson":"View JSON","act.copyjson":"Copy JSON","act.copy":"Copy","act.retry":"Retry","act.view":"View","act.enable":"Enable","act.disable":"Disable","act.confirm":"Confirm","act.savesettings":"Save settings","act.allsessions":"All sessions","act.reset":"Reset","col.kind":"Kind","col.value":"Value","tag.custom":"Custom","prompts.catalogHead":"Operational prompts",
 "add.endpoint":"Add endpoint","add.server":"Add server","add.profile":"Add profile","add.subagent":"Add subagent","add.hook":"Add hook","add.command":"Add command","add.binding":"Add binding","add.skill":"Add skill","act.newchat":"New chat",
 "tbl.rows":"Rows","tbl.columns":"Columns","tbl.filter":"Filter…","tbl.norows":"No rows match the current filters.","tbl.record":"record","tbl.records":"records","tbl.loading":"Loading…","tbl.failed":"Failed to load.","tbl.showing":"Showing {a}–{b} of {n}",
 "toast.saved":"Saved","toast.deleted":"Deleted","toast.created":"Created","toast.copied":"Copied to clipboard","toast.nameReq":"Name is required","toast.exported":"Exported",
@@ -1404,6 +1414,11 @@ function loadSettings(){
     el("s_compactionStrategy").value=s.CompactionStrategy;
     el("s_compactionPreserveTurns").value=s.CompactionPreserveTurns;
     el("s_contextWarningThresholdPercent").value=s.ContextWarningThresholdPercent;
+    el("s_largeFileMode").value=s.LargeFileMode;
+    el("s_inlineThresholdBytes").value=s.InlineThresholdBytes;
+    el("s_summaryChunkLines").value=s.SummaryChunkLines;
+    el("s_summaryCacheEnabled").checked=s.SummaryCacheEnabled;
+    el("s_summaryCacheRetentionDays").value=s.SummaryCacheRetentionDays;
     el("s_skillsEnabled").checked=s.SkillsEnabled;
     el("s_taskPlanningEnabled").checked=s.TaskPlanningEnabled;
     el("s_taskParallelismEnabled").checked=s.TaskParallelismEnabled;
@@ -1431,6 +1446,11 @@ function saveSettings(){
     CompactionStrategy:el("s_compactionStrategy").value,
     CompactionPreserveTurns:parseInt(el("s_compactionPreserveTurns").value,10),
     ContextWarningThresholdPercent:parseInt(el("s_contextWarningThresholdPercent").value,10),
+    LargeFileMode:el("s_largeFileMode").value,
+    InlineThresholdBytes:parseInt(el("s_inlineThresholdBytes").value,10),
+    SummaryChunkLines:parseInt(el("s_summaryChunkLines").value,10),
+    SummaryCacheEnabled:el("s_summaryCacheEnabled").checked,
+    SummaryCacheRetentionDays:parseInt(el("s_summaryCacheRetentionDays").value,10),
     SkillsEnabled:el("s_skillsEnabled").checked,
     TaskPlanningEnabled:el("s_taskPlanningEnabled").checked,
     TaskParallelismEnabled:el("s_taskParallelismEnabled").checked,
@@ -1701,13 +1721,15 @@ function delMcp(name){confirmModal('Delete MCP server "'+name+'"?',function(){
 
 /* ================= Prompts ================= */
 var _pr=[];
-function loadPrompts(){_reload["prompts_list"]=loadPrompts;gridLoading("prompts_list");api("/v1.0/api/prompts").then(function(r){_pr=(r&&r.Items)||[];renderPr();}).catch(function(e){gridError("prompts_list",e.message);});}
+function loadPrompts(){_reload["prompts_list"]=loadPrompts;gridLoading("prompts_list");api("/v1.0/api/prompts").then(function(r){_pr=(r&&r.Items)||[];renderPr();}).catch(function(e){gridError("prompts_list",e.message);});loadCatalog();}
 function renderPr(){renderGrid("prompts_list",
   [{h:t("col.name"),get:function(p){return esc(p.Name)+(p.IsActive?' <span class="tag on">'+t("tag.active")+'</span>':'')}},
    {h:t("col.systemPrompt"),get:function(p){return esc((p.SystemPrompt||"").slice(0,80)||"(inherits default)")}}],
   _pr,{icon:"📝",msg:t("empty.prompts"),add:"+ "+t("add.profile")});}
 function prFields(isEdit){return [{id:"Name",label:"Name",disabled:isEdit,tip:"A name for this prompt profile. Cannot be changed after creation."},{id:"IsActive",label:"Active",type:"checkbox",tip:"Make this the profile mux uses. Only one profile is active at a time."},
-  {id:"SystemPrompt",label:"System prompt",sub:"(blank inherits)",type:"textarea",rows:16,tip:"Overrides the built-in system prompt for this profile. Leave blank to inherit the default prompt."}];}
+  {id:"SystemPrompt",label:"System prompt",sub:"(blank inherits)",type:"textarea",rows:14,tip:"Overrides the built-in system prompt for this profile. Leave blank to inherit the default prompt."},
+  {id:"ToolsDisabledPrompt",label:"System prompt (tools disabled)",sub:"(blank inherits)",type:"textarea",rows:8,tip:"Used instead of the system prompt when the active endpoint does not support tools. Leave blank to inherit the default."},
+  {id:"CompactionPrompt",label:"Compaction system prompt",sub:"(blank inherits)",type:"textarea",rows:6,tip:"The system prompt for the automatic history-compaction sidecar call. Leave blank to inherit the default."}];}
 function openPr(i,prefill){var isEdit=i>=0,p=isEdit?_pr[i]:(prefill||{IsActive:false});
   formModal(isEdit?"Edit prompt profile":"Add prompt profile",prFields(isEdit),p,function(v){
     if(!v.Name){toast(t("toast.nameReq"),true);return;}
@@ -1716,6 +1738,23 @@ function openPr(i,prefill){var isEdit=i>=0,p=isEdit?_pr[i]:(prefill||{IsActive:f
 function delPr(i){var p=_pr[parseInt(i,10)];confirmModal('Delete prompt profile "'+(p?p.Name:"")+'"?',function(){
   var list=_pr.filter(function(x,ix){return ix!==parseInt(i,10);});
   saveCollection("/v1.0/api/prompts",list,function(items){_pr=items;renderPr();});});}
+
+/* ---- Operational prompt catalog (the global, non-persona prompts) ---- */
+var _cat=[];
+function loadCatalog(){_reload["catalog_list"]=loadCatalog;gridLoading("catalog_list");api("/v1.0/api/prompts/catalog").then(function(r){_cat=(r&&r.Items)||[];
+  _cat.sort(function(a,b){return a.Kind===b.Kind?(a.DisplayName<b.DisplayName?-1:(a.DisplayName>b.DisplayName?1:0)):(a.Kind<b.Kind?-1:1);});renderCat();}).catch(function(e){gridError("catalog_list",e.message);});}
+function renderCat(){renderGrid("catalog_list",
+  [{h:t("col.kind"),get:function(c){return esc(c.Kind)}},
+   {h:t("col.name"),get:function(c){return esc(c.DisplayName)+(c.Overridden?' <span class="tag on">'+t("tag.custom")+'</span>':' <span class="tag">'+t("tag.default")+'</span>')}},
+   {h:t("col.value"),get:function(c){return esc((c.Effective||"").replace(/\s+/g," ").slice(0,90))}}],
+  _cat,{icon:"📝",msg:"All prompts use their defaults."});}
+function openCat(i){var c=_cat[i];if(!c)return;
+  if(!c.Editable){openModal(esc(c.DisplayName),'<p class="hint" style="margin:0 0 8px">'+esc(c.Description||"")+' '+esc(c.Scope==="Profile"?"Edited in the active profile above.":"")+'</p><pre style="white-space:pre-wrap;margin:0;max-height:60vh">'+esc(c.Effective||"")+'</pre>',[{label:t("act.close"),primary:true,onClick:closeModal}],true);return;}
+  var ph=(c.Placeholders&&c.Placeholders.length)?(" Keep these placeholders: "+c.Placeholders.join(", ")+"."):"";
+  formModal("Edit prompt · "+c.DisplayName,[{id:"Content",label:c.DisplayName,sub:c.Key,type:"textarea",rows:16,tip:(c.Description||"")+ph}],{Content:c.Effective},function(v){
+    busyModal(true);api("/v1.0/api/prompts/catalog","PUT",{key:c.Key,content:v.Content}).then(function(){closeModal();loadCatalog();toast(t("toast.saved"));}).catch(function(e){toast(e.message,true);}).finally(function(){busyModal(false);});},"xl");}
+function resetCat(i){var c=_cat[i];if(!c||!c.Editable)return;confirmModal('Reset "'+c.DisplayName+'" to its default?',function(){
+  api("/v1.0/api/prompts/catalog","PUT",{key:c.Key,content:""}).then(function(){loadCatalog();toast(t("toast.saved"));}).catch(function(e){toast(e.message,true);});});}
 
 /* ================= Subagents ================= */
 var _sa=[];
@@ -1863,16 +1902,16 @@ function renderHome(d){
     "<tr><td>"+esc(t("home.auth"))+"</td><td>"+(d.AuthEnabled?esc(t("home.authOn")):esc(t("home.authOff")))+"</td></tr>"+
     "<tr><td>"+esc(t("home.configDir"))+"</td><td class='mono' style='font-size:12px;word-break:break-all'>"+esc(d.ConfigDir)+"</td></tr>";
   var rs=d.RecentSessions||[];
-  el("home_recent").innerHTML=rs.length?rs.map(function(s){return '<div class="recent-item"><div class="rt"><div class="rtitle">'+esc(s.Title||s.Id)+'</div><div class="rmeta">'+esc(s.Model||"")+' · '+s.MessageCount+' '+esc(t("home.msg"))+' · '+fmtWhen(s.UpdatedUtc)+'</div></div><button class="minibtn" data-viewses="'+esc(s.Id)+'" title="Preview this session">'+esc(t("act.view"))+'</button></div>';}).join(""):'<div class="empty" style="padding:22px">'+esc(t("empty.sessions"))+'</div>';
+  el("home_recent").innerHTML=rs.length?rs.map(function(s){return '<div class="recent-item"><div class="rt"><div class="rtitle">'+esc(s.Title||s.Id)+'</div><div class="rmeta">'+esc(s.Model||"")+' · '+s.MessageCount+' '+esc(t("home.msg"))+' · '+fmtWhenAbs(s.UpdatedUtc)+'</div></div><button class="minibtn" data-viewses="'+esc(s.Id)+'" title="Preview this session">'+esc(t("act.view"))+'</button></div>';}).join(""):'<div class="empty" style="padding:22px">'+esc(t("empty.sessions"))+'</div>';
   el("home_quick").innerHTML='<button class="btn" data-goto="chat">💬 '+esc(t("quick.newchat"))+'</button><button class="btn secondary" data-action="addendpoint">🔌 '+esc(t("quick.addep"))+'</button><button class="btn secondary" data-goto="sessions">🗂️ '+esc(t("quick.sessions"))+'</button><button class="btn secondary" data-goto="settings">⚙️ '+esc(t("quick.settings"))+'</button>';
 }
 /* ================= Usage analytics ================= */
 var usageState={range:"day",endpoint:"",model:"",tab:"tokens",buckets:[],summary:null,wired:false};
 function fmtTok(n){n=n||0;if(n>=1e6)return (n/1e6).toFixed(n>=1e7?0:1)+"M";if(n>=1e3)return (n/1e3).toFixed(n>=1e4?0:1)+"k";return ""+Math.round(n);}
 function fmtUsd(n){n=n||0;if(n===0)return "$0";if(n<0.01)return "$"+n.toFixed(4);if(n<1)return "$"+n.toFixed(3);return "$"+n.toFixed(2);}
-function fmtMs(n){n=Math.round(n||0);if(n>=1000)return (n/1000).toFixed(2)+"s";return n+"ms";}
+function fmtMsCompact(n){n=Math.round(n||0);if(n>=1000)return (n/1000).toFixed(2)+"s";return n+"ms";}
 function fmtPct(n){return ((n||0)*100).toFixed(1)+"%";}
-function fmtWhen(ms){try{return new Date(ms).toLocaleString();}catch(e){return ""+ms;}}
+function fmtWhenAbs(ms){try{return new Date(ms).toLocaleString();}catch(e){return ""+ms;}}
 function usageQuery(extra){var p="range="+usageState.range;if(usageState.endpoint)p+="&endpoint="+encodeURIComponent(usageState.endpoint);if(usageState.model)p+="&model="+encodeURIComponent(usageState.model);if(extra)p+=extra;return p;}
 function loadUsage(){
   if(!usageState.wired){wireUsage();usageState.wired=true;}
@@ -1921,9 +1960,9 @@ var CHART_TABS={
     {n:"Cached",c:"#16a34a",g:function(m){return m.CachedTokens||0;}},
     {n:"Output",c:"#d97706",g:function(m){return m.OutputTokens||0;}}]},
   cost:{kind:"bar",fmt:fmtUsd,series:[{n:"Cost",c:"#7c3aed",g:function(m){return m.CostUsd||0;}}]},
-  latency:{kind:"dist",fmt:fmtMs,c:"#2563eb",d:function(m){return m.TotalMsDist||{};}},
-  ttft:{kind:"dist",fmt:fmtMs,c:"#7c3aed",d:function(m){return m.TtftMsDist||{};}},
-  stream:{kind:"dist",fmt:fmtMs,c:"#0891b2",d:function(m){return m.StreamMsDist||{};}},
+  latency:{kind:"dist",fmt:fmtMsCompact,c:"#2563eb",d:function(m){return m.TotalMsDist||{};}},
+  ttft:{kind:"dist",fmt:fmtMsCompact,c:"#7c3aed",d:function(m){return m.TtftMsDist||{};}},
+  stream:{kind:"dist",fmt:fmtMsCompact,c:"#0891b2",d:function(m){return m.StreamMsDist||{};}},
   throughput:{kind:"dist",fmt:function(v){return (v||0).toFixed(0)+" tok/s";},c:"#16a34a",d:function(m){return m.ThroughputDist||{};}}
 };
 function cachedNote(buckets){var any=buckets.some(function(b){return (b.Metrics&&b.Metrics.CachedTokens)>0;});return any?"":"Prompt shows the uncached portion; cached tokens stack on top. Cache metrics populate when the provider reports them.";}
@@ -2043,14 +2082,14 @@ function loadUsageHistory(){_reload["usage_history_list"]=loadUsageHistory;gridL
   }).then(function(pg){_uhist=(pg&&pg.Items)||[];_uhistTotal=(pg&&pg.TotalCount)||0;renderUsageHistory();}).catch(function(e){gridError("usage_history_list",e.message);});}
 function renderUsageHistory(){
   renderGrid("usage_history_list",[
-    {h:"When",tip:"Call completion time",get:function(r){return esc(fmtWhen(r.TimestampUnixMs));}},
+    {h:"When",tip:"Call completion time",get:function(r){return esc(fmtWhenAbs(r.TimestampUnixMs));}},
     {h:"Conversation",tip:"The conversation this call belongs to",get:function(r){return esc(sessName(r.SessionId));}},
     {h:"Endpoint",get:function(r){return esc(r.EndpointName);}},
     {h:"In",mono:true,tip:"Input tokens",get:function(r){return fmtTok(r.InputTokens);}},
     {h:"Cached",mono:true,tip:"Cache-read tokens",get:function(r){return fmtTok(r.CachedTokens);}},
     {h:"Out",mono:true,tip:"Output tokens",get:function(r){return fmtTok(r.OutputTokens);}},
-    {h:"TTFT",mono:true,tip:"Time to first token",get:function(r){return r.TimeToFirstTokenMs!=null?fmtMs(r.TimeToFirstTokenMs):"—";}},
-    {h:"Latency",mono:true,tip:"Total request duration",get:function(r){return r.TotalMs!=null?fmtMs(r.TotalMs):"—";}},
+    {h:"TTFT",mono:true,tip:"Time to first token",get:function(r){return r.TimeToFirstTokenMs!=null?fmtMsCompact(r.TimeToFirstTokenMs):"—";}},
+    {h:"Latency",mono:true,tip:"Total request duration",get:function(r){return r.TotalMs!=null?fmtMsCompact(r.TotalMs):"—";}},
     {h:"tok/s",mono:true,tip:"Output throughput",get:function(r){return r.TokensPerSecond!=null?r.TokensPerSecond.toFixed(0):"—";}},
     {h:"Cost",mono:true,get:function(r){return fmtUsd(r.CostUsd);}},
     {h:"Status",get:function(r){return r.Success?'<span class="ubadge ok">ok</span>':'<span class="ubadge err">'+esc(r.ErrorCode||"error")+'</span>';}}
@@ -2062,10 +2101,10 @@ function viewUsageRow(i){var r=_uhist[i];if(!r)return;
   function sec(title,pairs){var h='<div class="udetail-sec"><h5>'+esc(title)+'</h5><div class="udetail-kv">';pairs.forEach(function(kv){h+='<div><div class="k">'+esc(kv[0])+'</div><div class="v">'+esc(""+kv[1])+'</div></div>';});return h+'</div></div>';}
   var badge=r.Success?'<span class="ubadge ok">success</span>':'<span class="ubadge err">'+esc(r.ErrorCode||"error")+'</span>';
   var body='<div class="udetail">'+
-    '<div class="udetail-hd"><div><div class="mdl">'+esc(r.Model)+'</div><div class="when">'+esc(fmtWhen(r.TimestampUnixMs))+'</div></div>'+badge+'</div>'+
+    '<div class="udetail-hd"><div><div class="mdl">'+esc(r.Model)+'</div><div class="when">'+esc(fmtWhenAbs(r.TimestampUnixMs))+'</div></div>'+badge+'</div>'+
     sec("Identity",[["Endpoint",r.EndpointName],["Provider",r.AdapterType||"—"],["Call kind",r.CallKind],["Command",r.Command||"—"],["Session",r.SessionId||"—"],["Host",r.BaseHost||"—"]])+
     sec("Tokens",[["Input",fmtTok(r.InputTokens)],["Cached",fmtTok(r.CachedTokens)],["Output",fmtTok(r.OutputTokens)],["Reasoning",fmtTok(r.ReasoningTokens)],["Total",fmtTok(r.TotalTokens)]])+
-    sec("Timing",[["Time to first token",r.TimeToFirstTokenMs!=null?fmtMs(r.TimeToFirstTokenMs):"—"],["Streaming time",r.StreamingMs!=null?fmtMs(r.StreamingMs):"—"],["Total latency",r.TotalMs!=null?fmtMs(r.TotalMs):"—"],["Throughput",r.TokensPerSecond!=null?(r.TokensPerSecond.toFixed(1)+" tok/s"):"—"],["Finish reason",r.FinishReason||"—"]])+
+    sec("Timing",[["Time to first token",r.TimeToFirstTokenMs!=null?fmtMsCompact(r.TimeToFirstTokenMs):"—"],["Streaming time",r.StreamingMs!=null?fmtMsCompact(r.StreamingMs):"—"],["Total latency",r.TotalMs!=null?fmtMsCompact(r.TotalMs):"—"],["Throughput",r.TokensPerSecond!=null?(r.TokensPerSecond.toFixed(1)+" tok/s"):"—"],["Finish reason",r.FinishReason||"—"]])+
     sec("Cost",[["Derived cost",fmtUsd(r.CostUsd)]])+
   '</div>';
   openModal("Call details",body,[{label:t("act.viewjson"),onClick:function(){viewJson("Usage event",r);}},{label:t("act.close"),primary:true,onClick:closeModal}],true);
@@ -2083,18 +2122,18 @@ function renderPricing(){renderGrid("pricing_list",[
   {h:"Cached $/Mtok",mono:true,tip:"USD per million cache-read tokens",get:function(r){return "$"+(+r.Cached).toFixed(2);}},
   {h:"Output $/Mtok",mono:true,tip:"USD per million completion tokens",get:function(r){return "$"+(+r.Output).toFixed(2);}}
 ],_pr2,{icon:"💲",msg:"No model rates yet. Unknown models cost nothing until you add a rate.",add:"+ Add model"});}
-function prFields(isEdit){return [
+function priceFields(isEdit){return [
   {id:"Model",label:"Model",disabled:isEdit,tip:"The model identifier as reported by the provider — the same value as the endpoint's model field."},
   {id:"Input",label:"Input rate",sub:"(USD / Mtok)",type:"number",step:"0.01",tip:"Price per million uncached prompt tokens."},
   {id:"Cached",label:"Cached input rate",sub:"(USD / Mtok)",type:"number",step:"0.01",tip:"Price per million cache-read prompt tokens — usually a fraction of the input rate."},
   {id:"Output",label:"Output rate",sub:"(USD / Mtok)",type:"number",step:"0.01",tip:"Price per million completion tokens."}];}
-function openPr(i,prefill){var isEdit=i>=0,e=isEdit?_pr2[i]:(prefill||{Input:0,Cached:0,Output:0});
-  formModal(isEdit?"Edit model pricing":"Add model pricing",prFields(isEdit),e,function(v){
+function openPrice(i,prefill){var isEdit=i>=0,e=isEdit?_pr2[i]:(prefill||{Input:0,Cached:0,Output:0});
+  formModal(isEdit?"Edit model pricing":"Add model pricing",priceFields(isEdit),e,function(v){
     if(!v.Model){toast(t("toast.nameReq"),true);return;}
     var list=_pr2.slice();
     if(isEdit)list[i]=v;else{for(var j=0;j<list.length;j++){if((""+list[j].Model).toLowerCase()===(""+v.Model).toLowerCase()){toast('"'+v.Model+'" already has a rate.',true);return;}}list.push(v);}
     savePricingList(list);});}
-function delPr(i){var m=_pr2[i];if(!m)return;confirmModal('Remove pricing for "'+m.Model+'"?',function(){var list=_pr2.slice();list.splice(i,1);savePricingList(list);});}
+function delPrice(i){var m=_pr2[i];if(!m)return;confirmModal('Remove pricing for "'+m.Model+'"?',function(){var list=_pr2.slice();list.splice(i,1);savePricingList(list);});}
 function savePricingList(list){var models={};list.forEach(function(r){if(r.Model)models[r.Model]={inputPerMTok:+r.Input||0,cachedInputPerMTok:+r.Cached||0,outputPerMTok:+r.Output||0};});
   busyModal(true);api("/v1.0/api/usage/pricing","PUT",{version:_prVersion,models:models}).then(function(tb){_prVersion=(tb&&tb.version)||_prVersion;closeModal();loadPricing();toast(t("toast.saved"));}).catch(function(e){toast(e.message,true);}).finally(function(){busyModal(false);});
 }
@@ -2152,17 +2191,18 @@ document.addEventListener("keydown",function(e){
 function on(id,fn){var e=el(id);if(e)e.addEventListener("click",fn);}
 on("endpoints_add",function(){openEp(-1);});on("endpoints_reload",loadEndpointsAdmin);
 on("mcp_add",function(){openMcp(-1);});on("mcp_reload",loadMcp);
-on("prompts_add",function(){openPr(-1);});on("prompts_reload",loadPrompts);
+on("prompts_add",function(){openPr(-1);});on("prompts_reload",loadPrompts);on("catalog_reload",loadCatalog);
 on("subagents_add",function(){openSa(-1);});on("subagents_reload",loadSubagents);
 on("hooks_add",function(){openHook(-1);});on("hooks_reload",loadHooks);
 on("cmds_add",function(){openCmd(-1);});on("commands_reload",loadHooks);
 on("keybindings_add",function(){openKb(-1);});on("keybindings_reload",loadKeybindings);
 on("skills_add",function(){openSk(null);});on("skills_reload",loadSkills);on("sessions_reload",loadSessions);
-on("usage_refresh",refreshUsage);on("pricing_add",function(){openPr(-1);});on("pricing_reload",loadPricing);
+on("usage_refresh",refreshUsage);on("pricing_add",function(){openPrice(-1);});on("pricing_reload",loadPricing);
 /* row context-menus + row-click-to-edit + empty-state add */
 wireTable("endpoints_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openEp(i);}},{label:t("act.duplicate"),run:function(){openEp(-1,dupOf(_ep[i],"Name"));}},{label:t("act.viewjson"),run:function(){viewJson("Endpoint · "+_ep[i].Name,_ep[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delEp(_ep[i].Name);}}];},row:function(i){openEp(i);},add:function(){openEp(-1);}});
 wireTable("mcp_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openMcp(i);}},{label:t("act.duplicate"),run:function(){openMcp(-1,dupOf(_mcp[i],"Name"));}},{label:t("act.viewjson"),run:function(){viewJson("MCP server · "+_mcp[i].Name,_mcp[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delMcp(_mcp[i].Name);}}];},row:function(i){openMcp(i);},add:function(){openMcp(-1);}});
 wireTable("prompts_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openPr(i);}},{label:t("act.duplicate"),run:function(){openPr(-1,dupOf(_pr[i],"Name"));}},{label:t("act.viewjson"),run:function(){viewJson("Prompt profile · "+_pr[i].Name,_pr[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delPr(i);}}];},row:function(i){openPr(i);},add:function(){openPr(-1);}});
+wireTable("catalog_list",{menu:function(i){var c=_cat[i];var items=[];if(c.Editable){items.push({label:t("act.edit"),run:function(){openCat(i);}});if(c.Overridden)items.push({label:t("act.reset"),run:function(){resetCat(i);}});}else{items.push({label:t("act.view"),run:function(){openCat(i);}});}items.push({label:t("act.viewjson"),run:function(){viewJson("Prompt · "+c.Key,c);}});return items;},row:function(i){openCat(i);}});
 wireTable("subagents_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openSa(i);}},{label:t("act.duplicate"),run:function(){openSa(-1,dupOf(_sa[i],"Name"));}},{label:t("act.viewjson"),run:function(){viewJson("Subagent · "+_sa[i].Name,_sa[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delSa(i);}}];},row:function(i){openSa(i);},add:function(){openSa(-1);}});
 wireTable("hooks_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openHook(i);}},{label:t("act.duplicate"),run:function(){openHook(-1,dupOf(_hooks.Hooks[i],null));}},{label:t("act.viewjson"),run:function(){viewJson("Hook",_hooks.Hooks[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delHook(i);}}];},row:function(i){openHook(i);},add:function(){openHook(-1);}});
 wireTable("cmds_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openCmd(i);}},{label:t("act.duplicate"),run:function(){openCmd(-1,dupOf(_hooks.Commands[i],"Name"));}},{label:t("act.viewjson"),run:function(){viewJson("Command · /"+_hooks.Commands[i].Name,_hooks.Commands[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delCmd(i);}}];},row:function(i){openCmd(i);},add:function(){openCmd(-1);}});
@@ -2170,7 +2210,7 @@ wireTable("keybindings_list",{menu:function(i){return [{label:t("act.edit"),run:
 wireTable("skills_list",{menu:function(i){var s=_sk[i];return [{label:t("act.edit"),run:function(){openSk(s.Name);}},{label:t("act.view"),run:function(){viewSk(s.Name);}},{label:s.Enabled?t("act.disable"):t("act.enable"),run:function(){toggleSk(s.Name);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delSk(s.Name);}}];},row:function(i){var s=_sk[i];if(s)openSk(s.Name);},add:function(){openSk(null);}});
 wireTable("sessions_list",{menu:function(i){var id=_se[i].Id;return [{label:"View Markdown",run:function(){viewSe(id,"md");}},{label:"View HTML",run:function(){viewSe(id,"html");}},{sep:true},{label:"Download Markdown",run:function(){exportSe(id,"md");}},{label:"Download HTML",run:function(){exportSe(id,"html");}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delSe(id);}}];},row:function(i){viewSe(_se[i].Id,"md");}});
 wireTable("usage_history_list",{menu:function(i){return [{label:t("act.view"),run:function(){viewUsageRow(i);}},{label:t("act.viewjson"),run:function(){viewJson("Usage event",_uhist[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delUsageRow(i);}}];},row:function(i){viewUsageRow(i);}});
-wireTable("pricing_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openPr(i);}},{label:t("act.duplicate"),run:function(){openPr(-1,{Model:"",Input:_pr2[i].Input,Cached:_pr2[i].Cached,Output:_pr2[i].Output});}},{label:t("act.viewjson"),run:function(){viewJson("Pricing · "+_pr2[i].Model,_pr2[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delPr(i);}}];},row:function(i){openPr(i);},add:function(){openPr(-1);}});
+wireTable("pricing_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openPrice(i);}},{label:t("act.duplicate"),run:function(){openPrice(-1,{Model:"",Input:_pr2[i].Input,Cached:_pr2[i].Cached,Output:_pr2[i].Output});}},{label:t("act.viewjson"),run:function(){viewJson("Pricing · "+_pr2[i].Model,_pr2[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delPrice(i);}}];},row:function(i){openPrice(i);},add:function(){openPrice(-1);}});
 var comp=el("composer");
 comp.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat();}});
 comp.addEventListener("input",function(){comp.style.height="44px";comp.style.height=Math.min(comp.scrollHeight,180)+"px";});

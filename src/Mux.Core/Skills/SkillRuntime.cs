@@ -7,6 +7,7 @@ namespace Mux.Core.Skills
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
     using Mux.Core.Tools;
 
     /// <summary>
@@ -159,8 +160,7 @@ namespace Mux.Core.Skills
             }
 
             StringBuilder builder = new StringBuilder();
-            builder.Append("\n\nThe following skills are available. Call the `skill` tool with a skill's name to read its ");
-            builder.Append("instructions, then `run_skill` to execute one of its commands:\n");
+            builder.Append("\n\n").Append(PromptResolver.Shared.GetEffective("section.skills")).Append('\n');
             foreach (Skill skill in skills)
             {
                 builder.Append($"- {skill.Manifest.Name}: {skill.Manifest.Description}\n");

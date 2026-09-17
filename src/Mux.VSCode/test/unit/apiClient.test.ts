@@ -45,3 +45,24 @@ test('cancelRun rethrows a non-404 error', async () => {
     const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
     await assert.rejects(() => client.cancelRun('boom'));
 });
+
+test('buildFileContext posts to the context route and returns the built block', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    let capturedBody = '';
+    globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: string }) => {
+        capturedUrl = String(input);
+        capturedMethod = init?.method ?? 'GET';
+        capturedBody = init?.body ?? '';
+        return new Response(JSON.stringify({ Text: 'Structural map (3 entries): …', Mode: 'map', Inlined: false, OutlineEntryCount: 3, FromCache: false }), { status: 200 });
+    }) as typeof fetch;
+
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: 'secret' });
+    const result = await client.buildFileContext({ path: 'src/big.cs', content: 'x'.repeat(100), mode: 'map' });
+
+    assert.equal(capturedUrl, 'http://127.0.0.1:8710/v1.0/api/context/file');
+    assert.equal(capturedMethod, 'POST');
+    assert.equal(result.Mode, 'map');
+    assert.equal(result.OutlineEntryCount, 3);
+    assert.ok(capturedBody.includes('src/big.cs'), 'the request carries the file path');
+});

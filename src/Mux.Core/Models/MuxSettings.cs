@@ -33,6 +33,7 @@ namespace Mux.Core.Models
         private bool _TaskPlanningEnabled = true;
         private bool _TaskParallelismEnabled = false;
         private ExternalSearchSettings _ExternalSearch = new ExternalSearchSettings();
+        private ContextSettings _Context = new ContextSettings();
         private RestServerSettings _Rest = new RestServerSettings();
         private TelemetrySettings _Telemetry = new TelemetrySettings();
 
@@ -336,6 +337,17 @@ namespace Mux.Core.Models
         {
             get => _ExternalSearch;
             set => _ExternalSearch = value ?? new ExternalSearchSettings();
+        }
+
+        /// <summary>
+        /// Large-file context configuration: how oversized files are mapped, summarized, or truncated, and how
+        /// the summary cache behaves.
+        /// </summary>
+        [JsonPropertyName("context")]
+        public ContextSettings Context
+        {
+            get => _Context;
+            set => _Context = value ?? new ContextSettings();
         }
 
         /// <summary>

@@ -286,6 +286,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.redo", "Redo undone changes", null, RedoLastUndo, "Session", new[] { "redo" }));
             _Catalog.Add(new CommandDescriptor("mux.queue", "Edit queue", "ctrl+g", OpenQueueEditor, "Session", new[] { "queue", "edit queue", "pending" }));
             _Catalog.Add(new CommandDescriptor("mux.prompts", "Prompts", "ctrl+p", OpenPromptEditor, "Model", new[] { "prompts", "prompt", "system prompt" }));
+            _Catalog.Add(new CommandDescriptor("mux.prompt-catalog", "Operational prompts", null, OpenPromptCatalog, "Model", new[] { "operational-prompts", "prompt-catalog", "catalog" }));
             _Catalog.Add(new CommandDescriptor("mux.mcp", "MCP servers", null, OpenMcpModal, "Model", new[] { "mcp", "mcp-servers", "mcpservers", "servers" }));
             _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
@@ -2194,6 +2195,14 @@ namespace Mux.Cli.App
             PromptEditorModal modal = new PromptEditorModal(display);
             _App.Modals.Push(modal);
             _ = ResolvePromptEditorAsync(modal);
+        }
+
+        private void OpenPromptCatalog()
+        {
+            // The catalog modal applies each override in-process through PromptResolver as it is edited, so no
+            // completion result needs to be persisted here.
+            PromptCatalogModal modal = new PromptCatalogModal();
+            _App.Modals.Push(modal);
         }
 
         private async Task ResolvePromptEditorAsync(PromptEditorModal modal)

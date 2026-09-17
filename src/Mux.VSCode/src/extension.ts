@@ -80,6 +80,8 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('mux.manage.addPrompt', () => manageActions.addPrompt()),
         vscode.commands.registerCommand('mux.manage.editPrompt', (node: ManageNode) => manageActions.editPrompt(node)),
         vscode.commands.registerCommand('mux.manage.deletePrompt', (node: ManageNode) => manageActions.deletePrompt(node)),
+        vscode.commands.registerCommand('mux.manage.editCatalog', (node: ManageNode) => manageActions.editCatalog(node)),
+        vscode.commands.registerCommand('mux.manage.resetCatalog', (node: ManageNode) => manageActions.resetCatalog(node)),
         vscode.commands.registerCommand('mux.manage.addSubagent', () => manageActions.addSubagent()),
         vscode.commands.registerCommand('mux.manage.editSubagent', (node: ManageNode) => manageActions.editSubagent(node)),
         vscode.commands.registerCommand('mux.manage.deleteSubagent', (node: ManageNode) => manageActions.deleteSubagent(node)),

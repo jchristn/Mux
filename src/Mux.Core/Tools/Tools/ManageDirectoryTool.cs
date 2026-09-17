@@ -6,6 +6,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
 
     /// <summary>
     /// Creates, deletes, or renames directories.
@@ -22,10 +23,7 @@ namespace Mux.Core.Tools.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Creates, deletes, or renames a directory. "
-            + "Use action 'create' to create a directory (including parents), "
-            + "'delete' to remove an empty or non-empty directory, "
-            + "or 'rename' to move/rename a directory.";
+        public string Description => PromptResolver.Shared.GetEffective("tool.manage_directory");
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.

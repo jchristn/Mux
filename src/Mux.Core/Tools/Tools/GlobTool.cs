@@ -10,6 +10,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
 
     /// <summary>
     /// Searches for files matching a glob pattern within a directory tree.
@@ -27,8 +28,7 @@ namespace Mux.Core.Tools.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Searches for files matching a glob pattern. "
-            + "Supports * (any characters in filename), ** (any path segments), and ? (single character).";
+        public string Description => PromptResolver.Shared.GetEffective("tool.glob");
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.

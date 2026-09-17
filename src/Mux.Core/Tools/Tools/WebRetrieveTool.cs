@@ -6,6 +6,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading.Tasks;
     using Microsoft.Playwright;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
 
     /// <summary>
     /// Retrieves web pages in a headless browser and returns rendered page content.
@@ -42,7 +43,7 @@ namespace Mux.Core.Tools.Tools
         public string Name => "web_retrieve";
 
         /// <inheritdoc />
-        public string Description => "Retrieves a URL with a headless browser and returns rendered text, title, final URL, status, and optional HTML.";
+        public string Description => PromptResolver.Shared.GetEffective("tool.web_retrieve");
 
         /// <inheritdoc />
         public object ParametersSchema => new

@@ -55,5 +55,7 @@
   "cmd.manage.addSkill": "स्किल जोड़ें",
   "cmd.manage.editSkill": "स्किल संपादित करें",
   "cmd.manage.deleteSkill": "स्किल हटाएँ",
-  "cmd.usage": "उपयोग डैशबोर्ड"
+  "cmd.usage": "उपयोग डैशबोर्ड",
+  "cmd.manage.editCatalog": "प्रॉम्प्ट ओवरराइड संपादित करें",
+  "cmd.manage.resetCatalog": "डिफ़ॉल्ट पर रीसेट करें"
 }

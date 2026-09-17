@@ -36,6 +36,7 @@ export async function collectContext(sources: ContextSource[], workspaceRoot: st
                         kind: 'activeFile',
                         label: vscode.l10n.t('Active file: {0}', relativePath(editor.document.uri)),
                         content: editor.document.getText(),
+                        path: editor.document.uri.fsPath,
                     });
                 }
                 break;
@@ -153,7 +154,10 @@ function appendSymbols(symbols: vscode.DocumentSymbol[], depth: number, lines: s
     for (const symbol of symbols) {
         const indent = '  '.repeat(depth);
         const kind = vscode.SymbolKind[symbol.kind] ?? 'Symbol';
-        lines.push(`${indent}${kind} ${symbol.name} [line ${symbol.range.start.line + 1}]`);
+        const startLine = symbol.range.start.line + 1;
+        const endLine = symbol.range.end.line + 1;
+        const range = endLine > startLine ? `lines ${startLine}-${endLine}` : `line ${startLine}`;
+        lines.push(`${indent}${kind} ${symbol.name} [${range}]`);
         if (symbol.children && symbol.children.length > 0) {
             appendSymbols(symbol.children, depth + 1, lines);
         }

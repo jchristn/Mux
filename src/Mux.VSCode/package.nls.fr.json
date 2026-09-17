@@ -55,5 +55,7 @@
   "cmd.manage.addSkill": "Ajouter une compétence",
   "cmd.manage.editSkill": "Modifier la compétence",
   "cmd.manage.deleteSkill": "Supprimer la compétence",
-  "cmd.usage": "Tableau de bord d'utilisation"
+  "cmd.usage": "Tableau de bord d'utilisation",
+  "cmd.manage.editCatalog": "Modifier la substitution du prompt",
+  "cmd.manage.resetCatalog": "Réinitialiser par défaut"
 }

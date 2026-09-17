@@ -2,7 +2,7 @@
   "name": "mux-ai",
   "displayName": "mux-ai",
   "description": "mux in your editor — chat, inline commands, native diffs, and shared sessions over the local mux agent.",
-  "version": "0.12.2",
+  "version": "0.12.3",
   "icon": "dashboard/media/icon.png",
   "publisher": "joelchristner",
   "license": "MIT",
@@ -240,6 +240,16 @@
         "category": "mux"
       },
       {
+        "command": "mux.manage.editCatalog",
+        "title": "%cmd.manage.editCatalog%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.manage.resetCatalog",
+        "title": "%cmd.manage.resetCatalog%",
+        "category": "mux"
+      },
+      {
         "command": "mux.manage.addSubagent",
         "title": "%cmd.manage.addSubagent%",
         "category": "mux",
@@ -408,6 +418,16 @@
         {
           "command": "mux.manage.deletePrompt",
           "when": "view == mux.manage && viewItem == prompt",
+          "group": "2@1"
+        },
+        {
+          "command": "mux.manage.editCatalog",
+          "when": "view == mux.manage && viewItem == catalog-entry",
+          "group": "1@1"
+        },
+        {
+          "command": "mux.manage.resetCatalog",
+          "when": "view == mux.manage && viewItem == catalog-entry",
           "group": "2@1"
         },
         {

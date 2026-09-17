@@ -54,9 +54,12 @@ message — and streams its answer in the panel.
 ## Context
 
 A prompt carries whatever editor context you have enabled in `mux.context.sources`: the active file, the
-selection, diagnostics, open tabs, and the working-tree diff. The panel tells you when an attachment was
-truncated to fit, and when a requested source could not be provided — terminal scrollback, for one, which the
-stable VS Code API does not expose. Nothing is dropped silently.
+selection, diagnostics, open tabs, and the working-tree diff. A large active file is no longer hard-sliced —
+the extension sends it to `mux serve` to be turned into a structural map (or summary) with line ranges and
+inlines that, so the model can read exact ranges rather than losing the tail; if the server is unreachable it
+falls back to truncation. The panel tells you when an attachment was truncated to fit, and when a requested
+source could not be provided — terminal scrollback, for one, which the stable VS Code API does not expose.
+Nothing is dropped silently.
 
 ## Sessions
 
@@ -76,7 +79,9 @@ section reads the server's live configuration:
   token/context limits, per-endpoint tool auto-approval). The API key field is blank on edit and leaving it
   blank keeps the stored key.
 - **MCP Servers** — add, edit, and delete stdio or HTTP servers.
-- **Prompts** — see your prompt profiles and set which one is active.
+- **Prompts** — edit your prompt profiles (system, tools-disabled, and compaction prompts) and set which one
+  is active, and browse the operational prompt catalog grouped by kind — edit or reset any entry. Subagent
+  personas are listed read-through and deep-link to the subagent editor.
 - **Subagents** — see the configured subagents and their descriptions.
 - **Skills** — see every discovered skill and toggle it on or off.
 - **Settings** — opens an editor over the server's settings (approval policy, iteration and concurrency

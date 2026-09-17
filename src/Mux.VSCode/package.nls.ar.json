@@ -55,5 +55,7 @@
   "cmd.manage.addSkill": "إضافة مهارة",
   "cmd.manage.editSkill": "تعديل المهارة",
   "cmd.manage.deleteSkill": "حذف المهارة",
-  "cmd.usage": "لوحة الاستخدام"
+  "cmd.usage": "لوحة الاستخدام",
+  "cmd.manage.editCatalog": "تحرير تجاوز الموجه",
+  "cmd.manage.resetCatalog": "إعادة التعيين إلى الافتراضي"
 }

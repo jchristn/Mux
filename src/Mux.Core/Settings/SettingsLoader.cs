@@ -515,30 +515,53 @@ namespace Mux.Core.Settings
         }
 
         /// <summary>
+        /// Reads and deserializes the whole <c>prompts.json</c> wrapper (both profiles and the operational
+        /// override map). Returns an empty wrapper when the file is absent or unparseable, so callers on the
+        /// model path never fault on a missing or malformed file.
+        /// </summary>
+        /// <returns>The deserialized wrapper; never null.</returns>
+        private static PromptsFile LoadPromptsFile()
+        {
+            string filePath = Path.Combine(GetConfigDirectory(), "prompts.json");
+            if (!File.Exists(filePath))
+            {
+                return new PromptsFile();
+            }
+
+            try
+            {
+                string json = ReadAllTextShared(filePath);
+                return JsonSerializer.Deserialize<PromptsFile>(json, _JsonOptions) ?? new PromptsFile();
+            }
+            catch (JsonException)
+            {
+                return new PromptsFile();
+            }
+        }
+
+        /// <summary>
+        /// Serializes and atomically writes the whole <c>prompts.json</c> wrapper.
+        /// </summary>
+        /// <param name="file">The wrapper to persist.</param>
+        private static void WritePromptsFile(PromptsFile file)
+        {
+            EnsureConfigDirectory();
+            string json = JsonSerializer.Serialize(file, _JsonWriteOptions);
+            WriteAllTextAtomic(Path.Combine(GetConfigDirectory(), "prompts.json"), json);
+        }
+
+        /// <summary>
         /// Loads the prompt profiles from <c>~/.mux/prompts.json</c>.
         /// </summary>
         /// <returns>The prompt profiles, or an empty list when the file does not exist.</returns>
         public static List<PromptProfile> LoadPrompts()
         {
-            string filePath = Path.Combine(GetConfigDirectory(), "prompts.json");
-            if (!File.Exists(filePath))
-            {
-                return new List<PromptProfile>();
-            }
-
-            string json = ReadAllTextShared(filePath);
-            PromptsFile? file = JsonSerializer.Deserialize<PromptsFile>(json, _JsonOptions);
-            if (file == null || file.Prompts == null)
-            {
-                return new List<PromptProfile>();
-            }
-
-            return file.Prompts;
+            return LoadPromptsFile().Prompts ?? new List<PromptProfile>();
         }
 
         /// <summary>
         /// Saves prompt profiles to <c>~/.mux/prompts.json</c>. Exactly one profile is normalized to active
-        /// (the first, if none or several are marked).
+        /// (the first, if none or several are marked). The operational override map is preserved verbatim.
         /// </summary>
         /// <param name="prompts">The prompt profiles to persist.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="prompts"/> is null.</exception>
@@ -552,9 +575,42 @@ namespace Mux.Core.Settings
             EnsureConfigDirectory();
             NormalizeActiveProfile(prompts);
 
-            PromptsFile file = new PromptsFile { Prompts = prompts };
-            string json = JsonSerializer.Serialize(file, _JsonWriteOptions);
-            WriteAllTextAtomic(Path.Combine(GetConfigDirectory(), "prompts.json"), json);
+            PromptsFile file = LoadPromptsFile();
+            file.Prompts = prompts;
+            WritePromptsFile(file);
+        }
+
+        /// <summary>
+        /// Loads the operational-prompt overrides (catalog key → override text) from <c>~/.mux/prompts.json</c>.
+        /// </summary>
+        /// <returns>The override map (a case-sensitive ordinal dictionary); empty when none are stored.</returns>
+        public static Dictionary<string, string> LoadOperationalPrompts()
+        {
+            Dictionary<string, string>? stored = LoadPromptsFile().Operational;
+            if (stored == null)
+            {
+                return new Dictionary<string, string>(StringComparer.Ordinal);
+            }
+
+            return new Dictionary<string, string>(stored, StringComparer.Ordinal);
+        }
+
+        /// <summary>
+        /// Saves the operational-prompt overrides to <c>~/.mux/prompts.json</c>, preserving the prompt profiles.
+        /// An empty map clears the <c>operational</c> section.
+        /// </summary>
+        /// <param name="operational">The override map (catalog key → override text).</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="operational"/> is null.</exception>
+        public static void SaveOperationalPrompts(Dictionary<string, string> operational)
+        {
+            if (operational == null)
+            {
+                throw new ArgumentNullException(nameof(operational));
+            }
+
+            PromptsFile file = LoadPromptsFile();
+            file.Operational = operational.Count == 0 ? null : new Dictionary<string, string>(operational, StringComparer.Ordinal);
+            WritePromptsFile(file);
         }
 
         /// <summary>
@@ -1168,7 +1224,9 @@ namespace Mux.Core.Settings
         }
 
         /// <summary>
-        /// Wrapper class for deserializing the prompts JSON file.
+        /// Wrapper class for deserializing the prompts JSON file. Carries both the switchable prompt profiles
+        /// and the forward-tolerant <c>operational</c> override map (catalog key → override text); an absent
+        /// key resolves to the coded default, so a missing or empty map is valid.
         /// </summary>
         private class PromptsFile
         {
@@ -1177,6 +1235,13 @@ namespace Mux.Core.Settings
             /// </summary>
             [JsonPropertyName("prompts")]
             public List<PromptProfile>? Prompts { get; set; }
+
+            /// <summary>
+            /// The operational-prompt overrides (catalog key → override text). Null or empty means every
+            /// operational prompt uses its coded default.
+            /// </summary>
+            [JsonPropertyName("operational")]
+            public Dictionary<string, string>? Operational { get; set; }
         }
 
         private static bool TryExtractEnvironmentVariableName(string value, bool allowBareName, out string variableName)
@@ -1292,11 +1357,27 @@ namespace Mux.Core.Settings
                 TaskPlanningEnabled = settings.TaskPlanningEnabled,
                 TaskParallelismEnabled = settings.TaskParallelismEnabled,
                 ExternalSearch = NormalizeExternalSearchSettings(settings.ExternalSearch),
+                Context = NormalizeContextSettings(settings.Context),
                 Rest = NormalizeRestServerSettings(settings.Rest),
                 Telemetry = NormalizeTelemetrySettings(settings.Telemetry)
             };
 
             return normalized;
+        }
+
+        private static ContextSettings NormalizeContextSettings(ContextSettings? context)
+        {
+            ContextSettings source = context ?? new ContextSettings();
+
+            // Re-assigning through the setters re-normalizes and clamps every value.
+            return new ContextSettings
+            {
+                LargeFileMode = source.LargeFileMode,
+                InlineThresholdBytes = source.InlineThresholdBytes,
+                SummaryChunkLines = source.SummaryChunkLines,
+                SummaryCacheEnabled = source.SummaryCacheEnabled,
+                SummaryCacheRetentionDays = source.SummaryCacheRetentionDays
+            };
         }
 
         private static TelemetrySettings NormalizeTelemetrySettings(TelemetrySettings? settings)

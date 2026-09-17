@@ -4,7 +4,8 @@ import * as vscode from 'vscode';
 import { ApiClient } from '../api/ApiClient';
 import { readSettings } from '../config/settings';
 import { collectContext, workspaceRootPath } from '../context/providers';
-import { composePrompt } from '../context/composePrompt';
+import { ContextItem, composePrompt } from '../context/composePrompt';
+import { resolveFileContext } from '../context/fileContext';
 import { MuxServerLifecycle } from '../server/lifecycle';
 import { MirrorClient } from '../mirror/MirrorClient';
 import { log, logError } from '../util/logger';
@@ -394,6 +395,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    /**
+     * Replaces a large active-file context item's content with a server-built map or summary instead of
+     * letting it be hard-truncated. Small files are left whole; when the server call fails the original
+     * content is kept and marked truncatable, so {@link composePrompt}'s per-item cap applies as the fallback.
+     */
+    private async applyLargeFileContext(items: ContextItem[], client: ApiClient, signal: AbortSignal): Promise<void> {
+        for (const item of items) {
+            if (item.kind !== 'activeFile' || !item.path) {
+                continue;
+            }
+
+            const resolved = await resolveFileContext(item.path, item.content, {
+                fetcher: (request) => client.buildFileContext(request, signal),
+            });
+            item.content = resolved.content;
+            item.noTruncate = resolved.noTruncate;
+        }
+    }
+
     private async runTurn(userText: string): Promise<void> {
         const text = userText.trim();
         if (!text || this.activeRun) {
@@ -417,6 +437,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
             const settings = readSettings();
             const collected = await collectContext(settings.contextSources, workspaceRootPath());
+            await this.applyLargeFileContext(collected.items, client, controller.signal);
             const composed = composePrompt(text, collected.items);
             if (collected.unavailable.length > 0) {
                 this.post({ type: 'notice', message: vscode.l10n.t('Not attached: {0}', collected.unavailable.join(', ')) });

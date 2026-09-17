@@ -9,6 +9,7 @@ namespace Mux.Core.Tools.Tools
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Prompting;
 
     /// <summary>
     /// Lists files and directories at a given path with type indicators.
@@ -26,8 +27,7 @@ namespace Mux.Core.Tools.Tools
         /// <summary>
         /// A human-readable description of what this tool does.
         /// </summary>
-        public string Description => "Lists files and directories at a given path. "
-            + "Directories are listed first (marked [DIR]), then files (marked [FILE]), sorted alphabetically within each group.";
+        public string Description => PromptResolver.Shared.GetEffective("tool.list_directory");
 
         /// <summary>
         /// The JSON Schema object describing the tool's input parameters.
