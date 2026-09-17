@@ -18,6 +18,8 @@
   "cmd.sessions.resume": "Fortsetzen",
   "cmd.sessions.rename": "Umbenennen",
   "cmd.sessions.duplicate": "Duplizieren",
+  "cmd.sessions.label": "Labels bearbeiten…",
+  "cmd.sessions.tag": "Tags bearbeiten…",
   "cmd.sessions.export": "Exportieren",
   "cmd.sessions.delete": "Löschen",
   "config.server.autoStart": "Einen lokalen mux-Server starten, wenn keiner erreichbar ist.",

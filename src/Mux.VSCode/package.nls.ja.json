@@ -18,6 +18,8 @@
   "cmd.sessions.resume": "再開",
   "cmd.sessions.rename": "名前を変更",
   "cmd.sessions.duplicate": "複製",
+  "cmd.sessions.label": "ラベルを編集…",
+  "cmd.sessions.tag": "タグを編集…",
   "cmd.sessions.export": "エクスポート",
   "cmd.sessions.delete": "削除",
   "config.server.autoStart": "到達可能なサーバーがない場合にローカルの mux サーバーを起動します。",

@@ -18,6 +18,8 @@
   "cmd.sessions.resume": "Продолжить",
   "cmd.sessions.rename": "Переименовать",
   "cmd.sessions.duplicate": "Дублировать",
+  "cmd.sessions.label": "Изменить метки…",
+  "cmd.sessions.tag": "Изменить теги…",
   "cmd.sessions.export": "Экспортировать",
   "cmd.sessions.delete": "Удалить",
   "config.server.autoStart": "Запускать локальный сервер mux, когда ни один недоступен.",

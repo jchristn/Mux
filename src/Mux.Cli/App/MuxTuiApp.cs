@@ -301,8 +301,8 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.cwd", "Working directory", null, ShowWorkingDirectory, "Session", new[] { "cwd", "cd", "chdir" }, ChangeWorkingDirectory));
-            _Catalog.Add(new CommandDescriptor("mux.label", "Labels", null, ShowSessionMetadata, "Session", new[] { "label", "labels" }, HandleLabelArgument));
-            _Catalog.Add(new CommandDescriptor("mux.tag", "Tags", null, ShowSessionMetadata, "Session", new[] { "tag", "tags" }, HandleTagArgument));
+            _Catalog.Add(new CommandDescriptor("mux.label", "Labels", null, ShowSessionLabels, "Session", new[] { "label", "labels" }, HandleLabelArgument));
+            _Catalog.Add(new CommandDescriptor("mux.tag", "Tags", null, ShowSessionTags, "Session", new[] { "tag", "tags" }, HandleTagArgument));
             _Catalog.Add(new CommandDescriptor("mux.tasks", "Tasks", null, OpenTasksModal, "View", new[] { "tasks", "task", "plan", "todo" }));
             _Catalog.Add(new CommandDescriptor("mux.usage", "Usage", null, OpenUsageView, "View", new[] { "usage", "stats", "spend" }, OpenUsageViewFiltered));
             _Catalog.Add(new CommandDescriptor("mux.effort", "Reasoning effort", null, OpenEffortSelector, "Model", new[] { "effort", "reasoning", "reasoning-effort" }));
@@ -2876,9 +2876,14 @@ namespace Mux.Cli.App
         // Command handlers for /label and /tag. The no-argument form lists current metadata; the argument
         // form adds/sets or (with an "rm"/"remove"/"-" prefix) removes. All work runs off the shared
         // SessionManager so normalization and dedupe match every other surface.
-        private void ShowSessionMetadata()
+        private void ShowSessionLabels()
         {
-            _ = ShowSessionMetadataAsync();
+            _ = ShowSessionLabelsAsync();
+        }
+
+        private void ShowSessionTags()
+        {
+            _ = ShowSessionTagsAsync();
         }
 
         private void HandleLabelArgument(string argument)
@@ -2910,17 +2915,22 @@ namespace Mux.Cli.App
             }
         }
 
-        private async Task ShowSessionMetadataAsync()
+        private async Task ShowSessionLabelsAsync()
         {
             if (_Store == null) { WriteNotice("Session persistence is disabled."); return; }
 
             SessionSnapshot? snapshot = await _Store.LoadAsync(ActiveSessionId(), _Cts.Token).ConfigureAwait(false);
             List<string> labels = snapshot?.Labels ?? new List<string>();
-            List<Mux.Core.Sessions.SessionTag> tags = snapshot?.Tags ?? new List<Mux.Core.Sessions.SessionTag>();
+            WriteNotice("Labels: " + (labels.Count == 0 ? "(none)" : string.Join(", ", labels)));
+        }
 
-            string labelText = labels.Count == 0 ? "(none)" : string.Join(", ", labels);
-            string tagText = tags.Count == 0 ? "(none)" : string.Join(", ", tags.ConvertAll(t => t.Key + ": " + t.Value));
-            WriteNotice("Labels: " + labelText + "  •  Tags: " + tagText);
+        private async Task ShowSessionTagsAsync()
+        {
+            if (_Store == null) { WriteNotice("Session persistence is disabled."); return; }
+
+            SessionSnapshot? snapshot = await _Store.LoadAsync(ActiveSessionId(), _Cts.Token).ConfigureAwait(false);
+            List<Mux.Core.Sessions.SessionTag> tags = snapshot?.Tags ?? new List<Mux.Core.Sessions.SessionTag>();
+            WriteNotice("Tags: " + (tags.Count == 0 ? "(none)" : string.Join(", ", tags.ConvertAll(t => t.Key + ": " + t.Value))));
         }
 
         private async Task HandleLabelAsync(string argument)
@@ -2928,7 +2938,7 @@ namespace Mux.Cli.App
             if (_Store == null) { WriteNotice("Session persistence is disabled."); return; }
 
             argument = argument.Trim();
-            if (argument.Length == 0) { await ShowSessionMetadataAsync().ConfigureAwait(false); return; }
+            if (argument.Length == 0) { await ShowSessionLabelsAsync().ConfigureAwait(false); return; }
 
             try
             {
@@ -2949,7 +2959,7 @@ namespace Mux.Cli.App
             }
             catch (ArgumentException ex)
             {
-                WriteNotice("⚠ " + ex.Message);
+                WriteNotice("⚠  " + ex.Message.TrimEnd('.'));
             }
         }
 
@@ -2958,7 +2968,7 @@ namespace Mux.Cli.App
             if (_Store == null) { WriteNotice("Session persistence is disabled."); return; }
 
             argument = argument.Trim();
-            if (argument.Length == 0) { await ShowSessionMetadataAsync().ConfigureAwait(false); return; }
+            if (argument.Length == 0) { await ShowSessionTagsAsync().ConfigureAwait(false); return; }
 
             try
             {
@@ -2976,7 +2986,7 @@ namespace Mux.Cli.App
                 int colon = argument.IndexOf(':');
                 if (colon < 0)
                 {
-                    WriteNotice("⚠ Use /tag key: value (or /tag rm key).");
+                    WriteNotice("⚠  Use /tag key: value (or /tag rm key)");
                     return;
                 }
 
@@ -2987,7 +2997,7 @@ namespace Mux.Cli.App
             }
             catch (ArgumentException ex)
             {
-                WriteNotice("⚠ " + ex.Message);
+                WriteNotice("⚠  " + ex.Message.TrimEnd('.'));
             }
         }
 
@@ -5051,7 +5061,7 @@ namespace Mux.Cli.App
                 }
                 else
                 {
-                    WriteNotice("⚠ Use /usage label <label> or /usage tag <key: value>.");
+                    WriteNotice("⚠  Use /usage label <label> or /usage tag <key: value>");
                     return;
                 }
             }

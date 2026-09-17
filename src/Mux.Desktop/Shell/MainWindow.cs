@@ -2579,6 +2579,14 @@ namespace Mux.Desktop.Shell
                 case "/new":
                     _ = NewChatAsync();
                     break;
+                case "/label":
+                case "/labels":
+                    _ = HandleLabelSlashAsync(argument);
+                    break;
+                case "/tag":
+                case "/tags":
+                    _ = HandleTagSlashAsync(argument);
+                    break;
                 case "/help":
                 case "/?":
                 case "/menu":
@@ -2673,6 +2681,8 @@ namespace Mux.Desktop.Shell
             card.Children.Add(CommandRow("/keys", L("main.help.keys")));
             card.Children.Add(CommandRow("/effort", L("main.help.effort")));
             card.Children.Add(CommandRow("/cwd <path>", "Show or change the working directory"));
+            card.Children.Add(CommandRow("/label <text>", L("main.help.labels")));
+            card.Children.Add(CommandRow("/tag <key: value>", L("main.help.tags")));
             card.Children.Add(CommandRow("/commands", L("main.help.commands")));
             card.Children.Add(CommandRow("/new", L("main.help.new")));
             card.Children.Add(CommandRow("/help", L("main.help.help")));
@@ -3005,6 +3015,112 @@ namespace Mux.Desktop.Shell
 
             await LoadThreadsAsync();
             NotifySessionsChanged(id);
+        }
+
+        // Composer slash-command handlers for the active conversation: "/label <text>" (or "rm <text>"),
+        // "/labels" to list, and the tag equivalents. They mutate the current thread through the shared
+        // service, so normalization and dedupe match every other surface.
+        private async Task HandleLabelSlashAsync(string argument)
+        {
+            string id = _CurrentThreadId;
+            if (string.IsNullOrEmpty(id)) { AddNotice(L("main.metaNoThread"), isError: true); return; }
+
+            argument = (argument ?? string.Empty).Trim();
+            try
+            {
+                if (argument.Length == 0) { await ShowThreadMetadataAsync(id); return; }
+
+                ThreadSummary? updated;
+                if (TryStripRemovePrefix(argument, out string toRemove))
+                {
+                    updated = await _Threads.RemoveLabelAsync(id, toRemove, CancellationToken.None);
+                }
+                else
+                {
+                    updated = await _Threads.AddLabelAsync(id, argument, CancellationToken.None);
+                }
+
+                AddNotice(updated == null ? L("main.metaNoThread") : L("thread.labels") + ": " + DescribeLabels(updated), isError: false);
+                await LoadThreadsAsync();
+                NotifySessionsChanged(id);
+            }
+            catch (ArgumentException ex)
+            {
+                AddNotice(ex.Message, isError: true);
+            }
+        }
+
+        private async Task HandleTagSlashAsync(string argument)
+        {
+            string id = _CurrentThreadId;
+            if (string.IsNullOrEmpty(id)) { AddNotice(L("main.metaNoThread"), isError: true); return; }
+
+            argument = (argument ?? string.Empty).Trim();
+            try
+            {
+                if (argument.Length == 0) { await ShowThreadMetadataAsync(id); return; }
+
+                ThreadSummary? updated;
+                if (TryStripRemovePrefix(argument, out string keyToRemove))
+                {
+                    updated = await _Threads.RemoveTagAsync(id, keyToRemove, CancellationToken.None);
+                }
+                else
+                {
+                    int colon = argument.IndexOf(':');
+                    if (colon < 0) { AddNotice(L("main.tagUsage"), isError: true); return; }
+                    updated = await _Threads.SetTagAsync(id, argument.Substring(0, colon), argument.Substring(colon + 1), CancellationToken.None);
+                }
+
+                AddNotice(updated == null ? L("main.metaNoThread") : L("thread.tags") + ": " + DescribeTags(updated), isError: false);
+                await LoadThreadsAsync();
+                NotifySessionsChanged(id);
+            }
+            catch (ArgumentException ex)
+            {
+                AddNotice(ex.Message, isError: true);
+            }
+        }
+
+        private async Task ShowThreadMetadataAsync(string id)
+        {
+            IReadOnlyList<ThreadSummary> threads = await _Threads.ListAsync(CancellationToken.None);
+            ThreadSummary? summary = null;
+            foreach (ThreadSummary s in threads)
+            {
+                if (string.Equals(s.Id, id, StringComparison.Ordinal)) { summary = s; break; }
+            }
+
+            if (summary == null) { AddNotice(L("main.metaNoThread"), isError: true); return; }
+            AddNotice(L("thread.labels") + ": " + DescribeLabels(summary) + "   " + L("thread.tags") + ": " + DescribeTags(summary), isError: false);
+        }
+
+        private static bool TryStripRemovePrefix(string argument, out string remainder)
+        {
+            foreach (string prefix in new[] { "rm ", "remove ", "delete ", "-" })
+            {
+                if (argument.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    remainder = argument.Substring(prefix.Length).Trim();
+                    return true;
+                }
+            }
+
+            remainder = argument;
+            return false;
+        }
+
+        private static string DescribeLabels(ThreadSummary s)
+        {
+            return s.Labels.Count == 0 ? "(none)" : string.Join(", ", s.Labels);
+        }
+
+        private static string DescribeTags(ThreadSummary s)
+        {
+            if (s.Tags.Count == 0) return "(none)";
+            System.Collections.Generic.List<string> parts = new System.Collections.Generic.List<string>();
+            foreach (Mux.Core.Sessions.SessionTag tag in s.Tags) parts.Add(tag.Key + ": " + tag.Value);
+            return string.Join(", ", parts);
         }
 
         // Edit a thread's labels: prompt for a comma-separated set and reconcile (remove dropped, add new)

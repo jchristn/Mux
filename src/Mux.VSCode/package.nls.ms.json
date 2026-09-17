@@ -18,6 +18,8 @@
   "cmd.sessions.resume": "Sambung semula",
   "cmd.sessions.rename": "Namakan semula",
   "cmd.sessions.duplicate": "Duplikat",
+  "cmd.sessions.label": "Edit label…",
+  "cmd.sessions.tag": "Edit tag…",
   "cmd.sessions.export": "Eksport",
   "cmd.sessions.delete": "Padam",
   "config.server.autoStart": "Mulakan pelayan mux tempatan apabila tiada yang boleh dicapai.",

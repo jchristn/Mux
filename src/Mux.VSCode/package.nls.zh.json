@@ -18,6 +18,8 @@
   "cmd.sessions.resume": "恢复",
   "cmd.sessions.rename": "重命名",
   "cmd.sessions.duplicate": "复制",
+  "cmd.sessions.label": "编辑标签…",
+  "cmd.sessions.tag": "编辑标记…",
   "cmd.sessions.export": "导出",
   "cmd.sessions.delete": "删除",
   "config.server.autoStart": "当没有可用的 mux 服务器时启动本地服务器。",

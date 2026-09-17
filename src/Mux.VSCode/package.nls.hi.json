@@ -18,6 +18,8 @@
   "cmd.sessions.resume": "फिर से शुरू करें",
   "cmd.sessions.rename": "नाम बदलें",
   "cmd.sessions.duplicate": "डुप्लिकेट करें",
+  "cmd.sessions.label": "लेबल संपादित करें…",
+  "cmd.sessions.tag": "टैग संपादित करें…",
   "cmd.sessions.export": "निर्यात करें",
   "cmd.sessions.delete": "हटाएँ",
   "config.server.autoStart": "जब कोई पहुँच योग्य न हो तो स्थानीय mux सर्वर प्रारंभ करें।",

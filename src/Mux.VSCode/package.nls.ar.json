@@ -18,6 +18,8 @@
   "cmd.sessions.resume": "استئناف",
   "cmd.sessions.rename": "إعادة تسمية",
   "cmd.sessions.duplicate": "تكرار",
+  "cmd.sessions.label": "تحرير التسميات…",
+  "cmd.sessions.tag": "تحرير الوسوم…",
   "cmd.sessions.export": "تصدير",
   "cmd.sessions.delete": "حذف",
   "config.server.autoStart": "بدء خادم mux محلي عند عدم توفر أي خادم يمكن الوصول إليه.",
