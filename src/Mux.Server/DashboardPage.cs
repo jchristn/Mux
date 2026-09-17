@@ -314,6 +314,10 @@ th.actcell,td.actcell{width:44px;text-align:right}
 .modal.xl{max-width:1140px;min-height:70vh;max-height:92vh}
 .modal.xl .modal-body{flex:1 1 auto}
 .modal.xl .modal-body .field{grid-template-columns:190px 1fr}
+/* A full-width, fill-height field (label stacked above a textarea that consumes the rest of the modal). */
+.modal-body:has(.field.full){display:flex;flex-direction:column}
+.modal-body .field.full{grid-template-columns:1fr;grid-template-rows:auto 1fr;align-items:stretch;flex:1 1 auto;min-height:0;padding:8px 0}
+.modal-body .field.full textarea{width:100%;height:100%;min-height:220px;resize:none}
 /* topbar badges (health + version + uptime + host share one badge style) */
 .topbar .right{gap:8px}
 .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;line-height:1;padding:5px 11px;border-radius:999px;background:var(--panel-2);border:1px solid var(--line);color:var(--muted);white-space:nowrap;font-family:inherit}
@@ -1518,7 +1522,8 @@ function fieldHtml(f){
   else if(f.type==="multiselect"){var c="";for(var i=0;i<f.options.length;i++){var ov=f.options[i];c+='<label class="chip"><input type="checkbox" value="'+esc(ov)+'">'+esc(ov)+'</label>';}inp='<div class="chips" id="'+id+'">'+c+'</div>';tall=" tall";}
   else inp='<input type="'+(f.type==="password"?"password":(f.type==="number"?"number":"text"))+'" id="'+id+'"'+(f.placeholder?' placeholder="'+esc(f.placeholder)+'"':'')+(f.step?' step="'+f.step+'"':'')+(f.tip?' title="'+esc(f.tip)+'"':'')+'>';
   var ttl=f.tip?' title="'+esc(f.tip)+'"':'';
-  return '<div class="field'+tall+'" id="fw_'+f.id+'"'+ttl+'><label>'+esc(f.label)+sub+'</label>'+inp+'</div>';
+  var full=f.full?" full":"";
+  return '<div class="field'+tall+full+'" id="fw_'+f.id+'"'+ttl+'><label>'+esc(f.label)+sub+'</label>'+inp+'</div>';
 }
 function applyShowIf(fields){var vals=collectForm(fields);
   for(var i=0;i<fields.length;i++){var f=fields[i];if(f.type==="section"||!f.showIf)continue;var w=el("fw_"+f.id);if(w)w.style.display=f.showIf(vals)?"":"none";}}
@@ -1832,7 +1837,7 @@ function renderCat(){renderGrid("catalog_list",
 function openCat(i){var c=_cat[i];if(!c)return;
   if(!c.Editable){openModal(esc(c.DisplayName),'<p class="hint" style="margin:0 0 8px">'+esc(c.Description||"")+' '+esc(c.Scope==="Profile"?"Edited in the active profile above.":"")+'</p><pre style="white-space:pre-wrap;margin:0;max-height:60vh">'+esc(c.Effective||"")+'</pre>',[{label:t("act.close"),primary:true,onClick:closeModal}],true);return;}
   var ph=(c.Placeholders&&c.Placeholders.length)?(" Keep these placeholders: "+c.Placeholders.join(", ")+"."):"";
-  formModal("Edit prompt · "+c.DisplayName,[{id:"Content",label:c.DisplayName,sub:c.Key,type:"textarea",rows:16,tip:(c.Description||"")+ph}],{Content:c.Effective},function(v){
+  formModal("Edit prompt · "+c.DisplayName,[{id:"Content",label:c.DisplayName,sub:c.Key,type:"textarea",rows:16,full:true,tip:(c.Description||"")+ph}],{Content:c.Effective},function(v){
     busyModal(true);api("/v1.0/api/prompts/catalog","PUT",{key:c.Key,content:v.Content}).then(function(){closeModal();loadCatalog();toast(t("toast.saved"));}).catch(function(e){toast(e.message,true);}).finally(function(){busyModal(false);});},"xl");}
 function resetCat(i){var c=_cat[i];if(!c||!c.Editable)return;confirmModal('Reset "'+c.DisplayName+'" to its default?',function(){
   api("/v1.0/api/prompts/catalog","PUT",{key:c.Key,content:""}).then(function(){loadCatalog();toast(t("toast.saved"));}).catch(function(e){toast(e.message,true);});});}
