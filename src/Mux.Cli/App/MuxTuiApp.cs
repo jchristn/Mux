@@ -264,7 +264,7 @@ namespace Mux.Cli.App
             _PromptLabel = new Pane(PromptLabelRegion);
             _Footer = new Pane(FooterRegion);
             _QueuePane = new Pane(QueueRegion);
-            _Composer = new TextEditor { IsFocused = true, NormalStyle = InputSurface };
+            _Composer = new TextEditor { IsFocused = true, NormalStyle = InputSurface, WordWrap = true };
             _Sidebar = new SidebarView(_SidebarPane);
 
             _PromptLabel.WriteLine(Text.From(PromptText).Green().Bold());
@@ -1738,7 +1738,7 @@ namespace Mux.Cli.App
                 return true;
             }
 
-            if (key.Code == KeyCode.Down && _Composer.CaretRow == ComposerLineCount() - 1 && RecallNext())
+            if (key.Code == KeyCode.Down && _Composer.CaretRow == ComposerLogicalLineCount() - 1 && RecallNext())
             {
                 return true;
             }
@@ -4439,7 +4439,22 @@ namespace Mux.Cli.App
             return key.Code == KeyCode.Character && (key.Rune == 13 || key.Rune == 10);
         }
 
+        // The number of visual (wrapped) rows the composer occupies at its current render width, so the
+        // composer grows to fit wrapped text rather than letting it run off the right edge.
         private int ComposerLineCount()
+        {
+            return _Composer.VisualLineCount(ComposerWidth());
+        }
+
+        // The composer's render width: the terminal width less the prompt label column.
+        private int ComposerWidth()
+        {
+            return Math.Max(1, _Backend.Size.Width - PromptText.Length);
+        }
+
+        // The number of logical lines (newline-separated) in the composer, used for history recall so Down at
+        // the last typed line steps into history regardless of soft wrapping.
+        private int ComposerLogicalLineCount()
         {
             string text = _Composer.Text;
             int lines = 1;
