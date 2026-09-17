@@ -11,9 +11,9 @@ This document outlines the work needed to move mux from a capable local-first co
 
 mux already has strong bones: backend-agnostic endpoint configuration, interactive and headless execution, structured JSON/JSONL output, MCP support, skills, task tracking, subagents, undo/redo, local session export, a local REST server, and a web dashboard. It now runs on **five surfaces** — terminal UI, desktop app, web dashboard, VS Code extension, and headless CLI — and they are no longer just five clients that happen to share a session file. As of **0.12.2** they share a live run fabric: sessions are portable across every surface (resume/rename/duplicate/export/delete everywhere, a working directory recorded per session and changeable mid-run with `/cwd`, web chats persisted server-side), a run started on any surface can be watched live and read-only on any other, and a turn made on one surface appears in the same conversation open elsewhere without a manual refresh. The `mux serve` REST server publishes a complete OpenAPI 3.0.3 document with Swagger UI, tracks each run as an addressable object with cancel/inspect routes, and exposes a WebSocket bridge whose event envelope is byte-identical to the headless JSONL contract.
 
-The main gap is not raw capability, and it is increasingly not the control plane either — that has largely converged. The remaining gap is product finish at the edges: the first-run path, provider onboarding convenience, the desktop app's job/approval depth, the extension/package runtime story, and legible context/prompt handling (the large-file truncation and universal-prompt work now scoped for 0.13.0 in `CONTEXT_AND_SUMMARIZATION.md`).
+The main gap is not raw capability, and it is increasingly not the control plane either — that has largely converged. The remaining gap is product finish at the deeper edges: **distribution** (signed binaries, one-command install, update/rollback), the desktop app's **job/approval depth**, **contract stability** (freezing REST/WS/JSONL as versioned APIs), and the **extension/package runtime story** — section 4, which remains the least-advanced area.
 
-### Recent Momentum (last three days, 0.11.0 → 0.12.2)
+### Recent Momentum (last three days, 0.11.0 → 0.12.3)
 
 The control-plane vision in sections 2–3 moved from "planned" to "shipped" in a concentrated burst:
 
@@ -23,13 +23,18 @@ The control-plane vision in sections 2–3 moved from "planned" to "shipped" in 
 - **Cross-surface sync made reliable (0.12.2).** A `SessionStoreWatcher` makes the on-disk store the trigger rather than any single hub — the server rebroadcasts external writes, and the TUI/desktop watch the store directly. Session persist/open consolidated into a shared `Mux.Core.Sessions.SessionService` with an anti-truncation `SessionMergePolicy`, so a turn is never silently overwritten by a surface that hadn't seen it.
 - **OpenAPI 3.0.3 + Swagger UI shipped** for `mux serve` — discovery works before authenticating.
 - **VS Code matured into a full fifth surface (0.11.x).** Streaming chat with in-editor approvals and Markdown, per-turn stats, inline code actions, editor+LSP context injection, full Manage CRUD (endpoints/MCP-with-auth/prompts/subagents/skills/settings), native usage charts, slash commands, and localization into twelve languages.
+- **Guided first-run wizard on every surface (0.12.3).** A fresh install (no user-configured endpoint) walks the user through defining an endpoint, checking connectivity, and sending the first prompt on terminal/desktop/web/VS Code; re-runnable via `/setup` and equivalents.
+- **Adaptive endpoint config + flexible API-key placement (0.12.3).** Endpoint forms now show only the fields a given adapter needs (region/project for Vertex/Bedrock, api-version for Azure, custom-headers editor for HTTP adapters), and the OpenAI-family adapters gained an auth-placement control — bearer header, custom-named header, or query-string param — so non-bearer services are first-class. This delivers the §2 adapter-aware-forms P1 item.
+- **Universal prompt management (0.12.3).** Every model-facing string now lives in a code-defined `PromptCatalog` behind a single `PromptResolver` (override-else-default), editable and resettable on every surface, exposed over `GET`/`PUT /v1.0/api/prompts/catalog`; profiles now expose all three prompt fields. See `docs/PROMPTS.md`.
+- **Smart large-file context (0.12.3).** Files too big to inline become a navigable map (default), a map-reduce summary, or a strict truncate — replacing both the eager 8000-char slice (VS Code) and the `read_file` `file_too_large` refusal (agent). Threshold scales with the model's context window; summaries are hash-addressed and cached; `POST /v1.0/api/context/file` lets thin clients offload the work.
+- **Terminal usage charts + Prompts/Pricing wiring fix (0.12.3).** `/usage` gained token/cost/model charts, and the web dashboard's Prompts rows now open the prompt editor (not the pricing dialog), guarded by a regression test against duplicate handler names.
 
 ## 1. Out-Of-Box Polish
 
 | Area | Current Feel | Needed Improvement | Why It Matters |
 |---|---|---|---|
 | Installation | Source-first and developer-friendly, but not yet frictionless. | Publish signed binaries and packages for major platforms, with checksum verification, upgrade commands, and uninstall paths. | A serious agent should be installable in one command by someone who has not cloned the repo. |
-| First run | Seeds useful defaults, but assumes the user understands model runners and endpoints. | Add a guided first-run wizard: choose local or hosted backend, test credentials, pick a model, verify tool calling, and save defaults. | The first successful prompt should be boringly easy. |
+| ~~First run~~ (delivered 0.12.3) | A guided first-run wizard now ships on every surface (terminal/desktop/web/VS Code): a fresh install with no user-configured endpoint walks through defining an endpoint, checking connectivity, and sending the first prompt, then records completion; re-runnable (`/setup`, etc.). Remaining polish: explicit local-vs-hosted branching and an in-wizard tool-calling verification step. | The first successful prompt should be boringly easy. |
 | Provider setup | Flexible config and endpoint forms exist. | Add provider-specific setup flows with clear auth hints, model discovery, capability warnings, and pricing/usage metadata where available. | "It can connect" is good; "it guides me to a working configuration" is better. |
 | Error messages | Functional, but some failures still require technical interpretation. | Normalize errors into actionable categories: auth, network, unsupported model, tool-calling unavailable, context limit, rate limit, TLS interception, missing runtime. | Great agents fail in ways that tell the user exactly what to do next. |
 | Model capability detection | Probing and model listing exist for several backends. | Detect and surface capabilities per model: tool calling, streaming, reasoning controls, thinking output, vision, JSON/schema output, context size, cache support. | Prevents confusing runs where the selected model cannot actually do the requested job. |
@@ -57,7 +62,7 @@ mux's provider strategy is deliberately compat-first, and that design largely cl
 
 | Gap | Needed Capability | Priority |
 |---|---|---:|
-| Onboarding presets + adapter-aware forms | Ship a preset table (base URL, suggested models, quirks, and an auth hint per known provider) and endpoint forms that show only the fields a given adapter needs. This is pure config + form work in the TUI modal and web form — no engine change — and it is the single genuinely useful item in this section. | P1 |
+| Onboarding presets + adapter-aware forms | **Adapter-aware forms delivered (0.12.3):** endpoint forms now show only the fields a given adapter needs (region/project for Vertex/Bedrock, api-version for Azure, custom-headers for HTTP adapters), plus an auth-placement control (bearer / custom header / query-string) on the OpenAI-family adapters. Remaining: a per-provider **preset table** (base URL, suggested models, quirks, auth hint) to prefill a working config in one pick. | P1 |
 | Model capability / quirks detection | Keep surfacing per-model capability flags (tools, vision, JSON schema, reasoning, cache) via `BackendQuirks` so a run never selects a model that cannot do the requested job. | P1 |
 | Provider conformance tests | A harness that records mocked streams and validates tool calls, errors, and usage for the **native** adapters (Anthropic/Gemini/Vertex/Bedrock); the compat transport is already exercised by the `LlmBridge` suite. | P1 |
 | Native non-Bearer auth (optional) | For users who do **not** front a gateway, implement real auth runtimes for the cloud adapters that already have enum slots: Vertex (service-account/ADC token minting + refresh), Bedrock (SigV4 request signing), and OAuth/subscription login where terms permit. This is adapter + secure-credential-storage work, not field layout — and it is avoidable by pointing mux at a gateway that holds the cloud credential and re-exposes OpenAI. | P2 |
@@ -128,12 +133,12 @@ native usage charts, slash commands, twelve-language localization, and the share
 agent loop staying in `Mux.Core`. **Live session mirroring over the WebSocket bridge now ships** (0.12.0):
 the extension unified onto the shared hub and key, publishes and consumes runs, and keeps an open
 conversation live-synced through the store watcher (0.12.2). The rows below track what remains — deeper
-LSP-as-tools awareness and a propose-before-write native diff mode — each dependent on server work called
-out in the plan (the file-context route for large files is scoped in `CONTEXT_AND_SUMMARIZATION.md`).
+LSP-as-tools awareness and a propose-before-write native diff mode. (The large-file slice is already gone —
+0.12.3 replaced it with the `POST /v1.0/api/context/file` map/summarize route, with truncation as fallback.)
 
 | Capability | Needed Work |
 |---|---|
-| Context injection | Current file, selection, diagnostics, open tabs, git diff, and LSP symbols already inject into a mux run. Remaining: project tree and terminal output; and replacing the 8000-char active-file hard-slice with the map/summarize file-context route (scoped for 0.13.0). |
+| Context injection | Current file, selection, diagnostics, open tabs, git diff, and LSP symbols already inject into a mux run, and large files now map/summarize via the file-context route instead of a hard slice (delivered 0.12.3). Remaining: project tree and terminal output. |
 | Inline commands | Explain selection, fix diagnostic, generate tests, refactor selected code, write commit message, summarize diff, and review current file. |
 | Diff workflow | Show proposed edits as native editor diffs; accept/reject file or hunk; restore checkpoint; open changed files after a run. |
 | LSP awareness | Use language-server symbols, definitions, references, hover text, diagnostics, and call hierarchy as context and tools. |

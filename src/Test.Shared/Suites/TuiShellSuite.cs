@@ -2,6 +2,7 @@ namespace Test.Shared.Suites
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Runtime.CompilerServices;
     using System.Threading;
     using System.Threading.Tasks;
@@ -10,6 +11,8 @@ namespace Test.Shared.Suites
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Mux.Core.Models;
+    using Mux.Core.Settings;
+    using Mux.Core.Setup;
     using Touchstone.Core;
     using TUIKit.Terminal;
 
@@ -224,6 +227,41 @@ namespace Test.Shared.Suites
 
                             await run.WaitAsync(TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
                             MuxAssert.IsTrue(run.IsCompletedSuccessfully, "run loop exited");
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "FirstRunShowsSetupWizard", "On first run (only the seed endpoint, setup not completed) the wizard modal appears", async (CancellationToken ct) =>
+                    {
+                        string? originalEnv = Environment.GetEnvironmentVariable("MUX_CONFIG_DIR");
+                        string dir = Path.Combine(Path.GetTempPath(), "mux-firstrun-" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(dir);
+                        Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", dir);
+                        try
+                        {
+                            // Seed a fresh config: this writes the ollama-local / qwen2.5-coder:7b seed endpoint
+                            // and settings with setupCompleted=false — exactly the first-run state.
+                            SettingsLoader.EnsureConfigDirectory();
+                            MuxAssert.IsTrue(
+                                SetupState.NeedsSetup(SettingsLoader.LoadEndpoints(), SettingsLoader.LoadSettings().SetupCompleted),
+                                "precondition: a freshly seeded config needs setup");
+
+                            HeadlessBackend backend = new HeadlessBackend(80, 24);
+                            await using (JobManager manager = NewManager(EchoRunner))
+                            using (MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove, enableFirstRunWizard: true))
+                            using (CancellationTokenSource runCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                            {
+                                Task run = app.RunAsync(runCts.Token);
+                                await WaitUntilAsync(() => app.IsModalActive, ct).ConfigureAwait(false);
+                                MuxAssert.IsTrue(app.IsModalActive, "the setup wizard modal is shown on first run");
+
+                                runCts.Cancel();
+                                try { await run.ConfigureAwait(false); } catch (OperationCanceledException) { }
+                            }
+                        }
+                        finally
+                        {
+                            Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", originalEnv);
+                            try { Directory.Delete(dir, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
                         }
                     }),
 

@@ -623,9 +623,10 @@ namespace Mux.Cli.App
                     StartSessionMirror(_JobManager.SessionId);
 
                     // First run: with no usable endpoint and setup not yet completed, guide the user through
-                    // defining an endpoint, checking connectivity, and sending a first prompt. Runs as a
-                    // background task so it layers modals over the loop rather than blocking startup.
-                    MaybeStartFirstRunWizard();
+                    // defining an endpoint, checking connectivity, and sending a first prompt. Posted onto the
+                    // loop so it runs on the first frame — pushing a modal before RunAsync starts targets a
+                    // not-yet-live modal stack and is lost.
+                    _App.Post(MaybeStartFirstRunWizard);
 
                     await _App.RunAsync(loopCts.Token).ConfigureAwait(false);
                 }
