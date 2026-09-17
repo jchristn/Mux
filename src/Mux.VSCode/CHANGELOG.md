@@ -9,6 +9,10 @@ All notable changes to the mux VS Code extension are documented here.
   the default (`mux.manage.editCatalog` / `mux.manage.resetCatalog`, backed by the server's prompt-catalog
   routes). The prompt-profile form now edits all three prompt fields (system, tools-disabled, compaction), and
   subagent personas are listed read-through with a deep link to the subagent editor.
+- **Clear "mux CLI not found" guidance.** The extension is a thin client for the mux CLI — with auto-start on
+  it runs `mux serve` to provide the local server. If mux isn't installed it now says so up front (once) with
+  an **Install mux** link and a shortcut to `mux.server.path`, instead of failing a first chat with a vague
+  timeout; auto-start also fails fast with the same clear message.
 - **Smart large-file context.** The active file is no longer hard-sliced at 8000 characters: a small file is
   inlined whole, and a large file is sent to the server to be turned into a structural map (or summary) with
   line ranges, which is inlined verbatim. "Large" now scales with the selected endpoint's context window (a

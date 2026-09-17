@@ -2,6 +2,36 @@ import * as vscode from 'vscode';
 import { MuxServerLifecycle } from './lifecycle';
 import { DEFAULT_PORT, readSettings } from '../config/settings';
 
+/** The install/getting-started docs the "mux CLI not found" notice links to. */
+const INSTALL_URL = 'https://github.com/jchristn/Mux#getting-started';
+
+/**
+ * Tells the user, plainly, that the mux CLI is required and was not found. The extension is a thin client: it
+ * runs `mux serve` to provide the local server that powers chat, tools, and sessions, so without the CLI there
+ * is no server and nothing works. Offers to open the install docs or the setting for a custom mux path.
+ *
+ * @param muxPath The configured mux path (default `mux`) that could not be found.
+ */
+export async function showMuxNotInstalled(muxPath: string): Promise<void> {
+    const install = vscode.l10n.t('Install mux');
+    const openSettings = vscode.l10n.t('Set mux path');
+
+    const choice = await vscode.window.showWarningMessage(
+        vscode.l10n.t(
+            'The mux CLI ("{0}") was not found. The mux extension needs it to run a local server — install the mux CLI, then reload the window. If it is installed elsewhere, set mux.server.path to its full path.',
+            muxPath,
+        ),
+        install,
+        openSettings,
+    );
+
+    if (choice === install) {
+        await vscode.env.openExternal(vscode.Uri.parse(INSTALL_URL));
+    } else if (choice === openSettings) {
+        await vscode.commands.executeCommand('workbench.action.openSettings', 'mux.server.path');
+    }
+}
+
 /**
  * Shows actionable guidance when the extension cannot reach a mux server. Rather than leaving the user with a
  * bare error, it explains the usual cause — no server running — and offers the concrete next steps: retry the

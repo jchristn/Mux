@@ -7,9 +7,10 @@ import { AboutPanel } from './manage/AboutPanel';
 import { ManageActions } from './manage/actions';
 import { ManageNode, ManageTreeProvider } from './manage/ManageTree';
 import { UsagePanel } from './manage/UsagePanel';
-import { showConnectionHelp } from './server/help';
+import { showConnectionHelp, showMuxNotInstalled } from './server/help';
 import { MirrorClient } from './mirror/MirrorClient';
 import { MuxServerLifecycle } from './server/lifecycle';
+import { readSettings } from './config/settings';
 import { ConnectionStatusBar } from './server/StatusBar';
 import { SessionNode, SessionTreeProvider } from './sessions/SessionTree';
 import { initLogger, log } from './util/logger';
@@ -149,6 +150,36 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         }),
     );
+
+    // The extension is a thin client for the mux CLI: with auto-start on, it runs `mux serve` to provide the
+    // server that powers everything. If mux isn't installed there is no server, so warn once, up front, rather
+    // than letting the first chat fail with a confusing timeout. Runs in the background so activation stays
+    // network-free, and is shown at most once per install (until mux appears, then it re-arms).
+    void notifyIfMuxMissing(context, lifecycle);
+}
+
+const MUX_MISSING_NOTIFIED_KEY = 'mux.notifiedMuxMissing';
+
+async function notifyIfMuxMissing(context: vscode.ExtensionContext, lifecycle: MuxServerLifecycle): Promise<void> {
+    const settings = readSettings();
+    // When auto-start is off the user is running their own server, so a missing local CLI is not the problem.
+    if (!settings.autoStart) {
+        return;
+    }
+
+    const available = await lifecycle.isMuxCliAvailable();
+    if (available) {
+        // Re-arm the one-shot notice so a later removal of mux warns again.
+        await context.globalState.update(MUX_MISSING_NOTIFIED_KEY, false);
+        return;
+    }
+
+    if (context.globalState.get<boolean>(MUX_MISSING_NOTIFIED_KEY)) {
+        return;
+    }
+
+    await context.globalState.update(MUX_MISSING_NOTIFIED_KEY, true);
+    await showMuxNotInstalled(settings.muxPath);
 }
 
 /** Deactivates the extension. Disposables registered on the context clean up the server and UI. */

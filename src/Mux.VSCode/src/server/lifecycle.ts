@@ -7,6 +7,26 @@ import { checkContract } from './contract';
 
 const SECRET_KEY = 'mux.apiKey';
 
+/**
+ * Thrown when the mux CLI cannot be spawned because the binary was not found (a spawn `ENOENT`). This is the
+ * "mux is not installed / not on PATH" case, distinct from a server that started but did not become ready.
+ */
+export class MuxCliNotFoundError extends Error {
+    /** The mux path that could not be spawned. */
+    public readonly muxPath: string;
+
+    /**
+     * Creates the error.
+     *
+     * @param muxPath The configured mux path (default `mux`) that could not be found.
+     */
+    public constructor(muxPath: string) {
+        super(`The mux CLI ("${muxPath}") was not found. Install mux, or set mux.server.path to its full path.`);
+        this.name = 'MuxCliNotFoundError';
+        this.muxPath = muxPath;
+    }
+}
+
 /** The current connection state, surfaced to the status bar and management tree. */
 export interface ConnectionState {
     /** Whether a compatible server is currently connected. */
@@ -215,14 +235,57 @@ export class MuxServerLifecycle implements vscode.Disposable {
 
             const child = childProcess.spawn(muxPath, args, { stdio: 'ignore', windowsHide: true });
 
-            child.on('error', (error) => {
+            // Wait for the actual spawn outcome rather than resolving optimistically: a missing binary emits
+            // 'error' (ENOENT) only after this callback returns, so resolving early would swallow it and leave
+            // the caller to time out ~15s later with a vague "did not become ready" message. Settle on the
+            // first of 'spawn' (started) or 'error' (failed to start).
+            let settled = false;
+            child.on('error', (error: NodeJS.ErrnoException) => {
+                if (settled) return;
+                settled = true;
                 logError('Failed to start mux serve.', error);
-                reject(new Error(`Could not start "${muxPath} serve". Is mux installed and on PATH? Set mux.server.path otherwise.`));
+                if (error.code === 'ENOENT') {
+                    reject(new MuxCliNotFoundError(muxPath));
+                } else {
+                    reject(new Error(`Could not start "${muxPath} serve": ${error.message}`));
+                }
             });
+            child.on('spawn', () => {
+                if (settled) return;
+                settled = true;
+                this.ownedProcess = child;
+                // The process stays up; readiness is confirmed by polling health, not by the spawn event.
+                resolve();
+            });
+        });
+    }
 
-            this.ownedProcess = child;
-            // The process stays up; readiness is confirmed by polling health, not by a spawn event.
-            resolve();
+    /**
+     * Probes whether the mux CLI can be launched at all (the configured {@link readSettings} path resolves to
+     * a runnable binary), without starting a server. Used to warn up front when mux is not installed.
+     *
+     * @returns True when `mux` (or the configured path) can be spawned; false on a spawn `ENOENT`.
+     */
+    public isMuxCliAvailable(): Promise<boolean> {
+        return new Promise((resolve) => {
+            const muxPath = readSettings().muxPath;
+            let settled = false;
+            const finish = (available: boolean): void => {
+                if (settled) return;
+                settled = true;
+                resolve(available);
+            };
+
+            try {
+                const child = childProcess.spawn(muxPath, ['--version'], { stdio: 'ignore', windowsHide: true });
+                child.on('error', () => finish(false));
+                // A successful spawn proves the binary exists; the short-lived `--version` process then exits
+                // on its own. If neither event fires promptly, assume present rather than nag with a false alarm.
+                child.on('spawn', () => finish(true));
+                setTimeout(() => finish(true), 4000);
+            } catch {
+                finish(false);
+            }
         });
     }
 
