@@ -117,7 +117,7 @@ namespace Mux.Server.Routes
                     SettingsLoader.SaveEndpoints(merged);
                     List<EndpointDto> saved = SettingsLoader.LoadEndpoints().Select(ToDto).ToList();
                     req.Http.Response.StatusCode = 200;
-                    return (object)new ListResponse<EndpointDto>(saved);
+                    return await Task.FromResult<object>(new ListResponse<EndpointDto>(saved)).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {

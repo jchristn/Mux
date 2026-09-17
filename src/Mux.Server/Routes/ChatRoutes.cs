@@ -131,7 +131,7 @@ namespace Mux.Server.Routes
                     && handle.ResolveApproval(decision.ToolCallId, verdict))
                 {
                     req.Http.Response.StatusCode = 200;
-                    return (object)new { ok = true };
+                    return await Task.FromResult<object>(new { ok = true }).ConfigureAwait(false);
                 }
 
                 req.Http.Response.StatusCode = 404;

@@ -69,7 +69,7 @@ namespace Mux.Server.Routes
 
                     SettingsLoader.SaveMcpServers(merged);
                     req.Http.Response.StatusCode = 200;
-                    return (object)new ListResponse<McpServerDto>(SettingsLoader.LoadMcpServers().Select(ToDto).ToList());
+                    return await Task.FromResult<object>(new ListResponse<McpServerDto>(SettingsLoader.LoadMcpServers().Select(ToDto).ToList())).ConfigureAwait(false);
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("SaveFailed", "Failed to save MCP servers: " + ex.Message); }
             }, Documentation.ApiDoc.McpPut);
