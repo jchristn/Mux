@@ -83,6 +83,43 @@ namespace Mux.Server.Models
 
         /// <summary>Number of messages in the session's focused conversation.</summary>
         public int MessageCount { get; set; } = 0;
+
+        /// <summary>The session's freeform labels.</summary>
+        public List<string> Labels { get; set; } = new List<string>();
+
+        /// <summary>The session's key/value tags.</summary>
+        public List<SessionTagDto> Tags { get; set; } = new List<SessionTagDto>();
+    }
+
+    /// <summary>
+    /// A key/value session tag on the wire.
+    /// </summary>
+    public class SessionTagDto
+    {
+        /// <summary>The normalized tag key.</summary>
+        public string Key { get; set; } = string.Empty;
+
+        /// <summary>The tag value.</summary>
+        public string Value { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Request body for <c>PATCH /v1.0/api/sessions/{id}/metadata</c>: incremental label/tag edits applied to
+    /// an existing session. All fields are optional; each is applied in order (adds/sets before removals).
+    /// </summary>
+    public class SessionMetadataPatch
+    {
+        /// <summary>Labels to add (normalized; deduped case-insensitively).</summary>
+        public List<string>? AddLabels { get; set; }
+
+        /// <summary>Labels to remove.</summary>
+        public List<string>? RemoveLabels { get; set; }
+
+        /// <summary>Tags to set/upsert by key.</summary>
+        public List<SessionTagDto>? SetTags { get; set; }
+
+        /// <summary>Tag keys to remove.</summary>
+        public List<string>? RemoveTagKeys { get; set; }
     }
 
     /// <summary>The Home/Overview aggregate: counts, the default endpoint, environment facts, recent sessions, and derived notices. Computed from config files, health, and the session store — no telemetry or database.</summary>

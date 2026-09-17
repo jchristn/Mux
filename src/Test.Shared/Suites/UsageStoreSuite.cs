@@ -98,6 +98,26 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual((long)(writers * perWriter), await store.CountAsync(ct).ConfigureAwait(false), "every concurrent write landed");
                     }),
 
+                    StoreCase("SessionIdsInFilterScopesRows", "A SessionIds filter scopes rows via an IN clause; an empty set yields none", async (SqliteUsageStore store, CancellationToken ct) =>
+                    {
+                        UsageEvent a = MakeEvent(1_000, "openai", "gpt"); a.SessionId = "s-a";
+                        UsageEvent b = MakeEvent(2_000, "openai", "gpt"); b.SessionId = "s-b";
+                        UsageEvent c = MakeEvent(3_000, "openai", "gpt"); c.SessionId = "s-c";
+                        await store.InsertBatchAsync(new List<UsageEvent> { a, b, c }, ct).ConfigureAwait(false);
+
+                        // Constrain to two of the three sessions.
+                        UsageFilter twoOfThree = new UsageFilter { SessionIds = new List<string> { "s-a", "s-c" } };
+                        MuxAssert.AreEqual(2L, await store.CountEventsAsync(twoOfThree, ct).ConfigureAwait(false), "IN clause scopes to the set");
+
+                        // An empty (non-null) set means "no session matched" and must return zero rows.
+                        UsageFilter none = new UsageFilter { SessionIds = new List<string>() };
+                        MuxAssert.AreEqual(0L, await store.CountEventsAsync(none, ct).ConfigureAwait(false), "empty set yields zero");
+
+                        // A null SessionIds set applies no constraint.
+                        UsageFilter all = new UsageFilter();
+                        MuxAssert.AreEqual(3L, await store.CountEventsAsync(all, ct).ConfigureAwait(false), "null set matches all");
+                    }),
+
                     StoreCase("SecondStoreOnSameFileSharesData", "A second store opened on the same file sees the first store's rows", async (SqliteUsageStore store, CancellationToken ct) =>
                     {
                         await store.InsertBatchAsync(new List<UsageEvent> { MakeEvent(5_000, "anthropic", "claude-opus-4-8") }, ct).ConfigureAwait(false);

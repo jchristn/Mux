@@ -2,13 +2,26 @@
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <Version>0.12.3</Version>
-    <Description>Optional local REST + WebSocket server (Watson 7) exposing mux over loopback</Description>
+    <Version>1.0.0</Version>
+    <Title>Mux.Server</Title>
+    <Description>Optional local REST + WebSocket server (Watson 7) exposing the mux engine over loopback: sessions, chat streaming, endpoints, usage telemetry, and the built-in dashboard.</Description>
     <PackageId>Mux.Server</PackageId>
+    <PackageTags>mux;ai;agent;llm;rest;server;dashboard</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Packaged into the NuGet package root (README rendered on nuget.org, icon as the package icon). -->
+    <None Include="PACKAGE.md" Pack="true" PackagePath="README.md" />
+    <None Include="..\..\assets\icon-black.png" Pack="true" PackagePath="icon.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Watson" Version="7.1.1" />

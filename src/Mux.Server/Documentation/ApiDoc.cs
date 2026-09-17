@@ -309,6 +309,17 @@ namespace Mux.Server.Documentation
             .WithResponse(400, BadRequest())
             .WithResponse(401, Unauthorized());
 
+        /// <summary>Metadata for <c>POST /v1.0/api/sessions/{id}/metadata</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SessionsMetadata = m => Sec(Init(m, TagSessions,
+            "Edit a session's labels and tags",
+            "Incrementally edits the labels and tags of the session named by the `{id}` path segment: adds/removes labels and sets (upserts by key)/removes tags. Tag keys are normalized (lowercased and slugified); labels dedupe case-insensitively. Returns the updated session summary.",
+            operationId: "patchSessionMetadata"))
+            .WithRequestBody(Body("SessionMetadataPatch", "The label/tag edits to apply."))
+            .WithResponse(200, Ok("SessionSummary"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
         /// <summary>Metadata for <c>GET /v1.0/api/sessions/export</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> SessionsExport = m => Sec(Init(m, TagSessions,
             "Export a session",

@@ -18,11 +18,26 @@ export class SessionNode extends vscode.TreeItem {
     public constructor(public readonly session: SessionSummary, locale: string, nowMs: number) {
         super(session.Title || session.Id, vscode.TreeItemCollapsibleState.None);
         this.id = session.Id;
-        this.description = `${session.Model} · ${formatRelativeTime(locale, session.UpdatedUtc, nowMs)}`;
+        const meta = SessionNode.metadataSummary(session);
+        this.description = meta.length > 0
+            ? `${session.Model} · ${meta} · ${formatRelativeTime(locale, session.UpdatedUtc, nowMs)}`
+            : `${session.Model} · ${formatRelativeTime(locale, session.UpdatedUtc, nowMs)}`;
         this.tooltip = vscode.l10n.t('{0} — {1} messages', session.Title || session.Id, String(session.MessageCount));
         this.contextValue = 'muxSession';
         this.iconPath = new vscode.ThemeIcon('comment-discussion');
         this.command = { command: 'mux.sessions.resume', title: vscode.l10n.t('Resume'), arguments: [this] };
+    }
+
+    /** A compact "#label key:value" summary of a session's metadata, or an empty string when it has none. */
+    private static metadataSummary(session: SessionSummary): string {
+        const parts: string[] = [];
+        for (const label of session.Labels ?? []) {
+            parts.push(`#${label}`);
+        }
+        for (const tag of session.Tags ?? []) {
+            parts.push(`${tag.Key}:${tag.Value}`);
+        }
+        return parts.join(' ');
     }
 }
 
@@ -110,6 +125,66 @@ export class SessionTreeProvider implements vscode.TreeDataProvider<SessionNode>
                 Model: detail.Model,
                 Messages: detail.Messages.map((m) => ({ Role: m.Role, Content: m.Content })),
             });
+            this.refresh();
+        });
+    }
+
+    /** Edits a session's labels: prompts for a comma-separated set and reconciles it against the current one. */
+    public async label(node: SessionNode): Promise<void> {
+        const existing = (node.session.Labels ?? []).join(', ');
+        const entered = await vscode.window.showInputBox({
+            prompt: vscode.l10n.t('Labels (comma-separated)'),
+            value: existing,
+        });
+        if (entered === undefined) {
+            return;
+        }
+
+        const desired = entered
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+        const desiredLower = new Set(desired.map((s) => s.toLowerCase()));
+        const current = node.session.Labels ?? [];
+        const removeLabels = current.filter((l) => !desiredLower.has(l.toLowerCase()));
+
+        await this.withClient(async (client) => {
+            await client.patchSessionMetadata(node.session.Id, { AddLabels: desired, RemoveLabels: removeLabels });
+            this.refresh();
+        });
+    }
+
+    /** Edits a session's tags: prompts for a comma-separated key:value set and reconciles it. */
+    public async tag(node: SessionNode): Promise<void> {
+        const existing = (node.session.Tags ?? []).map((t) => `${t.Key}: ${t.Value}`).join(', ');
+        const entered = await vscode.window.showInputBox({
+            prompt: vscode.l10n.t('Tags (key: value, comma-separated)'),
+            value: existing,
+        });
+        if (entered === undefined) {
+            return;
+        }
+
+        const setTags: Array<{ Key: string; Value: string }> = [];
+        for (const part of entered.split(',')) {
+            const colon = part.indexOf(':');
+            if (colon < 0) {
+                continue;
+            }
+            const key = part.slice(0, colon).trim();
+            const value = part.slice(colon + 1).trim();
+            if (key.length > 0 && value.length > 0) {
+                setTags.push({ Key: key, Value: value });
+            }
+        }
+
+        const keptKeys = new Set(setTags.map((t) => t.Key.toLowerCase().replace(/\s+/g, '-')));
+        const removeTagKeys = (node.session.Tags ?? [])
+            .map((t) => t.Key)
+            .filter((k) => !keptKeys.has(k.toLowerCase()));
+
+        await this.withClient(async (client) => {
+            await client.patchSessionMetadata(node.session.Id, { SetTags: setTags, RemoveTagKeys: removeTagKeys });
             this.refresh();
         });
     }

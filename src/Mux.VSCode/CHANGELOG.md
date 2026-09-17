@@ -2,6 +2,14 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 1.0.0
+
+- **Session labels and tags.** The Sessions view row menu gains **Edit Labels…** and **Edit Tags…**; labels
+  (`#wip`) and tags (`env:prod`) show in each row's description. Both persist with the session, propagate to
+  every mux surface, and are filterable in the usage analytics. Backed by the new
+  `POST /v1.0/api/sessions/{id}/metadata` endpoint.
+- **First stable release** — versioned `1.0.0` in step with the rest of mux.
+
 ## 0.12.3
 
 - **Adaptive endpoint form + flexible API-key placement.** The endpoint editor now shows only the fields that

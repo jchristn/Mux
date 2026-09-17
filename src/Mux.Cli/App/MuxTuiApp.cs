@@ -69,6 +69,11 @@ namespace Mux.Cli.App
         private readonly bool _EnableFirstRunWizard;
         private readonly MuxBoxModal? _SplashModal;
         private readonly Mux.Core.Telemetry.UsageQueryService? _UsageQuery;
+        private List<string>? _UsageFilterLabels;
+        private List<Mux.Core.Sessions.SessionTag>? _UsageFilterTags;
+        private List<string>? _LaunchLabels;
+        private List<Mux.Core.Sessions.SessionTag>? _LaunchTags;
+        private bool _LaunchMetadataSeeded;
         private readonly Mux.Core.Telemetry.PricingTable _Pricing = new Mux.Core.Telemetry.PricingTable();
         private Mux.Core.Checkpoints.CheckpointManager? _CheckpointManager;
         private readonly Mux.Core.Plugins.PluginRegistry? _PluginRegistry;
@@ -296,8 +301,10 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.cwd", "Working directory", null, ShowWorkingDirectory, "Session", new[] { "cwd", "cd", "chdir" }, ChangeWorkingDirectory));
+            _Catalog.Add(new CommandDescriptor("mux.label", "Labels", null, ShowSessionMetadata, "Session", new[] { "label", "labels" }, HandleLabelArgument));
+            _Catalog.Add(new CommandDescriptor("mux.tag", "Tags", null, ShowSessionMetadata, "Session", new[] { "tag", "tags" }, HandleTagArgument));
             _Catalog.Add(new CommandDescriptor("mux.tasks", "Tasks", null, OpenTasksModal, "View", new[] { "tasks", "task", "plan", "todo" }));
-            _Catalog.Add(new CommandDescriptor("mux.usage", "Usage", null, OpenUsageView, "View", new[] { "usage", "stats", "spend" }));
+            _Catalog.Add(new CommandDescriptor("mux.usage", "Usage", null, OpenUsageView, "View", new[] { "usage", "stats", "spend" }, OpenUsageViewFiltered));
             _Catalog.Add(new CommandDescriptor("mux.effort", "Reasoning effort", null, OpenEffortSelector, "Model", new[] { "effort", "reasoning", "reasoning-effort" }));
             _Catalog.Add(new CommandDescriptor("mux.compact", "Compact conversation", null, CompactConversation, "Session", new[] { "compact", "compress", "summarize" }));
             _Catalog.Add(new CommandDescriptor("mux.settings", "Settings", null, OpenSettingsModal, "Model", new[] { "settings", "config", "preferences", "prefs" }));
@@ -1288,7 +1295,46 @@ namespace Mux.Cli.App
                 snapshot.ConversationHistory = new List<ConversationMessage>(_ConversationHistory);
             }
 
+            // Seed launch-time labels/tags (`mux --label ... --tag ...`) exactly once, on the first snapshot
+            // written. Seeding only once means a later `/label rm` is not resurrected by the next turn's save.
+            if (!_LaunchMetadataSeeded)
+            {
+                _LaunchMetadataSeeded = true;
+                if (_LaunchLabels != null)
+                {
+                    foreach (string label in _LaunchLabels)
+                    {
+                        if (!snapshot.Labels.Exists(l => string.Equals(l, label, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            snapshot.Labels.Add(label);
+                        }
+                    }
+                }
+
+                if (_LaunchTags != null)
+                {
+                    foreach (Mux.Core.Sessions.SessionTag tag in _LaunchTags)
+                    {
+                        Mux.Core.Sessions.SessionTag? existing = snapshot.Tags.Find(t => string.Equals(t.Key, tag.Key, StringComparison.OrdinalIgnoreCase));
+                        if (existing != null) existing.Value = tag.Value;
+                        else snapshot.Tags.Add(new Mux.Core.Sessions.SessionTag(tag.Key, tag.Value));
+                    }
+                }
+            }
+
             return snapshot;
+        }
+
+        /// <summary>
+        /// Seeds labels/tags supplied at launch (<c>mux --label &lt;text&gt; --tag &lt;key:value&gt;</c>). They are
+        /// applied to the session once, on the first snapshot persisted.
+        /// </summary>
+        /// <param name="labels">Normalized labels to seed, or null.</param>
+        /// <param name="tags">Normalized tags to seed, or null.</param>
+        public void SeedLaunchMetadata(IEnumerable<string>? labels, IEnumerable<Mux.Core.Sessions.SessionTag>? tags)
+        {
+            _LaunchLabels = labels == null ? null : new List<string>(labels);
+            _LaunchTags = tags == null ? null : new List<Mux.Core.Sessions.SessionTag>(tags);
         }
 
         /// <summary>
@@ -2827,6 +2873,152 @@ namespace Mux.Cli.App
             WriteNotice($"Working directory changed to {directory}");
         }
 
+        // Command handlers for /label and /tag. The no-argument form lists current metadata; the argument
+        // form adds/sets or (with an "rm"/"remove"/"-" prefix) removes. All work runs off the shared
+        // SessionManager so normalization and dedupe match every other surface.
+        private void ShowSessionMetadata()
+        {
+            _ = ShowSessionMetadataAsync();
+        }
+
+        private void HandleLabelArgument(string argument)
+        {
+            _ = HandleLabelAsync(argument ?? string.Empty);
+        }
+
+        private void HandleTagArgument(string argument)
+        {
+            _ = HandleTagAsync(argument ?? string.Empty);
+        }
+
+        private string ActiveSessionId()
+        {
+            return string.IsNullOrEmpty(_ActiveSessionId) ? _JobManager.SessionId : _ActiveSessionId;
+        }
+
+        // Ensure the active session has a file on disk before a metadata mutation loads it (a brand-new
+        // session may not have been saved yet). Persisting preserves any labels/tags already stored.
+        private async Task EnsureSessionPersistedAsync()
+        {
+            if (_Store == null) return;
+            string id = ActiveSessionId();
+            SessionSnapshot? existing = await _Store.LoadAsync(id, _Cts.Token).ConfigureAwait(false);
+            if (existing == null)
+            {
+                SessionSnapshot snapshot = BuildSnapshot();
+                await new SessionService(_Store).PersistConversationAsync(snapshot, _Cts.Token).ConfigureAwait(false);
+            }
+        }
+
+        private async Task ShowSessionMetadataAsync()
+        {
+            if (_Store == null) { WriteNotice("Session persistence is disabled."); return; }
+
+            SessionSnapshot? snapshot = await _Store.LoadAsync(ActiveSessionId(), _Cts.Token).ConfigureAwait(false);
+            List<string> labels = snapshot?.Labels ?? new List<string>();
+            List<Mux.Core.Sessions.SessionTag> tags = snapshot?.Tags ?? new List<Mux.Core.Sessions.SessionTag>();
+
+            string labelText = labels.Count == 0 ? "(none)" : string.Join(", ", labels);
+            string tagText = tags.Count == 0 ? "(none)" : string.Join(", ", tags.ConvertAll(t => t.Key + ": " + t.Value));
+            WriteNotice("Labels: " + labelText + "  •  Tags: " + tagText);
+        }
+
+        private async Task HandleLabelAsync(string argument)
+        {
+            if (_Store == null) { WriteNotice("Session persistence is disabled."); return; }
+
+            argument = argument.Trim();
+            if (argument.Length == 0) { await ShowSessionMetadataAsync().ConfigureAwait(false); return; }
+
+            try
+            {
+                await EnsureSessionPersistedAsync().ConfigureAwait(false);
+                Mux.Core.Sessions.SessionManager manager = new Mux.Core.Sessions.SessionManager(_Store);
+                string id = ActiveSessionId();
+
+                if (TryStripRemovePrefix(argument, out string toRemove))
+                {
+                    Mux.Core.Sessions.SessionInfo? info = await manager.RemoveLabelAsync(id, toRemove, _Cts.Token).ConfigureAwait(false);
+                    WriteNotice(info == null ? "No active session to update." : "✓ Removed label. " + DescribeLabels(info));
+                }
+                else
+                {
+                    Mux.Core.Sessions.SessionInfo? info = await manager.AddLabelAsync(id, argument, _Cts.Token).ConfigureAwait(false);
+                    WriteNotice(info == null ? "No active session to update." : "✓ Labeled. " + DescribeLabels(info));
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                WriteNotice("⚠ " + ex.Message);
+            }
+        }
+
+        private async Task HandleTagAsync(string argument)
+        {
+            if (_Store == null) { WriteNotice("Session persistence is disabled."); return; }
+
+            argument = argument.Trim();
+            if (argument.Length == 0) { await ShowSessionMetadataAsync().ConfigureAwait(false); return; }
+
+            try
+            {
+                await EnsureSessionPersistedAsync().ConfigureAwait(false);
+                Mux.Core.Sessions.SessionManager manager = new Mux.Core.Sessions.SessionManager(_Store);
+                string id = ActiveSessionId();
+
+                if (TryStripRemovePrefix(argument, out string keyToRemove))
+                {
+                    Mux.Core.Sessions.SessionInfo? info = await manager.RemoveTagAsync(id, keyToRemove, _Cts.Token).ConfigureAwait(false);
+                    WriteNotice(info == null ? "No active session to update." : "✓ Removed tag. " + DescribeTags(info));
+                    return;
+                }
+
+                int colon = argument.IndexOf(':');
+                if (colon < 0)
+                {
+                    WriteNotice("⚠ Use /tag key: value (or /tag rm key).");
+                    return;
+                }
+
+                string key = argument.Substring(0, colon);
+                string value = argument.Substring(colon + 1);
+                Mux.Core.Sessions.SessionInfo? tagged = await manager.SetTagAsync(id, key, value, _Cts.Token).ConfigureAwait(false);
+                WriteNotice(tagged == null ? "No active session to update." : "✓ Tagged. " + DescribeTags(tagged));
+            }
+            catch (ArgumentException ex)
+            {
+                WriteNotice("⚠ " + ex.Message);
+            }
+        }
+
+        private static bool TryStripRemovePrefix(string argument, out string remainder)
+        {
+            foreach (string prefix in new[] { "rm ", "remove ", "delete ", "-" })
+            {
+                if (argument.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    remainder = argument.Substring(prefix.Length).Trim();
+                    return true;
+                }
+            }
+
+            remainder = argument;
+            return false;
+        }
+
+        private static string DescribeLabels(Mux.Core.Sessions.SessionInfo info)
+        {
+            return info.Labels.Count == 0 ? "Labels: (none)" : "Labels: " + string.Join(", ", info.Labels);
+        }
+
+        private static string DescribeTags(Mux.Core.Sessions.SessionInfo info)
+        {
+            if (info.Tags.Count == 0) return "Tags: (none)";
+            List<string> parts = new List<string>();
+            foreach (Mux.Core.Sessions.SessionTag tag in info.Tags) parts.Add(tag.Key + ": " + tag.Value);
+            return "Tags: " + string.Join(", ", parts);
+        }
+
         private void OpenSessionBrowser()
         {
             if (_Store == null)
@@ -2887,7 +3079,7 @@ namespace Mux.Cli.App
             }
 
             string label = string.IsNullOrWhiteSpace(session.Title) ? session.Id : session.Title;
-            List<string> actions = new List<string> { "Resume", "Rename", "Duplicate", "Export (Markdown)", "Export (HTML)", "Delete" };
+            List<string> actions = new List<string> { "Resume", "Rename", "Duplicate", "Export (Markdown)", "Export (HTML)", "Delete", "Edit labels", "Edit tags" };
             SelectModal actionModal = new SelectModal($"Session: {label}", actions);
             _App.Modals.Push(actionModal);
             object? actionResult = await actionModal.Completion.ConfigureAwait(false);
@@ -2922,7 +3114,100 @@ namespace Mux.Cli.App
                 case 5:
                     await DeleteSessionAsync(manager, session, label).ConfigureAwait(false);
                     break;
+                case 6:
+                    await EditSessionLabelsAsync(manager, session).ConfigureAwait(false);
+                    break;
+                case 7:
+                    await EditSessionTagsAsync(manager, session).ConfigureAwait(false);
+                    break;
             }
+        }
+
+        // Browsed-session label editor: prompts for a comma-separated label set and replaces the session's
+        // labels with it (adds the new ones, removes any dropped), so a non-active session can be managed too.
+        private async Task EditSessionLabelsAsync(SessionManager manager, SessionSnapshot session)
+        {
+            SessionSnapshot? current = await _Store!.LoadAsync(session.Id, _Cts.Token).ConfigureAwait(false);
+            string existing = current == null ? string.Empty : string.Join(", ", current.Labels);
+            PromptModal prompt = new PromptModal("Labels (comma-separated)", existing);
+            _App.Modals.Push(prompt);
+            object? entered = await prompt.Completion.ConfigureAwait(false);
+            if (!(entered is string text))
+            {
+                return;
+            }
+
+            List<string> desired = new List<string>();
+            foreach (string part in text.Split(','))
+            {
+                if (Mux.Core.Sessions.SessionMetadataNormalizer.TryNormalizeLabel(part, out string normalized, out _)
+                    && !desired.Exists(l => string.Equals(l, normalized, StringComparison.OrdinalIgnoreCase)))
+                {
+                    desired.Add(normalized);
+                }
+            }
+
+            // Remove labels no longer desired, then add the rest.
+            if (current != null)
+            {
+                foreach (string label in new List<string>(current.Labels))
+                {
+                    if (!desired.Exists(l => string.Equals(l, label, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        await manager.RemoveLabelAsync(session.Id, label, _Cts.Token).ConfigureAwait(false);
+                    }
+                }
+            }
+
+            foreach (string label in desired)
+            {
+                await manager.AddLabelAsync(session.Id, label, _Cts.Token).ConfigureAwait(false);
+            }
+
+            WriteNotice("✓ Labels updated: " + (desired.Count == 0 ? "(none)" : string.Join(", ", desired)));
+        }
+
+        // Browsed-session tag editor: prompts for a comma-separated key:value set and replaces the session's
+        // tags with it.
+        private async Task EditSessionTagsAsync(SessionManager manager, SessionSnapshot session)
+        {
+            SessionSnapshot? current = await _Store!.LoadAsync(session.Id, _Cts.Token).ConfigureAwait(false);
+            string existing = current == null ? string.Empty : string.Join(", ", current.Tags.ConvertAll(t => t.Key + ": " + t.Value));
+            PromptModal prompt = new PromptModal("Tags (key: value, comma-separated)", existing);
+            _App.Modals.Push(prompt);
+            object? entered = await prompt.Completion.ConfigureAwait(false);
+            if (!(entered is string text))
+            {
+                return;
+            }
+
+            List<Mux.Core.Sessions.SessionTag> desired = new List<Mux.Core.Sessions.SessionTag>();
+            foreach (string part in text.Split(','))
+            {
+                if (Mux.Core.Sessions.SessionMetadataNormalizer.TryParseTag(part, out Mux.Core.Sessions.SessionTag? tag, out _) && tag != null
+                    && !desired.Exists(t => string.Equals(t.Key, tag.Key, StringComparison.OrdinalIgnoreCase)))
+                {
+                    desired.Add(tag);
+                }
+            }
+
+            if (current != null)
+            {
+                foreach (Mux.Core.Sessions.SessionTag tag in new List<Mux.Core.Sessions.SessionTag>(current.Tags))
+                {
+                    if (!desired.Exists(t => string.Equals(t.Key, tag.Key, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        await manager.RemoveTagAsync(session.Id, tag.Key, _Cts.Token).ConfigureAwait(false);
+                    }
+                }
+            }
+
+            foreach (Mux.Core.Sessions.SessionTag tag in desired)
+            {
+                await manager.SetTagAsync(session.Id, tag.Key, tag.Value, _Cts.Token).ConfigureAwait(false);
+            }
+
+            WriteNotice("✓ Tags updated: " + (desired.Count == 0 ? "(none)" : string.Join(", ", desired.ConvertAll(t => t.Key + ": " + t.Value))));
         }
 
         private async Task RenameSessionAsync(SessionManager manager, SessionSnapshot session)
@@ -4726,6 +5011,9 @@ namespace Mux.Cli.App
 
         private void OpenUsageView()
         {
+            _UsageFilterLabels = null;
+            _UsageFilterTags = null;
+
             if (_UsageQuery == null)
             {
                 _App.Modals.Push(new MuxBoxModal("Usage", BuildUsageLines(), "Enter / Esc to close", centered: false));
@@ -4737,15 +5025,62 @@ namespace Mux.Cli.App
             _App.Modals.Push(new UsageChartsModal("Usage", BuildUsageChartData, Mux.Core.Telemetry.UsageRange.Day));
         }
 
+        // Slash-argument handler: "/usage label <label>" or "/usage tag <key:value>" opens the usage charts
+        // scoped to a label or tag. Any other (or empty) argument opens the unfiltered view.
+        private void OpenUsageViewFiltered(string argument)
+        {
+            _UsageFilterLabels = null;
+            _UsageFilterTags = null;
+
+            string text = (argument ?? string.Empty).Trim();
+            if (text.Length > 0)
+            {
+                int space = text.IndexOf(' ');
+                string keyword = (space < 0 ? text : text.Substring(0, space)).ToLowerInvariant();
+                string rest = space < 0 ? string.Empty : text.Substring(space + 1).Trim();
+
+                if (keyword == "label" && rest.Length > 0
+                    && Mux.Core.Sessions.SessionMetadataNormalizer.TryNormalizeLabel(rest, out string label, out _))
+                {
+                    _UsageFilterLabels = new List<string> { label };
+                }
+                else if (keyword == "tag" && rest.Length > 0
+                    && Mux.Core.Sessions.SessionMetadataNormalizer.TryParseTag(rest, out Mux.Core.Sessions.SessionTag? tag, out _) && tag != null)
+                {
+                    _UsageFilterTags = new List<Mux.Core.Sessions.SessionTag> { tag };
+                }
+                else
+                {
+                    WriteNotice("⚠ Use /usage label <label> or /usage tag <key: value>.");
+                    return;
+                }
+            }
+
+            if (_UsageQuery == null)
+            {
+                _App.Modals.Push(new MuxBoxModal("Usage", BuildUsageLines(), "Enter / Esc to close", centered: false));
+                return;
+            }
+
+            _App.Modals.Push(new UsageChartsModal("Usage", BuildUsageChartData, Mux.Core.Telemetry.UsageRange.Day));
+        }
+
         private UsageChartData BuildUsageChartData(Mux.Core.Telemetry.UsageRange range)
         {
             UsageChartData data = new UsageChartData();
             long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             Mux.Core.Telemetry.UsageWindow window = Mux.Core.Telemetry.UsageWindow.Compute(range, now);
-            Mux.Core.Telemetry.UsageFilter filter = new Mux.Core.Telemetry.UsageFilter { FromUnixMs = window.FromUnixMs, ToUnixMs = window.ToUnixMs };
+            Mux.Core.Telemetry.UsageFilter filter = new Mux.Core.Telemetry.UsageFilter
+            {
+                FromUnixMs = window.FromUnixMs,
+                ToUnixMs = window.ToUnixMs,
+                Labels = _UsageFilterLabels,
+                Tags = _UsageFilterTags
+            };
 
             Mux.Core.Telemetry.UsageSummary summary = _UsageQuery!.GetSummaryAsync(filter, _Cts.Token).GetAwaiter().GetResult();
-            data.HeaderLines.Add(KpiLine(summary.Metrics));
+            string scope = DescribeUsageScope();
+            data.HeaderLines.Add(scope.Length == 0 ? KpiLine(summary.Metrics) : scope + " — " + KpiLine(summary.Metrics));
 
             List<Mux.Core.Telemetry.UsageBucket> series = _UsageQuery.GetTimeseriesAsync(filter, window.BucketMs, _Cts.Token).GetAwaiter().GetResult();
             foreach (Mux.Core.Telemetry.UsageBucket bucket in series)
@@ -4773,6 +5108,23 @@ namespace Mux.Cli.App
             }
 
             return data;
+        }
+
+        private string DescribeUsageScope()
+        {
+            if (_UsageFilterLabels != null && _UsageFilterLabels.Count > 0)
+            {
+                return "label:" + string.Join(",", _UsageFilterLabels);
+            }
+
+            if (_UsageFilterTags != null && _UsageFilterTags.Count > 0)
+            {
+                List<string> parts = new List<string>();
+                foreach (Mux.Core.Sessions.SessionTag tag in _UsageFilterTags) parts.Add(tag.Key + ":" + tag.Value);
+                return "tag:" + string.Join(",", parts);
+            }
+
+            return string.Empty;
         }
 
         private static string FormatBucketLabel(long unixMs, Mux.Core.Telemetry.UsageRange range)

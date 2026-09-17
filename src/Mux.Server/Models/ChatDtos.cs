@@ -199,6 +199,12 @@ namespace Mux.Server.Models
         /// <summary>Model captured with the session.</summary>
         public string Model { get; set; } = string.Empty;
 
+        /// <summary>The session's freeform labels.</summary>
+        public List<string> Labels { get; set; } = new List<string>();
+
+        /// <summary>The session's key/value tags.</summary>
+        public List<SessionTagDto> Tags { get; set; } = new List<SessionTagDto>();
+
         /// <summary>The conversation messages, oldest first.</summary>
         public List<ChatMessageDto> Messages { get; set; } = new List<ChatMessageDto>();
     }
@@ -221,6 +227,12 @@ namespace Mux.Server.Models
 
         /// <summary>Model to record.</summary>
         public string Model { get; set; } = string.Empty;
+
+        /// <summary>Optional labels to apply to the session (added; existing labels are preserved).</summary>
+        public List<string>? Labels { get; set; }
+
+        /// <summary>Optional tags to upsert on the session (existing tags with other keys are preserved).</summary>
+        public List<SessionTagDto>? Tags { get; set; }
 
         /// <summary>The conversation messages to persist, oldest first.</summary>
         public List<ChatMessageDto> Messages { get; set; } = new List<ChatMessageDto>();

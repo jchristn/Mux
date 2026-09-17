@@ -2,7 +2,7 @@
   "name": "mux-ai",
   "displayName": "mux-ai",
   "description": "mux in your editor — chat, inline commands, native diffs, and shared sessions over the local mux agent.",
-  "version": "0.12.3",
+  "version": "1.0.0",
   "icon": "dashboard/media/icon.png",
   "publisher": "usemux",
   "license": "MIT",
@@ -163,6 +163,16 @@
       {
         "command": "mux.sessions.duplicate",
         "title": "%cmd.sessions.duplicate%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.sessions.label",
+        "title": "%cmd.sessions.label%",
+        "category": "mux"
+      },
+      {
+        "command": "mux.sessions.tag",
+        "title": "%cmd.sessions.tag%",
         "category": "mux"
       },
       {
@@ -475,6 +485,16 @@
           "command": "mux.sessions.duplicate",
           "when": "view == mux.sessions",
           "group": "1@3"
+        },
+        {
+          "command": "mux.sessions.label",
+          "when": "view == mux.sessions",
+          "group": "1@4"
+        },
+        {
+          "command": "mux.sessions.tag",
+          "when": "view == mux.sessions",
+          "group": "1@5"
         },
         {
           "command": "mux.sessions.export",

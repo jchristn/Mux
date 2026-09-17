@@ -440,6 +440,8 @@ namespace Mux.Cli.Commands
                             runtime,
                             jsonlInput ? "(multi-turn session)" : prompt,
                             latestConversation,
+                            settings.Labels,
+                            settings.Tags,
                             cancellationToken).ConfigureAwait(false);
                     }
                 }
@@ -904,6 +906,8 @@ namespace Mux.Cli.Commands
             ResolvedRuntime runtime,
             string prompt,
             IReadOnlyList<ConversationMessage> finalConversation,
+            IReadOnlyList<string> launchLabels,
+            IReadOnlyList<string> launchTags,
             CancellationToken cancellationToken)
         {
             DateTime nowUtc = DateTime.UtcNow;
@@ -930,6 +934,33 @@ namespace Mux.Cli.Commands
                 CreatedUtc = source?.CreatedUtc ?? nowUtc,
                 UpdatedUtc = nowUtc
             };
+
+            // Preserve labels/tags from a resumed session, then apply any supplied at launch (--label/--tag),
+            // normalized through the shared rules so a headless run annotates identically to every surface.
+            if (source != null)
+            {
+                snapshot.Labels = new List<string>(source.Labels);
+                foreach (SessionTag tag in source.Tags) snapshot.Tags.Add(new SessionTag(tag.Key, tag.Value));
+            }
+
+            foreach (string raw in launchLabels)
+            {
+                if (SessionMetadataNormalizer.TryNormalizeLabel(raw, out string label, out _)
+                    && !snapshot.Labels.Exists(l => string.Equals(l, label, StringComparison.OrdinalIgnoreCase)))
+                {
+                    snapshot.Labels.Add(label);
+                }
+            }
+
+            foreach (string raw in launchTags)
+            {
+                if (SessionMetadataNormalizer.TryParseTag(raw, out SessionTag? tag, out _) && tag != null)
+                {
+                    SessionTag? existing = snapshot.Tags.Find(t => string.Equals(t.Key, tag.Key, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null) existing.Value = tag.Value;
+                    else snapshot.Tags.Add(tag);
+                }
+            }
 
             await store.SaveAsync(snapshot, cancellationToken).ConfigureAwait(false);
         }

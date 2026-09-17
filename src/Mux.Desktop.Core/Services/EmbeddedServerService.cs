@@ -204,7 +204,9 @@ namespace Mux.Desktop.Services
                     SessionStore sessionStore = new SessionStore(sessionsDir);
 
                     telemetry = UsageTelemetry.Create(settings, SettingsLoader.GetConfigDirectory(), null);
-                    UsageQueryService? usageQuery = telemetry.CreateQueryService(() => SettingsLoader.LoadPricing());
+                    UsageQueryService? usageQuery = telemetry.CreateQueryService(
+                        () => SettingsLoader.LoadPricing(),
+                        new Mux.Core.Telemetry.SessionStoreMetadataIndex(sessionStore));
 
                     server = new MuxServer(
                         rest,

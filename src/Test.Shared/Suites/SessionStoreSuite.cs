@@ -34,13 +34,21 @@ namespace Test.Shared.Suites
 
                         SessionSnapshot? loaded = await store.LoadAsync("s1", ct).ConfigureAwait(false);
                         MuxAssert.IsNotNull(loaded, "loaded");
-                        MuxAssert.AreEqual(1, loaded!.SchemaVersion, "schemaVersion");
+                        MuxAssert.AreEqual(2, loaded!.SchemaVersion, "schemaVersion");
                         MuxAssert.AreEqual("s1", loaded.Id, "id");
                         MuxAssert.AreEqual(original.Title, loaded.Title, "title (special chars)");
                         MuxAssert.IsTrue(loaded.TitlePinned, "titlePinned");
                         MuxAssert.AreEqual("openai-prod", loaded.EndpointName, "endpoint");
                         MuxAssert.AreEqual("gpt-4o", loaded.Model, "model");
                         MuxAssert.AreEqual("/work/project", loaded.WorkingDirectory, "workingDirectory");
+                        MuxAssert.AreEqual(2, loaded.Labels.Count, "labels count");
+                        MuxAssert.AreEqual("wip", loaded.Labels[0], "labels[0]");
+                        MuxAssert.AreEqual("customer-acme", loaded.Labels[1], "labels[1]");
+                        MuxAssert.AreEqual(2, loaded.Tags.Count, "tags count");
+                        MuxAssert.AreEqual("env", loaded.Tags[0].Key, "tags[0].key");
+                        MuxAssert.AreEqual("prod", loaded.Tags[0].Value, "tags[0].value");
+                        MuxAssert.AreEqual("sprint", loaded.Tags[1].Key, "tags[1].key");
+                        MuxAssert.AreEqual("42", loaded.Tags[1].Value, "tags[1].value");
                         MuxAssert.AreEqual(2, loaded.CompactionCount, "compactionCount");
                         MuxAssert.AreEqual(2, loaded.ConversationHistory.Count, "history count");
                         MuxAssert.AreEqual(RoleEnum.User, loaded.ConversationHistory[0].Role, "history[0] role");
@@ -253,6 +261,12 @@ namespace Test.Shared.Suites
                 Model = "gpt-4o",
                 WorkingDirectory = "/work/project",
                 CompactionCount = 2,
+                Labels = new List<string> { "wip", "customer-acme" },
+                Tags = new List<SessionTag>
+                {
+                    new SessionTag("env", "prod"),
+                    new SessionTag("sprint", "42")
+                },
                 ConversationHistory = new List<ConversationMessage>
                 {
                     new ConversationMessage { Role = RoleEnum.User, Content = "hello" },

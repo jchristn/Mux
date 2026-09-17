@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>0.5.0</Version>
+    <Version>1.0.0</Version>
     <Title>Mux.Search</Title>
     <PackageId>Mux.Search</PackageId>
     <Description>Web-search abstractions and provider clients (Tavily, You.com) for mux and Mux.Core.</Description>

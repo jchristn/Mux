@@ -1,6 +1,8 @@
 namespace Mux.Desktop.Services
 {
     using System;
+    using System.Collections.Generic;
+    using Mux.Core.Sessions;
 
     /// <summary>
     /// A lightweight projection of a persisted session for the conversation list: identity, title, active
@@ -20,6 +22,8 @@ namespace Mux.Desktop.Services
         /// <param name="updatedUtc">Last-updated time (UTC).</param>
         /// <param name="messageCount">Number of messages in the conversation history.</param>
         /// <param name="titlePinned">Whether the title is user-pinned.</param>
+        /// <param name="labels">The session's freeform labels. Optional; null is treated as empty.</param>
+        /// <param name="tags">The session's key/value tags. Optional; null is treated as empty.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="id"/> or <paramref name="title"/> is null.</exception>
         public ThreadSummary(
             string id,
@@ -29,7 +33,9 @@ namespace Mux.Desktop.Services
             DateTime createdUtc,
             DateTime updatedUtc,
             int messageCount,
-            bool titlePinned)
+            bool titlePinned,
+            IReadOnlyList<string>? labels = null,
+            IReadOnlyList<SessionTag>? tags = null)
         {
             ArgumentNullException.ThrowIfNull(id);
             ArgumentNullException.ThrowIfNull(title);
@@ -42,6 +48,8 @@ namespace Mux.Desktop.Services
             _UpdatedUtc = updatedUtc;
             _MessageCount = messageCount;
             _TitlePinned = titlePinned;
+            _Labels = labels ?? Array.Empty<string>();
+            _Tags = tags ?? Array.Empty<SessionTag>();
         }
 
         private readonly string _Id;
@@ -52,6 +60,8 @@ namespace Mux.Desktop.Services
         private readonly DateTime _UpdatedUtc;
         private readonly int _MessageCount;
         private readonly bool _TitlePinned;
+        private readonly IReadOnlyList<string> _Labels;
+        private readonly IReadOnlyList<SessionTag> _Tags;
 
         /// <summary>The session id (also the on-disk file stem).</summary>
         public string Id
@@ -99,6 +109,30 @@ namespace Mux.Desktop.Services
         public bool TitlePinned
         {
             get => _TitlePinned;
+        }
+
+        /// <summary>The session's freeform labels. Never null.</summary>
+        public IReadOnlyList<string> Labels
+        {
+            get => _Labels;
+        }
+
+        /// <summary>The session's key/value tags. Never null.</summary>
+        public IReadOnlyList<SessionTag> Tags
+        {
+            get => _Tags;
+        }
+
+        /// <summary>A compact, human-readable summary of labels and tags for list/tooltip display.</summary>
+        public string MetadataSummary
+        {
+            get
+            {
+                List<string> parts = new List<string>();
+                foreach (string label in _Labels) parts.Add("#" + label);
+                foreach (SessionTag tag in _Tags) parts.Add(tag.Key + ":" + tag.Value);
+                return string.Join("  ", parts);
+            }
         }
     }
 }

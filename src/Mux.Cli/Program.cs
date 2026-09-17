@@ -209,6 +209,36 @@ CONFIG:
             Console.WriteLine(help);
         }
 
+        // Normalize launch-time --label/--tag values and seed them onto the interactive app. Invalid entries
+        // are silently dropped (the flags are a convenience; the /label and /tag commands report errors).
+        private static void SeedLaunchMetadata(MuxTuiApp app, List<string> labels, List<string> tags)
+        {
+            List<string> normalizedLabels = new List<string>();
+            foreach (string raw in labels)
+            {
+                if (Mux.Core.Sessions.SessionMetadataNormalizer.TryNormalizeLabel(raw, out string label, out _)
+                    && !normalizedLabels.Exists(l => string.Equals(l, label, StringComparison.OrdinalIgnoreCase)))
+                {
+                    normalizedLabels.Add(label);
+                }
+            }
+
+            List<Mux.Core.Sessions.SessionTag> normalizedTags = new List<Mux.Core.Sessions.SessionTag>();
+            foreach (string raw in tags)
+            {
+                if (Mux.Core.Sessions.SessionMetadataNormalizer.TryParseTag(raw, out Mux.Core.Sessions.SessionTag? tag, out _) && tag != null
+                    && !normalizedTags.Exists(t => string.Equals(t.Key, tag.Key, StringComparison.OrdinalIgnoreCase)))
+                {
+                    normalizedTags.Add(tag);
+                }
+            }
+
+            if (normalizedLabels.Count > 0 || normalizedTags.Count > 0)
+            {
+                app.SeedLaunchMetadata(normalizedLabels, normalizedTags);
+            }
+        }
+
         private static string? GetConfigDirectoryOverride(string[] args)
         {
             for (int i = 0; i < args.Length; i++)
@@ -312,6 +342,15 @@ CONFIG:
                         .RunAsync(commandArgs, CancellationToken.None)
                         .GetAwaiter()
                         .GetResult();
+                }
+
+                if (args.Length > 0 && string.Equals(args[0], "session", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] commandArgs = args.Skip(1).ToArray();
+                    return RunWrapped(() => new Mux.Cli.Commands.SessionCommand()
+                        .RunAsync(commandArgs, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult());
                 }
 
                 if (args.Length > 0 && string.Equals(args[0], "plugin", StringComparison.OrdinalIgnoreCase))
@@ -630,12 +669,18 @@ CONFIG:
                     checkpointManager: checkpointManager,
                     pluginRegistry: pluginRegistry,
                     workingDirectory: runtime.WorkingDirectory,
-                    usageQuery: usageTelemetry.CreateQueryService(() => SettingsLoader.LoadPricing()),
+                    usageQuery: usageTelemetry.CreateQueryService(
+                        () => SettingsLoader.LoadPricing(),
+                        new Mux.Core.Telemetry.SessionStoreMetadataIndex(sessionStore)),
                     enableFirstRunWizard: true);
 
                 // Expose the shell so MCP connection notices (raised on the runtime's background thread once
                 // Start() is called below) can be written into the transcript.
                 shell = app;
+
+                // Seed any launch-time labels/tags (`mux --label wip --tag env:prod`). Normalization drops
+                // invalid entries; they attach to the session on its first save.
+                SeedLaunchMetadata(app, settings.Labels, settings.Tags);
 
                 // Route escalated tool approvals to the shell's modal. The template is captured by
                 // CreateForAgentLoop and read per job run, so setting this before the run loop starts

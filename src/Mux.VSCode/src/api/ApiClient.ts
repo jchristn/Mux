@@ -21,6 +21,7 @@ import {
     PromptCatalogEntry,
     PromptProfile,
     SessionDetail,
+    SessionMetadataPatch,
     SessionSummary,
     SkillSummary,
     StreamEvent,
@@ -99,6 +100,11 @@ export class ApiClient {
     /** Deletes a session by id. */
     public async deleteSession(id: string, signal?: AbortSignal): Promise<void> {
         await this.send('DELETE', `/v1.0/api/sessions?id=${encodeURIComponent(id)}`, undefined, signal);
+    }
+
+    /** Incrementally edits a session's labels/tags; returns the updated summary. */
+    public patchSessionMetadata(id: string, patch: SessionMetadataPatch, signal?: AbortSignal): Promise<SessionSummary> {
+        return this.sendJson<SessionSummary>('POST', `/v1.0/api/sessions/${encodeURIComponent(id)}/metadata`, patch, signal);
     }
 
     /** Renders a session to Markdown or HTML for download. */

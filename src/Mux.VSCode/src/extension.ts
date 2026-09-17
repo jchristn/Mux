@@ -142,6 +142,8 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('mux.sessions.resume', (node: SessionNode) => sessions.resume(node)),
         vscode.commands.registerCommand('mux.sessions.rename', (node: SessionNode) => sessions.rename(node)),
         vscode.commands.registerCommand('mux.sessions.duplicate', (node: SessionNode) => sessions.duplicate(node)),
+        vscode.commands.registerCommand('mux.sessions.label', (node: SessionNode) => sessions.label(node)),
+        vscode.commands.registerCommand('mux.sessions.tag', (node: SessionNode) => sessions.tag(node)),
         vscode.commands.registerCommand('mux.sessions.export', (node: SessionNode) => sessions.export(node)),
         vscode.commands.registerCommand('mux.sessions.delete', (node: SessionNode) => sessions.delete(node)),
     );

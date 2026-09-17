@@ -129,6 +129,8 @@ namespace Mux.Desktop.I18n
                 { "settings.save.tip", "Write these settings to settings.json." },
                 { "thread.rename", "Rename" },
                 { "thread.export", "Export" },
+                { "thread.labels", "Edit labels…" },
+                { "thread.tags", "Edit tags…" },
                 { "main.noConversations", "No conversations yet." },
                 { "main.quickCommands", "Quick commands" },
                 { "main.recentConversations", "Recent conversations" },

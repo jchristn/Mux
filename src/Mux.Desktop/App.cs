@@ -61,7 +61,9 @@ namespace Mux.Desktop
                 IThreadService threads = _Services.GetRequiredService<IThreadService>();
                 SessionStore store = _Services.GetRequiredService<SessionStore>();
                 _Telemetry = _Services.GetRequiredService<UsageTelemetry>();
-                UsageQueryService? usageQuery = _Telemetry.CreateQueryService(() => SettingsLoader.LoadPricing());
+                UsageQueryService? usageQuery = _Telemetry.CreateQueryService(
+                    () => SettingsLoader.LoadPricing(),
+                    new Mux.Core.Telemetry.SessionStoreMetadataIndex(store));
 
                 MainWindow main = new MainWindow(localization, threads, store, _Telemetry.Recorder, usageQuery, configDirectory);
                 desktop.MainWindow = main;

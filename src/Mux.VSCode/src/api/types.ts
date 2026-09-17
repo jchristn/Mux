@@ -239,6 +239,12 @@ export interface UsageFilters {
     Models: string[];
 }
 
+/** A key/value session tag on the wire. */
+export interface SessionTagDto {
+    Key: string;
+    Value: string;
+}
+
 /** A persisted session summary, as returned by `GET /v1.0/api/sessions`. */
 export interface SessionSummary {
     Id: string;
@@ -248,6 +254,16 @@ export interface SessionSummary {
     CreatedUtc: string;
     UpdatedUtc: string;
     MessageCount: number;
+    Labels?: string[];
+    Tags?: SessionTagDto[];
+}
+
+/** The label/tag edit body for `POST /v1.0/api/sessions/{id}/metadata`. */
+export interface SessionMetadataPatch {
+    AddLabels?: string[];
+    RemoveLabels?: string[];
+    SetTags?: SessionTagDto[];
+    RemoveTagKeys?: string[];
 }
 
 /** A tool call carried on a persisted message. */

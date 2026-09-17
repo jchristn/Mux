@@ -5,6 +5,7 @@ namespace Mux.Core.Telemetry
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Sessions;
 
     /// <summary>
     /// Read-side service over a <see cref="SqliteUsageStore"/>: composes aggregate rows and latency samples
@@ -19,6 +20,7 @@ namespace Mux.Core.Telemetry
 
         private readonly SqliteUsageStore _Store;
         private readonly Func<PricingTable> _PricingProvider;
+        private readonly ISessionMetadataIndex? _SessionIndex;
 
         #endregion
 
@@ -29,11 +31,15 @@ namespace Mux.Core.Telemetry
         /// </summary>
         /// <param name="store">The backing store. Required.</param>
         /// <param name="pricingProvider">A provider of the current pricing table. Required; called per query.</param>
+        /// <param name="sessionIndex">An optional session label/tag index. When supplied, usage can be filtered
+        /// and broken down by label/tag (resolved to session ids at query time). When null, label/tag filters
+        /// match nothing and label/tag breakdowns are empty.</param>
         /// <exception cref="ArgumentNullException">Thrown when a required argument is null.</exception>
-        public UsageQueryService(SqliteUsageStore store, Func<PricingTable> pricingProvider)
+        public UsageQueryService(SqliteUsageStore store, Func<PricingTable> pricingProvider, ISessionMetadataIndex? sessionIndex = null)
         {
             _Store = store ?? throw new ArgumentNullException(nameof(store));
             _PricingProvider = pricingProvider ?? throw new ArgumentNullException(nameof(pricingProvider));
+            _SessionIndex = sessionIndex;
         }
 
         #endregion
@@ -48,6 +54,7 @@ namespace Mux.Core.Telemetry
         /// <returns>The summary.</returns>
         public async Task<UsageSummary> GetSummaryAsync(UsageFilter? filter, CancellationToken token)
         {
+            filter = await ResolveFilterAsync(filter, token).ConfigureAwait(false);
             PricingTable pricing = _PricingProvider();
             List<UsageAggregateRow> rows = await _Store.FetchAggregatesAsync(filter, 0, token).ConfigureAwait(false);
             List<UsageLatencySample> samples = await _Store.FetchLatencySamplesAsync(filter, 0, token).ConfigureAwait(false);
@@ -72,6 +79,7 @@ namespace Mux.Core.Telemetry
         /// <returns>The buckets, ascending by time.</returns>
         public async Task<List<UsageBucket>> GetTimeseriesAsync(UsageFilter? filter, long bucketMs, CancellationToken token)
         {
+            filter = await ResolveFilterAsync(filter, token).ConfigureAwait(false);
             long width = bucketMs < 1 ? 1 : bucketMs;
             PricingTable pricing = _PricingProvider();
             List<UsageAggregateRow> rows = await _Store.FetchAggregatesAsync(filter, width, token).ConfigureAwait(false);
@@ -147,13 +155,20 @@ namespace Mux.Core.Telemetry
         /// <summary>
         /// Computes a breakdown of the window grouped by a dimension.
         /// </summary>
-        /// <param name="dimension">One of "model", "endpoint", "provider", "command".</param>
+        /// <param name="dimension">One of "model", "endpoint", "provider", "command", "callkind", "label", "tag".</param>
         /// <param name="filter">The filter/window. Null covers everything.</param>
         /// <param name="token">A token to cancel the operation.</param>
         /// <returns>The breakdown rows, descending by cost then total tokens.</returns>
         public async Task<List<UsageBreakdownRow>> GetBreakdownAsync(string dimension, UsageFilter? filter, CancellationToken token)
         {
             string dim = NormalizeDimension(dimension);
+
+            if (dim == "label" || dim == "tag")
+            {
+                return await BreakdownByMetadataAsync(dim, filter, token).ConfigureAwait(false);
+            }
+
+            filter = await ResolveFilterAsync(filter, token).ConfigureAwait(false);
             PricingTable pricing = _PricingProvider();
             List<UsageAggregateRow> rows = await _Store.FetchAggregatesAsync(filter, 0, token).ConfigureAwait(false);
 
@@ -197,6 +212,7 @@ namespace Mux.Core.Telemetry
         /// <returns>The page.</returns>
         public async Task<UsageEventPage> GetEventsAsync(UsageFilter? filter, int pageNumber, int pageSize, CancellationToken token)
         {
+            filter = await ResolveFilterAsync(filter, token).ConfigureAwait(false);
             PricingTable pricing = _PricingProvider();
             List<UsageEventRow> rows = await _Store.QueryEventsAsync(filter, pageNumber, pageSize, token).ConfigureAwait(false);
             long total = await _Store.CountEventsAsync(filter, token).ConfigureAwait(false);
@@ -246,9 +262,232 @@ namespace Mux.Core.Telemetry
             return _Store.DistinctValuesAsync("model", token);
         }
 
+        /// <summary>
+        /// Returns the distinct labels across all sessions (for filter controls), ascending. Empty when no
+        /// session metadata index is configured.
+        /// </summary>
+        /// <param name="token">A token to cancel the operation.</param>
+        /// <returns>The distinct labels.</returns>
+        public async Task<List<string>> GetLabelsAsync(CancellationToken token)
+        {
+            if (_SessionIndex == null)
+            {
+                return new List<string>();
+            }
+
+            IReadOnlyList<SessionMetadataEntry> entries = await _SessionIndex.SnapshotAsync(token).ConfigureAwait(false);
+            return entries
+                .SelectMany(e => e.Labels)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(l => l, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Returns the distinct key/value tags across all sessions (for filter controls), ordered by key then
+        /// value. Empty when no session metadata index is configured.
+        /// </summary>
+        /// <param name="token">A token to cancel the operation.</param>
+        /// <returns>The distinct tags.</returns>
+        public async Task<List<SessionTag>> GetTagsAsync(CancellationToken token)
+        {
+            if (_SessionIndex == null)
+            {
+                return new List<SessionTag>();
+            }
+
+            IReadOnlyList<SessionMetadataEntry> entries = await _SessionIndex.SnapshotAsync(token).ConfigureAwait(false);
+            Dictionary<string, SessionTag> distinct = new Dictionary<string, SessionTag>(StringComparer.OrdinalIgnoreCase);
+            foreach (SessionMetadataEntry entry in entries)
+            {
+                foreach (SessionTag tag in entry.Tags)
+                {
+                    string key = tag.Key + " " + tag.Value;
+                    if (!distinct.ContainsKey(key))
+                    {
+                        distinct[key] = new SessionTag(tag.Key, tag.Value);
+                    }
+                }
+            }
+
+            return distinct.Values
+                .OrderBy(t => t.Key, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(t => t.Value, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         #endregion
 
         #region Private-Methods
+
+        // Resolves a filter's label/tag constraints into a concrete session-id set (an AND across every
+        // requested label and tag). Returns the filter unchanged when it carries no label/tag constraint;
+        // otherwise returns a copy with SessionIds populated (empty when nothing matched, which yields zero
+        // rows). When no session index is configured, a label/tag constraint matches nothing.
+        private async Task<UsageFilter?> ResolveFilterAsync(UsageFilter? filter, CancellationToken token)
+        {
+            if (filter == null)
+            {
+                return null;
+            }
+
+            bool hasLabels = filter.Labels != null && filter.Labels.Count > 0;
+            bool hasTags = filter.Tags != null && filter.Tags.Count > 0;
+            if (!hasLabels && !hasTags)
+            {
+                return filter;
+            }
+
+            HashSet<string> matched = new HashSet<string>(StringComparer.Ordinal);
+            if (_SessionIndex != null)
+            {
+                IReadOnlyList<SessionMetadataEntry> entries = await _SessionIndex.SnapshotAsync(token).ConfigureAwait(false);
+                foreach (SessionMetadataEntry entry in entries)
+                {
+                    if (MatchesMetadata(entry, filter.Labels, filter.Tags))
+                    {
+                        matched.Add(entry.Id);
+                    }
+                }
+            }
+
+            IReadOnlyCollection<string> resolved = matched;
+            if (filter.SessionIds != null)
+            {
+                // Compose with any session set already on the filter (intersection).
+                resolved = matched.Where(filter.SessionIds.Contains).ToList();
+            }
+
+            return CloneWithSessionIds(filter, resolved);
+        }
+
+        // True when the entry carries every requested label (case-insensitive) and every requested tag
+        // (key case-insensitive, value case-insensitive).
+        private static bool MatchesMetadata(SessionMetadataEntry entry, List<string>? labels, List<SessionTag>? tags)
+        {
+            if (labels != null)
+            {
+                foreach (string label in labels)
+                {
+                    if (string.IsNullOrWhiteSpace(label)) continue;
+                    if (!entry.Labels.Any(l => string.Equals(l, label, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            if (tags != null)
+            {
+                foreach (SessionTag tag in tags)
+                {
+                    if (tag == null || string.IsNullOrWhiteSpace(tag.Key)) continue;
+                    bool present = entry.Tags.Any(t =>
+                        string.Equals(t.Key, tag.Key, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(t.Value, tag.Value, StringComparison.OrdinalIgnoreCase));
+                    if (!present)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        // Breakdown grouped by label or by key:value tag. Because usage rows carry no metadata, each distinct
+        // value's session set is resolved from the index and summarized with a per-value session filter. A
+        // session with N labels contributes to all N label buckets (intentional fan-out — per-label totals can
+        // exceed the grand total); this is documented and asserted in tests.
+        private async Task<List<UsageBreakdownRow>> BreakdownByMetadataAsync(string dim, UsageFilter? filter, CancellationToken token)
+        {
+            UsageFilter? baseFilter = await ResolveFilterAsync(filter, token).ConfigureAwait(false);
+            IReadOnlyCollection<string>? baseSessions = baseFilter?.SessionIds;
+            PricingTable pricing = _PricingProvider();
+
+            List<UsageBreakdownRow> result = new List<UsageBreakdownRow>();
+            if (_SessionIndex == null)
+            {
+                return result;
+            }
+
+            IReadOnlyList<SessionMetadataEntry> entries = await _SessionIndex.SnapshotAsync(token).ConfigureAwait(false);
+
+            // value -> set of session ids carrying it.
+            Dictionary<string, HashSet<string>> valueToSessions = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            foreach (SessionMetadataEntry entry in entries)
+            {
+                if (dim == "label")
+                {
+                    foreach (string label in entry.Labels)
+                    {
+                        AddToBucket(valueToSessions, label, entry.Id);
+                    }
+                }
+                else
+                {
+                    foreach (SessionTag tag in entry.Tags)
+                    {
+                        AddToBucket(valueToSessions, tag.Key + ": " + tag.Value, entry.Id);
+                    }
+                }
+            }
+
+            foreach (KeyValuePair<string, HashSet<string>> pair in valueToSessions)
+            {
+                IEnumerable<string> sessionIds = pair.Value;
+                if (baseSessions != null)
+                {
+                    sessionIds = sessionIds.Where(baseSessions.Contains);
+                }
+
+                List<string> ids = sessionIds.ToList();
+                UsageFilter perValue = CloneWithSessionIds(filter, ids);
+                perValue.Labels = null;
+                perValue.Tags = null;
+
+                List<UsageAggregateRow> rows = await _Store.FetchAggregatesAsync(perValue, 0, token).ConfigureAwait(false);
+                result.Add(new UsageBreakdownRow
+                {
+                    Dimension = dim,
+                    Value = pair.Key,
+                    Metrics = RollUp(rows, pricing)
+                });
+            }
+
+            return result
+                .OrderByDescending(r => r.Metrics.CostUsd)
+                .ThenByDescending(r => r.Metrics.TotalTokens)
+                .ToList();
+        }
+
+        private static void AddToBucket(Dictionary<string, HashSet<string>> map, string key, string sessionId)
+        {
+            if (!map.TryGetValue(key, out HashSet<string>? set))
+            {
+                set = new HashSet<string>(StringComparer.Ordinal);
+                map[key] = set;
+            }
+
+            set.Add(sessionId);
+        }
+
+        private static UsageFilter CloneWithSessionIds(UsageFilter? source, IReadOnlyCollection<string>? sessionIds)
+        {
+            return new UsageFilter
+            {
+                FromUnixMs = source?.FromUnixMs ?? 0,
+                ToUnixMs = source?.ToUnixMs ?? 0,
+                EndpointName = source?.EndpointName,
+                Model = source?.Model,
+                SessionId = source?.SessionId,
+                CallKind = source?.CallKind,
+                Success = source?.Success,
+                Labels = source?.Labels,
+                Tags = source?.Tags,
+                SessionIds = sessionIds
+            };
+        }
 
         private static UsageMetrics RollUp(IEnumerable<UsageAggregateRow> rows, PricingTable pricing)
         {
@@ -389,6 +628,10 @@ namespace Mux.Core.Telemetry
                 case "callkind":
                 case "call_kind":
                     return "callkind";
+                case "label":
+                    return "label";
+                case "tag":
+                    return "tag";
                 case "model":
                 default:
                     return "model";

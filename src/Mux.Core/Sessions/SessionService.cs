@@ -159,6 +159,18 @@ namespace Mux.Core.Sessions
                 incoming.WorkingDirectory = existing.WorkingDirectory;
             }
 
+            // Labels and tags are authored by the metadata-mutation path, not by a turn save. A surface that
+            // only persists the conversation leaves them empty, so keep whatever the store already holds.
+            if (incoming.Labels.Count == 0 && existing.Labels.Count > 0)
+            {
+                incoming.Labels = existing.Labels;
+            }
+
+            if (incoming.Tags.Count == 0 && existing.Tags.Count > 0)
+            {
+                incoming.Tags = existing.Tags;
+            }
+
             if (incoming.Jobs.Count == 0 && existing.Jobs.Count > 0)
             {
                 incoming.Jobs = existing.Jobs;

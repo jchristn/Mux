@@ -19,6 +19,8 @@ namespace Mux.Core.Sessions
         private string _EndpointName = string.Empty;
         private string _Model = string.Empty;
         private string _WorkingDirectory = string.Empty;
+        private List<string> _Labels = new List<string>();
+        private List<SessionTag> _Tags = new List<SessionTag>();
         private List<ConversationMessage> _ConversationHistory = new List<ConversationMessage>();
         private List<string> _PromptHistory = new List<string>();
         private List<PersistedJobSnapshot> _Jobs = new List<PersistedJobSnapshot>();
@@ -28,9 +30,11 @@ namespace Mux.Core.Sessions
         #region Public-Members
 
         /// <summary>
-        /// The current snapshot schema version written by this build.
+        /// The current snapshot schema version written by this build. Version 2 added the
+        /// <see cref="Labels"/> and <see cref="Tags"/> collections; deserialization stays forward-tolerant, so
+        /// the bump is informational.
         /// </summary>
-        public const int CurrentSchemaVersion = 1;
+        public const int CurrentSchemaVersion = 2;
 
         /// <summary>
         /// The schema version of this snapshot. Defaults to <see cref="CurrentSchemaVersion"/>.
@@ -101,6 +105,26 @@ namespace Mux.Core.Sessions
         {
             get => _WorkingDirectory;
             set => _WorkingDirectory = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Freeform user labels attached to the session (for example <c>wip</c>, <c>customer-acme</c>).
+        /// Deduplicated case-insensitively by the mutation layer; used to filter usage analytics. Never null.
+        /// </summary>
+        public List<string> Labels
+        {
+            get => _Labels;
+            set => _Labels = value ?? new List<string>();
+        }
+
+        /// <summary>
+        /// Normalized key/value tags attached to the session (for example <c>env: prod</c>). At most one value
+        /// per key; used to filter usage analytics. Never null.
+        /// </summary>
+        public List<SessionTag> Tags
+        {
+            get => _Tags;
+            set => _Tags = value ?? new List<SessionTag>();
         }
 
         /// <summary>

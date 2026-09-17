@@ -89,9 +89,14 @@ Interactive:
 /model
 /search
 /tools
+/label wip
+/tag env: prod
 /clear
 /exit
 ```
+
+`/label` and `/tag` annotate the current session so you can filter the usage analytics by label or tag
+later (see [USAGE.md](USAGE.md#labels-and-tags)).
 
 Single-shot:
 

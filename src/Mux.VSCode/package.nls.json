@@ -22,6 +22,8 @@
   "cmd.sessions.resume": "Resume",
   "cmd.sessions.rename": "Rename",
   "cmd.sessions.duplicate": "Duplicate",
+  "cmd.sessions.label": "Edit Labels…",
+  "cmd.sessions.tag": "Edit Tags…",
   "cmd.sessions.export": "Export",
   "cmd.sessions.delete": "Delete",
   "cmd.manage.refresh": "Refresh",

@@ -108,16 +108,18 @@ namespace Mux.Core.Telemetry
         /// (no store to query).
         /// </summary>
         /// <param name="pricingProvider">A provider of the current pricing table, called per query. Required.</param>
+        /// <param name="sessionIndex">An optional session label/tag index enabling filter/breakdown by label and
+        /// tag. When null, those capabilities are inert.</param>
         /// <returns>A <see cref="UsageQueryService"/> when enabled; otherwise null.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="pricingProvider"/> is null.</exception>
-        public UsageQueryService? CreateQueryService(Func<PricingTable> pricingProvider)
+        public UsageQueryService? CreateQueryService(Func<PricingTable> pricingProvider, ISessionMetadataIndex? sessionIndex = null)
         {
             if (pricingProvider == null)
             {
                 throw new ArgumentNullException(nameof(pricingProvider));
             }
 
-            return _Store == null ? null : new UsageQueryService(_Store, pricingProvider);
+            return _Store == null ? null : new UsageQueryService(_Store, pricingProvider, sessionIndex);
         }
 
         /// <summary>

@@ -2,13 +2,25 @@
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <Version>0.12.3</Version>
+    <Version>1.0.0</Version>
+    <Title>Mux.Desktop.Core</Title>
+    <PackageId>Mux.Desktop.Core</PackageId>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <IsPackable>false</IsPackable>
-    <Description>UI-framework-agnostic logic for mux Desktop: localization, view models, and services over Mux.Core. No Avalonia dependency, so it is unit-testable in isolation.</Description>
+    <Description>UI-framework-agnostic logic for mux Desktop: localization, view models, and services over Mux.Core and Mux.Server. No Avalonia dependency, so it is unit-testable in isolation.</Description>
+    <PackageTags>mux;ai;agent;llm;desktop;mvvm</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="PACKAGE.md" Pack="true" PackagePath="README.md" />
+    <None Include="..\..\assets\icon-black.png" Pack="true" PackagePath="icon.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />

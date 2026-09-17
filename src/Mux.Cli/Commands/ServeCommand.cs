@@ -96,7 +96,9 @@ namespace Mux.Cli.Commands
             // a disabled/unopenable store yields empty dashboard data and a no-op recorder.
             using Mux.Core.Telemetry.UsageTelemetry usageTelemetry = Mux.Core.Telemetry.UsageTelemetry.Create(
                 settings, SettingsLoader.GetConfigDirectory(), null);
-            Mux.Core.Telemetry.UsageQueryService? usageQuery = usageTelemetry.CreateQueryService(() => SettingsLoader.LoadPricing());
+            Mux.Core.Telemetry.UsageQueryService? usageQuery = usageTelemetry.CreateQueryService(
+                () => SettingsLoader.LoadPricing(),
+                new Mux.Core.Telemetry.SessionStoreMetadataIndex(sessionStore));
 
             using MuxServer server = new MuxServer(
                 rest,

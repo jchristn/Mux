@@ -1,6 +1,8 @@
 namespace Mux.Core.Sessions
 {
     using System;
+    using System.Collections.Generic;
+    using System.Linq;
 
     /// <summary>
     /// A lightweight, surface-agnostic projection of a persisted session for list UIs: identity, title,
@@ -22,6 +24,8 @@ namespace Mux.Core.Sessions
         /// <param name="updatedUtc">Last-updated time (UTC).</param>
         /// <param name="messageCount">Number of messages in the conversation history.</param>
         /// <param name="titlePinned">Whether the title is user-pinned.</param>
+        /// <param name="labels">The session's freeform labels. Optional; null is treated as empty.</param>
+        /// <param name="tags">The session's key/value tags. Optional; null is treated as empty.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="id"/> or <paramref name="title"/> is null.</exception>
         public SessionInfo(
             string id,
@@ -32,7 +36,9 @@ namespace Mux.Core.Sessions
             DateTime createdUtc,
             DateTime updatedUtc,
             int messageCount,
-            bool titlePinned)
+            bool titlePinned,
+            IReadOnlyList<string>? labels = null,
+            IReadOnlyList<SessionTag>? tags = null)
         {
             if (id is null) throw new ArgumentNullException(nameof(id));
             if (title is null) throw new ArgumentNullException(nameof(title));
@@ -46,6 +52,8 @@ namespace Mux.Core.Sessions
             UpdatedUtc = updatedUtc;
             MessageCount = messageCount;
             TitlePinned = titlePinned;
+            Labels = labels ?? Array.Empty<string>();
+            Tags = tags ?? Array.Empty<SessionTag>();
         }
 
         /// <summary>The session id (also the on-disk file stem).</summary>
@@ -75,6 +83,12 @@ namespace Mux.Core.Sessions
         /// <summary>Whether the title was pinned by the user.</summary>
         public bool TitlePinned { get; }
 
+        /// <summary>The session's freeform labels. Never null.</summary>
+        public IReadOnlyList<string> Labels { get; }
+
+        /// <summary>The session's key/value tags. Never null.</summary>
+        public IReadOnlyList<SessionTag> Tags { get; }
+
         /// <summary>
         /// Projects a <see cref="SessionSnapshot"/> to a <see cref="SessionInfo"/>.
         /// </summary>
@@ -94,7 +108,9 @@ namespace Mux.Core.Sessions
                 snapshot.CreatedUtc,
                 snapshot.UpdatedUtc,
                 snapshot.ConversationHistory.Count,
-                snapshot.TitlePinned);
+                snapshot.TitlePinned,
+                snapshot.Labels.ToList(),
+                snapshot.Tags.Select(t => new SessionTag(t.Key, t.Value)).ToList());
         }
     }
 }

@@ -40,6 +40,46 @@ namespace Mux.Core.Sessions
         /// <returns>True when updated; false when the session does not exist.</returns>
         Task<bool> SetTitlePinnedAsync(string id, bool pinned, CancellationToken token);
 
+        /// <summary>Attach a freeform label to a session (idempotent; deduped case-insensitively).</summary>
+        /// <param name="id">The session id.</param>
+        /// <param name="label">The raw label; normalized before saving.</param>
+        /// <param name="token">A cancellation token.</param>
+        /// <returns>The updated projection, or null when the session does not exist.</returns>
+        /// <exception cref="System.ArgumentException">Thrown when the label is invalid.</exception>
+        Task<SessionInfo?> AddLabelAsync(string id, string label, CancellationToken token);
+
+        /// <summary>Remove a label from a session (no-op when absent).</summary>
+        /// <param name="id">The session id.</param>
+        /// <param name="label">The label to remove; matched case-insensitively after normalization.</param>
+        /// <param name="token">A cancellation token.</param>
+        /// <returns>The updated projection, or null when the session does not exist.</returns>
+        Task<SessionInfo?> RemoveLabelAsync(string id, string label, CancellationToken token);
+
+        /// <summary>Set (upsert by normalized key) a key/value tag on a session.</summary>
+        /// <param name="id">The session id.</param>
+        /// <param name="key">The raw tag key; normalized (lowercased/slugified) before saving.</param>
+        /// <param name="value">The tag value; normalized before saving.</param>
+        /// <param name="token">A cancellation token.</param>
+        /// <returns>The updated projection, or null when the session does not exist.</returns>
+        /// <exception cref="System.ArgumentException">Thrown when the key or value is invalid.</exception>
+        Task<SessionInfo?> SetTagAsync(string id, string key, string value, CancellationToken token);
+
+        /// <summary>Remove a tag by key from a session (no-op when absent).</summary>
+        /// <param name="id">The session id.</param>
+        /// <param name="key">The raw tag key; normalized before matching.</param>
+        /// <param name="token">A cancellation token.</param>
+        /// <returns>The updated projection, or null when the session does not exist.</returns>
+        /// <exception cref="System.ArgumentException">Thrown when the key is invalid.</exception>
+        Task<SessionInfo?> RemoveTagAsync(string id, string key, CancellationToken token);
+
+        /// <summary>Bulk-apply labels and tags to a session: add each label, upsert each tag.</summary>
+        /// <param name="id">The session id.</param>
+        /// <param name="labels">Raw labels to add; each normalized. Invalid entries are skipped.</param>
+        /// <param name="tags">Key/value tags to upsert; each normalized. Invalid entries are skipped.</param>
+        /// <param name="token">A cancellation token.</param>
+        /// <returns>The updated projection, or null when the session does not exist.</returns>
+        Task<SessionInfo?> SetMetadataAsync(string id, System.Collections.Generic.IEnumerable<string>? labels, System.Collections.Generic.IEnumerable<SessionTag>? tags, CancellationToken token);
+
         /// <summary>Duplicate (fork) a session from its current state under a new id.</summary>
         /// <param name="id">The id of the session to copy.</param>
         /// <param name="token">A cancellation token.</param>

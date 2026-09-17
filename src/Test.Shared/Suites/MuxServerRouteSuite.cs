@@ -162,6 +162,32 @@ namespace Test.Shared.Suites
                             MuxAssert.Contains("glob", detailBody, "tool name round-trips");
                             MuxAssert.Contains("ToolCallId", detailBody, "tool result id round-trips");
 
+                            // Metadata endpoint: add a label + tag, verify they come back, and normalize the key.
+                            string metaBody = "{\"addLabels\":[\"WIP\"],\"setTags\":[{\"key\":\"Env\",\"value\":\"prod\"}]}";
+                            using HttpRequestMessage metaReq = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/v1.0/api/sessions/toolsess/metadata");
+                            metaReq.Headers.Add("Authorization", "Bearer testkey123");
+                            metaReq.Content = new StringContent(metaBody, System.Text.Encoding.UTF8, "application/json");
+                            HttpResponseMessage metaRes = http.SendAsync(metaReq).GetAwaiter().GetResult();
+                            string metaResBody = metaRes.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(200, (int)metaRes.StatusCode, "SessionMetadataStatus");
+                            MuxAssert.Contains("WIP", metaResBody, "label echoed");
+                            MuxAssert.Contains("\"env\"", metaResBody, "tag key normalized to lowercase");
+                            MuxAssert.Contains("prod", metaResBody, "tag value echoed");
+
+                            // Metadata on an unknown session id is a 404.
+                            using HttpRequestMessage metaMissing = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/v1.0/api/sessions/no-such-session/metadata");
+                            metaMissing.Headers.Add("Authorization", "Bearer testkey123");
+                            metaMissing.Content = new StringContent("{\"addLabels\":[\"x\"]}", System.Text.Encoding.UTF8, "application/json");
+                            HttpResponseMessage metaMissingRes = http.SendAsync(metaMissing).GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(404, (int)metaMissingRes.StatusCode, "SessionMetadataMissingStatus");
+
+                            // A tag whose key normalizes to empty is a 400.
+                            using HttpRequestMessage metaBad = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/v1.0/api/sessions/toolsess/metadata");
+                            metaBad.Headers.Add("Authorization", "Bearer testkey123");
+                            metaBad.Content = new StringContent("{\"setTags\":[{\"key\":\"!!!\",\"value\":\"x\"}]}", System.Text.Encoding.UTF8, "application/json");
+                            HttpResponseMessage metaBadRes = http.SendAsync(metaBad).GetAwaiter().GetResult();
+                            MuxAssert.AreEqual(400, (int)metaBadRes.StatusCode, "SessionMetadataBadKeyStatus");
+
                             // A streamed chat with a non-existent working directory is rejected up front (400),
                             // before switching to SSE — so an editor client learns the path is bad cleanly.
                             string missingDir = Path.Combine(Path.GetTempPath(), "mux-missing-" + Guid.NewGuid().ToString("N"));

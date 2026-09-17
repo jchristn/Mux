@@ -628,8 +628,10 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
           <button data-range="week" title="Last 7 days">Week</button>
           <button data-range="month" title="Last 30 days">Month</button>
         </div>
-        <label>Endpoint</label><select id="us_endpoint" title="Filter to one endpoint"><option value="">All endpoints</option></select>
-        <label>Model</label><select id="us_model" title="Filter to one model"><option value="">All models</option></select>
+        <label data-i18n="us.endpoint">Endpoint</label><select id="us_endpoint" data-i18n-title="us.endpoint.tip" title="Filter to one endpoint"><option value="">All endpoints</option></select>
+        <label data-i18n="us.model">Model</label><select id="us_model" data-i18n-title="us.model.tip" title="Filter to one model"><option value="">All models</option></select>
+        <label data-i18n="us.label">Label</label><select id="us_label" data-i18n-title="us.label.tip" title="Filter to one label"><option value="">All labels</option></select>
+        <label data-i18n="us.tag">Tag</label><select id="us_tag" data-i18n-title="us.tag.tip" title="Filter to one tag"><option value="">All tags</option></select>
       </div>
       <div id="us_disabled" style="display:none" class="empty"><div class="eicon">📊</div><div>Usage telemetry is disabled or empty. Run a turn in the CLI, or enable telemetry in settings.</div></div>
       <div class="kpis" id="us_kpis"></div>
@@ -718,6 +720,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 var API_KEY="__MUX_API_KEY__";
 var I18N={
 en:{
+"us.endpoint":"Endpoint","us.model":"Model","us.label":"Label","us.tag":"Tag","us.endpoint.tip":"Filter to one endpoint","us.model.tip":"Filter to one model","us.label.tip":"Filter usage to sessions carrying this label","us.tag.tip":"Filter usage to sessions carrying this tag","us.allEndpoints":"All endpoints","us.allModels":"All models","us.allLabels":"All labels","us.allTags":"All tags","sess.labels":"Labels","sess.tags":"Tags","sess.editLabels":"Edit labels","sess.editTags":"Edit tags","sess.labelsPh":"Labels (comma-separated)","sess.tagsPh":"Tags (key: value, comma-separated)","sess.metaSaved":"Metadata updated",
 "nav.home":"Home","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"MCP Servers","nav.prompts":"Prompts","nav.subagents":"Subagents","nav.hooks":"Hooks","nav.commands":"Commands","nav.keybindings":"Keybindings","nav.skills":"Skills","nav.sessions":"Sessions","nav.settings":"Settings","grp.observability":"Observability","nav.usage":"Usage","nav.pricing":"Pricing",
 "grp.config":"Configuration","grp.system":"System",
 "vt.mcp":"MCP Servers","vt.hooks":"Event Hooks","vt.commands":"Custom Commands",
@@ -1953,8 +1956,27 @@ var _se=[];
 function loadSessions(){_reload["sessions_list"]=loadSessions;gridLoading("sessions_list");api("/v1.0/api/sessions").then(function(r){_se=(r&&r.Items)||[];renderSe();}).catch(function(e){gridError("sessions_list",e.message);});}
 function renderSe(){renderGrid("sessions_list",
   [{h:t("col.title"),get:function(s){return esc(s.Title||s.Id)}},{h:t("col.model"),get:function(s){return esc(s.Model||"")}},
+   {h:t("sess.labels")+" / "+t("sess.tags"),get:function(s){return esc(seMetaSummary(s))}},
    {h:t("col.updated"),tip:"When the session was last saved (hover for the exact UTC time)",get:function(s){return fmtWhen(s.UpdatedUtc)}}],
   _se,{icon:"🗂️",msg:t("empty.sessions")});}
+function seMetaSummary(s){var parts=[];(s.Labels||[]).forEach(function(l){parts.push("#"+l);});(s.Tags||[]).forEach(function(tg){parts.push(tg.Key+":"+tg.Value);});return parts.join("  ");}
+/* Edit a session's labels: reconcile the comma-separated set against the current labels via the metadata PATCH. */
+function editSeLabels(id){var s=null;for(var i=0;i<_se.length;i++){if(_se[i].Id===id){s=_se[i];break;}}if(!s)return;
+  var cur=(s.Labels||[]).join(", ");
+  formModal(t("sess.editLabels"),[{id:"labels",label:t("sess.labels"),type:"text",placeholder:t("sess.labelsPh")}],{labels:cur},function(v){
+    var desired=(v.labels||"").split(",").map(function(x){return x.trim();}).filter(function(x){return x.length>0;});
+    var lower={};desired.forEach(function(x){lower[x.toLowerCase()]=1;});
+    var remove=(s.Labels||[]).filter(function(l){return !lower[l.toLowerCase()];});
+    api("/v1.0/api/sessions/"+encodeURIComponent(id)+"/metadata","POST",{AddLabels:desired,RemoveLabels:remove}).then(function(){closeModal();loadSessions();toast(t("sess.metaSaved"));}).catch(function(e){toast(e.message,true);});
+  });}
+/* Edit a session's tags: reconcile the comma-separated key:value set via the metadata PATCH. */
+function editSeTags(id){var s=null;for(var i=0;i<_se.length;i++){if(_se[i].Id===id){s=_se[i];break;}}if(!s)return;
+  var cur=(s.Tags||[]).map(function(tg){return tg.Key+": "+tg.Value;}).join(", ");
+  formModal(t("sess.editTags"),[{id:"tags",label:t("sess.tags"),type:"text",placeholder:t("sess.tagsPh")}],{tags:cur},function(v){
+    var setTags=[],keep={};(v.tags||"").split(",").forEach(function(part){var c=part.indexOf(":");if(c<0)return;var k=part.slice(0,c).trim(),val=part.slice(c+1).trim();if(k&&val){setTags.push({Key:k,Value:val});keep[k.toLowerCase().replace(/\s+/g,"-")]=1;}});
+    var remove=(s.Tags||[]).map(function(tg){return tg.Key;}).filter(function(k){return !keep[k.toLowerCase()];});
+    api("/v1.0/api/sessions/"+encodeURIComponent(id)+"/metadata","POST",{SetTags:setTags,RemoveTagKeys:remove}).then(function(){closeModal();loadSessions();toast(t("sess.metaSaved"));}).catch(function(e){toast(e.message,true);});
+  });}
 function exportSe(id,fmt){api("/v1.0/api/sessions/export?id="+encodeURIComponent(id)+"&format="+fmt).then(function(r){
   var blob=new Blob([r.Content],{type:fmt==="html"?"text/html":"text/markdown"});
   var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=r.Filename;document.body.appendChild(a);a.click();document.body.removeChild(a);
@@ -1992,28 +2014,34 @@ function renderHome(d){
   el("home_quick").innerHTML='<button class="btn" data-goto="chat">💬 '+esc(t("quick.newchat"))+'</button><button class="btn secondary" data-action="addendpoint">🔌 '+esc(t("quick.addep"))+'</button><button class="btn secondary" data-goto="sessions">🗂️ '+esc(t("quick.sessions"))+'</button><button class="btn secondary" data-goto="settings">⚙️ '+esc(t("quick.settings"))+'</button>';
 }
 /* ================= Usage analytics ================= */
-var usageState={range:"day",endpoint:"",model:"",tab:"tokens",buckets:[],summary:null,wired:false};
+var usageState={range:"day",endpoint:"",model:"",label:"",tag:"",tab:"tokens",buckets:[],summary:null,wired:false};
 function fmtTok(n){n=n||0;if(n>=1e6)return (n/1e6).toFixed(n>=1e7?0:1)+"M";if(n>=1e3)return (n/1e3).toFixed(n>=1e4?0:1)+"k";return ""+Math.round(n);}
 function fmtUsd(n){n=n||0;if(n===0)return "$0";if(n<0.01)return "$"+n.toFixed(4);if(n<1)return "$"+n.toFixed(3);return "$"+n.toFixed(2);}
 function fmtMsCompact(n){n=Math.round(n||0);if(n>=1000)return (n/1000).toFixed(2)+"s";return n+"ms";}
 function fmtPct(n){return ((n||0)*100).toFixed(1)+"%";}
 function fmtWhenAbs(ms){try{return new Date(ms).toLocaleString();}catch(e){return ""+ms;}}
-function usageQuery(extra){var p="range="+usageState.range;if(usageState.endpoint)p+="&endpoint="+encodeURIComponent(usageState.endpoint);if(usageState.model)p+="&model="+encodeURIComponent(usageState.model);if(extra)p+=extra;return p;}
+function usageQuery(extra){var p="range="+usageState.range;if(usageState.endpoint)p+="&endpoint="+encodeURIComponent(usageState.endpoint);if(usageState.model)p+="&model="+encodeURIComponent(usageState.model);if(usageState.label)p+="&label="+encodeURIComponent(usageState.label);if(usageState.tag)p+="&tag="+encodeURIComponent(usageState.tag);if(extra)p+=extra;return p;}
 function loadUsage(){
   if(!usageState.wired){wireUsage();usageState.wired=true;}
   api("/v1.0/api/usage/filters").then(function(f){
     el("us_disabled").style.display=f.Enabled?"none":"";
-    fillUsageSelect("us_endpoint",f.Endpoints,usageState.endpoint,"All endpoints");
-    fillUsageSelect("us_model",f.Models,usageState.model,"All models");
+    fillUsageSelect("us_endpoint",f.Endpoints,usageState.endpoint,t("us.allEndpoints"));
+    fillUsageSelect("us_model",f.Models,usageState.model,t("us.allModels"));
+    fillUsageSelect("us_label",f.Labels,usageState.label,t("us.allLabels"));
+    fillUsageTagSelect("us_tag",f.Tags,usageState.tag,t("us.allTags"));
   }).catch(function(){});
   refreshUsage();
 }
 function fillUsageSelect(id,vals,cur,allLabel){var s=el(id);if(!s)return;var o='<option value="">'+esc(allLabel)+'</option>';(vals||[]).forEach(function(v){o+='<option value="'+esc(v)+'"'+(v===cur?" selected":"")+'>'+esc(v)+'</option>';});s.innerHTML=o;s.value=cur||"";}
+/* Tags arrive as {Key,Value}; the option value is the wire form "key:value" and the label is "key: value". */
+function fillUsageTagSelect(id,tags,cur,allLabel){var s=el(id);if(!s)return;var o='<option value="">'+esc(allLabel)+'</option>';(tags||[]).forEach(function(tg){var v=tg.Key+":"+tg.Value;o+='<option value="'+esc(v)+'"'+(v===cur?" selected":"")+'>'+esc(tg.Key+": "+tg.Value)+'</option>';});s.innerHTML=o;s.value=cur||"";}
 function wireUsage(){
   Array.prototype.forEach.call(document.querySelectorAll("#us_range button"),function(b){b.addEventListener("click",function(){usageState.range=b.dataset.range;Array.prototype.forEach.call(document.querySelectorAll("#us_range button"),function(x){x.classList.toggle("active",x===b);});refreshUsage();});});
   Array.prototype.forEach.call(document.querySelectorAll("#us_tabs button"),function(b){b.addEventListener("click",function(){usageState.tab=b.dataset.tab;Array.prototype.forEach.call(document.querySelectorAll("#us_tabs button"),function(x){x.classList.toggle("active",x===b);});drawUsageChart();renderUsageKpis();});});
   el("us_endpoint").addEventListener("change",function(){usageState.endpoint=this.value;refreshUsage();});
   el("us_model").addEventListener("change",function(){usageState.model=this.value;refreshUsage();});
+  el("us_label").addEventListener("change",function(){usageState.label=this.value;refreshUsage();});
+  el("us_tag").addEventListener("change",function(){usageState.tag=this.value;refreshUsage();});
 }
 function refreshUsage(){
   el("us_kpis").innerHTML='<div class="empty"><div class="spinner"></div></div>';
@@ -2294,7 +2322,7 @@ wireTable("hooks_list",{menu:function(i){return [{label:t("act.edit"),run:functi
 wireTable("cmds_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openCmd(i);}},{label:t("act.duplicate"),run:function(){openCmd(-1,dupOf(_hooks.Commands[i],"Name"));}},{label:t("act.viewjson"),run:function(){viewJson("Command · /"+_hooks.Commands[i].Name,_hooks.Commands[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delCmd(i);}}];},row:function(i){openCmd(i);},add:function(){openCmd(-1);}});
 wireTable("keybindings_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openKb(i);}},{label:t("act.duplicate"),run:function(){openKb(-1,dupOf(_kb[i],"CommandId"));}},{label:t("act.viewjson"),run:function(){viewJson("Keybinding · "+_kb[i].CommandId,_kb[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delKb(i);}}];},row:function(i){openKb(i);},add:function(){openKb(-1);}});
 wireTable("skills_list",{menu:function(i){var s=_sk[i];return [{label:t("act.edit"),run:function(){openSk(s.Name);}},{label:t("act.view"),run:function(){viewSk(s.Name);}},{label:s.Enabled?t("act.disable"):t("act.enable"),run:function(){toggleSk(s.Name);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delSk(s.Name);}}];},row:function(i){var s=_sk[i];if(s)openSk(s.Name);},add:function(){openSk(null);}});
-wireTable("sessions_list",{menu:function(i){var id=_se[i].Id;return [{label:"View Markdown",run:function(){viewSe(id,"md");}},{label:"View HTML",run:function(){viewSe(id,"html");}},{sep:true},{label:"Download Markdown",run:function(){exportSe(id,"md");}},{label:"Download HTML",run:function(){exportSe(id,"html");}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delSe(id);}}];},row:function(i){viewSe(_se[i].Id,"md");}});
+wireTable("sessions_list",{menu:function(i){var id=_se[i].Id;return [{label:"View Markdown",run:function(){viewSe(id,"md");}},{label:"View HTML",run:function(){viewSe(id,"html");}},{sep:true},{label:t("sess.editLabels"),run:function(){editSeLabels(id);}},{label:t("sess.editTags"),run:function(){editSeTags(id);}},{sep:true},{label:"Download Markdown",run:function(){exportSe(id,"md");}},{label:"Download HTML",run:function(){exportSe(id,"html");}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delSe(id);}}];},row:function(i){viewSe(_se[i].Id,"md");}});
 wireTable("usage_history_list",{menu:function(i){return [{label:t("act.view"),run:function(){viewUsageRow(i);}},{label:t("act.viewjson"),run:function(){viewJson("Usage event",_uhist[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delUsageRow(i);}}];},row:function(i){viewUsageRow(i);}});
 wireTable("pricing_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openPrice(i);}},{label:t("act.duplicate"),run:function(){openPrice(-1,{Model:"",Input:_pr2[i].Input,Cached:_pr2[i].Cached,Output:_pr2[i].Output});}},{label:t("act.viewjson"),run:function(){viewJson("Pricing · "+_pr2[i].Model,_pr2[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delPrice(i);}}];},row:function(i){openPrice(i);},add:function(){openPrice(-1);}});
 var comp=el("composer");

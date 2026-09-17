@@ -215,6 +215,20 @@ namespace Mux.Cli.Commands
         public List<string> AddDir { get; set; } = new List<string>();
 
         /// <summary>
+        /// Freeform labels to attach to the session at launch. Repeatable.
+        /// </summary>
+        [Description("Attach a label to the session (repeatable).")]
+        [CommandOption("--label")]
+        public List<string> Labels { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Key/value tags (<c>key:value</c>) to attach to the session at launch. Repeatable.
+        /// </summary>
+        [Description("Attach a key:value tag to the session (repeatable).")]
+        [CommandOption("--tag")]
+        public List<string> Tags { get; set; } = new List<string>();
+
+        /// <summary>
         /// Application-level confinement posture: none, read-only, or workspace-write.
         /// </summary>
         [Description("Confinement posture: none, read-only, or workspace-write.")]

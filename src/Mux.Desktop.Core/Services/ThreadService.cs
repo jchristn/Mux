@@ -70,6 +70,34 @@ namespace Mux.Desktop.Services
         }
 
         /// <inheritdoc />
+        public async Task<ThreadSummary?> AddLabelAsync(string id, string label, CancellationToken token)
+        {
+            SessionInfo? info = await _Sessions.AddLabelAsync(id, label, token).ConfigureAwait(false);
+            return info == null ? null : MapToSummary(info);
+        }
+
+        /// <inheritdoc />
+        public async Task<ThreadSummary?> RemoveLabelAsync(string id, string label, CancellationToken token)
+        {
+            SessionInfo? info = await _Sessions.RemoveLabelAsync(id, label, token).ConfigureAwait(false);
+            return info == null ? null : MapToSummary(info);
+        }
+
+        /// <inheritdoc />
+        public async Task<ThreadSummary?> SetTagAsync(string id, string key, string value, CancellationToken token)
+        {
+            SessionInfo? info = await _Sessions.SetTagAsync(id, key, value, token).ConfigureAwait(false);
+            return info == null ? null : MapToSummary(info);
+        }
+
+        /// <inheritdoc />
+        public async Task<ThreadSummary?> RemoveTagAsync(string id, string key, CancellationToken token)
+        {
+            SessionInfo? info = await _Sessions.RemoveTagAsync(id, key, token).ConfigureAwait(false);
+            return info == null ? null : MapToSummary(info);
+        }
+
+        /// <inheritdoc />
         public async Task<ThreadSummary?> DuplicateAsync(string id, CancellationToken token)
         {
             SessionInfo? info = await _Sessions.DuplicateAsync(id, token).ConfigureAwait(false);
@@ -98,7 +126,9 @@ namespace Mux.Desktop.Services
                 info.CreatedUtc,
                 info.UpdatedUtc,
                 info.MessageCount,
-                info.TitlePinned);
+                info.TitlePinned,
+                info.Labels,
+                info.Tags);
         }
     }
 }

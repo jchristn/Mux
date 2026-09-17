@@ -588,6 +588,12 @@ namespace Mux.Desktop.Shell
             MenuItem export = new MenuItem { Header = L("thread.export") };
             export.Click += (sender, args) => _ = ExportThreadAsync(item.Id, DisplayTitle(item));
             menu.Items.Add(export);
+            MenuItem labels = new MenuItem { Header = L("thread.labels") };
+            labels.Click += (sender, args) => _ = EditThreadLabelsAsync(item);
+            menu.Items.Add(labels);
+            MenuItem tags = new MenuItem { Header = L("thread.tags") };
+            tags.Click += (sender, args) => _ = EditThreadTagsAsync(item);
+            menu.Items.Add(tags);
             menu.Items.Add(new Separator());
             MenuItem delete = new MenuItem { Header = L("act.delete"), Foreground = _Theme.Error };
             delete.Click += (sender, args) => _ = DeleteThreadAsync(item.Id, DisplayTitle(item));
@@ -2999,6 +3005,82 @@ namespace Mux.Desktop.Shell
 
             await LoadThreadsAsync();
             NotifySessionsChanged(id);
+        }
+
+        // Edit a thread's labels: prompt for a comma-separated set and reconcile (remove dropped, add new)
+        // through the shared thread service so normalization matches every surface.
+        private async Task EditThreadLabelsAsync(ThreadSummary item)
+        {
+            string existing = string.Join(", ", item.Labels);
+            string? result = await new InputDialog(L("thread.labels"), L("thread.labels"), existing).ShowDialog<string?>(this);
+            if (result == null)
+            {
+                return;
+            }
+
+            List<string> desired = new List<string>();
+            foreach (string part in result.Split(','))
+            {
+                if (Mux.Core.Sessions.SessionMetadataNormalizer.TryNormalizeLabel(part, out string normalized, out _)
+                    && !desired.Exists(l => string.Equals(l, normalized, StringComparison.OrdinalIgnoreCase)))
+                {
+                    desired.Add(normalized);
+                }
+            }
+
+            foreach (string label in item.Labels)
+            {
+                if (!desired.Exists(l => string.Equals(l, label, StringComparison.OrdinalIgnoreCase)))
+                {
+                    await _Threads.RemoveLabelAsync(item.Id, label, CancellationToken.None);
+                }
+            }
+
+            foreach (string label in desired)
+            {
+                await _Threads.AddLabelAsync(item.Id, label, CancellationToken.None);
+            }
+
+            await LoadThreadsAsync();
+            NotifySessionsChanged(item.Id);
+        }
+
+        // Edit a thread's tags: prompt for a comma-separated key:value set and reconcile through the service.
+        private async Task EditThreadTagsAsync(ThreadSummary item)
+        {
+            List<string> existingParts = new List<string>();
+            foreach (Mux.Core.Sessions.SessionTag tag in item.Tags) existingParts.Add(tag.Key + ": " + tag.Value);
+            string? result = await new InputDialog(L("thread.tags"), L("thread.tags"), string.Join(", ", existingParts)).ShowDialog<string?>(this);
+            if (result == null)
+            {
+                return;
+            }
+
+            List<Mux.Core.Sessions.SessionTag> desired = new List<Mux.Core.Sessions.SessionTag>();
+            foreach (string part in result.Split(','))
+            {
+                if (Mux.Core.Sessions.SessionMetadataNormalizer.TryParseTag(part, out Mux.Core.Sessions.SessionTag? tag, out _) && tag != null
+                    && !desired.Exists(t => string.Equals(t.Key, tag.Key, StringComparison.OrdinalIgnoreCase)))
+                {
+                    desired.Add(tag);
+                }
+            }
+
+            foreach (Mux.Core.Sessions.SessionTag tag in item.Tags)
+            {
+                if (!desired.Exists(t => string.Equals(t.Key, tag.Key, StringComparison.OrdinalIgnoreCase)))
+                {
+                    await _Threads.RemoveTagAsync(item.Id, tag.Key, CancellationToken.None);
+                }
+            }
+
+            foreach (Mux.Core.Sessions.SessionTag tag in desired)
+            {
+                await _Threads.SetTagAsync(item.Id, tag.Key, tag.Value, CancellationToken.None);
+            }
+
+            await LoadThreadsAsync();
+            NotifySessionsChanged(item.Id);
         }
 
         // Broadcast a conversation-list change (rename/delete) to the hub so other surfaces refresh live.

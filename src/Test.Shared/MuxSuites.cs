@@ -124,6 +124,7 @@ namespace Test.Shared
 
                     // Mux.Core / Sessions shared management verbs (cross-surface parity).
                     SessionManagerSuite.Create(),
+                    SessionMetadataNormalizerSuite.Create(),
 
                     // Mux.Core / Utility: shared /cwd path resolver.
                     WorkingDirectoryResolverSuite.Create(),
@@ -254,6 +255,9 @@ namespace Test.Shared
 
                     // Usage telemetry: SQLite store schema, inserts, retention, and concurrent writers.
                     UsageStoreSuite.Create(),
+
+                    // Usage telemetry: filter/breakdown by session label/tag (query-time join).
+                    UsageMetadataFilterSuite.Create(),
 
                     // Usage telemetry: live REST endpoints over a seeded store.
                     UsageRoutesSuite.Create(),

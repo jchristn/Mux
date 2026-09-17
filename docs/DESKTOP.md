@@ -32,7 +32,7 @@ Only one desktop instance runs per config directory (a single-instance lock); la
 
 The shell has three regions:
 
-- **Sidebar** — your saved conversations, newest first. `+ New` starts a fresh thread; the `⟳` icon refreshes the list; each row has actions (rename, delete). Threads created here are ordinary mux sessions, so the TUI and dashboard see them too. **Bulk delete** clears many at once.
+- **Sidebar** — your saved conversations, newest first. `+ New` starts a fresh thread; the `⟳` icon refreshes the list; each row has actions (rename, **Edit labels…**, **Edit tags…**, delete). Labels and tags attached here persist with the session and are filterable in the usage analytics on every surface. Threads created here are ordinary mux sessions, so the TUI and dashboard see them too. **Bulk delete** clears many at once.
 - **Header** — the active endpoint/model selector, the About / Help button, and access to the managers and analytics described below.
 - **Workspace** — the transcript and the composer.
 

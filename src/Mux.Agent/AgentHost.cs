@@ -148,13 +148,17 @@ namespace Mux.Agent
             _Telemetry?.Dispose();
             _Telemetry = Mux.Core.Telemetry.UsageTelemetry.Create(settings, SettingsLoader.GetConfigDirectory(), null);
 
+            SessionStore agentSessionStore = new SessionStore(sessionsDir);
+
             _Server = new MuxServer(
                 rest,
                 Defaults.ProductVersion,
-                new SessionStore(sessionsDir),
+                agentSessionStore,
                 () => SettingsLoader.LoadEndpoints(),
                 logger: null,
-                usageQuery: _Telemetry.CreateQueryService(() => SettingsLoader.LoadPricing()),
+                usageQuery: _Telemetry.CreateQueryService(
+                    () => SettingsLoader.LoadPricing(),
+                    new Mux.Core.Telemetry.SessionStoreMetadataIndex(agentSessionStore)),
                 usageRecorder: _Telemetry.Recorder);
 
             _Server.Start();

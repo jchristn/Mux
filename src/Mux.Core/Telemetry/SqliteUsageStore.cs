@@ -738,6 +738,29 @@ WHERE id IN (
                     command.Parameters.AddWithValue("$fsession", filter.SessionId);
                 }
 
+                if (filter.SessionIds != null)
+                {
+                    if (filter.SessionIds.Count == 0)
+                    {
+                        // Label/tag constraints resolved to no session — the result set is empty by definition.
+                        conditions.Add("0 = 1");
+                    }
+                    else
+                    {
+                        List<string> placeholders = new List<string>();
+                        int index = 0;
+                        foreach (string sessionId in filter.SessionIds)
+                        {
+                            string name = "$fsid" + index.ToString(CultureInfo.InvariantCulture);
+                            placeholders.Add(name);
+                            command.Parameters.AddWithValue(name, sessionId ?? string.Empty);
+                            index++;
+                        }
+
+                        conditions.Add("session_id IN (" + string.Join(", ", placeholders) + ")");
+                    }
+                }
+
                 if (filter.CallKind.HasValue)
                 {
                     conditions.Add("call_kind = $kind");

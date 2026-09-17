@@ -2,6 +2,27 @@
 
 All notable changes to mux are documented here.
 
+## 1.0.0
+
+### Added
+
+- **Session labels and tags.** Annotate any session with **labels** (freeform strings like `wip` or
+  `customer-acme`) and **tags** (`key: value` pairs like `env: prod`), then filter the usage analytics by
+  label, by tag, or by any combination alongside the existing endpoint/model filters. Metadata persists with
+  the session and propagates across every surface. Manage it from anywhere: the terminal (`/label`, `/tag`,
+  `/labels`, `/tags`, and `/usage label|tag …` to scope the charts), launch flags (`mux --label … --tag …`),
+  a headless verb (`mux session <id> label|tag|unlabel|untag|show`, `mux session --list`), the Desktop app
+  and VS Code (right-click a session → Edit labels / Edit tags), the web dashboard's **Sessions** page, and a
+  new REST endpoint (`POST /v1.0/api/sessions/{id}/metadata`). Tag keys are normalized (lowercased and
+  slugified) so the same concept is one filter facet; values and labels are free-form UTF-8. Usage filtering
+  joins each call to its session's *current* metadata at query time, so relabeling a session refilters its
+  whole history retroactively; a session carrying several labels counts under each in a label breakdown.
+
+### Changed
+
+- **First stable release.** All shipping components are versioned `1.0.0`, and the reusable libraries
+  (`Mux.Core`, `Mux.Server`, `Mux.Desktop.Core`) are packaged for NuGet with symbol packages.
+
 ## 0.12.3
 
 ### Added

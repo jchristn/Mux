@@ -3,6 +3,7 @@ namespace Mux.Desktop.Services
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Sessions;
 
     /// <summary>
     /// Manages conversations/threads over the mux session store: list, create, rename, pin, duplicate,
@@ -45,6 +46,35 @@ namespace Mux.Desktop.Services
         /// <param name="token">A cancellation token.</param>
         /// <returns>True when updated; false when the thread does not exist.</returns>
         Task<bool> SetTitlePinnedAsync(string id, bool pinned, CancellationToken token);
+
+        /// <summary>Attach a freeform label to a thread (idempotent; deduped case-insensitively).</summary>
+        /// <param name="id">The thread id.</param>
+        /// <param name="label">The raw label; normalized before saving.</param>
+        /// <param name="token">A cancellation token.</param>
+        /// <returns>The updated summary, or null when the thread does not exist.</returns>
+        Task<ThreadSummary?> AddLabelAsync(string id, string label, CancellationToken token);
+
+        /// <summary>Remove a label from a thread (no-op when absent).</summary>
+        /// <param name="id">The thread id.</param>
+        /// <param name="label">The label to remove.</param>
+        /// <param name="token">A cancellation token.</param>
+        /// <returns>The updated summary, or null when the thread does not exist.</returns>
+        Task<ThreadSummary?> RemoveLabelAsync(string id, string label, CancellationToken token);
+
+        /// <summary>Set (upsert by key) a key/value tag on a thread.</summary>
+        /// <param name="id">The thread id.</param>
+        /// <param name="key">The raw tag key; normalized before saving.</param>
+        /// <param name="value">The tag value; normalized before saving.</param>
+        /// <param name="token">A cancellation token.</param>
+        /// <returns>The updated summary, or null when the thread does not exist.</returns>
+        Task<ThreadSummary?> SetTagAsync(string id, string key, string value, CancellationToken token);
+
+        /// <summary>Remove a tag by key from a thread (no-op when absent).</summary>
+        /// <param name="id">The thread id.</param>
+        /// <param name="key">The raw tag key; normalized before matching.</param>
+        /// <param name="token">A cancellation token.</param>
+        /// <returns>The updated summary, or null when the thread does not exist.</returns>
+        Task<ThreadSummary?> RemoveTagAsync(string id, string key, CancellationToken token);
 
         /// <summary>
         /// Duplicate (fork) a thread from its current state under a new id.

@@ -332,6 +332,12 @@ namespace Mux.Cli.Commands
                     case "--add-dir":
                         settings.AddDir.Add(ReadValue(option, inlineValue, args, ref i));
                         break;
+                    case "--label":
+                        settings.Labels.Add(ReadValue(option, inlineValue, args, ref i));
+                        break;
+                    case "--tag":
+                        settings.Tags.Add(ReadValue(option, inlineValue, args, ref i));
+                        break;
                     case "--sandbox":
                         settings.Sandbox = ReadValue(option, inlineValue, args, ref i);
                         break;

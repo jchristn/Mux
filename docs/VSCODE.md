@@ -64,9 +64,11 @@ Nothing is dropped silently.
 ## Sessions
 
 The **Sessions** view lists the shared mux session store, newest first. Resume opens a conversation into the
-panel with its transcript intact; rename, duplicate, export (Markdown or HTML), and delete are on the row's
-context menu. Because this is the same store the terminal UI and desktop app read, a session you started
-anywhere is here, and a session you start here is there.
+panel with its transcript intact; rename, duplicate, **Edit Labels…**, **Edit Tags…**, export (Markdown or
+HTML), and delete are on the row's context menu. Labels (`#wip`) and tags (`env:prod`) show in the row
+description and are filterable in the usage analytics; editing them prompts for a comma-separated set.
+Because this is the same store the terminal UI and desktop app read, a session you started anywhere is here,
+and a session you start here is there.
 
 ## Managing mux from the editor
 

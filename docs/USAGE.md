@@ -131,8 +131,8 @@ Type a leading `/` in the composer to run a command instead of submitting a prom
 also reachable by key and the menu (one catalog, three surfaces):
 `/endpoint` (`/model`), `/effort` (`/reasoning`), `/settings` (`/config`, `/preferences`, `/prefs`),
 `/help` (`/?`), `/clear`, `/sidebar`, `/save`, `/export` (`/share`), `/undo`, `/redo`, `/sessions`,
-`/tasks`, `/usage` (`/stats`, `/spend`), `/theme`, `/mouse`, `/menu`, `/quit` (`/exit`). Any custom
-commands from `hooks.json` also appear here as `/<name>`.
+`/label` (`/labels`), `/tag` (`/tags`), `/tasks`, `/usage` (`/stats`, `/spend`), `/theme`, `/mouse`,
+`/menu`, `/quit` (`/exit`). Any custom commands from `hooks.json` also appear here as `/<name>`.
 
 Key chords for these commands can be rebound in `~/.mux/keybindings.json` — see
 [CONFIG.md](CONFIG.md#keybindingsjson-custom-key-chords). `/help` lists the current command ids.
@@ -196,6 +196,37 @@ The session autosaves at each turn boundary. `Ctrl+S` / `/save` saves on demand;
 resumes saved sessions (under `~/.mux/sessions`). A resumed session shows the completed conversation
 read-only and marks an interrupted turn as re-run-required — it never silently re-runs it.
 
+### Labels and tags
+
+Attach metadata to a session so you can group and filter it later. **Labels** are freeform strings
+(`wip`, `customer-acme`); **tags** are `key: value` pairs (`env: prod`, `sprint: 42`). Both persist with
+the session and propagate across every surface, and both are filterable in the usage analytics.
+
+In the terminal:
+
+```
+/label wip                 add a label            /labels        list current labels
+/label rm wip              remove a label         /tags          list current tags
+/tag env: prod             set (upsert by key)    /tag rm env    remove a tag
+```
+
+At launch, `mux --label wip --tag env:prod` seeds the session (repeatable). Headless scripts use the
+`mux session` verb:
+
+```bash
+mux session <id> label wip
+mux session <id> tag env:prod
+mux session <id> unlabel wip
+mux session <id> untag env
+mux session <id> show          # or --json
+mux session --list             # id, labels, tags per session
+```
+
+Tag **keys** are normalized — trimmed, lowercased, and slugified to `[a-z0-9._-]` (so `Env` and `env` are
+one facet) — while tag **values** and labels are free-form UTF-8. Labels dedupe case-insensitively. The
+same edits are available from the Desktop app and VS Code (right-click a session → Edit labels / Edit
+tags) and from the web dashboard's **Sessions** page.
+
 ### Exporting / sharing a session
 
 `/export` (`/share`) writes the current session to a self-contained **HTML** file and a **Markdown**
@@ -243,8 +274,13 @@ p95 TTFT/latency, and the top models by spend — read from the shared database,
 instance on the machine, not just the current one.
 
 For charts over time (token usage by type, cost, latency/TTFT percentiles, streaming time, throughput) with
-endpoint and model filters, plus a paginated per-call history, run `mux serve` and open the dashboard's
-**Usage** page; edit per-model rates on its **Pricing** page. Cost is derived from `pricing.json` at read
+endpoint, model, **label**, and **tag** filters, plus a paginated per-call history, run `mux serve` and open
+the dashboard's **Usage** page; edit per-model rates on its **Pricing** page. Filtering by label or tag joins
+each usage row to its session's *current* metadata, so relabeling a session refilters its whole history
+retroactively. A session that carries several labels counts under each in a label breakdown, so per-label
+totals can add up to more than the grand total. In the terminal, `/usage label <label>` or
+`/usage tag <key:value>` opens the charts scoped to that label or tag. Cost is derived from `pricing.json`
+at read
 time, so correcting a rate re-values history. Disable capture with `telemetry.enabled: false` (or the
 `MUX_TELEMETRY_ENABLED` environment variable). See [CONFIG.md](CONFIG.md#usage-telemetry-settingsjson-telemetry).
 

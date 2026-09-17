@@ -85,6 +85,88 @@ namespace Test.Shared.Suites
                         MuxAssert.IsNotNull(await store.LoadAsync("src", ct).ConfigureAwait(false), "source preserved");
                     }),
 
+                    Case("AddLabelDedupesAndPersists", "AddLabel normalizes, persists, and dedupes case-insensitively", async (SessionManager mgr, SessionStore store, CancellationToken ct) =>
+                    {
+                        await store.SaveAsync(new SessionSnapshot { Id = "s1", Title = "T" }, ct).ConfigureAwait(false);
+                        SessionInfo? one = await mgr.AddLabelAsync("s1", "  WIP  ", ct).ConfigureAwait(false);
+                        MuxAssert.IsNotNull(one, "added");
+                        MuxAssert.AreEqual(1, one!.Labels.Count, "one label");
+                        MuxAssert.AreEqual("WIP", one.Labels[0], "normalized (whitespace collapsed, case preserved)");
+
+                        // Case-insensitive duplicate is a no-op (still one label).
+                        SessionInfo? two = await mgr.AddLabelAsync("s1", "wip", ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(1, two!.Labels.Count, "deduped");
+
+                        SessionSnapshot? loaded = await store.LoadAsync("s1", ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(1, loaded!.Labels.Count, "persisted one label");
+                    }),
+
+                    Case("RemoveLabelNoOpWhenAbsent", "RemoveLabel removes a present label and is a no-op otherwise", async (SessionManager mgr, SessionStore store, CancellationToken ct) =>
+                    {
+                        await store.SaveAsync(new SessionSnapshot { Id = "s1", Title = "T", Labels = new List<string> { "wip" } }, ct).ConfigureAwait(false);
+                        SessionInfo? removed = await mgr.RemoveLabelAsync("s1", "WIP", ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(0, removed!.Labels.Count, "removed case-insensitively");
+
+                        SessionInfo? again = await mgr.RemoveLabelAsync("s1", "nope", ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(0, again!.Labels.Count, "no-op when absent");
+                    }),
+
+                    Case("SetTagUpsertsByKey", "SetTag normalizes the key and upserts by key", async (SessionManager mgr, SessionStore store, CancellationToken ct) =>
+                    {
+                        await store.SaveAsync(new SessionSnapshot { Id = "s1", Title = "T" }, ct).ConfigureAwait(false);
+                        SessionInfo? first = await mgr.SetTagAsync("s1", "Env", "prod", ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(1, first!.Tags.Count, "one tag");
+                        MuxAssert.AreEqual("env", first.Tags[0].Key, "key normalized to lowercase");
+                        MuxAssert.AreEqual("prod", first.Tags[0].Value, "value");
+
+                        // Same (normalized) key upserts the value rather than adding a second tag.
+                        SessionInfo? second = await mgr.SetTagAsync("s1", "ENV", "staging", ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(1, second!.Tags.Count, "upserted, not appended");
+                        MuxAssert.AreEqual("staging", second.Tags[0].Value, "value replaced");
+                    }),
+
+                    Case("RemoveTagByKey", "RemoveTag removes by normalized key", async (SessionManager mgr, SessionStore store, CancellationToken ct) =>
+                    {
+                        await store.SaveAsync(new SessionSnapshot { Id = "s1", Title = "T", Tags = new List<SessionTag> { new SessionTag("env", "prod") } }, ct).ConfigureAwait(false);
+                        SessionInfo? removed = await mgr.RemoveTagAsync("s1", "ENV", ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(0, removed!.Tags.Count, "removed by key");
+                    }),
+
+                    Case("InvalidLabelThrows", "AddLabel rejects an empty/whitespace label", async (SessionManager mgr, SessionStore store, CancellationToken ct) =>
+                    {
+                        await store.SaveAsync(new SessionSnapshot { Id = "s1", Title = "T" }, ct).ConfigureAwait(false);
+                        bool threw = false;
+                        try { await mgr.AddLabelAsync("s1", "   ", ct).ConfigureAwait(false); }
+                        catch (ArgumentException) { threw = true; }
+                        MuxAssert.IsTrue(threw, "empty label throws ArgumentException");
+                    }),
+
+                    Case("MutateMissingSessionReturnsNull", "Metadata mutations on a missing session return null", async (SessionManager mgr, SessionStore store, CancellationToken ct) =>
+                    {
+                        MuxAssert.IsNull(await mgr.AddLabelAsync("nope", "wip", ct).ConfigureAwait(false), "add label null");
+                        MuxAssert.IsNull(await mgr.SetTagAsync("nope", "env", "prod", ct).ConfigureAwait(false), "set tag null");
+                    }),
+
+                    Case("DuplicateCopiesLabelsAndTags", "Duplicate deep-copies labels and tags", async (SessionManager mgr, SessionStore store, CancellationToken ct) =>
+                    {
+                        await store.SaveAsync(new SessionSnapshot
+                        {
+                            Id = "src",
+                            Title = "Original",
+                            Labels = new List<string> { "wip" },
+                            Tags = new List<SessionTag> { new SessionTag("env", "prod") }
+                        }, ct).ConfigureAwait(false);
+
+                        SessionInfo? copy = await mgr.DuplicateAsync("src", ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(1, copy!.Labels.Count, "labels copied");
+                        MuxAssert.AreEqual(1, copy.Tags.Count, "tags copied");
+
+                        // Mutating the copy must not affect the source (deep copy).
+                        await mgr.RemoveLabelAsync(copy.Id, "wip", ct).ConfigureAwait(false);
+                        SessionSnapshot? src = await store.LoadAsync("src", ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(1, src!.Labels.Count, "source label untouched");
+                    }),
+
                     Case("DeleteRemoves", "Delete removes the session", async (SessionManager mgr, SessionStore store, CancellationToken ct) =>
                     {
                         await store.SaveAsync(new SessionSnapshot { Id = "s1", Title = "T" }, ct).ConfigureAwait(false);

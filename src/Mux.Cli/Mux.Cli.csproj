@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <Version>0.12.3</Version>
+    <Version>1.0.0</Version>
     <Description>CLI interface for mux AI agent</Description>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mux</ToolCommandName>

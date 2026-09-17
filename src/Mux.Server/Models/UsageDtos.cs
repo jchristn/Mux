@@ -17,6 +17,24 @@ namespace Mux.Server.Models
 
         /// <summary>The distinct models seen in the store.</summary>
         public List<string> Models { get; set; } = new List<string>();
+
+        /// <summary>The distinct session labels available to filter by.</summary>
+        public List<string> Labels { get; set; } = new List<string>();
+
+        /// <summary>The distinct session tags available to filter by.</summary>
+        public List<UsageTagDto> Tags { get; set; } = new List<UsageTagDto>();
+    }
+
+    /// <summary>
+    /// A key/value session tag exposed to the dashboard filter controls.
+    /// </summary>
+    public class UsageTagDto
+    {
+        /// <summary>The normalized tag key.</summary>
+        public string Key { get; set; } = string.Empty;
+
+        /// <summary>The tag value.</summary>
+        public string Value { get; set; } = string.Empty;
     }
 
     /// <summary>

@@ -165,6 +165,12 @@ namespace Mux.Server.Routes
                 {
                     dto.Endpoints = await _Query.GetEndpointsAsync(CancellationToken.None).ConfigureAwait(false);
                     dto.Models = await _Query.GetModelsAsync(CancellationToken.None).ConfigureAwait(false);
+                    dto.Labels = await _Query.GetLabelsAsync(CancellationToken.None).ConfigureAwait(false);
+                    List<Mux.Core.Sessions.SessionTag> tags = await _Query.GetTagsAsync(CancellationToken.None).ConfigureAwait(false);
+                    foreach (Mux.Core.Sessions.SessionTag tag in tags)
+                    {
+                        dto.Tags.Add(new UsageTagDto { Key = tag.Key, Value = tag.Value });
+                    }
                 }
 
                 req.Http.Response.StatusCode = 200;
@@ -252,6 +258,20 @@ namespace Mux.Server.Routes
 
             filter.EndpointName = NullIfBlank(ctx.Request.Query.Elements["endpoint"]);
             filter.Model = NullIfBlank(ctx.Request.Query.Elements["model"]);
+            filter.SessionId = NullIfBlank(ctx.Request.Query.Elements["session"]);
+
+            // Labels and tags are comma-separated. Labels: `label=wip,customer-acme`. Tags: `tag=env:prod,tier:gold`.
+            List<string> labels = ParseLabels(ctx.Request.Query.Elements["label"]);
+            if (labels.Count > 0)
+            {
+                filter.Labels = labels;
+            }
+
+            List<Mux.Core.Sessions.SessionTag> tags = ParseTags(ctx.Request.Query.Elements["tag"]);
+            if (tags.Count > 0)
+            {
+                filter.Tags = tags;
+            }
 
             string? callKind = ctx.Request.Query.Elements["callKind"];
             if (!string.IsNullOrWhiteSpace(callKind) && Enum.TryParse(callKind, true, out UsageCallKindEnum parsedKind))
@@ -312,6 +332,51 @@ namespace Mux.Server.Routes
         private static string? NullIfBlank(string? value)
         {
             return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+
+        // Splits a comma-separated label parameter and normalizes each entry, dropping any that fail
+        // normalization. Duplicates (case-insensitive) are collapsed.
+        private static List<string> ParseLabels(string? raw)
+        {
+            List<string> labels = new List<string>();
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return labels;
+            }
+
+            foreach (string part in raw.Split(','))
+            {
+                if (Mux.Core.Sessions.SessionMetadataNormalizer.TryNormalizeLabel(part, out string normalized, out _))
+                {
+                    if (!labels.Exists(l => string.Equals(l, normalized, System.StringComparison.OrdinalIgnoreCase)))
+                    {
+                        labels.Add(normalized);
+                    }
+                }
+            }
+
+            return labels;
+        }
+
+        // Splits a comma-separated tag parameter (`key:value,key:value`) and normalizes each `key:value`,
+        // dropping any that fail parsing.
+        private static List<Mux.Core.Sessions.SessionTag> ParseTags(string? raw)
+        {
+            List<Mux.Core.Sessions.SessionTag> tags = new List<Mux.Core.Sessions.SessionTag>();
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return tags;
+            }
+
+            foreach (string part in raw.Split(','))
+            {
+                if (Mux.Core.Sessions.SessionMetadataNormalizer.TryParseTag(part, out Mux.Core.Sessions.SessionTag? tag, out _) && tag != null)
+                {
+                    tags.Add(tag);
+                }
+            }
+
+            return tags;
         }
 
         #endregion
