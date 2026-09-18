@@ -226,8 +226,11 @@ namespace Test.Shared.Suites
 
                             // The active prompt is echoed to the transcript; the queued one shows in the
                             // strip above the composer and is NOT echoed to the transcript until it starts.
-                            MuxAssert.Contains("first", Join(app.TranscriptSnapshot()), "first echoed to transcript");
-                            MuxAssert.IsFalse(Join(app.TranscriptSnapshot()).Contains("second"), "second not yet in transcript");
+                            // Match the echoed prompt line ("> first" / "> second"), not the bare word: the
+                            // active turn's random "thinking" phrase can itself contain "second" (e.g.
+                            // "Having second thoughts…"), which a substring check would flakily trip.
+                            MuxAssert.Contains("> first", Join(app.TranscriptSnapshot()), "first echoed to transcript");
+                            MuxAssert.IsFalse(Join(app.TranscriptSnapshot()).Contains("> second"), "second not yet in transcript");
                             IReadOnlyList<string> strip = app.QueueStripSnapshot();
                             MuxAssert.Contains("second", Join(strip), "second shown in the queue strip");
                             MuxAssert.Contains("QUEUED", Join(strip), "queue strip labeled");
