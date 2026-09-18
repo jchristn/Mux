@@ -9,7 +9,7 @@ loop, tools, approvals, and session store stay in mux itself. Your editor sessio
 terminal UI and desktop app show, because they read the same store. A conversation you start here resumes
 there, and one you start there opens here.
 
-> Alpha. Tracks the mux `contractVersion` API and may change alongside it.
+> Beta. Tracks the mux `contractVersion` API and may change alongside it.
 
 ## Requirements
 

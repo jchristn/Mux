@@ -8,4 +8,4 @@ Web-search abstractions and provider clients used by [**mux**](https://github.co
 
 MIT. See the [repository](https://github.com/jchristn/Mux) for full documentation.
 
-> **Alpha:** APIs may change between releases.
+> **Beta:** APIs may change between releases.
