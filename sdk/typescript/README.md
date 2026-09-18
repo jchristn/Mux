@@ -5,7 +5,7 @@ A thin TypeScript driver for the [mux](../../README.md) CLI. It does not reimple
 plus an aggregated result. Because it wraps the CLI and its `contractVersion`-versioned JSONL contract, the
 SDK stays backend-agnostic and in lockstep with mux itself.
 
-> Beta, tracking mux `v0.7.0`. The API may change alongside the CLI.
+> Beta. Tracks the mux JSONL `contractVersion` and may change alongside the CLI.
 
 ## Requirements
 
