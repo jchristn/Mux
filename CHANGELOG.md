@@ -6,6 +6,12 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **Installers require MIT license acceptance.** The interactive installers now display the license from
+  `LICENSE.md` and demand acceptance before proceeding: the Inno `.exe` shows a license page (Next disabled
+  until accepted), the WiX `.msi` shows the WixUI license dialog, and the macOS `.dmg` carries a Software
+  License Agreement that gates mounting behind an Agree/Disagree prompt. Package-manager channels continue to
+  record the `MIT` SPDX id as metadata (they have no interactive acceptance step).
+
 - **Session labels and tags.** Annotate any session with **labels** (freeform strings like `wip` or
   `customer-acme`) and **tags** (`key: value` pairs like `env: prod`), then filter the usage analytics by
   label, by tag, or by any combination alongside the existing endpoint/model filters. Metadata persists with

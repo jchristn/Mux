@@ -18,9 +18,18 @@ Version defaults to `<Version>` in `src/Mux.Cli/Mux.Cli.csproj`; pass one explic
 ## Prerequisites
 
 - **All platforms:** .NET SDK 8 and 10.
-- **Windows:** [Inno Setup](https://jrsoftware.org/isdl.php) (`iscc` on PATH); WiX (`wix`) only if you enable the `.msi` channel.
+- **Windows:** [Inno Setup](https://jrsoftware.org/isdl.php) (`iscc` on PATH); WiX (`wix`) only if you enable the `.msi` channel. The `.msi` license dialog uses the WixUI extension — add it once with `wix extension add -g WixToolset.UI.wixext`.
 - **macOS:** Xcode command-line tools (`xcode-select --install`) — provides `hdiutil`, `sips`, `iconutil`.
 - **Linux:** `fpm`, `rpm`, `appimagetool`, `createrepo_c`, `dpkg-dev`, `apt-utils` (`libfuse2` for AppImage).
+
+### License acceptance
+
+The interactive installers show the project's MIT license (from `LICENSE.md`) and require the user to
+accept it before continuing: the Inno `.exe` renders a license page (Next stays disabled until "I accept the
+agreement" is selected), the WiX `.msi` shows the WixUI license dialog (Install disabled until accepted), and
+the macOS `.dmg` carries a Software License Agreement that gates mounting behind an Agree/Disagree prompt.
+Package-manager channels (winget, Chocolatey, Scoop, Homebrew, apt/yum, NuGet) instead record the `MIT` SPDX
+id as metadata — those tools have no interactive acceptance step.
 
 ## Windows
 

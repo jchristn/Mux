@@ -87,6 +87,19 @@ namespace Mux.Publisher.Channels.Drivers
                 })
                 { Description = "Create the .dmg for " + rid });
 
+                // 4b. Attach a Software License Agreement so the volume shows an Agree/Disagree prompt and will
+                //     not mount until the user accepts. Done before notarize/staple so the ticket covers the
+                //     final artifact. The resource plist carries a default-English LPic/STR# plus the license
+                //     as a TEXT resource.
+                string slaName = "dmg/" + rid + "/sla.plist";
+                plan.AddFile(slaName, Mux.Publisher.Publishing.LicenseAssets.DmgSlaResourcesPlist(
+                    Mux.Publisher.Publishing.LicenseAssets.ReadLicenseText(context.RepoRoot)));
+                plan.AddCommand(new ShellCommand("hdiutil", new List<string>
+                {
+                    "udifrez", "-xml", System.IO.Path.Combine(context.StagingRoot, slaName), "-quiet", dmgOut
+                })
+                { Description = "Attach the license agreement (SLA) to the .dmg for " + rid });
+
                 // 5. Notarize + staple.
                 if (canSign && mac!.Notarize)
                 {

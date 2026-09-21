@@ -36,6 +36,10 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("[Setup]", iss.Content, "iss has setup section");
                         MuxAssert.Contains("AppVersion=" + Version, iss.Content, "iss version");
                         MuxAssert.Contains("[Run]", iss.Content, "iss launches app post-install");
+                        // The installer must show a license page and demand acceptance before proceeding.
+                        MuxAssert.Contains("LicenseFile=", iss.Content, "iss references a license file");
+                        GeneratedFile license = Find(plan, "LICENSE.txt");
+                        MuxAssert.Contains("Permission is hereby granted", license.Content, "license text staged");
                         MuxAssert.IsTrue(HasCommand(plan, "iscc"), "compiles with iscc");
                         MuxAssert.IsTrue(HasCommand(plan, "signtool"), "signs with signtool");
                         MuxAssert.AreEqual(TargetOs.Windows, new InnoSetupDriver().RequiredOs, "requires windows");
@@ -49,6 +53,13 @@ namespace Test.Shared.Suites
                         GeneratedFile wxs = Find(plan, ".wxs");
                         MuxAssert.Contains("<Files Directory=\"INSTALLFOLDER\"", wxs.Content, "harvests publish dir");
                         MuxAssert.Contains("UpgradeCode=", wxs.Content, "stable upgrade code");
+                        // The MSI must present a license the user accepts, via the WixUI dialog set.
+                        MuxAssert.Contains("WixUI_Minimal", wxs.Content, "uses the WixUI license dialog set");
+                        MuxAssert.Contains("WixUILicenseRtf", wxs.Content, "supplies the license RTF");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "wix", "WixToolset.UI.wixext"), "references the UI extension at build");
+                        GeneratedFile rtf = Find(plan, "License.rtf");
+                        MuxAssert.Contains("\\rtf1", rtf.Content, "license is RTF");
+                        MuxAssert.Contains("Permission is hereby granted", rtf.Content, "license text present");
                         MuxAssert.IsTrue(HasCommand(plan, "wix"), "builds with wix");
                     }),
 
@@ -97,6 +108,12 @@ namespace Test.Shared.Suites
                         MuxAssert.IsTrue(HasCommandWithArg(plan, "xcrun", "notarytool"), "notarizes");
                         MuxAssert.IsTrue(HasCommandWithArg(plan, "xcrun", "stapler"), "staples");
                         MuxAssert.IsTrue(HasCommand(plan, "hdiutil"), "builds dmg");
+                        // The disk image must gate mounting behind a license agreement (SLA).
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "hdiutil", "udifrez"), "attaches the SLA with udifrez");
+                        GeneratedFile sla = Find(plan, "sla.plist");
+                        MuxAssert.Contains("LPic", sla.Content, "SLA carries the language map");
+                        MuxAssert.Contains("STR#", sla.Content, "SLA carries the button labels");
+                        MuxAssert.Contains("TEXT", sla.Content, "SLA carries the license text resource");
                     }),
 
                     Case("HomebrewCaskForGuiFormulaForCli", "Homebrew renders a cask for GUI and a formula for CLI", () =>
@@ -172,6 +189,25 @@ namespace Test.Shared.Suites
                     {
                         MuxAssert.AreEqual(StableGuid.FromString("inno:mux"), StableGuid.FromString("inno:mux"), "deterministic");
                         MuxAssert.AreNotEqual(StableGuid.FromString("inno:mux"), StableGuid.FromString("wix:mux"), "distinct seeds differ");
+                    }),
+
+                    Case("LicenseAssetsRenderEveryInstallerFormat", "license renders to plain text, RTF, and a dmg SLA resource plist", () =>
+                    {
+                        // Missing LICENSE.md falls back to the canonical MIT text so rendering never fails.
+                        string plain = Mux.Publisher.Publishing.LicenseAssets.ReadLicenseText("/nonexistent-repo");
+                        MuxAssert.Contains("MIT License", plain, "plain text carries the license");
+                        MuxAssert.Contains("Permission is hereby granted", plain, "plain text carries the grant");
+
+                        string rtf = Mux.Publisher.Publishing.LicenseAssets.ToRtf(plain);
+                        MuxAssert.IsTrue(rtf.StartsWith("{\\rtf1", StringComparison.Ordinal), "RTF header");
+                        MuxAssert.Contains("\\par", rtf, "RTF paragraph breaks");
+                        MuxAssert.Contains("Permission is hereby granted", rtf, "RTF carries the license");
+
+                        string sla = Mux.Publisher.Publishing.LicenseAssets.DmgSlaResourcesPlist(plain);
+                        MuxAssert.Contains("<key>LPic</key>", sla, "SLA language map");
+                        MuxAssert.Contains("<key>STR#</key>", sla, "SLA button labels");
+                        MuxAssert.Contains("<key>TEXT</key>", sla, "SLA license text");
+                        MuxAssert.Contains("<data>", sla, "SLA resources are base64 data");
                     })
                 });
         }

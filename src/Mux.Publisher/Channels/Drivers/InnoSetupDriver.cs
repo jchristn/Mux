@@ -44,6 +44,10 @@ namespace Mux.Publisher.Channels.Drivers
                 string appExe = System.IO.Path.GetFileName(published.PrimaryBinary);
                 string issName = "inno/" + project + "-" + rid + ".iss";
 
+                // Stage the license so the installer shows a license page the user must accept before Next.
+                string licenseName = "inno/" + project + "-" + rid + "-LICENSE.txt";
+                plan.AddFile(licenseName, Mux.Publisher.Publishing.LicenseAssets.ReadLicenseText(context.RepoRoot));
+
                 string script = RenderIss(new InnoInputs
                 {
                     AppName = display,
@@ -54,7 +58,8 @@ namespace Mux.Publisher.Channels.Drivers
                     PublishDir = published.PublishDir,
                     OutputBaseName = System.IO.Path.GetFileNameWithoutExtension(installer),
                     OutputDir = System.IO.Path.Combine(context.OutputRoot, "windows"),
-                    IconFile = System.IO.Path.Combine(context.RepoRoot, "assets", "icon-green.ico")
+                    IconFile = System.IO.Path.Combine(context.RepoRoot, "assets", "icon-green.ico"),
+                    LicenseFile = System.IO.Path.Combine(context.StagingRoot, licenseName)
                 });
                 plan.AddFile(issName, script);
 
@@ -133,6 +138,9 @@ namespace Mux.Publisher.Channels.Drivers
 
             /// <summary>The setup icon file.</summary>
             public string IconFile { get; set; } = string.Empty;
+
+            /// <summary>The license file shown on the wizard's license page (acceptance is required to proceed).</summary>
+            public string LicenseFile { get; set; } = string.Empty;
         }
 
         /// <summary>
@@ -166,6 +174,12 @@ namespace Mux.Publisher.Channels.Drivers
             if (!string.IsNullOrWhiteSpace(inputs.IconFile))
             {
                 builder.AppendLine("SetupIconFile=" + inputs.IconFile);
+            }
+
+            if (!string.IsNullOrWhiteSpace(inputs.LicenseFile))
+            {
+                // Inno shows the license page and disables Next until the user selects "I accept the agreement".
+                builder.AppendLine("LicenseFile=" + inputs.LicenseFile);
             }
 
             builder.AppendLine();
