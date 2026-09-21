@@ -53,7 +53,17 @@ namespace Mux.Publisher.Channels.Drivers
                 plan.AddCommand(new ShellCommand("mkdir", new List<string> { "-p", optDir, stageAbs + "/usr/bin" }) { Description = "Create package tree (" + rid + ")" });
                 plan.AddCommand(new ShellCommand("cp", new List<string> { "-R", published.PublishDir + "/.", optDir }) { Description = "Copy published binaries" });
                 plan.AddCommand(new ShellCommand("chmod", new List<string> { "+x", optDir + "/" + binaryName }) { Description = "Mark the launcher executable" });
-                plan.AddCommand(new ShellCommand("ln", new List<string> { "-sf", "/opt/" + project + "/" + binaryName, stageAbs + "/usr/bin/" + project }) { Description = "Symlink launcher into /usr/bin" });
+
+                // The `mux` command on PATH should be the CLI, not the GUI: when the desktop payload bundles the
+                // CLI, point /usr/bin/mux at it (and mark the bundled binaries executable). The .desktop entry
+                // still launches the GUI binary.
+                string cliBinary = published.CliBinary ?? binaryName;
+                foreach (BundledBinary extra in published.Bundled)
+                {
+                    plan.AddCommand(new ShellCommand("chmod", new List<string> { "+x", optDir + "/" + extra.FileName }) { Description = "Mark the bundled " + (string.IsNullOrEmpty(extra.Role) ? "binary" : extra.Role) + " executable" });
+                }
+
+                plan.AddCommand(new ShellCommand("ln", new List<string> { "-sf", "/opt/" + project + "/" + cliBinary, stageAbs + "/usr/bin/" + project }) { Description = "Symlink the CLI into /usr/bin" });
 
                 foreach (string type in new[] { "deb", "rpm" })
                 {

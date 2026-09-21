@@ -80,6 +80,12 @@ namespace Test.Shared.Suites
                         MuxAssert.IsTrue(manifest.Channels.ContainsKey("dmg"), "has dmg channel");
                         MuxAssert.IsTrue(manifest.Channels.ContainsKey("debrpm"), "has debrpm channel");
                         MuxAssert.IsNull(manifest.Version, "committed manifest encodes no version");
+
+                        // The desktop artifact bundles the tray agent and the CLI into its payload.
+                        ArtifactInfo? desktop = manifest.Build.Artifacts.Find(a => string.Equals(a.Id, "desktop", StringComparison.Ordinal));
+                        MuxAssert.IsNotNull(desktop, "has a desktop artifact");
+                        MuxAssert.IsTrue(desktop!.Bundle.Exists(b => b.Csproj.Contains("Mux.Agent") && b.Role == "agent"), "bundles the tray agent");
+                        MuxAssert.IsTrue(desktop.Bundle.Exists(b => b.Csproj.Contains("Mux.Cli") && b.Role == "cli"), "bundles the CLI");
                         return Task.CompletedTask;
                     })
                 });

@@ -138,6 +138,31 @@ namespace Mux.Publisher.Manifest
         /// <summary>The artifact kind, controlling how it is published and packaged.</summary>
         [JsonPropertyName("kind")]
         public ArtifactKind Kind { get; set; } = ArtifactKind.Console;
+
+        /// <summary>
+        /// Additional projects published <b>into the same payload</b> as this artifact, so one installer ships
+        /// several executables side by side (for example the desktop app bundles the tray agent and the CLI).
+        /// Each is published self-contained next to the primary binary. Empty for a single-executable artifact.
+        /// </summary>
+        [JsonPropertyName("bundle")]
+        public List<BundledProject> Bundle { get; set; } = new List<BundledProject>();
+    }
+
+    /// <summary>
+    /// A secondary project published into an artifact's payload alongside its primary binary.
+    /// </summary>
+    public sealed class BundledProject
+    {
+        /// <summary>Path to the project file, relative to the repo root.</summary>
+        [JsonPropertyName("csproj")]
+        public string Csproj { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The bundled binary's role, used by drivers to wire it correctly: <c>cli</c> (put on PATH /
+        /// <c>/usr/bin</c>), <c>agent</c> (the tray agent, discovered beside the desktop binary), or empty.
+        /// </summary>
+        [JsonPropertyName("role")]
+        public string Role { get; set; } = string.Empty;
     }
 
     /// <summary>The kind of a publishable artifact.</summary>

@@ -142,7 +142,48 @@ namespace Mux.Publisher.Publishing
                 Sha256 = File.Exists(primary) ? ComputeSha256(primary) : string.Empty
             };
 
+            // Publish any bundled projects (e.g. the tray agent and the CLI) into the SAME payload directory so
+            // one installer ships them side by side. Each is self-contained/single-file, so the extra
+            // executables coexist with the primary without dependency collisions.
+            foreach (BundledProject bundled in artifact.Bundle)
+            {
+                if (string.IsNullOrWhiteSpace(bundled.Csproj)) continue;
+
+                string bundledCsproj = Path.Combine(repoRoot, bundled.Csproj.Replace('/', Path.DirectorySeparatorChar));
+                List<string> bundledArgs = BuildPublishArgs(bundledCsproj, tfm, rid, outputDir, version);
+                ProcessResult bundledResult = await _runner.RunAsync("dotnet", bundledArgs, repoRoot, ct).ConfigureAwait(false);
+                if (bundledResult.ExitCode != 0)
+                {
+                    throw new InvalidOperationException(
+                        "dotnet publish of bundled project '" + bundled.Csproj + "' failed (" + rid + "): exit "
+                        + bundledResult.ExitCode + Environment.NewLine + bundledResult.StandardError);
+                }
+
+                published.Bundled.Add(new BundledBinary
+                {
+                    Role = bundled.Role,
+                    FileName = ProjectExecutableName(bundled.Csproj, rid)
+                });
+            }
+
             return published;
+        }
+
+        /// <summary>
+        /// Derives the published executable file name for a bundled project from its csproj name and the
+        /// target runtime (Windows adds <c>.exe</c>). The CLI project builds as <c>mux</c>, matching its
+        /// assembly name; every other project publishes under its project name.
+        /// </summary>
+        /// <param name="csproj">The project path (relative or absolute).</param>
+        /// <param name="rid">The runtime identifier.</param>
+        /// <returns>The expected executable file name (no directory).</returns>
+        public static string ProjectExecutableName(string csproj, string rid)
+        {
+            string stem = Path.GetFileNameWithoutExtension(csproj);
+            // Mux.Cli publishes as `mux` (its assembly name), not `Mux.Cli`.
+            if (string.Equals(stem, "Mux.Cli", StringComparison.OrdinalIgnoreCase)) stem = "mux";
+            bool isWindows = ChannelHelpers.OsForRid(rid) == TargetOs.Windows;
+            return isWindows ? stem + ".exe" : stem;
         }
 
         /// <summary>

@@ -53,7 +53,9 @@ namespace Mux.Publisher.Channels.Drivers
                     AppExe = appExe,
                     PublishDir = published.PublishDir,
                     Arch = rid.EndsWith("arm64", StringComparison.OrdinalIgnoreCase) ? "arm64" : "x64",
-                    LicenseRtfPath = System.IO.Path.Combine(context.StagingRoot, licenseName)
+                    LicenseRtfPath = System.IO.Path.Combine(context.StagingRoot, licenseName),
+                    // When the desktop payload bundles the CLI, add the install dir to PATH so `mux` works.
+                    AddToPath = published.CliBinary != null
                 });
                 plan.AddFile(wxsName, wxs);
 
@@ -101,6 +103,9 @@ namespace Mux.Publisher.Channels.Drivers
 
             /// <summary>Path to the RTF license shown by the WixUI dialog (acceptance is required to install).</summary>
             public string LicenseRtfPath { get; set; } = string.Empty;
+
+            /// <summary>Whether to add the install directory to the system PATH (so the bundled CLI is on PATH).</summary>
+            public bool AddToPath { get; set; }
         }
 
         /// <summary>
@@ -143,6 +148,16 @@ namespace Mux.Publisher.Channels.Drivers
             builder.AppendLine("    </StandardDirectory>");
             builder.AppendLine("    <Feature Id=\"Main\">");
             builder.AppendLine("      <Files Directory=\"INSTALLFOLDER\" Include=\"" + Xml(inputs.PublishDir) + "\\**\" />");
+            if (inputs.AddToPath)
+            {
+                // A dedicated component owns the PATH entry so the install directory (which holds the bundled
+                // CLI) is added to the system PATH and removed cleanly on uninstall.
+                string pathGuid = StableGuid.FromString("wixpath:" + inputs.ProductName);
+                builder.AppendLine("      <Component Id=\"PathEntry\" Directory=\"INSTALLFOLDER\" Guid=\"" + pathGuid + "\">");
+                builder.AppendLine("        <Environment Id=\"MuxPath\" Name=\"PATH\" Value=\"[INSTALLFOLDER]\" Part=\"last\" Action=\"set\" System=\"yes\" Permanent=\"no\" />");
+                builder.AppendLine("      </Component>");
+            }
+
             builder.AppendLine("    </Feature>");
             builder.AppendLine("  </Package>");
             builder.AppendLine("</Wix>");

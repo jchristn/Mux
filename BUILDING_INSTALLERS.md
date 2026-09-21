@@ -5,6 +5,19 @@ mux installers are built by `Mux.Publisher` (reads `publisher.json`) and wrapped
 macOS, `.deb`/`.rpm`/AppImage only on Linux, the `.exe` installer only on Windows — so one machine builds
 its own OS's installers. To build all three at once, push a `v<version>` tag and let CI do it.
 
+### What the desktop installers contain
+
+The `desktop` artifact bundles **three** executables into one payload, so a single desktop installer
+(Inno `.exe`, WiX `.msi`, `.dmg`, `.deb`/`.rpm`, AppImage, and the winget/Chocolatey/homebrew-cask channels
+built from them) lays down the **desktop app**, the **tray agent** (`Mux.Agent`), and the **CLI** (`mux`)
+side by side (`publisher.json` → `build.artifacts` → `desktop.bundle`). Placing the agent beside the desktop
+binary is what lets the app's autostart find and launch it. The CLI is put on `PATH`: Windows installers add
+the install directory to the system `PATH` (de-duplicated), and the `.deb`/`.rpm` symlink `mux` into
+`/usr/bin`. On macOS a `.dmg` cannot edit `PATH`, so `mux` ships inside the `.app` bundle and the build logs a
+one-line `ln -s … /usr/local/bin/mux` instruction; an AppImage is a single portable file, so its bundled CLI
+runs from inside the image. The CLI-only channels (Scoop, Homebrew formula, NuGet) still ship just the `mux`
+tool on their own.
+
 ## Where output goes
 
 - **Installers/binaries →** `installers/<version>/<os>/`

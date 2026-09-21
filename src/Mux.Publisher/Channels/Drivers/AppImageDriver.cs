@@ -49,6 +49,14 @@ namespace Mux.Publisher.Channels.Drivers
                 plan.AddCommand(new ShellCommand("mkdir", new List<string> { "-p", appDirAbs + "/usr/bin" }) { Description = "Create AppDir (" + rid + ")" });
                 plan.AddCommand(new ShellCommand("cp", new List<string> { "-R", published.PublishDir + "/.", appDirAbs + "/usr/bin" }) { Description = "Copy published binaries" });
                 plan.AddCommand(new ShellCommand("chmod", new List<string> { "+x", appDirAbs + "/usr/bin/" + binaryName, appDirAbs + "/AppRun" }) { Description = "Mark launcher + AppRun executable" });
+
+                // The bundled tray agent and CLI ride inside the AppDir (beside the desktop binary, so the
+                // agent autostart resolves). Mark them executable too.
+                foreach (BundledBinary extra in published.Bundled)
+                {
+                    plan.AddCommand(new ShellCommand("chmod", new List<string> { "+x", appDirAbs + "/usr/bin/" + extra.FileName }) { Description = "Mark the bundled " + (string.IsNullOrEmpty(extra.Role) ? "binary" : extra.Role) + " executable" });
+                }
+
                 plan.AddCommand(new ShellCommand("cp", new List<string> { System.IO.Path.Combine(context.RepoRoot, "assets", "icon-green.png"), appDirAbs + "/" + project + ".png" }) { Description = "Copy the app icon", ContinueOnError = true });
 
                 // appimagetool reads the target architecture from the ARCH environment variable, which

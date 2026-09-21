@@ -66,6 +66,19 @@ namespace Mux.Publisher.Channels.Drivers
                 plan.AddCommand(new ShellCommand("cp", new List<string> { System.IO.Path.Combine(context.RepoRoot, "assets", "icon-green.icns"), resourcesDir + "/" + project + ".icns" }) { Description = "Copy the app icon", ContinueOnError = true });
                 plan.AddCommand(new ShellCommand("chmod", new List<string> { "+x", macOsDir + "/" + binaryName }) { Description = "Mark the launcher executable" });
 
+                // The bundled tray agent and CLI ride inside the .app; mark them executable too. The agent is
+                // discovered beside the desktop binary (so autostart works); the CLI lives at
+                // Contents/MacOS/mux — see the note below about putting it on PATH.
+                foreach (BundledBinary extra in published.Bundled)
+                {
+                    plan.AddCommand(new ShellCommand("chmod", new List<string> { "+x", macOsDir + "/" + extra.FileName }) { Description = "Mark the bundled " + (string.IsNullOrEmpty(extra.Role) ? "binary" : extra.Role) + " executable" });
+                }
+
+                if (published.CliBinary != null)
+                {
+                    plan.AddNote("macOS: the `" + published.CliBinary + "` CLI is bundled at " + appName + "/Contents/MacOS/. A .dmg cannot edit PATH; to run `" + project + "` from a shell, symlink it: sudo ln -sf \"/Applications/" + appName + "/Contents/MacOS/" + published.CliBinary + "\" /usr/local/bin/" + project + ".");
+                }
+
                 // 3. Hardened-runtime codesign.
                 if (canSign)
                 {

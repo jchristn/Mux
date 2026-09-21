@@ -7,6 +7,7 @@ namespace Test.Shared.Suites
     using Mux.Publisher.Channels;
     using Mux.Publisher.Channels.Drivers;
     using Mux.Publisher.Manifest;
+    using Mux.Publisher.Publishing;
     using Touchstone.Core;
 
     /// <summary>
@@ -40,6 +41,9 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("LicenseFile=", iss.Content, "iss references a license file");
                         GeneratedFile license = Find(plan, "LICENSE.txt");
                         MuxAssert.Contains("Permission is hereby granted", license.Content, "license text staged");
+                        // The bundled CLI is put on PATH via a de-duplicated system PATH entry.
+                        MuxAssert.Contains("ChangesEnvironment=yes", iss.Content, "declares environment change");
+                        MuxAssert.Contains("NeedsAddPath", iss.Content, "adds the install dir to PATH");
                         MuxAssert.IsTrue(HasCommand(plan, "iscc"), "compiles with iscc");
                         MuxAssert.IsTrue(HasCommand(plan, "signtool"), "signs with signtool");
                         MuxAssert.AreEqual(TargetOs.Windows, new InnoSetupDriver().RequiredOs, "requires windows");
@@ -60,6 +64,9 @@ namespace Test.Shared.Suites
                         GeneratedFile rtf = Find(plan, "License.rtf");
                         MuxAssert.Contains("\\rtf1", rtf.Content, "license is RTF");
                         MuxAssert.Contains("Permission is hereby granted", rtf.Content, "license text present");
+                        // The bundled CLI is put on PATH via an Environment component.
+                        MuxAssert.Contains("<Environment", wxs.Content, "adds a PATH environment entry");
+                        MuxAssert.Contains("Name=\"PATH\"", wxs.Content, "targets PATH");
                         MuxAssert.IsTrue(HasCommand(plan, "wix"), "builds with wix");
                     }),
 
@@ -114,6 +121,8 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("LPic", sla.Content, "SLA carries the language map");
                         MuxAssert.Contains("STR#", sla.Content, "SLA carries the button labels");
                         MuxAssert.Contains("TEXT", sla.Content, "SLA carries the license text resource");
+                        // The tray agent and CLI ride inside the .app bundle.
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "chmod", "Mux.Agent"), "marks the bundled tray agent executable");
                     }),
 
                     Case("HomebrewCaskForGuiFormulaForCli", "Homebrew renders a cask for GUI and a formula for CLI", () =>
@@ -142,6 +151,10 @@ namespace Test.Shared.Suites
                         MuxAssert.IsTrue(HasCommandWithArg(plan, "fpm", "rpm"), "builds rpm");
                         GeneratedFile desktop = Find(plan, ".desktop");
                         MuxAssert.Contains("[Desktop Entry]", desktop.Content, "desktop entry");
+                        // /usr/bin/mux must be the CLI, not the GUI; the .desktop launcher runs the GUI binary.
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "ln", "/opt/mux/mux"), "symlinks the CLI into /usr/bin");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "chmod", "Mux.Agent"), "marks the bundled tray agent executable");
+                        MuxAssert.Contains("Mux.Desktop", desktop.Content, "desktop entry launches the GUI");
                     }),
 
                     Case("AppImagePacksSingleFile", "appimage assembles an AppDir and packs it", () =>
@@ -208,6 +221,15 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("<key>STR#</key>", sla, "SLA button labels");
                         MuxAssert.Contains("<key>TEXT</key>", sla, "SLA license text");
                         MuxAssert.Contains("<data>", sla, "SLA resources are base64 data");
+                    }),
+
+                    Case("BundledExecutableNamesResolve", "bundled project executable names map correctly per OS", () =>
+                    {
+                        // The CLI publishes as `mux` (its assembly name); Windows adds .exe.
+                        MuxAssert.AreEqual("mux.exe", PublishService.ProjectExecutableName("src/Mux.Cli/Mux.Cli.csproj", "win-x64"), "cli on windows");
+                        MuxAssert.AreEqual("mux", PublishService.ProjectExecutableName("src/Mux.Cli/Mux.Cli.csproj", "linux-x64"), "cli on linux");
+                        MuxAssert.AreEqual("Mux.Agent.exe", PublishService.ProjectExecutableName("src/Mux.Agent/Mux.Agent.csproj", "win-x64"), "agent on windows");
+                        MuxAssert.AreEqual("Mux.Agent", PublishService.ProjectExecutableName("src/Mux.Agent/Mux.Agent.csproj", "osx-arm64"), "agent on macOS");
                     })
                 });
         }
@@ -257,11 +279,18 @@ namespace Test.Shared.Suites
                 Linux = new SigningEntry { VaultRef = "GPG_SIGNING" }
             };
 
+            // The desktop artifact bundles the tray agent and the CLI into its payload.
+            if (kind == ArtifactKind.Gui)
+            {
+                artifact.Bundle.Add(new BundledProject { Csproj = "src/Mux.Agent/Mux.Agent.csproj", Role = "agent" });
+                artifact.Bundle.Add(new BundledProject { Csproj = "src/Mux.Cli/Mux.Cli.csproj", Role = "cli" });
+            }
+
             List<PublishedArtifact> published = new List<PublishedArtifact>();
             foreach (string rid in rids)
             {
                 bool win = rid.StartsWith("win", StringComparison.OrdinalIgnoreCase);
-                published.Add(new PublishedArtifact
+                PublishedArtifact pub = new PublishedArtifact
                 {
                     ArtifactId = artifact.Id,
                     Rid = rid,
@@ -271,7 +300,15 @@ namespace Test.Shared.Suites
                     Sha256 = "deadbeef",
                     ArchivePath = "out/" + Naming.Archive("mux", Version, rid),
                     ArchiveSha256 = ArchiveHash()
-                });
+                };
+
+                if (kind == ArtifactKind.Gui)
+                {
+                    pub.Bundled.Add(new BundledBinary { Role = "agent", FileName = win ? "Mux.Agent.exe" : "Mux.Agent" });
+                    pub.Bundled.Add(new BundledBinary { Role = "cli", FileName = win ? "mux.exe" : "mux" });
+                }
+
+                published.Add(pub);
             }
 
             Dictionary<string, string> checksums = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)

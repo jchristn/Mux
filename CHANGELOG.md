@@ -6,6 +6,13 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **Desktop installers bundle the app, tray agent, and CLI.** The `desktop` artifact now publishes the
+  desktop app, the tray agent (`Mux.Agent`), and the CLI (`mux`) into one payload, so a single installer
+  (Inno `.exe`, WiX `.msi`, `.dmg`, `.deb`/`.rpm`, AppImage, and the package managers built from them)
+  installs all three. The tray agent sits beside the desktop binary so the app's autostart finds it, and the
+  CLI is put on `PATH` — Windows adds the install dir to the system `PATH`, `.deb`/`.rpm` symlink `mux` into
+  `/usr/bin`; on macOS the CLI ships inside the `.app` with a logged `ln -s` hint. CLI-only channels (Scoop,
+  Homebrew formula, NuGet) still ship just the `mux` tool.
 - **Installers require MIT license acceptance.** The interactive installers now display the license from
   `LICENSE.md` and demand acceptance before proceeding: the Inno `.exe` shows a license page (Next disabled
   until accepted), the WiX `.msi` shows the WixUI license dialog, and the macOS `.dmg` carries a Software

@@ -143,5 +143,38 @@ namespace Mux.Publisher.Channels
 
         /// <summary>SHA-256 of the archive, lowercase hex; empty when not built.</summary>
         public string ArchiveSha256 { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Secondary binaries published into <see cref="PublishDir"/> alongside <see cref="PrimaryBinary"/>
+        /// (for the desktop artifact: the tray agent and the CLI). Empty for a single-executable artifact.
+        /// </summary>
+        public System.Collections.Generic.List<BundledBinary> Bundled { get; set; } = new System.Collections.Generic.List<BundledBinary>();
+
+        /// <summary>The bundled CLI binary's file name (for the PATH / <c>/usr/bin</c> launcher), or null.</summary>
+        public string? CliBinary
+        {
+            get
+            {
+                foreach (BundledBinary b in Bundled)
+                {
+                    if (string.Equals(b.Role, "cli", System.StringComparison.OrdinalIgnoreCase)) return b.FileName;
+                }
+
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A secondary executable published into an artifact's payload, tagged with its role (<c>cli</c>,
+    /// <c>agent</c>).
+    /// </summary>
+    public sealed class BundledBinary
+    {
+        /// <summary>The role: <c>cli</c>, <c>agent</c>, or empty.</summary>
+        public string Role { get; set; } = string.Empty;
+
+        /// <summary>The binary file name (no path) inside the publish directory.</summary>
+        public string FileName { get; set; } = string.Empty;
     }
 }

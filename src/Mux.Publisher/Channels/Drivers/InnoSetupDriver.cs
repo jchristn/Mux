@@ -59,7 +59,9 @@ namespace Mux.Publisher.Channels.Drivers
                     OutputBaseName = System.IO.Path.GetFileNameWithoutExtension(installer),
                     OutputDir = System.IO.Path.Combine(context.OutputRoot, "windows"),
                     IconFile = System.IO.Path.Combine(context.RepoRoot, "assets", "icon-green.ico"),
-                    LicenseFile = System.IO.Path.Combine(context.StagingRoot, licenseName)
+                    LicenseFile = System.IO.Path.Combine(context.StagingRoot, licenseName),
+                    // When the desktop payload bundles the CLI, put the install dir on PATH so `mux` works.
+                    AddToPath = published.CliBinary != null
                 });
                 plan.AddFile(issName, script);
 
@@ -141,6 +143,9 @@ namespace Mux.Publisher.Channels.Drivers
 
             /// <summary>The license file shown on the wizard's license page (acceptance is required to proceed).</summary>
             public string LicenseFile { get; set; } = string.Empty;
+
+            /// <summary>Whether to add the install directory to the system PATH (so the bundled CLI is on PATH).</summary>
+            public bool AddToPath { get; set; }
         }
 
         /// <summary>
@@ -169,6 +174,10 @@ namespace Mux.Publisher.Channels.Drivers
             builder.AppendLine("SolidCompression=yes");
             builder.AppendLine("ArchitecturesInstallIn64BitMode=x64compatible");
             builder.AppendLine("WizardStyle=modern");
+            if (inputs.AddToPath)
+            {
+                builder.AppendLine("ChangesEnvironment=yes");
+            }
             builder.AppendLine("OutputBaseFilename=" + inputs.OutputBaseName);
             builder.AppendLine("OutputDir=" + inputs.OutputDir);
             if (!string.IsNullOrWhiteSpace(inputs.IconFile))
@@ -196,6 +205,28 @@ namespace Mux.Publisher.Channels.Drivers
             builder.AppendLine("[Run]");
             builder.AppendLine("; Launch after install; the app registers login-startup for the tray agent on first run.");
             builder.AppendLine("Filename: \"{app}\\" + inputs.AppExe + "\"; Description: \"Launch " + inputs.AppName + "\"; Flags: nowait postinstall skipifsilent");
+
+            if (inputs.AddToPath)
+            {
+                // Add the install dir (which holds the bundled CLI) to the system PATH, de-duplicated.
+                builder.AppendLine();
+                builder.AppendLine("[Registry]");
+                builder.AppendLine("Root: HKLM; Subkey: \"System\\CurrentControlSet\\Control\\Session Manager\\Environment\"; ValueType: expandsz; ValueName: \"Path\"; ValueData: \"{olddata};{app}\"; Check: NeedsAddPath('{app}')");
+                builder.AppendLine();
+                builder.AppendLine("[Code]");
+                builder.AppendLine("function NeedsAddPath(Param: string): Boolean;");
+                builder.AppendLine("var");
+                builder.AppendLine("  OrigPath: string;");
+                builder.AppendLine("begin");
+                builder.AppendLine("  if not RegQueryStringValue(HKEY_LOCAL_MACHINE, 'System\\CurrentControlSet\\Control\\Session Manager\\Environment', 'Path', OrigPath) then");
+                builder.AppendLine("  begin");
+                builder.AppendLine("    Result := True;");
+                builder.AppendLine("    exit;");
+                builder.AppendLine("  end;");
+                builder.AppendLine("  Result := Pos(';' + Uppercase(Param) + ';', ';' + Uppercase(OrigPath) + ';') = 0;");
+                builder.AppendLine("end;");
+            }
+
             return builder.ToString();
         }
     }
