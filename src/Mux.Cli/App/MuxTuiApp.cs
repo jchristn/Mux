@@ -1739,10 +1739,41 @@ namespace Mux.Cli.App
                 return true;
             }
 
-            // Ctrl+Backspace deletes the previous word. In the enhanced keyboard protocol it arrives as a
-            // dedicated Backspace key carrying the Ctrl modifier; the Ctrl'd control-character form
-            // (0x08/0x7F) is handled in the Character branch below for terminals without that protocol.
-            if (key.Code == KeyCode.Backspace && (key.Modifiers & KeyModifiers.Ctrl) != 0)
+            // Ctrl+Backspace / Alt+Backspace delete the previous word. In the enhanced keyboard protocol
+            // Ctrl+Backspace arrives as a dedicated Backspace key carrying the modifier; the control-character
+            // form (0x08/0x7F, and Alt+Backspace as ESC-prefixed DEL) is handled in the Character branch below
+            // for terminals without that protocol.
+            if (key.Code == KeyCode.Backspace && (key.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Alt)) != 0)
+            {
+                DeletePreviousWord();
+                return true;
+            }
+
+            // Ctrl+Delete deletes the next word.
+            if (key.Code == KeyCode.Delete && (key.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Alt)) != 0)
+            {
+                DeleteNextWord();
+                return true;
+            }
+
+            // Ctrl+Left / Ctrl+Right (CSI "1;5D" / "1;5C") and Alt+Left / Alt+Right (CSI "1;3D" / "1;3C",
+            // the macOS word-jump chord) move the caret one word at a time.
+            if (key.Code == KeyCode.Left && (key.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Alt)) != 0)
+            {
+                MoveComposerWordLeft();
+                return true;
+            }
+
+            if (key.Code == KeyCode.Right && (key.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Alt)) != 0)
+            {
+                MoveComposerWordRight();
+                return true;
+            }
+
+            // Alt+Backspace (delete previous word) arrives as the DEL/BS control character carrying the Alt
+            // modifier rather than a decoded Backspace key, so it is caught here ahead of the Ctrl branch.
+            if (key.Code == KeyCode.Character && (key.Modifiers & KeyModifiers.Alt) != 0
+                && (key.Rune == 127 || key.Rune == 8))
             {
                 DeletePreviousWord();
                 return true;
@@ -1767,6 +1798,15 @@ namespace Mux.Cli.App
                     case 'e': OpenEndpointModal(); return true;
                     case 'g': OpenQueueEditor(); return true;
                     case 'p': OpenPromptEditor(); return true;
+
+                    // Composer line-editing chords (readline / Claude Code / Codex parity). These do not
+                    // collide with the command chords above, so they edit the prompt rather than dispatch.
+                    case 'w': DeletePreviousWord(); return true;
+                    case 'a': MoveComposerLineStart(); return true;
+                    case 'u': DeleteToLineStart(); return true;
+                    case 'k': DeleteToLineEnd(); return true;
+                    case 'z': _Composer.Undo(); RefreshComposerLayout(); return true;
+                    case 'y': _Composer.Redo(); RefreshComposerLayout(); return true;
                 }
 
                 // Swallow any other Ctrl+key so control codes never land in the composer as text.
@@ -2446,37 +2486,172 @@ namespace Mux.Cli.App
             return false;
         }
 
+        // Absolute caret offset into the composer's newline-normalized text, counting each line break as a
+        // single character. Word edits and word navigation work on this flat offset so they cross line
+        // boundaries the same way the underlying editor's Backspace/DeleteForward do.
+        private int ComposerCaretOffset(string normalized)
+        {
+            int row = _Composer.CaretRow;
+            int col = _Composer.CaretColumn;
+            string[] lines = normalized.Split('\n');
+            int offset = 0;
+            for (int r = 0; r < row && r < lines.Length; r++)
+            {
+                offset += lines[r].Length + 1;
+            }
+
+            if (row >= 0 && row < lines.Length)
+            {
+                offset += Math.Min(col, lines[row].Length);
+            }
+
+            return offset;
+        }
+
+        // Scans backward from an offset over a run of trailing whitespace and then the word before it,
+        // returning the resulting offset. Line breaks count as whitespace, so a caret at column 0 eats the
+        // break and the previous line's last word — matching Claude Code / Codex and readline's Ctrl+W.
+        private static int WordStartBefore(string text, int offset)
+        {
+            int i = offset;
+            while (i > 0 && char.IsWhiteSpace(text[i - 1]))
+            {
+                i--;
+            }
+
+            while (i > 0 && !char.IsWhiteSpace(text[i - 1]))
+            {
+                i--;
+            }
+
+            return i;
+        }
+
+        // Scans forward from an offset over a run of leading whitespace and then the word after it.
+        private static int WordEndAfter(string text, int offset)
+        {
+            int i = offset;
+            while (i < text.Length && char.IsWhiteSpace(text[i]))
+            {
+                i++;
+            }
+
+            while (i < text.Length && !char.IsWhiteSpace(text[i]))
+            {
+                i++;
+            }
+
+            return i;
+        }
+
+        // Ctrl+Backspace / Ctrl+W / Alt+Backspace: delete the word before the caret, crossing a line break
+        // when the caret sits at the start of a line.
         private void DeletePreviousWord()
         {
             string text = _Composer.Text.Replace("\r\n", "\n").Replace("\r", "\n");
-            int row = _Composer.CaretRow;
-            int col = _Composer.CaretColumn;
-            string[] lines = text.Split('\n');
-            if (row < 0 || row >= lines.Length || col <= 0)
+            int caret = ComposerCaretOffset(text);
+            int target = WordStartBefore(text, caret);
+            int count = caret - target;
+            if (count <= 0)
             {
-                _Composer.Backspace();
-                RefreshComposerLayout();
-                return;
+                count = caret > 0 ? 1 : 0;
             }
 
-            string line = lines[row];
-            int i = Math.Min(col, line.Length);
-            while (i > 0 && char.IsWhiteSpace(line[i - 1]))
-            {
-                i--;
-            }
-
-            while (i > 0 && !char.IsWhiteSpace(line[i - 1]))
-            {
-                i--;
-            }
-
-            int count = Math.Max(1, col - i);
             for (int k = 0; k < count; k++)
             {
                 _Composer.Backspace();
             }
 
+            RefreshComposerLayout();
+        }
+
+        // Ctrl+Delete: delete the word after the caret, crossing a line break at the end of a line.
+        private void DeleteNextWord()
+        {
+            string text = _Composer.Text.Replace("\r\n", "\n").Replace("\r", "\n");
+            int caret = ComposerCaretOffset(text);
+            int target = WordEndAfter(text, caret);
+            int count = target - caret;
+            if (count <= 0)
+            {
+                count = caret < text.Length ? 1 : 0;
+            }
+
+            for (int k = 0; k < count; k++)
+            {
+                _Composer.DeleteForward();
+            }
+
+            RefreshComposerLayout();
+        }
+
+        // Ctrl+Left: move the caret to the start of the previous word.
+        private void MoveComposerWordLeft()
+        {
+            string text = _Composer.Text.Replace("\r\n", "\n").Replace("\r", "\n");
+            int caret = ComposerCaretOffset(text);
+            int target = WordStartBefore(text, caret);
+            int steps = caret - target;
+            if (steps <= 0 && caret > 0)
+            {
+                steps = 1;
+            }
+
+            for (int k = 0; k < steps; k++)
+            {
+                _Composer.MoveLeft();
+            }
+
+            RefreshComposerLayout();
+        }
+
+        // Ctrl+Right: move the caret to the end of the next word.
+        private void MoveComposerWordRight()
+        {
+            string text = _Composer.Text.Replace("\r\n", "\n").Replace("\r", "\n");
+            int caret = ComposerCaretOffset(text);
+            int target = WordEndAfter(text, caret);
+            int steps = target - caret;
+            if (steps <= 0 && caret < text.Length)
+            {
+                steps = 1;
+            }
+
+            for (int k = 0; k < steps; k++)
+            {
+                _Composer.MoveRight();
+            }
+
+            RefreshComposerLayout();
+        }
+
+        // Ctrl+A: move the caret to the start of the current line.
+        private void MoveComposerLineStart()
+        {
+            while (_Composer.CaretColumn > 0)
+            {
+                _Composer.MoveLeft();
+            }
+
+            RefreshComposerLayout();
+        }
+
+        // Ctrl+U: delete from the caret back to the start of the current line.
+        private void DeleteToLineStart()
+        {
+            int count = _Composer.CaretColumn;
+            for (int k = 0; k < count; k++)
+            {
+                _Composer.Backspace();
+            }
+
+            RefreshComposerLayout();
+        }
+
+        // Ctrl+K: delete from the caret to the end of the current line.
+        private void DeleteToLineEnd()
+        {
+            _Composer.KillToEndOfLine();
             RefreshComposerLayout();
         }
 

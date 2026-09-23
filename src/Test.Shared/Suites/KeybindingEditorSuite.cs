@@ -101,6 +101,28 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    Case("CommandForChordResolvesDefaults", "A pressed chord resolves to its bound command", ct =>
+                    {
+                        KeybindingEditorModel model = new KeybindingEditorModel(null);
+                        MuxAssert.AreEqual("mux.clear", model.CommandForChord("ctrl+l"), "default chord resolves");
+                        MuxAssert.AreEqual("mux.endpoint", model.CommandForChord("Ctrl+E"), "casing is normalized before matching");
+                        MuxAssert.IsTrue(model.CommandForChord("ctrl+shift+f9") == null, "an unbound chord resolves to nothing");
+                        MuxAssert.IsTrue(model.CommandForChord(null) == null, "a null chord resolves to nothing");
+                        return Task.CompletedTask;
+                    }),
+
+                    Case("CommandForChordFollowsOverrides", "Resolution honors rebinds and unbinds", ct =>
+                    {
+                        KeybindingEditorModel model = new KeybindingEditorModel(null);
+                        model.SetChord("mux.prompts", "ctrl+shift+p");
+                        MuxAssert.AreEqual("mux.prompts", model.CommandForChord("ctrl+shift+p"), "the rebound chord resolves");
+                        MuxAssert.IsTrue(model.CommandForChord("ctrl+p") == null, "the vacated default no longer resolves");
+
+                        model.Unbind("mux.clear");
+                        MuxAssert.IsTrue(model.CommandForChord("ctrl+l") == null, "an unbound command's default no longer resolves");
+                        return Task.CompletedTask;
+                    }),
+
                     Case("UnknownOverridesAndSetsIgnored", "Unknown command ids are dropped on load and ignored on set", ct =>
                     {
                         KeybindingEditorModel model = new KeybindingEditorModel(new Dictionary<string, string?> { { "mux.ghost", "ctrl+j" } });

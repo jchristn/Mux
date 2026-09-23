@@ -185,6 +185,133 @@ namespace Test.Shared.Suites
                         }
                     }),
 
+                    // ---- Composer word / line editing (readline / Claude Code / Codex parity) ----
+                    Case("CtrlBackspaceDeletesPreviousWord", "Ctrl+Backspace deletes the word before the caret", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            // Ctrl+Backspace under the enhanced protocol: CSI-u codepoint 127 (DEL), modifier 5 (Ctrl).
+                            Feed(backend, app, "hello world" + Esc + "[127;5u");
+                            MuxAssert.AreEqual("hello ", app.ComposerText, "last word removed, trailing space kept");
+                        }
+                    }),
+
+                    Case("CtrlWDeletesPreviousWord", "Ctrl+W deletes the word before the caret", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            // Ctrl+W is the C0 control byte 0x17 on every terminal.
+                            Feed(backend, app, "hello world" + (char)0x17);
+                            MuxAssert.AreEqual("hello ", app.ComposerText, "last word removed");
+                        }
+                    }),
+
+                    Case("AltBackspaceDeletesPreviousWord", "Alt+Backspace deletes the word before the caret", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            // Alt+Backspace arrives as ESC-prefixed DEL (0x7F), decoded as Char(127, Alt).
+                            Feed(backend, app, "foo bar" + Esc + ((char)0x7F).ToString());
+                            MuxAssert.AreEqual("foo ", app.ComposerText, "last word removed");
+                        }
+                    }),
+
+                    Case("CtrlBackspaceAtLineStartJoinsPreviousWord", "Ctrl+Backspace at column 0 crosses the line break and eats the previous word", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            // "hello world", a Ctrl+J newline (caret now at column 0 of line 2), then Ctrl+Backspace.
+                            Feed(backend, app, "hello world" + Esc + "[106;5u" + Esc + "[127;5u");
+                            MuxAssert.AreEqual("hello ", app.ComposerText, "newline and previous word removed");
+                        }
+                    }),
+
+                    Case("CtrlDeleteDeletesNextWord", "Ctrl+Delete deletes the word after the caret", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            // Ctrl+A to the start of the line, then Ctrl+Delete (CSI 3;5~) removes the leading word.
+                            Feed(backend, app, "hello world" + (char)0x01 + Esc + "[3;5~");
+                            MuxAssert.AreEqual(" world", app.ComposerText, "first word removed");
+                        }
+                    }),
+
+                    Case("CtrlLeftThenCtrlUKillsToLineStart", "Ctrl+Left moves by word and Ctrl+U kills to the line start", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            // Ctrl+Left (CSI 1;5D) lands the caret before "world"; Ctrl+U (0x15) kills "hello ".
+                            Feed(backend, app, "hello world" + Esc + "[1;5D" + (char)0x15);
+                            MuxAssert.AreEqual("world", app.ComposerText, "text before the caret removed");
+                        }
+                    }),
+
+                    Case("CtrlAThenCtrlKKillsToLineEnd", "Ctrl+A jumps to the line start and Ctrl+K kills to the line end", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            // Two lines; Ctrl+A to column 0 of line 2, Ctrl+K (0x0B) kills the rest of that line only.
+                            Feed(backend, app, "line1" + Esc + "[106;5u" + "line2" + (char)0x01 + (char)0x0B);
+                            MuxAssert.AreEqual("line1\n", app.ComposerText, "second line emptied, first line kept");
+                        }
+                    }),
+
+                    Case("CtrlRightMovesByWord", "Ctrl+Right moves the caret one word forward", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            // Ctrl+A to the start, Ctrl+Right (CSI 1;5C) past "hello", then type "X" between the words.
+                            Feed(backend, app, "hello world" + (char)0x01 + Esc + "[1;5C" + "X");
+                            MuxAssert.AreEqual("helloX world", app.ComposerText, "caret moved to the end of the first word");
+                        }
+                    }),
+
+                    Case("AltLeftRightMoveByWord", "Alt+Left / Alt+Right move the caret one word at a time", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            // Alt+Left (CSI 1;3D) back over "world" to the caret before it, then type "X".
+                            Feed(backend, app, "hello world" + Esc + "[1;3D" + "X");
+                            MuxAssert.AreEqual("hello Xworld", app.ComposerText, "Alt+Left jumped to the start of the last word");
+
+                            // Alt+Right (CSI 1;3C) forward over "world" to end of line, then type "!".
+                            Feed(backend, app, Esc + "[1;3C" + "!");
+                            MuxAssert.AreEqual("hello Xworld!", app.ComposerText, "Alt+Right jumped to the end of the word");
+                        }
+                    }),
+
+                    Case("CtrlZUndoesAndCtrlYRedoes", "Ctrl+Z undoes the last edit and Ctrl+Y redoes it", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            Feed(backend, app, "hello" + (char)0x1A); // Ctrl+Z removes the last inserted character
+                            MuxAssert.AreEqual("hell", app.ComposerText, "last character undone");
+
+                            Feed(backend, app, ((char)0x19).ToString()); // Ctrl+Y
+                            MuxAssert.AreEqual("hello", app.ComposerText, "character restored");
+                        }
+                    }),
+
                     // ---- Multi-line paste ----
                     Case("PastedMultiLineStaysOneUnitAndSubmitsAsOnePrompt", "A bracketed paste keeps its newlines and submits as a single prompt", async (CancellationToken ct) =>
                     {

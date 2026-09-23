@@ -721,6 +721,8 @@ namespace Mux.Desktop.I18n
                 { "main.compacting", "Compacting the conversation…" },
                 { "main.stopped", "(stopped)" },
                 { "main.errorPrefix", "Error: " },
+                { "main.saved", "Session saved." },
+                { "main.noConversationToSave", "Open a conversation before saving it." },
                 { "main.unknownCommand", "Unknown command: " },
                 { "main.metaNoThread", "Start or open a conversation before labeling it." },
                 { "main.tagUsage", "Use /tag key: value (or /tag rm key)" },

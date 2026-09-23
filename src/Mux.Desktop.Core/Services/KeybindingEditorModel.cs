@@ -122,6 +122,33 @@ namespace Mux.Desktop.Services
         }
 
         /// <summary>
+        /// The id of the command currently bound to a chord, or null when the chord is free or unbound. The
+        /// chord is normalized before matching, so any casing/whitespace is accepted. When more than one command
+        /// resolves to the same chord (a conflict the editor warns about but does not forbid), the first in
+        /// catalog order wins — the same order a front end would dispatch. Used to route a live key press.
+        /// </summary>
+        /// <param name="chord">The pressed chord (for example <c>ctrl+s</c>).</param>
+        /// <returns>The bound command id, or null.</returns>
+        public string? CommandForChord(string? chord)
+        {
+            string? normalized = Normalize(chord);
+            if (normalized == null)
+            {
+                return null;
+            }
+
+            foreach (KeybindingCommand command in KeybindingCatalog.Commands)
+            {
+                if (string.Equals(EffectiveChord(command.Id), normalized, StringComparison.Ordinal))
+                {
+                    return command.Id;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Finds another command that currently resolves to the given chord, or null when the chord is free
         /// (or unbound). Used to warn before creating a duplicate binding. The command identified by
         /// <paramref name="id"/> is excluded from the search.

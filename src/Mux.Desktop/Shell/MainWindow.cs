@@ -54,6 +54,11 @@ namespace Mux.Desktop.Shell
         private readonly string _ConfigDirectory;
         private readonly UsageQueryService? _UsageQuery;
 
+        // Effective command chords (catalog defaults layered with the user's keybindings.json overrides),
+        // resolved on every global key press so bound chords dispatch the same commands the TUI runs. Reloaded
+        // whenever the keybindings editor closes so a rebind takes effect without a restart.
+        private KeybindingEditorModel _Keybindings = new KeybindingEditorModel(null);
+
         private AppTheme _Theme = AppTheme.Current;
         private StackPanel _ThreadListPanel = null!;
         private ComboBox _ModelPicker = null!;
@@ -217,6 +222,7 @@ namespace Mux.Desktop.Shell
             // can be written into the transcript.
             InitializeToolRuntimes();
 
+            ReloadKeybindings();
             AddHandler(InputElement.KeyDownEvent, OnGlobalKeyDown, RoutingStrategies.Tunnel);
 
             // Probe for a git work tree in the background so the undo/redo buttons appear immediately in a
@@ -308,11 +314,112 @@ namespace Mux.Desktop.Shell
 
         private void OnGlobalKeyDown(object? sender, KeyEventArgs e)
         {
+            if (e.Handled)
+            {
+                return;
+            }
+
+            // Ctrl+K opens the command palette. It is not a rebindable catalog command (it is the desktop's
+            // fixed "how do I find everything" affordance), so it stays hardcoded ahead of catalog dispatch.
             if (e.Key == Key.K && (e.KeyModifiers & KeyModifiers.Control) != 0)
             {
                 e.Handled = true;
                 OpenCommandPalette();
+                return;
             }
+
+            // Resolve the pressed chord against the effective keybindings and run the matching command. A press
+            // that forms no chord (a bare modifier) or matches nothing falls through untouched so ordinary
+            // typing and the composer's own gestures (Enter, Ctrl+Enter, Up/Down history) are never swallowed.
+            string? chord = KeyChordFormat.Format(e.KeyModifiers, e.Key);
+            if (chord != null && DispatchKeybinding(chord))
+            {
+                e.Handled = true;
+            }
+        }
+
+        // Rebuilds the effective-keybinding model from keybindings.json. Best-effort: a missing or unreadable
+        // file leaves the catalog defaults in place.
+        private void ReloadKeybindings()
+        {
+            try
+            {
+                _Keybindings = new KeybindingEditorModel(SettingsLoader.LoadKeybindings());
+            }
+            catch (Exception)
+            {
+                _Keybindings = new KeybindingEditorModel(null);
+            }
+        }
+
+        // Maps a chord to its bound catalog command and runs the desktop equivalent. Returns false when the
+        // chord is unbound or the command has no desktop action (for example the TUI-only mouse-capture toggle),
+        // so the key press is left for other handlers. Kept in sync with the slash-command dispatcher.
+        private bool DispatchKeybinding(string chord)
+        {
+            string? id = _Keybindings.CommandForChord(chord);
+            if (id == null)
+            {
+                return false;
+            }
+
+            switch (id)
+            {
+                case "mux.quit": Close(); return true;
+                case "mux.save": SaveCurrentSession(); return true;
+                case "mux.export": _ = ExportCurrentAsync(); return true;
+                case "mux.undo": _ = UndoLastTurnAsync(); return true;
+                case "mux.redo": _ = RedoLastUndoAsync(); return true;
+                case "mux.compact": _ = CompactCurrentAsync(); return true;
+                case "mux.endpoint": OpenEndpointsWindow(); return true;
+                case "mux.prompts": OpenPromptsWindow(); return true;
+                case "mux.mcp": OpenMcpServersWindow(); return true;
+                case "mux.skills": OpenSkillsWindow(); return true;
+                case "mux.effort": OpenEffortPicker(); return true;
+                case "mux.settings": OpenSettingsWindow(); return true;
+                case "mux.clear": ClearActiveConversation(); return true;
+                case "mux.sidebar.toggle": ToggleSidebarCollapse(); return true;
+                case "mux.usage": OpenUsageWindow(); return true;
+                case "mux.theme": SetThemeMode(_Theme.IsDark ? "light" : "dark"); return true;
+                case "mux.theme.dark": SetThemeMode("dark"); return true;
+                case "mux.theme.light": SetThemeMode("light"); return true;
+                case "mux.menu": OpenCommandPalette(); return true;
+                case "mux.help": ShowHelpMenu(); return true;
+                default:
+                    // A bound command with no desktop action (mux.queue, mux.mouse, mux.borders, mux.tasks,
+                    // mux.sessions, …). Leave the key unhandled rather than swallowing it to no effect.
+                    return false;
+            }
+        }
+
+        // Ctrl+S parity: desktop conversations autosave every turn, so this force-persists the current one and
+        // confirms it. Mirrors the TUI's explicit "save session".
+        private void SaveCurrentSession()
+        {
+            TabContext? context = Ctx;
+            if (context == null || string.IsNullOrEmpty(_CurrentThreadId))
+            {
+                AddNotice(L("main.noConversationToSave"), isError: false);
+                return;
+            }
+
+            _ = PersistCurrentAsync(context);
+            AddNotice(L("main.saved"), isError: false);
+        }
+
+        // Exports the current conversation, resolving its title from the active context.
+        private Task ExportCurrentAsync()
+        {
+            if (string.IsNullOrEmpty(_CurrentThreadId))
+            {
+                AddNotice(L("main.noConversationToSave"), isError: false);
+                return Task.CompletedTask;
+            }
+
+            string title = !string.IsNullOrEmpty(Ctx?.Title) ? Ctx!.Title
+                : !string.IsNullOrEmpty(_TitleText.Text) ? _TitleText.Text!
+                : _CurrentThreadId;
+            return ExportThreadAsync(_CurrentThreadId, title);
         }
 
         private async void OpenCommandPalette()
@@ -883,9 +990,12 @@ namespace Mux.Desktop.Shell
             _ = new PluginsWindow().ShowDialog(this);
         }
 
-        private void OpenKeybindingsWindow()
+        private async void OpenKeybindingsWindow()
         {
-            _ = new KeybindingsWindow().ShowDialog(this);
+            await new KeybindingsWindow().ShowDialog(this);
+
+            // Pick up any rebinds the editor persisted so new chords dispatch without a restart.
+            ReloadKeybindings();
         }
 
         private MenuFlyout BuildViewFlyout()

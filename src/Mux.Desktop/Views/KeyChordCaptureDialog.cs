@@ -1,7 +1,6 @@
 namespace Mux.Desktop.Views
 {
     using System;
-    using System.Collections.Generic;
     using Avalonia;
     using Avalonia.Controls;
     using Avalonia.Input;
@@ -80,88 +79,21 @@ namespace Mux.Desktop.Views
                 return;
             }
 
-            if (IsModifierKey(e.Key))
+            if (KeyChordFormat.IsModifierKey(e.Key))
             {
                 return;
             }
 
-            string? token = KeyToken(e.Key);
-            if (token == null)
+            string? chord = KeyChordFormat.Format(e.KeyModifiers, e.Key);
+            if (chord == null)
             {
                 return;
             }
 
             e.Handled = true;
-            _Captured = FormatChord(e.KeyModifiers, token);
+            _Captured = chord;
             _Preview.Text = _Captured;
             assign.IsEnabled = true;
-        }
-
-        private static bool IsModifierKey(Key key)
-        {
-            return key == Key.LeftCtrl || key == Key.RightCtrl
-                || key == Key.LeftAlt || key == Key.RightAlt
-                || key == Key.LeftShift || key == Key.RightShift
-                || key == Key.LWin || key == Key.RWin;
-        }
-
-        private static string FormatChord(KeyModifiers modifiers, string token)
-        {
-            List<string> parts = new List<string>();
-            if ((modifiers & KeyModifiers.Control) != 0)
-            {
-                parts.Add("ctrl");
-            }
-
-            if ((modifiers & KeyModifiers.Alt) != 0)
-            {
-                parts.Add("alt");
-            }
-
-            if ((modifiers & KeyModifiers.Shift) != 0)
-            {
-                parts.Add("shift");
-            }
-
-            parts.Add(token);
-            return string.Join("+", parts);
-        }
-
-        private static string? KeyToken(Key key)
-        {
-            if (key >= Key.A && key <= Key.Z)
-            {
-                return key.ToString().ToLowerInvariant();
-            }
-
-            if (key >= Key.D0 && key <= Key.D9)
-            {
-                return ((int)(key - Key.D0)).ToString();
-            }
-
-            if (key >= Key.F1 && key <= Key.F24)
-            {
-                return "f" + (int)(key - Key.F1 + 1);
-            }
-
-            switch (key)
-            {
-                case Key.Enter: return "enter";
-                case Key.Space: return "space";
-                case Key.Tab: return "tab";
-                case Key.Back: return "backspace";
-                case Key.Delete: return "delete";
-                case Key.Insert: return "insert";
-                case Key.Home: return "home";
-                case Key.End: return "end";
-                case Key.PageUp: return "pageup";
-                case Key.PageDown: return "pagedown";
-                case Key.Up: return "up";
-                case Key.Down: return "down";
-                case Key.Left: return "left";
-                case Key.Right: return "right";
-                default: return null;
-            }
         }
     }
 }
