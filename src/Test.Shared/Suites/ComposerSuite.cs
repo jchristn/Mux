@@ -1,4 +1,4 @@
-namespace Test.Shared.Suites
+﻿namespace Test.Shared.Suites
 {
     using System;
     using System.Collections.Generic;
@@ -312,6 +312,88 @@ namespace Test.Shared.Suites
                         }
                     }),
 
+                    // ---- Mouse text selection & copy (TUIKit selection layer, MouseTextSelectionEnabled) ----
+                    // The composer sits on the bottom row (SGR row 24 on a 24-row backend) with its content
+                    // starting at column 2 (after the "> " prompt label). SGR mouse: press "ESC[<0;X;YM",
+                    // drag (motion+left) "ESC[<32;X;YM", release "ESC[<0;X;Ym"; coordinates are 1-based.
+                    Case("MouseDragSelectsPaneText", "Click-drag over a pane selects its text", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            Feed(backend, app, "hello world");
+                            app.Start(); // bring up the renderer so RenderOnce composes the hit map + buffer
+                            app.RenderOnce(); // build the hit map + composited buffer the selection reads back
+
+                            // Drag from column 2 ('h', SGR X=3) to column 12 ('d', SGR X=13) on the composer row.
+                            Feed(backend, app, Esc + "[<0;3;24M" + Esc + "[<32;13;24M" + Esc + "[<0;13;24m");
+
+                            MuxAssert.IsTrue(app.HasSelection, "a selection exists after the drag");
+                            MuxAssert.AreEqual("hello world", app.SelectedText, "the dragged text is selected");
+                        }
+                    }),
+
+                    Case("MouseSelectionClampsToPaneRectangle", "A drag past the pane edge clamps to that rectangle", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            Feed(backend, app, "hello world");
+                            app.Start();
+                            app.RenderOnce();
+
+                            // Drag far past the right edge (SGR X=250); the selection clamps to the composer rect,
+                            // yielding the whole line (trailing blanks trimmed) and never bleeding into other panes.
+                            Feed(backend, app, Esc + "[<0;3;24M" + Esc + "[<32;250;24M" + Esc + "[<0;250;24m");
+
+                            MuxAssert.AreEqual("hello world", app.SelectedText, "clamped to the composer line");
+                        }
+                    }),
+
+                    Case("NewDragInDifferentRectangleReplacesSelection", "A drag in another rectangle replaces the prior selection", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            Feed(backend, app, "hello world");
+                            app.Start();
+                            app.RenderOnce();
+
+                            // Select "hello" (columns 2..6) in the composer rectangle.
+                            Feed(backend, app, Esc + "[<0;3;24M" + Esc + "[<32;7;24M" + Esc + "[<0;7;24m");
+                            MuxAssert.AreEqual("hello", app.SelectedText, "first selection is in the composer");
+
+                            // Now drag inside the prompt-label rectangle (columns 0..1 = "> "), a different pane.
+                            Feed(backend, app, Esc + "[<0;1;24M" + Esc + "[<32;2;24M" + Esc + "[<0;2;24m");
+                            MuxAssert.AreEqual(">", app.SelectedText, "selection moved to the prompt-label pane");
+                        }
+                    }),
+
+                    Case("CtrlCCopiesSelectionAndClears", "Ctrl+C copies the current selection (OSC 52) and clears it", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(100, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            Feed(backend, app, "hello world");
+                            app.Start();
+                            app.RenderOnce();
+                            Feed(backend, app, Esc + "[<0;3;24M" + Esc + "[<32;13;24M" + Esc + "[<0;13;24m");
+                            MuxAssert.IsTrue(app.HasSelection, "selection present before copy");
+
+                            backend.TakeOutput(); // discard render/enable output so we only inspect the copy write
+                            Feed(backend, app, ((char)3).ToString()); // Ctrl+C (0x03)
+
+                            string expected = System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("hello world"));
+                            MuxAssert.Contains(expected, backend.PeekOutput(), "clipboard OSC 52 payload written for the selection");
+                            MuxAssert.IsFalse(app.HasSelection, "selection cleared after copy");
+                            MuxAssert.IsFalse(backend.IsStopped, "Ctrl+C with a selection copies, it does not exit");
+                        }
+                    }),
+
                     // ---- Multi-line paste ----
                     Case("PastedMultiLineStaysOneUnitAndSubmitsAsOnePrompt", "A bracketed paste keeps its newlines and submits as a single prompt", async (CancellationToken ct) =>
                     {
@@ -355,7 +437,7 @@ namespace Test.Shared.Suites
                             // strip above the composer and is NOT echoed to the transcript until it starts.
                             // Match the echoed prompt line ("> first" / "> second"), not the bare word: the
                             // active turn's random "thinking" phrase can itself contain "second" (e.g.
-                            // "Having second thoughts…"), which a substring check would flakily trip.
+                            // "Having second thoughtsâ€¦"), which a substring check would flakily trip.
                             MuxAssert.Contains("> first", Join(app.TranscriptSnapshot()), "first echoed to transcript");
                             MuxAssert.IsFalse(Join(app.TranscriptSnapshot()).Contains("> second"), "second not yet in transcript");
                             IReadOnlyList<string> strip = app.QueueStripSnapshot();
@@ -410,7 +492,7 @@ namespace Test.Shared.Suites
                             Feed(backend, app, "");
                             MuxAssert.IsTrue(app.IsQueuePaused, "paused while editor open");
 
-                            // The active turn finishes while paused — the queued prompt must NOT start.
+                            // The active turn finishes while paused â€” the queued prompt must NOT start.
                             release.TrySetResult(true);
                             await app.DrainProjectorsAsync().ConfigureAwait(false);
                             MuxAssert.AreEqual(1, app.JobIds.Count, "queued prompt held while paused");
@@ -435,7 +517,7 @@ namespace Test.Shared.Suites
                     {
                         QueueEditorModal modal = new QueueEditorModal(new List<string> { "a", "b", "c" });
                         modal.HandleKey(KeyEvent.Special(KeyCode.Down));   // select "b"
-                        modal.HandleKey(KeyEvent.Char((int)']'));          // move "b" down → a, c, b
+                        modal.HandleKey(KeyEvent.Char((int)']'));          // move "b" down â†’ a, c, b
                         modal.HandleKey(KeyEvent.Special(KeyCode.Escape)); // close
 
                         List<string> result = (List<string>)(await modal.Completion.ConfigureAwait(false))!;
@@ -446,7 +528,7 @@ namespace Test.Shared.Suites
                     {
                         QueueEditorModal modal = new QueueEditorModal(new List<string> { "a", "b", "c" });
                         modal.HandleKey(KeyEvent.Special(KeyCode.Down));   // select "b"
-                        modal.HandleKey(KeyEvent.Char((int)'d'));          // delete "b" → a, c
+                        modal.HandleKey(KeyEvent.Char((int)'d'));          // delete "b" â†’ a, c
                         modal.HandleKey(KeyEvent.Special(KeyCode.Escape));
 
                         List<string> result = (List<string>)(await modal.Completion.ConfigureAwait(false))!;
@@ -460,7 +542,7 @@ namespace Test.Shared.Suites
                         modal.HandleKey(KeyEvent.Special(KeyCode.Backspace)); // clear "a"
                         modal.HandleKey(KeyEvent.Char((int)'x'));
                         modal.HandleKey(KeyEvent.Char((int)'y'));
-                        modal.HandleKey(KeyEvent.Special(KeyCode.Enter));  // commit → "xy"
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Enter));  // commit â†’ "xy"
                         modal.HandleKey(KeyEvent.Special(KeyCode.Escape));
 
                         List<string> result = (List<string>)(await modal.Completion.ConfigureAwait(false))!;
@@ -644,7 +726,7 @@ namespace Test.Shared.Suites
             yield return CompletedEvent();
         }
 
-        // A run that proposes and completes a tool call but never emits assistant text, then completes —
+        // A run that proposes and completes a tool call but never emits assistant text, then completes â€”
         // the empty-completion-after-tools case where the model stops mid-task without a final answer.
         private static async IAsyncEnumerable<AgentEvent> EmptyAfterToolRunner(Job job, string prompt, [EnumeratorCancellation] CancellationToken ct)
         {
@@ -719,3 +801,4 @@ namespace Test.Shared.Suites
         #endregion
     }
 }
+

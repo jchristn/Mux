@@ -259,6 +259,8 @@ namespace Mux.Cli.App
             _App = new TuiApplication(backend);
             _App.CtrlCPolicy = CtrlCPolicy.DoubleTapToExit;
             _App.MouseCaptureEnabled = true; // always on by default; F12 hands the mouse back for native text selection
+            _App.MouseTextSelectionEnabled = true; // click-drag selects within a pane; Ctrl+C copies the selection
+            _App.TextCopied += OnTextCopied;
             _App.Theme = MuxTheme; // no background color; the terminal's own background shows through
             _App.RenderOverlay = DrawBoundaries; // optional dark-grey rules between the main regions
 
@@ -404,6 +406,23 @@ namespace Mux.Cli.App
         public string ComposerText
         {
             get => _Composer.Text;
+        }
+
+        /// <summary>
+        /// The text of the current mouse selection (empty when nothing is selected). Test/inspection accessor
+        /// over the host's selection layer.
+        /// </summary>
+        public string SelectedText
+        {
+            get => _App.GetSelectedText();
+        }
+
+        /// <summary>
+        /// Whether a mouse text selection currently exists.
+        /// </summary>
+        public bool HasSelection
+        {
+            get => _App.HasTextSelection;
         }
 
         /// <summary>
@@ -1092,7 +1111,21 @@ namespace Mux.Cli.App
         /// </summary>
         public void ToggleMouseCapture()
         {
-            _App.ToggleMouseCapture();
+            bool captured = _App.ToggleMouseCapture();
+            _App.Notify(
+                captured
+                    ? "Mouse captured — drag to select within a pane, Ctrl+C to copy"
+                    : "Mouse released to the terminal — drag to select across panes (native)",
+                timeoutMilliseconds: 2500);
+        }
+
+        // Brief confirmation after a mouse selection is copied with Ctrl+C. The clipboard write itself is
+        // handled by TUIKit (OSC 52); this just surfaces feedback so the copy is not silent.
+        private void OnTextCopied(string text)
+        {
+            int count = text?.Length ?? 0;
+            string message = count == 1 ? "Copied 1 character" : "Copied " + count + " characters";
+            _App.Notify(message, timeoutMilliseconds: 1500);
         }
 
         /// <summary>
