@@ -33,6 +33,17 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- **Dependencies updated: Voltaic 0.7.1 → 2.0.0.** The MCP client already invokes tools only through
+  `tools/call` and never reads the old `"pong"` ping result, so no engine change was needed for the
+  v1.x/v2.x breaking changes. Behavior against Voltaic 2.x servers: `tools/list` (and mux's discovered tool
+  count) now shows only the server's own tools, with no `ping`/`echo`/`getTime`/`getSessions` demo tools;
+  a server whose tool schema sets `additionalProperties: false` rejects undeclared arguments, which mux
+  reports as a failed tool result naming the property. The in-process MCP test server returns plain-string
+  tool results (the v2 idiom) and adds a strict-schema tool; new cases cover exact tool discovery, opt-in
+  diagnostic tools, strict-schema accept/reject, and calls to removed demo tools. Also updated: Avalonia
+  12.1.3, CommunityToolkit.Mvvm 8.4.2, Microsoft.Data.Sqlite 10.0.12, Microsoft.Extensions.DependencyInjection
+  10.0.12, Microsoft.Playwright 1.63.0, Watson 7.2.0, Microsoft.NET.Test.Sdk 18.10.1, NUnit.Analyzers 4.15.0.
+  `SQLitePCLRaw.bundle_e_sqlite3` stays on 2.1.13 because Microsoft.Data.Sqlite 10 is built against the 2.1 line.
 - **First stable release.** All shipping components are versioned `1.0.0`, and the reusable libraries
   (`Mux.Core`, `Mux.Server`, `Mux.Desktop.Core`) are packaged for NuGet with symbol packages.
 

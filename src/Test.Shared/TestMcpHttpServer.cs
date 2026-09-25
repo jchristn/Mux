@@ -23,6 +23,7 @@ namespace Test.Shared
         // long single wait, is what absorbs transient failures.
         private static readonly TimeSpan _PerAttemptReadyTimeout = TimeSpan.FromSeconds(6);
 
+        private readonly bool _IncludeDiagnosticTools;
         private McpHttpServer? _Server = null;
         private CancellationTokenSource _Cts = new CancellationTokenSource();
         private Task? _RunTask = null;
@@ -42,6 +43,12 @@ namespace Test.Shared
         /// </summary>
         public string McpPath => "/mcp";
 
+        /// <summary>
+        /// The names of the tools this fixture registers itself. With Voltaic 2.x, <c>tools/list</c> returns exactly
+        /// these (plus Voltaic's <c>echo</c>/<c>getTime</c> diagnostic tools only when they are opted in).
+        /// </summary>
+        public static IReadOnlyList<string> ApplicationToolNames { get; } = new List<string> { "echo", "strict_echo" };
+
         #endregion
 
         #region Constructors-and-Factories
@@ -49,8 +56,10 @@ namespace Test.Shared
         /// <summary>
         /// Initializes a new instance of the <see cref="TestMcpHttpServer"/> class.
         /// </summary>
-        public TestMcpHttpServer()
+        /// <param name="includeDiagnosticTools">Whether Voltaic should also publish its opt-in <c>echo</c>/<c>getTime</c> diagnostic tools.</param>
+        public TestMcpHttpServer(bool includeDiagnosticTools = false)
         {
+            _IncludeDiagnosticTools = includeDiagnosticTools;
         }
 
         #endregion
@@ -148,7 +157,7 @@ namespace Test.Shared
 
         private McpHttpServer CreateServer(int port)
         {
-            McpHttpServer server = new McpHttpServer("127.0.0.1", port);
+            McpHttpServer server = new McpHttpServer("127.0.0.1", port, includeDiagnosticTools: _IncludeDiagnosticTools);
             server.RegisterTool(
                 "echo",
                 "Returns the input text",
@@ -166,13 +175,30 @@ namespace Test.Shared
                         ? args.GetString("text") ?? string.Empty
                         : string.Empty;
 
-                    return (object)new
+                    // Voltaic 2.x wraps a string return as a single text content block.
+                    return (object)text;
+                });
+
+            // Declares additionalProperties: false, which Voltaic 2.x enforces: an undeclared argument is rejected
+            // with -32602 before the handler runs.
+            server.RegisterTool(
+                "strict_echo",
+                "Returns the input text; rejects undeclared arguments",
+                new
+                {
+                    type = "object",
+                    properties = new
                     {
-                        content = new object[]
-                        {
-                            new { type = "text", text = text }
-                        }
-                    };
+                        text = new { type = "string" }
+                    },
+                    required = new[] { "text" },
+                    additionalProperties = false
+                },
+                args =>
+                {
+                    string text = args?.GetString("text") ?? string.Empty;
+
+                    return (object)("strict:" + text);
                 });
 
             return server;

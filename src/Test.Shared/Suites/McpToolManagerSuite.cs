@@ -104,7 +104,7 @@ namespace Test.Shared.Suites
                                 ToolResult result = await manager.ExecuteAsync("call-1", "http-test.echo", arguments.RootElement, ct).ConfigureAwait(false);
 
                                 MuxAssert.IsTrue(result.Success, "execute success");
-                                MuxAssert.Contains("hello over http", result.Content, "echo content");
+                                MuxAssert.AreEqual("hello over http", FirstText(result.Content), "echo content is a single unwrapped text block");
 
                                 List<McpConnectionResult> results = manager.GetConnectionResults();
                                 McpConnectionResult? connectionResult = results.FirstOrDefault(r => string.Equals(r.Name, "http-test", StringComparison.OrdinalIgnoreCase));
@@ -239,8 +239,147 @@ namespace Test.Shared.Suites
                                 MuxAssert.IsFalse(manager.GetToolDefinitions().Any(t => t.Name.StartsWith("removable.", StringComparison.Ordinal)), "no definitions remain");
                                 MuxAssert.IsFalse(manager.GetServerStatus().Any(s => string.Equals(s.Name, "removable", StringComparison.OrdinalIgnoreCase)), "no status remains");
                             }
+                        }),
+
+                    new TestCaseDescriptor(
+                        "McpToolManager",
+                        "DiscoveryListsOnlyApplicationTools",
+                        "Discovery surfaces exactly the server's own tools; Voltaic 2.x publishes no demo tools (ping/echo/getTime/getSessions) by default",
+                        async (CancellationToken ct) =>
+                        {
+                            using (McpToolManager manager = new McpToolManager(new List<McpServerConfig>()))
+                            using (TestMcpHttpServer server = new TestMcpHttpServer())
+                            {
+                                await server.StartAsync().ConfigureAwait(false);
+                                await manager.AddServerAsync(HttpConfig("exact", server), ct).ConfigureAwait(false);
+
+                                List<string> names = manager.GetToolDefinitions().Select(t => t.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
+                                List<string> expected = TestMcpHttpServer.ApplicationToolNames.Select(n => "exact." + n).OrderBy(n => n, StringComparer.Ordinal).ToList();
+                                MuxAssert.AreEqual(string.Join(",", expected), string.Join(",", names), "only application tools discovered");
+
+                                foreach (string demo in new[] { "ping", "getTime", "getSessions", "getClients" })
+                                {
+                                    MuxAssert.IsFalse(manager.HasTool("exact." + demo), "demo tool not published: " + demo);
+                                }
+
+                                McpConnectionResult? connectionResult = manager.GetConnectionResults().FirstOrDefault(r => string.Equals(r.Name, "exact", StringComparison.OrdinalIgnoreCase));
+                                MuxAssert.IsNotNull(connectionResult, "connection result recorded");
+                                MuxAssert.AreEqual(TestMcpHttpServer.ApplicationToolNames.Count, connectionResult!.ToolCount, "connection result counts only application tools");
+                            }
+                        }),
+
+                    new TestCaseDescriptor(
+                        "McpToolManager",
+                        "DiscoveryIncludesDiagnosticToolsOnlyWhenOptedIn",
+                        "A server that opts into Voltaic's diagnostic tools also surfaces getTime, and the application's echo still wins",
+                        async (CancellationToken ct) =>
+                        {
+                            using (McpToolManager manager = new McpToolManager(new List<McpServerConfig>()))
+                            using (TestMcpHttpServer server = new TestMcpHttpServer(includeDiagnosticTools: true))
+                            {
+                                await server.StartAsync().ConfigureAwait(false);
+                                await manager.AddServerAsync(HttpConfig("diag", server), ct).ConfigureAwait(false);
+
+                                MuxAssert.IsTrue(manager.HasTool("diag.getTime"), "opt-in diagnostic tool discovered");
+                                MuxAssert.IsFalse(manager.HasTool("diag.ping"), "ping is a protocol method, never a tool");
+                                MuxAssert.IsFalse(manager.HasTool("diag.getSessions"), "getSessions removed in Voltaic 2.x");
+
+                                using JsonDocument arguments = JsonDocument.Parse("{\"text\":\"app echo\"}");
+                                ToolResult result = await manager.ExecuteAsync("call-d", "diag.echo", arguments.RootElement, ct).ConfigureAwait(false);
+                                MuxAssert.IsTrue(result.Success, "echo executes");
+                                MuxAssert.Contains("app echo", result.Content, "echo content");
+                            }
+                        }),
+
+                    new TestCaseDescriptor(
+                        "McpToolManager",
+                        "ExecuteAsyncStrictSchemaAcceptsDeclaredArguments",
+                        "A tool whose schema sets additionalProperties:false succeeds when only declared arguments are sent",
+                        async (CancellationToken ct) =>
+                        {
+                            using (McpToolManager manager = new McpToolManager(new List<McpServerConfig>()))
+                            using (TestMcpHttpServer server = new TestMcpHttpServer())
+                            {
+                                await server.StartAsync().ConfigureAwait(false);
+                                await manager.AddServerAsync(HttpConfig("strict", server), ct).ConfigureAwait(false);
+
+                                using JsonDocument arguments = JsonDocument.Parse("{\"text\":\"declared\"}");
+                                ToolResult result = await manager.ExecuteAsync("call-s1", "strict.strict_echo", arguments.RootElement, ct).ConfigureAwait(false);
+
+                                MuxAssert.IsTrue(result.Success, "strict tool succeeds with declared args");
+                                MuxAssert.AreEqual("strict:declared", FirstText(result.Content), "strict tool content");
+                            }
+                        }),
+
+                    new TestCaseDescriptor(
+                        "McpToolManager",
+                        "ExecuteAsyncStrictSchemaRejectsUndeclaredArgument",
+                        "Voltaic 2.x enforces additionalProperties:false; an undeclared argument yields a failed ToolResult naming the property",
+                        async (CancellationToken ct) =>
+                        {
+                            using (McpToolManager manager = new McpToolManager(new List<McpServerConfig>()))
+                            using (TestMcpHttpServer server = new TestMcpHttpServer())
+                            {
+                                await server.StartAsync().ConfigureAwait(false);
+                                await manager.AddServerAsync(HttpConfig("strict", server), ct).ConfigureAwait(false);
+
+                                using JsonDocument arguments = JsonDocument.Parse("{\"text\":\"declared\",\"bogus\":1}");
+                                ToolResult result = await manager.ExecuteAsync("call-s2", "strict.strict_echo", arguments.RootElement, ct).ConfigureAwait(false);
+
+                                MuxAssert.IsFalse(result.Success, "undeclared argument rejected");
+                                MuxAssert.Contains("mcp_call_failed", result.Content, "mcp call failure code");
+                                MuxAssert.Contains("bogus", result.Content, "error names the undeclared property");
+                                MuxAssert.IsFalse(result.Content.Contains("strict:declared", StringComparison.Ordinal), "handler did not run");
+
+                                // The server stays usable after a validation error.
+                                using JsonDocument good = JsonDocument.Parse("{\"text\":\"again\"}");
+                                ToolResult retry = await manager.ExecuteAsync("call-s3", "strict.strict_echo", good.RootElement, ct).ConfigureAwait(false);
+                                MuxAssert.IsTrue(retry.Success, "subsequent valid call succeeds");
+                            }
+                        }),
+
+                    new TestCaseDescriptor(
+                        "McpToolManager",
+                        "ExecuteAsyncRemovedDemoToolReturnsUnknownTool",
+                        "Calling a v1.x demo tool name (getSessions/ping) against a connected server fails as unknown, not as a live call",
+                        async (CancellationToken ct) =>
+                        {
+                            using (McpToolManager manager = new McpToolManager(new List<McpServerConfig>()))
+                            using (TestMcpHttpServer server = new TestMcpHttpServer())
+                            {
+                                await server.StartAsync().ConfigureAwait(false);
+                                await manager.AddServerAsync(HttpConfig("legacy", server), ct).ConfigureAwait(false);
+
+                                using JsonDocument arguments = JsonDocument.Parse("{}");
+                                foreach (string demo in new[] { "getSessions", "ping" })
+                                {
+                                    ToolResult result = await manager.ExecuteAsync("call-" + demo, "legacy." + demo, arguments.RootElement, ct).ConfigureAwait(false);
+                                    MuxAssert.IsFalse(result.Success, demo + " not callable");
+                                    MuxAssert.Contains("unknown_mcp_tool", result.Content, demo + " reported as unknown tool");
+                                }
+                            }
                         })
                 });
+        }
+
+        private static string? FirstText(string toolCallResultJson)
+        {
+            using JsonDocument document = JsonDocument.Parse(toolCallResultJson);
+            JsonElement content = document.RootElement.GetProperty("content");
+            MuxAssert.AreEqual(1, content.GetArrayLength(), "single content block");
+            MuxAssert.AreEqual("text", content[0].GetProperty("type").GetString(), "text content block");
+            return content[0].GetProperty("text").GetString();
+        }
+
+        private static McpServerConfig HttpConfig(string name, TestMcpHttpServer server)
+        {
+            return new McpServerConfig
+            {
+                Name = name,
+                Transport = McpTransportTypeEnum.Http,
+                Url = server.BaseUrl,
+                McpPath = server.McpPath
+            };
         }
     }
 }
