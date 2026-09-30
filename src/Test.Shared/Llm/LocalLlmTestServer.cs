@@ -220,6 +220,7 @@ namespace Test.Shared
                 bool wantError = body.Contains("http500", StringComparison.OrdinalIgnoreCase);
                 bool wantUnsupported = body.Contains("unsupported", StringComparison.OrdinalIgnoreCase);
                 bool wantReasoning = body.Contains("reasoncapture", StringComparison.OrdinalIgnoreCase);
+                bool wantSigned = body.Contains("signedtool", StringComparison.OrdinalIgnoreCase);
 
                 if (wantError)
                 {
@@ -235,7 +236,7 @@ namespace Test.Shared
 
                 if (path == "/v1/chat/completions")
                 {
-                    await HandleOpenAiAsync(context, stream, hasTools, wantReasoning).ConfigureAwait(false);
+                    await HandleOpenAiAsync(context, stream, hasTools, wantReasoning, wantSigned).ConfigureAwait(false);
                     return;
                 }
 
@@ -275,8 +276,20 @@ namespace Test.Shared
             }
         }
 
-        private async Task HandleOpenAiAsync(HttpListenerContext context, bool stream, bool hasTools, bool wantReasoning = false)
+        private async Task HandleOpenAiAsync(HttpListenerContext context, bool stream, bool hasTools, bool wantReasoning = false, bool wantSigned = false)
         {
+            if (stream && hasTools && wantSigned)
+            {
+                // Gemini's OpenAI-compatible endpoint: the tool call carries a thought signature in
+                // extra_content.google.thought_signature that must be replayed on the next turn.
+                await BeginStream(context, "text/event-stream").ConfigureAwait(false);
+                await WriteChunkAsync(context, "data: {\"id\":\"cc-5\",\"choices\":[{\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call-weather-1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Seattle\\\"}\"},\"extra_content\":{\"google\":{\"thought_signature\":\"sig-abc123\"}}}]},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+                await WriteChunkAsync(context, "data: {\"id\":\"cc-5\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18}}\n\n").ConfigureAwait(false);
+                await WriteChunkAsync(context, "data: [DONE]\n\n").ConfigureAwait(false);
+                context.Response.Close();
+                return;
+            }
+
             if (stream && hasTools)
             {
                 await BeginStream(context, "text/event-stream").ConfigureAwait(false);

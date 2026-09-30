@@ -19,6 +19,9 @@ namespace Mux.Server.Models
 
         /// <summary>The raw JSON arguments string.</summary>
         public string Arguments { get; set; } = string.Empty;
+
+        /// <summary>Opaque provider thought signature (Gemini 3) to replay with the call, or null.</summary>
+        public string? ThoughtSignature { get; set; } = null;
     }
 
     /// <summary>
@@ -62,7 +65,7 @@ namespace Mux.Server.Models
                 Reasoning = string.IsNullOrEmpty(message.Reasoning) ? null : message.Reasoning,
                 ToolCalls = message.ToolCalls == null || message.ToolCalls.Count == 0
                     ? null
-                    : message.ToolCalls.Select(tc => new ChatToolCallDto { Id = tc.Id ?? string.Empty, Name = tc.Name ?? string.Empty, Arguments = tc.Arguments ?? string.Empty }).ToList(),
+                    : message.ToolCalls.Select(tc => new ChatToolCallDto { Id = tc.Id ?? string.Empty, Name = tc.Name ?? string.Empty, Arguments = tc.Arguments ?? string.Empty, ThoughtSignature = tc.ThoughtSignature }).ToList(),
                 ToolCallId = message.ToolCallId
             };
         }
@@ -79,7 +82,7 @@ namespace Mux.Server.Models
                 Reasoning = string.IsNullOrEmpty(dto.Reasoning) ? null : dto.Reasoning,
                 ToolCalls = dto.ToolCalls == null || dto.ToolCalls.Count == 0
                     ? null
-                    : dto.ToolCalls.Select(tc => new ToolCall { Id = tc.Id ?? string.Empty, Name = tc.Name ?? string.Empty, Arguments = tc.Arguments ?? string.Empty }).ToList(),
+                    : dto.ToolCalls.Select(tc => new ToolCall { Id = tc.Id ?? string.Empty, Name = tc.Name ?? string.Empty, Arguments = tc.Arguments ?? string.Empty, ThoughtSignature = tc.ThoughtSignature }).ToList(),
                 ToolCallId = dto.ToolCallId
             };
         }

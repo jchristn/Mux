@@ -13,6 +13,7 @@ namespace Mux.Core.Models
         private string _Id = string.Empty;
         private string _Name = string.Empty;
         private string _Arguments = string.Empty;
+        private string? _ThoughtSignature = null;
 
         #endregion
 
@@ -57,6 +58,19 @@ namespace Mux.Core.Models
         {
             get => _Arguments;
             set => _Arguments = value ?? throw new ArgumentNullException(nameof(Arguments));
+        }
+
+        /// <summary>
+        /// Opaque provider token that must be sent back, unchanged, when this tool call is replayed in
+        /// conversation history. Gemini 3 models attach a thought signature to the function calls they emit and
+        /// reject a follow-up request whose replayed call is missing it. Null when the provider sent none.
+        /// </summary>
+        [JsonPropertyName("thoughtSignature")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ThoughtSignature
+        {
+            get => _ThoughtSignature;
+            set => _ThoughtSignature = string.IsNullOrEmpty(value) ? null : value;
         }
 
         #endregion

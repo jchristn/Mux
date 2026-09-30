@@ -2,6 +2,11 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 1.0.2
+
+- Versioned `1.0.2` in step with the rest of mux. `ToolCallDto` gains an optional `ThoughtSignature` to
+  match the server's session detail payload.
+
 ## 1.0.1
 
 - Versioned `1.0.1` in step with the rest of mux; no extension changes.

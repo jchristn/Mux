@@ -6,6 +6,7 @@ namespace Test.Shared.Suites
     using Mux.Core.Enums;
     using Mux.Core.Models;
     using Mux.Core.Telemetry;
+    using Mux.Server.Models;
     using Touchstone.Core;
 
     /// <summary>
@@ -54,6 +55,25 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(AdapterTypeEnum.OpenAiCompatible, AdapterTypeEnumExtensions.FromKebab("openai_compatible"), "snake input accepted");
                         MuxAssert.AreEqual(AdapterTypeEnum.OpenAiCompatible, AdapterTypeEnumExtensions.FromKebab("nope"), "unknown falls back");
                         MuxAssert.AreEqual(AdapterTypeEnum.Ollama, AdapterTypeEnumExtensions.FromKebab("nope", AdapterTypeEnum.Ollama), "custom fallback");
+                        return Task.CompletedTask;
+                    }),
+
+                    Case("ToolCallThoughtSignatureSurvivesDto", "A tool call's thought signature round-trips through the server chat DTO", (CancellationToken ct) =>
+                    {
+                        ConversationMessage message = new ConversationMessage
+                        {
+                            Role = RoleEnum.Assistant,
+                            Content = string.Empty,
+                            ToolCalls = new List<ToolCall>
+                            {
+                                new ToolCall { Id = "c1", Name = "read_file", Arguments = "{}", ThoughtSignature = "sig-1" },
+                                new ToolCall { Id = "c2", Name = "read_file", Arguments = "{}" }
+                            }
+                        };
+
+                        ConversationMessage restored = ChatMessageMapper.ToModel(ChatMessageMapper.ToDto(message));
+                        MuxAssert.AreEqual("sig-1", restored.ToolCalls![0].ThoughtSignature, "signed call keeps its signature");
+                        MuxAssert.IsNull(restored.ToolCalls![1].ThoughtSignature, "unsigned call stays unsigned");
                         return Task.CompletedTask;
                     }),
 

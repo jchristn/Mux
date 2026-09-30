@@ -515,7 +515,8 @@ namespace Mux.Core.Llm
                         {
                             Id = call.Id ?? string.Empty,
                             Name = call.Name,
-                            Arguments = call.ArgumentsJson
+                            Arguments = call.ArgumentsJson,
+                            ThoughtSignature = call.ThoughtSignature
                         }
                     };
                 }
@@ -815,7 +816,8 @@ namespace Mux.Core.Llm
                 {
                     Id = call.Id,
                     Name = call.Name,
-                    ArgumentsJson = string.IsNullOrEmpty(call.Arguments) ? "{}" : call.Arguments
+                    ArgumentsJson = string.IsNullOrEmpty(call.Arguments) ? "{}" : call.Arguments,
+                    ThoughtSignature = call.ThoughtSignature
                 });
             }
 
@@ -836,7 +838,8 @@ namespace Mux.Core.Llm
                 {
                     Id = call.Id ?? string.Empty,
                     Name = call.Name,
-                    Arguments = call.ArgumentsJson
+                    Arguments = call.ArgumentsJson,
+                    ThoughtSignature = call.ThoughtSignature
                 });
             }
 

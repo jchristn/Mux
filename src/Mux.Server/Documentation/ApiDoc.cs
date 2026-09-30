@@ -905,7 +905,8 @@ namespace Mux.Server.Documentation
             {
                 ["Id"] = Pstr("Tool-call id (correlates the call with its result)."),
                 ["Name"] = Pstr("Tool name."),
-                ["Arguments"] = Pstr("Raw JSON arguments string.")
+                ["Arguments"] = Pstr("Raw JSON arguments string."),
+                ["ThoughtSignature"] = PstrNullable("Opaque provider thought signature (Gemini 3) replayed with the call, or null.")
             }, new Dictionary<string, object?> { ["Id"] = "call_1", ["Name"] = "read_file", ["Arguments"] = "{\"path\":\"README.md\"}" });
 
             s["ChatMessageDto"] = Obj(new Dictionary<string, M>

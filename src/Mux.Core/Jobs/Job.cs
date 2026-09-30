@@ -562,7 +562,8 @@ namespace Mux.Core.Jobs
                         {
                             Id = toolCall.Id,
                             Name = toolCall.Name,
-                            Arguments = toolCall.Arguments
+                            Arguments = toolCall.Arguments,
+                            ThoughtSignature = toolCall.ThoughtSignature
                         });
                     }
                 }

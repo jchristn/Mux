@@ -3,6 +3,7 @@ namespace Test.Shared.Suites
     using System;
     using System.Collections.Generic;
     using System.Text;
+    using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Agent;
@@ -40,6 +41,7 @@ namespace Test.Shared.Suites
                     Case("ConnectionFailureRetriesAndClassifies", "A connection failure retries and surfaces llm_connection_error", RunConnectionFailureAsync),
                     Case("ReasoningEffortReachesTheWire", "Reasoning effort maps onto the outbound request per adapter", RunReasoningEffortWireAsync),
                     Case("ThinkingCapturedWhenEnabled", "Thinking is surfaced as separate events when the endpoint enables it", RunThinkingCapturedAsync),
+                    Case("ThoughtSignatureRoundTrips", "A Gemini thought signature is captured, persisted, and replayed on the next request", RunThoughtSignatureRoundTripAsync),
                     Case("ThinkingSuppressedWhenDisabled", "No thinking events are produced when the endpoint disables it", RunThinkingSuppressedAsync),
                 });
         }
@@ -88,6 +90,42 @@ namespace Test.Shared.Suites
 
             // 6. Per-endpoint headers reach the backend.
             MuxAssert.AreEqual("marker", server.HeaderValue("X-Mux-Test"), $"{adapterType}: endpoint headers are applied");
+        }
+
+        private static async Task RunThoughtSignatureRoundTripAsync(CancellationToken ct)
+        {
+            using LocalLlmTestServer server = LocalLlmTestServer.Start();
+            EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAiCompatible, server.Endpoint);
+            using LlmClient client = new LlmClient(endpoint);
+
+            // 1. The signature on the streamed tool call is captured onto mux's ToolCall.
+            List<AgentEvent> events = await CollectAsync(client.StreamAsync(Messages("signedtool"), WeatherTools(), ct), ct).ConfigureAwait(false);
+            ToolCall? call = FirstToolCall(events);
+            MuxAssert.IsNotNull(call, "a signed tool call is proposed");
+            MuxAssert.AreEqual("sig-abc123", call!.ThoughtSignature, "thought signature captured");
+
+            // 2. It survives the session-store JSON round trip.
+            ConversationMessage assistant = new ConversationMessage { Role = RoleEnum.Assistant, Content = string.Empty, ToolCalls = new List<ToolCall> { call } };
+            string json = JsonSerializer.Serialize(assistant);
+            ConversationMessage restored = JsonSerializer.Deserialize<ConversationMessage>(json)!;
+            MuxAssert.AreEqual("sig-abc123", restored.ToolCalls![0].ThoughtSignature, "thought signature persisted");
+
+            // 3. Replaying the restored history sends the signature back in Gemini's extra_content.
+            List<ConversationMessage> history = Messages("signedtool");
+            history.Add(restored);
+            history.Add(new ConversationMessage { Role = RoleEnum.Tool, Content = "{\"temp\":61}", ToolCallId = call.Id });
+            await CollectAsync(client.StreamAsync(history, NoTools(), ct), ct).ConfigureAwait(false);
+            string replay = server.RequestBodies[server.RequestBodies.Count - 1];
+            MuxAssert.Contains("\"thought_signature\":\"sig-abc123\"", replay, "thought signature replayed");
+
+            // 4. An unsigned call neither serializes a signature nor sends extra_content.
+            ToolCall unsigned = new ToolCall { Id = "c1", Name = "get_weather", Arguments = "{}" };
+            MuxAssert.IsFalse(JsonSerializer.Serialize(unsigned).Contains("thoughtSignature", StringComparison.Ordinal), "no signature key when unsigned");
+            List<ConversationMessage> plain = Messages("hello");
+            plain.Add(new ConversationMessage { Role = RoleEnum.Assistant, Content = string.Empty, ToolCalls = new List<ToolCall> { unsigned } });
+            plain.Add(new ConversationMessage { Role = RoleEnum.Tool, Content = "{}", ToolCallId = "c1" });
+            await CollectAsync(client.StreamAsync(plain, NoTools(), ct), ct).ConfigureAwait(false);
+            MuxAssert.IsFalse(server.RequestBodies[server.RequestBodies.Count - 1].Contains("extra_content", StringComparison.Ordinal), "no extra_content for unsigned calls");
         }
 
         private static async Task RunOllamaV1BaseUrlAsync(CancellationToken ct)

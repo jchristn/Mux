@@ -2,6 +2,33 @@
 
 All notable changes to mux are documented here.
 
+## 1.0.2
+
+### Fixed
+
+- **Gemini 3 tool loops failed on the second request** ("Function call is missing a thought_signature").
+  PolyPrompt 2.8.0 captures the thought signature Gemini 3 attaches to each function call; mux now carries it
+  on `ToolCall.ThoughtSignature` (JSON `thoughtSignature`, omitted when null), persists it with the session,
+  copies it through job snapshots and the server chat DTO (`ChatToolCallDto.ThoughtSignature`), and hands it
+  back to PolyPrompt when the history is replayed. Sessions saved before this release have no signatures; on
+  the `gemini` and `vertex` adapters PolyPrompt substitutes Google's placeholder for those turns.
+- PolyPrompt 2.8.0 also fixes Gemini tool results (sent in `user` turns, parallel results merged, array/scalar/
+  plain-text results no longer throw), sends tool schemas as `parametersJsonSchema`, and replays Gemini's own
+  function call ids.
+
+### Changed
+
+- Dependencies: PolyPrompt 2.7.1 -> 2.8.0 (drops its SerializationHelper dependency; mux did not use it).
+
+### Tests
+
+- `LlmBridge.ThoughtSignatureRoundTrips`: a signed streamed tool call from a Gemini-style OpenAI-compatible
+  mock is captured, survives the session JSON round trip, and is replayed as
+  `extra_content.google.thought_signature`; an unsigned call serializes no signature and sends no
+  `extra_content`.
+- `CoreMapping.ToolCallThoughtSignatureSurvivesDto`: signed and unsigned calls round-trip through
+  `ChatMessageMapper`.
+
 ## 1.0.1
 
 ### Fixed
