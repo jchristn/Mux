@@ -131,10 +131,17 @@ namespace Mux.Core.Tools
                 object callParams = new { name = originalToolName, arguments = arguments };
                 JsonElement result = await client.CallAsync<JsonElement>("tools/call", callParams, 60000, cancellationToken).ConfigureAwait(false);
 
+                // Tool execution errors (including input-schema violations, per MCP 2025-11-25+) arrive as a
+                // normal result with isError: true rather than a JSON-RPC error; keep the payload so the model
+                // can read and react to the message.
+                bool isError = result.ValueKind == JsonValueKind.Object
+                    && result.TryGetProperty("isError", out JsonElement isErrorElement)
+                    && isErrorElement.ValueKind == JsonValueKind.True;
+
                 return new ToolResult
                 {
                     ToolCallId = toolCallId,
-                    Success = true,
+                    Success = !isError,
                     Content = result.GetRawText()
                 };
             }

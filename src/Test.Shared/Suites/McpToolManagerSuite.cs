@@ -327,14 +327,44 @@ namespace Test.Shared.Suites
                                 ToolResult result = await manager.ExecuteAsync("call-s2", "strict.strict_echo", arguments.RootElement, ct).ConfigureAwait(false);
 
                                 MuxAssert.IsFalse(result.Success, "undeclared argument rejected");
-                                MuxAssert.Contains("mcp_call_failed", result.Content, "mcp call failure code");
+                                using JsonDocument payload = JsonDocument.Parse(result.Content);
+                                MuxAssert.IsTrue(
+                                    payload.RootElement.TryGetProperty("isError", out JsonElement isError) && isError.ValueKind == JsonValueKind.True,
+                                    "reported as an MCP tool execution error (isError), not a protocol error");
                                 MuxAssert.Contains("bogus", result.Content, "error names the undeclared property");
+                                MuxAssert.Contains("bogus", ToolFailureReason.Describe(result.Content) ?? string.Empty, "failure reason surfaces the property");
                                 MuxAssert.IsFalse(result.Content.Contains("strict:declared", StringComparison.Ordinal), "handler did not run");
 
                                 // The server stays usable after a validation error.
                                 using JsonDocument good = JsonDocument.Parse("{\"text\":\"again\"}");
                                 ToolResult retry = await manager.ExecuteAsync("call-s3", "strict.strict_echo", good.RootElement, ct).ConfigureAwait(false);
                                 MuxAssert.IsTrue(retry.Success, "subsequent valid call succeeds");
+                            }
+                        }),
+
+                    new TestCaseDescriptor(
+                        "McpToolManager",
+                        "ExecuteAsyncToolErrorResultIsFailure",
+                        "A tools/call result carrying isError: true (a handler exception) yields a failed ToolResult that keeps the server's message",
+                        async (CancellationToken ct) =>
+                        {
+                            using (McpToolManager manager = new McpToolManager(new List<McpServerConfig>()))
+                            using (TestMcpHttpServer server = new TestMcpHttpServer())
+                            {
+                                await server.StartAsync().ConfigureAwait(false);
+                                await manager.AddServerAsync(HttpConfig("errs", server), ct).ConfigureAwait(false);
+
+                                using JsonDocument arguments = JsonDocument.Parse("{}");
+                                ToolResult result = await manager.ExecuteAsync("call-f1", "errs.fail_tool", arguments.RootElement, ct).ConfigureAwait(false);
+
+                                MuxAssert.IsFalse(result.Success, "isError result is a failure");
+                                MuxAssert.AreEqual("fail_tool always fails", FirstText(result.Content), "server message preserved");
+                                MuxAssert.Contains("fail_tool always fails", ToolFailureReason.Describe(result.Content) ?? string.Empty, "failure reason surfaces the message");
+
+                                // A normal result on the same connection is still a success.
+                                using JsonDocument echoArgs = JsonDocument.Parse("{\"text\":\"ok\"}");
+                                ToolResult ok = await manager.ExecuteAsync("call-f2", "errs.echo", echoArgs.RootElement, ct).ConfigureAwait(false);
+                                MuxAssert.IsTrue(ok.Success, "non-error result is a success");
                             }
                         }),
 

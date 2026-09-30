@@ -47,7 +47,7 @@ namespace Test.Shared
         /// The names of the tools this fixture registers itself. With Voltaic 2.x, <c>tools/list</c> returns exactly
         /// these (plus Voltaic's <c>echo</c>/<c>getTime</c> diagnostic tools only when they are opted in).
         /// </summary>
-        public static IReadOnlyList<string> ApplicationToolNames { get; } = new List<string> { "echo", "strict_echo" };
+        public static IReadOnlyList<string> ApplicationToolNames { get; } = new List<string> { "echo", "strict_echo", "fail_tool" };
 
         #endregion
 
@@ -180,7 +180,7 @@ namespace Test.Shared
                 });
 
             // Declares additionalProperties: false, which Voltaic 2.x enforces: an undeclared argument is rejected
-            // with -32602 before the handler runs.
+            // before the handler runs, as a tool result with isError: true (Voltaic 2.1+, MCP 2025-11-25+).
             server.RegisterTool(
                 "strict_echo",
                 "Returns the input text; rejects undeclared arguments",
@@ -199,6 +199,21 @@ namespace Test.Shared
                     string text = args?.GetString("text") ?? string.Empty;
 
                     return (object)("strict:" + text);
+                });
+
+            // Always throws; Voltaic reports a handler exception as a tool result with isError: true, and an
+            // McpToolException's message reaches the caller as written.
+            server.RegisterTool(
+                "fail_tool",
+                "Always fails with a tool execution error",
+                new
+                {
+                    type = "object",
+                    properties = new { }
+                },
+                args =>
+                {
+                    throw new McpToolException("fail_tool always fails");
                 });
 
             return server;

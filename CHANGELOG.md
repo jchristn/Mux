@@ -2,6 +2,27 @@
 
 All notable changes to mux are documented here.
 
+## 1.0.1
+
+### Fixed
+
+- **MCP tool errors are reported as failures.** A `tools/call` result carrying `isError: true` (a tool that
+  threw, or arguments that failed the tool's input schema) was recorded as a successful tool call. It is now a
+  failed `ToolResult` that keeps the server's payload, so the transcript shows the failure reason and the model
+  can still read the message and correct itself. Voltaic 2.1+ reports input-schema violations this way (as the
+  MCP 2025-11-25 specification requires) instead of as a JSON-RPC `-32602` error.
+
+### Changed
+
+- Dependencies: Voltaic 2.0.0 -> 2.1.13, PolyPrompt 2.7.1, Watson 7.2.1, SQLitePCLRaw.bundle_e_sqlite3 3.0.5,
+  NUnit 5.0.0, coverlet.collector 10.1.0.
+
+### Tests
+
+- The strict-schema case now expects an `isError` tool result naming the undeclared property. The test MCP
+  server gains a `fail_tool` that always throws, and a new `ExecuteAsyncToolErrorResultIsFailure` case covers
+  handler errors becoming failed results while normal results on the same connection still succeed.
+
 ## 1.0.0
 
 ### Added

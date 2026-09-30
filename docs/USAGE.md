@@ -855,6 +855,7 @@ mux --no-mcp
 Important:
 - interactive mode loads MCP servers from `mcp-servers.json` automatically; `mux print` loads them only when `--mcp-config` is supplied (see [Headless MCP](#headless-mcp---mcp-config)); `mux probe` never loads MCP
 - `--no-mcp` is interactive-only and, in `print`/`probe`, returns a structured configuration error rather than silently implying MCP support
+- an MCP tool result marked `isError: true` (the tool failed, or its arguments did not match the tool's input schema) is recorded as a failed tool call; the transcript shows the server's message as the failure reason, and the model still receives the full result so it can correct itself and retry
 
 ## Skills
 

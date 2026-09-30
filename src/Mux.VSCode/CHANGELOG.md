@@ -2,6 +2,10 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 1.0.1
+
+- Versioned `1.0.1` in step with the rest of mux; no extension changes.
+
 ## 1.0.0
 
 - **Session labels and tags.** The Sessions view row menu gains **Edit Labels…** and **Edit Tags…**; labels
