@@ -732,9 +732,24 @@ namespace Mux.Core.Llm
                 request.ReasoningEffort = reasoning;
             }
 
+            // Gemini's functionResponse must carry the name of the function that was called, but mux's tool
+            // messages record only the call id, so resolve each result's name from the assistant tool calls.
+            Dictionary<string, string> toolNamesById = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (ConversationMessage message in messages)
             {
-                request.Messages.Add(MapMessage(message));
+                if (message.Role != RoleEnum.Assistant || message.ToolCalls == null) continue;
+                foreach (ToolCall toolCall in message.ToolCalls)
+                {
+                    if (!string.IsNullOrEmpty(toolCall.Id) && !string.IsNullOrEmpty(toolCall.Name))
+                    {
+                        toolNamesById[toolCall.Id] = toolCall.Name;
+                    }
+                }
+            }
+
+            foreach (ConversationMessage message in messages)
+            {
+                request.Messages.Add(MapMessage(message, toolNamesById));
             }
 
             foreach (ToolDefinition tool in tools)
@@ -775,7 +790,7 @@ namespace Mux.Core.Llm
             }
         }
 
-        private static Pp.ChatMessage MapMessage(ConversationMessage message)
+        private static Pp.ChatMessage MapMessage(ConversationMessage message, Dictionary<string, string> toolNamesById)
         {
             switch (message.Role)
             {
@@ -795,6 +810,7 @@ namespace Mux.Core.Llm
                     {
                         Role = "tool",
                         ToolCallId = message.ToolCallId,
+                        ToolName = message.ToolCallId != null && toolNamesById.TryGetValue(message.ToolCallId, out string? toolName) ? toolName : null,
                         Content = message.Content
                     };
                 default:

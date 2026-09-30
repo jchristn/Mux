@@ -2,6 +2,23 @@
 
 All notable changes to mux are documented here.
 
+## 1.0.3
+
+### Fixed
+
+- **Gemini tool loops failed on the second request** with a bare `400 Request contains an invalid argument` on
+  the native `gemini` and `vertex` adapters. mux's tool-result messages carry only the call id, so PolyPrompt
+  fell back to sending the call id as Gemini's `functionResponse.name`. `LlmClient` now resolves each tool
+  result's name from the matching assistant tool call when it builds the request, so live, denied, error, and
+  resumed-session tool results all send the called function's name. Other adapters identify tool results by
+  id and are unchanged.
+
+### Tests
+
+- `LlmBridge.GeminiToolResultCarriesFunctionName`: a native `gemini` request with parallel calls answered in
+  reverse order and a denied call's result names every `functionResponse` after its function, both live and
+  after the session JSON round trip.
+
 ## 1.0.2
 
 ### Fixed

@@ -43,6 +43,7 @@ namespace Test.Shared.Suites
                     Case("ThinkingCapturedWhenEnabled", "Thinking is surfaced as separate events when the endpoint enables it", RunThinkingCapturedAsync),
                     Case("ThoughtSignatureRoundTrips", "A Gemini thought signature is captured, persisted, and replayed on the next request", RunThoughtSignatureRoundTripAsync),
                     Case("ThinkingSuppressedWhenDisabled", "No thinking events are produced when the endpoint disables it", RunThinkingSuppressedAsync),
+                    Case("GeminiToolResultCarriesFunctionName", "Gemini functionResponse.name is the called function's name, not the call id", RunGeminiToolResultNameAsync),
                 });
         }
 
@@ -126,6 +127,73 @@ namespace Test.Shared.Suites
             plain.Add(new ConversationMessage { Role = RoleEnum.Tool, Content = "{}", ToolCallId = "c1" });
             await CollectAsync(client.StreamAsync(plain, NoTools(), ct), ct).ConfigureAwait(false);
             MuxAssert.IsFalse(server.RequestBodies[server.RequestBodies.Count - 1].Contains("extra_content", StringComparison.Ordinal), "no extra_content for unsigned calls");
+        }
+
+        private static async Task RunGeminiToolResultNameAsync(CancellationToken ct)
+        {
+            // The mock does not speak Gemini's wire format, so the request itself fails; the captured body is
+            // what PolyPrompt's Gemini client serialized from mux's history, which is what is under test.
+            using LocalLlmTestServer server = LocalLlmTestServer.Start();
+            EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.Gemini, server.Endpoint);
+            endpoint.ApiKey = "test-key";
+            using LlmClient client = new LlmClient(endpoint);
+
+            // Parallel calls whose results arrive in the reverse order, plus a denied call's error result.
+            List<ConversationMessage> history = Messages("weather please");
+            history.Add(new ConversationMessage
+            {
+                Role = RoleEnum.Assistant,
+                Content = string.Empty,
+                ToolCalls = new List<ToolCall>
+                {
+                    new ToolCall { Id = "call_1", Name = "get_weather", Arguments = "{\"city\":\"Seattle\"}" },
+                    new ToolCall { Id = "call_2", Name = "list_directory", Arguments = "{\"path\":\".\"}" }
+                }
+            });
+            history.Add(new ConversationMessage { Role = RoleEnum.Tool, ToolCallId = "call_2", Content = "[FILE] a.txt" });
+            history.Add(new ConversationMessage { Role = RoleEnum.Tool, ToolCallId = "call_1", Content = "{\"temp\":61}" });
+            history.Add(new ConversationMessage
+            {
+                Role = RoleEnum.Assistant,
+                Content = string.Empty,
+                ToolCalls = new List<ToolCall> { new ToolCall { Id = "call_3", Name = "write_file", Arguments = "{}" } }
+            });
+            history.Add(new ConversationMessage { Role = RoleEnum.Tool, ToolCallId = "call_3", Content = "{\"error\":\"tool_call_denied\"}" });
+
+            // A resumed session: the same history after the session-store JSON round trip.
+            List<ConversationMessage> resumed = JsonSerializer.Deserialize<List<ConversationMessage>>(JsonSerializer.Serialize(history))!;
+
+            foreach ((string label, List<ConversationMessage> messages) in new[] { ("live", history), ("resumed", resumed) })
+            {
+                int before = server.RequestBodies.Count;
+                await CollectAsync(client.StreamAsync(messages, WeatherTools(), ct), ct).ConfigureAwait(false);
+                MuxAssert.IsTrue(server.RequestBodies.Count > before, $"{label}: the Gemini request reached the mock");
+
+                Dictionary<string, string> names = FunctionResponseNames(server.RequestBodies[server.RequestBodies.Count - 1]);
+                MuxAssert.AreEqual(3, names.Count, $"{label}: every tool result is sent as a functionResponse");
+                MuxAssert.AreEqual("get_weather", names["call_1"], $"{label}: call_1 result named get_weather");
+                MuxAssert.AreEqual("list_directory", names["call_2"], $"{label}: call_2 result named list_directory");
+                MuxAssert.AreEqual("write_file", names["call_3"], $"{label}: denied call_3 result named write_file");
+            }
+        }
+
+        private static Dictionary<string, string> FunctionResponseNames(string body)
+        {
+            Dictionary<string, string> names = new Dictionary<string, string>(StringComparer.Ordinal);
+            using JsonDocument document = JsonDocument.Parse(body);
+            foreach (JsonElement content in document.RootElement.GetProperty("contents").EnumerateArray())
+            {
+                if (!content.TryGetProperty("parts", out JsonElement parts)) continue;
+                foreach (JsonElement part in parts.EnumerateArray())
+                {
+                    if (part.TryGetProperty("functionResponse", out JsonElement response))
+                    {
+                        names[response.GetProperty("id").GetString()!] = response.GetProperty("name").GetString()!;
+                    }
+                }
+            }
+
+            return names;
         }
 
         private static async Task RunOllamaV1BaseUrlAsync(CancellationToken ct)
