@@ -293,13 +293,16 @@ namespace Mux.Core.Llm
         {
             Pp.ToolChatRequest request = new Pp.ToolChatRequest
             {
-                Model = string.IsNullOrWhiteSpace(_Endpoint.Model) ? null : _Endpoint.Model,
+                Options = new Pp.CompletionOptions
+                {
+                    Model = string.IsNullOrWhiteSpace(_Endpoint.Model) ? null : _Endpoint.Model,
 
-                // Give the model a real budget so it can actually produce output — a reasoning ("thinking")
-                // model spends tokens thinking before it can emit anything, and a 1-token cap made it fail a
-                // perfectly reachable endpoint. We stream and stop at the very first chunk (see below), so the
-                // budget is never reached and a healthy endpoint still validates near-instantly.
-                MaxTokens = 512,
+                    // Give the model a real budget so it can actually produce output — a reasoning ("thinking")
+                    // model spends tokens thinking before it can emit anything, and a 1-token cap made it fail a
+                    // perfectly reachable endpoint. We stream and stop at the very first chunk (see below), so the
+                    // budget is never reached and a healthy endpoint still validates near-instantly.
+                    MaxTokens = 512
+                },
                 ToolChoice = "none"
             };
 
@@ -862,7 +865,7 @@ namespace Mux.Core.Llm
 
         private void RecordUsage(Pp.ToolChatStreamingResponse response)
         {
-            Pp.ChatStreamingUsage? usage = response.Usage;
+            Pp.TokenUsage? usage = response.Usage;
             int promptReported = usage?.PromptTokens ?? 0;
             int output = usage?.CompletionTokens ?? 0;
             int cacheRead = usage?.CachedPromptTokens ?? 0;
@@ -933,7 +936,7 @@ namespace Mux.Core.Llm
 
         private Pp.ToolChatRequest BuildRequest(List<ConversationMessage> messages, List<ToolDefinition> tools)
         {
-            Pp.ToolChatRequest request = new Pp.ToolChatRequest
+            Pp.CompletionOptions options = new Pp.CompletionOptions
             {
                 Model = string.IsNullOrWhiteSpace(_Endpoint.Model) ? null : _Endpoint.Model,
                 MaxTokens = _Endpoint.MaxTokens
@@ -942,8 +945,13 @@ namespace Mux.Core.Llm
             Pp.ReasoningEffort? reasoning = MapReasoningEffort(_Endpoint.ReasoningEffort);
             if (reasoning != null)
             {
-                request.ReasoningEffort = reasoning;
+                options.ReasoningEffort = reasoning;
             }
+
+            Pp.ToolChatRequest request = new Pp.ToolChatRequest
+            {
+                Options = options
+            };
 
             // Gemini's functionResponse must carry the name of the function that was called, but mux's tool
             // messages record only the call id, so resolve each result's name from the assistant tool calls.
@@ -1114,28 +1122,28 @@ namespace Mux.Core.Llm
                     // root, not under /v1. A base URL carrying a trailing /v1 targets Ollama's separate
                     // OpenAI-compatible surface and yields "404 page not found" against /v1/api/chat. mux's
                     // own defaults and docs historically appended /v1 to ollama base URLs, so tolerate it
-                    // here the way OpenAiClient tolerates a base URL that already ends in /v1.
+                    // here the way OpenAiCompletionClient tolerates a base URL that already ends in /v1.
                     //
                     // Pass the API key through: a local Ollama needs none (a blank key resolves to null and
                     // sends no auth), but an authenticated Ollama-compatible gateway expects the key as an
-                    // Authorization: Bearer header — which PolyPrompt's OllamaClient sends when given a key.
+                    // Authorization: Bearer header — which PolyPrompt's OllamaCompletionClient sends when given a key.
                     // Honor the auth placement: only bearer placement hands the key to the client; header and
                     // query placements apply it to the transport instead (see the constructor).
-                    client = new OllamaClient(NormalizeOllamaBaseUrl(endpoint.BaseUrl), apiKey: OpenAiFamilyBearerKey(endpoint, apiKey), logging: SilentLogging, httpClient: httpClient);
+                    client = new OllamaCompletionClient(NormalizeOllamaBaseUrl(endpoint.BaseUrl), apiKey: OpenAiFamilyBearerKey(endpoint, apiKey), logging: SilentLogging, httpClient: httpClient);
                     break;
                 case AdapterTypeEnum.Anthropic:
                     // Anthropic authenticates with an API key sent as x-api-key; PolyPrompt's client attaches
-                    // it to the injected transport. A blank base URL falls back to the public API root.
-                    client = new AnthropicClient(
+                    // it to each request. A blank base URL falls back to the public API root.
+                    client = new AnthropicCompletionClient(
                         DefaultIfBlank(endpoint.BaseUrl, "https://api.anthropic.com"),
                         apiKey,
                         SilentLogging,
                         httpClient);
                     break;
                 case AdapterTypeEnum.Gemini:
-                    // Gemini (AI Studio) carries the API key in the request URL, so it must be passed to the
-                    // client rather than supplied as a header.
-                    client = new GeminiClient(
+                    // Gemini (AI Studio) authenticates with the x-goog-api-key header, which PolyPrompt's client
+                    // attaches to each request, so the key is passed to the client rather than as a mux header.
+                    client = new GeminiCompletionClient(
                         DefaultIfBlank(endpoint.BaseUrl, "https://generativelanguage.googleapis.com"),
                         apiKey,
                         SilentLogging,
@@ -1147,7 +1155,7 @@ namespace Mux.Core.Llm
                         throw new InvalidOperationException($"Endpoint '{endpoint.Name}' (azure-openai) requires a baseUrl set to the Azure resource endpoint, e.g. https://my-resource.openai.azure.com.");
                     if (string.IsNullOrWhiteSpace(endpoint.Model))
                         throw new InvalidOperationException($"Endpoint '{endpoint.Name}' (azure-openai) requires a model set to the Azure deployment name.");
-                    client = new AzureOpenAiClient(
+                    client = new AzureOpenAiCompletionClient(
                         endpoint.BaseUrl,
                         endpoint.Model,
                         apiKey ?? string.Empty,
@@ -1163,7 +1171,7 @@ namespace Mux.Core.Llm
                     string region = ResolveConfigValue(endpoint.Region) ?? string.Empty;
                     if (string.IsNullOrWhiteSpace(project) || string.IsNullOrWhiteSpace(region))
                         throw new InvalidOperationException($"Endpoint '{endpoint.Name}' (vertex) requires both 'project' and 'region'. Credentials come from Application Default Credentials (set GOOGLE_APPLICATION_CREDENTIALS).");
-                    client = new VertexAiClient(
+                    client = new VertexAiCompletionClient(
                         project,
                         region,
                         new AdcCredential(),
@@ -1179,12 +1187,12 @@ namespace Mux.Core.Llm
                     string region = ResolveConfigValue(endpoint.Region) ?? string.Empty;
                     if (string.IsNullOrWhiteSpace(region))
                         throw new InvalidOperationException($"Endpoint '{endpoint.Name}' (bedrock) requires a 'region'. Credentials come from the AWS environment (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN).");
-                    client = new BedrockClient(
+                    client = new BedrockCompletionClient(
                         new EnvironmentAwsCredential(region),
                         region,
+                        DefaultIfBlankOrNull(endpoint.BaseUrl),
                         SilentLogging,
-                        httpClient,
-                        DefaultIfBlankOrNull(endpoint.BaseUrl));
+                        httpClient);
                     break;
                 }
                 case AdapterTypeEnum.OpenAi:
@@ -1195,7 +1203,7 @@ namespace Mux.Core.Llm
                     // the key to the client (sent as Authorization: Bearer); header and query placements apply
                     // it to the transport instead (see the constructor). A hand-written Authorization entry in
                     // Headers still works when no API key is set (the key resolves to null and none is sent).
-                    client = new OpenAiClient(endpoint.BaseUrl, apiKey: OpenAiFamilyBearerKey(endpoint, apiKey), logging: SilentLogging, httpClient: httpClient);
+                    client = new OpenAiCompletionClient(endpoint.BaseUrl, apiKey: OpenAiFamilyBearerKey(endpoint, apiKey), logging: SilentLogging, httpClient: httpClient);
                     break;
             }
 

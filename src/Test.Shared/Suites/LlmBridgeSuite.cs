@@ -43,6 +43,8 @@ namespace Test.Shared.Suites
                     Case("ThinkingCapturedWhenEnabled", "Thinking is surfaced as separate events when the endpoint enables it", RunThinkingCapturedAsync),
                     Case("ThoughtSignatureRoundTrips", "A Gemini thought signature is captured, persisted, and replayed on the next request", RunThoughtSignatureRoundTripAsync),
                     Case("ThinkingSuppressedWhenDisabled", "No thinking events are produced when the endpoint disables it", RunThinkingSuppressedAsync),
+                    Case("EndpointSettingsReachTheWire", "The endpoint's model and max tokens reach the outbound request per adapter", RunEndpointSettingsWireAsync),
+                    Case("GeminiApiKeySentAsHeader", "The Gemini API key is sent as x-goog-api-key, never in the URL", RunGeminiApiKeyHeaderAsync),
                     Case("GeminiToolResultCarriesFunctionName", "Gemini functionResponse.name is the called function's name, not the call id", RunGeminiToolResultNameAsync),
                 });
         }
@@ -127,6 +129,46 @@ namespace Test.Shared.Suites
             plain.Add(new ConversationMessage { Role = RoleEnum.Tool, Content = "{}", ToolCallId = "c1" });
             await CollectAsync(client.StreamAsync(plain, NoTools(), ct), ct).ConfigureAwait(false);
             MuxAssert.IsFalse(server.RequestBodies[server.RequestBodies.Count - 1].Contains("extra_content", StringComparison.Ordinal), "no extra_content for unsigned calls");
+        }
+
+        private static async Task RunEndpointSettingsWireAsync(CancellationToken ct)
+        {
+            // PolyPrompt 3 moved per-request model and token settings from ToolChatRequest onto its Options;
+            // the endpoint's values must still land in the body, and no system message may be injected.
+            foreach (AdapterTypeEnum adapterType in new[] { AdapterTypeEnum.OpenAi, AdapterTypeEnum.Anthropic })
+            {
+                using LocalLlmTestServer server = LocalLlmTestServer.Start();
+                EndpointConfig endpoint = MakeEndpoint(adapterType, server.Endpoint);
+                endpoint.Model = "wire-model";
+                endpoint.MaxTokens = 2345;
+                endpoint.ApiKey = "test-key";
+                using LlmClient client = new LlmClient(endpoint);
+
+                await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
+                MuxAssert.IsTrue(server.RequestCount > 0, $"{adapterType}: the request reached the mock");
+
+                string body = server.RequestBodies[0];
+                MuxAssert.Contains("\"model\":\"wire-model\"", body, $"{adapterType}: endpoint model is sent");
+                MuxAssert.Contains("\"max_tokens\":2345", body, $"{adapterType}: endpoint max tokens are sent");
+                MuxAssert.IsFalse(body.Contains("\"system\"", StringComparison.Ordinal), $"{adapterType}: no system prompt is injected");
+            }
+        }
+
+        private static async Task RunGeminiApiKeyHeaderAsync(CancellationToken ct)
+        {
+            // The mock does not speak Gemini's wire format; only the captured request is under test.
+            using LocalLlmTestServer server = LocalLlmTestServer.Start();
+            EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.Gemini, server.Endpoint);
+            endpoint.ApiKey = "gemini-secret";
+            using LlmClient client = new LlmClient(endpoint);
+
+            await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
+            MuxAssert.IsTrue(server.RequestCount > 0, "the Gemini request reached the mock");
+            MuxAssert.AreEqual("gemini-secret", server.HeaderValue("x-goog-api-key"), "the API key is sent as x-goog-api-key");
+            foreach (string query in server.RequestQueries)
+            {
+                MuxAssert.IsFalse(query.Contains("gemini-secret", StringComparison.Ordinal), "the API key is not in the request URL");
+            }
         }
 
         private static async Task RunGeminiToolResultNameAsync(CancellationToken ct)

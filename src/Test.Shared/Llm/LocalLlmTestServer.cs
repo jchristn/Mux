@@ -28,6 +28,7 @@ namespace Test.Shared
         private readonly object _Sync = new object();
         private readonly List<string> _RequestBodies = new List<string>();
         private readonly List<string> _RequestPaths = new List<string>();
+        private readonly List<string> _RequestQueries = new List<string>();
         private readonly List<Dictionary<string, string>> _RequestHeaders = new List<Dictionary<string, string>>();
         private bool _Disposed = false;
 
@@ -64,6 +65,21 @@ namespace Test.Shared
                 lock (_Sync)
                 {
                     return new List<string>(_RequestPaths);
+                }
+            }
+        }
+
+        /// <summary>
+        /// A detached snapshot of the raw request query strings (including the leading '?', or empty) received
+        /// so far.
+        /// </summary>
+        public List<string> RequestQueries
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return new List<string>(_RequestQueries);
                 }
             }
         }
@@ -212,6 +228,7 @@ namespace Test.Shared
                 {
                     _RequestBodies.Add(body);
                     _RequestPaths.Add(path);
+                    _RequestQueries.Add(context.Request.Url?.Query ?? string.Empty);
                     _RequestHeaders.Add(headers);
                 }
 

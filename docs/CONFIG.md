@@ -145,7 +145,7 @@ hand-written header needed. This is the way to reach services that authenticate 
 
 ### Frontier and cloud provider adapters
 
-mux reaches these through PolyPrompt's native clients (PolyPrompt 2.5.0+):
+mux reaches these through PolyPrompt's native completion clients (PolyPrompt 3.1.0+):
 
 ```json
 {
@@ -161,7 +161,7 @@ mux reaches these through PolyPrompt's native clients (PolyPrompt 2.5.0+):
 ```
 
 Credential notes:
-- `anthropic` / `gemini` / `azure-openai` — set `apiKey` (literal or `${VAR}`).
+- `anthropic` / `gemini` / `azure-openai` — set `apiKey` (literal or `${VAR}`). Gemini sends it in the `x-goog-api-key` header, never in the URL.
 - `vertex` — credentials come from **Application Default Credentials**; set `GOOGLE_APPLICATION_CREDENTIALS` (a service-account key file) or run on GCP with a metadata server. `project` and `region` are required.
 - `bedrock` — credentials come from the **AWS environment** (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`), SigV4-signed per request. `region` is required.
 

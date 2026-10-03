@@ -2,6 +2,35 @@
 
 All notable changes to mux are documented here.
 
+## 1.1.1
+
+### Changed
+
+- **PolyPrompt 2.8.0 -> 3.1.0.** PolyPrompt 3 splits each provider client into one client per capability, so
+  `LlmClient` now builds `OllamaCompletionClient`, `OpenAiCompletionClient`, `AnthropicCompletionClient`,
+  `GeminiCompletionClient`, `AzureOpenAiCompletionClient`, `VertexAiCompletionClient`, and
+  `BedrockCompletionClient`. The endpoint's model, max tokens, and reasoning effort now travel on
+  `ToolChatRequest.Options` (the inline request fields were removed), and streaming usage is read from
+  `TokenUsage`. No mux settings or behavior change, with one wire-level difference from PolyPrompt: Gemini
+  (AI Studio) endpoints now send the API key in the `x-goog-api-key` header instead of the request URL, so it no
+  longer appears in URLs or logs.
+- **Voltaic 2.1.13 -> 2.2.1** (MCP client). No API changes; Voltaic now emits its own `Voltaic` meter and
+  activity source.
+- **Watson 7.2.1 -> 7.2.2** (REST server). Access-control denials return `403` instead of `500`, and IP matchers
+  are disposed with their settings.
+- **TUIKit 1.1.1 -> 1.2.1** (interactive UI). No API changes; TUIKit now emits its own `TUIKit` meter and
+  activity source.
+- **Touchstone 0.1.12 -> 0.2.0** (`Touchstone.Core`, `Touchstone.Cli`, `Touchstone.XunitAdapter`,
+  `Touchstone.NunitAdapter`) for the test runners.
+
+### Tests
+
+- `LlmBridge.EndpointSettingsReachTheWire`: the endpoint's model and max tokens reach the OpenAI and Anthropic
+  request bodies through the new `ToolChatRequest.Options`, and no system prompt is injected.
+- `LlmBridge.GeminiApiKeySentAsHeader`: the Gemini API key is sent as `x-goog-api-key` and never in the URL. The
+  local mock server now records request query strings.
+- Automated (net8.0 and net10.0), xUnit, and NUnit runners all pass.
+
 ## 1.1.0
 
 ### Added

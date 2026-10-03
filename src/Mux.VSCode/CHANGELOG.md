@@ -2,6 +2,10 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 1.1.1
+
+- Versioned `1.1.1` in step with the rest of mux; no extension changes.
+
 ## 1.1.0
 
 - Versioned `1.1.0` in step with the rest of mux; no extension changes. (`GET /v1.0/api/overview` gains an

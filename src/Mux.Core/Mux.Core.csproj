@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <Title>Mux.Core</Title>
     <PackageId>Mux.Core</PackageId>
     <Description>The mux engine: agent loop with streaming events, built-in tools, MCP client, skills, subagents, session persistence, checkpoints, approval/sandbox governance, and usage telemetry — backend-agnostic across Ollama, OpenAI, Azure, Anthropic, Gemini, Vertex, Bedrock, and any OpenAI-compatible API. Build your own experiences on top of mux.</Description>
@@ -30,8 +30,8 @@
          transitively (2.1.10) carries advisory GHSA-2m69-gcr7-jv3q. -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <PackageReference Include="Microsoft.Playwright" Version="1.63.0" />
-    <PackageReference Include="PolyPrompt" Version="2.8.0" />
-    <PackageReference Include="Voltaic" Version="2.1.13" />
+    <PackageReference Include="PolyPrompt" Version="3.1.0" />
+    <PackageReference Include="Voltaic" Version="2.2.1" />
     <!-- SourceLink is bundled in the .NET 8+ SDK; PublishRepositoryUrl/EmbedUntrackedSources
          (in Directory.Build.props) drive the source-linked .snupkg with no extra package. -->
   </ItemGroup>
