@@ -190,6 +190,9 @@ namespace Mux.Server.Models
 
         /// <summary>Derived, human-readable next-step and health notices.</summary>
         public List<OverviewNotice> Notices { get; set; } = new List<OverviewNotice>();
+
+        /// <summary>OpenTelemetry export status and the bundled observability tools (External Services card).</summary>
+        public OverviewObservabilityDto Observability { get; set; } = new OverviewObservabilityDto();
     }
 
     /// <summary>A derived notice on the overview: a severity plus a short message.</summary>

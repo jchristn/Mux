@@ -1393,7 +1393,8 @@ namespace Mux.Core.Settings
                 ExternalSearch = NormalizeExternalSearchSettings(settings.ExternalSearch),
                 Context = NormalizeContextSettings(settings.Context),
                 Rest = NormalizeRestServerSettings(settings.Rest),
-                Telemetry = NormalizeTelemetrySettings(settings.Telemetry)
+                Telemetry = NormalizeTelemetrySettings(settings.Telemetry),
+                Observability = NormalizeObservabilitySettings(settings.Observability)
             };
 
             return normalized;
@@ -1434,6 +1435,36 @@ namespace Mux.Core.Settings
             };
         }
 
+        private static ObservabilitySettings NormalizeObservabilitySettings(ObservabilitySettings? settings)
+        {
+            if (settings == null)
+            {
+                return new ObservabilitySettings();
+            }
+
+            // Re-run the validating setters so a hand-edited settings.json is clamped/normalized.
+            return new ObservabilitySettings
+            {
+                Enabled = settings.Enabled,
+                ServiceName = settings.ServiceName,
+                OtlpEnabled = settings.OtlpEnabled,
+                OtlpEndpoint = settings.OtlpEndpoint,
+                OtlpProtocol = settings.OtlpProtocol,
+                PrometheusEnabled = settings.PrometheusEnabled,
+                PrometheusHostname = settings.PrometheusHostname,
+                PrometheusPort = settings.PrometheusPort,
+                LogsEnabled = settings.LogsEnabled,
+                LokiEnabled = settings.LokiEnabled,
+                LokiEndpoint = settings.LokiEndpoint,
+                TraceSamplingRatio = settings.TraceSamplingRatio,
+                MetricsExportIntervalMs = settings.MetricsExportIntervalMs,
+                GrafanaUrl = settings.GrafanaUrl,
+                PrometheusUrl = settings.PrometheusUrl,
+                TempoUrl = settings.TempoUrl,
+                LokiUrl = settings.LokiUrl
+            };
+        }
+
         private static RestServerSettings NormalizeRestServerSettings(RestServerSettings? settings)
         {
             if (settings == null)
@@ -1466,6 +1497,41 @@ namespace Mux.Core.Settings
             if (TryParseBooleanEnvironmentValue(telemetryEnabledValue, out bool telemetryEnabled))
             {
                 settings.Telemetry.Enabled = telemetryEnabled;
+            }
+
+            // OpenTelemetry export overrides (see TELEMETRY.md). Unset variables leave settings.json untouched.
+            if (TryParseBooleanEnvironmentValue(Environment.GetEnvironmentVariable("MUX_OBSERVABILITY_ENABLED"), out bool observabilityEnabled))
+            {
+                settings.Observability.Enabled = observabilityEnabled;
+            }
+
+            string? otlpEndpoint = Environment.GetEnvironmentVariable("MUX_OTLP_ENDPOINT");
+            if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+            {
+                settings.Observability.OtlpEndpoint = otlpEndpoint;
+            }
+
+            string? otlpProtocol = Environment.GetEnvironmentVariable("MUX_OTLP_PROTOCOL");
+            if (!string.IsNullOrWhiteSpace(otlpProtocol))
+            {
+                settings.Observability.OtlpProtocol = otlpProtocol;
+            }
+
+            if (TryParseBooleanEnvironmentValue(Environment.GetEnvironmentVariable("MUX_PROMETHEUS_ENABLED"), out bool prometheusEnabled))
+            {
+                settings.Observability.PrometheusEnabled = prometheusEnabled;
+            }
+
+            string? prometheusPort = Environment.GetEnvironmentVariable("MUX_PROMETHEUS_PORT");
+            if (!string.IsNullOrWhiteSpace(prometheusPort) && int.TryParse(prometheusPort, out int parsedPort))
+            {
+                settings.Observability.PrometheusPort = parsedPort;
+            }
+
+            string? serviceName = Environment.GetEnvironmentVariable("MUX_OTEL_SERVICE_NAME");
+            if (!string.IsNullOrWhiteSpace(serviceName))
+            {
+                settings.Observability.ServiceName = serviceName;
             }
         }
 

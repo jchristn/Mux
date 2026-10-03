@@ -1,0 +1,12 @@
+# Loads the mux dashboards (assets/grafana, mounted read-only) into a "Mux" folder.
+apiVersion: 1
+
+providers:
+  - name: 'Mux'
+    orgId: 1
+    folder: 'Mux'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards/mux

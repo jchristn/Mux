@@ -7,6 +7,7 @@ namespace Mux.Core.Checkpoints
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Observability;
 
     /// <summary>
     /// Captures and restores whole-workspace snapshots using git plumbing, without disturbing the user's
@@ -71,6 +72,31 @@ namespace Mux.Core.Checkpoints
         /// <returns>The snapshot commit's object id (SHA).</returns>
         /// <exception cref="InvalidOperationException">Thrown when a git command fails.</exception>
         public async Task<string> CaptureAsync(string label, CancellationToken cancellationToken)
+        {
+            Activity? activity = MuxTelemetry.StartActivity("checkpoint capture");
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeError;
+            try
+            {
+                string sha = await CaptureCoreAsync(label, cancellationToken).ConfigureAwait(false);
+                outcome = MuxTelemetryNames.OutcomeSuccess;
+                MuxTelemetry.SetOk(activity);
+                return sha;
+            }
+            catch (Exception ex)
+            {
+                if (ex is OperationCanceledException) outcome = MuxTelemetryNames.OutcomeCancelled;
+                MuxTelemetry.RecordException(activity, ex);
+                throw;
+            }
+            finally
+            {
+                MuxTelemetry.RecordCheckpoint("capture", outcome, MuxTelemetry.SecondsSince(startTimestamp));
+                MuxTelemetry.Stop(activity);
+            }
+        }
+
+        private async Task<string> CaptureCoreAsync(string label, CancellationToken cancellationToken)
         {
             string tempIndex = Path.Combine(Path.GetTempPath(), "mux-idx-" + Guid.NewGuid().ToString("N"));
             Dictionary<string, string> env = new Dictionary<string, string>
@@ -148,6 +174,31 @@ namespace Mux.Core.Checkpoints
             {
                 throw new ArgumentException("Snapshot SHA cannot be null or empty.", nameof(snapshotSha));
             }
+
+            Activity? activity = MuxTelemetry.StartActivity("checkpoint restore");
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeError;
+            try
+            {
+                await RestoreCoreAsync(snapshotSha, cancellationToken).ConfigureAwait(false);
+                outcome = MuxTelemetryNames.OutcomeSuccess;
+                MuxTelemetry.SetOk(activity);
+            }
+            catch (Exception ex)
+            {
+                if (ex is OperationCanceledException) outcome = MuxTelemetryNames.OutcomeCancelled;
+                MuxTelemetry.RecordException(activity, ex);
+                throw;
+            }
+            finally
+            {
+                MuxTelemetry.RecordCheckpoint("restore", outcome, MuxTelemetry.SecondsSince(startTimestamp));
+                MuxTelemetry.Stop(activity);
+            }
+        }
+
+        private async Task RestoreCoreAsync(string snapshotSha, CancellationToken cancellationToken)
+        {
 
             // Delete files present now but absent from the snapshot, so a restore also undoes file creation.
             HashSet<string> current = await ListCurrentFilesAsync(cancellationToken).ConfigureAwait(false);
@@ -229,6 +280,36 @@ namespace Mux.Core.Checkpoints
         }
 
         private async Task<GitResult> RunGitAsync(string[] args, IReadOnlyDictionary<string, string>? env, CancellationToken cancellationToken)
+        {
+            // The git subcommands mux runs are a fixed set, so the subcommand is a bounded operation label.
+            string operation = args.Length > 0 ? args[0] : "unknown";
+            Activity? activity = MuxTelemetry.StartActivity("git " + operation, ActivityKind.Client);
+            MuxTelemetry.SetTag(activity, "process.executable.name", "git");
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeError;
+            try
+            {
+                GitResult result = await RunGitCoreAsync(args, env, cancellationToken).ConfigureAwait(false);
+                MuxTelemetry.SetTag(activity, "process.exit.code", result.ExitCode);
+                outcome = result.ExitCode == 0 ? MuxTelemetryNames.OutcomeSuccess : MuxTelemetryNames.OutcomeFailure;
+                if (result.ExitCode == 0) MuxTelemetry.SetOk(activity);
+                else MuxTelemetry.SetError(activity, "git_exit_" + result.ExitCode, "git exited with a non-zero code");
+                return result;
+            }
+            catch (Exception ex)
+            {
+                if (ex is OperationCanceledException) outcome = MuxTelemetryNames.OutcomeCancelled;
+                MuxTelemetry.RecordException(activity, ex);
+                throw;
+            }
+            finally
+            {
+                MuxTelemetry.RecordIntegration(MuxTelemetryNames.ServiceGit, operation, outcome, MuxTelemetry.SecondsSince(startTimestamp));
+                MuxTelemetry.Stop(activity);
+            }
+        }
+
+        private async Task<GitResult> RunGitCoreAsync(string[] args, IReadOnlyDictionary<string, string>? env, CancellationToken cancellationToken)
         {
             ProcessStartInfo startInfo = new ProcessStartInfo
             {

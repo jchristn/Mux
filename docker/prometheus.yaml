@@ -1,0 +1,27 @@
+# Prometheus for the mux observability stack.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/prometheus-alerts.yaml
+
+scrape_configs:
+  # Metrics pushed by mux over OTLP, re-exposed by the collector. job = service.name ("mux"),
+  # instance = service.instance.id (honor_labels keeps the resource labels the collector attaches).
+  - job_name: 'otel-collector'
+    honor_labels: true
+    static_configs:
+      - targets: ['otel-collector:8889']
+
+  # Optional direct scrape of a long-running mux process's in-process endpoint
+  # ("observability.prometheusEnabled": true). Bind it to an address the container can reach
+  # (prometheusHostname) for this to work; the target stays down otherwise, which is harmless.
+  - job_name: 'mux-direct'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['host.docker.internal:9464']
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['127.0.0.1:9090']

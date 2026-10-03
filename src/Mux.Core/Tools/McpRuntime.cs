@@ -2,10 +2,12 @@ namespace Mux.Core.Tools
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Observability;
 
     /// <summary>
     /// Owns the lifecycle of the interactive session's MCP (Model Context Protocol) connections. On start it
@@ -205,6 +207,8 @@ namespace Mux.Core.Tools
 
         private async Task LoopAsync(CancellationToken cancellationToken)
         {
+            // Background worker: detach from the starter's trace so each refresh is its own root span.
+            Activity.Current = null;
             await RefreshAsync(force: true, cancellationToken).ConfigureAwait(false);
 
             while (!cancellationToken.IsCancellationRequested)
@@ -277,20 +281,28 @@ namespace Mux.Core.Tools
 
                 // Full (re)initialization: build a fresh manager off to the side, then swap it in.
                 McpToolManager candidate = new McpToolManager(CloneConfigs(configs));
+                Activity? refreshActivity = MuxTelemetry.StartActivity("mcp refresh");
+                MuxTelemetry.SetTag(refreshActivity, "mux.mcp.server_count", configs.Count);
                 try
                 {
                     await candidate.InitializeAsync(cancellationToken).ConfigureAwait(false);
+                    MuxTelemetry.SetOk(refreshActivity);
                 }
                 catch (OperationCanceledException)
                 {
+                    MuxTelemetry.SetError(refreshActivity, "cancelled", "refresh cancelled");
+                    MuxTelemetry.Stop(refreshActivity);
                     candidate.Dispose();
                     return;
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     // InitializeAsync already swallows per-server failures; any other error leaves the
                     // candidate usable (possibly with no tools).
+                    MuxTelemetry.RecordException(refreshActivity, ex);
                 }
+
+                MuxTelemetry.Stop(refreshActivity);
 
                 List<ToolDefinition> tools = candidate.GetToolDefinitions();
                 List<McpServerStatus> status = BuildStatus(configs, candidate);

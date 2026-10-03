@@ -23,6 +23,7 @@ namespace Test.Shared
         private bool _Disposed = false;
         private int _Port;
         private List<string> _ReceivedRequests = new List<string>();
+        private List<string> _ReceivedTraceparents = new List<string>();
         private List<MockRoute> _Routes = new List<MockRoute>();
         private readonly object _Lock = new object();
 
@@ -51,6 +52,21 @@ namespace Test.Shared
                 lock (_Lock)
                 {
                     return new List<string>(_ReceivedRequests);
+                }
+            }
+        }
+
+        /// <summary>
+        /// The W3C <c>traceparent</c> header values received (one per request that carried one), for asserting
+        /// outbound trace-context propagation.
+        /// </summary>
+        public List<string> ReceivedTraceparents
+        {
+            get
+            {
+                lock (_Lock)
+                {
+                    return new List<string>(_ReceivedTraceparents);
                 }
             }
         }
@@ -263,6 +279,8 @@ namespace Test.Shared
             lock (_Lock)
             {
                 _ReceivedRequests.Add(requestBody);
+                string? traceparent = context.Request.Headers["traceparent"];
+                if (!string.IsNullOrEmpty(traceparent)) _ReceivedTraceparents.Add(traceparent);
             }
 
             MockRoute? matchedRoute = null;

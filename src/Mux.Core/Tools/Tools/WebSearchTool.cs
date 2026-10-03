@@ -2,10 +2,12 @@ namespace Mux.Core.Tools.Tools
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
+    using Mux.Core.Observability;
     using Mux.Core.Prompting;
     using Mux.Search.Models;
     using Mux.Search.Services;
@@ -92,6 +94,9 @@ namespace Mux.Core.Tools.Tools
         /// <inheritdoc />
         public async Task<ToolResult> ExecuteAsync(string toolCallId, JsonElement arguments, string workingDirectory, CancellationToken cancellationToken)
         {
+            Activity? activity = MuxTelemetry.StartActivity("web_search search", ActivityKind.Client);
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeError;
             try
             {
                 WebSearchRequest request = new WebSearchRequest
@@ -107,7 +112,10 @@ namespace Mux.Core.Tools.Tools
                     ExcludeDomains = GetOptionalStringArray(arguments, "exclude_domains")
                 };
 
+                MuxTelemetry.SetTag(activity, "mux.search.preferred_provider", request.PreferredProvider);
                 WebSearchResponse response = await _SearchService.SearchAsync(request, cancellationToken).ConfigureAwait(false);
+                outcome = MuxTelemetryNames.OutcomeSuccess;
+                MuxTelemetry.SetOk(activity);
 
                 return new ToolResult
                 {
@@ -118,6 +126,8 @@ namespace Mux.Core.Tools.Tools
             }
             catch (Exception ex)
             {
+                outcome = ex is OperationCanceledException ? MuxTelemetryNames.OutcomeCancelled : MuxTelemetryNames.OutcomeError;
+                MuxTelemetry.RecordException(activity, ex);
                 return new ToolResult
                 {
                     ToolCallId = toolCallId,
@@ -128,6 +138,11 @@ namespace Mux.Core.Tools.Tools
                         message = ex.Message
                     })
                 };
+            }
+            finally
+            {
+                MuxTelemetry.RecordIntegration(MuxTelemetryNames.ServiceWebSearch, "search", outcome, MuxTelemetry.SecondsSince(startTimestamp));
+                MuxTelemetry.Stop(activity);
             }
         }
 

@@ -2,11 +2,13 @@ namespace Mux.Core.Sessions
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.IO;
     using System.Text.Json;
     using System.Text.Json.Serialization;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Observability;
 
     /// <summary>
     /// Persists <see cref="SessionSnapshot"/> instances as one JSON file per session under a
@@ -79,6 +81,30 @@ namespace Mux.Core.Sessions
         {
             if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
 
+            Activity? activity = MuxTelemetry.StartActivity("session save");
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrSessionId, snapshot.Id);
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeError;
+            try
+            {
+                await SaveCoreAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                outcome = MuxTelemetryNames.OutcomeSuccess;
+                MuxTelemetry.SetOk(activity);
+            }
+            catch (Exception ex)
+            {
+                MuxTelemetry.RecordException(activity, ex);
+                throw;
+            }
+            finally
+            {
+                MuxTelemetry.RecordSessionOperation("save", outcome, MuxTelemetry.SecondsSince(startTimestamp));
+                MuxTelemetry.Stop(activity);
+            }
+        }
+
+        private async Task SaveCoreAsync(SessionSnapshot snapshot, CancellationToken cancellationToken)
+        {
             string path = ResolvePath(snapshot.Id);
             Directory.CreateDirectory(_RootDirectory);
 
@@ -97,6 +123,32 @@ namespace Mux.Core.Sessions
         /// <returns>The snapshot, or null when no session with that id exists.</returns>
         /// <exception cref="ArgumentException">Thrown when <paramref name="id"/> is empty or not a valid file name.</exception>
         public async Task<SessionSnapshot?> LoadAsync(string id, CancellationToken cancellationToken)
+        {
+            Activity? activity = MuxTelemetry.StartActivity("session load");
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrSessionId, id);
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeError;
+            try
+            {
+                SessionSnapshot? snapshot = await LoadCoreAsync(id, cancellationToken).ConfigureAwait(false);
+                outcome = snapshot == null ? MuxTelemetryNames.OutcomeFailure : MuxTelemetryNames.OutcomeSuccess;
+                MuxTelemetry.SetTag(activity, "mux.session.found", snapshot != null);
+                MuxTelemetry.SetOk(activity);
+                return snapshot;
+            }
+            catch (Exception ex)
+            {
+                MuxTelemetry.RecordException(activity, ex);
+                throw;
+            }
+            finally
+            {
+                MuxTelemetry.RecordSessionOperation("load", outcome, MuxTelemetry.SecondsSince(startTimestamp));
+                MuxTelemetry.Stop(activity);
+            }
+        }
+
+        private async Task<SessionSnapshot?> LoadCoreAsync(string id, CancellationToken cancellationToken)
         {
             string path = ResolvePath(id);
             if (!File.Exists(path))
@@ -146,18 +198,30 @@ namespace Mux.Core.Sessions
         /// <returns>The loaded snapshots.</returns>
         public async Task<IReadOnlyList<SessionSnapshot>> ListAsync(CancellationToken cancellationToken)
         {
-            List<SessionSnapshot> snapshots = new List<SessionSnapshot>();
-            foreach (string id in ListSessionIds())
+            // One "list" measurement for the whole scan; per-file loads use the uninstrumented core so a
+            // dashboard listing does not emit one span per session file.
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeError;
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                SessionSnapshot? snapshot = await LoadAsync(id, cancellationToken).ConfigureAwait(false);
-                if (snapshot != null)
+                List<SessionSnapshot> snapshots = new List<SessionSnapshot>();
+                foreach (string id in ListSessionIds())
                 {
-                    snapshots.Add(snapshot);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    SessionSnapshot? snapshot = await LoadCoreAsync(id, cancellationToken).ConfigureAwait(false);
+                    if (snapshot != null)
+                    {
+                        snapshots.Add(snapshot);
+                    }
                 }
-            }
 
-            return snapshots;
+                outcome = MuxTelemetryNames.OutcomeSuccess;
+                return snapshots;
+            }
+            finally
+            {
+                MuxTelemetry.RecordSessionOperation("list", outcome, MuxTelemetry.SecondsSince(startTimestamp));
+            }
         }
 
         /// <summary>
@@ -170,14 +234,25 @@ namespace Mux.Core.Sessions
         public Task<bool> DeleteAsync(string id, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string path = ResolvePath(id);
-            if (!File.Exists(path))
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeError;
+            try
             {
-                return Task.FromResult(false);
-            }
+                string path = ResolvePath(id);
+                if (!File.Exists(path))
+                {
+                    outcome = MuxTelemetryNames.OutcomeFailure;
+                    return Task.FromResult(false);
+                }
 
-            File.Delete(path);
-            return Task.FromResult(true);
+                File.Delete(path);
+                outcome = MuxTelemetryNames.OutcomeSuccess;
+                return Task.FromResult(true);
+            }
+            finally
+            {
+                MuxTelemetry.RecordSessionOperation("delete", outcome, MuxTelemetry.SecondsSince(startTimestamp));
+            }
         }
 
         /// <summary>

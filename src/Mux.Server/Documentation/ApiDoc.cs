@@ -1229,6 +1229,25 @@ namespace Mux.Server.Documentation
                 ["Text"] = Pstr("The message text.")
             }, new Dictionary<string, object?> { ["Level"] = "warning", ["Text"] = "No default endpoint is set." });
 
+            s["ExternalServiceDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Kind"] = Pstr("Stable kind: `grafana`, `prometheus`, `tempo`, `loki`, or `scrape`."),
+                ["Name"] = Pstr("Display name."),
+                ["Url"] = Pstr("Browser-reachable URL."),
+                ["Credentials"] = PstrNullable("Local default credentials as display text, or null when the tool has no login.")
+            }, new Dictionary<string, object?> { ["Kind"] = "grafana", ["Name"] = "Grafana", ["Url"] = "http://127.0.0.1:3000", ["Credentials"] = "admin / admin" });
+
+            s["OverviewObservabilityDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Enabled"] = Pbool("Whether OpenTelemetry export is enabled in settings."),
+                ["ServiceName"] = Pstr("The service.name mux reports as."),
+                ["OtlpEndpoint"] = PstrNullable("The OTLP collector endpoint when OTLP push is enabled, or null."),
+                ["Services"] = Parr(Ref("ExternalServiceDto"), "The bundled observability tools.")
+            }, new Dictionary<string, object?>
+            {
+                ["Enabled"] = true, ["ServiceName"] = "mux", ["OtlpEndpoint"] = "http://127.0.0.1:4317", ["Services"] = new object[0]
+            }, description: "OpenTelemetry export status and the bundled observability tools for the External Services card.");
+
             s["OverviewDto"] = Obj(new Dictionary<string, M>
             {
                 ["Version"] = Pstr("Product version."),
@@ -1252,7 +1271,8 @@ namespace Mux.Server.Documentation
                 ["Sessions"] = Pint("Saved session count."),
                 ["TotalMessages"] = Pint("Total messages across all saved sessions."),
                 ["RecentSessions"] = Parr(Ref("SessionSummary"), "The most recently updated sessions."),
-                ["Notices"] = Parr(Ref("OverviewNotice"), "Derived next-step and health notices.")
+                ["Notices"] = Parr(Ref("OverviewNotice"), "Derived next-step and health notices."),
+                ["Observability"] = Ref("OverviewObservabilityDto")
             }, new Dictionary<string, object?>
             {
                 ["Version"] = "0.11.0", ["ConfigDir"] = "C:/Users/you/.mux", ["Uptime"] = "0.01:02:03",

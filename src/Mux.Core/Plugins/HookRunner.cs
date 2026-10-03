@@ -6,6 +6,7 @@ namespace Mux.Core.Plugins
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Observability;
 
     /// <summary>
     /// Runs hooks out-of-process for a lifecycle event. Each matching hook is launched as its own process
@@ -44,13 +45,54 @@ namespace Mux.Core.Plugins
             List<HookRunResult> results = new List<HookRunResult>();
             bool vetoable = IsVetoable(hookEvent);
 
-            foreach (HookDefinition hook in registry.HooksFor(hookEvent))
+            string eventName = hookEvent.ToString().ToLowerInvariant();
+            Activity? activity = null;
+
+            try
             {
-                HookRunResult result = await RunOneAsync(hook, payloadJson, workingDirectory, vetoable, cancellationToken).ConfigureAwait(false);
-                results.Add(result);
+                foreach (HookDefinition hook in registry.HooksFor(hookEvent))
+                {
+                    activity ??= StartHookActivity(eventName);
+                    long startTimestamp = Stopwatch.GetTimestamp();
+                    HookRunResult result = await RunOneAsync(hook, payloadJson, workingDirectory, vetoable, cancellationToken).ConfigureAwait(false);
+                    string outcome = !result.Started
+                        ? MuxTelemetryNames.OutcomeError
+                        : (result.TimedOut ? MuxTelemetryNames.OutcomeTimeout : (result.ExitCode == 0 ? MuxTelemetryNames.OutcomeSuccess : MuxTelemetryNames.OutcomeFailure));
+                    MuxTelemetry.RecordIntegration(MuxTelemetryNames.ServiceHook, eventName, outcome, MuxTelemetry.SecondsSince(startTimestamp));
+                    if (result.Vetoed)
+                    {
+                        activity?.AddEvent(new ActivityEvent("mux.hook.vetoed"));
+                    }
+
+                    results.Add(result);
+                }
+
+                if (activity != null)
+                {
+                    MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrHookCount, results.Count);
+                    bool anyFailed = results.Exists((HookRunResult r) => !r.Started || r.TimedOut);
+                    if (anyFailed) MuxTelemetry.SetError(activity, "hook_failed", "one or more hooks failed to start or timed out");
+                    else MuxTelemetry.SetOk(activity);
+                }
+            }
+            catch (Exception ex)
+            {
+                MuxTelemetry.RecordException(activity, ex);
+                throw;
+            }
+            finally
+            {
+                MuxTelemetry.Stop(activity);
             }
 
             return results;
+        }
+
+        private static Activity? StartHookActivity(string eventName)
+        {
+            Activity? activity = MuxTelemetry.StartActivity("hook " + eventName);
+            MuxTelemetry.SetTag(activity, "mux.hook.event", eventName);
+            return activity;
         }
 
         /// <summary>

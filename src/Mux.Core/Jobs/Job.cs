@@ -2,6 +2,7 @@ namespace Mux.Core.Jobs
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Threading;
     using System.Threading.Channels;
     using Mux.Core.Agent;
@@ -384,6 +385,13 @@ namespace Mux.Core.Jobs
         {
             get => _CancellationTokenSource;
         }
+
+        /// <summary>
+        /// The trace context that was current when the job was submitted, captured so the worker that later
+        /// dequeues the job can parent the job span to the submitter (a background hand-off where
+        /// <see cref="Activity.Current"/> does not reliably flow). Default when nothing was being traced.
+        /// </summary>
+        internal ActivityContext ParentContext { get; set; }
 
         #endregion
 

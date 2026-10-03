@@ -54,7 +54,10 @@ namespace Test.Shared.Suites
 
                     Case("TimeoutKillsProcess", "A process exceeding the timeout is killed and reported as timed out", async (string dir, RunProcessTool tool, CancellationToken ct) =>
                     {
-                        ToolResult result = await tool.ExecuteAsync("call4", ToolArgs.From(new { command = "ping -n 30 127.0.0.1", timeout_ms = 1000 }), dir, ct).ConfigureAwait(false);
+                        // A command that outlives the timeout on every OS. "ping -n 30" only counts pings on Windows;
+                        // on macOS/Linux "-n" means numeric output and "30" is parsed as a host, so it exits at once.
+                        string longRunning = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ping -n 30 127.0.0.1" : "sleep 30";
+                        ToolResult result = await tool.ExecuteAsync("call4", ToolArgs.From(new { command = longRunning, timeout_ms = 1000 }), dir, ct).ConfigureAwait(false);
                         MuxAssert.IsFalse(result.Success, "failure");
                         JsonDocument doc = JsonDocument.Parse(result.Content);
                         MuxAssert.IsTrue(doc.RootElement.GetProperty("timed_out").GetBoolean(), "timed_out");

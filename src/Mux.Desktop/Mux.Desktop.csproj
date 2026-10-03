@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <Version>1.0.3</Version>
+    <Version>1.1.0</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -24,6 +24,7 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.3" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+    <PackageReference Include="Radiant" Version="0.1.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -33,6 +34,12 @@
   <ItemGroup>
     <ProjectReference Include="..\Mux.Core\Mux.Core.csproj" />
     <ProjectReference Include="..\Mux.Desktop.Core\Mux.Desktop.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Composition-root telemetry host (one Radiant host per process), shared by source link with the other
+         mux executables. Libraries (Mux.Core, Mux.Server) emit through BCL Meter/ActivitySource only. -->
+    <Compile Include="..\ObservabilityShared\*.cs" LinkBase="ObservabilityShared" />
   </ItemGroup>
 
 </Project>

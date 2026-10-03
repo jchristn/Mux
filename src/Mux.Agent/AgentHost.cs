@@ -146,7 +146,8 @@ namespace Mux.Agent
             // Without this the agent served an empty dashboard even though `mux serve` did not. Best-effort:
             // a disabled/unopenable store yields empty data and a no-op recorder.
             _Telemetry?.Dispose();
-            _Telemetry = Mux.Core.Telemetry.UsageTelemetry.Create(settings, SettingsLoader.GetConfigDirectory(), null);
+            Mux.Hosting.MuxObservabilityHost? observability = Mux.Hosting.MuxObservabilityHost.Current;
+            _Telemetry = Mux.Core.Telemetry.UsageTelemetry.Create(settings, SettingsLoader.GetConfigDirectory(), observability?.CreateLogSink("Mux.UsageTelemetry"));
 
             SessionStore agentSessionStore = new SessionStore(sessionsDir);
 
@@ -155,7 +156,7 @@ namespace Mux.Agent
                 Defaults.ProductVersion,
                 agentSessionStore,
                 () => SettingsLoader.LoadEndpoints(),
-                logger: null,
+                logger: observability?.CreateLogSink("Mux.Server"),
                 usageQuery: _Telemetry.CreateQueryService(
                     () => SettingsLoader.LoadPricing(),
                     new Mux.Core.Telemetry.SessionStoreMetadataIndex(agentSessionStore)),

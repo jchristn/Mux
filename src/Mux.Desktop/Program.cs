@@ -49,7 +49,10 @@ namespace Mux.Desktop
 
             try
             {
+                // One OpenTelemetry export host for the desktop process (off unless observability is enabled in
+                // settings); it collects the in-process agent loop and embedded server signals.
                 using (instance)
+                using (Mux.Hosting.MuxObservabilityHost observability = Mux.Hosting.MuxObservabilityHost.StartFromSettings(true, null))
                 {
                     return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
                 }

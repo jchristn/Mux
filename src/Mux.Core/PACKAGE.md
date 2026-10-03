@@ -34,6 +34,7 @@ await foreach (AgentEvent evt in loop.RunAsync("List the files in this directory
 - **Sessions** — `SessionStore` / `SessionSnapshot` / `SessionResumeService` / `SessionExporter`.
 - **Tools & MCP** — `BuiltInToolRegistry`, `McpToolManager`, allow/deny + sandbox governance.
 - **Telemetry** — `UsageTelemetry` + `UsageQueryService` over a shared local SQLite store.
+- **Observability**: OpenTelemetry metrics and traces on the BCL `Meter` and `ActivitySource` named `Mux` (agent runs and stages, LLM calls, tools, MCP, jobs, sessions, and more). No exporter dependency and near-zero cost when nothing listens; subscribe from your host with `AddMeter("Mux")` / `AddActivitySource("Mux")`. Names live in `Mux.Core.Observability.MuxTelemetryNames`; the full catalog is in [TELEMETRY.md](https://github.com/jchristn/Mux/blob/main/TELEMETRY.md).
 - **Config** — `SettingsLoader` over the `~/.mux` config directory.
 
 ## License

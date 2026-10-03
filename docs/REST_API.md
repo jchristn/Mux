@@ -92,6 +92,7 @@ All paths are versioned under `/v1.0/api`.
 | GET | `/openapi.json` | none | OpenAPI 3.0 document describing the whole API (see [API documentation](#api-documentation-openapi--swagger)). |
 | GET | `/swagger` | none | Interactive Swagger UI. |
 | GET | `/v1.0/api/health` | none | Status, product version, **`contractVersion`** (the REST/SSE API contract a client negotiates against), pid, uptime. |
+| GET | `/v1.0/api/overview` | key | The dashboard home aggregate: version, uptime, auth state, config directory, counts (endpoints, MCP servers, prompts, subagents, skills, hooks, commands, keybindings, sessions, messages), the default endpoint, recent sessions, derived `Notices`, and `Observability`: `{ "Enabled", "ServiceName", "OtlpEndpoint", "Services": [ { "Kind", "Name", "Url", "Credentials" } ] }` (OpenTelemetry export status and the bundled Grafana/Prometheus/Tempo/Loki URLs with local default credentials, for the External services card; see [TELEMETRY.md](../TELEMETRY.md)). |
 | GET | `/v1.0/api/endpoints` | key | Configured endpoints (name, adapter type, base URL, model, default). **No secrets.** |
 | GET | `/v1.0/api/endpoints/detail` | key | Full endpoint fields for editing, **secrets masked** (`apiKeySet` flag; header/key values blanked). |
 | PUT | `/v1.0/api/endpoints` | key | Replace the endpoint collection (`{ "items": [ … ] }`). A blank secret preserves the stored one. |

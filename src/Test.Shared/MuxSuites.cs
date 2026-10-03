@@ -74,6 +74,10 @@ namespace Test.Shared
                     // Mux.Core / Llm bridge suite (PolyPrompt-backed LlmClient against mock servers).
                     LlmBridgeSuite.Create(),
 
+                    // OpenTelemetry instrumentation (Mux meter/activity source, Watson wiring, export host).
+                    TelemetryCoreSuite.Create(),
+                    TelemetryHostSuite.Create(),
+
                     // Settings + non-interactive CLI command unit suites (ported from Test.Xunit).
                     EndpointConfigSuite.Create(),
                     EndpointAuthPlacementSuite.Create(),

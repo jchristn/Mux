@@ -2,12 +2,14 @@ namespace Mux.Core.Tools
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Linq;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Observability;
     using Mux.Core.Settings;
     using Voltaic.Mcp;
     using ToolDefinition = Mux.Core.Models.ToolDefinition;
@@ -126,6 +128,12 @@ namespace Mux.Core.Tools
                 originalToolName = toolName.Substring(prefix.Length);
             }
 
+            string transport = client is HttpMcpClientConnection ? "http" : "stdio";
+            Activity? activity = StartMcpActivity("tools/call", serverName, transport);
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrToolName, toolName);
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeSuccess;
+
             try
             {
                 object callParams = new { name = originalToolName, arguments = arguments };
@@ -138,6 +146,16 @@ namespace Mux.Core.Tools
                     && result.TryGetProperty("isError", out JsonElement isErrorElement)
                     && isErrorElement.ValueKind == JsonValueKind.True;
 
+                if (isError)
+                {
+                    outcome = MuxTelemetryNames.OutcomeFailure;
+                    MuxTelemetry.SetError(activity, "mcp_tool_error", "MCP tool returned isError");
+                }
+                else
+                {
+                    MuxTelemetry.SetOk(activity);
+                }
+
                 return new ToolResult
                 {
                     ToolCallId = toolCallId,
@@ -147,12 +165,19 @@ namespace Mux.Core.Tools
             }
             catch (Exception ex)
             {
+                outcome = OutcomeOf(ex, cancellationToken);
+                MuxTelemetry.RecordException(activity, ex);
                 return new ToolResult
                 {
                     ToolCallId = toolCallId,
                     Success = false,
                     Content = JsonSerializer.Serialize(new { error = "mcp_call_failed", message = ex.Message })
                 };
+            }
+            finally
+            {
+                MuxTelemetry.RecordIntegration(MuxTelemetryNames.ServiceMcp, "tools/call", outcome, MuxTelemetry.SecondsSince(startTimestamp));
+                MuxTelemetry.Stop(activity);
             }
         }
 
@@ -366,9 +391,32 @@ namespace Mux.Core.Tools
 
         private async Task ConnectAndDiscoverAsync(McpServerConfig config, CancellationToken cancellationToken)
         {
-            IMcpClientConnection client = await ConnectClientAsync(config, cancellationToken).ConfigureAwait(false);
+            string transport = MethodLabel(config.Transport);
+            IMcpClientConnection client;
+            Activity? connectActivity = StartMcpActivity("connect", config.Name, transport);
+            long connectStart = Stopwatch.GetTimestamp();
+            try
+            {
+                client = await ConnectClientAsync(config, cancellationToken).ConfigureAwait(false);
+                MuxTelemetry.SetOk(connectActivity);
+                MuxTelemetry.RecordIntegration(MuxTelemetryNames.ServiceMcp, "connect", MuxTelemetryNames.OutcomeSuccess, MuxTelemetry.SecondsSince(connectStart));
+            }
+            catch (Exception ex)
+            {
+                MuxTelemetry.RecordException(connectActivity, ex);
+                MuxTelemetry.RecordIntegration(MuxTelemetryNames.ServiceMcp, "connect", OutcomeOf(ex, cancellationToken), MuxTelemetry.SecondsSince(connectStart));
+                throw;
+            }
+            finally
+            {
+                MuxTelemetry.Stop(connectActivity);
+            }
+
             _Clients[config.Name] = client;
 
+            Activity? listActivity = StartMcpActivity("tools/list", config.Name, transport);
+            long listStart = Stopwatch.GetTimestamp();
+            string listOutcome = MuxTelemetryNames.OutcomeSuccess;
             try
             {
                 JsonElement toolsResult = await client.CallAsync<JsonElement>("tools/list", null, 30000, cancellationToken).ConfigureAwait(false);
@@ -406,10 +454,18 @@ namespace Mux.Core.Tools
                 }
 
                 _ServerTools[config.Name] = serverToolDefs;
+                MuxTelemetry.SetOk(listActivity);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                listOutcome = OutcomeOf(ex, cancellationToken);
+                MuxTelemetry.RecordException(listActivity, ex);
                 _ServerTools[config.Name] = new List<ToolDefinition>();
+            }
+            finally
+            {
+                MuxTelemetry.RecordIntegration(MuxTelemetryNames.ServiceMcp, "tools/list", listOutcome, MuxTelemetry.SecondsSince(listStart));
+                MuxTelemetry.Stop(listActivity);
             }
 
             // The connection itself succeeded (a tools/list failure above still leaves the server usable with
@@ -439,6 +495,25 @@ namespace Mux.Core.Tools
                 Method = MethodLabel(config.Transport),
                 Error = ex.Message
             };
+        }
+
+        private static Activity? StartMcpActivity(string operation, string serverName, string transport)
+        {
+            Activity? activity = MuxTelemetry.StartActivity("mcp " + operation, ActivityKind.Client);
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrMcpServer, serverName);
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrMcpTransport, transport);
+            MuxTelemetry.SetTag(activity, "rpc.method", operation);
+            return activity;
+        }
+
+        private static string OutcomeOf(Exception ex, CancellationToken cancellationToken)
+        {
+            if (ex is OperationCanceledException)
+            {
+                return cancellationToken.IsCancellationRequested ? MuxTelemetryNames.OutcomeCancelled : MuxTelemetryNames.OutcomeTimeout;
+            }
+
+            return ex is TimeoutException ? MuxTelemetryNames.OutcomeTimeout : MuxTelemetryNames.OutcomeError;
         }
 
         private static string MethodLabel(McpTransportTypeEnum transport)

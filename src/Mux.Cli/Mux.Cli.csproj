@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <Version>1.0.3</Version>
+    <Version>1.1.0</Version>
     <Description>CLI interface for mux AI agent</Description>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mux</ToolCommandName>
@@ -17,6 +17,7 @@
   <ItemGroup>
     <!-- TUIKit (pinned, exact) drives the interactive UI. Source lives at C:\Code\TUIKit for reference
          only; always consume the published NuGet package, never a project reference. -->
+    <PackageReference Include="Radiant" Version="0.1.2" />
     <PackageReference Include="TUIKit" Version="1.1.1" />
   </ItemGroup>
 
@@ -27,6 +28,12 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Composition-root telemetry host (one Radiant host per process), shared by source link with the other
+         mux executables. Libraries (Mux.Core, Mux.Server) emit through BCL Meter/ActivitySource only. -->
+    <Compile Include="..\ObservabilityShared\*.cs" LinkBase="ObservabilityShared" />
   </ItemGroup>
 
 </Project>

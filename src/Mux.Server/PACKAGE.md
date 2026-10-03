@@ -19,12 +19,17 @@ using Mux.Server;
 SessionStore sessions = new SessionStore(); // ~/.mux/sessions
 using MuxServer server = new MuxServer(
     new Mux.Core.Settings.RestServerSettings { Hostname = "127.0.0.1", Port = 8710 },
-    productVersion: "1.0.3",
+    productVersion: "1.1.0",
     sessionStore: sessions,
     endpointsProvider: () => Mux.Core.Settings.SettingsLoader.LoadEndpoints());
 server.Start();
 // GET http://127.0.0.1:8710/dashboard
 ```
+
+Observability: Watson's built-in telemetry is on (meter and activity source `Watson`: HTTP server metrics and one
+server span per request, adopting an inbound `traceparent`), and the engine's spans nest under it on the `Mux`
+source. Subscribe a collector to `Watson` and `Mux`; see
+[TELEMETRY.md](https://github.com/jchristn/Mux/blob/main/TELEMETRY.md).
 
 See the [REST API reference](https://github.com/jchristn/Mux/blob/main/docs/REST_API.md) for the full
 surface. Distributed under the MIT License.

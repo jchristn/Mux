@@ -429,6 +429,10 @@ Resolution priority:
 |---|---|
 | `MUX_CONFIG_DIR` | override the active config directory |
 | `MUX_IGNORE_CERT_ERRORS` | set to `1`, `true`, `yes`, or `on` to disable TLS certificate validation for mux-owned network requests; set to `0`, `false`, `no`, or `off` to force it off |
+| `MUX_OBSERVABILITY_ENABLED` | turn OpenTelemetry export on or off (`observability.enabled`) |
+| `MUX_OTLP_ENDPOINT` / `MUX_OTLP_PROTOCOL` | OTLP collector endpoint and protocol (`grpc` or `httpprotobuf`) |
+| `MUX_PROMETHEUS_ENABLED` / `MUX_PROMETHEUS_PORT` | in-process Prometheus `/metrics` endpoint for long-running processes |
+| `MUX_OTEL_SERVICE_NAME` | the `service.name` mux reports as |
 
 Config values may reference environment variables using `${VAR_NAME}`, `%VAR_NAME%`, `$VAR_NAME`, or `$env:VAR_NAME`. The interactive endpoint wizard accepts the same forms and writes stored references as `${VAR_NAME}`. If both `--config-dir` and `MUX_CONFIG_DIR` are present, the CLI flag wins.
 
@@ -512,6 +516,53 @@ best-effort: a telemetry fault never affects a run.
 | `maxRows` | int | Secondary retention guard: max rows regardless of age. Floored at 1000. Default 5,000,000. |
 
 Environment override: `MUX_TELEMETRY_ENABLED` (`1`/`true`/`0`/`false`) toggles capture without editing the file.
+
+## OpenTelemetry export (`settings.json` `observability`)
+
+mux always emits OpenTelemetry metrics and traces through the .NET `Meter` and `ActivitySource` named `Mux` (and the
+REST server through Watson's `Watson` meter and source). This block controls whether the mux executables (`mux`,
+`mux serve`, the tray agent, the desktop app) start an exporter that ships them, plus logs, to an observability stack
+such as the bundled [`docker/compose.yaml`](../docker/compose.yaml). Export is **off by default**.
+
+```json
+{
+  "observability": {
+    "enabled": false,
+    "serviceName": "mux",
+    "otlpEnabled": true,
+    "otlpEndpoint": "http://127.0.0.1:4317",
+    "otlpProtocol": "grpc",
+    "prometheusEnabled": false,
+    "prometheusHostname": "127.0.0.1",
+    "prometheusPort": 9464,
+    "logsEnabled": true,
+    "lokiEnabled": false,
+    "lokiEndpoint": "http://127.0.0.1:3100/otlp",
+    "traceSamplingRatio": 1.0,
+    "metricsExportIntervalMs": 15000,
+    "grafanaUrl": "http://127.0.0.1:3000",
+    "prometheusUrl": "http://127.0.0.1:9090",
+    "tempoUrl": "http://127.0.0.1:3200",
+    "lokiUrl": "http://127.0.0.1:3100"
+  }
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `enabled` | bool | Master switch. Default false: no exporter, no port, no connection. |
+| `serviceName` | string | `service.name` on every signal. Default `mux`. |
+| `otlpEnabled` / `otlpEndpoint` / `otlpProtocol` | bool / string / string | Push over OTLP. Defaults `true` / `http://127.0.0.1:4317` / `grpc` (`httpprotobuf` uses port 4318). |
+| `prometheusEnabled` / `prometheusHostname` / `prometheusPort` | bool / string / int | In-process `/metrics` for long-running processes only. Defaults `false` / `127.0.0.1` / 9464 (clamped 1-65535). Unauthenticated. |
+| `logsEnabled` | bool | Export diagnostic log lines with trace correlation. Default true. |
+| `lokiEnabled` / `lokiEndpoint` | bool / string | Push logs straight to Loki 3.x. Defaults `false` / `http://127.0.0.1:3100/otlp`. |
+| `traceSamplingRatio` | number | Root-span sampling, clamped 0-1. Default 1.0. |
+| `metricsExportIntervalMs` | int | OTLP metric push cadence, clamped 1000-300000. Default 15000. |
+| `grafanaUrl`, `prometheusUrl`, `tempoUrl`, `lokiUrl` | string | Browser URLs on the dashboard's External services card. Display only. |
+
+Environment overrides: `MUX_OBSERVABILITY_ENABLED`, `MUX_OTLP_ENDPOINT`, `MUX_OTLP_PROTOCOL`, `MUX_PROMETHEUS_ENABLED`,
+`MUX_PROMETHEUS_PORT`, `MUX_OTEL_SERVICE_NAME`. Every metric, span, dashboard, and alert is documented in
+[TELEMETRY.md](../TELEMETRY.md).
 
 ## Model pricing (`pricing.json`)
 

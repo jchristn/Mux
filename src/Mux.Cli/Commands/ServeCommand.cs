@@ -94,8 +94,9 @@ namespace Mux.Cli.Commands
             // Usage telemetry: open the shared store (written by every mux instance) so the dashboard can
             // query it, and hand the server a recorder so its own chat calls are captured too. Best-effort —
             // a disabled/unopenable store yields empty dashboard data and a no-op recorder.
+            Mux.Hosting.MuxObservabilityHost? observability = Mux.Hosting.MuxObservabilityHost.Current;
             using Mux.Core.Telemetry.UsageTelemetry usageTelemetry = Mux.Core.Telemetry.UsageTelemetry.Create(
-                settings, SettingsLoader.GetConfigDirectory(), null);
+                settings, SettingsLoader.GetConfigDirectory(), observability?.CreateLogSink("Mux.UsageTelemetry"));
             Mux.Core.Telemetry.UsageQueryService? usageQuery = usageTelemetry.CreateQueryService(
                 () => SettingsLoader.LoadPricing(),
                 new Mux.Core.Telemetry.SessionStoreMetadataIndex(sessionStore));
@@ -105,7 +106,7 @@ namespace Mux.Cli.Commands
                 Defaults.ProductVersion,
                 sessionStore,
                 () => SettingsLoader.LoadEndpoints(),
-                logger: null,
+                logger: observability?.CreateLogSink("Mux.Server"),
                 usageQuery: usageQuery,
                 usageRecorder: usageTelemetry.Recorder,
                 allowInteractiveTools: allowTools);
@@ -138,6 +139,16 @@ namespace Mux.Cli.Commands
             {
                 Console.WriteLine("  " + "api key".PadRight(labelWidth) + " : " + apiKey);
                 Console.WriteLine(valueIndent + "send as 'Authorization: Bearer <key>'");
+            }
+            if (observability != null && observability.IsEnabled)
+            {
+                ObservabilitySettings otel = settings.Observability;
+                Console.WriteLine("  " + "telemetry".PadRight(labelWidth) + " : exporting as '" + otel.ServiceName + "'"
+                    + (otel.OtlpEnabled ? " via OTLP " + otel.OtlpEndpoint : string.Empty));
+                if (observability.PrometheusScrapeUrl != null)
+                {
+                    Console.WriteLine(valueIndent + "metrics at " + observability.PrometheusScrapeUrl);
+                }
             }
             Console.WriteLine("  " + "tools".PadRight(labelWidth) + " : " + (allowTools
                 ? "interactive (mutating tools prompt the browser for approval)"

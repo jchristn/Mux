@@ -53,6 +53,12 @@ namespace Mux.Cli
             string? configDirectoryOverride = GetConfigDirectoryOverride(args);
             using IDisposable configScope = SettingsLoader.PushConfigDirectoryOverride(configDirectoryOverride);
 
+            // OpenTelemetry export (off unless "observability.enabled" or MUX_OBSERVABILITY_ENABLED). One host per
+            // process, disposed on exit so buffered spans and metrics flush. Only `mux serve` is long-running
+            // enough to serve the Prometheus endpoint; other commands push over OTLP. Never throws.
+            bool isServeCommand = args.Any(a => a == "serve");
+            using Mux.Hosting.MuxObservabilityHost observability = Mux.Hosting.MuxObservabilityHost.StartFromSettings(isServeCommand, null);
+
             bool isNonInteractiveCommand = args.Any(a =>
                 a == "--print"
                 || a == "-p"

@@ -38,7 +38,10 @@ namespace Mux.Agent
 
             try
             {
+                // One OpenTelemetry export host for the tray process (off unless observability is enabled in
+                // settings); it collects the REST server's Watson and Mux signals and flushes on exit.
                 using (instance)
+                using (Mux.Hosting.MuxObservabilityHost observability = Mux.Hosting.MuxObservabilityHost.StartFromSettings(true, null))
                 {
                     return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
                 }

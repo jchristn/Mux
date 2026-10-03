@@ -6,6 +6,7 @@ namespace Mux.Core.Runs
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Observability;
 
     /// <summary>
     /// Server-lifetime registry of active and recently-terminal <see cref="RunHandle"/> instances, keyed by
@@ -149,6 +150,10 @@ namespace Mux.Core.Runs
         public RunRegistry()
         {
             _EvictionLoop = Task.Run(() => EvictionLoopAsync(_Cts.Token));
+            MuxTelemetry.RegisterGaugeSource(
+                MuxTelemetryNames.RunsActive,
+                this,
+                (object owner) => ((RunRegistry)owner)._Runs.Values.Count((RunHandle h) => !h.IsTerminal));
         }
 
         #endregion
@@ -171,6 +176,7 @@ namespace Mux.Core.Runs
 
             RunHandle handle = new RunHandle(runId, sessionId, endpointName, model, externalToken);
             handle.Completed += () => NotifySessionsChanged(handle.SessionId);
+            handle.Completed += () => MuxTelemetry.RecordRunCompleted(handle.Status.ToString());
             _Runs[runId] = handle;
             RaiseRegistered(handle);
             return handle;
@@ -203,6 +209,7 @@ namespace Mux.Core.Runs
             if (created)
             {
                 handle.Completed += () => NotifySessionsChanged(handle.SessionId);
+                handle.Completed += () => MuxTelemetry.RecordRunCompleted(handle.Status.ToString());
                 RaiseRegistered(handle);
             }
 
@@ -296,6 +303,7 @@ namespace Mux.Core.Runs
         {
             if (_Disposed) return;
             _Disposed = true;
+            MuxTelemetry.UnregisterGaugeSources(this);
 
             try { _Cts.Cancel(); } catch (ObjectDisposedException) { }
             try { _EvictionLoop.Wait(TimeSpan.FromSeconds(2)); } catch (Exception) { }

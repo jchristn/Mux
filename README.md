@@ -9,7 +9,7 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.3-blue.svg" alt="v1.0.3"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.0-blue.svg" alt="v1.1.0"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-yellow.svg" alt="beta"></a>
 </p>
 
@@ -81,6 +81,7 @@
 - Usage analytics: every model call is recorded to a local SQLite database (`~/.mux/usage.db`, multi-process safe, no external service) — tokens, cost, time-to-first-token, streaming time, latency, and throughput. See it via `/usage` and the live sidebar cost in the TUI, or the **Usage** and **Pricing** pages on the `mux serve` dashboard (charts over time with endpoint/model filters). Cost derives from an editable `pricing.json`. See `docs/CONFIG.md`
 - Desktop app (`v0.11.0`): `mux Desktop` is a cross-platform Avalonia client that links `Mux.Core` in-process. It offers streaming chat with Markdown, tables, and syntax-highlighted code (with per-response copy), thinking and tool-call cards, and auto-safe tool approvals; **parallel conversation tabs** that each run their own agent turn concurrently (switch tabs mid-turn without blocking); conversations/threads with AI-summarized titles, rename/export/bulk-delete; a command palette (`Ctrl+K`) and slash commands; MCP tools and skills in turns; live context/usage stats and the `mux serve` usage dashboard (candlestick charts with endpoint/conversation filters). Configuration is fully managed in-app — endpoints (with model import and validation), MCP servers (with connectivity checks), prompt profiles, skills, subagents, pricing, hooks, custom commands, keybindings, and web-search providers, plus a grouped settings surface, `/compact` and `/effort`, system/light/dark/**high-contrast** theming, and **full localization in 11 languages** (with right-to-left support for Arabic). Launch it with `run-desktop.bat` / `run-desktop.sh`. See `docs/DESKTOP.md`
 - Run lifecycle (`v0.12.0`): `mux serve` tracks each streamed run as an addressable object you can list (`GET /v1.0/api/runs`), inspect (`GET /v1.0/api/runs/{runId}` — status, counters, task plan), and cancel (`POST /v1.0/api/runs/{runId}/cancel`, cooperative and server-side). The `/v1.0/ws` WebSocket is a live per-run event bridge: subscribe by run or session id and replay-then-tail the same event envelope `mux print --output-format jsonl` emits. Stop in the dashboard and the VS Code extension now cancels server-side. **Live session mirroring** works across surfaces — a run on one surface can be watched read-only on another (`mux mirror <sessionId>` in the terminal, `/mirror` in the dashboard, *Mirror a session's live run* in VS Code); the desktop app publishes its in-process runs through its embedded server. See `docs/REST_API.md`
+- Observability (`v1.1.0`): OpenTelemetry metrics, traces, and logs for operators. `Mux.Core` emits on the `Mux` meter and activity source (agent runs and their stages, LLM calls with time-to-first-token and tokens, tools, approvals, MCP, web search, git checkpoints, hooks, subagents, the job pipeline, the write lease, the usage writer, sessions), the REST server adds Watson's HTTP metrics and per-request spans, and `mux`, the tray agent, and the desktop app export it all (OTLP, optional in-process Prometheus, Loki logs with trace correlation) when `observability.enabled` is on. `docker/compose.yaml` brings up a provisioned Prometheus + Tempo + Loki + Grafana stack with six per-domain dashboards and alert rules, and the web dashboard's home page links to it. See [TELEMETRY.md](TELEMETRY.md)
 - Engine as a library: `Mux.Core` (and `Mux.Search`) publish to NuGet with a symbol package, so you can build your own experiences on the mux engine (`AgentLoop`, `SessionStore`, `McpToolManager`, `UsageQueryService`, `SettingsLoader`)
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
 - Health checks: `mux probe` validates config, backend reachability, auth, and model access
@@ -681,6 +682,7 @@ See [CONFIG.md](CONFIG.md) for the full reference.
 - [GETTING_STARTED.md](GETTING_STARTED.md)
 - [USAGE.md](USAGE.md)
 - [CONFIG.md](CONFIG.md)
+- [TELEMETRY.md](TELEMETRY.md): OpenTelemetry metrics, traces, logs, dashboards, and alerts
 - [SKILLS_AUTHORING.md](SKILLS_AUTHORING.md)
 - [ARMADA.md](ARMADA.md)
 - [TESTING.md](TESTING.md)

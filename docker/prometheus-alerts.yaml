@@ -1,0 +1,97 @@
+# Recommended alerts for mux (documented in TELEMETRY.md). Thresholds are starting points: tune them to
+# your traffic. Every expression uses only bounded labels.
+groups:
+  - name: mux
+    rules:
+      - alert: MuxNotReporting
+        expr: absent(mux_build_info) == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'No mux process is exporting telemetry'
+          description: 'mux_build_info has been absent for 10 minutes. The process is down, export is disabled, or the collector is unreachable.'
+
+      - alert: MuxAgentRunErrorRatioHigh
+        expr: |
+          sum by (job) (rate(mux_agent_runs_total{outcome!="completed"}[10m]))
+            / clamp_min(sum by (job) (rate(mux_agent_runs_total[10m])), 1e-9) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 20% of agent runs are not completing cleanly'
+          description: 'Check Mux / Agent Workflow (errors by type, stage failures) and Mux / LLM Providers.'
+
+      - alert: MuxLlmErrorRatioHigh
+        expr: |
+          sum by (job, gen_ai_provider_name) (rate(mux_llm_requests_total{outcome!="success"}[5m]))
+            / clamp_min(sum by (job, gen_ai_provider_name) (rate(mux_llm_requests_total[5m])), 1e-9) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'LLM provider {{ $labels.gen_ai_provider_name }} is failing more than 10% of requests'
+          description: 'See Mux / LLM Providers (failures by outcome) and the failing client spans in Tempo.'
+
+      - alert: MuxLlmLatencyHigh
+        expr: |
+          histogram_quantile(0.95, sum by (le, job, gen_ai_provider_name) (rate(mux_llm_request_duration_seconds_bucket{gen_ai_operation_name="chat_stream"}[10m]))) > 120
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'LLM p95 latency for {{ $labels.gen_ai_provider_name }} is above 2 minutes'
+
+      - alert: MuxIntegrationErrorRatioHigh
+        expr: |
+          sum by (job, service) (rate(mux_integration_requests_total{outcome!="success"}[10m]))
+            / clamp_min(sum by (job, service) (rate(mux_integration_requests_total[10m])), 1e-9) > 0.25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Integration {{ $labels.service }} is failing more than 25% of calls'
+          description: 'See Mux / Integrations (failures by service and operation).'
+
+      - alert: MuxJobsQueuedTooLong
+        expr: |
+          histogram_quantile(0.95, sum by (le, job) (rate(mux_job_stage_duration_seconds_bucket{stage="queued"}[15m]))) > 300
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Jobs wait more than 5 minutes (p95) for a concurrency slot'
+          description: 'Raise maxConcurrency or investigate long-running jobs (Mux / Jobs & Background).'
+
+      - alert: MuxJobFailures
+        expr: sum by (job) (increase(mux_jobs_total{outcome="failed"}[15m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Background jobs failed in the last 15 minutes'
+
+      - alert: MuxWriteLeaseTimeouts
+        expr: sum by (job) (increase(mux_write_lease_wait_duration_seconds_count{outcome="timeout"}[15m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Jobs timed out waiting for the workspace write lease'
+
+      - alert: MuxUsageEventsLost
+        expr: sum by (job) (increase(mux_usage_events_total{outcome=~"dropped|write_failed"}[15m])) > 0
+        labels:
+          severity: info
+        annotations:
+          summary: 'Usage-history events were dropped or failed to persist'
+          description: 'The local usage database (usage.db) is not keeping up or is failing; check the mux logs in Loki.'
+
+      - alert: MuxHttp5xxRatioHigh
+        expr: |
+          sum by (job) (rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m]))
+            / clamp_min(sum by (job) (rate(http_server_request_duration_seconds_count[5m])), 1e-9) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The mux REST server is returning more than 5% 5xx responses'

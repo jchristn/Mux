@@ -2,6 +2,7 @@ namespace Mux.Core.Llm
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Net;
     using System.Net.Http;
     using System.Runtime.CompilerServices;
@@ -11,6 +12,7 @@ namespace Mux.Core.Llm
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Observability;
     using Mux.Core.Settings;
     using Mux.Core.Utility;
     using PolyPrompt.Auth;
@@ -30,6 +32,9 @@ namespace Mux.Core.Llm
         #region Private-Members
 
         private const int MaxRetries = 3;
+        private const string OperationChat = "chat";
+        private const string OperationChatStream = "chat_stream";
+        private const string OperationModelLoad = "model_load";
 
         private static readonly LoggingModule SilentLogging = CreateSilentLogging();
 
@@ -130,6 +135,11 @@ namespace Mux.Core.Llm
             get => _CumulativeUsage;
         }
 
+        private string ProviderName
+        {
+            get => _Endpoint.AdapterType.ToString().ToLowerInvariant();
+        }
+
         #endregion
 
         #region Public-Methods
@@ -150,6 +160,46 @@ namespace Mux.Core.Llm
             if (messages == null) throw new ArgumentNullException(nameof(messages));
             if (tools == null) throw new ArgumentNullException(nameof(tools));
 
+            Activity? activity = StartLlmActivity(OperationChat);
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeSuccess;
+            try
+            {
+                ConversationMessage message = await SendCoreAsync(messages, tools, cancellationToken).ConfigureAwait(false);
+                MuxTelemetry.SetOk(activity);
+                return message;
+            }
+            catch (OperationCanceledException)
+            {
+                outcome = MuxTelemetryNames.OutcomeCancelled;
+                MuxTelemetry.SetError(activity, outcome, "request cancelled");
+                throw;
+            }
+            catch (HttpRequestException ex)
+            {
+                outcome = ex.StatusCode.HasValue ? "llm_error" : "llm_connection_error";
+                MuxTelemetry.RecordException(activity, ex);
+                if (ex.StatusCode.HasValue) MuxTelemetry.SetTag(activity, "http.response.status_code", (int)ex.StatusCode.Value);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                outcome = MuxTelemetryNames.OutcomeError;
+                MuxTelemetry.RecordException(activity, ex);
+                throw;
+            }
+            finally
+            {
+                MuxTelemetry.RecordLlmRequest(ProviderName, OperationChat, outcome, MuxTelemetry.SecondsSince(startTimestamp));
+                MuxTelemetry.Stop(activity);
+            }
+        }
+
+        private async Task<ConversationMessage> SendCoreAsync(
+            List<ConversationMessage> messages,
+            List<ToolDefinition> tools,
+            CancellationToken cancellationToken)
+        {
             Pp.ToolChatRequest request = BuildRequest(messages, tools);
 
             Pp.ToolChatResponse response;
@@ -165,6 +215,7 @@ namespace Mux.Core.Llm
                     break;
                 }
 
+                MuxTelemetry.RecordLlmRetry(ProviderName, OperationChat);
                 _OnRetry?.Invoke(attempt + 1, MaxRetries, string.IsNullOrEmpty(response.Error) ? "connection error" : response.Error);
                 await Task.Delay(RetryBackoff(attempt), cancellationToken).ConfigureAwait(false);
             }
@@ -200,6 +251,45 @@ namespace Mux.Core.Llm
         /// <param name="cancellationToken">A token to cancel the probe.</param>
         /// <returns>A <see cref="ModelLoadResult"/> describing success or the failure details.</returns>
         public async Task<ModelLoadResult> LoadModelAsync(CancellationToken cancellationToken)
+        {
+            Activity? activity = StartLlmActivity(OperationModelLoad);
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeError;
+            try
+            {
+                ModelLoadResult result = await LoadModelCoreAsync(cancellationToken).ConfigureAwait(false);
+                if (result.Success)
+                {
+                    outcome = MuxTelemetryNames.OutcomeSuccess;
+                    MuxTelemetry.SetOk(activity);
+                }
+                else
+                {
+                    outcome = result.Reachable ? "llm_error" : "llm_connection_error";
+                    MuxTelemetry.SetError(activity, outcome, result.Error);
+                }
+
+                return result;
+            }
+            catch (OperationCanceledException)
+            {
+                outcome = MuxTelemetryNames.OutcomeCancelled;
+                MuxTelemetry.SetError(activity, outcome, "probe cancelled");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                MuxTelemetry.RecordException(activity, ex);
+                throw;
+            }
+            finally
+            {
+                MuxTelemetry.RecordLlmRequest(ProviderName, OperationModelLoad, outcome, MuxTelemetry.SecondsSince(startTimestamp));
+                MuxTelemetry.Stop(activity);
+            }
+        }
+
+        private async Task<ModelLoadResult> LoadModelCoreAsync(CancellationToken cancellationToken)
         {
             Pp.ToolChatRequest request = new Pp.ToolChatRequest
             {
@@ -295,6 +385,8 @@ namespace Mux.Core.Llm
                     return ModelLoadResult.Fail(failureDetail, reachable);
                 }
 
+                MuxTelemetry.RecordLlmRetry(ProviderName, OperationModelLoad);
+
                 await Task.Delay(RetryBackoff(attempt), cancellationToken).ConfigureAwait(false);
             }
         }
@@ -335,6 +427,86 @@ namespace Mux.Core.Llm
             if (messages == null) throw new ArgumentNullException(nameof(messages));
             if (tools == null) throw new ArgumentNullException(nameof(tools));
 
+            // Telemetry wrapper: a client span plus request, time-to-first-token, and token metrics. The span
+            // is re-established as Activity.Current before each inner step so the HttpClient call (and its W3C
+            // traceparent header) is parented to it.
+            Activity? activity = StartLlmActivity(OperationChatStream);
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeAbandoned;
+            LlmCallMetrics? previousCall = _LastCall;
+            IAsyncEnumerator<AgentEvent> inner = StreamCoreAsync(messages, tools, cancellationToken).GetAsyncEnumerator(cancellationToken);
+
+            try
+            {
+                while (true)
+                {
+                    if (activity != null) Activity.Current = activity;
+
+                    bool moved;
+                    try
+                    {
+                        moved = await inner.MoveNextAsync().ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        outcome = MuxTelemetryNames.OutcomeCancelled;
+                        MuxTelemetry.SetError(activity, outcome, "stream cancelled");
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        outcome = MuxTelemetryNames.OutcomeError;
+                        MuxTelemetry.RecordException(activity, ex);
+                        throw;
+                    }
+
+                    if (!moved)
+                    {
+                        if (string.Equals(outcome, MuxTelemetryNames.OutcomeAbandoned, StringComparison.Ordinal))
+                        {
+                            outcome = MuxTelemetryNames.OutcomeSuccess;
+                        }
+
+                        break;
+                    }
+
+                    AgentEvent agentEvent = inner.Current;
+                    if (agentEvent is ErrorEvent errorEvent)
+                    {
+                        outcome = errorEvent.Code;
+                        MuxTelemetry.SetError(activity, errorEvent.Code, errorEvent.Message);
+                    }
+
+                    yield return agentEvent;
+                }
+            }
+            finally
+            {
+                try { await inner.DisposeAsync().ConfigureAwait(false); } catch (Exception) { }
+
+                if (string.Equals(outcome, MuxTelemetryNames.OutcomeAbandoned, StringComparison.Ordinal)
+                    && cancellationToken.IsCancellationRequested)
+                {
+                    outcome = MuxTelemetryNames.OutcomeCancelled;
+                }
+
+                LlmCallMetrics? call = _LastCall;
+                if (call != null && !ReferenceEquals(call, previousCall))
+                {
+                    RecordCallTelemetry(activity, call);
+                }
+
+                if (string.Equals(outcome, MuxTelemetryNames.OutcomeSuccess, StringComparison.Ordinal)) MuxTelemetry.SetOk(activity);
+                MuxTelemetry.RecordLlmRequest(ProviderName, OperationChatStream, outcome, MuxTelemetry.SecondsSince(startTimestamp));
+                MuxTelemetry.Stop(activity);
+            }
+        }
+
+        private async IAsyncEnumerable<AgentEvent> StreamCoreAsync(
+            List<ConversationMessage> messages,
+            List<ToolDefinition> tools,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
             Pp.ToolChatRequest request = BuildRequest(messages, tools);
 
             Pp.ToolChatStreamingResponse? response = null;
@@ -370,6 +542,7 @@ namespace Mux.Core.Llm
                 {
                     if (attempt < MaxRetries)
                     {
+                        MuxTelemetry.RecordLlmRetry(ProviderName, OperationChatStream);
                         _OnRetry?.Invoke(attempt + 1, MaxRetries, failureMessage);
                         retry = true;
                     }
@@ -645,6 +818,46 @@ namespace Mux.Core.Llm
             int shift = Math.Min(attempt, 3);
             int milliseconds = Math.Min(100 * (1 << shift), 500);
             return TimeSpan.FromMilliseconds(milliseconds);
+        }
+
+        private Activity? StartLlmActivity(string operation)
+        {
+            Activity? activity = MuxTelemetry.StartActivity("llm " + operation, ActivityKind.Client);
+            if (activity == null) return null;
+
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.LabelLlmOperation, operation);
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.LabelProvider, ProviderName);
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrRequestModel, _Endpoint.Model);
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrEndpointName, _Endpoint.Name);
+            if (Uri.TryCreate(_Endpoint.BaseUrl, UriKind.Absolute, out Uri? uri))
+            {
+                MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrServerAddress, uri.Host);
+            }
+
+            return activity;
+        }
+
+        private void RecordCallTelemetry(Activity? activity, LlmCallMetrics call)
+        {
+            string provider = ProviderName;
+            if (call.TimeToFirstTokenMs.HasValue)
+            {
+                MuxTelemetry.RecordTimeToFirstToken(provider, call.TimeToFirstTokenMs.Value / 1000.0);
+            }
+
+            MuxTelemetry.RecordTokens(provider, "input", call.Usage.InputTokens);
+            MuxTelemetry.RecordTokens(provider, "output", call.Usage.OutputTokens);
+            MuxTelemetry.RecordTokens(provider, "cached", call.Usage.CachedTokens);
+            MuxTelemetry.RecordTokens(provider, "reasoning", call.Usage.ReasoningTokens);
+
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrInputTokens, call.Usage.InputTokens);
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrOutputTokens, call.Usage.OutputTokens);
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrResponseModel, call.Model);
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrFinishReasons, call.FinishReason);
+            if (call.TimeToFirstTokenMs.HasValue)
+            {
+                MuxTelemetry.SetTag(activity, "mux.llm.time_to_first_token_ms", call.TimeToFirstTokenMs.Value);
+            }
         }
 
         private void RecordUsage(Pp.ToolChatStreamingResponse response)

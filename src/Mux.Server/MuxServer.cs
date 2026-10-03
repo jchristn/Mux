@@ -2,6 +2,7 @@ namespace Mux.Server
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
@@ -121,6 +122,15 @@ namespace Mux.Server
             wsSettings.Ssl.Enable = _Settings.Ssl;
             wsSettings.WebSockets.Enable = true;
 
+            // Watson's built-in telemetry (the "Watson" meter and activity source): HTTP server metrics and one
+            // server span per request, adopting an inbound W3C traceparent. These are Watson's defaults; they are
+            // set explicitly so the contract is visible here. A host collects them by subscribing to "Watson"
+            // alongside "Mux" (see TELEMETRY.md). Mux's own spans nest under the request span.
+            wsSettings.Telemetry.Enable = true;
+            wsSettings.Telemetry.EnableMetrics = true;
+            wsSettings.Telemetry.EnableTraces = true;
+            wsSettings.Telemetry.PropagateContext = true;
+
             _App = new Webserver(wsSettings, DefaultRouteAsync);
             if (_Logger != null) _App.Events.Logger = _Logger;
 
@@ -208,6 +218,9 @@ namespace Mux.Server
         {
             app.Routes.PreRouting = async (HttpContextBase ctx) =>
             {
+                // Watson's request span is current here and in handlers, but no longer in PostRouting. Keep a
+                // reference so the request log line below is stamped with this request's trace and span id.
+                ctx.Metadata = Activity.Current;
                 ctx.Timestamp.Start = DateTime.UtcNow;
                 ctx.Response.ContentType = "application/json";
                 await Task.CompletedTask.ConfigureAwait(false);
@@ -216,9 +229,38 @@ namespace Mux.Server
             app.Routes.PostRouting = async (HttpContextBase ctx) =>
             {
                 ctx.Timestamp.End = DateTime.UtcNow;
-                _Logger?.Invoke(
-                    _Header + ctx.Request.Method + " " + ctx.Request.Url.RawWithQuery + " " +
-                    ctx.Response.StatusCode);
+                if (_Logger != null)
+                {
+                    // Watson has already stopped the request span here, and a stopped activity cannot be made
+                    // current, so a short-lived stand-in parented to it (never exported: it is not created on an
+                    // ActivitySource) carries the request's trace id onto the log record for trace-to-logs.
+                    Activity? previous = Activity.Current;
+                    Activity? standIn = null;
+                    try
+                    {
+                        if (ctx.Metadata is Activity requestActivity)
+                        {
+                            standIn = new Activity("mux.request.log");
+                            standIn.SetParentId(requestActivity.TraceId, requestActivity.SpanId, requestActivity.ActivityTraceFlags);
+                            standIn.Start();
+                        }
+
+                        // Path only: query strings can carry ids or tokens, and this line may be exported to Loki.
+                        _Logger.Invoke(
+                            _Header + ctx.Request.Method + " " + ctx.Request.Url.RawWithoutQuery + " " +
+                            ctx.Response.StatusCode);
+                    }
+                    catch (Exception)
+                    {
+                        // Best-effort request logging.
+                    }
+                    finally
+                    {
+                        standIn?.Dispose();
+                        Activity.Current = previous;
+                    }
+                }
+
                 ApplyCors(ctx);
                 await Task.CompletedTask.ConfigureAwait(false);
             };

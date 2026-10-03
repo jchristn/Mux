@@ -37,6 +37,7 @@ namespace Mux.Core.Models
         private ContextSettings _Context = new ContextSettings();
         private RestServerSettings _Rest = new RestServerSettings();
         private TelemetrySettings _Telemetry = new TelemetrySettings();
+        private ObservabilitySettings _Observability = new ObservabilitySettings();
 
         #endregion
 
@@ -384,6 +385,17 @@ namespace Mux.Core.Models
         {
             get => _Telemetry;
             set => _Telemetry = value ?? new TelemetrySettings();
+        }
+
+        /// <summary>
+        /// Configuration for exporting OpenTelemetry metrics, traces, and logs to an observability stack
+        /// (OTLP collector, Prometheus, Loki). Export is off by default; see <c>TELEMETRY.md</c>.
+        /// </summary>
+        [JsonPropertyName("observability")]
+        public ObservabilitySettings Observability
+        {
+            get => _Observability;
+            set => _Observability = value ?? new ObservabilitySettings();
         }
 
         #endregion

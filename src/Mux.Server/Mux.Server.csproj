@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <Version>1.0.3</Version>
+    <Version>1.1.0</Version>
     <Title>Mux.Server</Title>
     <Description>Optional local REST + WebSocket server (Watson 7) exposing the mux engine over loopback: sessions, chat streaming, endpoints, usage telemetry, and the built-in dashboard.</Description>
     <PackageId>Mux.Server</PackageId>

@@ -2,11 +2,13 @@ namespace Mux.Core.Subagents
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Agent;
     using Mux.Core.Models;
+    using Mux.Core.Observability;
     using Mux.Core.Telemetry;
 
     /// <summary>
@@ -51,6 +53,40 @@ namespace Mux.Core.Subagents
         {
             if (definition == null) throw new ArgumentNullException(nameof(definition));
             if (string.IsNullOrWhiteSpace(prompt)) throw new ArgumentException("Prompt cannot be null or empty.", nameof(prompt));
+
+            Activity? activity = MuxTelemetry.StartActivity("subagent run");
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrSubagentName, definition.Name);
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeError;
+            try
+            {
+                SubagentResult result = await ExecuteCoreAsync(definition, prompt, workingDirectory, cancellationToken).ConfigureAwait(false);
+                outcome = result.Success ? MuxTelemetryNames.OutcomeSuccess : MuxTelemetryNames.OutcomeFailure;
+                MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrIterations, result.Iterations);
+                if (result.Success) MuxTelemetry.SetOk(activity);
+                else MuxTelemetry.SetError(activity, "subagent_failed", result.Error);
+                return result;
+            }
+            catch (OperationCanceledException)
+            {
+                outcome = MuxTelemetryNames.OutcomeCancelled;
+                MuxTelemetry.SetError(activity, outcome, "subagent cancelled");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                MuxTelemetry.RecordException(activity, ex);
+                throw;
+            }
+            finally
+            {
+                MuxTelemetry.RecordSubagent(outcome, MuxTelemetry.SecondsSince(startTimestamp));
+                MuxTelemetry.Stop(activity);
+            }
+        }
+
+        private async Task<SubagentResult> ExecuteCoreAsync(SubagentDefinition definition, string prompt, string workingDirectory, CancellationToken cancellationToken)
+        {
 
             AgentLoopOptions parent = _TemplateProvider() ?? throw new InvalidOperationException("Subagent template is unavailable.");
 

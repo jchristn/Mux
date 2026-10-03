@@ -2,9 +2,11 @@ namespace Mux.Core.Telemetry
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Threading;
     using System.Threading.Channels;
     using System.Threading.Tasks;
+    using Mux.Core.Observability;
 
     /// <summary>
     /// A best-effort <see cref="IUsageRecorder"/> that buffers events in an in-memory channel and drains
@@ -72,6 +74,7 @@ namespace Mux.Core.Telemetry
                 SingleWriter = false
             };
             _Channel = Channel.CreateBounded<UsageEvent>(options);
+            MuxTelemetry.RegisterGaugeSource(MuxTelemetryNames.UsageQueueDepth, this, (object owner) => Interlocked.Read(ref ((SqliteUsageRecorder)owner)._PendingCount));
             _WriterLoop = Task.Run(() => WriterLoopAsync(_Cts.Token));
             _MaintenanceLoop = Task.Run(() => MaintenanceLoopAsync(_Cts.Token));
         }
@@ -93,6 +96,7 @@ namespace Mux.Core.Telemetry
             if (string.IsNullOrWhiteSpace(usageEvent.SessionId))
             {
                 Interlocked.Increment(ref _DroppedCount);
+                MuxTelemetry.RecordUsageEvents("dropped", 1);
                 Log("usage event dropped: no session id");
                 return;
             }
@@ -105,10 +109,12 @@ namespace Mux.Core.Telemetry
             if (_Channel.Writer.TryWrite(usageEvent))
             {
                 Interlocked.Increment(ref _PendingCount);
+                MuxTelemetry.RecordUsageEvents("enqueued", 1);
             }
             else
             {
                 Interlocked.Increment(ref _DroppedCount);
+                MuxTelemetry.RecordUsageEvents("dropped", 1);
             }
         }
 
@@ -144,6 +150,7 @@ namespace Mux.Core.Telemetry
             }
 
             _Disposed = true;
+            MuxTelemetry.UnregisterGaugeSources(this);
             _Cts.Cancel();
             _Channel.Writer.TryComplete();
 
@@ -187,6 +194,9 @@ namespace Mux.Core.Telemetry
 
         private async Task WriterLoopAsync(CancellationToken token)
         {
+            // The loop was started from whatever context constructed the recorder; detach so each batch span
+            // is a root rather than a child of an unrelated (long-finished) request.
+            Activity.Current = null;
             List<UsageEvent> batch = new List<UsageEvent>(BatchSize);
 
             try
@@ -238,20 +248,33 @@ namespace Mux.Core.Telemetry
 
         private async Task WriteBatchAsync(IReadOnlyList<UsageEvent> batch, CancellationToken token)
         {
+            // Background work: each batch is its own root span (there is no inbound request to parent it to).
+            Activity? activity = MuxTelemetry.StartActivity("usage write_batch", ActivityKind.Internal, default(ActivityContext));
+            MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrBatchSize, batch.Count);
+            long startTimestamp = Stopwatch.GetTimestamp();
             try
             {
                 await _Store.InsertBatchAsync(batch, token).ConfigureAwait(false);
+                MuxTelemetry.SetOk(activity);
+                MuxTelemetry.RecordUsageEvents("written", batch.Count);
+                MuxTelemetry.RecordUsageWrite(MuxTelemetryNames.OutcomeSuccess, MuxTelemetry.SecondsSince(startTimestamp));
             }
             catch (OperationCanceledException)
             {
+                MuxTelemetry.SetError(activity, MuxTelemetryNames.OutcomeCancelled, "usage write cancelled");
+                MuxTelemetry.RecordUsageWrite(MuxTelemetryNames.OutcomeCancelled, MuxTelemetry.SecondsSince(startTimestamp));
                 throw;
             }
             catch (Exception ex)
             {
+                MuxTelemetry.RecordException(activity, ex);
+                MuxTelemetry.RecordUsageEvents("write_failed", batch.Count);
+                MuxTelemetry.RecordUsageWrite(MuxTelemetryNames.OutcomeError, MuxTelemetry.SecondsSince(startTimestamp));
                 Log("usage recorder insert failed (" + batch.Count + " events dropped): " + ex.Message);
             }
             finally
             {
+                MuxTelemetry.Stop(activity);
                 // These events are now durably written (or dropped after a failure): either way they are no
                 // longer pending, so FlushAsync callers waiting on _PendingCount can proceed.
                 Interlocked.Add(ref _PendingCount, -batch.Count);

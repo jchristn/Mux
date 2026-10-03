@@ -2,8 +2,10 @@ namespace Mux.Core.Jobs
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Observability;
 
     /// <summary>
     /// A fair, single-writer workspace lease. At most one job holds the lease at a time; waiting jobs
@@ -134,14 +136,28 @@ namespace Mux.Core.Jobs
 
                 using (linkedSource.Token.Register(() => waiter.Completion.TrySetCanceled(linkedSource.Token)))
                 {
+                    long waitStart = Stopwatch.GetTimestamp();
+                    string outcome = "acquired";
+                    MuxTelemetry.AddWriteLeaseWaiter(1);
                     try
                     {
                         return await waiter.Completion.Task.ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
                     {
+                        outcome = MuxTelemetryNames.OutcomeTimeout;
                         throw new WriteLeaseTimeoutException(
                             $"Timed out after {timeoutMs} ms acquiring the workspace write lease for job '{jobId}'.");
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        outcome = MuxTelemetryNames.OutcomeCancelled;
+                        throw;
+                    }
+                    finally
+                    {
+                        MuxTelemetry.AddWriteLeaseWaiter(-1);
+                        MuxTelemetry.RecordWriteLeaseWait(outcome, MuxTelemetry.SecondsSince(waitStart));
                     }
                 }
             }

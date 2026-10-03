@@ -83,12 +83,64 @@ namespace Mux.Server.Routes
                 catch (Exception) { }
 
                 LoadSkillCounts(dto);
+                dto.Observability = LoadObservability();
                 await LoadSessionsAsync(dto, req.Http.Token).ConfigureAwait(false);
                 BuildNotices(dto);
 
                 req.Http.Response.StatusCode = 200;
                 return (object)dto;
             }, Documentation.ApiDoc.OverviewGet);
+        }
+
+        /// <summary>
+        /// Maps observability settings to the External Services card payload: export status plus each bundled
+        /// tool's browser-reachable URL and local default credentials. Contains no secrets.
+        /// </summary>
+        /// <param name="settings">The observability settings. Null yields an "export off" payload with no tools.</param>
+        /// <returns>The card payload; never null.</returns>
+        public static OverviewObservabilityDto BuildObservability(ObservabilitySettings? settings)
+        {
+            OverviewObservabilityDto result = new OverviewObservabilityDto();
+            if (settings == null) return result;
+
+            try
+            {
+                result.Enabled = settings.Enabled;
+                result.ServiceName = settings.ServiceName;
+                result.OtlpEndpoint = settings.Enabled && settings.OtlpEnabled ? settings.OtlpEndpoint : null;
+                result.Services.Add(new ExternalServiceDto { Kind = "grafana", Name = "Grafana", Url = settings.GrafanaUrl, Credentials = "admin / admin" });
+                result.Services.Add(new ExternalServiceDto { Kind = "prometheus", Name = "Prometheus", Url = settings.PrometheusUrl });
+                result.Services.Add(new ExternalServiceDto { Kind = "tempo", Name = "Tempo", Url = settings.TempoUrl });
+                result.Services.Add(new ExternalServiceDto { Kind = "loki", Name = "Loki", Url = settings.LokiUrl });
+                if (settings.Enabled && settings.PrometheusEnabled)
+                {
+                    result.Services.Add(new ExternalServiceDto
+                    {
+                        Kind = "scrape",
+                        Name = "/metrics",
+                        Url = "http://" + settings.PrometheusHostname + ":" + settings.PrometheusPort + "/metrics"
+                    });
+                }
+            }
+            catch (Exception)
+            {
+                // Best-effort: the card degrades to "export off" when settings cannot be mapped.
+            }
+
+            return result;
+        }
+
+        private static OverviewObservabilityDto LoadObservability()
+        {
+            try
+            {
+                return BuildObservability(SettingsLoader.LoadSettings().Observability);
+            }
+            catch (Exception)
+            {
+                // Best-effort: the card degrades to "export off" when settings cannot be read.
+                return new OverviewObservabilityDto();
+            }
         }
 
         private static void LoadSkillCounts(OverviewDto dto)

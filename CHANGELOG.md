@@ -2,6 +2,57 @@
 
 All notable changes to mux are documented here.
 
+## 1.1.0
+
+### Added
+
+- **OpenTelemetry observability.** mux now emits metrics, traces, and logs an operator can watch in Grafana
+  (Prometheus, Tempo, Loki) or any OTLP backend. See [TELEMETRY.md](TELEMETRY.md) for the full catalog.
+  - `Mux.Core` emits on a BCL `Meter` and `ActivitySource` named `Mux` (no exporter dependency, near-zero cost
+    when nothing listens): agent runs with per-stage timing (`llm`, `approval`, `tool`, `compaction`,
+    `write_lease_wait`), iterations, errors by type, compactions; LLM requests by provider and operation with
+    time-to-first-token, tokens, and retries; tool calls and approval decisions; subagents; outbound integrations
+    (`llm`, `mcp`, `web_search`, `git`, `hook`) by service, operation, and outcome; the job pipeline (`queued` and
+    `run` stages, outcomes, active/queued/capacity gauges, last-success timestamp); the workspace write lease; the
+    usage-history writer queue; session store, run registry, and git checkpoints; build info and safe config
+    gauges. Spans cover the same paths (`agent run`, `llm chat_stream`, `tool <name>`, `stage:*`, `mcp *`,
+    `job`, ...) with explicit status, recorded exceptions, and bounded metric labels. Names are public constants
+    in `Mux.Core.Observability.MuxTelemetryNames`.
+  - W3C trace context flows end to end: Watson adopts an inbound `traceparent`, outbound LLM/MCP/web-search HTTP
+    calls carry one, jobs parent their span to the submitter across the worker hand-off, and async-iterator
+    boundaries keep the run and LLM spans current.
+  - `Mux.Server` turns Watson's built-in telemetry on explicitly (HTTP server metrics and a server span per
+    request); mux spans nest under it. The request log line is stamped with the request's trace id and never
+    includes the query string.
+  - `mux`, the tray agent, and the desktop app host one Radiant (`0.1.2`) export pipeline per process when the new
+    `observability` settings block is enabled (off by default): OTLP push, an optional in-process Prometheus
+    `/metrics` for long-running processes (falls back to OTLP-only on a port conflict), logs with trace
+    correlation, and .NET runtime/process metrics. Overrides: `MUX_OBSERVABILITY_ENABLED`, `MUX_OTLP_ENDPOINT`,
+    `MUX_OTLP_PROTOCOL`, `MUX_PROMETHEUS_ENABLED`, `MUX_PROMETHEUS_PORT`, `MUX_OTEL_SERVICE_NAME`. `mux serve`
+    prints a `telemetry` line when export is active.
+  - `docker/compose.yaml`: a pinned, provisioned OpenTelemetry Collector + Prometheus + Tempo + Loki + Grafana
+    stack (loopback-bound, healthchecked, ports overridable), alert rules (`docker/prometheus-alerts.yaml`), and
+    `docker/update.bat` / `update.sh`. Six per-domain dashboards in `assets/grafana/` load into a **Mux** folder:
+    Overview, HTTP, Agent Workflow, LLM Providers, Integrations, and Jobs & Background.
+  - The web dashboard's home page gains an **External services** card (Grafana, Prometheus, Tempo, Loki, and the
+    process's `/metrics` when served) with copyable URLs and local default credentials, in all 11 locales.
+    `GET /v1.0/api/overview` gains an `Observability` block.
+
+### Changed
+
+- Dependencies: `Radiant` 0.1.2 added to the executables only (`Mux.Cli`, `Mux.Agent`, `Mux.Desktop`); the NuGet
+  libraries take no new dependency.
+
+### Tests
+
+- `TelemetryCore` and `TelemetryHost` suites (25 cases, in-memory `MeterListener`/`ActivityListener`): every
+  instrumented category including failure paths and the no-listener path, span parentage and status,
+  `traceparent` propagation to the LLM endpoint and from an inbound request, job parentage across the worker
+  hand-off, request-log trace correlation, the Radiant host's Prometheus scrape (second-scale buckets, port-conflict
+  fallback), settings defaults and clamps, the overview `Observability` block, and the External services card.
+- `RunProcessTool.TimeoutKillsProcess` now uses `sleep 30` on macOS/Linux (`ping -n 30` only counts pings on
+  Windows, so the test could never time out elsewhere).
+
 ## 1.0.3
 
 ### Fixed

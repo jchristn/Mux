@@ -2,6 +2,8 @@ namespace Mux.Core.Jobs
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
+    using System.Linq;
     using System.Runtime.CompilerServices;
     using System.Threading;
     using System.Threading.Channels;
@@ -9,6 +11,7 @@ namespace Mux.Core.Jobs
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Observability;
     using Mux.Core.Tools;
 
     /// <summary>
@@ -55,6 +58,10 @@ namespace Mux.Core.Jobs
             _MaxConcurrency = Math.Max(1, maxConcurrency);
             _SessionId = string.IsNullOrWhiteSpace(sessionId) ? Guid.NewGuid().ToString("N") : sessionId;
             _WriteLease = writeLease ?? new WriteLease();
+
+            MuxTelemetry.RegisterGaugeSource(MuxTelemetryNames.JobsQueued, this, (object owner) => ((JobManager)owner).CountJobs(false));
+            MuxTelemetry.RegisterGaugeSource(MuxTelemetryNames.JobsActive, this, (object owner) => ((JobManager)owner).CountJobs(true));
+            MuxTelemetry.RegisterGaugeSource(MuxTelemetryNames.JobsCapacity, this, (object owner) => ((JobManager)owner)._MaxConcurrency);
         }
 
         /// <summary>
@@ -502,6 +509,7 @@ namespace Mux.Core.Jobs
                 }
 
                 _Disposed = true;
+                MuxTelemetry.UnregisterGaugeSources(this);
                 _ShutdownTokenSource.Cancel();
 
                 foreach (Job job in _Jobs)
@@ -576,6 +584,7 @@ namespace Mux.Core.Jobs
                     prompt,
                     approvalPolicy,
                     effectiveHistory);
+                job.ParentContext = Activity.Current?.Context ?? default(ActivityContext);
 
                 _Jobs.Add(job);
                 if (_FocusedJobId == null)
@@ -617,6 +626,15 @@ namespace Mux.Core.Jobs
 
         private async Task RunJobAsync(Job job, CancellationToken managerCancellationToken)
         {
+            // The worker may have been started from another job's completion path, so the ambient trace context
+            // is unrelated: clear it and parent the job span to the context captured at submission instead.
+            Activity.Current = null;
+            Activity? jobActivity = MuxTelemetry.StartActivity("job", ActivityKind.Internal, job.ParentContext);
+            MuxTelemetry.SetTag(jobActivity, MuxTelemetryNames.AttrJobId, job.Id);
+            MuxTelemetry.SetTag(jobActivity, MuxTelemetryNames.AttrSessionId, _SessionId);
+            RecordQueuedStage(job, jobActivity);
+            string jobOutcome = "failed";
+
             using (CancellationTokenSource linkedTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
                 managerCancellationToken,
                 job.CancellationToken))
@@ -632,22 +650,52 @@ namespace Mux.Core.Jobs
                             break;
                         }
 
-                        await foreach (AgentEvent agentEvent in _AgentRunner(job, prompt, linkedTokenSource.Token).ConfigureAwait(false))
+                        Activity? runActivity = MuxTelemetry.StartActivity("stage:run");
+                        long runStart = Stopwatch.GetTimestamp();
+                        string runOutcome = MuxTelemetryNames.OutcomeError;
+                        try
                         {
-                            linkedTokenSource.Token.ThrowIfCancellationRequested();
-                            job.RecordEvent(agentEvent);
-                            await job.EventWriter.WriteAsync(agentEvent, linkedTokenSource.Token).ConfigureAwait(false);
+                            await foreach (AgentEvent agentEvent in _AgentRunner(job, prompt, linkedTokenSource.Token).ConfigureAwait(false))
+                            {
+                                linkedTokenSource.Token.ThrowIfCancellationRequested();
+                                job.RecordEvent(agentEvent);
+                                await job.EventWriter.WriteAsync(agentEvent, linkedTokenSource.Token).ConfigureAwait(false);
+                            }
+
+                            runOutcome = MuxTelemetryNames.OutcomeSuccess;
+                            MuxTelemetry.SetOk(runActivity);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            runOutcome = MuxTelemetryNames.OutcomeCancelled;
+                            MuxTelemetry.SetError(runActivity, runOutcome, "job run cancelled");
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            MuxTelemetry.RecordException(runActivity, ex);
+                            throw;
+                        }
+                        finally
+                        {
+                            MuxTelemetry.RecordJobStage(MuxTelemetryNames.StageRun, runOutcome, MuxTelemetry.SecondsSince(runStart));
+                            MuxTelemetry.Stop(runActivity);
                         }
                     }
 
                     CompleteWorkerJob(job, JobState.Completed, string.Empty);
+                    jobOutcome = "completed";
+                    MuxTelemetry.SetOk(jobActivity);
                 }
                 catch (OperationCanceledException)
                 {
                     CompleteWorkerJob(job, JobState.Cancelled, string.Empty);
+                    jobOutcome = "cancelled";
+                    MuxTelemetry.SetError(jobActivity, jobOutcome, "job cancelled");
                 }
                 catch (Exception exception)
                 {
+                    MuxTelemetry.RecordException(jobActivity, exception);
                     job.RecordFailure(exception);
                     ErrorEvent errorEvent = new ErrorEvent
                     {
@@ -661,6 +709,10 @@ namespace Mux.Core.Jobs
                 }
                 finally
                 {
+                    MuxTelemetry.SetTag(jobActivity, MuxTelemetryNames.LabelOutcome, jobOutcome);
+                    MuxTelemetry.RecordJob(jobOutcome);
+                    MuxTelemetry.Stop(jobActivity);
+
                     job.EventWriter.TryComplete();
                     lock (_SyncRoot)
                     {
@@ -669,6 +721,35 @@ namespace Mux.Core.Jobs
 
                     StartEligibleJobs();
                 }
+            }
+        }
+
+        private long CountJobs(bool active)
+        {
+            lock (_SyncRoot)
+            {
+                return active
+                    ? _Jobs.Count((Job j) => JobScheduler.IsActiveState(j.State))
+                    : _Jobs.Count((Job j) => j.State == JobState.Queued);
+            }
+        }
+
+        private static void RecordQueuedStage(Job job, Activity? jobActivity)
+        {
+            // The queue wait is reconstructed after the fact: from submission to the moment a slot was granted.
+            DateTime createdUtc = job.CreatedUtc;
+            DateTime startedUtc = job.StartedUtc ?? DateTime.UtcNow;
+            double seconds = Math.Max(0, (startedUtc - createdUtc).TotalSeconds);
+            MuxTelemetry.RecordJobStage(MuxTelemetryNames.StageQueued, MuxTelemetryNames.OutcomeSuccess, seconds);
+
+            if (jobActivity == null) return;
+            Activity? queued = MuxTelemetry.StartActivity("stage:queued", ActivityKind.Internal, jobActivity.Context, new DateTimeOffset(createdUtc, TimeSpan.Zero));
+            if (queued != null)
+            {
+                MuxTelemetry.SetOk(queued);
+                queued.SetEndTime(startedUtc);
+                MuxTelemetry.Stop(queued);
+                Activity.Current = jobActivity;
             }
         }
 

@@ -13,6 +13,7 @@ namespace Mux.Core.Agent
     using Mux.Core.Jobs;
     using Mux.Core.Llm;
     using Mux.Core.Models;
+    using Mux.Core.Observability;
     using Mux.Core.Prompting;
     using Mux.Core.Settings;
     using Mux.Core.Telemetry;
@@ -89,8 +90,104 @@ namespace Mux.Core.Agent
             if (string.IsNullOrWhiteSpace(prompt))
                 throw new ArgumentException("Prompt cannot be null or empty.", nameof(prompt));
 
-            Stopwatch stopwatch = Stopwatch.StartNew();
+            // Telemetry wrapper: one "agent run" span per run plus the run-level metrics. The span nests under
+            // whatever is current (a Watson request span, a job stage span). Async-iterator segments do not
+            // carry AsyncLocal changes across yields, so the span is re-established as Activity.Current before
+            // every inner MoveNextAsync; LLM, tool, and stage spans opened by the inner loop then nest under it.
             string runId = Guid.NewGuid().ToString("N");
+            string callKind = _Options.UsageCallKind.ToString().ToLowerInvariant();
+            Activity? runActivity = MuxTelemetry.StartActivity("agent run");
+            MuxTelemetry.SetTag(runActivity, MuxTelemetryNames.AttrRunId, runId);
+            MuxTelemetry.SetTag(runActivity, MuxTelemetryNames.AttrSessionId, _Options.SessionId);
+            MuxTelemetry.SetTag(runActivity, MuxTelemetryNames.AttrJobId, _Options.JobId);
+            MuxTelemetry.SetTag(runActivity, MuxTelemetryNames.AttrEndpointName, _Options.Endpoint.Name);
+            MuxTelemetry.SetTag(runActivity, MuxTelemetryNames.LabelProvider, ProviderName(_Options.Endpoint));
+            MuxTelemetry.SetTag(runActivity, MuxTelemetryNames.AttrRequestModel, _Options.Endpoint.Model);
+            MuxTelemetry.SetTag(runActivity, MuxTelemetryNames.LabelCallKind, callKind);
+            MuxTelemetry.AgentRunStarted();
+
+            long startTimestamp = Stopwatch.GetTimestamp();
+            string outcome = MuxTelemetryNames.OutcomeAbandoned;
+            int iterations = 0;
+            IAsyncEnumerator<AgentEvent> inner = RunCoreAsync(prompt, runId, cancellationToken).GetAsyncEnumerator(cancellationToken);
+
+            try
+            {
+                while (true)
+                {
+                    if (runActivity != null) Activity.Current = runActivity;
+
+                    bool moved;
+                    try
+                    {
+                        moved = await inner.MoveNextAsync().ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        outcome = MuxTelemetryNames.OutcomeCancelled;
+                        MuxTelemetry.SetError(runActivity, MuxTelemetryNames.OutcomeCancelled, "run cancelled");
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        outcome = MuxTelemetryNames.OutcomeFailed;
+                        MuxTelemetry.RecordException(runActivity, ex);
+                        throw;
+                    }
+
+                    if (!moved) break;
+
+                    AgentEvent agentEvent = inner.Current;
+                    if (agentEvent is RunCompletedEvent completed)
+                    {
+                        outcome = completed.Status;
+                        iterations = completed.IterationsCompleted;
+                        MuxTelemetry.SetTag(runActivity, MuxTelemetryNames.AttrIterations, completed.IterationsCompleted);
+                        MuxTelemetry.SetTag(runActivity, MuxTelemetryNames.AttrToolCallCount, completed.ToolCallCount);
+                        MuxTelemetry.SetTag(runActivity, MuxTelemetryNames.AttrInputTokens, completed.InputTokens);
+                        MuxTelemetry.SetTag(runActivity, MuxTelemetryNames.AttrOutputTokens, completed.OutputTokens);
+                    }
+                    else if (agentEvent is ErrorEvent errorEvent)
+                    {
+                        MuxTelemetry.RecordAgentError(errorEvent.Code);
+                        runActivity?.AddEvent(new ActivityEvent(
+                            "mux.agent.error",
+                            DateTimeOffset.UtcNow,
+                            new ActivityTagsCollection { { MuxTelemetryNames.LabelErrorType, MuxTelemetry.SanitizeCode(errorEvent.Code) } }));
+                    }
+                    else if (agentEvent is ContextCompactedEvent compactedEvent)
+                    {
+                        MuxTelemetry.RecordCompaction(compactedEvent.Strategy);
+                    }
+
+                    yield return agentEvent;
+                }
+            }
+            finally
+            {
+                try { await inner.DisposeAsync().ConfigureAwait(false); } catch (Exception) { }
+
+                if (string.Equals(outcome, MuxTelemetryNames.OutcomeAbandoned, StringComparison.Ordinal)
+                    && cancellationToken.IsCancellationRequested)
+                {
+                    outcome = MuxTelemetryNames.OutcomeCancelled;
+                }
+
+                MuxTelemetry.SetTag(runActivity, MuxTelemetryNames.LabelOutcome, outcome);
+                if (string.Equals(outcome, "completed", StringComparison.Ordinal)) MuxTelemetry.SetOk(runActivity);
+                else if (runActivity != null && runActivity.Status == ActivityStatusCode.Unset) MuxTelemetry.SetError(runActivity, outcome, "run finished with outcome " + outcome);
+
+                MuxTelemetry.RecordAgentRun(outcome, callKind, MuxTelemetry.SecondsSince(startTimestamp), iterations);
+                MuxTelemetry.Stop(runActivity);
+            }
+        }
+
+        private async IAsyncEnumerable<AgentEvent> RunCoreAsync(
+            string prompt,
+            string runId,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            Stopwatch stopwatch = Stopwatch.StartNew();
             int iterationCount = 0;
             int toolCallCount = 0;
             int errorCount = 0;
@@ -196,6 +293,7 @@ namespace Mux.Core.Agent
                 StringBuilder assistantTextBuilder = new StringBuilder();
                 List<ToolCall> proposedToolCalls = new List<ToolCall>();
                 string? streamErrorCode = null;
+                long llmStageStart = Stopwatch.GetTimestamp();
 
                 await foreach (AgentEvent streamEvent in _LlmClient
                     .StreamAsync(conversation, allTools, cancellationToken)
@@ -224,6 +322,11 @@ namespace Mux.Core.Agent
                         yield return streamEvent;
                     }
                 }
+
+                MuxTelemetry.RecordAgentStage(
+                    MuxTelemetryNames.StageLlm,
+                    streamErrorCode == null ? MuxTelemetryNames.OutcomeSuccess : streamErrorCode,
+                    MuxTelemetry.SecondsSince(llmStageStart));
 
                 // Record durable usage telemetry for this model call. Only fresh metrics (a call that
                 // actually completed this iteration) are attached; a stream that errored before completing
@@ -264,6 +367,8 @@ namespace Mux.Core.Agent
                     string? governanceDenyReason = EvaluateToolGovernance(toolCall);
                     if (governanceDenyReason != null)
                     {
+                        MuxTelemetry.RecordApproval("policy_denied");
+                        MuxTelemetry.RecordToolCall(ToolKindOf(toolCall.Name), ToolLabelOf(toolCall.Name), MuxTelemetryNames.OutcomeDenied, -1);
                         errorCount++;
                         yield return new ErrorEvent
                         {
@@ -283,6 +388,10 @@ namespace Mux.Core.Agent
                     // Run through approval
                     bool approved = false;
                     ErrorEvent? approvalError = null;
+                    long approvalStart = Stopwatch.GetTimestamp();
+                    Activity? approvalActivity = MuxTelemetry.StartActivity("stage:approval");
+                    MuxTelemetry.SetTag(approvalActivity, MuxTelemetryNames.AttrToolName, toolCall.Name);
+                    MuxTelemetry.SetTag(approvalActivity, MuxTelemetryNames.AttrToolCallId, toolCall.Id);
 
                     try
                     {
@@ -314,6 +423,18 @@ namespace Mux.Core.Agent
                             Code = "approval_error",
                             Message = $"Approval check failed: {ex.Message}"
                         };
+                        MuxTelemetry.RecordException(approvalActivity, ex);
+                    }
+
+                    string approvalDecision = approvalError != null ? MuxTelemetryNames.OutcomeError : (approved ? "approved" : "denied");
+                    MuxTelemetry.RecordApproval(approvalDecision);
+                    MuxTelemetry.RecordAgentStage(MuxTelemetryNames.StageApproval, approvalDecision, MuxTelemetry.SecondsSince(approvalStart));
+                    MuxTelemetry.SetTag(approvalActivity, MuxTelemetryNames.LabelDecision, approvalDecision);
+                    if (approvalError == null) MuxTelemetry.SetOk(approvalActivity);
+                    MuxTelemetry.Stop(approvalActivity);
+                    if (!approved && approvalError == null)
+                    {
+                        MuxTelemetry.RecordToolCall(ToolKindOf(toolCall.Name), ToolLabelOf(toolCall.Name), MuxTelemetryNames.OutcomeDenied, -1);
                     }
 
                     if (approvalError != null)
@@ -356,13 +477,30 @@ namespace Mux.Core.Agent
                     ToolResult result;
                     int taskPlanVersionBefore = _Options.TaskPlan?.Version ?? 0;
                     System.Diagnostics.Stopwatch toolStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    string toolKind = ToolKindOf(toolCall.Name);
+                    string toolOutcome = MuxTelemetryNames.OutcomeSuccess;
+                    Activity? toolActivity = MuxTelemetry.StartActivity("tool " + toolCall.Name);
+                    MuxTelemetry.SetTag(toolActivity, MuxTelemetryNames.AttrToolName, toolCall.Name);
+                    MuxTelemetry.SetTag(toolActivity, MuxTelemetryNames.AttrToolCallId, toolCall.Id);
+                    MuxTelemetry.SetTag(toolActivity, MuxTelemetryNames.LabelToolKind, toolKind);
 
                     try
                     {
                         result = await ExecuteToolCallAsync(toolCall, cancellationToken).ConfigureAwait(false);
+                        if (!result.Success)
+                        {
+                            toolOutcome = MuxTelemetryNames.OutcomeFailure;
+                            MuxTelemetry.SetError(toolActivity, "tool_failure", "tool returned a failure result");
+                        }
+                        else
+                        {
+                            MuxTelemetry.SetOk(toolActivity);
+                        }
                     }
                     catch (Exception ex)
                     {
+                        toolOutcome = MuxTelemetryNames.OutcomeError;
+                        MuxTelemetry.RecordException(toolActivity, ex);
                         result = new ToolResult
                         {
                             ToolCallId = toolCall.Id,
@@ -372,6 +510,9 @@ namespace Mux.Core.Agent
                     }
 
                     toolStopwatch.Stop();
+                    MuxTelemetry.Stop(toolActivity);
+                    MuxTelemetry.RecordToolCall(toolKind, ToolLabelOf(toolCall.Name), toolOutcome, toolStopwatch.Elapsed.TotalSeconds);
+                    MuxTelemetry.RecordAgentStage(MuxTelemetryNames.StageTool, toolOutcome, toolStopwatch.Elapsed.TotalSeconds);
 
                     yield return new ToolCallCompletedEvent
                     {
@@ -633,13 +774,35 @@ namespace Mux.Core.Agent
             }
 
             List<ConversationMessage> compactedConversation = new List<ConversationMessage>(conversation);
-            ContextCompactedEvent? compactionEvent = TryCompactActiveConversation(
-                compactedConversation,
-                allTools,
-                snapshot,
-                cancellationToken,
-                out List<ConversationMessage> workingConversation,
-                out string failureDetail);
+            long compactionStart = Stopwatch.GetTimestamp();
+            Activity? compactionActivity = MuxTelemetry.StartActivity("stage:compaction");
+            MuxTelemetry.SetTag(compactionActivity, MuxTelemetryNames.LabelStrategy, _Options.CompactionStrategy);
+            ContextCompactedEvent? compactionEvent;
+            List<ConversationMessage> workingConversation;
+            string failureDetail;
+            try
+            {
+                compactionEvent = TryCompactActiveConversation(
+                    compactedConversation,
+                    allTools,
+                    snapshot,
+                    cancellationToken,
+                    out workingConversation,
+                    out failureDetail);
+            }
+            catch (Exception ex)
+            {
+                MuxTelemetry.RecordException(compactionActivity, ex);
+                MuxTelemetry.Stop(compactionActivity);
+                MuxTelemetry.RecordAgentStage(MuxTelemetryNames.StageCompaction, MuxTelemetryNames.OutcomeError, MuxTelemetry.SecondsSince(compactionStart));
+                throw;
+            }
+
+            string compactionOutcome = compactionEvent == null ? MuxTelemetryNames.OutcomeFailure : MuxTelemetryNames.OutcomeSuccess;
+            if (compactionEvent == null) MuxTelemetry.SetError(compactionActivity, "compaction_failed", failureDetail);
+            else MuxTelemetry.SetOk(compactionActivity);
+            MuxTelemetry.Stop(compactionActivity);
+            MuxTelemetry.RecordAgentStage(MuxTelemetryNames.StageCompaction, compactionOutcome, MuxTelemetry.SecondsSince(compactionStart));
 
             if (compactionEvent == null)
             {
@@ -1146,12 +1309,34 @@ namespace Mux.Core.Agent
             {
                 Task<WriteLeaseHandle> acquire = _Options.WriteLease.AcquireAsync(_Options.JobId, cancellationToken);
                 bool waited = !acquire.IsCompleted;
+                long leaseWaitStart = Stopwatch.GetTimestamp();
+                Activity? leaseActivity = null;
                 if (waited)
                 {
+                    leaseActivity = MuxTelemetry.StartActivity("stage:write_lease_wait");
                     _Options.OnWriteLeaseWaitChanged?.Invoke(true);
                 }
 
-                WriteLeaseHandle handle = await acquire.ConfigureAwait(false);
+                WriteLeaseHandle handle;
+                try
+                {
+                    handle = await acquire.ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    MuxTelemetry.RecordException(leaseActivity, ex);
+                    MuxTelemetry.Stop(leaseActivity);
+                    if (waited) MuxTelemetry.RecordAgentStage(MuxTelemetryNames.StageWriteLeaseWait, MuxTelemetryNames.OutcomeError, MuxTelemetry.SecondsSince(leaseWaitStart));
+                    throw;
+                }
+
+                if (waited)
+                {
+                    MuxTelemetry.SetOk(leaseActivity);
+                    MuxTelemetry.Stop(leaseActivity);
+                    MuxTelemetry.RecordAgentStage(MuxTelemetryNames.StageWriteLeaseWait, MuxTelemetryNames.OutcomeSuccess, MuxTelemetry.SecondsSince(leaseWaitStart));
+                }
+
                 try
                 {
                     if (waited)
@@ -1248,6 +1433,33 @@ namespace Mux.Core.Agent
 
             // Unknown/external tools are treated as mutating — the safe default.
             return ToolMutationKind.Mutating;
+        }
+
+        private string ToolKindOf(string toolName)
+        {
+            if (_ToolRegistry.HasTool(toolName)) return "builtin";
+
+            IExternalToolProvider? provider = FindProviderFor(toolName);
+            if (provider != null)
+            {
+                return provider is Mux.Core.Skills.SkillToolProvider || provider is Mux.Core.Skills.SkillRuntime
+                    ? "skill"
+                    : (toolName.Contains('.') ? "mcp" : "external");
+            }
+
+            return _Options.ExternalToolExecutor != null ? "mcp" : "unknown";
+        }
+
+        private string ToolLabelOf(string toolName)
+        {
+            // Only built-in tool names are a bounded set; every other tool collapses to its kind so MCP and
+            // skill tool names (user configuration) never become metric label values. Spans keep the full name.
+            return _ToolRegistry.HasTool(toolName) ? toolName : ToolKindOf(toolName);
+        }
+
+        private static string ProviderName(EndpointConfig endpoint)
+        {
+            return endpoint.AdapterType.ToString().ToLowerInvariant();
         }
 
         private static ApprovalDecision MapPromptResponseToDecision(string response)

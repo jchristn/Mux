@@ -82,6 +82,31 @@
 			]
 		},
 		{
+			"name": "Overview",
+			"description": "The dashboard home aggregate. One call returns the counts, default endpoint, recent sessions, derived notices, and the OpenTelemetry export status the web dashboard's home page renders. Requires the API key.",
+			"item": [
+				{
+					"name": "Get overview",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/overview",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"overview"
+							]
+						},
+						"description": "Returns the home aggregate: `Version`, `Uptime`, `AuthEnabled`, `ConfigDir`, counts (`Endpoints`, `McpServers`, `Prompts`, `Subagents`, `SkillsTotal`/`SkillsEnabled`/`SkillsInvalid`, `Hooks`, `Commands`, `Keybindings`, `Sessions`, `TotalMessages`), the default endpoint, `RecentSessions`, `Notices`, and `Observability`: `{ Enabled, ServiceName, OtlpEndpoint, Services: [ { Kind, Name, Url, Credentials } ] }`, the OpenTelemetry export status plus the bundled Grafana, Prometheus, Tempo, and Loki URLs with their local default credentials (the External services card). No secrets are returned. See TELEMETRY.md."
+					}
+				}
+			]
+		},
+		{
 			"name": "Endpoints",
 			"description": "The model endpoints in `endpoints.json` — the local and cloud LLMs mux can talk to. Secrets (API keys, header values) are never returned; a blank secret on write preserves the stored value. Edits are applied as a whole-collection PUT.",
 			"item": [
