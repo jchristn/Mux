@@ -24,6 +24,7 @@ namespace Mux.Core.Skills
         private string _ArgumentHint = string.Empty;
         private string _Body = string.Empty;
         private List<DefaultSkillCommandDef> _Commands = new List<DefaultSkillCommandDef>();
+        private Dictionary<string, string> _Resources = new Dictionary<string, string>(StringComparer.Ordinal);
 
         #endregion
 
@@ -132,6 +133,17 @@ namespace Mux.Core.Skills
         {
             get => _Commands;
             set => _Commands = value ?? new List<DefaultSkillCommandDef>();
+        }
+
+        /// <summary>
+        /// Extra files written into the skill directory when it is seeded, keyed by path relative to the skill
+        /// directory (for example <c>resources/mux-skill.ps1</c>). Paths use forward slashes and must stay inside
+        /// the skill directory. Never null.
+        /// </summary>
+        public Dictionary<string, string> Resources
+        {
+            get => _Resources;
+            set => _Resources = value ?? new Dictionary<string, string>(StringComparer.Ordinal);
         }
 
         /// <summary>

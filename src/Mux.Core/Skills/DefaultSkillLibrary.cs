@@ -30,7 +30,53 @@ namespace Mux.Core.Skills
             Merge(skills, DefaultScaffoldDocsSkills.All());
             Merge(skills, DefaultWorkflowUtilitySkills.All());
 
+            Dictionary<string, string> built = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (DefaultSkillDef definition in Definitions())
+            {
+                if (built.ContainsKey(definition.Id))
+                {
+                    throw new InvalidOperationException("Duplicate default skill id '" + definition.Id + "'.");
+                }
+
+                built[definition.Id] = DefaultSkillBuilder.Build(definition);
+            }
+
+            Merge(skills, built);
             return skills;
+        }
+
+        /// <summary>
+        /// Returns the default skills that are declared as <see cref="DefaultSkillDef"/> data (the toolchain and
+        /// playbook families), in catalog order. The older categories declare <c>SKILL.md</c> text directly and are
+        /// only reachable through <see cref="All"/>.
+        /// </summary>
+        /// <returns>The definitions.</returns>
+        public static IReadOnlyList<DefaultSkillDef> Definitions()
+        {
+            List<DefaultSkillDef> definitions = new List<DefaultSkillDef>();
+            definitions.AddRange(DefaultProjectSkills.All());
+            definitions.AddRange(DefaultJavaScriptSkills.All());
+            definitions.AddRange(DefaultPythonSkills.All());
+            return definitions;
+        }
+
+        /// <summary>
+        /// Returns the extra files each default skill ships with (beyond <c>SKILL.md</c>), keyed by skill id and
+        /// then by path relative to the skill directory. Skills without extra files are omitted.
+        /// </summary>
+        /// <returns>The resources by skill id.</returns>
+        public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> AllResources()
+        {
+            Dictionary<string, IReadOnlyDictionary<string, string>> resources = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
+            foreach (DefaultSkillDef definition in Definitions())
+            {
+                if (definition.Resources.Count > 0)
+                {
+                    resources[definition.Id] = new Dictionary<string, string>(definition.Resources, StringComparer.Ordinal);
+                }
+            }
+
+            return resources;
         }
 
         private static void Merge(Dictionary<string, string> target, IReadOnlyDictionary<string, string> source)
@@ -57,6 +103,7 @@ namespace Mux.Core.Skills
             if (skillsDirectory == null) throw new ArgumentNullException(nameof(skillsDirectory));
 
             Directory.CreateDirectory(skillsDirectory);
+            IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> resources = AllResources();
             foreach (KeyValuePair<string, string> skill in All())
             {
                 string dir = Path.Combine(skillsDirectory, skill.Key);
@@ -65,8 +112,7 @@ namespace Mux.Core.Skills
                     continue;
                 }
 
-                Directory.CreateDirectory(dir);
-                File.WriteAllText(Path.Combine(dir, "SKILL.md"), skill.Value);
+                WriteSkill(dir, skill.Key, skill.Value, resources);
             }
         }
 
@@ -97,6 +143,7 @@ namespace Mux.Core.Skills
             HashSet<string> seeded = LoadSeededManifest(manifestPath);
             List<string> added = new List<string>();
             bool manifestChanged = false;
+            IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> resources = AllResources();
 
             foreach (KeyValuePair<string, string> skill in All())
             {
@@ -108,8 +155,7 @@ namespace Mux.Core.Skills
                 string dir = Path.Combine(skillsDirectory, skill.Key);
                 if (!Directory.Exists(dir))
                 {
-                    Directory.CreateDirectory(dir);
-                    File.WriteAllText(Path.Combine(dir, "SKILL.md"), skill.Value);
+                    WriteSkill(dir, skill.Key, skill.Value, resources);
                     added.Add(skill.Key);
                 }
 
@@ -123,6 +169,29 @@ namespace Mux.Core.Skills
             }
 
             return added;
+        }
+
+        private static void WriteSkill(string dir, string id, string content, IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> resources)
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "SKILL.md"), content);
+            if (!resources.TryGetValue(id, out IReadOnlyDictionary<string, string>? files))
+            {
+                return;
+            }
+
+            string root = Path.GetFullPath(dir) + Path.DirectorySeparatorChar;
+            foreach (KeyValuePair<string, string> file in files)
+            {
+                string target = Path.GetFullPath(Path.Combine(dir, file.Key.Replace('/', Path.DirectorySeparatorChar)));
+                if (!target.StartsWith(root, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("Default skill '" + id + "' resource '" + file.Key + "' escapes the skill directory.");
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.WriteAllText(target, file.Value);
+            }
         }
 
         private static HashSet<string> LoadSeededManifest(string manifestPath)

@@ -33,6 +33,15 @@ All notable changes to mux are documented here.
   (`skillListingMode`) a skill is listed in the system prompt only when a glob matches a project file, with a
   footer counting the rest. `skill` with the name `list` returns every available skill (`list` is now a
   reserved skill name).
+- **Toolchain skills (Phase 2, in progress).** 16 new default skills, each gated with `appliesTo` so they are
+  listed only in matching projects: `project-detect` (languages, package managers, test frameworks, CI, deploy
+  files, and the skills that apply); JavaScript and TypeScript (`js-install`, `js-build`, `js-test`, `js-lint`,
+  `js-typecheck`, `js-format`, `js-deps`, `js-scripts`), which detect npm, pnpm, yarn (classic and Berry), or bun
+  and Vitest, Jest, Mocha, or `node --test`, ESLint or Biome, and Prettier or Biome; and Python (`py-env`,
+  `py-install`, `py-test`, `py-lint`, `py-format`, `py-typecheck`, `py-deps`), which run inside the project's uv,
+  poetry, pipenv, or `.venv` environment with pytest, Ruff (or flake8 and Black), and mypy or pyright. They share a
+  seeded `resources/mux-skill.ps1` helper: exit 0/1/2 conventions, install hints, and `MUX_SKILL_DRY_RUN=1` dry
+  runs. Default skills can now ship resource files, and `SkillExecutor` accepts per-run environment variables.
 - **Skills in `mux print`.** Headless runs now discover skills, list them in the system prompt, and expose
   `skill` and `run_skill`, matching the interactive shell.
 
@@ -48,6 +57,8 @@ All notable changes to mux are documented here.
 
 ### Tests
 
+- `ToolchainSkills`: 28 cases that dry-run the JavaScript, Python, and project-detection skills against generated
+  fixture projects and assert the exact command and exit code (skipped when `pwsh` is not on PATH).
 - New suites `ProjectInstructions`, `ProjectSkills`, `SkillInvocation`, and `SkillListing`, plus new
   `DefaultSkills` cases (playbook builder, no em-dashes, colon headings) and a `SkillCommand` case for
   `mux skill trust`.

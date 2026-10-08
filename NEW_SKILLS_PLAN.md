@@ -125,11 +125,19 @@ The full library after this plan is 152 skills. Listed one line each, that is ro
 
 ---
 
-## Phase 2: Language and toolchain skills
+## Phase 2: Language and toolchain skills (in progress)
 
 Each family is one category class in `src/Mux.Core/Skills/`, merged in `DefaultSkillLibrary.All()`. Every command skill below uses `pwsh`, detects its tool, sets `appliesTo`, and follows the exit-code convention from the guiding decisions. Commands that take a filter or path read it from `$args[0]`.
 
-### 2.0 Project detection (row 11): `DefaultProjectSkills.cs`
+**Status:** the shared infrastructure, 2.0 (project detection), 2.1 (JavaScript and TypeScript), and 2.2 (Python) are done: 16 new default skills, 62 in the library. 2.3 through 2.8 are next.
+
+Shared infrastructure, as built:
+
+- [x] `src/Mux.Core/Skills/Resources/mux-skill.ps1`, embedded in Mux.Core and exposed by `DefaultSkillHelpers`. It holds the conventions every toolchain skill follows: `Invoke-MuxTool` echoes each command, prints `DRYRUN: <command>` instead of running it when `MUX_SKILL_DRY_RUN=1`, exits 2 with an install hint when the tool is missing, and passes through the tool's own exit code; `Exit-MuxNotApplicable` exits 2 with a reason; plus repo-root and walk-up file discovery, Node package-manager detection (`packageManager` field, then bun, pnpm, yarn, npm lockfiles in the package or repository root), package.json script and dependency checks, and Python environment detection (uv, poetry, pipenv, or a `.venv` with pip). It is a real `.ps1` file in the repository rather than a C# string, so it can be read and linted as PowerShell.
+- [x] `DefaultSkillDef.Resources` and `DefaultSkillHelpers.Attach`, which add the helper as `resources/mux-skill.ps1` and prefix each pwsh command with one dot-source line. `DefaultSkillLibrary.Definitions()` lists the data-declared families, `AllResources()` returns their files, and both `SeedInto` and `SeedNewInto` write them beside `SKILL.md` (refusing any path that escapes the skill folder). Each skill folder carries its own copy of the helper, so a seeded skill stays self-contained and editable.
+- [x] `SkillExecutor.ExecuteAsync` takes optional per-run environment variables, so tests set `MUX_SKILL_DRY_RUN=1` for one process without touching the test host.
+
+### 2.0 Project detection (row 11): `DefaultProjectSkills.cs` (done)
 
 `project-detect` is the anchor for everything else. `init`, `code-review`, and `fix-until-green` all call it first, so it ships first.
 
@@ -137,7 +145,7 @@ Each family is one category class in `src/Mux.Core/Skills/`, merged in `DefaultS
 |---|:---:|---|---|
 | `project-detect` | no | `summary`, `json` | Reports languages (by file counts), package managers, build systems, test frameworks, linters, formatters, CI providers, container files, and the exact build, test, lint, and format commands it would run. `json` emits the same as a single object for other skills. No `appliesTo`: always listed. |
 
-### 2.1 JavaScript and TypeScript (row 5): `DefaultJavaScriptSkills.cs`
+### 2.1 JavaScript and TypeScript (row 5): `DefaultJavaScriptSkills.cs` (done)
 
 Package manager detection order: `bun.lockb`/`bun.lock` → bun, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, otherwise npm. Script names come from `package.json`; a skill prefers the project's own script (`test`, `lint`, `build`, `typecheck`, `format`) and falls back to the tool directly only when no script exists. `appliesTo: [package.json]`.
 
@@ -152,7 +160,7 @@ Package manager detection order: `bun.lockb`/`bun.lock` → bun, `pnpm-lock.yaml
 | `js-deps` | no | `outdated`, `audit`, `why` | `why <pkg>` explains why a package is installed. |
 | `js-scripts` | yes | `list`, `run` | `run <name>` runs any `package.json` script with a timeout. Long-running scripts belong to Phase 5 background processes. |
 
-### 2.2 Python (row 6): `DefaultPythonSkills.cs`
+### 2.2 Python (row 6): `DefaultPythonSkills.cs` (done)
 
 Environment detection order: `uv.lock` → uv, `poetry.lock` → poetry, `Pipfile.lock` → pipenv, otherwise a `.venv` (created on demand) with pip. Every command runs inside the detected environment, which removes the most common Python failure an agent hits: running the system interpreter. `appliesTo: [pyproject.toml, requirements*.txt, setup.py, setup.cfg, Pipfile]`.
 
@@ -323,10 +331,10 @@ Not requested by name, but Go and Rust are each common enough that their absence
 
 ### Phase 2 tasks
 
-- [ ] Add the category classes above (2.0 through 2.8), one class per file.
-- [ ] Register them in `DefaultSkillLibrary.All()`.
-- [ ] Fixture repositories under `src/Test.Shared/Fixtures/projects/` (`node-npm`, `node-pnpm`, `python-uv`, `python-pip`, `react-vite`, `java-maven`, `java-gradle`, `cmake`, `go`, `rust`, `compose`, `helm-chart`, `kustomize`, `terraform`, `vercel`, `netlify`, `wrangler`, `fly`): manifests and lockfiles only, no dependencies installed.
-- [ ] `ToolchainDetectionSuite`: runs each skill's detection against each fixture with a `MUX_SKILL_DRY_RUN=1` environment variable, which every toolchain skill honors by printing the command it would run instead of running it. The suite asserts the printed command, so detection is tested on every platform without installing Node, Python, a JDK, or a compiler in CI.
+- [~] Add the category classes above (2.0 through 2.8), one class per file. Done: 2.0, 2.1, 2.2.
+- [~] Register them in `DefaultSkillLibrary.Definitions()`. Done for 2.0 through 2.2.
+- [~] Fixture projects: manifests and lockfiles only, no dependencies installed. **Changed:** fixtures are generated by the test code in temp directories (one small lambda per case) instead of checked into `src/Test.Shared/Fixtures/projects/`, which keeps each case's inputs next to its assertion and avoids committing lockfiles that tooling might try to act on. Done: npm, pnpm, yarn classic and Berry, bun, packageManager field, pnpm workspace package, Vitest, Jest, Mocha-free node --test, Biome, Prettier, uv, poetry with and without a lockfile, pipenv, pip with and without .venv, pyright, and non-projects.
+- [~] `ToolchainSkillsSuite` (named for what it covers): runs each case with `MUX_SKILL_DRY_RUN=1` and asserts the printed command and exit code, so detection is tested on every platform without Node, Python, a JDK, or a compiler in CI; cases are skipped when `pwsh` is not on PATH. It also checks that seeding writes the helper and the prelude, and runs `project-detect json` for real against a mixed repository. 28 cases so far, for 2.0 through 2.2. A manual check ran `js-test all` for real against a `node --test` project: exit 0 when passing and exit 1 when a test fails.
 - [ ] `ToolchainLiveSuite`: opt-in (skipped unless `MUX_TEST_LIVE_TOOLCHAINS=1`), runs the real commands against fixtures where the toolchain is installed.
 - [ ] `appliesTo` cases: each fixture lists exactly its own family plus the ungated skills.
 

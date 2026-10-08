@@ -31,6 +31,8 @@ namespace Mux.Core.Skills
         /// <param name="arguments">Arguments appended to the command's script. May be null.</param>
         /// <param name="workingDirectory">The working directory for the run.</param>
         /// <param name="cancellationToken">A token to cancel the run.</param>
+        /// <param name="environment">Optional environment variables set for this run only (for example
+        /// <c>MUX_SKILL_DRY_RUN=1</c>). They override inherited values and never touch this process. May be null.</param>
         /// <returns>A <see cref="ToolResult"/> with the process output, or an error result on failure.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="skill"/> or <paramref name="command"/> is null.</exception>
         public async Task<ToolResult> ExecuteAsync(
@@ -39,7 +41,8 @@ namespace Mux.Core.Skills
             SkillCommand command,
             IReadOnlyList<string>? arguments,
             string workingDirectory,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            IReadOnlyDictionary<string, string>? environment = null)
         {
             if (skill == null) throw new ArgumentNullException(nameof(skill));
             if (command == null) throw new ArgumentNullException(nameof(command));
@@ -54,6 +57,13 @@ namespace Mux.Core.Skills
                 startInfo.Environment["MUX_SKILL_NAME"] = skill.Manifest.Name;
                 startInfo.Environment["MUX_SKILL_DIR"] = skill.DirectoryPath;
                 startInfo.Environment["MUX_SKILL_COMMAND"] = command.Name;
+                if (environment != null)
+                {
+                    foreach (KeyValuePair<string, string> variable in environment)
+                    {
+                        startInfo.Environment[variable.Key] = variable.Value;
+                    }
+                }
 
                 return await RunProcessAsync(toolCallId, startInfo, command.TimeoutMs, cancellationToken).ConfigureAwait(false);
             }

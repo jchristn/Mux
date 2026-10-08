@@ -228,6 +228,9 @@ namespace Test.Shared
                     // Project instruction files (MUX.md / AGENTS.md / CLAUDE.md) in the system prompt.
                     ProjectInstructionsSuite.Create(),
 
+                    // Phase 2 toolchain skills (JavaScript, Python, project detection) in dry-run mode.
+                    ToolchainSkillsSuite.Create(),
+
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
                     McpRuntimeSuite.Create(),

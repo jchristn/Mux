@@ -22,6 +22,7 @@
   <ItemGroup>
     <!-- Cosmetic "thinking…" phrase pool, shared by the TUI and desktop via ThinkingPhrases. -->
     <EmbeddedResource Include="Conversation\Resources\thinking-messages.txt" />
+    <EmbeddedResource Include="Skills\Resources\mux-skill.ps1" LogicalName="Mux.Core.Skills.mux-skill.ps1" />
   </ItemGroup>
 
   <ItemGroup>

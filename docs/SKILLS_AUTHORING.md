@@ -116,6 +116,16 @@ Put skills in the repository under `.mux/skills`, `.claude/skills`, or `.agents/
 
 A project skill with commands runs code from the repository, so it loads only after the user trusts that project (`/trust all`, `mux skill trust all`, or `--trust-project-skills` for a single headless run). Until then it is listed as blocked. Playbook skills execute nothing and load right away, unless the project is set to `ignore`.
 
+## Toolchain skills: exit codes, dry runs, and the shared helper
+
+The default toolchain skills (`project-detect`, `js-*`, `py-*`, and the families that follow) share one PowerShell helper, `resources/mux-skill.ps1`, which each command dot-sources on its first line. Copy that pattern when you write a toolchain skill of your own, and keep its conventions:
+
+- **Exit codes.** 0 means success. 1 means the tool ran and reported problems (failing tests, lint findings, a failed build). 2 means the tool is not installed or the project does not use this toolchain, and the output says which, with an install hint. A model can tell "your tests failed" from "you have no test runner" without reading the text.
+- **Dry runs.** With `MUX_SKILL_DRY_RUN=1` in the environment, `Invoke-MuxTool` prints `DRYRUN: <command>` instead of running anything, while detection still runs. That shows exactly what a skill would do in a given project, and it is how the test suite checks every skill on every platform without installing the toolchains.
+- **Detection lives in the skill.** `Get-MuxNodePackageManager` reads the `packageManager` field, then lockfiles (bun, pnpm, yarn, npm) in the package or repository root; `Get-MuxPythonManager` picks uv, poetry, pipenv, or a project `.venv`, and `Invoke-MuxPython` runs tools as `python -m <tool>` inside that environment. The model calls `js-test all` or `py-test all`; the skill decides the actual command.
+
+The helper is seeded into each skill folder and is yours to edit; mux never overwrites a skill folder that already exists.
+
 ## Cross-platform notes
 
 mux runs on Windows, Linux, and macOS. `pwsh` (PowerShell 7) and `node` run on all three and are the safest defaults for skills you intend to share. A bare `bash` is a trap on Windows, where it often resolves to the WSL stub rather than Git Bash — reach for `bash` only when the audience is POSIX, and say so in `whenToUse`. A machine still needs the named interpreter installed to *run* a skill; validation only checks that the interpreter is on the allowlist.
