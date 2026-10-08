@@ -132,7 +132,10 @@ also reachable by key and the menu (one catalog, three surfaces):
 `/endpoint` (`/model`), `/effort` (`/reasoning`), `/settings` (`/config`, `/preferences`, `/prefs`),
 `/help` (`/?`), `/clear`, `/sidebar`, `/save`, `/export` (`/share`), `/undo`, `/redo`, `/sessions`,
 `/label` (`/labels`), `/tag` (`/tags`), `/tasks`, `/usage` (`/stats`, `/spend`), `/theme`, `/mouse`,
-`/menu`, `/quit` (`/exit`). Any custom commands from `hooks.json` also appear here as `/<name>`.
+`/menu`, `/quit` (`/exit`), `/trust`. Any custom commands from `hooks.json` also appear here as `/<name>`.
+Anything else that names an enabled skill runs that skill: `/code-review main` submits the skill's
+instructions with `main` as its arguments (see [Skills](#skills)). Built-in commands win, then custom
+commands, then skills.
 
 Key chords for these commands can be rebound in `~/.mux/keybindings.json` — see
 [CONFIG.md](CONFIG.md#keybindingsjson-custom-key-chords). `/help` lists the current command ids.
@@ -859,7 +862,7 @@ Important:
 
 ## Skills
 
-Skills are versioned Markdown-plus-code capabilities under `~/.mux/skills`. Each is a folder with a `SKILL.md` — frontmatter plus a body — whose commands run a fenced code block or a bundled script through an allowlisted interpreter with a timeout and captured output, turning a request into a fixed, deterministic procedure. The interactive shell discovers skills on startup, lists the enabled ones in the system prompt, and exposes `skill` (read a skill's instructions) and `run_skill` (execute a command, gated by the approval policy and the write lease). A curated default set is seeded on first run and preserved on upgrade.
+Skills are versioned Markdown-plus-code capabilities under `~/.mux/skills` (and, per project, in the repository; see below). Each is a folder with a `SKILL.md` (frontmatter plus a body). A command skill's commands run a fenced code block or a bundled script through an allowlisted interpreter with a timeout and captured output, turning a request into a fixed, deterministic procedure. A playbook skill declares no commands: its body is a procedure the model follows with its normal tools. Every surface, including `mux print`, discovers skills, lists the relevant enabled ones in the system prompt, and exposes `skill` (read a skill's instructions) and `run_skill` (execute a command, gated by the approval policy and the write lease). A curated default set is seeded on first run and preserved on upgrade.
 
 Manage skills in-app with `/skills` (aliases `/skill`; also on the `F1` menu under **Model**): the inventory shows a state glyph (`●` enabled, `○` disabled, `⚠` invalid), command counts, and tags; per-skill actions cover view, enable/disable, duplicate, and remove; a **+ New skill…** wizard scaffolds a working skill; and **⬇ Import skill…** brings one in from a local path. Enablement lives in `~/.mux/skills.json`, separate from each `SKILL.md`.
 
@@ -872,11 +875,66 @@ mux skill validate [<name>]          # validate one or all; nonzero exit on fail
 mux skill run <name> <command> [--arg v ...] [--cwd dir]   # execute deterministically
 mux skill new <name>                 # scaffold a skill
 mux skill add <path>                 # import from a directory
+mux skill trust [all|playbooks|ignore|reset] [--cwd dir]   # record or report project skill trust
 ```
 
 `mux skill run` returns the same `stdout`/`stderr`/`exit_code` contract the agent sees, so a Git hook or CI job can invoke a curated procedure with no model in the loop. The full authoring reference is in `SKILLS_AUTHORING.md`.
 
-Settings in `settings.json`: `skillsEnabled` (default `true`), `skillRefreshIntervalSeconds` (default `30`), and `skillsDirectory` (override the default `~/.mux/skills`).
+### Running a skill by name
+
+Type `/<skill> [arguments]` in the terminal, the desktop app, or the web dashboard, or pass it as the prompt to
+`mux print "/<skill> args"`. mux replaces the slash text with the skill's instructions: `$ARGUMENTS` becomes the
+whole argument text and `$1` through `$9` the positional arguments (quotes group words), substituted in prose
+but never inside fenced code blocks. When the body has no placeholder, the arguments are appended on their own
+line. A skill with commands also tells the model to run them through `run_skill`. A skill can opt out with
+`userInvocable: false`, and `argumentHint` documents what it expects. A skill whose name matches a built-in
+command is shadowed by that command; `/skills` flags the collision.
+
+### Project skills and trust
+
+Skills can live in the repository as well as in `~/.mux/skills`. mux also searches `.mux/skills`,
+`.claude/skills`, and `.agents/skills` under the repository root (or the working directory outside a
+repository), so a project that already ships Claude Code or Codex skills works unchanged. A project skill
+shadows a user skill with the same id. Claude Code frontmatter is understood: `allowed-tools`,
+`argument-hint`, `user-invocable`, and `disable-model-invocation` map onto mux's fields, YAML block scalars
+(`description: >`) are read, and fields mux does not know are reported as warnings rather than errors.
+
+A project skill with runnable commands is code from the repository, so it stays blocked until you decide
+to trust that project. Playbook skills (instructions only) load immediately. The terminal tells you when a
+project ships blocked skills; decide with `/trust all`, `/trust playbooks`, `/trust ignore`, or `/trust reset`
+(bare `/trust` reports the current level). The desktop app has the same `/trust` command, and the
+`/skills` inventory lists project skills with their state and a **Trust this project's skills** action.
+Decisions are stored per repository root in `~/.mux/trusted-projects.json`. Headless runs use
+`mux skill trust <level> [--cwd dir]` to record a decision, or `--trust-project-skills` to trust the
+project for one run without recording anything.
+
+### Which skills the model sees
+
+With 100+ skills installed, listing all of them on every turn would crowd a small model's context. A skill
+can declare `appliesTo` globs (for example `[package.json]` or `[pyproject.toml, requirements*.txt]`), and
+in the default `relevant` listing mode it is advertised only when a glob matches a file in the project. A
+footer tells the model how many skills were left out and that `skill` with the name `list` shows them all;
+every enabled skill stays callable either way. Set `skillListingMode` to `all` or `none` to change this.
+
+Settings in `settings.json`: `skillsEnabled` (default `true`), `skillRefreshIntervalSeconds` (default `30`),
+`skillsDirectory` (override the default `~/.mux/skills`), `projectSkillsEnabled` (default `true`),
+`projectSkillRoots`, and `skillListingMode` (default `relevant`). See [CONFIG.md](CONFIG.md).
+
+## Project Instructions (MUX.md, AGENTS.md, CLAUDE.md)
+
+mux reads project instruction files into the system prompt on every surface (terminal, `mux print`, desktop,
+web, and VS Code through the server). Starting at the repository root and walking down to the working
+directory, it takes the first of `MUX.md`, `AGENTS.md`, or `CLAUDE.md` found in each directory, so a
+repository written for Codex or Claude Code needs no changes. Outside a repository only the working directory
+is read. A user-level `MUX.md` in the config directory (`~/.mux/MUX.md`) comes first, for preferences that
+apply everywhere. Outer files come before inner ones, and the model is told that a later (nearer) file wins
+on conflict.
+
+The terminal lists the loaded files at startup and after `/cwd`; the desktop app shows them with
+`/instructions` and after `/cwd`; the REST server exposes them at `GET /v1.0/api/context/instructions`. The
+combined size is capped by `projectInstructionsMaxBytes` (default 32 KB); over the cap, the files farthest from
+the working directory are dropped first. Turn the feature off with `projectInstructionsEnabled: false`, or skip
+it for one run with `--no-project-instructions`.
 
 ## Orchestrator Integration
 

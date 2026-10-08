@@ -145,6 +145,20 @@ namespace Mux.Core.Prompting
                 "The following skills are available. Call the `skill` tool with a skill's name to read its instructions, then `run_skill` to execute one of its commands:"));
 
             list.Add(new PromptDefinition(
+                "section.skills.more", PromptKind.ToolSection, PromptScope.Global,
+                "Skills section footer",
+                "Tells the model how many enabled skills were left out of the listing because they do not apply to this project. {Count} is replaced with the number.",
+                new[] { "{Count}" },
+                "{Count} more skills are installed but not listed because they do not apply to this project. Call the `skill` tool with the name \"list\" to see every skill."));
+
+            list.Add(new PromptDefinition(
+                "section.projectInstructions", PromptKind.ToolSection, PromptScope.Global,
+                "Project instructions lead-in",
+                "Introduces the project instruction files (MUX.md, AGENTS.md, CLAUDE.md) loaded into the system prompt.",
+                null,
+                "The following instructions were loaded from project instruction files. Follow them. Where they conflict, a file listed later (closer to the working directory) takes precedence:"));
+
+            list.Add(new PromptDefinition(
                 "section.mcp", PromptKind.ToolSection, PromptScope.Global,
                 "MCP section lead-in",
                 "Introduces the list of connected MCP tools in the system prompt.",

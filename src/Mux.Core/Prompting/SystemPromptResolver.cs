@@ -44,6 +44,9 @@ namespace Mux.Core.Prompting
         /// <param name="taskPlanningEnabled">Whether task planning is enabled in settings; the
         /// <c>{TaskPlanningGuidance}</c> block is only injected when this is true and tools are enabled.</param>
         /// <param name="appendSystemPrompt">Optional caller-supplied text appended after all substitution.</param>
+        /// <param name="projectInstructions">Optional project instruction files (see
+        /// <see cref="ProjectInstructionsLoader"/>), appended as their own section after substitution and before
+        /// <paramref name="appendSystemPrompt"/>. Null or empty adds nothing.</param>
         /// <returns>The resolved prompts; never null.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="activeProfile"/> is null.</exception>
         public static ResolvedSystemPrompt Resolve(
@@ -53,7 +56,8 @@ namespace Mux.Core.Prompting
             IReadOnlyList<ToolDefinition>? tools,
             string workingDirectory,
             bool taskPlanningEnabled,
-            string? appendSystemPrompt)
+            string? appendSystemPrompt,
+            ProjectInstructions? projectInstructions = null)
         {
             if (activeProfile == null) throw new ArgumentNullException(nameof(activeProfile));
 
@@ -81,6 +85,10 @@ namespace Mux.Core.Prompting
                 .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd())
                 .Replace("{TaskPlanningGuidance}", taskPlanningGuidance);
 
+            // Project instructions follow the substituted persona so a file's text is never consumed by a
+            // placeholder, and precede any caller-supplied append so an explicit CLI addition reads last.
+            systemPrompt += BuildProjectInstructionsSection(projectInstructions);
+
             // Append caller-supplied system-prompt text after all placeholder substitution so it survives
             // profile switches and is never consumed by a placeholder.
             if (!string.IsNullOrWhiteSpace(appendSystemPrompt))
@@ -95,6 +103,23 @@ namespace Mux.Core.Prompting
                 SystemPrompt = systemPrompt,
                 CompactionSystemPrompt = activeProfile.CompactionPrompt ?? string.Empty
             };
+        }
+
+        /// <summary>
+        /// Builds the system-prompt section holding the project instruction files: a blank line, the editable
+        /// <c>section.projectInstructions</c> lead-in, and the combined file text. Returns an empty string
+        /// when <paramref name="projectInstructions"/> is null or has no content.
+        /// </summary>
+        /// <param name="projectInstructions">The loaded instructions. May be null.</param>
+        /// <returns>The section text (leading with a blank line), or an empty string.</returns>
+        public static string BuildProjectInstructionsSection(ProjectInstructions? projectInstructions)
+        {
+            if (projectInstructions == null || !projectInstructions.HasContent)
+            {
+                return string.Empty;
+            }
+
+            return "\n\n" + PromptResolver.Shared.GetEffective("section.projectInstructions") + "\n\n" + projectInstructions.Text;
         }
     }
 }

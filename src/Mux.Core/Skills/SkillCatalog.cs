@@ -2,12 +2,14 @@ namespace Mux.Core.Skills
 {
     using System;
     using System.Collections.Generic;
+    using Mux.Core.Enums;
     using Mux.Core.Models;
 
     /// <summary>
     /// An immutable snapshot of the loaded skills. It answers the queries the tool provider and the UI need
-    /// — status for every skill, lookup by name, and the set of enabled, valid skills that the model should
-    /// be told about — without touching disk. A refresh builds a new catalog rather than mutating this one.
+    /// (status for every skill, lookup by name, and the set of usable skills the model should be told about)
+    /// without touching disk. A refresh builds a new catalog rather than mutating this one. When a catalog
+    /// merges project and user skills, a project skill shadows a user skill with the same id.
     /// </summary>
     public sealed class SkillCatalog
     {
@@ -46,15 +48,73 @@ namespace Mux.Core.Skills
         #region Public-Methods
 
         /// <summary>
-        /// Returns the enabled, valid skills — the ones the model should be told about and allowed to run.
+        /// Builds a catalog from project and user skills. Project skills come first and shadow any user skill
+        /// with the same id (case-insensitive); each shadowing project skill is marked
+        /// <see cref="Skill.ShadowsUserSkill"/> and the hidden user skill is left out.
         /// </summary>
-        /// <returns>The enabled, valid skills.</returns>
+        /// <param name="projectSkills">The project skills. Null is treated as empty.</param>
+        /// <param name="userSkills">The user skills. Null is treated as empty.</param>
+        /// <returns>The merged catalog.</returns>
+        public static SkillCatalog Merge(IReadOnlyList<Skill>? projectSkills, IReadOnlyList<Skill>? userSkills)
+        {
+            List<Skill> merged = new List<Skill>();
+            HashSet<string> projectNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (projectSkills != null)
+            {
+                foreach (Skill skill in projectSkills)
+                {
+                    string name = skill.Manifest.Name;
+                    if (!string.IsNullOrWhiteSpace(name) && !projectNames.Add(name))
+                    {
+                        // A duplicate id in a lower-precedence project root is hidden by the first one.
+                        continue;
+                    }
+
+                    merged.Add(skill);
+                }
+            }
+
+            if (userSkills != null)
+            {
+                foreach (Skill skill in userSkills)
+                {
+                    string name = skill.Manifest.Name;
+                    if (!string.IsNullOrWhiteSpace(name) && projectNames.Contains(name))
+                    {
+                        foreach (Skill projectSkill in merged)
+                        {
+                            if (string.Equals(projectSkill.Manifest.Name, name, StringComparison.OrdinalIgnoreCase))
+                            {
+                                projectSkill.ShadowsUserSkill = true;
+                            }
+                        }
+
+                        continue;
+                    }
+
+                    merged.Add(skill);
+                }
+            }
+
+            return new SkillCatalog(merged);
+        }
+
+        /// <summary>
+        /// Every skill in the catalog, usable or not, in catalog order.
+        /// </summary>
+        public IReadOnlyList<Skill> All => _Skills;
+
+        /// <summary>
+        /// Returns the usable skills (valid, enabled, and not blocked by project trust): the ones the model
+        /// may be told about and allowed to run.
+        /// </summary>
+        /// <returns>The usable skills.</returns>
         public IReadOnlyList<Skill> GetEnabledValidSkills()
         {
             List<Skill> result = new List<Skill>();
             foreach (Skill skill in _Skills)
             {
-                if (skill.IsValid && skill.Manifest.Enabled)
+                if (skill.IsUsable)
                 {
                     result.Add(skill);
                 }
@@ -80,7 +140,13 @@ namespace Mux.Core.Skills
                     Valid = skill.IsValid,
                     CommandCount = skill.Manifest.Commands.Count,
                     Tags = new List<string>(skill.Manifest.Tags),
-                    Error = skill.IsValid || skill.Validation.Errors.Count == 0 ? null : skill.Validation.Errors[0]
+                    Error = skill.IsValid || skill.Validation.Errors.Count == 0 ? null : skill.Validation.Errors[0],
+                    Scope = skill.Scope == SkillScopeEnum.Project ? "project" : "user",
+                    CommandsBlocked = skill.CommandsBlocked,
+                    ShadowsUserSkill = skill.ShadowsUserSkill,
+                    UserInvocable = skill.Manifest.UserInvocable,
+                    ArgumentHint = skill.Manifest.ArgumentHint,
+                    Warnings = new List<string>(skill.Validation.Warnings)
                 });
             }
 

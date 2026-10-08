@@ -18,14 +18,15 @@ namespace Mux.Cli.Commands
     public class SkillSettings : CommandSettings
     {
         /// <summary>
-        /// The skill action to perform: list, show, validate, run, new, or add.
+        /// The skill action to perform: list, show, validate, run, new, add, or trust.
         /// </summary>
-        [Description("Skill action: list, show, validate, run, new, or add.")]
+        [Description("Skill action: list, show, validate, run, new, add, or trust.")]
         [CommandArgument(0, "<action>")]
         public string Action { get; set; } = string.Empty;
 
         /// <summary>
-        /// The skill name (show/validate/run/new), or the source path (add).
+        /// The skill name (show/validate/run/new), the source path (add), or the trust level (trust: all,
+        /// playbooks, ignore, or reset; omitted reports the current level).
         /// </summary>
         [Description("Skill name, or source path for add.")]
         [CommandArgument(1, "[name]")]
@@ -44,9 +45,9 @@ namespace Mux.Cli.Commands
         public List<string> Args { get; set; } = new List<string>();
 
         /// <summary>
-        /// The working directory for the run action.
+        /// The working directory for the run action, or the directory whose project the trust action targets.
         /// </summary>
-        [Description("Working directory for the run action.")]
+        [Description("Working directory for the run action, or the project for the trust action.")]
         [CommandOption("--cwd")]
         public string? WorkingDirectory { get; set; }
 
@@ -108,8 +109,10 @@ namespace Mux.Cli.Commands
                         return HandleAdd(skillsDirectory, settings.Name);
                     case "run":
                         return await HandleRunAsync(skillsDirectory, settings, cancellationToken).ConfigureAwait(false);
+                    case "trust":
+                        return HandleTrust(settings.Name, settings.WorkingDirectory, json);
                     default:
-                        Console.Error.WriteLine("Usage: mux skill list|show <name>|validate [name]|run <name> <command>|new <name>|add <path>");
+                        Console.Error.WriteLine("Usage: mux skill list|show <name>|validate [name]|run <name> <command>|new <name>|add <path>|trust [all|playbooks|ignore|reset] [--cwd dir]");
                         return 1;
                 }
             }
@@ -118,6 +121,36 @@ namespace Mux.Cli.Commands
                 Console.Error.WriteLine("skill error: " + ex.Message);
                 return 1;
             }
+        }
+
+        private static int HandleTrust(string? level, string? workingDirectory, bool json)
+        {
+            string directory = string.IsNullOrWhiteSpace(workingDirectory) ? Directory.GetCurrentDirectory() : workingDirectory!;
+            string root = SkillRuntime.ResolveProjectRoot(directory) ?? directory;
+            ProjectTrustStore store = new ProjectTrustStore(SettingsLoader.GetTrustedProjectsPath());
+
+            if (!string.IsNullOrWhiteSpace(level))
+            {
+                if (!ProjectTrustStore.TryParseLevel(level, out Mux.Core.Enums.ProjectTrustLevelEnum parsed))
+                {
+                    Console.Error.WriteLine($"Unknown trust level '{level}'. Use all, playbooks, ignore, or reset.");
+                    return 1;
+                }
+
+                store.SetLevel(root, parsed);
+            }
+
+            string current = ProjectTrustStore.ToWireName(store.GetLevel(root));
+            if (json)
+            {
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { projectRoot = root, level = current }));
+            }
+            else
+            {
+                Console.WriteLine($"{root}: {current}");
+            }
+
+            return 0;
         }
 
         private static int HandleList(string skillsDirectory, bool json)

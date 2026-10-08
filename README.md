@@ -65,7 +65,8 @@
 - External web search: optional Tavily and You.com providers expose `web_search` for result discovery
 - Shell-aware process execution metadata: `run_process` tells the model which OS and shell it will run under
 - MCP tool servers: define `stdio`/HTTP servers in `mcp-servers.json` or manage them with `/mcp`; the interactive UI connects to them, discovers their tools, exposes those tools to the model, and shows per-server connectivity
-- Skills: versioned Markdown-plus-code capabilities in `~/.mux/skills` that turn a request into a fixed, deterministic procedure; author, inventory, and manage them in-app with `/skills` (or the `mux skill` verb), and a curated default set ships on first run
+- Project instructions: `MUX.md`, `AGENTS.md`, or `CLAUDE.md` files from the repository root down to the working directory (plus a user-level `~/.mux/MUX.md`) are loaded into the system prompt on every surface, so a repository already set up for Codex or Claude Code works in mux unchanged
+- Skills: versioned Markdown-plus-code capabilities in `~/.mux/skills` (and checked into a project under `.mux/skills`, `.claude/skills`, or `.agents/skills`) that turn a request into a fixed, deterministic procedure or a reusable playbook; run one by name with `/<skill> args` on any surface, author, inventory, and manage them in-app with `/skills` (or the `mux skill` verb), and a curated default set ships on first run. Project skills with commands load only after `/trust`, and skills declare `appliesTo` globs so only the relevant ones are listed to the model
 - TUIKit interactive UI (`v0.8.2`): a full-screen shell with per-job transcripts, a job sidebar, a multi-line composer, slash commands / key bindings / menu over one command catalog, an interactive tool-approval modal, and autosaved resumable sessions. Multiple prompts run as concurrent background jobs (a single-writer lease serializes file edits); enqueue-while-busy lets you start a new job or append to the focused one. See `USAGE.md`.
 - Background tasks: for a large request the model lays out the work as a tracked plan of tasks and advances them as it goes; the interactive shell draws a live checklist that updates in place (pending → running → done), the sidebar shows `TASKS n/m`, `/tasks` opens a viewer to inspect and hand-annotate the plan, and the plan persists across save/resume. A `task_plan_updated` event is emitted in `jsonl` mode for orchestrators. See `USAGE.md`
 - Subagents: define named subagents in `~/.mux/subagents.json` and the model can delegate a scoped sub-task to one with the `spawn_subagent` tool; each runs in an isolated conversation (its own system prompt, endpoint, and tool allow-list) and returns only its final answer, keeping the primary agent's context clean
@@ -229,6 +230,8 @@ The **desktop app** launches from the repo with `run-desktop.bat` (Windows) or `
 | `--working-directory <path>` | `-w` | Tool execution directory |
 | `--system-prompt <path>` |  | Override system prompt file |
 | `--append-system-prompt <text>` |  | Append text to the resolved system prompt |
+| `--no-project-instructions` |  | Do not load `MUX.md` / `AGENTS.md` / `CLAUDE.md` project instruction files for this run |
+| `--trust-project-skills` |  | Load the project's checked-in skills that carry commands for this run, without recording a trust decision |
 | `--sandbox <posture>` |  | Confinement posture: `none` (default), `read-only`, or `workspace-write` |
 | `--allow-tools <globs>` |  | Comma-separated tool-name globs; only matching tools are allowed |
 | `--deny-tools <globs>` |  | Comma-separated tool-name globs to deny (deny wins over allow) |

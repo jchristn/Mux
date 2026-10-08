@@ -6,6 +6,7 @@ namespace Mux.Core.Skills
     using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Enums;
     using Mux.Core.Models;
 
     /// <summary>
@@ -27,7 +28,13 @@ namespace Mux.Core.Skills
         private static readonly Regex _FenceClosePattern = new Regex("^```+\\s*$", RegexOptions.Compiled);
         private static readonly Regex _BlockIdPattern = new Regex("id=(?<id>[A-Za-z0-9._-]+)", RegexOptions.Compiled);
 
+        /// <summary>
+        /// The skill name reserved for the <c>skill</c> tool's catalog listing; no skill may use it.
+        /// </summary>
+        public const string ReservedListName = "list";
+
         private readonly string _SkillsDirectory;
+        private readonly SkillScopeEnum _Scope;
 
         #endregion
 
@@ -39,8 +46,21 @@ namespace Mux.Core.Skills
         /// <param name="skillsDirectory">The directory whose subfolders are skills. Must not be null.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="skillsDirectory"/> is null.</exception>
         public SkillLoader(string skillsDirectory)
+            : this(skillsDirectory, SkillScopeEnum.User)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SkillLoader"/> class that tags every loaded skill
+        /// with a scope.
+        /// </summary>
+        /// <param name="skillsDirectory">The directory whose subfolders are skills. Must not be null.</param>
+        /// <param name="scope">The scope recorded on each loaded skill.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="skillsDirectory"/> is null.</exception>
+        public SkillLoader(string skillsDirectory, SkillScopeEnum scope)
         {
             _SkillsDirectory = skillsDirectory ?? throw new ArgumentNullException(nameof(skillsDirectory));
+            _Scope = scope;
         }
 
         #endregion
@@ -146,6 +166,10 @@ namespace Mux.Core.Skills
             {
                 result.Errors.Add($"Skill id '{manifest.Name}' must be lowercase and hyphen-separated.");
             }
+            else if (string.Equals(manifest.Name, ReservedListName, StringComparison.OrdinalIgnoreCase))
+            {
+                result.Errors.Add($"Skill id '{ReservedListName}' is reserved for the skill catalog listing.");
+            }
 
             if (string.IsNullOrWhiteSpace(manifest.Description))
             {
@@ -156,6 +180,11 @@ namespace Mux.Core.Skills
             foreach (SkillCommand command in manifest.Commands)
             {
                 ValidateCommand(skill, command, commandNames, result);
+            }
+
+            foreach (string field in manifest.UnrecognizedFields)
+            {
+                result.Warnings.Add($"Frontmatter field '{field}' is not recognized by mux and was ignored.");
             }
 
             return result;
@@ -210,6 +239,7 @@ namespace Mux.Core.Skills
             Skill skill = new Skill
             {
                 DirectoryPath = Path.GetFullPath(skillDirectory),
+                Scope = _Scope,
                 Manifest = manifest,
                 Body = body,
                 CodeBlocks = ExtractCodeBlocks(body)
@@ -221,14 +251,14 @@ namespace Mux.Core.Skills
 
         private Skill BuildMissing(string skillDirectory)
         {
-            Skill skill = new Skill { DirectoryPath = Path.GetFullPath(skillDirectory) };
+            Skill skill = new Skill { DirectoryPath = Path.GetFullPath(skillDirectory), Scope = _Scope };
             skill.Validation.Errors.Add($"{SkillFileName} not found in the skill directory.");
             return skill;
         }
 
         private Skill BuildUnreadable(string skillDirectory, string message)
         {
-            Skill skill = new Skill { DirectoryPath = Path.GetFullPath(skillDirectory) };
+            Skill skill = new Skill { DirectoryPath = Path.GetFullPath(skillDirectory), Scope = _Scope };
             skill.Validation.Errors.Add($"{SkillFileName} could not be read: {message}");
             return skill;
         }

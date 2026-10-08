@@ -50,6 +50,12 @@
 			"key": "runId",
 			"value": "",
 			"type": "string"
+		},
+		{
+			"key": "workingDirectory",
+			"value": "",
+			"type": "string",
+			"description": "Optional working directory for project-scoped routes (skills expand, context instructions). Blank uses the server's current directory."
 		}
 	],
 	"item": [
@@ -596,6 +602,68 @@
 							]
 						},
 						"description": "Deletes a skill folder by id."
+					}
+				},
+				{
+					"name": "Expand skill invocation",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/skills/expand",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"skills",
+								"expand"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Input\": \"/{{skillId}} main\",\n  \"WorkingDirectory\": \"{{workingDirectory}}\"\n}"
+						},
+						"description": "Expands typed slash text (`/<skill> args`) into the user message that runs the skill, exactly as the terminal, desktop, and dashboard do. The skill body becomes the message with `$ARGUMENTS` and `$1`..`$9` substituted in prose (never inside code fences); a skill with commands also gets a `run_skill` hint. Project skills under `WorkingDirectory` (`.mux/skills`, `.claude/skills`, `.agents/skills`) shadow user skills; leave `WorkingDirectory` blank to use the server's current directory. Returns `{ Matched, Skill, Arguments, Prompt, IsPlaybook }`; `Matched` is false when no usable, user-invocable skill has that name. `400` when `Input` is missing or the directory does not exist."
+					}
+				}
+			]
+		},
+		{
+			"name": "Context",
+			"description": "Project context that a run in a working directory receives, such as the project instruction files (MUX.md, AGENTS.md, CLAUDE.md).",
+			"item": [
+				{
+					"name": "Get project instructions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/context/instructions?workingDirectory={{workingDirectory}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"context",
+								"instructions"
+							],
+							"query": [
+								{
+									"key": "workingDirectory",
+									"value": "{{workingDirectory}}",
+									"description": "The directory to resolve instructions for. Optional; defaults to the server's current directory."
+								}
+							]
+						},
+						"description": "Lists the project instruction files a run in `workingDirectory` loads into its system prompt: the user-level `MUX.md` in the config directory, then `MUX.md`, `AGENTS.md`, or `CLAUDE.md` (the first found) at each directory from the repository root down to the working directory. Returns `{ WorkingDirectory, Enabled, Sources, DroppedSources, TotalBytes, Truncated, Text }`. Files beyond `projectInstructionsMaxBytes` appear in `DroppedSources`, outermost first. `400` when the directory does not exist."
 					}
 				}
 			]

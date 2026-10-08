@@ -6,8 +6,8 @@ namespace Mux.Core.Skills
 
     /// <summary>
     /// Parses the constrained YAML-style frontmatter of a <c>SKILL.md</c> into a <see cref="SkillManifest"/>.
-    /// The supported subset is intentionally small — top-level scalars, booleans, inline or block string
-    /// lists, and a <c>commands</c> block of maps — which keeps the parser dependency-free and lets it fail
+    /// The supported subset is intentionally small (top-level scalars, booleans, inline or block string
+    /// lists, and a <c>commands</c> block of maps), which keeps the parser dependency-free and lets it fail
     /// softly: malformed input yields a partial manifest rather than an exception, and the loader's
     /// validation decides whether the result is usable.
     /// </summary>
@@ -35,6 +35,12 @@ namespace Mux.Core.Skills
             string currentListKey = string.Empty;
             SkillCommand? currentCommand = null;
 
+            // A YAML block scalar ("description: >" or "description: |") collects the indented lines that
+            // follow it, folded with spaces (">") or kept as lines ("|"), and is applied when it ends.
+            string blockScalarKey = string.Empty;
+            bool blockScalarLiteral = false;
+            List<string> blockScalarLines = new List<string>();
+
             foreach (string rawLine in lines)
             {
                 string line = StripComment(rawLine);
@@ -51,13 +57,28 @@ namespace Mux.Core.Skills
                     inCommands = false;
                     currentListKey = string.Empty;
                     currentCommand = null;
+                    FlushBlockScalar(manifest, ref blockScalarKey, blockScalarLiteral, blockScalarLines, ref inCommands, ref currentListKey);
 
                     if (!TrySplitKeyValue(trimmed, out string key, out string value))
                     {
                         continue;
                     }
 
+                    if (IsBlockScalarIndicator(value))
+                    {
+                        blockScalarKey = key;
+                        blockScalarLiteral = value.StartsWith("|", StringComparison.Ordinal);
+                        blockScalarLines.Clear();
+                        continue;
+                    }
+
                     HandleTopLevel(manifest, key, value, ref inCommands, ref currentListKey);
+                    continue;
+                }
+
+                if (blockScalarKey.Length > 0)
+                {
+                    blockScalarLines.Add(trimmed);
                     continue;
                 }
 
@@ -95,12 +116,39 @@ namespace Mux.Core.Skills
                 }
             }
 
+            FlushBlockScalar(manifest, ref blockScalarKey, blockScalarLiteral, blockScalarLines, ref inCommands, ref currentListKey);
             return manifest;
+        }
+
+        private static bool IsBlockScalarIndicator(string value)
+        {
+            string trimmed = value.Trim();
+            return trimmed == ">" || trimmed == "|" || trimmed == ">-" || trimmed == "|-" || trimmed == ">+" || trimmed == "|+";
+        }
+
+        private static void FlushBlockScalar(SkillManifest manifest, ref string blockScalarKey, bool literal, List<string> lines, ref bool inCommands, ref string currentListKey)
+        {
+            if (blockScalarKey.Length == 0)
+            {
+                return;
+            }
+
+            string text = string.Join(literal ? "\n" : " ", lines).Trim();
+            string key = blockScalarKey;
+            blockScalarKey = string.Empty;
+            lines.Clear();
+
+            // Only scalar fields make sense as block text; quote it so a leading '[' is not read as a list.
+            HandleTopLevel(manifest, key, "\"" + text + "\"", ref inCommands, ref currentListKey);
+            inCommands = false;
+            currentListKey = string.Empty;
         }
 
         private static void HandleTopLevel(SkillManifest manifest, string key, string value, ref bool inCommands, ref string currentListKey)
         {
-            switch (key.ToLowerInvariant())
+            // Keys are matched without case, hyphens, or underscores, so Claude Code spellings such as
+            // allowed-tools, user-invocable, and argument-hint map onto the same fields as their camelCase forms.
+            switch (NormalizeKey(key))
             {
                 case "name":
                     manifest.Name = StripQuotes(value);
@@ -129,13 +177,38 @@ namespace Mux.Core.Skills
                 case "tags":
                     ApplyListKey(manifest, "tags", value, ref currentListKey);
                     break;
+                case "appliesto":
+                    ApplyListKey(manifest, "appliesto", value, ref currentListKey);
+                    break;
+                case "userinvocable":
+                    manifest.UserInvocable = ParseBool(value, true);
+                    break;
+                case "modelinvocable":
+                    manifest.ModelInvocable = ParseBool(value, true);
+                    break;
+                case "disablemodelinvocation":
+                    manifest.ModelInvocable = !ParseBool(value, false);
+                    break;
+                case "argumenthint":
+                    manifest.ArgumentHint = StripQuotes(value);
+                    break;
                 case "commands":
                     inCommands = true;
                     currentListKey = string.Empty;
                     break;
                 default:
+                    if (!manifest.UnrecognizedFields.Contains(key))
+                    {
+                        manifest.UnrecognizedFields.Add(key);
+                    }
+
                     break;
             }
+        }
+
+        private static string NormalizeKey(string key)
+        {
+            return key.Replace("-", string.Empty).Replace("_", string.Empty).ToLowerInvariant();
         }
 
         private static void ApplyListKey(SkillManifest manifest, string listKey, string value, ref string currentListKey)
@@ -144,6 +217,19 @@ namespace Mux.Core.Skills
             if (inline.StartsWith("[", StringComparison.Ordinal))
             {
                 foreach (string item in ParseFlowList(inline))
+                {
+                    AddToList(manifest, listKey, item);
+                }
+
+                currentListKey = string.Empty;
+                return;
+            }
+
+            // A non-empty scalar (for example Claude Code's "allowed-tools: Read, Grep") is a comma-separated
+            // list on one line; an empty value opens a block list of "- item" lines.
+            if (inline.Length > 0)
+            {
+                foreach (string item in ParseFlowList("[" + inline + "]"))
                 {
                     AddToList(manifest, listKey, item);
                 }
@@ -164,6 +250,10 @@ namespace Mux.Core.Skills
             else if (string.Equals(listKey, "allowedtools", StringComparison.OrdinalIgnoreCase))
             {
                 manifest.AllowedTools.Add(item);
+            }
+            else if (string.Equals(listKey, "appliesto", StringComparison.OrdinalIgnoreCase))
+            {
+                manifest.AppliesTo.Add(item);
             }
         }
 

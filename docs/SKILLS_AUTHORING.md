@@ -61,9 +61,15 @@ git status --short
 | `mutating` | bool | `true` | `false` marks the skill read-only. See *Safety* below. |
 | `whenToUse` | string | empty | Guidance the model uses to decide relevance. |
 | `tags` | string[] | empty | Grouping and search. Inline `[a, b]` or a block list. |
-| `commands` | list | empty | The runnable units (below). |
+| `commands` | list | empty | The runnable units (below). Leave it out for a playbook skill. |
+| `appliesTo` | string[] | empty | File globs, relative to the project root, that make the skill relevant (`[package.json]`, `[pyproject.toml, requirements*.txt]`, `[**/*.csproj]`). In the default `relevant` listing mode the skill is advertised to the model only when a glob matches. Empty means always relevant. |
+| `userInvocable` | bool | `true` | Whether `/<name> args` runs the skill. Claude Code's `user-invocable` maps here. |
+| `modelInvocable` | bool | `true` | Whether the skill is listed in the system prompt. Claude Code's `disable-model-invocation: true` sets it to `false`; the skill stays callable by name and through the `skill` tool. |
+| `argumentHint` | string | empty | What the skill expects after its name, for example `"[base-branch]"`. Quote it when it starts with `[`. Claude Code's `argument-hint` maps here. |
 
 The frontmatter parser accepts a small, fixed subset of YAML — scalars, booleans, inline `[a, b]` or block (`- item`) string lists, and the `commands` list of maps. It is intentionally simple; when in doubt, keep values on one line.
+
+Keys match without regard to case, hyphens, or underscores, so `allowed-tools` and `allowedTools` are the same field. A comma-separated scalar (`allowed-tools: Read, Grep`) is read as a list, and a block scalar (`description: >` followed by indented lines) is folded into one value. A field mux does not recognize is reported as a validation warning and ignored; it never makes a skill invalid. The name `list` is reserved: `skill` with the name `list` returns every available skill.
 
 ### Commands
 
@@ -85,6 +91,30 @@ A body block is tagged on its opening fence:
     ```
 
 Arguments passed to `run_skill` (or `mux skill run … --arg x`) arrive as process arguments after the script — in `pwsh` as `$args`, in `node` as `process.argv`, in `python` as `sys.argv`, in `bash` as `$1`, `$2`. Arguments are never interpolated into a shell string, so quoting and injection are not your problem. The executor sets three environment variables for every run: `MUX_SKILL_NAME`, `MUX_SKILL_DIR`, and `MUX_SKILL_COMMAND`, so a script can find its own `resources/` without guessing.
+
+## Playbooks and invocation by name
+
+A skill with no `commands` is a playbook. Its body is a procedure (what to collect, what to check, how to report) that the model reads and carries out with its normal tools. Code review, debugging, and "write the project's AGENTS.md" are playbooks: the work needs judgment, not a fixed script. A hybrid keeps a few read-only commands that gather facts deterministically (the diff, the detected test command) and a body that says what to do with them.
+
+Any user-invocable skill runs by name: `/code-review main` in the terminal, desktop, or dashboard, or `mux print "/code-review main"`. The body becomes the submitted message, with `$ARGUMENTS` replaced by the whole argument text and `$1` through `$9` by positional arguments (quotes group words). Substitution touches prose only; fenced code blocks are left exactly as written, so a bash block's own `$1` is safe. When the body has no placeholder, the arguments are appended on their own line. A skill with commands also gets a closing line telling the model to run them through `run_skill`.
+
+```markdown
+---
+name: team-review
+description: Review a change the way this team does.
+argumentHint: "[base-branch]"
+appliesTo: [package.json]
+---
+
+Diff the current branch against $1 (default: the origin default branch). Read every changed hunk,
+then report correctness problems first, each with file:line and a concrete failure scenario.
+```
+
+## Project skills
+
+Put skills in the repository under `.mux/skills`, `.claude/skills`, or `.agents/skills` (configurable with `projectSkillRoots`) and everyone working in that project gets them. A project skill shadows a user skill with the same id, and the inventory marks it. Existing Claude Code and Codex skill folders load as they are.
+
+A project skill with commands runs code from the repository, so it loads only after the user trusts that project (`/trust all`, `mux skill trust all`, or `--trust-project-skills` for a single headless run). Until then it is listed as blocked. Playbook skills execute nothing and load right away, unless the project is set to `ignore`.
 
 ## Cross-platform notes
 

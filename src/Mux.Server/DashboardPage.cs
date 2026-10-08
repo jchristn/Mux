@@ -1229,7 +1229,8 @@ var CHAT_HELP="**Chat commands**\n\n"+
 "- `/commands` — manage custom commands\n"+
 "- `/keybindings` — edit keybindings\n"+
 "- `/sessions` — browse saved sessions\n"+
-"- `/settings` — open settings";
+"- `/settings` — open settings\n"+
+"- `/<skill> <args>`: run a skill by name (for example `/code-review main`)";
 function showChatStats(){
   var last=null;
   for(var i=messages.length-1;i>=0;i--){if(messages[i].role==="assistant"&&messages[i].stats){last=messages[i];break;}}
@@ -1263,8 +1264,16 @@ function handleChatCommand(text){
     case "keys": case "keybindings": case "shortcuts": switchView("keybindings");return;
     case "sessions": switchView("sessions");return;
     case "settings": switchView("settings");return;
-    default: toast("Unknown command: "+text+" (try /?)",true);
+    default: expandSkillOrWarn(text);
   }
+}
+// "/<skill> args": ask the server to expand a user-invocable skill into its instructions and send that as the
+// next message. Built-in dashboard commands above always win over a skill with the same name.
+function expandSkillOrWarn(text){
+  api("/v1.0/api/skills/expand","POST",{Input:text}).then(function(r){
+    if(r&&r.Matched){toast("Running skill /"+r.Skill+(r.Arguments?" "+r.Arguments:""));el("composer").value=r.Prompt;sendChat();}
+    else{toast("Unknown command: "+text+" (try /?)",true);}
+  }).catch(function(){toast("Unknown command: "+text+" (try /?)",true);});
 }
 function sendChat(){
   if(busy)return;

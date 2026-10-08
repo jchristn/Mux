@@ -301,6 +301,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.prompt-catalog", "Operational prompts", null, OpenPromptCatalog, "Model", new[] { "operational-prompts", "prompt-catalog", "catalog" }));
             _Catalog.Add(new CommandDescriptor("mux.mcp", "MCP servers", null, OpenMcpModal, "Model", new[] { "mcp", "mcp-servers", "mcpservers", "servers" }));
             _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }));
+            _Catalog.Add(new CommandDescriptor("mux.trust", "Project skill trust", null, () => HandleTrustArgument(string.Empty), "Model", new[] { "trust" }, HandleTrustArgument));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.cwd", "Working directory", null, ShowWorkingDirectory, "Session", new[] { "cwd", "cd", "chdir" }, ChangeWorkingDirectory));
             _Catalog.Add(new CommandDescriptor("mux.label", "Labels", null, ShowSessionLabels, "Session", new[] { "label", "labels" }, HandleLabelArgument));
@@ -2488,8 +2489,10 @@ namespace Mux.Cli.App
 
         private void RouteSlash(string input)
         {
+            // Built-in and custom (hooks.json) commands win; a skill with the same name is only reached when
+            // neither claims the input.
             bool handled = _SlashHandler != null && _SlashHandler(input);
-            if (!handled)
+            if (!handled && !TryInvokeSkill(input))
             {
                 _Conversation.WriteLine(Text.From($"Unknown command: {input}").Yellow());
             }
@@ -4616,8 +4619,36 @@ namespace Mux.Cli.App
                 string glyph = !status.Valid ? "⚠" : (status.Enabled ? "●" : "○");
                 string tags = status.Tags.Count > 0 ? "  [" + string.Join(", ", status.Tags) + "]" : string.Empty;
                 string plural = status.CommandCount == 1 ? string.Empty : "s";
-                options.Add($"{glyph} {status.Title}  ({status.CommandCount} command{plural}){tags}");
+                options.Add($"{glyph} {status.Title}  ({status.CommandCount} command{plural}){tags}{SlashCollisionNote(status.Name)}");
                 actions.Add(SkillMenuAction.Manage);
+            }
+
+            // Project skills (checked into the repository) are listed read-only after the user library, with
+            // their trust state, so the inventory explains why a repository skill is or is not available.
+            List<SkillStatus> projectStatuses = new List<SkillStatus>();
+            foreach (SkillStatus status in _SkillRuntime.GetStatus(_HookWorkingDirectory))
+            {
+                if (status.Scope == "project")
+                {
+                    projectStatuses.Add(status);
+                }
+            }
+
+            if (projectStatuses.Count > 0)
+            {
+                options.Add(string.Empty);
+                actions.Add(SkillMenuAction.None);
+                foreach (SkillStatus status in projectStatuses)
+                {
+                    string glyph = !status.Valid ? "⚠" : (status.CommandsBlocked ? "⊘" : (status.Enabled ? "●" : "○"));
+                    string note = status.CommandsBlocked ? "  blocked until trusted" : (status.ShadowsUserSkill ? "  overrides user skill" : string.Empty);
+                    options.Add($"{glyph} {status.Title}  [project]{note}{SlashCollisionNote(status.Name)}");
+                    actions.Add(SkillMenuAction.ProjectInfo);
+                    statuses.Add(status);
+                }
+
+                options.Add("⚑ Trust this project's skills…");
+                actions.Add(SkillMenuAction.Trust);
             }
 
             if (statuses.Count > 0)
@@ -4655,6 +4686,12 @@ namespace Mux.Cli.App
                 case SkillMenuAction.Manage:
                     await ManageSkillAsync(statuses[index]).ConfigureAwait(false);
                     break;
+                case SkillMenuAction.ProjectInfo:
+                    ShowProjectSkillInfo(StatusForRow(statuses, actions, index));
+                    break;
+                case SkillMenuAction.Trust:
+                    await ChooseProjectTrustAsync().ConfigureAwait(false);
+                    break;
                 case SkillMenuAction.New:
                     await NewSkillWizardAsync().ConfigureAwait(false);
                     break;
@@ -4669,6 +4706,130 @@ namespace Mux.Cli.App
                 default:
                     break;
             }
+        }
+
+        // A skill whose name matches a built-in or custom command cannot be invoked by name, because commands
+        // win. The inventory says so rather than letting "/name" silently run something else.
+        private string SlashCollisionNote(string skillName)
+        {
+            foreach (CommandDescriptor descriptor in _Catalog.Commands)
+            {
+                if (descriptor.MatchesSlash(skillName))
+                {
+                    return $"  (/{skillName} runs the '{descriptor.Title}' command)";
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static SkillStatus StatusForRow(List<SkillStatus> statuses, List<SkillMenuAction> actions, int index)
+        {
+            int position = -1;
+            for (int i = 0; i <= index && i < actions.Count; i++)
+            {
+                if (actions[i] == SkillMenuAction.Manage || actions[i] == SkillMenuAction.ProjectInfo)
+                {
+                    position++;
+                }
+            }
+
+            return position >= 0 && position < statuses.Count ? statuses[position] : new SkillStatus();
+        }
+
+        private void ShowProjectSkillInfo(SkillStatus status)
+        {
+            string root = SkillRuntime.ResolveProjectRoot(_HookWorkingDirectory) ?? _HookWorkingDirectory;
+            WriteNotice($"Project skill '{status.Name}' ({status.Title}) from {root}");
+            WriteNotice(status.CommandsBlocked
+                ? "  Its commands are blocked until you trust this project: /trust all (or /trust playbooks to keep it blocked)."
+                : $"  {status.CommandCount} command(s); edit it in the repository. Invoke it with /{status.Name}{(status.ArgumentHint.Length > 0 ? " " + status.ArgumentHint : string.Empty)}.");
+            if (!status.Valid && status.Error != null)
+            {
+                WriteNotice("  ⚠ " + status.Error);
+            }
+
+            foreach (string warning in status.Warnings)
+            {
+                WriteNotice("  note: " + warning);
+            }
+        }
+
+        private async Task ChooseProjectTrustAsync()
+        {
+            List<string> options = new List<string>
+            {
+                "Trust all project skills (allow their commands to run)",
+                "Trust playbooks only (keep skills with commands blocked)",
+                "Ignore this project's skills",
+                "Forget the decision"
+            };
+
+            SelectModal modal = new SelectModal("Trust this project's skills?", options);
+            _App.Modals.Push(modal);
+            object? result = await modal.Completion.ConfigureAwait(false);
+            int index = result is int value ? value : -1;
+            string[] levels = { "all", "playbooks", "ignore", "reset" };
+            if (index >= 0 && index < levels.Length)
+            {
+                HandleTrustArgument(levels[index]);
+            }
+        }
+
+        // Slash-argument handler ("/trust [all|playbooks|ignore|reset]"): record a trust decision for the
+        // project containing the working directory, or report the current one when called bare.
+        private void HandleTrustArgument(string argument)
+        {
+            if (_SkillRuntime == null)
+            {
+                WriteNotice("Skills are disabled (settings.json: skillsEnabled).");
+                return;
+            }
+
+            string root = SkillRuntime.ResolveProjectRoot(_HookWorkingDirectory) ?? _HookWorkingDirectory;
+            if (string.IsNullOrWhiteSpace(argument))
+            {
+                SkillCatalogView? view = _SkillRuntime.GetView(_HookWorkingDirectory);
+                string level = view == null ? "unknown" : ProjectTrustStore.ToWireName(view.TrustLevel);
+                WriteNotice($"Project skill trust for {root}: {level}. Use /trust all, /trust playbooks, /trust ignore, or /trust reset.");
+                return;
+            }
+
+            if (!ProjectTrustStore.TryParseLevel(argument, out Mux.Core.Enums.ProjectTrustLevelEnum parsed))
+            {
+                WriteNotice($"⚠ Unknown trust level '{argument}'. Use all, playbooks, ignore, or reset.");
+                return;
+            }
+
+            try
+            {
+                string recorded = _SkillRuntime.SetProjectTrust(_HookWorkingDirectory, parsed);
+                WriteNotice($"Project skill trust for {recorded} set to {ProjectTrustStore.ToWireName(parsed)}.");
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException || ex is System.IO.IOException || ex is UnauthorizedAccessException)
+            {
+                WriteNotice("⚠ Could not record trust: " + ex.Message);
+            }
+        }
+
+        // Expands "/<skill> args" into the skill's instructions and submits it as a normal turn. Returns false
+        // when no usable, user-invocable skill has that name, so the caller can report an unknown command.
+        private bool TryInvokeSkill(string input)
+        {
+            if (_SkillRuntime == null || !SkillInvocationExpander.TryParse(input, out string name, out string arguments))
+            {
+                return false;
+            }
+
+            if (!_SkillRuntime.TryGetSkill(name, _HookWorkingDirectory, out Skill skill) || !skill.Manifest.UserInvocable)
+            {
+                return false;
+            }
+
+            SkillInvocation invocation = SkillInvocationExpander.Expand(skill, arguments);
+            WriteNotice(arguments.Length > 0 ? $"Running skill /{name} {arguments}" : $"Running skill /{name}");
+            EnqueueOrRun(invocation.Prompt);
+            return true;
         }
 
         private async Task ManageSkillAsync(SkillStatus status)

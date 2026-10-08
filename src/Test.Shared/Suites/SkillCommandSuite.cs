@@ -63,6 +63,24 @@ namespace Test.Shared.Suites
                             MuxAssert.AreEqual(0, code, "list returns 0");
                         })),
 
+                    Case("TrustRecordsAndRejects", "skill trust records a level for the project and rejects unknown levels", (CancellationToken ct) =>
+                        WithConfigDirAsync(async (configDir, skillsDir) =>
+                        {
+                            string project = Path.Combine(configDir, "proj");
+                            Directory.CreateDirectory(Path.Combine(project, ".git"));
+                            Directory.CreateDirectory(Path.Combine(project, "sub"));
+
+                            int code = await RunSkillAsync(new SkillSettings { Action = "trust", Name = "playbooks", WorkingDirectory = Path.Combine(project, "sub"), ConfigDir = configDir }, ct).ConfigureAwait(false);
+                            MuxAssert.AreEqual(0, code, "trust returns 0");
+                            MuxAssert.AreEqual(
+                                Mux.Core.Enums.ProjectTrustLevelEnum.PlaybooksOnly,
+                                new Mux.Core.Skills.ProjectTrustStore(Path.Combine(configDir, "trusted-projects.json")).GetLevel(project),
+                                "recorded for the repository root");
+
+                            int bad = await RunSkillAsync(new SkillSettings { Action = "trust", Name = "sometimes", WorkingDirectory = project, ConfigDir = configDir }, ct).ConfigureAwait(false);
+                            MuxAssert.AreEqual(1, bad, "unknown level returns 1");
+                        })),
+
                     Case("ParseMapsPositionalsAndArgs", "ParseSkill maps positionals and repeatable --arg", (CancellationToken ct) =>
                     {
                         SkillSettings settings = CliArgumentParser.ParseSkill(new[] { "run", "myskill", "docmd", "--arg", "one", "--arg", "two", "--cwd", "/tmp" });

@@ -55,6 +55,42 @@ namespace Mux.Server.Routes
                 return await Task.FromResult<object>(found).ConfigureAwait(false);
             }, Documentation.ApiDoc.SkillsDetail);
 
+            // Expand "/<skill> args" into the message that runs the skill, as every surface does. Body
+            // { "input": "/code-review main", "workingDirectory": "..." }; an unmatched input returns Matched=false.
+            app.Post("/v1.0/api/skills/expand", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();
+                SkillExpandRequestDto? dto;
+                try { dto = JsonSerializer.Deserialize<SkillExpandRequestDto>(req.Http.Request.DataAsString ?? string.Empty, _JsonOptions); }
+                catch (Exception) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", "Request body is not valid JSON."); }
+                if (dto == null || string.IsNullOrWhiteSpace(dto.Input)) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", "An 'input' is required."); }
+
+                string workingDirectory = string.IsNullOrWhiteSpace(dto.WorkingDirectory) ? Directory.GetCurrentDirectory() : dto.WorkingDirectory!;
+                if (!Directory.Exists(workingDirectory)) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", "workingDirectory does not exist: " + workingDirectory); }
+
+                SkillExpandResponseDto response = new SkillExpandResponseDto();
+                MuxSettings settings = LoadSettingsSafe();
+                if (settings.SkillsEnabled && SkillInvocationExpander.TryParse(dto.Input, out string name, out string arguments))
+                {
+                    using (SkillRuntime runtime = SkillRuntime.FromSettings(settings, () => { }))
+                    {
+                        await runtime.RefreshNowAsync(req.Http.Token).ConfigureAwait(false);
+                        if (runtime.TryGetSkill(name, workingDirectory, out Skill skill) && skill.Manifest.UserInvocable)
+                        {
+                            SkillInvocation invocation = SkillInvocationExpander.Expand(skill, arguments);
+                            response.Matched = true;
+                            response.Skill = invocation.SkillName;
+                            response.Arguments = invocation.Arguments;
+                            response.Prompt = invocation.Prompt;
+                            response.IsPlaybook = invocation.IsPlaybook;
+                        }
+                    }
+                }
+
+                req.Http.Response.StatusCode = 200;
+                return (object)response;
+            }, Documentation.ApiDoc.SkillsExpand);
+
             // Toggle enablement: body { "id": "...", "enabled": true }.
             app.Put("/v1.0/api/skills/enabled", async (req) =>
             {
@@ -145,6 +181,11 @@ namespace Mux.Server.Routes
             public string Id { get; set; } = string.Empty;
 
             public string Body { get; set; } = string.Empty;
+        }
+
+        private static MuxSettings LoadSettingsSafe()
+        {
+            try { return SettingsLoader.LoadSettings(); } catch (Exception) { return new MuxSettings(); }
         }
 
         private static string SkillsDir()

@@ -2,6 +2,52 @@
 
 All notable changes to mux are documented here.
 
+## Unreleased
+
+### Added
+
+- **Project instruction files.** Every surface (terminal, `mux print`, desktop, and the REST server) loads
+  `MUX.md`, `AGENTS.md`, or `CLAUDE.md` (the first found in each directory) from the repository root down to
+  the working directory, plus a user-level `MUX.md` in the config directory, into the system prompt. Nearer
+  files come last and win on conflict. New settings `projectInstructionsEnabled` (default `true`) and
+  `projectInstructionsMaxBytes` (default 32768; the outermost files are dropped first when over the cap), a
+  `--no-project-instructions` flag, a `section.projectInstructions` catalog prompt, terminal notices at startup
+  and after `/cwd`, a desktop `/instructions` command, and `GET /v1.0/api/context/instructions`.
+- **Playbook skills.** A skill may declare no commands; its body is a procedure the model follows.
+  `DefaultSkillBuilder.Build(DefaultSkillDef)` builds playbooks, hybrids, and command skills from one data class.
+- **Invoke a skill by name.** `/<skill> args` runs a skill in the terminal, the desktop app, the web dashboard,
+  and `mux print`. `$ARGUMENTS` and `$1`..`$9` are substituted in prose (never inside code fences). Built-in
+  commands win, then custom commands, then skills. New frontmatter fields `userInvocable` and `argumentHint`,
+  and `POST /v1.0/api/skills/expand`.
+- **Project skills and trust.** Skills under `.mux/skills`, `.claude/skills`, or `.agents/skills` in the
+  repository load alongside user skills and shadow ones with the same id. Project skills with commands stay
+  blocked until the project is trusted with `/trust` (terminal and desktop), `mux skill trust`, or
+  `--trust-project-skills` for one run; decisions live in `~/.mux/trusted-projects.json`. The `/skills`
+  inventory lists project skills with their state and a trust action. New settings `projectSkillsEnabled` and
+  `projectSkillRoots`.
+- **Claude Code skill compatibility.** Frontmatter keys match regardless of case, hyphens, and underscores
+  (`allowed-tools`, `argument-hint`, `user-invocable`, `disable-model-invocation`), comma-separated scalars read
+  as lists, YAML block scalars (`description: >`) are folded, and unrecognized fields become validation
+  warnings instead of being silently dropped.
+- **Relevance-gated skill listing.** Skills can declare `appliesTo` globs; in the default `relevant` mode
+  (`skillListingMode`) a skill is listed in the system prompt only when a glob matches a project file, with a
+  footer counting the rest. `skill` with the name `list` returns every available skill (`list` is now a
+  reserved skill name).
+- **Skills in `mux print`.** Headless runs now discover skills, list them in the system prompt, and expose
+  `skill` and `run_skill`, matching the interactive shell.
+
+### Changed
+
+- Seeded default skills use `name: description` command headings instead of an em-dash. Existing seeded
+  copies are untouched.
+- Switching prompt profiles in the terminal after `/cwd` now keeps the new working directory.
+
+### Tests
+
+- New suites `ProjectInstructions`, `ProjectSkills`, `SkillInvocation`, and `SkillListing`, plus new
+  `DefaultSkills` cases (playbook builder, no em-dashes, colon headings) and a `SkillCommand` case for
+  `mux skill trust`.
+
 ## 1.1.1
 
 ### Changed

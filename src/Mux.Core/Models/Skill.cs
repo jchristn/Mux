@@ -1,6 +1,7 @@
 namespace Mux.Core.Models
 {
     using System.Collections.Generic;
+    using Mux.Core.Enums;
 
     /// <summary>
     /// A fully loaded skill: its parsed manifest, its Markdown body, the fenced code blocks extracted from
@@ -16,6 +17,7 @@ namespace Mux.Core.Models
         private string _DirectoryPath = string.Empty;
         private Dictionary<string, string> _CodeBlocks = new Dictionary<string, string>();
         private SkillValidationResult _Validation = new SkillValidationResult();
+        private SkillScopeEnum _Scope = SkillScopeEnum.User;
 
         #endregion
 
@@ -66,6 +68,31 @@ namespace Mux.Core.Models
             get => _Validation;
             set => _Validation = value ?? new SkillValidationResult();
         }
+
+        /// <summary>
+        /// Where the skill was loaded from. Defaults to <see cref="SkillScopeEnum.User"/>.
+        /// </summary>
+        public SkillScopeEnum Scope
+        {
+            get => _Scope;
+            set => _Scope = value;
+        }
+
+        /// <summary>
+        /// Whether this project skill's commands are blocked because the project has not been trusted. A
+        /// blocked skill is not advertised or runnable; its status explains why. Always false for user skills.
+        /// </summary>
+        public bool CommandsBlocked { get; set; }
+
+        /// <summary>
+        /// Whether this project skill hides a user skill with the same id.
+        /// </summary>
+        public bool ShadowsUserSkill { get; set; }
+
+        /// <summary>
+        /// Whether the skill can be offered to the model and run: valid, enabled, and not blocked.
+        /// </summary>
+        public bool IsUsable => IsValid && _Manifest.Enabled && !CommandsBlocked;
 
         /// <summary>
         /// A convenience shortcut for <c>Validation.IsValid</c>.

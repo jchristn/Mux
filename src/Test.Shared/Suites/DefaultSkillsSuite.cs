@@ -44,6 +44,60 @@ namespace Test.Shared.Suites
                             return Task.CompletedTask;
                         })),
 
+                    Case("NoDefaultContainsEmDash", "No seeded default skill contains an em-dash", (CancellationToken ct) =>
+                    {
+                        foreach (KeyValuePair<string, string> entry in DefaultSkillLibrary.All())
+                        {
+                            MuxAssert.IsFalse(entry.Value.Contains('\u2014'), entry.Key + " has no em-dash");
+                        }
+
+                        return Task.CompletedTask;
+                    }),
+
+                    Case("BuilderEmitsPlaybookSkill", "A definition with a body and no commands builds a valid playbook", (CancellationToken ct) =>
+                        WithDirAsync((root) =>
+                        {
+                            string content = DefaultSkillBuilder.Build(new DefaultSkillDef
+                            {
+                                Id = "demo-playbook",
+                                Title = "Demo playbook",
+                                Description = "Shows the playbook shape.",
+                                Tags = new List<string> { "demo", "playbook" },
+                                WhenToUse = "The user asks for a demo.",
+                                AppliesTo = new List<string> { "package.json", "**/*.csproj" },
+                                ArgumentHint = "[target]",
+                                Body = "Step one: inspect $ARGUMENTS.\nStep two: report."
+                            });
+
+                            string dir = Path.Combine(root, "demo-playbook");
+                            Directory.CreateDirectory(dir);
+                            File.WriteAllText(Path.Combine(dir, "SKILL.md"), content);
+                            Skill skill = new SkillLoader(root).Load(dir);
+
+                            MuxAssert.IsTrue(skill.IsValid, "valid: " + string.Join("; ", skill.Validation.Errors));
+                            MuxAssert.IsTrue(skill.Manifest.IsPlaybook, "no commands");
+                            MuxAssert.AreEqual(2, skill.Manifest.AppliesTo.Count, "appliesTo round-trips");
+                            MuxAssert.AreEqual("[target]", skill.Manifest.ArgumentHint, "argument hint round-trips");
+                            MuxAssert.AreEqual(0, skill.Validation.Warnings.Count, "no unrecognized fields");
+                            MuxAssert.Contains("Step one: inspect $ARGUMENTS.", skill.Body, "body written");
+                            return Task.CompletedTask;
+                        })),
+
+                    Case("BuilderRejectsEmptySkill", "A definition with neither commands nor a body is rejected", (CancellationToken ct) =>
+                    {
+                        MuxAssert.Throws<ArgumentException>(() => DefaultSkillBuilder.Build(new DefaultSkillDef { Id = "x", Title = "X", Description = "d" }), "no commands and no body");
+                        MuxAssert.Throws<ArgumentException>(() => DefaultSkillBuilder.Build("x", "X", "d", false, "t", "w", new List<DefaultSkillCommandDef>()), "positional overload still needs a command");
+                        MuxAssert.Throws<ArgumentNullException>(() => DefaultSkillBuilder.Build((DefaultSkillDef)null!), "null definition");
+                        return Task.CompletedTask;
+                    }),
+
+                    Case("CommandHeadingUsesColon", "Command headings use a colon separator", (CancellationToken ct) =>
+                    {
+                        string content = DefaultSkillLibrary.All()["git-status-vs-head"];
+                        MuxAssert.Contains("### summarize: ", content, "colon heading");
+                        return Task.CompletedTask;
+                    }),
+
                     Case("SeedPreservesEditsAndDoesNotDuplicate", "Re-seeding leaves edited skills untouched and adds nothing new", (CancellationToken ct) =>
                         WithDirAsync((root) =>
                         {

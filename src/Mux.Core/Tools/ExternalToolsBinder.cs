@@ -50,7 +50,7 @@ namespace Mux.Core.Tools
             {
                 template.ExternalToolProviders = new List<IExternalToolProvider> { skillRuntime };
                 skillToolCount = skillRuntime.GetToolDefinitions().Count;
-                skillSection = skillRuntime.BuildPromptSection();
+                skillSection = skillRuntime.BuildPromptSection(template.WorkingDirectory);
             }
             else
             {

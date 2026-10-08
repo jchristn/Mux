@@ -102,6 +102,37 @@ namespace Mux.Server.Routes
                     FromCache = result.FromCache
                 };
             }, Documentation.ApiDoc.ContextFilePost);
+
+            // The project instruction files (MUX.md, AGENTS.md, CLAUDE.md) a run in a working directory would
+            // load, so a client can show what the agent was told. ?workingDirectory= defaults to the server's cwd.
+            app.Get("/v1.0/api/context/instructions", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey)) return new ApiError("Unauthorized", "Authentication required.");
+
+                string? requested = req.Http.Request.Query.Elements["workingDirectory"];
+                string workingDirectory = string.IsNullOrWhiteSpace(requested) ? System.IO.Directory.GetCurrentDirectory() : requested!;
+                if (!System.IO.Directory.Exists(workingDirectory))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiError("BadRequest", "workingDirectory does not exist: " + workingDirectory);
+                }
+
+                MuxSettings mux = LoadSettingsSafe();
+                Mux.Core.Prompting.ProjectInstructions instructions =
+                    Mux.Core.Prompting.ProjectInstructionsLoader.LoadForSettings(mux, workingDirectory);
+
+                req.Http.Response.StatusCode = 200;
+                return await Task.FromResult<object>(new ProjectInstructionsDto
+                {
+                    WorkingDirectory = workingDirectory,
+                    Enabled = mux.ProjectInstructionsEnabled && mux.ProjectInstructionsMaxBytes > 0,
+                    Sources = instructions.Sources,
+                    DroppedSources = instructions.DroppedSources,
+                    TotalBytes = instructions.TotalBytes,
+                    Truncated = instructions.Truncated,
+                    Text = instructions.Text
+                }).ConfigureAwait(false);
+            }, Documentation.ApiDoc.ContextInstructionsGet);
         }
 
         private static async Task<string> RunSidecarAsync(EndpointConfig endpoint, bool ignoreCert, string systemPrompt, string userPrompt, CancellationToken token)

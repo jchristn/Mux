@@ -283,11 +283,7 @@ namespace Mux.Desktop.Shell
                 try
                 {
                     string skillsDirectory = SettingsLoader.ResolveSkillsDirectory(settings);
-                    _Skills = new SkillRuntime(
-                        skillsDirectory,
-                        SettingsLoader.LoadSkillIndex,
-                        () => { },
-                        TimeSpan.FromSeconds(settings.SkillRefreshIntervalSeconds));
+                    _Skills = SkillRuntime.FromSettings(settings, () => { });
                     _Skills.Start();
                     foreach (AgentLoopTurnRunner runner in AllRunners())
                     {
@@ -2702,10 +2698,103 @@ namespace Mux.Desktop.Shell
                 case "/menu":
                     ShowHelpMenu();
                     break;
+                case "/trust":
+                    HandleTrustSlash(argument);
+                    break;
+                case "/instructions":
+                    ShowProjectInstructions();
+                    break;
                 default:
+                    if (TryInvokeSkill(trimmedInput))
+                    {
+                        break;
+                    }
+
                     AddNotice(L("main.unknownCommand") + command, isError: false);
                     ShowHelpMenu();
                     break;
+            }
+        }
+
+        // "/<skill> args": expand a user-invocable skill into its instructions and send it as the next turn.
+        // Built-in commands above always win over a skill with the same name.
+        private bool TryInvokeSkill(string input)
+        {
+            if (_Skills == null || !SkillInvocationExpander.TryParse(input, out string name, out string arguments))
+            {
+                return false;
+            }
+
+            if (!_Skills.TryGetSkill(name, _Runner.WorkingDirectory, out Skill skill) || !skill.Manifest.UserInvocable)
+            {
+                return false;
+            }
+
+            SkillInvocation invocation = SkillInvocationExpander.Expand(skill, arguments);
+            AddNotice(arguments.Length > 0 ? $"Running skill /{name} {arguments}" : $"Running skill /{name}", isError: false);
+            _Composer.Text = invocation.Prompt;
+            _ = SendAsync();
+            return true;
+        }
+
+        // "/trust [all|playbooks|ignore|reset]": record or report the trust decision for the current
+        // conversation's project, which gates the project's checked-in skills that carry commands.
+        private void HandleTrustSlash(string argument)
+        {
+            if (_Skills == null)
+            {
+                AddNotice("Skills are disabled (settings.json: skillsEnabled).", isError: false);
+                return;
+            }
+
+            string workingDirectory = _Runner.WorkingDirectory;
+            string root = SkillRuntime.ResolveProjectRoot(workingDirectory) ?? workingDirectory;
+            if (string.IsNullOrWhiteSpace(argument))
+            {
+                SkillCatalogView? view = _Skills.GetView(workingDirectory);
+                string level = view == null ? "unknown" : ProjectTrustStore.ToWireName(view.TrustLevel);
+                AddNotice($"Project skill trust for {root}: {level}. Use /trust all, /trust playbooks, /trust ignore, or /trust reset.", isError: false);
+                return;
+            }
+
+            if (!ProjectTrustStore.TryParseLevel(argument, out ProjectTrustLevelEnum parsedLevel))
+            {
+                AddNotice($"Unknown trust level '{argument}'. Use all, playbooks, ignore, or reset.", isError: true);
+                return;
+            }
+
+            try
+            {
+                string recorded = _Skills.SetProjectTrust(workingDirectory, parsedLevel);
+                AddNotice($"Project skill trust for {recorded} set to {ProjectTrustStore.ToWireName(parsedLevel)}.", isError: false);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException || ex is System.IO.IOException || ex is UnauthorizedAccessException)
+            {
+                AddNotice("Could not record trust: " + ex.Message, isError: true);
+            }
+        }
+
+        // "/instructions": list the project instruction files (MUX.md, AGENTS.md, CLAUDE.md) that the next turn
+        // will load for the current working directory, and any project skills waiting on a trust decision.
+        private void ShowProjectInstructions()
+        {
+            string workingDirectory = _Runner.WorkingDirectory;
+            ProjectInstructions instructions =
+                ProjectInstructionsLoader.LoadForSettings(SettingsLoader.LoadSettings(), workingDirectory);
+            if (instructions.Sources.Count == 0)
+            {
+                AddNotice("No project instruction files (MUX.md, AGENTS.md, CLAUDE.md) apply to " + workingDirectory + ".", isError: false);
+            }
+            else
+            {
+                string suffix = instructions.Truncated ? " (over projectInstructionsMaxBytes; outer files skipped or cut)" : string.Empty;
+                AddNotice("Project instructions: " + string.Join(", ", instructions.Sources) + suffix, isError: false);
+            }
+
+            SkillCatalogView? view = _Skills?.GetView(workingDirectory);
+            if (view != null && view.BlockedCount > 0 && view.TrustLevel == ProjectTrustLevelEnum.Unknown)
+            {
+                AddNotice($"This project ships {view.BlockedCount} skill(s) with runnable commands. They stay blocked until you decide: /trust all, /trust playbooks, or /trust ignore.", isError: false);
             }
         }
 
@@ -2743,6 +2832,7 @@ namespace Mux.Desktop.Shell
             }
 
             AddNotice("Working directory changed to " + resolution.Path, isError: false);
+            ShowProjectInstructions();
         }
 
         private async Task ShowStatsAsync()
@@ -2791,6 +2881,9 @@ namespace Mux.Desktop.Shell
             card.Children.Add(CommandRow("/keys", L("main.help.keys")));
             card.Children.Add(CommandRow("/effort", L("main.help.effort")));
             card.Children.Add(CommandRow("/cwd <path>", "Show or change the working directory"));
+            card.Children.Add(CommandRow("/instructions", "List the project instruction files the agent loads"));
+            card.Children.Add(CommandRow("/trust <level>", "Trust this project's skills: all, playbooks, ignore, reset"));
+            card.Children.Add(CommandRow("/<skill> <args>", "Run a skill by name"));
             card.Children.Add(CommandRow("/label <text>", L("main.help.labels")));
             card.Children.Add(CommandRow("/tag <key: value>", L("main.help.tags")));
             card.Children.Add(CommandRow("/commands", L("main.help.commands")));

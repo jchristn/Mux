@@ -187,6 +187,22 @@ namespace Mux.Cli.Commands
         public string? AppendSystemPrompt { get; set; }
 
         /// <summary>
+        /// When true, project instruction files (MUX.md, AGENTS.md, CLAUDE.md) are not loaded into the system
+        /// prompt for this run, regardless of settings.
+        /// </summary>
+        [Description("Do not load MUX.md / AGENTS.md / CLAUDE.md project instruction files.")]
+        [CommandOption("--no-project-instructions")]
+        public bool NoProjectInstructions { get; set; }
+
+        /// <summary>
+        /// When true, project skills with runnable commands load for this run as if the project were trusted,
+        /// without recording a trust decision.
+        /// </summary>
+        [Description("Treat the project as trusted so its checked-in skills with commands load for this run.")]
+        [CommandOption("--trust-project-skills")]
+        public bool TrustProjectSkills { get; set; }
+
+        /// <summary>
         /// Ceiling on the estimated working-context tokens before the run stops with a budget_exceeded error.
         /// </summary>
         [Description("Estimated-token ceiling; stops the run with budget_exceeded when exceeded.")]

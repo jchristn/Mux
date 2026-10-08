@@ -49,6 +49,8 @@ If the directory does not exist, `mux` creates it. If `endpoints.json` is missin
 | `prompts.json` | Named, switchable prompt profiles (system + internal prompts) | No |
 | `skills/` | User-authored skills, one folder per skill (`SKILL.md` plus optional `scripts/` and `resources/`); seeded with a curated default set on first run | Created on demand |
 | `skills.json` | Per-skill enablement and pinning, kept separate from each `SKILL.md` so toggling a skill never rewrites it | No |
+| `trusted-projects.json` | Per-project trust decisions for checked-in skills with commands (`all`, `playbooks`, or `ignore`), written by `/trust` or `mux skill trust` | No |
+| `MUX.md` | User-level instructions loaded into every system prompt ahead of any project instruction files | No |
 | `sessions/` | Saved interactive sessions (one JSON file per session); the shell autosaves here at each turn boundary and `/sessions` browses/resumes them | Created on demand |
 | `subagents.json` | Named subagents the model can delegate scoped sub-tasks to via `spawn_subagent`; seeded with an example on first run | No |
 | `keybindings.json` | User overrides for command key chords (rebind or unbind); seeded empty on first run | No |
@@ -267,6 +269,11 @@ Example:
   "skillsEnabled": true,
   "skillRefreshIntervalSeconds": 30,
   "skillsDirectory": null,
+  "projectSkillsEnabled": true,
+  "projectSkillRoots": [".mux/skills", ".claude/skills", ".agents/skills"],
+  "skillListingMode": "relevant",
+  "projectInstructionsEnabled": true,
+  "projectInstructionsMaxBytes": 32768,
   "taskPlanningEnabled": true,
   "taskParallelismEnabled": false,
   "setupCompleted": false,
@@ -299,6 +306,11 @@ Fields:
 | `skillsEnabled` | bool | load user-authored skills and expose them to the model in the interactive shell; default `true` |
 | `skillRefreshIntervalSeconds` | int | how often the shell re-scans the skills directory for changes; clamped to a minimum of `5`; default `30` |
 | `skillsDirectory` | string or null | override for the skills directory (for a shared, version-controlled library); `null` uses `~/.mux/skills` |
+| `projectSkillsEnabled` | bool | also discover skills checked into the current project (under `projectSkillRoots`, relative to the repository root, or the working directory outside a repository); a project skill shadows a user skill with the same id; project skills with commands stay blocked until the project is trusted (`/trust all`, `mux skill trust all`, or `--trust-project-skills` for one run); default `true` |
+| `projectSkillRoots` | string[] | project skill directories, in precedence order; rooted and `..` entries are dropped, and an empty list restores the default `[".mux/skills", ".claude/skills", ".agents/skills"]` |
+| `skillListingMode` | string | which enabled skills are listed in the system prompt: `relevant` (default; skills with `appliesTo` globs are listed only when a glob matches a file in the project, and a footer counts the rest), `all`, or `none` (skills stay callable through the `skill` tool and by name) |
+| `projectInstructionsEnabled` | bool | load project instruction files into the system prompt: the user-level `MUX.md` in the config directory, then `MUX.md`, `AGENTS.md`, or `CLAUDE.md` (the first found in each directory) from the repository root down to the working directory; default `true`; `--no-project-instructions` skips them for one run |
+| `projectInstructionsMaxBytes` | int | cap on the combined size of the instruction files, in UTF-8 bytes; the files farthest from the working directory are dropped first, and a single oversized file is cut short; clamped to `0-1048576`, `0` disables loading; default `32768` |
 | `maxConcurrency` | int | maximum number of interactive jobs allowed to run at once; clamped to `1-32`, default `3` |
 | `taskPlanningEnabled` | bool | offer the `plan_tasks`/`update_task` tools and teach the model to decompose large requests into a tracked task plan; default `true` |
 | `taskParallelismEnabled` | bool | allow the opt-in orchestration engine to run independent tasks as parallel jobs under the shared write lease; has no effect unless `taskPlanningEnabled` is also true; default `false` |

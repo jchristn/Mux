@@ -220,6 +220,14 @@ namespace Test.Shared
                     // Skills: the seeded default library.
                     DefaultSkillsSuite.Create(),
 
+                    // Skills: project scope, trust, invocation by name, and relevance-gated listing.
+                    ProjectSkillsSuite.Create(),
+                    SkillInvocationSuite.Create(),
+                    SkillListingSuite.Create(),
+
+                    // Project instruction files (MUX.md / AGENTS.md / CLAUDE.md) in the system prompt.
+                    ProjectInstructionsSuite.Create(),
+
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
                     McpRuntimeSuite.Create(),

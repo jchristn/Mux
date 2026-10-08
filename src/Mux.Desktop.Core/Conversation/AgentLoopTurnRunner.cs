@@ -219,7 +219,8 @@ namespace Mux.Desktop.Conversation
                 builtInTools,
                 _WorkingDirectory,
                 settings.TaskPlanningEnabled,
-                null);
+                null,
+                ProjectInstructionsLoader.LoadForSettings(settings, _WorkingDirectory));
 
             AgentLoopOptions options = new AgentLoopOptions(endpoint)
             {

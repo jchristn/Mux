@@ -424,6 +424,15 @@ namespace Mux.Server.Documentation
             .WithResponse(400, BadRequest())
             .WithResponse(401, Unauthorized());
 
+        /// <summary>Metadata for <c>GET /v1.0/api/context/instructions</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ContextInstructionsGet = m => Sec(Init(m, TagContext,
+            "List project instruction files",
+            "Returns the project instruction files (`MUX.md`, `AGENTS.md`, or `CLAUDE.md` at each directory level up to the repository root, plus the user-level `MUX.md`) that a run in `workingDirectory` loads into its system prompt, in prompt order, with the combined text. Files beyond `projectInstructionsMaxBytes` are listed in `DroppedSources`. Query: `workingDirectory` (optional; defaults to the server's current directory).",
+            operationId: "getProjectInstructions"))
+            .WithResponse(200, Ok("ProjectInstructionsDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
         // --- Subagents ---
 
         /// <summary>Metadata for <c>GET /v1.0/api/subagents</c>.</summary>
@@ -516,6 +525,16 @@ namespace Mux.Server.Documentation
             .WithResponse(404, NotFound());
 
         // --- Skills ---
+
+        /// <summary>Metadata for <c>POST /v1.0/api/skills/expand</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SkillsExpand = m => Sec(Init(m, TagSkills,
+            "Expand a skill invocation",
+            "Expands typed slash text (`/<skill> args`) into the user message that runs the skill: the skill body with `$ARGUMENTS` and `$1`..`$9` substituted in prose, plus a `run_skill` hint when the skill has commands. Project skills for `WorkingDirectory` (default: the server's current directory) shadow user skills. Returns `Matched=false` when no usable, user-invocable skill has that name.",
+            operationId: "expandSkill"))
+            .WithRequestBody(Body("SkillExpandRequestDto", "The typed slash text and an optional working directory."))
+            .WithResponse(200, Ok("SkillExpandResponseDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
 
         /// <summary>Metadata for <c>GET /v1.0/api/skills</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> SkillsList = m => Sec(Init(m, TagSkills,
@@ -1087,6 +1106,32 @@ namespace Mux.Server.Documentation
                 ["OutlineEntryCount"] = Pint("The number of outline entries emitted."),
                 ["FromCache"] = Pbool("Whether a summary was served from the cache.")
             }, new Dictionary<string, object?> { ["Text"] = "Structural map (12 entries): …", ["Mode"] = "map", ["Inlined"] = false, ["OutlineEntryCount"] = 12, ["FromCache"] = false });
+
+            s["ProjectInstructionsDto"] = Obj(new Dictionary<string, M>
+            {
+                ["WorkingDirectory"] = Pstr("The working directory the files were resolved for."),
+                ["Enabled"] = Pbool("Whether project instructions are enabled in settings."),
+                ["Sources"] = Parr(Pstr("An absolute file path."), "The files included, in prompt order (user file, then outer to inner)."),
+                ["DroppedSources"] = Parr(Pstr("An absolute file path."), "Files left out because the size cap was reached."),
+                ["TotalBytes"] = Pint("The UTF-8 byte count of the included content.", "int64"),
+                ["Truncated"] = Pbool("Whether the size cap dropped or cut a file."),
+                ["Text"] = Pstr("The combined text placed in the system prompt.")
+            }, new Dictionary<string, object?> { ["WorkingDirectory"] = "/src/app", ["Enabled"] = true, ["Sources"] = new[] { "/src/app/AGENTS.md" }, ["DroppedSources"] = new string[0], ["TotalBytes"] = 812, ["Truncated"] = false, ["Text"] = "### AGENTS.md\nRun tests with dotnet test." });
+
+            s["SkillExpandRequestDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Input"] = Pstr("The typed slash text, for example `/code-review main`."),
+                ["WorkingDirectory"] = PstrNullable("The working directory whose project skills apply. Null uses the server's current directory.")
+            }, new Dictionary<string, object?> { ["Input"] = "/code-review main", ["WorkingDirectory"] = null });
+
+            s["SkillExpandResponseDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Matched"] = Pbool("Whether the input named a usable, user-invocable skill."),
+                ["Skill"] = Pstr("The matched skill's name."),
+                ["Arguments"] = Pstr("The argument text after the skill name."),
+                ["Prompt"] = Pstr("The user message to send in place of the slash text."),
+                ["IsPlaybook"] = Pbool("Whether the skill declares no commands.")
+            }, new Dictionary<string, object?> { ["Matched"] = true, ["Skill"] = "code-review", ["Arguments"] = "main", ["Prompt"] = "Run the \"code-review\" skill with these arguments: main. Its instructions follow.\n\n…", ["IsPlaybook"] = false });
 
             s["SubagentDto"] = Obj(new Dictionary<string, M>
             {

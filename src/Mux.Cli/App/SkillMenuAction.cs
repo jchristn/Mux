@@ -29,6 +29,16 @@ namespace Mux.Cli.App
         /// <summary>
         /// The re-scan-the-library action.
         /// </summary>
-        Reload
+        Reload,
+
+        /// <summary>
+        /// Show the details of a project skill (read-only; project skills are edited in the repository).
+        /// </summary>
+        ProjectInfo,
+
+        /// <summary>
+        /// Choose a trust level for the current project's checked-in skills.
+        /// </summary>
+        Trust
     }
 }

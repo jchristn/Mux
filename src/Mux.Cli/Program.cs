@@ -155,6 +155,8 @@ OPTIONS:
         --add-dir <path>                 Additional writable root under workspace-write (repeatable)
         --system-prompt <path>           Path to system prompt file
         --append-system-prompt <text>    Append text to the resolved system prompt
+        --no-project-instructions        Do not load MUX.md / AGENTS.md / CLAUDE.md into the system prompt
+        --trust-project-skills           Load the project's checked-in skills with commands for this run
         --output-schema <path>           print: constrain the final response to a JSON Schema file
         --output-last-message <path>     Write only the final assistant response text to a file
         --mcp-config <path|json>         print: load MCP servers from a file or inline JSON (enables MCP)
@@ -558,12 +560,8 @@ CONFIG:
 
             if (runtime.MuxSettings.SkillsEnabled)
             {
-                string skillsDirectory = SettingsLoader.ResolveSkillsDirectory(runtime.MuxSettings);
-                skillRuntime = new SkillRuntime(
-                    skillsDirectory,
-                    SettingsLoader.LoadSkillIndex,
-                    toolBinder.Rebind,
-                    TimeSpan.FromSeconds(runtime.MuxSettings.SkillRefreshIntervalSeconds));
+                skillRuntime = SkillRuntime.FromSettings(runtime.MuxSettings, toolBinder.Rebind);
+                skillRuntime.TrustAllProjects = settings.TrustProjectSkills;
                 toolBinder.SkillRuntime = skillRuntime;
             }
 
@@ -634,7 +632,8 @@ CONFIG:
                         // awareness.
                         bool toolsEnabled = template.Endpoint.Quirks?.SupportsTools ?? true;
                         (string systemPrompt, string compactionPrompt) = CommandRuntimeResolver.ResolveProfilePrompts(
-                            profile, toolsEnabled, runtime.WorkingDirectory, builtInTools);
+                            profile, toolsEnabled, template.WorkingDirectory, builtInTools,
+                            LoadInteractiveInstructions(settings, runtime.MuxSettings, template.WorkingDirectory));
                         toolBinder.SetProfilePrompt(systemPrompt, compactionPrompt);
                     },
                     onWorkingDirectoryChanged: (string newWorkingDirectory) =>
@@ -646,9 +645,12 @@ CONFIG:
                         template.WorkingDirectory = newWorkingDirectory;
                         bool toolsEnabled = template.Endpoint.Quirks?.SupportsTools ?? true;
                         PromptProfile activeProfile = SettingsLoader.GetActivePromptProfile();
+                        Mux.Core.Prompting.ProjectInstructions instructions =
+                            LoadInteractiveInstructions(settings, runtime.MuxSettings, newWorkingDirectory);
                         (string systemPrompt, string compactionPrompt) = CommandRuntimeResolver.ResolveProfilePrompts(
-                            activeProfile, toolsEnabled, newWorkingDirectory, builtInTools);
+                            activeProfile, toolsEnabled, newWorkingDirectory, builtInTools, instructions);
                         toolBinder.SetProfilePrompt(systemPrompt, compactionPrompt);
+                        PostProjectNotices(shell, instructions, skillRuntime, newWorkingDirectory);
                     },
                     onSettingsChanged: (MuxSettings changed) =>
                     {
@@ -693,9 +695,21 @@ CONFIG:
                 // (jobs only run after the user submits) takes effect for every job.
                 template.PromptUserFunc = (ToolCall toolCall) => app.RequestApprovalAsync(toolCall);
 
-                // Connect MCP servers and discover skills in the background.
+                // Connect MCP servers and discover skills in the background. Once skills are known, report the
+                // project instruction files and any project skills waiting on a trust decision.
                 mcpRuntime.Start();
                 skillRuntime?.Start();
+                if (skillRuntime != null)
+                {
+                    SkillRuntime startedSkills = skillRuntime;
+                    _ = startedSkills.FirstRefreshCompleted.ContinueWith(
+                        (Task completed) => PostProjectNotices(shell, runtime.ProjectInstructions, startedSkills, template.WorkingDirectory),
+                        TaskScheduler.Default);
+                }
+                else
+                {
+                    PostProjectNotices(shell, runtime.ProjectInstructions, null, runtime.WorkingDirectory);
+                }
 
                 using CancellationTokenSource cts = new CancellationTokenSource();
                 app.RunAsync(cts.Token).GetAwaiter().GetResult();
@@ -732,6 +746,50 @@ CONFIG:
         /// <summary>
         /// Builds the baseline agent-loop options cloned for each interactive job.
         /// </summary>
+        private static void PostProjectNotices(MuxTuiApp? shell, Mux.Core.Prompting.ProjectInstructions instructions, SkillRuntime? skills, string workingDirectory)
+        {
+            if (shell == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (instructions.Sources.Count > 0)
+                {
+                    string root = SkillRuntime.ResolveProjectRoot(workingDirectory) ?? workingDirectory;
+                    List<string> names = new List<string>();
+                    foreach (string source in instructions.Sources)
+                    {
+                        string relative = Path.GetRelativePath(root, source);
+                        names.Add(relative.StartsWith("..", StringComparison.Ordinal) ? source : relative.Replace('\\', '/'));
+                    }
+
+                    string dropped = instructions.DroppedSources.Count > 0
+                        ? $" ({instructions.DroppedSources.Count} more skipped: over projectInstructionsMaxBytes)"
+                        : (instructions.Truncated ? " (truncated: over projectInstructionsMaxBytes)" : string.Empty);
+                    shell.PostNotice("Project instructions: " + string.Join(", ", names) + dropped);
+                }
+
+                SkillCatalogView? view = skills?.GetView(workingDirectory);
+                if (view != null && view.BlockedCount > 0 && view.TrustLevel == ProjectTrustLevelEnum.Unknown)
+                {
+                    shell.PostNotice($"This project ships {view.BlockedCount} skill(s) with runnable commands. They stay blocked until you decide: /trust all, /trust playbooks, or /trust ignore.");
+                }
+            }
+            catch (Exception)
+            {
+                // Notices are informational; never let them disturb the shell.
+            }
+        }
+
+        private static Mux.Core.Prompting.ProjectInstructions LoadInteractiveInstructions(CommonSettings settings, MuxSettings muxSettings, string workingDirectory)
+        {
+            return settings.NoProjectInstructions
+                ? new Mux.Core.Prompting.ProjectInstructions()
+                : Mux.Core.Prompting.ProjectInstructionsLoader.LoadForSettings(muxSettings, workingDirectory);
+        }
+
         private static AgentLoopOptions BuildInteractiveTemplate(
             ResolvedRuntime runtime,
             InteractiveSettings settings,

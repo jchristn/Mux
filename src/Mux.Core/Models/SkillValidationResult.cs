@@ -11,6 +11,7 @@ namespace Mux.Core.Models
         #region Private-Members
 
         private List<string> _Errors = new List<string>();
+        private List<string> _Warnings = new List<string>();
 
         #endregion
 
@@ -28,6 +29,16 @@ namespace Mux.Core.Models
         {
             get => _Errors;
             set => _Errors = value ?? new List<string>();
+        }
+
+        /// <summary>
+        /// Non-fatal problems, such as frontmatter fields that were not recognized and were ignored. Warnings
+        /// never affect <see cref="IsValid"/>. Never null.
+        /// </summary>
+        public List<string> Warnings
+        {
+            get => _Warnings;
+            set => _Warnings = value ?? new List<string>();
         }
 
         #endregion

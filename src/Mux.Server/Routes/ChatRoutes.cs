@@ -316,11 +316,7 @@ namespace Mux.Server.Routes
                     MuxSettings settings = SettingsLoader.LoadSettings();
                     if (settings.SkillsEnabled)
                     {
-                        _Skills = new SkillRuntime(
-                            SettingsLoader.ResolveSkillsDirectory(settings),
-                            SettingsLoader.LoadSkillIndex,
-                            () => { },
-                            TimeSpan.FromSeconds(settings.SkillRefreshIntervalSeconds));
+                        _Skills = SkillRuntime.FromSettings(settings, () => { });
                         _Skills.Start();
                     }
                 }
@@ -428,7 +424,8 @@ namespace Mux.Server.Routes
                 builtInTools,
                 runDirectory,
                 settings.TaskPlanningEnabled,
-                null);
+                null,
+                ProjectInstructionsLoader.LoadForSettings(settings, runDirectory));
 
             // A per-run id correlating interactive approval prompts with their decisions, and the addressable
             // run handle other surfaces cancel, inspect, and mirror. The handle's token is linked to the

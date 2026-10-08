@@ -22,6 +22,11 @@ namespace Mux.Core.Models
         private List<string> _AllowedTools = new List<string>();
         private List<string> _Tags = new List<string>();
         private List<SkillCommand> _Commands = new List<SkillCommand>();
+        private List<string> _AppliesTo = new List<string>();
+        private bool _UserInvocable = true;
+        private bool _ModelInvocable = true;
+        private string _ArgumentHint = string.Empty;
+        private List<string> _UnrecognizedFields = new List<string>();
 
         #endregion
 
@@ -130,6 +135,65 @@ namespace Mux.Core.Models
             get => _Commands;
             set => _Commands = value ?? new List<SkillCommand>();
         }
+
+        /// <summary>
+        /// File globs, relative to the project root, that make the skill relevant (for example
+        /// <c>package.json</c> or <c>requirements*.txt</c>). When the skill listing mode is <c>relevant</c>, a
+        /// skill with globs is advertised to the model only when at least one glob matches. Empty means the
+        /// skill is always relevant. Never null.
+        /// </summary>
+        public List<string> AppliesTo
+        {
+            get => _AppliesTo;
+            set => _AppliesTo = value ?? new List<string>();
+        }
+
+        /// <summary>
+        /// Whether a user can invoke the skill by name as a slash command (<c>/&lt;name&gt; args</c>).
+        /// Defaults to <c>true</c>. Also read from the Claude Code field <c>user-invocable</c>.
+        /// </summary>
+        public bool UserInvocable
+        {
+            get => _UserInvocable;
+            set => _UserInvocable = value;
+        }
+
+        /// <summary>
+        /// Whether the skill is advertised to the model in the system-prompt listing. Defaults to
+        /// <c>true</c>. The Claude Code field <c>disable-model-invocation: true</c> sets this to <c>false</c>;
+        /// such a skill stays invocable by name and through the <c>skill</c> tool.
+        /// </summary>
+        public bool ModelInvocable
+        {
+            get => _ModelInvocable;
+            set => _ModelInvocable = value;
+        }
+
+        /// <summary>
+        /// A short hint describing the arguments accepted when the skill is invoked by name, shown next to
+        /// the command in completion and listings (for example <c>[base-branch]</c>). Empty when unspecified.
+        /// Never null.
+        /// </summary>
+        public string ArgumentHint
+        {
+            get => _ArgumentHint;
+            set => _ArgumentHint = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Top-level frontmatter keys the parser did not recognize, in the order they appeared. The loader
+        /// reports each as a validation warning; they never make a skill invalid. Never null.
+        /// </summary>
+        public List<string> UnrecognizedFields
+        {
+            get => _UnrecognizedFields;
+            set => _UnrecognizedFields = value ?? new List<string>();
+        }
+
+        /// <summary>
+        /// Whether the skill is a playbook: it declares no commands, so invoking it means following its body.
+        /// </summary>
+        public bool IsPlaybook => _Commands.Count == 0;
 
         #endregion
     }

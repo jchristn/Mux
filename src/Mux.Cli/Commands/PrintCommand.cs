@@ -16,6 +16,7 @@ namespace Mux.Cli.Commands
     using Mux.Core.Models;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
+    using Mux.Core.Skills;
     using Mux.Core.Tools;
     using Mux.Core.Utility;
 
@@ -331,6 +332,7 @@ namespace Mux.Cli.Commands
             }
 
             McpRuntime? mcpRuntime = null;
+            SkillRuntime? skillRuntime = null;
 
             using (CancellationTokenSource cts = new CancellationTokenSource())
             {
@@ -356,6 +358,24 @@ namespace Mux.Cli.Commands
                         loopOptions.AdditionalTools = mcpRuntime.CurrentTools;
                         loopOptions.ExternalToolExecutor = mcpRuntime.ExecuteToolAsync;
                         loopOptions.EffectiveToolCount = runtime.Capabilities.EffectiveToolCount + mcpRuntime.CurrentTools.Count;
+                    }
+
+                    // Discover skills once for the invocation (user skills plus the project's checked-in skills,
+                    // which need --trust-project-skills or a recorded trust decision when they carry commands).
+                    // They join the loop as an external provider and are listed in the system prompt, and a
+                    // "/<skill> args" prompt expands into that skill's instructions.
+                    if (runtime.MuxSettings.SkillsEnabled)
+                    {
+                        skillRuntime = SkillRuntime.FromSettings(runtime.MuxSettings, () => { });
+                        skillRuntime.TrustAllProjects = settings.TrustProjectSkills;
+                        skillRuntime.Start();
+                        await Task.WhenAny(
+                            skillRuntime.FirstRefreshCompleted,
+                            Task.Delay(TimeSpan.FromSeconds(10), cts.Token)).ConfigureAwait(false);
+
+                        loopOptions.ExternalToolProviders = new List<IExternalToolProvider> { skillRuntime };
+                        loopOptions.SystemPrompt += skillRuntime.BuildPromptSection(runtime.WorkingDirectory);
+                        loopOptions.EffectiveToolCount += skillRuntime.GetToolDefinitions().Count;
                     }
 
                     List<ConversationMessage> history = new List<ConversationMessage>(latestConversation);
@@ -395,7 +415,7 @@ namespace Mux.Cli.Commands
                             turnCount++;
                             loopOptions.ConversationHistory = history;
                             PrintTurnResult turn = await RunTurnAsync(
-                                turnPrompt, loopOptions, runtime, plan, outputSchemaJson, sessionId, settings.Verbose, cts.Token).ConfigureAwait(false);
+                                ExpandSkillInvocation(turnPrompt, skillRuntime, runtime.WorkingDirectory), loopOptions, runtime, plan, outputSchemaJson, sessionId, settings.Verbose, cts.Token).ConfigureAwait(false);
 
                             if (turn.ExitCode != 0)
                             {
@@ -417,7 +437,7 @@ namespace Mux.Cli.Commands
                     {
                         loopOptions.ConversationHistory = history;
                         PrintTurnResult turn = await RunTurnAsync(
-                            prompt, loopOptions, runtime, plan, outputSchemaJson, sessionId, settings.Verbose, cts.Token).ConfigureAwait(false);
+                            ExpandSkillInvocation(prompt, skillRuntime, runtime.WorkingDirectory), loopOptions, runtime, plan, outputSchemaJson, sessionId, settings.Verbose, cts.Token).ConfigureAwait(false);
                         exitCode = turn.ExitCode;
                         latestConversation = turn.FinalConversation;
                         lastAssistantText = turn.AssistantText;
@@ -467,6 +487,7 @@ namespace Mux.Cli.Commands
                 finally
                 {
                     mcpRuntime?.Dispose();
+                    skillRuntime?.Dispose();
 
                     // Flush and close usage telemetry so the one-shot run's events are written before exit.
                     usageTelemetry.Dispose();
@@ -766,6 +787,21 @@ namespace Mux.Cli.Commands
             }
 
             return result;
+        }
+
+        private static string ExpandSkillInvocation(string prompt, SkillRuntime? skills, string workingDirectory)
+        {
+            if (skills == null || !SkillInvocationExpander.TryParse(prompt, out string name, out string arguments))
+            {
+                return prompt;
+            }
+
+            if (!skills.TryGetSkill(name, workingDirectory, out Skill skill) || !skill.Manifest.UserInvocable)
+            {
+                return prompt;
+            }
+
+            return SkillInvocationExpander.Expand(skill, arguments).Prompt;
         }
 
         private static string BuildSchemaDirective(string schemaJson)

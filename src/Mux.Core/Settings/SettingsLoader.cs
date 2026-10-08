@@ -388,6 +388,16 @@ namespace Mux.Core.Settings
         }
 
         /// <summary>
+        /// Returns the path of the per-project skill trust decisions (<c>~/.mux/trusted-projects.json</c>)
+        /// under the active config directory.
+        /// </summary>
+        /// <returns>The absolute path of the trust file.</returns>
+        public static string GetTrustedProjectsPath()
+        {
+            return Path.Combine(GetConfigDirectory(), "trusted-projects.json");
+        }
+
+        /// <summary>
         /// Loads the skills index (<c>~/.mux/skills.json</c>), which holds per-skill enablement and pinning.
         /// </summary>
         /// <returns>The index entries, or an empty list when the file does not exist or cannot be read.</returns>
@@ -1387,6 +1397,11 @@ namespace Mux.Core.Settings
                 SkillsEnabled = settings.SkillsEnabled,
                 SkillRefreshIntervalSeconds = settings.SkillRefreshIntervalSeconds,
                 SkillsDirectory = settings.SkillsDirectory,
+                ProjectSkillsEnabled = settings.ProjectSkillsEnabled,
+                ProjectSkillRoots = settings.ProjectSkillRoots,
+                SkillListingMode = settings.SkillListingMode,
+                ProjectInstructionsEnabled = settings.ProjectInstructionsEnabled,
+                ProjectInstructionsMaxBytes = settings.ProjectInstructionsMaxBytes,
                 TaskPlanningEnabled = settings.TaskPlanningEnabled,
                 TaskParallelismEnabled = settings.TaskParallelismEnabled,
                 SetupCompleted = settings.SetupCompleted,

@@ -17,6 +17,9 @@ namespace Mux.Core.Models
         private int _CommandCount = 0;
         private List<string> _Tags = new List<string>();
         private string? _Error = null;
+        private string _Scope = "user";
+        private string _ArgumentHint = string.Empty;
+        private List<string> _Warnings = new List<string>();
 
         #endregion
 
@@ -83,6 +86,76 @@ namespace Mux.Core.Models
         {
             get => _Error;
             set => _Error = value;
+        }
+
+        /// <summary>
+        /// Where the skill came from: <c>user</c> or <c>project</c>. Never null.
+        /// </summary>
+        public string Scope
+        {
+            get => _Scope;
+            set => _Scope = string.IsNullOrWhiteSpace(value) ? "user" : value;
+        }
+
+        /// <summary>
+        /// Whether this project skill's commands are blocked until the project is trusted.
+        /// </summary>
+        public bool CommandsBlocked { get; set; }
+
+        /// <summary>
+        /// Whether this project skill hides a user skill with the same id.
+        /// </summary>
+        public bool ShadowsUserSkill { get; set; }
+
+        /// <summary>
+        /// Whether the skill can be invoked by name as a slash command. Defaults to true.
+        /// </summary>
+        public bool UserInvocable { get; set; } = true;
+
+        /// <summary>
+        /// The argument hint shown next to the slash command. Never null.
+        /// </summary>
+        public string ArgumentHint
+        {
+            get => _ArgumentHint;
+            set => _ArgumentHint = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Non-fatal validation warnings, such as ignored frontmatter fields. Never null.
+        /// </summary>
+        public List<string> Warnings
+        {
+            get => _Warnings;
+            set => _Warnings = value ?? new List<string>();
+        }
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <summary>
+        /// Returns a detached copy of this status, including copies of its lists.
+        /// </summary>
+        /// <returns>The copy.</returns>
+        public SkillStatus Clone()
+        {
+            return new SkillStatus
+            {
+                Name = _Name,
+                Title = _Title,
+                Enabled = _Enabled,
+                Valid = _Valid,
+                CommandCount = _CommandCount,
+                Tags = new List<string>(_Tags),
+                Error = _Error,
+                Scope = _Scope,
+                CommandsBlocked = CommandsBlocked,
+                ShadowsUserSkill = ShadowsUserSkill,
+                UserInvocable = UserInvocable,
+                ArgumentHint = _ArgumentHint,
+                Warnings = new List<string>(_Warnings)
+            };
         }
 
         #endregion

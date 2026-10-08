@@ -1,6 +1,8 @@
 namespace Mux.Core.Models
 {
     using System;
+    using System.Collections.Generic;
+    using System.Linq;
     using System.Text.Json.Serialization;
 
     /// <summary>
@@ -30,6 +32,11 @@ namespace Mux.Core.Models
         private bool _SkillsEnabled = true;
         private int _SkillRefreshIntervalSeconds = 30;
         private string? _SkillsDirectory = null;
+        private bool _ProjectSkillsEnabled = true;
+        private List<string> _ProjectSkillRoots = DefaultProjectSkillRoots();
+        private string _SkillListingMode = "relevant";
+        private bool _ProjectInstructionsEnabled = true;
+        private int _ProjectInstructionsMaxBytes = 32768;
         private bool _TaskPlanningEnabled = true;
         private bool _TaskParallelismEnabled = false;
         private bool _SetupCompleted = false;
@@ -305,6 +312,67 @@ namespace Mux.Core.Models
         }
 
         /// <summary>
+        /// Whether skills checked into the current project are discovered from <see cref="ProjectSkillRoots"/>
+        /// in addition to the user skills directory. A project skill shadows a user skill with the same id.
+        /// Project skills with runnable commands load only after the project is trusted. Defaults to true.
+        /// </summary>
+        [JsonPropertyName("projectSkillsEnabled")]
+        public bool ProjectSkillsEnabled
+        {
+            get => _ProjectSkillsEnabled;
+            set => _ProjectSkillsEnabled = value;
+        }
+
+        /// <summary>
+        /// The directories, relative to the repository root (or the working directory outside a repository),
+        /// searched for project skills, in precedence order. Defaults to <c>.mux/skills</c>,
+        /// <c>.claude/skills</c>, and <c>.agents/skills</c>. Null or an empty list restores the defaults;
+        /// blank, rooted, and parent-escaping entries are dropped.
+        /// </summary>
+        [JsonPropertyName("projectSkillRoots")]
+        public List<string> ProjectSkillRoots
+        {
+            get => _ProjectSkillRoots;
+            set => _ProjectSkillRoots = NormalizeProjectSkillRoots(value);
+        }
+
+        /// <summary>
+        /// Which enabled skills are advertised to the model in the system prompt. <c>relevant</c> (the
+        /// default) lists skills without <c>appliesTo</c> globs plus those whose globs match a file in the
+        /// project; <c>all</c> lists every enabled skill; <c>none</c> lists none (skills stay callable through
+        /// the <c>skill</c> tool and by name). Any other value falls back to <c>relevant</c>.
+        /// </summary>
+        [JsonPropertyName("skillListingMode")]
+        public string SkillListingMode
+        {
+            get => _SkillListingMode;
+            set => _SkillListingMode = TryNormalizeSkillListingMode(value, out string normalized) ? normalized : "relevant";
+        }
+
+        /// <summary>
+        /// Whether project instruction files (<c>MUX.md</c>, <c>AGENTS.md</c>, <c>CLAUDE.md</c>, plus the
+        /// user-level <c>MUX.md</c> in the config directory) are loaded into the system prompt. Defaults to true.
+        /// </summary>
+        [JsonPropertyName("projectInstructionsEnabled")]
+        public bool ProjectInstructionsEnabled
+        {
+            get => _ProjectInstructionsEnabled;
+            set => _ProjectInstructionsEnabled = value;
+        }
+
+        /// <summary>
+        /// The maximum combined size, in UTF-8 bytes, of the project instruction files placed in the system
+        /// prompt. Default 32768, minimum 0, maximum 1048576. Zero disables loading. When the cap is reached,
+        /// the files farthest from the working directory are dropped first.
+        /// </summary>
+        [JsonPropertyName("projectInstructionsMaxBytes")]
+        public int ProjectInstructionsMaxBytes
+        {
+            get => _ProjectInstructionsMaxBytes;
+            set => _ProjectInstructionsMaxBytes = Math.Clamp(value, 0, 1048576);
+        }
+
+        /// <summary>
         /// Whether the model may decompose a job into a tracked plan of background tasks and advance
         /// them with the <c>plan_tasks</c> and <c>update_task</c> tools. When true, the two task tools
         /// are offered to the model and the system prompt teaches when to plan; when false, neither the
@@ -435,6 +503,74 @@ namespace Mux.Core.Models
                     normalized = "summary";
                     return false;
             }
+        }
+
+        /// <summary>
+        /// Normalizes a skill listing mode string.
+        /// </summary>
+        /// <param name="value">The raw mode value.</param>
+        /// <param name="normalized">The normalized value (<c>relevant</c>, <c>all</c>, or <c>none</c>).</param>
+        /// <returns>True if the input matched a supported mode; otherwise false.</returns>
+        public static bool TryNormalizeSkillListingMode(string? value, out string normalized)
+        {
+            switch ((value ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "relevant":
+                    normalized = "relevant";
+                    return true;
+                case "all":
+                    normalized = "all";
+                    return true;
+                case "none":
+                case "off":
+                    normalized = "none";
+                    return true;
+                default:
+                    normalized = "relevant";
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns a new list holding the default project skill roots.
+        /// </summary>
+        /// <returns>The defaults: <c>.mux/skills</c>, <c>.claude/skills</c>, <c>.agents/skills</c>.</returns>
+        public static List<string> DefaultProjectSkillRoots()
+        {
+            return new List<string> { ".mux/skills", ".claude/skills", ".agents/skills" };
+        }
+
+        /// <summary>
+        /// Normalizes a list of project skill roots: trims entries, converts backslashes to forward slashes,
+        /// drops blank, rooted, and parent-escaping entries and duplicates, and restores the defaults when
+        /// nothing usable remains.
+        /// </summary>
+        /// <param name="roots">The raw roots. May be null.</param>
+        /// <returns>The normalized roots; never null or empty.</returns>
+        public static List<string> NormalizeProjectSkillRoots(List<string>? roots)
+        {
+            List<string> result = new List<string>();
+            if (roots != null)
+            {
+                foreach (string raw in roots)
+                {
+                    string candidate = (raw ?? string.Empty).Trim().Replace('\\', '/').TrimEnd('/');
+                    if (candidate.Length == 0
+                        || candidate.StartsWith("/", StringComparison.Ordinal)
+                        || System.IO.Path.IsPathRooted(candidate)
+                        || candidate.Split('/').Contains(".."))
+                    {
+                        continue;
+                    }
+
+                    if (!result.Contains(candidate))
+                    {
+                        result.Add(candidate);
+                    }
+                }
+            }
+
+            return result.Count > 0 ? result : DefaultProjectSkillRoots();
         }
 
         /// <summary>

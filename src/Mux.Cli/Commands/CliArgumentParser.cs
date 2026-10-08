@@ -320,6 +320,12 @@ namespace Mux.Cli.Commands
                     case "--append-system-prompt":
                         settings.AppendSystemPrompt = ReadValue(option, inlineValue, args, ref i);
                         break;
+                    case "--no-project-instructions":
+                        settings.NoProjectInstructions = ReadBool(option, inlineValue, defaultValue: true);
+                        break;
+                    case "--trust-project-skills":
+                        settings.TrustProjectSkills = ReadBool(option, inlineValue, defaultValue: true);
+                        break;
                     case "--max-token-budget":
                         settings.MaxTokenBudget = int.Parse(ReadValue(option, inlineValue, args, ref i), CultureInfo.InvariantCulture);
                         break;

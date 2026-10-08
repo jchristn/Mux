@@ -6,6 +6,7 @@ namespace Mux.Core.Skills
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Enums;
     using Mux.Core.Models;
     using Mux.Core.Tools;
 
@@ -71,7 +72,7 @@ namespace Mux.Core.Skills
                     type = "object",
                     properties = new
                     {
-                        name = new { type = "string", description = "The skill name to open." }
+                        name = new { type = "string", description = "The skill name to open, or \"list\" to list every available skill." }
                     },
                     required = new[] { "name" }
                 }
@@ -136,7 +137,12 @@ namespace Mux.Core.Skills
         private ToolResult OpenSkill(string toolCallId, JsonElement arguments)
         {
             string name = GetString(arguments, "name");
-            if (name.Length == 0 || !_Catalog.TryGet(name, out Skill skill) || !skill.IsValid || !skill.Manifest.Enabled)
+            if (string.Equals(name, SkillLoader.ReservedListName, StringComparison.OrdinalIgnoreCase))
+            {
+                return ListSkills(toolCallId);
+            }
+
+            if (name.Length == 0 || !_Catalog.TryGet(name, out Skill skill) || !skill.IsUsable)
             {
                 return Error(toolCallId, "skill_not_found", $"No enabled skill named '{name}'.");
             }
@@ -159,10 +165,37 @@ namespace Mux.Core.Skills
                     when_to_use = skill.Manifest.WhenToUse,
                     version = skill.Manifest.Version,
                     mutating = skill.Manifest.Mutating,
+                    playbook = skill.Manifest.IsPlaybook,
+                    argument_hint = skill.Manifest.ArgumentHint,
                     commands,
                     resources = ListResources(skill),
                     body = skill.Body
                 })
+            };
+        }
+
+        private ToolResult ListSkills(string toolCallId)
+        {
+            List<object> skills = new List<object>();
+            foreach (Skill skill in _Catalog.GetEnabledValidSkills())
+            {
+                skills.Add(new
+                {
+                    name = skill.Manifest.Name,
+                    description = skill.Manifest.Description,
+                    scope = skill.Scope == SkillScopeEnum.Project ? "project" : "user",
+                    playbook = skill.Manifest.IsPlaybook,
+                    commands = skill.Manifest.Commands.Count,
+                    applies_to = skill.Manifest.AppliesTo,
+                    tags = skill.Manifest.Tags
+                });
+            }
+
+            return new ToolResult
+            {
+                ToolCallId = toolCallId,
+                Success = true,
+                Content = JsonSerializer.Serialize(new { count = skills.Count, skills })
             };
         }
 
@@ -171,7 +204,7 @@ namespace Mux.Core.Skills
             string name = GetString(arguments, "name");
             string commandName = GetString(arguments, "command");
 
-            if (!_Catalog.TryGet(name, out Skill skill) || !skill.IsValid || !skill.Manifest.Enabled)
+            if (!_Catalog.TryGet(name, out Skill skill) || !skill.IsUsable)
             {
                 return Error(toolCallId, "skill_not_found", $"No enabled skill named '{name}'.");
             }

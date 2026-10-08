@@ -50,6 +50,10 @@ Type in the composer and press **Enter** to send (**Shift+Enter** inserts a newl
 
 The desktop app runs the same agent loop as the TUI with the **auto-safe** approval posture: read-only tools run automatically, while mutating actions raise an approval dialog before they proceed. Built-in tools, MCP tools, and skills are all available to the model when enabled in settings.
 
+### Skills and project instructions
+
+Type `/<skill> args` to run any enabled skill by name; the composer sends the skill's instructions with your arguments filled in, and built-in commands such as `/skills` always win over a skill with the same name. Each turn also loads the project instruction files (`MUX.md`, `AGENTS.md`, or `CLAUDE.md`) for the conversation's working directory. `/instructions` lists the files that apply and any project skills waiting on a trust decision, and runs automatically after `/cwd`. `/trust all|playbooks|ignore|reset` records whether the project's checked-in skills with commands may load. See [USAGE.md](USAGE.md#project-skills-and-trust).
+
 ## Managers
 
 Everything you can configure in the TUI is available here as a window, each backed by the same `Mux.Core` stores:

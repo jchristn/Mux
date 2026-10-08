@@ -113,6 +113,10 @@ namespace Mux.Cli.Commands
 
             // Resolve the system + compaction prompts through the shared Core resolver so the CLI and the
             // desktop produce an identical prompt (tools-disabled variant, placeholder substitution, append).
+            ProjectInstructions projectInstructions = settings.NoProjectInstructions
+                ? new ProjectInstructions()
+                : ProjectInstructionsLoader.LoadForSettings(muxSettings, workingDirectory);
+
             ResolvedSystemPrompt resolvedPrompt = SystemPromptResolver.Resolve(
                 SettingsLoader.LoadSystemPrompt(settings.SystemPrompt, muxSettings),
                 activePromptProfile,
@@ -120,7 +124,8 @@ namespace Mux.Cli.Commands
                 builtInTools,
                 workingDirectory,
                 muxSettings.TaskPlanningEnabled,
-                settings.AppendSystemPrompt);
+                settings.AppendSystemPrompt,
+                projectInstructions);
 
             string systemPrompt = resolvedPrompt.SystemPrompt;
             string compactionSystemPrompt = resolvedPrompt.CompactionSystemPrompt;
@@ -141,6 +146,7 @@ namespace Mux.Cli.Commands
                     ? Math.Clamp(settings.MaxTurns.Value, 1, 100)
                     : muxSettings.GetEffectiveMaxAgentIterations(endpoint),
                 WorkingDirectory = workingDirectory,
+                ProjectInstructions = projectInstructions,
                 SystemPrompt = systemPrompt,
                 CompactionSystemPrompt = compactionSystemPrompt,
                 ApprovalPolicy = approvalPolicy,
@@ -180,13 +186,15 @@ namespace Mux.Cli.Commands
         /// <param name="toolsEnabled">Whether the active endpoint supports tools.</param>
         /// <param name="workingDirectory">The working directory substituted for <c>{WorkingDirectory}</c>.</param>
         /// <param name="tools">The tools whose names/descriptions fill <c>{ToolDescriptions}</c>.</param>
+        /// <param name="projectInstructions">Optional project instruction files appended after substitution.</param>
         /// <returns>The substituted system prompt and the compaction system prompt.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="profile"/> is null.</exception>
         public static (string SystemPrompt, string CompactionSystemPrompt) ResolveProfilePrompts(
             PromptProfile profile,
             bool toolsEnabled,
             string workingDirectory,
-            IReadOnlyList<ToolDefinition> tools)
+            IReadOnlyList<ToolDefinition> tools,
+            ProjectInstructions? projectInstructions = null)
         {
             if (profile == null) throw new ArgumentNullException(nameof(profile));
 
@@ -219,7 +227,8 @@ namespace Mux.Cli.Commands
             string systemPrompt = raw
                 .Replace("{WorkingDirectory}", workingDirectory ?? string.Empty)
                 .Replace("{ToolDescriptions}", toolDescBuilder.ToString().TrimEnd())
-                .Replace("{TaskPlanningGuidance}", taskPlanningActive ? Defaults.TaskPlanningGuidance : string.Empty);
+                .Replace("{TaskPlanningGuidance}", taskPlanningActive ? Defaults.TaskPlanningGuidance : string.Empty)
+                + SystemPromptResolver.BuildProjectInstructionsSection(projectInstructions);
 
             string compaction = string.IsNullOrWhiteSpace(profile.CompactionPrompt)
                 ? Defaults.CompactionSystemPrompt
@@ -446,6 +455,12 @@ namespace Mux.Cli.Commands
         /// Effective working directory.
         /// </summary>
         public string WorkingDirectory { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The project instruction files loaded into <see cref="SystemPrompt"/>. Empty when none were found or
+        /// loading was disabled. Never null.
+        /// </summary>
+        public ProjectInstructions ProjectInstructions { get; set; } = new ProjectInstructions();
 
         /// <summary>
         /// Effective system prompt.
