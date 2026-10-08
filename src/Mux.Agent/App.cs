@@ -24,7 +24,29 @@ namespace Mux.Agent
         /// </summary>
         public override void Initialize()
         {
+            // The name macOS shows in the menu bar and app switcher while an agent window is open.
+            Name = "mux agent";
             Styles.Add(new FluentTheme());
+
+            // The macOS application menu must be installed before Avalonia creates its default one.
+            if (OperatingSystem.IsMacOS())
+            {
+                NativeMenu appMenu = new NativeMenu();
+                NativeMenuItem aboutItem = new NativeMenuItem("About mux agent");
+                aboutItem.Click += OnAbout;
+                appMenu.Items.Add(aboutItem);
+                appMenu.Items.Add(new NativeMenuItemSeparator());
+                NativeMenuItem dashboardItem = new NativeMenuItem("Launch Dashboard");
+                dashboardItem.Click += OnLaunchDashboard;
+                appMenu.Items.Add(dashboardItem);
+                NativeMenuItem terminalItem = new NativeMenuItem("Launch Terminal");
+                terminalItem.Click += OnLaunchTerminal;
+                appMenu.Items.Add(terminalItem);
+                NativeMenuItem desktopItem = new NativeMenuItem("Launch Desktop");
+                desktopItem.Click += OnLaunchDesktop;
+                appMenu.Items.Add(desktopItem);
+                NativeMenu.SetMenu(this, appMenu);
+            }
         }
 
         /// <summary>
@@ -76,7 +98,18 @@ namespace Mux.Agent
             _Tray.ToolTipText = string.IsNullOrEmpty(_Host?.BaseUrl) ? "mux agent" : "mux — " + _Host!.BaseUrl;
             _Tray.Icon = LoadIcon();
             _Tray.Menu = menu;
+
+            // macOS menu-bar icons are template images: drawn from the glyph's alpha in the menu bar's own color,
+            // so the "M" reads correctly on light and dark menu bars.
+            if (OperatingSystem.IsMacOS())
+            {
+                MacOSProperties.SetIsTemplateIcon(_Tray, true);
+            }
             _Tray.IsVisible = true;
+
+            // Register the icon with the application. A TrayIcon that is only constructed is never added to the
+            // macOS status bar; Avalonia creates the platform status item for icons attached here.
+            TrayIcon.SetIcons(this, new TrayIcons { _Tray });
 
             // Keep the tray glyph readable when the OS switches between light and dark: dark icon on a light
             // taskbar, white icon on a dark taskbar.
@@ -125,8 +158,30 @@ namespace Mux.Agent
 
         private void OnAbout(object? sender, EventArgs e)
         {
+            // While a window is open the agent shows in the Dock (with the mux icon) so the window can be found
+            // and focused; it returns to menu-bar-only when the window closes.
+            if (OperatingSystem.IsMacOS())
+            {
+                MacActivationPolicy.ShowInDock();
+                if (!MacDockIcon.IsRunningFromBundle())
+                {
+                    using (Stream? icon = Assembly.GetExecutingAssembly().GetManifestResourceStream("Mux.Agent.icon-macos.png"))
+                    {
+                        MacDockIcon.TryApply(icon);
+                    }
+                }
+            }
+
             AboutWindow window = new AboutWindow();
+            window.Closed += (closedSender, args) =>
+            {
+                if (OperatingSystem.IsMacOS())
+                {
+                    MacActivationPolicy.HideFromDock();
+                }
+            };
             window.Show();
+            window.Activate();
         }
 
         private void OnLaunchTerminal(object? sender, EventArgs e)

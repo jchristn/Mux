@@ -63,7 +63,7 @@ namespace Mux.Publisher.Channels.Drivers
                 // 2. Assemble the bundle from the publish output + icon.
                 plan.AddCommand(new ShellCommand("mkdir", new List<string> { "-p", macOsDir, resourcesDir }) { Description = "Create .app bundle layout (" + rid + ")" });
                 plan.AddCommand(new ShellCommand("cp", new List<string> { "-R", published.PublishDir + "/.", macOsDir }) { Description = "Copy published binaries into the bundle" });
-                plan.AddCommand(new ShellCommand("cp", new List<string> { System.IO.Path.Combine(context.RepoRoot, "assets", "icon-green.icns"), resourcesDir + "/" + project + ".icns" }) { Description = "Copy the app icon", ContinueOnError = true });
+                plan.AddCommand(new ShellCommand("cp", new List<string> { System.IO.Path.Combine(context.RepoRoot, "assets", "icons", "icon-macos.icns"), resourcesDir + "/" + project + ".icns" }) { Description = "Copy the app icon", ContinueOnError = true });
                 plan.AddCommand(new ShellCommand("chmod", new List<string> { "+x", macOsDir + "/" + binaryName }) { Description = "Mark the launcher executable" });
 
                 // The bundled tray agent and CLI ride inside the .app; mark them executable too. The agent is

@@ -87,8 +87,11 @@ namespace Mux.Agent
         /// <returns>The configured application builder.</returns>
         public static AppBuilder BuildAvaloniaApp()
         {
+            // On macOS the agent is a menu-bar app: no Dock icon and no menu bar of its own until a window opens
+            // (App switches the activation policy then), so it never shows up as "Avalonia Application".
             return AppBuilder.Configure<App>()
                 .UsePlatformDetect()
+                .With(new MacOSPlatformOptions { ShowInDock = false })
                 .LogToTrace();
         }
     }

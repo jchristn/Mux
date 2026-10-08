@@ -74,6 +74,15 @@ namespace Mux.Desktop
             // TUI does. Best-effort and opt-out via MUX_AGENT_AUTOSTART=0.
             AgentLauncher.EnsureRunning();
 
+            // Outside an .app bundle macOS shows a generic Dock icon for the dotnet host; use the mux tile.
+            if (OperatingSystem.IsMacOS() && !MacDockIcon.IsRunningFromBundle())
+            {
+                using (System.IO.Stream? icon = typeof(App).Assembly.GetManifestResourceStream("Mux.Desktop.icon-macos.png"))
+                {
+                    MacDockIcon.TryApply(icon);
+                }
+            }
+
             string configDirectory = ResolveConfigDirectory();
             _Services = BuildServices(configDirectory);
 

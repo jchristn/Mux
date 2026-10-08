@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="..\..\assets\icon-green.png" LogicalName="Mux.Desktop.logo-green.png" />
+    <EmbeddedResource Include="..\..\assets\icons\icon-macos.png" LogicalName="Mux.Desktop.icon-macos.png" />
   </ItemGroup>
 
   <ItemGroup>
