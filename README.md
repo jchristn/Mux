@@ -80,7 +80,7 @@
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Local REST server & tray agent (`v0.9.0`, opt-in): `mux serve` starts a loopback-bound, token-guarded REST + WebSocket API (Watson 7) over mux's in-process services; a cross-platform Avalonia system-tray agent hosts it in the background with **About / Launch Mux / Exit**. Never auto-starts from a plain run. See `docs/REST_API.md`
 - Usage analytics: every model call is recorded to a local SQLite database (`~/.mux/usage.db`, multi-process safe, no external service) — tokens, cost, time-to-first-token, streaming time, latency, and throughput. See it via `/usage` and the live sidebar cost in the TUI, or the **Usage** and **Pricing** pages on the `mux serve` dashboard (charts over time with endpoint/model filters). Cost derives from an editable `pricing.json`. See `docs/CONFIG.md`
-- Desktop app (`v0.11.0`): `mux Desktop` is a cross-platform Avalonia client that links `Mux.Core` in-process. It offers streaming chat with Markdown, tables, and syntax-highlighted code (with per-response copy), thinking and tool-call cards, and auto-safe tool approvals; **parallel conversation tabs** that each run their own agent turn concurrently (switch tabs mid-turn without blocking); conversations/threads with AI-summarized titles, rename/export/bulk-delete; a command palette (`Ctrl+K`) and slash commands; MCP tools and skills in turns; live context/usage stats and the `mux serve` usage dashboard (candlestick charts with endpoint/conversation filters). Configuration is fully managed in-app — endpoints (with model import and validation), MCP servers (with connectivity checks), prompt profiles, skills, subagents, pricing, hooks, custom commands, keybindings, and web-search providers, plus a grouped settings surface, `/compact` and `/effort`, system/light/dark/**high-contrast** theming, and **full localization in 11 languages** (with right-to-left support for Arabic). Launch it with `run-desktop.bat` / `run-desktop.sh`. See `docs/DESKTOP.md`
+- Desktop app (`v0.11.0`): `mux Desktop` is a cross-platform Avalonia client that links `Mux.Core` in-process. It offers streaming chat with Markdown, tables, and syntax-highlighted code (with per-response copy), thinking and tool-call cards, and auto-safe tool approvals; **parallel conversation tabs** that each run their own agent turn concurrently (switch tabs mid-turn without blocking); conversations/threads with AI-summarized titles, rename/export/bulk-delete; a command palette (`Ctrl+K`) and slash commands; MCP tools and skills in turns; live context/usage stats and the `mux serve` usage dashboard (candlestick charts with endpoint/conversation filters). Configuration is fully managed in-app — endpoints (with model import and validation), MCP servers (with connectivity checks), prompt profiles, skills, subagents, pricing, hooks, custom commands, keybindings, and web-search providers, plus a grouped settings surface, `/compact` and `/effort`, system/light/dark/**high-contrast** theming, and **full localization in 11 languages** (with right-to-left support for Arabic). Launch it with `scripts\windows\run-desktop.bat` / `./scripts/macos/run-desktop.sh` / `./scripts/linux/run-desktop.sh`. See `docs/DESKTOP.md`
 - Run lifecycle (`v0.12.0`): `mux serve` tracks each streamed run as an addressable object you can list (`GET /v1.0/api/runs`), inspect (`GET /v1.0/api/runs/{runId}` — status, counters, task plan), and cancel (`POST /v1.0/api/runs/{runId}/cancel`, cooperative and server-side). The `/v1.0/ws` WebSocket is a live per-run event bridge: subscribe by run or session id and replay-then-tail the same event envelope `mux print --output-format jsonl` emits. Stop in the dashboard and the VS Code extension now cancels server-side. **Live session mirroring** works across surfaces — a run on one surface can be watched read-only on another (`mux mirror <sessionId>` in the terminal, `/mirror` in the dashboard, *Mirror a session's live run* in VS Code); the desktop app publishes its in-process runs through its embedded server. See `docs/REST_API.md`
 - Observability (`v1.1.0`): OpenTelemetry metrics, traces, and logs for operators. `Mux.Core` emits on the `Mux` meter and activity source (agent runs and their stages, LLM calls with time-to-first-token and tokens, tools, approvals, MCP, web search, git checkpoints, hooks, subagents, the job pipeline, the write lease, the usage writer, sessions), the REST server adds Watson's HTTP metrics and per-request spans, and `mux`, the tray agent, and the desktop app export it all (OTLP, optional in-process Prometheus, Loki logs with trace correlation) when `observability.enabled` is on. `docker/compose.yaml` brings up a provisioned Prometheus + Tempo + Loki + Grafana stack with six per-domain dashboards and alert rules, and the web dashboard's home page links to it. See [TELEMETRY.md](TELEMETRY.md)
 - Engine as a library: `Mux.Core` (and `Mux.Search`) publish to NuGet with a symbol package, so you can build your own experiences on the mux engine (`AgentLoop`, `SessionStore`, `McpToolManager`, `UsageQueryService`, `SettingsLoader`)
@@ -113,11 +113,10 @@ git clone https://github.com/jchristn/Mux.git
 cd Mux
 
 # Windows
-install-tool.bat            # or: install-tool.bat net8.0
+scripts\windows\install-tool.bat     # or: scripts\windows\install-tool.bat net8.0
 
-# Linux / macOS
-chmod +x install-tool.sh
-./install-tool.sh           # or: ./install-tool.sh net8.0
+# Linux (use scripts/macos/ on macOS)
+./scripts/linux/install-tool.sh       # or: ./scripts/linux/install-tool.sh net8.0
 ```
 
 On first run mux seeds `~/.mux/endpoints.json` (a default local Ollama endpoint) and `~/.mux/settings.json`.
@@ -165,10 +164,10 @@ Launch the Avalonia desktop client:
 
 ```bash
 # Windows
-run-desktop.bat
+scripts\windows\run-desktop.bat
 
-# Linux / macOS
-./run-desktop.sh
+# Linux (use scripts/macos/ on macOS)
+./scripts/linux/run-desktop.sh
 ```
 
 `mux Desktop` links `Mux.Core` in-process and offers streaming chat with Markdown, tables, and
@@ -202,7 +201,7 @@ mux serve [OPTIONS]                   Start the local REST/WebSocket API + web d
 
 Use `mux print` as the preferred non-interactive entrypoint in scripts and automation. `--print` remains supported and is convenient for stdin piping. Use `mux endpoint list`/`ls`/`show` when automation needs to inspect stored endpoint configuration without entering the REPL. Use `mux serve` to bring up the token-guarded local REST API and web dashboard (see `docs/REST_API.md`).
 
-The **desktop app** launches from the repo with `run-desktop.bat` (Windows) or `./run-desktop.sh` (Linux/macOS); see `archive/DESKTOP_APP.md`.
+The **desktop app** launches from the repo with `scripts\windows\run-desktop.bat` (Windows), `./scripts/linux/run-desktop.sh` (Linux), or `./scripts/macos/run-desktop.sh` (macOS); see `archive/DESKTOP_APP.md`.
 
 ### Options
 

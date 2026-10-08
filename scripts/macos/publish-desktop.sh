@@ -2,7 +2,7 @@
 # Publish a self-contained, single-file mux Desktop build for one runtime.
 #
 # Usage:
-#   ./publish-desktop.sh [RID] [TFM]
+#   ./scripts/macos/publish-desktop.sh [RID] [TFM]
 #
 # RID  defaults to a guess from the host OS/arch (linux-x64, osx-arm64, win-x64, ...).
 # TFM  defaults to net10.0 (pass net8.0 for the LTS build).
@@ -14,7 +14,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT="$SCRIPT_DIR/src/Mux.Desktop/Mux.Desktop.csproj"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT="$REPO_ROOT/src/Mux.Desktop/Mux.Desktop.csproj"
 
 # --- Resolve the runtime identifier ---------------------------------------
 guess_rid() {
@@ -35,7 +36,7 @@ guess_rid() {
 
 RID="${1:-$(guess_rid)}"
 TFM="${2:-net10.0}"
-OUT="$SCRIPT_DIR/dist/desktop/$RID"
+OUT="$REPO_ROOT/dist/desktop/$RID"
 
 echo "Publishing mux Desktop"
 echo "  project: $PROJECT"

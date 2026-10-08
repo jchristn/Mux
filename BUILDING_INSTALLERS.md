@@ -47,8 +47,8 @@ id as metadata — those tools have no interactive acceptance step.
 ## Windows
 
 ```bat
-build-installers.bat                REM builds inno, scoop, chocolatey, winget
-build-installers.bat 0.11.0 --dry-run
+scripts\windows\build-installers.bat                REM builds inno, scoop, chocolatey, winget
+scripts\windows\build-installers.bat 0.11.0 --dry-run
 ```
 Produces the signed-less `mux-<version>-win-x64-setup.exe` (SmartScreen shows "More info → Run anyway"),
 plus the scoop/winget/choco manifests.
@@ -56,8 +56,8 @@ plus the scoop/winget/choco manifests.
 ## macOS
 
 ```bash
-./build-installers.sh               # builds dmg, homebrew (formula), homebrew-cask
-./build-installers.sh 0.11.0 --dry-run
+./scripts/macos/build-installers.sh               # builds dmg, homebrew (formula), homebrew-cask
+./scripts/macos/build-installers.sh 0.11.0 --dry-run
 ```
 Produces an **unsigned** `.dmg`. First launch: right-click the app → **Open** (or
 `xattr -dr com.apple.quarantine /Applications/mux.app`) — no Apple Developer certificate is configured.
@@ -65,8 +65,8 @@ Produces an **unsigned** `.dmg`. First launch: right-click the app → **Open** 
 ## Linux
 
 ```bash
-./build-installers.sh               # builds appimage, debrpm, nuget, apt, yum
-./build-installers.sh 0.11.0 --dry-run
+./scripts/linux/build-installers.sh               # builds appimage, debrpm, nuget, apt, yum
+./scripts/linux/build-installers.sh 0.11.0 --dry-run
 ```
 Produces `.deb`, `.rpm`, `.AppImage`, the NuGet tool package, and GPG-signed apt/yum repo trees (needs the
 free `GPG_SIGNING_KEYID`; metadata is unsigned without it).

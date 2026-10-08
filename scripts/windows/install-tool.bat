@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "ROOT_DIR=%~dp0"
+for %%i in ("%~dp0..\..") do set "ROOT_DIR=%%~fi\"
 set "PACKAGE_SOURCE=%ROOT_DIR%artifacts\tool-packages"
 
 call :resolve_framework "%~1"

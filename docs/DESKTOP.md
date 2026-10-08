@@ -12,12 +12,12 @@ With the .NET 8 or .NET 10 SDK installed, from a clone of the repository:
 
 ```bash
 # Windows
-run-desktop.bat            # defaults to net10.0
-run-desktop.bat net8.0
+scripts\windows\run-desktop.bat            # defaults to net10.0
+scripts\windows\run-desktop.bat net8.0
 
-# Linux / macOS
-./run-desktop.sh           # defaults to net10.0
-./run-desktop.sh net8.0
+# Linux (use scripts/macos/ on macOS)
+./scripts/linux/run-desktop.sh           # defaults to net10.0
+./scripts/linux/run-desktop.sh net8.0
 ```
 
 Both scripts run `dotnet run` against `src/Mux.Desktop`. You can also run the project directly:
@@ -113,13 +113,13 @@ To produce a self-contained, single-file build that runs without a .NET runtime 
 
 ```bash
 # Windows (defaults to win-x64 / net10.0)
-publish-desktop.bat
-publish-desktop.bat win-arm64
+scripts\windows\publish-desktop.bat
+scripts\windows\publish-desktop.bat win-arm64
 
-# Linux / macOS (RID guessed from the host; override as needed)
-./publish-desktop.sh
-./publish-desktop.sh osx-arm64
-./publish-desktop.sh linux-x64 net8.0
+# macOS / Linux (RID guessed from the host; override as needed)
+./scripts/macos/publish-desktop.sh
+./scripts/macos/publish-desktop.sh osx-arm64
+./scripts/linux/publish-desktop.sh linux-x64 net8.0
 ```
 
 Output lands in `dist/desktop/<RID>/`. Distribute the whole folder; the launcher is `Mux.Desktop` (`Mux.Desktop.exe` on Windows).

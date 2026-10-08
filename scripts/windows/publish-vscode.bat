@@ -2,8 +2,8 @@
 REM Publish the mux VS Code extension (src\Mux.VSCode) to the VS Code Marketplace.
 REM
 REM Usage:
-REM   publish-vscode.bat <marketplace-token>
-REM   publish-vscode.bat                       (prompts for the token)
+REM   scripts\windows\publish-vscode.bat <marketplace-token>
+REM   scripts\windows\publish-vscode.bat     (prompts for the token)
 REM
 REM The token is a VS Code Marketplace Personal Access Token, created in Azure
 REM DevOps with scope "Marketplace: Manage" and organization "All accessible
@@ -26,7 +26,8 @@ if "%TOKEN%"=="" (
   exit /b 1
 )
 
-set "EXTDIR=%~dp0src\Mux.VSCode"
+for %%i in ("%~dp0..\..") do set "ROOT=%%~fi\"
+set "EXTDIR=%ROOT%src\Mux.VSCode"
 
 echo Publishing the mux VS Code extension
 echo   project: %EXTDIR%

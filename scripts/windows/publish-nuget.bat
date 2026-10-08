@@ -4,20 +4,20 @@ setlocal enabledelayedexpansion
 rem publish-nuget.bat - pack and publish the mux NuGet libraries (and their .snupkg symbol
 rem packages) to nuget.org.
 rem
-rem Usage:  publish-nuget.bat ^<nuget-api-key^>
+rem Usage:  scripts\windows\publish-nuget.bat ^<nuget-api-key^>
 rem
 rem Each project is packed fresh in Release so the current version in its .csproj is what
 rem gets published. Pushing a .nupkg also uploads the matching .snupkg symbol package.
 
 if "%~1"=="" (
-  echo Usage: publish-nuget.bat ^<nuget-api-key^>
+  echo Usage: scripts\windows\publish-nuget.bat ^<nuget-api-key^>
   exit /b 1
 )
 
 set "APIKEY=%~1"
 set "SOURCE=https://api.nuget.org/v3/index.json"
 set "CONFIG=Release"
-set "ROOT=%~dp0"
+for %%i in ("%~dp0..\..") do set "ROOT=%%~fi\"
 set "OUTDIR=%ROOT%artifacts\nuget"
 
 rem Publish in dependency order (a package's dependencies should exist first).

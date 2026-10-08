@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 PACKAGE_SOURCE="$ROOT_DIR/artifacts/tool-packages"
 cd "$ROOT_DIR"
 
@@ -38,6 +38,8 @@ resolve_framework() {
 
 resolve_framework "${1:-}"
 
+echo "Removing mux..."
+dotnet tool uninstall -g Mux.Cli 2>/dev/null || true
 rm -rf "$PACKAGE_SOURCE"
 mkdir -p "$PACKAGE_SOURCE"
 echo "Building mux for $FRAMEWORK..."

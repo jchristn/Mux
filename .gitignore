@@ -13,8 +13,8 @@ obj/
 /src/artifact.txt
 /artifacts/
 
-# Self-contained desktop publish output (publish-desktop.{sh,bat})
+# Self-contained desktop publish output (scripts/*/publish-desktop.{sh,bat})
 /dist/
 
-# Installer build output (build-installers.{sh,bat})
+# Installer build output (scripts/*/build-installers.{sh,bat})
 /installers/

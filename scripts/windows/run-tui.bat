@@ -4,10 +4,11 @@ REM global 'mux' tool. IMPORTANT: 'dotnet build' does NOT update the global 'mux
 REM requires reinstall-tool.bat. Use this script to test terminal changes against the current
 REM build without reinstalling, so the TUI always matches the freshly built desktop/agent/web.
 REM The TUI runs against the directory you launch this script from (its working directory).
-REM Usage: run-tui.bat [net8.0^|net10.0]
+REM Usage: scripts\windows\run-tui.bat [net8.0^|net10.0]
 setlocal
+for %%i in ("%~dp0..\..") do set "ROOT=%%~fi\"
 chcp 65001 >nul
 set TFM=%1
 if "%TFM%"=="" set TFM=net10.0
-dotnet run --project "%~dp0src\Mux.Cli\Mux.Cli.csproj" --framework %TFM%
+dotnet run --project "%ROOT%src\Mux.Cli\Mux.Cli.csproj" --framework %TFM%
 endlocal

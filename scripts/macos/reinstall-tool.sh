@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 PACKAGE_SOURCE="$ROOT_DIR/artifacts/tool-packages"
 cd "$ROOT_DIR"
 

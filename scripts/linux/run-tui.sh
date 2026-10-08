@@ -4,8 +4,9 @@
 # requires reinstall-tool.sh. Use this script to test terminal changes against the current
 # build without reinstalling, so the TUI always matches the freshly built desktop/agent/web.
 # The TUI runs against the directory you launch this script from (its working directory).
-# Usage: ./run-tui.sh [net8.0|net10.0]
+# Usage: ./scripts/linux/run-tui.sh [net8.0|net10.0]
 set -e
 TFM="${1:-net10.0}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-dotnet run --project "$SCRIPT_DIR/src/Mux.Cli/Mux.Cli.csproj" --framework "$TFM"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+dotnet run --project "$REPO_ROOT/src/Mux.Cli/Mux.Cli.csproj" --framework "$TFM"

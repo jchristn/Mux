@@ -2,19 +2,19 @@
 # Build mux installers for THIS machine's operating system and drop them under
 # installers/<version>/. Native installer formats are OS-locked — a .dmg can only be
 # built on macOS, .deb/.rpm/AppImage on Linux — so this script builds the channels
-# your current OS owns. Run it on each OS (and build-installers.bat on Windows) to get
+# your current OS owns. Run it on each OS (and scripts\windows\build-installers.bat on Windows) to get
 # the full set, or just push a version tag to let the GitHub Actions matrix build all
 # three at once (see .github/workflows/release.yml).
 #
 # Usage:
-#   ./build-installers.sh [VERSION] [--dry-run]
+#   ./scripts/macos/build-installers.sh [VERSION] [--dry-run]
 #
 # VERSION   defaults to the <Version> in src/Mux.Cli/Mux.Cli.csproj.
 # --dry-run prints the plan (files + commands) without building or needing the packagers.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$SCRIPT_DIR"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # --- Parse arguments -------------------------------------------------------
 VERSION=""
@@ -33,7 +33,7 @@ if [ -z "$VERSION" ]; then
     | head -n1 | sed -E 's/<\/?Version>//g')"
 fi
 if [ -z "$VERSION" ]; then
-  echo "error: could not determine version. Pass it explicitly: ./build-installers.sh 0.10.0" >&2
+  echo "error: could not determine version. Pass it explicitly: ./scripts/macos/build-installers.sh 0.10.0" >&2
   exit 1
 fi
 
@@ -42,7 +42,7 @@ case "$(uname -s)" in
   Darwin*) OS_JOB="macos" ;;
   Linux*)  OS_JOB="linux" ;;
   MINGW*|MSYS*|CYGWIN*)
-    echo "error: this looks like Windows. Use build-installers.bat instead." >&2
+    echo "error: this looks like Windows. Use scripts\\windows\\build-installers.bat instead." >&2
     exit 1 ;;
   *) echo "error: unsupported OS '$(uname -s)'." >&2; exit 1 ;;
 esac
@@ -102,7 +102,7 @@ if [ -n "$FAILED" ]; then
   echo "macOS: Xcode command line tools) and re-run, or use --dry-run to preview."
 fi
 echo
-echo "Note: this built only $OS_JOB installers. Run build-installers.sh on the other Unix OS"
-echo "and build-installers.bat on Windows for the full set — or push a 'v$VERSION' tag to build"
+echo "Note: this built only $OS_JOB installers. Run scripts/linux or scripts/macos build-installers.sh on the other Unix OS"
+echo "and scripts\\windows\\build-installers.bat on Windows for the full set — or push a 'v$VERSION' tag to build"
 echo "all three via GitHub Actions."
 [ -z "$FAILED" ] || exit 1

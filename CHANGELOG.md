@@ -38,6 +38,10 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- **Repository scripts moved under `scripts/`.** Windows `.bat` scripts now live in `scripts/windows/`, and the
+  shell scripts in both `scripts/linux/` and `scripts/macos/` (for example `scripts/windows/install-tool.bat`,
+  `./scripts/macos/run-desktop.sh`). Each script resolves the repository root from its own location, so they
+  run from any directory.
 - Seeded default skills use `name: description` command headings instead of an em-dash. Existing seeded
   copies are untouched.
 - Switching prompt profiles in the terminal after `/cwd` now keeps the new working directory.

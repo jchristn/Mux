@@ -2,16 +2,16 @@
 setlocal enabledelayedexpansion
 REM Build mux Windows installers and drop them under installers\<version>\. Native installer
 REM formats are OS-locked, so this builds the Windows channels only (Inno .exe, winget, choco,
-REM scoop). Run build-installers.sh on macOS and Linux for their installers, or push a version
+REM scoop). Run scripts/macos or scripts/linux build-installers.sh on macOS and Linux for their installers, or push a version
 REM tag to build all three via GitHub Actions (.github\workflows\release.yml).
 REM
 REM Usage:
-REM   build-installers.bat [VERSION] [--dry-run]
+REM   scripts\windows\build-installers.bat [VERSION] [--dry-run]
 REM
 REM VERSION   defaults to the ^<Version^> in src\Mux.Cli\Mux.Cli.csproj.
 REM --dry-run prints the plan without building or needing the packagers.
 
-set "REPO_ROOT=%~dp0"
+for %%i in ("%~dp0..\..") do set "REPO_ROOT=%%~fi"
 if "%REPO_ROOT:~-1%"=="\" set "REPO_ROOT=%REPO_ROOT:~0,-1%"
 
 REM --- Parse arguments -------------------------------------------------------
@@ -39,7 +39,7 @@ if not defined VERSION (
   )
 )
 if not defined VERSION (
-  echo error: could not determine version. Pass it explicitly: build-installers.bat 0.10.0 1>&2
+  echo error: could not determine version. Pass it explicitly: scripts\windows\build-installers.bat 0.10.0 1>&2
   exit /b 1
 )
 
@@ -100,13 +100,13 @@ if defined FAILED (
   echo Install the missing packagers ^(Inno Setup for iscc^) and re-run, or use --dry-run to preview.
 )
 echo.
-echo Note: this built only Windows installers. Run build-installers.sh on macOS and Linux for
+echo Note: this built only Windows installers. Run scripts/macos or scripts/linux build-installers.sh for
 echo their installers - or push a "v%VERSION%" tag to build all three via GitHub Actions.
 if defined FAILED exit /b 1
 exit /b 0
 
 :usage
-echo Usage: build-installers.bat [VERSION] [--dry-run]
+echo Usage: scripts\windows\build-installers.bat [VERSION] [--dry-run]
 echo   VERSION   defaults to the ^<Version^> in src\Mux.Cli\Mux.Cli.csproj
 echo   --dry-run prints the plan without building
 exit /b 0
