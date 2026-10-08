@@ -1,6 +1,6 @@
 # New Default Skills and OOBE Parity Plan
 
-_Status: Phase 1 done (2026-10-08); Phases 2 through 7 proposed. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
+_Status: Phase 1 done (2026-10-08); Phase 2 in progress; Phases 3 through 7 proposed. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
 
 mux ships 46 default skills, and nearly all of them assume a git repository, a .NET solution, or both. Someone who opens mux in a React app, a Django service, a Maven project, or a CMake tree gets git helpers and nothing that knows how their code builds or tests. That gap is the first thing a Claude Code or Codex user notices, and it is the reason for this plan. The second thing they notice is subtler: both of those harnesses read a project instruction file on startup, can review a diff on request, and let skills be invoked by name with arguments. mux has a strong engine (subagents, MCP, sandboxing, undo, compaction, sessions across four surfaces) but the out-of-box experience still feels like a toolkit rather than an agent that already knows the job.
 
@@ -30,7 +30,9 @@ The scorecard below lists everything that exists in Claude Code or Codex and is 
 | 18 | Background processes (start a dev server, read its output later, stop it) | yes | partial | `run_process` is foreground with a timeout | 5 | 9 | **14** | 5 |
 | 19 | `@file` mentions in the composer | yes | yes | none | 7 | 7 | **14** | 6 |
 | 20 | Debugging playbook and `git bisect` driver | via model | via model | none | 9 | 5 | **14** | 3 |
-| 21 | Go, Rust, and container skills | via model + shell | via model + shell | none | 9 | 5 | **14** | 2 |
+| 21 | Containers and orchestration skills (Docker, Docker Compose, Kubernetes, Minikube, Helm, OpenStack) | via model + shell | via model + shell | none | 8 | 8 | **16** | 2 |
+| 21a | Cloud provider skills (AWS, Azure, Google Cloud, DigitalOcean, Rackspace, Vercel, Alibaba, Huawei, IBM Cloud, Linode, Netlify, Cloudflare, fly.io) plus Terraform and Pulumi | via model + shell | via model + shell | none | 6 | 8 | **14** | 2 |
+| 21b | Go and Rust skills | via model + shell | via model + shell | none | 9 | 5 | **14** | 2 |
 | 22 | C++ skills (CMake, CTest, clang-format, clang-tidy, sanitizers) | via model + shell | via model + shell | none | 7 | 6 | **13** | 2 |
 | 23 | `/loop`: re-run a prompt on an interval or self-paced | yes | no | none | 6 | 7 | **13** | 4 |
 | 24 | Persistent memory (agent-written facts reused across sessions, `#` quick-add) | yes | partial | none | 6 | 7 | **13** | 6 |
@@ -46,7 +48,7 @@ The scorecard below lists everything that exists in Claude Code or Codex and is 
 
 A few things that look like gaps are not, and they are deliberately absent from the table: sandbox postures, tool allow and deny globs, compaction, resume and fork, subagents, web search and retrieval, undo and redo, task plans, custom slash commands, MCP client support, and usage tracking all exist today.
 
-Rows 1, 2, 7, 8, and 16 are harness changes, not skills, but they come first because the new skills depend on them. Most rows from 3 through 15 lean on playbook skills (2), project scoping (8), or name invocation (7). Without them, a React developer would still have to type "please run the react-test skill" instead of `/react-test`, and 105 skills would be listed in every system prompt sent to a 7B model with an 8K window.
+Rows 1, 2, 7, 8, and 16 are harness changes, not skills, but they come first because the new skills depend on them. Most rows from 3 through 15 lean on playbook skills (2), project scoping (8), or name invocation (7). Without them, a React developer would still have to type "please run the react-test skill" instead of `/react-test`, and 152 skills would be listed in every system prompt sent to a 7B model with an 8K window.
 
 ---
 
@@ -111,7 +113,7 @@ Claude Code reads `CLAUDE.md`; Codex reads `AGENTS.md`. mux now reads both, so a
 
 ### 1.5 Relevance-gated listing (row 16)
 
-The full library after this plan is 105 skills. Listed one line each, that is roughly 4,000 tokens on every turn, which is half the context of the local models mux is built to support.
+The full library after this plan is 152 skills. Listed one line each, that is roughly 6,000 tokens on every turn, which is half the context of the local models mux is built to support.
 
 - [x] Frontmatter `appliesTo`, evaluated by `src/Mux.Core/Skills/AppliesToMatcher.cs`: relative globs with `*`, `?`, and `**`, where rooted or `..` globs never match, dependency and build directories are skipped under `**`, and a visit budget bounds the search.
 - [x] Relevance is evaluated once per skill per project view and cached until the view is rebuilt on the refresh interval.
@@ -203,19 +205,127 @@ CMake is the supported path, since it covers most modern C++ projects and `compi
 | `cpp-tidy` | no | `check` | clang-tidy against `compile_commands.json`, limited to changed files when given `changed`. |
 | `cpp-sanitize` | yes | `asan`, `ubsan` | Configures a separate build tree with the sanitizer flags, builds, and runs CTest. |
 
-### 2.6 Go, Rust, and containers (row 21)
+### 2.6 Containers, orchestration, and private cloud (row 21)
+
+These skills touch running systems, not just files, so they follow stricter rules than the language families. Every command that talks to a cluster or cloud prints the target first (Docker context, Kubernetes context and namespace, OpenStack cloud and project) on its first line of output, so the model and the transcript always show where a command ran. Read-only commands are `mutating: false`. Anything that changes a cluster runs as a preview by default (`--dry-run=server`, `helm diff`, `helm template`, `--dry-run` for compose) and only applies when the caller passes `apply` explicitly. A guard refuses to apply when the active context, profile, or project name matches `settings.skillProdPattern` (default `prod|production|live`) unless the arguments repeat that name with `--confirm <name>`. No skill ships a delete, destroy, or prune command; those stay with the user.
+
+`DefaultContainerSkills.cs`, `appliesTo: [Dockerfile, "**/Dockerfile", "*.Dockerfile", compose.yaml, compose.yml, docker-compose.yaml, docker-compose.yml]`:
+
+| Id | Mut. | Commands | Notes |
+|---|:---:|---|---|
+| `docker-build` | yes | `build`, `tag`, `push` | Builds with BuildKit, tags with the git short SHA by default, and pushes only to the registry named in the arguments. |
+| `docker-inspect` | no | `ps`, `images`, `logs`, `stats`, `context` | `logs <container> [lines]` trims to the last N lines (default 200); `context` prints the active Docker context and engine. |
+| `compose` | yes | `config`, `up`, `down`, `ps`, `logs`, `restart` | `config` validates and prints the resolved file; `up` is detached and waits for health checks with a timeout; `down` never passes `-v`, so named volumes survive. |
+| `dockerfile-lint` | no | `check` | hadolint when installed; otherwise a built-in checklist (pinned base tags, `USER` set, no `ADD` for URLs, a `HEALTHCHECK` for services). |
+
+`DefaultKubernetesSkills.cs`, `appliesTo: [Chart.yaml, "**/Chart.yaml", kustomization.yaml, "**/kustomization.yaml", skaffold.yaml, "k8s/**", "kubernetes/**", "manifests/**", "deploy/**/*.yaml"]`:
+
+| Id | Mut. | Commands | Notes |
+|---|:---:|---|---|
+| `k8s-context` | no | `current`, `list`, `namespaces` | The first thing the model runs; prints context, cluster, user, and namespace. Switching contexts is left to the user. |
+| `k8s-inspect` | no | `get`, `describe`, `logs`, `events`, `top`, `rollout-status` | `logs <pod> [container] [lines]`; `events` sorted by time and limited to warnings by default. |
+| `k8s-validate` | no | `client`, `server`, `schema` | `kubectl apply --dry-run=client` / `--dry-run=server`, and kubeconform when installed. |
+| `k8s-apply` | yes | `diff`, `apply`, `rollout-restart` | `diff` first, always. `apply <path>` uses `-f` or `-k` by detecting a kustomization, and is refused by the production guard without `--confirm`. |
+| `minikube` | yes | `status`, `start`, `stop`, `image-load`, `service-url`, `addons` | `start [driver] [k8s-version]`; `image-load <image>` loads a local build without a registry; `addons` lists, never enables silently. |
+| `helm` | yes | `lint`, `template`, `deps`, `diff`, `upgrade`, `list`, `history` | `diff` needs the helm-diff plugin and says so when missing. `upgrade <release> <chart> [values...]` runs `--install --atomic --wait` with a timeout, behind the production guard. |
+
+`DefaultOpenStackSkills.cs`, `appliesTo: [clouds.yaml, "**/clouds.yaml", "heat/**", "*.hot.yaml", "**/*.hot.yaml"]`, `requiresTools: [openstack]`:
+
+| Id | Mut. | Commands | Notes |
+|---|:---:|---|---|
+| `openstack-whoami` | no | `token`, `project`, `catalog`, `quotas` | Resolves the cloud from `OS_CLOUD` or the argument and prints project, region, and user. |
+| `openstack-inspect` | no | `servers`, `images`, `flavors`, `networks`, `volumes`, `stacks` | Table output trimmed to the useful columns. |
+| `openstack-heat` | yes | `validate`, `preview`, `create`, `update`, `events` | `preview` runs `stack create --dry-run`; `create`/`update` sit behind the production guard. |
+
+### 2.7 Cloud providers (row 21a)
+
+Each provider gets a small family built on its official CLI (`aws`, `az` and `azd`, `gcloud`, `doctl`, `vercel`, `aliyun`, `hcloud` (KooCLI), `ibmcloud`, `linode-cli`, `netlify`, `wrangler`, `flyctl`), plus two cross-cloud infrastructure-as-code skills. The same rules as 2.6 apply: the account, subscription, or project is printed first; reads are the default; changes go through a preview or plan; the production guard applies; and nothing deletes. Two rules are specific to cloud work. Skills never print secret values (secret and environment-variable commands list names and last-updated times only). Skills never run a login flow: when the CLI is not authenticated, the command exits 2 with the exact login command for the user to run.
+
+Most of these providers leave no file in the repository, so `appliesTo` alone cannot decide relevance. This section adds one harness field:
+
+- [ ] Frontmatter `requiresTools`: executables that must be on `PATH` for the skill to be listed (for example `[aws]`). The runtime checks `PATH` once per refresh and caches the result; it never runs the tool to check. A skill is listed when every required tool is present and, if it also has `appliesTo`, at least one glob matches. A machine without `gcloud` therefore never sees the Google skills, and a repository with `vercel.json` sees the Vercel skill only when the Vercel CLI is installed. Tests extend `SkillListingSuite` with a fake `PATH`.
+
+**AWS** (`DefaultAwsSkills.cs`, `requiresTools: [aws]`). AWS is where most users will spend time, so it gets the widest coverage, grouped by job rather than one skill per service:
+
+| Id | Mut. | Commands | Notes |
+|---|:---:|---|---|
+| `aws-whoami` | no | `identity`, `profiles`, `regions` | `sts get-caller-identity`, the active profile and region, and whether SSO credentials have expired. |
+| `aws-compute` | yes | `ec2-list`, `ec2-describe`, `ec2-start`, `ec2-stop`, `lambda-list`, `lambda-invoke`, `lambda-logs` | Start, stop, and invoke sit behind the production guard (matched against the profile and instance `Environment` tag). |
+| `aws-containers` | yes | `ecs-services`, `ecs-tasks`, `ecs-redeploy`, `eks-clusters`, `eks-kubeconfig`, `ecr-repos`, `ecr-login`, `ecr-push` | `ecs-redeploy` is `update-service --force-new-deployment` and waits for stability; `eks-kubeconfig` writes a named context and hands off to the 2.6 Kubernetes skills. |
+| `aws-storage` | yes | `s3-buckets`, `s3-ls`, `s3-sync`, `s3-presign` | `s3-sync` always runs `--dryrun` first and applies only with `apply`; it never passes `--delete`. |
+| `aws-data` | no | `rds-instances`, `rds-snapshots`, `dynamodb-tables`, `dynamodb-describe`, `elasticache-clusters` | Read-only on purpose: database changes stay with migrations and the user. |
+| `aws-deploy` | yes | `cfn-stacks`, `cfn-events`, `cfn-changeset`, `sam-validate`, `sam-deploy`, `cdk-synth`, `cdk-diff`, `cdk-deploy` | Detects SAM (`template.yaml`, `samconfig.toml`), CDK (`cdk.json`), or plain CloudFormation. Every deploy shows a change set or diff first. |
+| `aws-observe` | no | `logs-groups`, `logs-tail`, `alarms`, `cost-month` | `logs-tail <group> [since]` is bounded (default 15 minutes, 500 lines); `cost-month` is month-to-date cost by service from Cost Explorer. |
+| `aws-integration` | no | `sqs-queues`, `sqs-depth`, `sns-topics`, `secrets-list`, `ssm-params`, `route53-zones`, `iam-whoami-policies` | Secret and parameter commands list names only. `iam-whoami-policies` shows the policies attached to the caller. |
+
+**Azure** (`DefaultAzureSkills.cs`, `requiresTools: [az]`; `azure-apps` also uses `azd` when `azure.yaml` exists):
+
+| Id | Mut. | Commands | Notes |
+|---|:---:|---|---|
+| `azure-whoami` | no | `account`, `subscriptions` | Active subscription, tenant, and user. |
+| `azure-resources` | no | `groups`, `list`, `show` | `list [group]` across resource types. |
+| `azure-compute` | yes | `vm-list`, `vm-start`, `vm-stop`, `vm-deallocate` | Behind the production guard. |
+| `azure-containers` | yes | `aks-list`, `aks-credentials`, `acr-list`, `acr-login`, `containerapp-list`, `containerapp-logs`, `containerapp-update` | `aks-credentials` hands off to the Kubernetes skills. |
+| `azure-apps` | yes | `webapp-list`, `webapp-logs`, `webapp-deploy`, `functionapp-list`, `azd-preview`, `azd-deploy` | `azd-preview` is `azd provision --preview`; Bicep files get `az bicep build` validation. |
+| `azure-data` | no | `storage-accounts`, `blob-ls`, `sql-servers`, `cosmos-accounts` | Read-only. |
+
+**Google Cloud** (`DefaultGcpSkills.cs`, `requiresTools: [gcloud]`):
+
+| Id | Mut. | Commands | Notes |
+|---|:---:|---|---|
+| `gcp-whoami` | no | `account`, `project`, `config` | Active account, project, and region. |
+| `gcp-compute` | yes | `instances`, `start`, `stop` | Behind the production guard. |
+| `gcp-run` | yes | `run-services`, `run-logs`, `run-deploy`, `functions-list`, `appengine-versions` | `run-deploy` deploys a new revision with `--no-traffic` first and shifts traffic only with `promote`. |
+| `gcp-gke` | yes | `clusters`, `credentials` | Hands off to the Kubernetes skills. |
+| `gcp-storage` | yes | `buckets`, `ls`, `rsync` | `rsync` is dry-run first (`-n`) and never deletes. |
+| `gcp-data` | no | `sql-instances`, `firestore-indexes`, `bigquery-datasets`, `bigquery-dry-run` | `bigquery-dry-run <sql>` reports bytes scanned without running the query. |
+
+**Platform and smaller providers.** These are mostly one skill each, because their CLIs are compact:
+
+| Id | File | Gate | Commands | Notes |
+|---|---|---|---|---|
+| `do-whoami` | `DefaultDigitalOceanSkills.cs` | `requiresTools: [doctl]` | `account`, `balance` | |
+| `do-infra` | same | `[doctl]` | `droplets`, `kubernetes`, `databases`, `volumes`, `spaces` | Read-only; DOKS hands off to the Kubernetes skills. |
+| `do-apps` | same | `[doctl]`, `appliesTo: [.do/app.yaml]` | `list`, `spec-validate`, `deploy`, `logs` | App Platform. |
+| `rackspace` | `DefaultRackspaceSkills.cs` | `[openstack]` | `whoami`, `servers`, `spot-clusters` | Rackspace Cloud is OpenStack-based, so this wraps the 2.6 OpenStack skills with a Rackspace `clouds.yaml` profile; `spot-clusters` uses the Rackspace Spot CLI when installed and otherwise points to the Kubernetes skills with the downloaded kubeconfig. |
+| `vercel` | `DefaultEdgePlatformSkills.cs` | `[vercel]`, `appliesTo: [vercel.json, .vercel/**, next.config.*]` | `whoami`, `ls`, `deploy-preview`, `deploy-prod`, `logs`, `env-names` | `deploy-prod` is behind the guard; `env-names` never prints values. |
+| `netlify` | same | `[netlify]`, `appliesTo: [netlify.toml, .netlify/**]` | `status`, `deploy-draft`, `deploy-prod`, `logs`, `env-names` | |
+| `cloudflare` | same | `[wrangler]`, `appliesTo: [wrangler.toml, wrangler.json, wrangler.jsonc]` | `whoami`, `deploy-dry-run`, `deploy`, `tail`, `d1-list`, `kv-list`, `r2-list`, `pages-deploy` | `tail` is bounded by time and line count. |
+| `flyio` | same | `[flyctl]` or `[fly]`, `appliesTo: [fly.toml]` | `status`, `deploy`, `logs`, `scale-show`, `secrets-names`, `releases` | |
+| `alibaba-whoami` | `DefaultAlibabaSkills.cs` | `[aliyun]` | `profile`, `regions` | |
+| `alibaba-infra` | same | `[aliyun]` | `ecs-instances`, `oss-ls`, `ack-clusters`, `rds-instances`, `fc-functions` | Read-only; OSS through `ossutil` when installed. |
+| `huawei-whoami` | `DefaultHuaweiSkills.cs` | `[hcloud]` | `profile`, `regions` | |
+| `huawei-infra` | same | `[hcloud]` | `ecs-servers`, `obs-ls`, `cce-clusters`, `rds-instances` | Read-only. |
+| `ibm-whoami` | `DefaultIbmCloudSkills.cs` | `[ibmcloud]` | `target`, `account` | |
+| `ibm-infra` | same | `[ibmcloud]` | `vpc-instances`, `ks-clusters`, `code-engine-apps`, `cos-buckets`, `code-engine-deploy` | Deploy behind the guard. |
+| `linode-whoami` | `DefaultLinodeSkills.cs` | `[linode-cli]` | `profile`, `account` | Linode is now Akamai Connected Cloud; the CLI is unchanged. |
+| `linode-infra` | same | `[linode-cli]` | `instances`, `lke-clusters`, `object-storage`, `volumes` | Read-only; LKE hands off to the Kubernetes skills. |
+
+**Cross-cloud infrastructure as code** (`DefaultIacSkills.cs`):
+
+| Id | Mut. | Gate | Commands | Notes |
+|---|:---:|---|---|---|
+| `terraform` | yes | `requiresTools: [terraform]` or `[tofu]`, `appliesTo: ["*.tf", "**/*.tf"]` | `fmt`, `validate`, `init`, `plan`, `apply`, `state-list`, `output` | Works with OpenTofu. `plan` writes a plan file; `apply` only applies a saved plan file, never a fresh one, and is behind the production guard (matched against the workspace name). No `destroy`. |
+| `pulumi` | yes | `requiresTools: [pulumi]`, `appliesTo: [Pulumi.yaml]` | `whoami`, `stack`, `preview`, `up`, `outputs` | `up` runs only after a `preview` in the same session and is behind the guard. |
+
+Together 2.6 and 2.7 add 50 skills (12 in 2.6, 38 in 2.7), almost all hidden unless the matching CLI or files are present.
+
+- [ ] Harness: `requiresTools` (above) and `settings.skillProdPattern` (default `prod|production|live`, a case-insensitive regex) with the shared guard implemented once in a bundled `resources/guard.ps1` that each skill dot-sources.
+- [ ] Fixtures: fake CLIs (`aws`, `kubectl`, `helm`, `az`, `gcloud`, and so on) written as small scripts in a temp `PATH` that echo their arguments, so `CloudSkillsSuite` asserts the exact command each skill would run, that previews precede applies, that the production guard refuses without `--confirm`, that secret commands never request values, and that no command line contains `delete`, `destroy`, or `--delete`.
+- [ ] Live runs stay manual: there is no CI account for any provider, and none should be added for this.
+
+### 2.8 Go and Rust (row 21b)
 
 Not requested by name, but Go and Rust are each common enough that their absence would read as a hole next to C++ and Java. Each skill is small because the toolchains are already uniform.
 
 - [ ] `DefaultGoSkills.cs`, `appliesTo: [go.mod]`: `go-build` (`build`, `vet`), `go-test` (`all`, `filter`, `race`), `go-lint` (`check` with staticcheck or golangci-lint when installed), `go-mod` (`tidy`, `outdated`).
 - [ ] `DefaultRustSkills.cs`, `appliesTo: [Cargo.toml]`: `cargo-build` (`debug`, `release`), `cargo-test` (`all`, `filter`), `cargo-clippy` (`check`, `fix`), `cargo-fmt` (`apply`, `verify`).
-- [ ] `DefaultContainerSkills.cs`, `appliesTo: [Dockerfile, compose.yaml, docker-compose.yml]`: `docker-build` (`build`), `compose` (`up`, `down`, `ps`, `logs`), `dockerfile-lint` (`check` with hadolint when installed).
 
 ### Phase 2 tasks
 
-- [ ] Add the eight category classes above, one class per file.
+- [ ] Add the category classes above (2.0 through 2.8), one class per file.
 - [ ] Register them in `DefaultSkillLibrary.All()`.
-- [ ] Fixture repositories under `src/Test.Shared/Fixtures/projects/` (`node-npm`, `node-pnpm`, `python-uv`, `python-pip`, `react-vite`, `java-maven`, `java-gradle`, `cmake`, `go`, `rust`): manifests and lockfiles only, no dependencies installed.
+- [ ] Fixture repositories under `src/Test.Shared/Fixtures/projects/` (`node-npm`, `node-pnpm`, `python-uv`, `python-pip`, `react-vite`, `java-maven`, `java-gradle`, `cmake`, `go`, `rust`, `compose`, `helm-chart`, `kustomize`, `terraform`, `vercel`, `netlify`, `wrangler`, `fly`): manifests and lockfiles only, no dependencies installed.
 - [ ] `ToolchainDetectionSuite`: runs each skill's detection against each fixture with a `MUX_SKILL_DRY_RUN=1` environment variable, which every toolchain skill honors by printing the command it would run instead of running it. The suite asserts the printed command, so detection is tested on every platform without installing Node, Python, a JDK, or a compiler in CI.
 - [ ] `ToolchainLiveSuite`: opt-in (skipped unless `MUX_TEST_LIVE_TOOLCHAINS=1`), runs the real commands against fixtures where the toolchain is installed.
 - [ ] `appliesTo` cases: each fixture lists exactly its own family plus the ungated skills.
@@ -341,13 +451,26 @@ Backlog with no plan yet: output styles (row 31, mostly covered by prompt profil
 | `DefaultCppSkills` | 0 | 6 | 6 |
 | `DefaultGoSkills` | 0 | 4 | 4 |
 | `DefaultRustSkills` | 0 | 4 | 4 |
-| `DefaultContainerSkills` | 0 | 3 | 3 |
+| `DefaultContainerSkills` | 0 | 4 | 4 |
+| `DefaultKubernetesSkills` | 0 | 6 | 6 |
+| `DefaultOpenStackSkills` | 0 | 3 | 3 |
+| `DefaultAwsSkills` | 0 | 8 | 8 |
+| `DefaultAzureSkills` | 0 | 6 | 6 |
+| `DefaultGcpSkills` | 0 | 6 | 6 |
+| `DefaultDigitalOceanSkills` | 0 | 3 | 3 |
+| `DefaultRackspaceSkills` | 0 | 1 | 1 |
+| `DefaultEdgePlatformSkills` (Vercel, Netlify, Cloudflare, fly.io) | 0 | 4 | 4 |
+| `DefaultAlibabaSkills` | 0 | 2 | 2 |
+| `DefaultHuaweiSkills` | 0 | 2 | 2 |
+| `DefaultIbmCloudSkills` | 0 | 2 | 2 |
+| `DefaultLinodeSkills` | 0 | 2 | 2 |
+| `DefaultIacSkills` (Terraform, Pulumi) | 0 | 2 | 2 |
 | `DefaultReviewSkills` | 0 | 5 | 5 |
 | `DefaultAgentPlaybookSkills` | 0 | 4 | 4 |
 | `DefaultLoopSkills` | 0 | 4 | 4 |
-| **Total** | **46** | **59** | **105** |
+| **Total** | **46** | **106** | **152** |
 
-Existing users receive the new defaults on their next startup through `SeedNewInto`; nothing they have edited or deleted is touched. With relevance gating on, a typical single-language repository lists about 45 skills (the ungated ones plus its own family) instead of 105.
+Existing users receive the new defaults on their next startup through `SeedNewInto`; nothing they have edited or deleted is touched. With relevance gating on, a typical single-language repository lists about 45 skills (the ungated ones, its own family, and the cloud skills for CLIs actually installed) instead of 152.
 
 Two existing defaults deserve a second look while this work is open. `new-tool` and `new-touchstone-suite` scaffold mux's own `IToolExecutor` and Touchstone types, which only make sense inside the mux repository. Giving them `appliesTo: [src/Mux.Core/Mux.Core.csproj]` hides them everywhere else at no cost.
 
@@ -366,7 +489,7 @@ Two existing defaults deserve a second look while this work is open. `new-tool` 
 
 ## Testing summary
 
-Every phase adds Touchstone suites in `src/Test.Shared/Suites/` and registers them in `MuxSuites.cs`, so they run under `Test.Automated`, `Test.Xunit`, and `Test.Nunit` on net8.0 and net10.0. The CI step `mux skill validate` already gates the default library and will cover the 59 new skills with no change. Toolchain behavior is tested through dry-run detection on every platform and through live runs only where the toolchain is present, so CI does not need Node, Python, a JDK, CMake, Go, and Rust installed to stay green. The full build must be free of errors and warnings before each phase is marked done.
+Every phase adds Touchstone suites in `src/Test.Shared/Suites/` and registers them in `MuxSuites.cs`, so they run under `Test.Automated`, `Test.Xunit`, and `Test.Nunit` on net8.0 and net10.0. The CI step `mux skill validate` already gates the default library and will cover the 106 new skills with no change. Toolchain behavior is tested through dry-run detection on every platform and through live runs only where the toolchain is present, so CI does not need Node, Python, a JDK, CMake, Go, Rust, Docker, kubectl, or any cloud CLI installed to stay green. The full build must be free of errors and warnings before each phase is marked done.
 
 ## Order of work
 

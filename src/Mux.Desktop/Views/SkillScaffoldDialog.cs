@@ -72,7 +72,7 @@ namespace Mux.Desktop.Views
             form.Children.Add(Field(Localizer.T("skill.scaffold.description"), _Description, Localizer.T("skill.scaffold.description.tip")));
             form.Children.Add(Field(Localizer.T("skill.scaffold.interpreter"), _Interpreter, Localizer.T("skill.scaffold.interpreter.tip")));
             form.Children.Add(_Mutating.Tip(Localizer.T("skill.scaffold.mutating.tip")));
-            root.Children.Add(new ScrollViewer { Content = form });
+            root.Children.Add(new ScrollViewer { Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass }, Content = form });
             return root;
         }
 

@@ -101,7 +101,7 @@ namespace Mux.Desktop.Views
             form.Children.Add(Field(Localizer.T("subagent.form.allowedTools"), _AllowedTools, Localizer.T("subagent.form.allowedTools.tip")));
             form.Children.Add(Field(Localizer.T("subagent.form.maxIterations"), _MaxIterations, Localizer.T("subagent.form.maxIterations.tip")));
 
-            root.Children.Add(new ScrollViewer { Content = form });
+            root.Children.Add(new ScrollViewer { Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass }, Content = form });
             return root;
         }
 

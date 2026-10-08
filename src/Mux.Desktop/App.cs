@@ -15,6 +15,7 @@ namespace Mux.Desktop
     using Mux.Desktop.I18n;
     using Mux.Desktop.Services;
     using Mux.Desktop.Shell;
+    using Mux.Desktop.Styling;
     using Mux.Desktop.Views;
 
     /// <summary>
@@ -31,6 +32,7 @@ namespace Mux.Desktop
         private UsageTelemetry? _Telemetry;
         private SplashWindow? _Splash;
         private DispatcherTimer? _SplashTimer;
+        private MainWindow? _Main;
 
         /// <summary>
         /// Initialize application-level styles and the theme. The app uses the light variant for a clean,
@@ -38,8 +40,29 @@ namespace Mux.Desktop
         /// </summary>
         public override void Initialize()
         {
+            // The application name is what macOS shows in the menu bar and the app switcher; without it Avalonia
+            // reports "Avalonia Application".
+            Name = "mux";
+
             Styles.Add(new FluentTheme());
             RequestedThemeVariant = AppTheme.Current.IsDark ? ThemeVariant.Dark : ThemeVariant.Light;
+
+            // Mirror the palette into Fluent's control resources now and on every theme change, so inputs,
+            // buttons, and scroll bars match the app in light, dark, and high contrast.
+            MuxThemeStyles.Apply(this);
+            AppTheme.Changed += (sender, args) => MuxThemeStyles.Apply(this);
+
+            // The macOS application menu (under "mux" in the menu bar) must be installed here, before Avalonia
+            // creates its default "About Avalonia" one. The main window does not exist yet, so the items resolve
+            // it when clicked.
+            if (OperatingSystem.IsMacOS())
+            {
+                NativeMenu appMenu = new NativeMenu();
+                appMenu.Items.Add(NativeMenuFactory.Item("About mux", () => _Main?.ShowAboutWindow()));
+                appMenu.Items.Add(new NativeMenuItemSeparator());
+                appMenu.Items.Add(NativeMenuFactory.Item("Settings…", () => _Main?.ShowSettingsWindow(), Avalonia.Input.Key.OemComma));
+                NativeMenu.SetMenu(this, appMenu);
+            }
         }
 
         /// <summary>
@@ -67,6 +90,7 @@ namespace Mux.Desktop
 
                 MainWindow main = new MainWindow(localization, threads, store, _Telemetry.Recorder, usageQuery, configDirectory);
                 desktop.MainWindow = main;
+                _Main = main;
 
                 // Closing the splash must not end the app; tie shutdown to the main window instead.
                 desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;

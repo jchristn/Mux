@@ -72,7 +72,7 @@ namespace Mux.Desktop.Views
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(6),
                 Padding = new Thickness(12),
-                Child = new ScrollViewer { MaxHeight = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = _Detail }
+                Child = new ScrollViewer { Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass }, MaxHeight = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = _Detail }
             });
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };

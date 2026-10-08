@@ -104,7 +104,7 @@ namespace Mux.Desktop.Views
             form.Children.Add(Row(Localizer.T("mcp.form.apiKeyHeader"), _ApiKeyHeader, Localizer.T("mcp.form.apiKeyHeader.tip")));
             form.Children.Add(Row(Localizer.T("mcp.form.apiKeyValue"), _ApiKeyValue, Localizer.T("mcp.form.apiKeyValue.tip")));
 
-            root.Children.Add(new ScrollViewer { Content = form, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto });
+            root.Children.Add(new ScrollViewer { Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass }, Content = form, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto });
             return root;
         }
 

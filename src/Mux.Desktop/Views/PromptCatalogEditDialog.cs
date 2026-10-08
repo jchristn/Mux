@@ -93,7 +93,7 @@ namespace Mux.Desktop.Views
 
             form.Children.Add(_Content);
 
-            root.Children.Add(new ScrollViewer { Content = form });
+            root.Children.Add(new ScrollViewer { Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass }, Content = form });
             return root;
         }
 

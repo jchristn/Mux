@@ -238,7 +238,7 @@ namespace Mux.Desktop.Views
                 Margin = new Thickness(0, 8, 0, 0)
             });
 
-            root.Children.Add(new ScrollViewer { Content = form, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+            root.Children.Add(new ScrollViewer { Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass }, Content = form, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
             return root;
         }
 

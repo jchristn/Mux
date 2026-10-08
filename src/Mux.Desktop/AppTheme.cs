@@ -1,15 +1,23 @@
 namespace Mux.Desktop
 {
+    using System;
     using Avalonia.Media;
 
     /// <summary>
-    /// The application color palette, anchored to the mux TUI's look (dark terminal surfaces with a green
-    /// accent) and offered in light and dark variants. A single <see cref="Current"/> instance is read by the
-    /// windows at build time; <see cref="Toggle"/> swaps it and the shell rebuilds against the new palette.
+    /// The application color palette: slate neutrals (shared with the Armada dashboard and Armada Harbor) with
+    /// the mux green accent, offered in light, dark, and high-contrast variants. A single <see cref="Current"/>
+    /// instance is read by the windows at build time, and <see cref="Styling.MuxThemeStyles"/> mirrors it into
+    /// the Fluent control resources. <see cref="Toggle"/>, <see cref="Set"/>, and <see cref="SetHighContrast"/>
+    /// swap it and raise <see cref="Changed"/>; the shell rebuilds against the new palette.
     /// Named <c>AppTheme</c> to avoid colliding with Avalonia's <c>StyledElement.Theme</c> property.
     /// </summary>
     public sealed class AppTheme
     {
+        /// <summary>
+        /// Raised after <see cref="Current"/> changes, on the thread that changed it.
+        /// </summary>
+        public static event EventHandler? Changed;
+
         /// <summary>Whether this is the dark variant.</summary>
         public bool IsDark { get; private set; }
 
@@ -27,6 +35,15 @@ namespace Mux.Desktop
 
         /// <summary>Muted/secondary text.</summary>
         public IBrush Muted { get; private set; } = Brushes.Gray;
+
+        /// <summary>Hover fill for rows, quiet buttons, and list items.</summary>
+        public IBrush Hover { get; private set; } = Brushes.WhiteSmoke;
+
+        /// <summary>Border of text inputs, combo boxes, and secondary buttons (a step stronger than <see cref="Border"/>).</summary>
+        public IBrush InputBorder { get; private set; } = Brushes.LightGray;
+
+        /// <summary>A soft tint of the accent, for selected rows and badges.</summary>
+        public IBrush AccentSoft { get; private set; } = Brushes.Honeydew;
 
         /// <summary>Subtle border/separator.</summary>
         public IBrush Border { get; private set; } = Brushes.LightGray;
@@ -62,6 +79,7 @@ namespace Mux.Desktop
         public static AppTheme Toggle()
         {
             Current = Current.IsDark ? CreateLight() : CreateDark();
+            Changed?.Invoke(null, EventArgs.Empty);
             return Current;
         }
 
@@ -73,6 +91,7 @@ namespace Mux.Desktop
         public static AppTheme Set(bool dark)
         {
             Current = dark ? CreateDark() : CreateLight();
+            Changed?.Invoke(null, EventArgs.Empty);
             return Current;
         }
 
@@ -83,6 +102,7 @@ namespace Mux.Desktop
         public static AppTheme SetHighContrast()
         {
             Current = CreateHighContrast();
+            Changed?.Invoke(null, EventArgs.Empty);
             return Current;
         }
 
@@ -102,7 +122,10 @@ namespace Mux.Desktop
                 Text = Solid("#ffffff"),
                 Muted = Solid("#e6e6e6"),
                 Border = Solid("#ffffff"),
+                Hover = Solid("#1f1f1f"),
+                InputBorder = Solid("#ffffff"),
                 Accent = Solid("#ffff00"),
+                AccentSoft = Solid("#333300"),
                 AccentButton = Solid("#ffff00"),
                 AccentText = Solid("#000000"),
                 UserBubble = Solid("#1a1a1a"),
@@ -118,21 +141,25 @@ namespace Mux.Desktop
         /// <returns>The dark palette.</returns>
         public static AppTheme CreateDark()
         {
+            // Slate dark (Armada dashboard): page #080d1a, card #111827, hover #1e293b, text #f1f5f9.
             return new AppTheme
             {
                 IsDark = true,
-                Surface = Solid("#0d1117"),
-                SurfaceAlt = Solid("#161b22"),
-                Text = Solid("#e6edf3"),
-                Muted = Solid("#8b949e"),
-                Border = Solid("#30363d"),
-                Accent = Solid("#3fb950"),
-                AccentButton = Solid("#238636"),
+                Surface = Solid("#080d1a"),
+                SurfaceAlt = Solid("#111827"),
+                Text = Solid("#f1f5f9"),
+                Muted = Solid("#94a3b8"),
+                Border = Solid("#1e293b"),
+                Hover = Solid("#1e293b"),
+                InputBorder = Solid("#334155"),
+                Accent = Solid("#4ade80"),
+                AccentSoft = Solid("#052e16"),
+                AccentButton = Solid("#16a34a"),
                 AccentText = Solid("#ffffff"),
-                UserBubble = Solid("#1c2333"),
-                AssistantBubble = Solid("#161b22"),
-                Error = Solid("#f85149"),
-                Success = Solid("#3fb950")
+                UserBubble = Solid("#172033"),
+                AssistantBubble = Solid("#111827"),
+                Error = Solid("#f87171"),
+                Success = Solid("#22c55e")
             };
         }
 
@@ -142,21 +169,25 @@ namespace Mux.Desktop
         /// <returns>The light palette.</returns>
         public static AppTheme CreateLight()
         {
+            // Slate light (Armada dashboard): page #f8fafc, card #ffffff, hover #f1f5f9, text #1e293b.
             return new AppTheme
             {
                 IsDark = false,
-                Surface = Solid("#ffffff"),
-                SurfaceAlt = Solid("#f6f8fa"),
-                Text = Solid("#1f2328"),
-                Muted = Solid("#59636e"),
-                Border = Solid("#e2e6ea"),
-                Accent = Solid("#2da44e"),
-                AccentButton = Solid("#2c974b"),
+                Surface = Solid("#f8fafc"),
+                SurfaceAlt = Solid("#ffffff"),
+                Text = Solid("#1e293b"),
+                Muted = Solid("#5b6b80"),
+                Border = Solid("#e2e8f0"),
+                Hover = Solid("#f1f5f9"),
+                InputBorder = Solid("#cbd5e1"),
+                Accent = Solid("#15803d"),
+                AccentSoft = Solid("#dcfce7"),
+                AccentButton = Solid("#16a34a"),
                 AccentText = Solid("#ffffff"),
-                UserBubble = Solid("#eef4ff"),
-                AssistantBubble = Solid("#f6f8fa"),
-                Error = Solid("#cf222e"),
-                Success = Solid("#2da44e")
+                UserBubble = Solid("#eef2f7"),
+                AssistantBubble = Solid("#ffffff"),
+                Error = Solid("#c81e1e"),
+                Success = Solid("#15803d")
             };
         }
 

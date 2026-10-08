@@ -63,6 +63,7 @@ namespace Mux.Desktop.Views
 
             ScrollViewer scroll = new ScrollViewer
             {
+                Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass },
                 Content = _Body,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto

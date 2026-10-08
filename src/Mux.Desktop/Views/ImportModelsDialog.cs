@@ -80,7 +80,7 @@ namespace Mux.Desktop.Views
             DockPanel.SetDock(buttons, Dock.Bottom);
             root.Children.Add(buttons);
 
-            root.Children.Add(new ScrollViewer { Content = _List, Margin = new Thickness(0, 12, 0, 0) });
+            root.Children.Add(new ScrollViewer { Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass }, Content = _List, Margin = new Thickness(0, 12, 0, 0) });
             return root;
         }
 

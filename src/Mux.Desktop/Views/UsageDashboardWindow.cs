@@ -137,7 +137,7 @@ namespace Mux.Desktop.Views
             BuildEventsHeader(theme);
             AddRow(grid, 6, new Border { BorderBrush = theme.Border, BorderThickness = new Thickness(0, 0, 0, 1), Child = _EventsHeader });
 
-            ScrollViewer scroll = new ScrollViewer { Content = _EventsList, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
+            ScrollViewer scroll = new ScrollViewer { Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass }, Content = _EventsList, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
             AddRow(grid, 7, scroll);
 
             return grid;

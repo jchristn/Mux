@@ -91,7 +91,7 @@ namespace Mux.Desktop.Views
             form.Children.Add(Field(Localizer.T("prompt.toolsDisabled"), _ToolsDisabled, Localizer.T("prompt.toolsDisabled.tip")));
             form.Children.Add(Field(Localizer.T("prompt.compaction"), _Compaction, Localizer.T("prompt.compaction.tip")));
 
-            root.Children.Add(new ScrollViewer { Content = form });
+            root.Children.Add(new ScrollViewer { Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass }, Content = form });
             return root;
         }
 

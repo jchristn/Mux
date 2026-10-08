@@ -186,6 +186,7 @@ namespace Mux.Desktop.Views
 
             ScrollViewer scroller = new ScrollViewer
             {
+                Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass },
                 Content = body,
                 HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
                 VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto

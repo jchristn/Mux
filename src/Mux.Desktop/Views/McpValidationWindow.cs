@@ -49,7 +49,7 @@ namespace Mux.Desktop.Views
             root.Children.Add(title);
 
             _Body.Margin = new Thickness(0, 14, 0, 0);
-            root.Children.Add(new ScrollViewer { Content = _Body });
+            root.Children.Add(new ScrollViewer { Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass }, Content = _Body });
             Content = root;
 
             _Body.Children.Add(new TextBlock { Text = Localizer.T("mcpVal.connecting"), Foreground = theme.Muted });

@@ -217,6 +217,12 @@ namespace Mux.Desktop.Shell
             Content = BuildLayout();
             PopulateModelPicker();
 
+            // macOS shows a global menu bar; give it real menus instead of Avalonia's empty default.
+            if (OperatingSystem.IsMacOS())
+            {
+                InstallNativeMenus();
+            }
+
             // Start the MCP + skills runtimes so the desktop model can call MCP tools and use skills (TUI
             // parity); the runner reads their live state per turn. Done after the layout so connection notices
             // can be written into the transcript.
@@ -664,7 +670,7 @@ namespace Mux.Desktop.Shell
             // selection highlighting match, rather than a ListBox's distinct item chrome.
             _ThreadListPanel = new StackPanel { Spacing = 1, Margin = new Thickness(0, 4, 0, 0) };
             _ = LoadThreadsAsync();
-            return new ScrollViewer { Content = _ThreadListPanel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+            return new ScrollViewer { Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass }, Content = _ThreadListPanel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         }
 
         private Button ConversationButton(ThreadSummary item)
@@ -1184,6 +1190,72 @@ namespace Mux.Desktop.Shell
 
                 PopulateModelPicker();
             }
+        }
+
+        /// <summary>
+        /// Opens the About window. Used by the macOS application menu.
+        /// </summary>
+        public void ShowAboutWindow()
+        {
+            OpenAboutWindow();
+        }
+
+        /// <summary>
+        /// Opens the Settings window. Used by the macOS application menu.
+        /// </summary>
+        public void ShowSettingsWindow()
+        {
+            OpenSettingsWindow();
+        }
+
+        // The macOS menu bar for this window: File, Edit, View, Configure, Tools, and Help menus that call the
+        // same actions as the header buttons and slash commands. The application menu (About, Settings) is set
+        // by App during startup, which is when macOS reads it.
+        private void InstallNativeMenus()
+        {
+            NativeMenu bar = new NativeMenu();
+            bar.Items.Add(NativeMenuFactory.Submenu("File",
+                NativeMenuFactory.Item("New Conversation", () => _ = NewChatAsync(), Key.N),
+                NativeMenuFactory.Item("Command Palette…", OpenCommandPalette, Key.K),
+                null,
+                NativeMenuFactory.Item("Delete Conversations…", () => _ = OpenBulkDeleteAsync()),
+                null,
+                NativeMenuFactory.Item("Close Window", Close)));
+            bar.Items.Add(NativeMenuFactory.Submenu("Edit",
+                NativeMenuFactory.Item("Undo Last Turn", () => _ = UndoLastTurnAsync()),
+                NativeMenuFactory.Item("Redo Turn", () => _ = RedoLastUndoAsync()),
+                null,
+                NativeMenuFactory.Item("Compact Conversation", () => _ = CompactCurrentAsync())));
+            bar.Items.Add(NativeMenuFactory.Submenu("View",
+                NativeMenuFactory.Item("Toggle Sidebar", ToggleSidebarCollapse, Key.B),
+                null,
+                NativeMenuFactory.Submenu("Theme",
+                    NativeMenuFactory.Item("System", () => SetThemeMode("system")),
+                    NativeMenuFactory.Item("Light", () => SetThemeMode("light")),
+                    NativeMenuFactory.Item("Dark", () => SetThemeMode("dark")),
+                    NativeMenuFactory.Item("High Contrast", () => SetThemeMode("highcontrast"))),
+                null,
+                NativeMenuFactory.Item("Context and Stats", () => _ = ShowStatsAsync()),
+                NativeMenuFactory.Item("Project Instructions", ShowProjectInstructions)));
+            bar.Items.Add(NativeMenuFactory.Submenu("Configure",
+                NativeMenuFactory.Item("Endpoints…", OpenEndpointsWindow),
+                NativeMenuFactory.Item("MCP Servers…", OpenMcpServersWindow),
+                NativeMenuFactory.Item("Prompts…", OpenPromptsWindow),
+                NativeMenuFactory.Item("Skills…", OpenSkillsWindow),
+                NativeMenuFactory.Item("Subagents…", OpenSubagentsWindow),
+                NativeMenuFactory.Item("Plugins and Hooks…", OpenPluginsWindow),
+                NativeMenuFactory.Item("Web Search Providers…", OpenSearchProvidersWindow),
+                NativeMenuFactory.Item("Pricing…", OpenPricingWindow),
+                null,
+                NativeMenuFactory.Item("Setup Wizard…", OpenSetupWizard),
+                NativeMenuFactory.Item("Settings…", OpenSettingsWindow)));
+            bar.Items.Add(NativeMenuFactory.Submenu("Tools",
+                NativeMenuFactory.Item("Usage Dashboard", OpenUsageWindow, Key.U, shift: true),
+                NativeMenuFactory.Item("Local Server…", OpenLocalServerWindow)));
+            bar.Items.Add(NativeMenuFactory.Submenu("Help",
+                NativeMenuFactory.Item("Commands", ShowHelpMenu),
+                NativeMenuFactory.Item("About mux", OpenAboutWindow)));
+            NativeMenu.SetMenu(this, bar);
         }
 
         private void OpenAboutWindow()
@@ -1766,7 +1838,7 @@ namespace Mux.Desktop.Shell
 
             // The scroll shows the active tab's transcript once a thread opens; until then, the empty default.
             _DefaultTranscript.Children.Clear();
-            _TranscriptScroll = new ScrollViewer { HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Content = _DefaultTranscript };
+            _TranscriptScroll = new ScrollViewer { Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass }, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Content = _DefaultTranscript };
 
             Grid area = new Grid();
             area.Children.Add(_TranscriptScroll);
