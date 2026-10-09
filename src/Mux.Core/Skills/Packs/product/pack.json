@@ -1,0 +1,8 @@
+{
+  "id": "product",
+  "title": "Product",
+  "description": "Product discovery, strategy, analytics, roadmaps, and design playbooks.",
+  "category": "product",
+  "source": "https://github.com/alirezarezvani/claude-skills@19392f7",
+  "license": "MIT"
+}

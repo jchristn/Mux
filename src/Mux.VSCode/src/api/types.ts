@@ -183,6 +183,26 @@ export interface SkillSummary {
     Mutating: boolean;
     Commands: number;
     Errors: string[];
+    /** The effective category (override, then SKILL.md, then inferred). */
+    Category?: string;
+    /** Whether Category is a per-user override from skills.json. */
+    CategoryOverridden?: boolean;
+    /** The category written in SKILL.md, or empty. */
+    FileCategory?: string;
+}
+
+/** One category in use and how many skills it has (GET /v1.0/api/skills/categories). */
+export interface SkillCategoryCount {
+    Category: string;
+    Count: number;
+    Known: boolean;
+}
+
+/** The categories in use and the canonical ones (GET /v1.0/api/skills/categories). */
+export interface SkillCategories {
+    Items: SkillCategoryCount[];
+    Count: number;
+    Known: string[];
 }
 
 /** The masked REST sub-settings. */

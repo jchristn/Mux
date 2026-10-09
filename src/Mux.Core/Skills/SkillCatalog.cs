@@ -146,7 +146,9 @@ namespace Mux.Core.Skills
                     ShadowsUserSkill = skill.ShadowsUserSkill,
                     UserInvocable = skill.Manifest.UserInvocable,
                     ArgumentHint = skill.Manifest.ArgumentHint,
-                    Warnings = new List<string>(skill.Validation.Warnings)
+                    Warnings = new List<string>(skill.Validation.Warnings),
+                    Category = skill.Category,
+                    CategoryOverridden = skill.CategoryOverride != null
                 });
             }
 

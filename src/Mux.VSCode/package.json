@@ -286,6 +286,11 @@
         "category": "mux"
       },
       {
+        "command": "mux.manage.setSkillCategory",
+        "title": "%cmd.manage.setSkillCategory%",
+        "category": "mux"
+      },
+      {
         "command": "mux.manage.addSkill",
         "title": "%cmd.manage.addSkill%",
         "category": "mux",
@@ -470,6 +475,11 @@
           "command": "mux.manage.toggleSkill",
           "when": "view == mux.manage && viewItem == skill",
           "group": "1@1"
+        },
+        {
+          "command": "mux.manage.setSkillCategory",
+          "when": "view == mux.manage && viewItem == skill",
+          "group": "1@2"
         },
         {
           "command": "mux.manage.editSkill",

@@ -64,6 +64,20 @@ namespace Mux.Cli.Commands
         [Description("Override the active config directory.")]
         [CommandOption("--config-dir")]
         public string? ConfigDir { get; set; }
+
+        /// <summary>
+        /// For list: show only skills in this category.
+        /// </summary>
+        [Description("For list: show only skills in this category.")]
+        [CommandOption("--category")]
+        public string? Category { get; set; }
+
+        /// <summary>
+        /// For category: clear the override so the skill uses its SKILL.md category again.
+        /// </summary>
+        [Description("For category: clear the override.")]
+        [CommandOption("--clear")]
+        public bool Clear { get; set; }
     }
 
     /// <summary>
@@ -98,7 +112,11 @@ namespace Mux.Cli.Commands
                 switch (action)
                 {
                     case "list":
-                        return HandleList(skillsDirectory, json);
+                        return HandleList(skillsDirectory, json, settings.Category);
+                    case "category":
+                        return HandleCategory(skillsDirectory, settings.Name, settings.Command, settings.Clear, json);
+                    case "categories":
+                        return HandleCategories(skillsDirectory, json);
                     case "show":
                         return HandleShow(skillsDirectory, settings.Name, json);
                     case "validate":
@@ -112,7 +130,7 @@ namespace Mux.Cli.Commands
                     case "trust":
                         return HandleTrust(settings.Name, settings.WorkingDirectory, json);
                     default:
-                        Console.Error.WriteLine("Usage: mux skill list|show <name>|validate [name]|run <name> <command>|new <name>|add <path>|trust [all|playbooks|ignore|reset] [--cwd dir]");
+                        Console.Error.WriteLine("Usage: mux skill list [--category <c>]|show <name>|validate [name]|run <name> <command>|new <name>|add <path>|category <name> [<category>|--clear]|categories|trust [all|playbooks|ignore|reset] [--cwd dir]");
                         return 1;
                 }
             }
@@ -153,10 +171,101 @@ namespace Mux.Cli.Commands
             return 0;
         }
 
-        private static int HandleList(string skillsDirectory, bool json)
+        private static int HandleCategory(string skillsDirectory, string? name, string? category, bool clear, bool json)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                Console.Error.WriteLine("Usage: mux skill category <name> [<category>|--clear]");
+                return 1;
+            }
+
+            if (clear && !string.IsNullOrWhiteSpace(category))
+            {
+                Console.Error.WriteLine("Pass a category or --clear, not both.");
+                return 1;
+            }
+
+            string path = Path.Combine(skillsDirectory, name);
+            if (!SkillManager.IsValidId(name) || !File.Exists(Path.Combine(path, "SKILL.md")))
+            {
+                Console.Error.WriteLine($"No skill named '{name}' in {skillsDirectory}.");
+                return 1;
+            }
+
+            SkillManager manager = new SkillManager(skillsDirectory);
+            if (clear || !string.IsNullOrWhiteSpace(category))
+            {
+                if (!SkillCategories.TryParse(category, out string? _, out string error))
+                {
+                    Console.Error.WriteLine(error);
+                    return 1;
+                }
+
+                manager.SetCategory(name, clear ? null : category);
+            }
+
+            Skill skill = new SkillLoader(skillsDirectory).Load(path);
+            skill.CategoryOverride = manager.GetCategoryOverride(name);
+            if (json)
+            {
+                Console.WriteLine(StructuredOutputFormatter.FormatObject(new
+                {
+                    success = true,
+                    name = skill.Manifest.Name,
+                    category = skill.Category,
+                    fileCategory = skill.Manifest.Category,
+                    overridden = skill.CategoryOverride != null
+                }));
+            }
+            else
+            {
+                Console.WriteLine($"{skill.Manifest.Name}: {skill.Category}" + (skill.CategoryOverride != null ? " (override; SKILL.md says " + (skill.Manifest.Category.Length > 0 ? skill.Manifest.Category : "nothing") + ")" : string.Empty));
+            }
+
+            return 0;
+        }
+
+        private static int HandleCategories(string skillsDirectory, bool json)
         {
             IReadOnlyList<Skill> skills = new SkillLoader(skillsDirectory).Discover();
+            SkillCategories.ApplyOverrides(skills);
+            List<SkillCategoryCount> counts = SkillCategories.Count(skills);
+            if (json)
+            {
+                List<object> rows = new List<object>();
+                foreach (SkillCategoryCount count in counts)
+                {
+                    rows.Add(new { category = count.Category, count = count.Count, known = count.Known });
+                }
+
+                Console.WriteLine(StructuredOutputFormatter.FormatObject(new { success = true, categories = rows, known = SkillCategories.Known }));
+                return 0;
+            }
+
+            if (counts.Count == 0)
+            {
+                Console.WriteLine("No skills in " + skillsDirectory);
+                return 0;
+            }
+
+            foreach (SkillCategoryCount count in counts)
+            {
+                Console.WriteLine($"{count.Category}\t{count.Count}");
+            }
+
+            return 0;
+        }
+
+        private static int HandleList(string skillsDirectory, bool json, string? categoryFilter)
+        {
+            List<Skill> skills = new List<Skill>(new SkillLoader(skillsDirectory).Discover());
             Dictionary<string, bool> enabled = LoadEnabledMap();
+            SkillCategories.ApplyOverrides(skills);
+            if (!string.IsNullOrWhiteSpace(categoryFilter))
+            {
+                string wanted = SkillCategories.Normalize(categoryFilter) ?? string.Empty;
+                skills = skills.FindAll(s => string.Equals(s.Category, wanted, StringComparison.Ordinal));
+            }
 
             if (json)
             {
@@ -168,6 +277,8 @@ namespace Mux.Cli.Commands
                         name = skill.Manifest.Name,
                         valid = skill.IsValid,
                         enabled = IsEnabled(enabled, skill),
+                        category = skill.Category,
+                        categoryOverridden = skill.CategoryOverride != null,
                         commands = skill.Manifest.Commands.Count,
                         tags = skill.Manifest.Tags
                     });
@@ -186,7 +297,7 @@ namespace Mux.Cli.Commands
             foreach (Skill skill in skills)
             {
                 string state = !skill.IsValid ? "invalid" : (IsEnabled(enabled, skill) ? "enabled" : "disabled");
-                Console.WriteLine($"{skill.Manifest.Name}\t{state}\t{skill.Manifest.Commands.Count} cmd\t{skill.Manifest.Description}");
+                Console.WriteLine($"{skill.Manifest.Name}\t{state}\t{skill.Category}\t{skill.Manifest.Commands.Count} cmd\t{skill.Manifest.Description}");
             }
 
             return 0;
@@ -201,6 +312,7 @@ namespace Mux.Cli.Commands
             }
 
             Skill skill = new SkillLoader(skillsDirectory).Load(Path.Combine(skillsDirectory, name));
+            skill.CategoryOverride = new SkillManager(skillsDirectory).GetCategoryOverride(name);
 
             if (json)
             {
@@ -217,11 +329,17 @@ namespace Mux.Cli.Commands
                     title = skill.Manifest.Title,
                     description = skill.Manifest.Description,
                     version = skill.Manifest.Version,
+                    category = skill.Category,
+                    categoryOverridden = skill.CategoryOverride != null,
                     mutating = skill.Manifest.Mutating,
+                    source = skill.Manifest.Source,
+                    license = skill.Manifest.License,
                     valid = skill.IsValid,
                     errors = skill.Validation.Errors,
                     commands,
-                    body = skill.Body
+                    directory = SkillPathResolver.NormalizeFolder(skill.DirectoryPath),
+                    files = SkillPathResolver.ListFiles(skill.DirectoryPath, out _),
+                    body = SkillPathResolver.Substitute(skill.Body, skill.DirectoryPath)
                 }));
                 return skill.IsValid ? 0 : 1;
             }
@@ -230,8 +348,18 @@ namespace Mux.Cli.Commands
             Console.WriteLine($"Title:       {skill.Manifest.Title}");
             Console.WriteLine($"Description: {skill.Manifest.Description}");
             Console.WriteLine($"Version:     {skill.Manifest.Version}");
+            Console.WriteLine($"Category:    {skill.Category}" + (skill.CategoryOverride != null ? " (override)" : string.Empty));
             Console.WriteLine($"Mutating:    {skill.Manifest.Mutating}");
+            if (skill.Manifest.Source.Length > 0) Console.WriteLine($"Source:      {skill.Manifest.Source}");
+            if (skill.Manifest.License.Length > 0) Console.WriteLine($"License:     {skill.Manifest.License}");
             Console.WriteLine($"Valid:       {skill.IsValid}");
+            Console.WriteLine($"Directory:   {SkillPathResolver.NormalizeFolder(skill.DirectoryPath)}");
+            List<string> bundledFiles = SkillPathResolver.ListFiles(skill.DirectoryPath, out bool filesTruncated);
+            if (bundledFiles.Count > 0)
+            {
+                Console.WriteLine("Files:       " + string.Join(", ", bundledFiles) + (filesTruncated ? ", ..." : string.Empty));
+            }
+
             if (!skill.IsValid)
             {
                 foreach (string error in skill.Validation.Errors)
@@ -244,6 +372,13 @@ namespace Mux.Cli.Commands
             foreach (SkillCommandModel command in skill.Manifest.Commands)
             {
                 Console.WriteLine($"  {command.Name} ({command.Interpreter}) — {command.Description}");
+            }
+
+            string shownBody = SkillPathResolver.Substitute(skill.Body, skill.DirectoryPath).Trim();
+            if (shownBody.Length > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine(shownBody);
             }
 
             return skill.IsValid ? 0 : 1;

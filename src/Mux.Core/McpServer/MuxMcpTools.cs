@@ -125,8 +125,16 @@ namespace Mux.Core.McpServer
                 new { type = "object", properties = new { } },
                 ListEndpointsAsync);
 
-            register("list_skills", "List the mux skills available in a working directory.",
-                new { type = "object", properties = new { working_directory = new { type = "string", description = "Optional working directory (project skills are included when trusted)." } } },
+            register("list_skills", "List the mux skills available in a working directory, with each skill's category. Pass category to list only one category.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        working_directory = new { type = "string", description = "Optional working directory (project skills are included when trusted)." },
+                        category = new { type = "string", description = "Optional category filter, for example review, testing, or cloud." }
+                    }
+                },
                 ListSkillsAsync);
 
             if (_Options.AllowSkills)
@@ -390,22 +398,35 @@ namespace Mux.Core.McpServer
 
             using JsonDocument doc = Parse(args);
             string directory = ResolveDirectory(OptionalString(doc.RootElement, "working_directory"));
+            string? categoryFilter = OptionalString(doc.RootElement, "category");
+            string? wanted = categoryFilter == null ? null : SkillCategories.Normalize(categoryFilter);
+            if (categoryFilter != null && (wanted == null || !SkillCategories.IsValidFormat(wanted)))
+            {
+                throw new McpToolException("category must be a kebab-case category such as review, testing, or cloud.");
+            }
+
             List<object> rows = new List<object>();
             foreach (Skill skill in _Skills.GetInvocableSkills(directory))
             {
+                if (wanted != null && !string.Equals(skill.Category, wanted, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
                 List<string> commands = new List<string>();
                 foreach (SkillCommand command in skill.Manifest.Commands) commands.Add(command.Name);
                 rows.Add(new
                 {
                     name = skill.Manifest.Name,
                     description = skill.Manifest.Description,
+                    category = skill.Category,
                     playbook = skill.Manifest.IsPlaybook,
                     scope = skill.Scope == SkillScopeEnum.Project ? "project" : "user",
                     commands
                 });
             }
 
-            return Task.FromResult<object>(Serialize(new { enabled = true, run_skill_allowed = _Options.AllowSkills, skills = rows }));
+            return Task.FromResult<object>(Serialize(new { enabled = true, run_skill_allowed = _Options.AllowSkills, category = wanted, skills = rows }));
         }
 
         private async Task<object> RunSkillAsync(RpcParameters? args, CancellationToken token)

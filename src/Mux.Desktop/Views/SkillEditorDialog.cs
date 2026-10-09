@@ -1,6 +1,7 @@
 namespace Mux.Desktop.Views
 {
     using System;
+    using System.Collections.Generic;
     using System.IO;
     using Avalonia;
     using Avalonia.Controls;
@@ -25,6 +26,11 @@ namespace Mux.Desktop.Views
             VerticalContentAlignment = VerticalAlignment.Top
         };
         private readonly TextBlock _Error = new TextBlock { Foreground = new SolidColorBrush(Color.Parse("#cf222e")), FontSize = 12, TextWrapping = TextWrapping.Wrap };
+        private readonly TextBox _Category = new TextBox { Width = 260 };
+        private readonly ComboBox _KnownCategories = new ComboBox { Width = 220 };
+        private readonly string _SkillName;
+        private readonly string _SkillsDirectory;
+        private readonly string? _OriginalOverride;
 
         /// <summary>
         /// Instantiate the skill editor.
@@ -35,6 +41,18 @@ namespace Mux.Desktop.Views
         public SkillEditorDialog(string skillMdPath, string skillName)
         {
             _Path = skillMdPath ?? throw new ArgumentNullException(nameof(skillMdPath));
+            _SkillName = skillName ?? string.Empty;
+            _SkillsDirectory = Path.GetDirectoryName(Path.GetDirectoryName(_Path) ?? string.Empty) ?? string.Empty;
+            _OriginalOverride = _SkillName.Length > 0 && _SkillsDirectory.Length > 0 ? new Mux.Core.Skills.SkillManager(_SkillsDirectory).GetCategoryOverride(_SkillName) : null;
+            _Category.Text = _OriginalOverride ?? string.Empty;
+            List<string> knownOptions = new List<string> { Localizer.T("skill.category.pick") };
+            knownOptions.AddRange(Mux.Core.Skills.SkillCategories.Known);
+            _KnownCategories.ItemsSource = knownOptions;
+            _KnownCategories.SelectedIndex = 0;
+            _KnownCategories.SelectionChanged += (object? sender, SelectionChangedEventArgs e) =>
+            {
+                if (_KnownCategories.SelectedIndex > 0 && _KnownCategories.SelectedItem is string picked) _Category.Text = picked;
+            };
 
             AppTheme theme = AppTheme.Current;
 
@@ -76,6 +94,15 @@ namespace Mux.Desktop.Views
             DockPanel.SetDock(header, Dock.Top);
             root.Children.Add(header);
 
+            // The category is a per-user override stored in skills.json (not in SKILL.md); blank uses the file's.
+            StackPanel categoryRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 10, 0, 0) };
+            categoryRow.Children.Add(new TextBlock { Text = Localizer.T("skill.category.label"), FontWeight = FontWeight.SemiBold, Foreground = theme.Text, VerticalAlignment = VerticalAlignment.Center });
+            categoryRow.Children.Add(_KnownCategories);
+            categoryRow.Children.Add(_Category);
+            categoryRow.Tip(Localizer.T("skill.category.help"));
+            DockPanel.SetDock(categoryRow, Dock.Top);
+            root.Children.Add(categoryRow);
+
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
             Button cancel = new Button { Content = Localizer.T("act.cancel") };
             cancel.Tip(Localizer.T("skill.editor.cancel.tip"));
@@ -105,9 +132,20 @@ namespace Mux.Desktop.Views
 
         private void Ok()
         {
+            string typed = (_Category.Text ?? string.Empty).Trim();
+            if (!Mux.Core.Skills.SkillCategories.TryParse(typed, out string? normalized, out string categoryError))
+            {
+                _Error.Text = categoryError;
+                return;
+            }
+
             try
             {
                 File.WriteAllText(_Path, _Editor.Text ?? string.Empty);
+                if (_SkillName.Length > 0 && _SkillsDirectory.Length > 0 && !string.Equals(normalized, _OriginalOverride, StringComparison.Ordinal))
+                {
+                    new Mux.Core.Skills.SkillManager(_SkillsDirectory).SetCategory(_SkillName, normalized);
+                }
             }
             catch (Exception exception)
             {

@@ -22,12 +22,17 @@ namespace Mux.Core.Tools
     {
         #region Private-Members
 
+        private static readonly SemaphoreSlim _StdioLaunchGate = new SemaphoreSlim(1, 1);
+
         private readonly Dictionary<string, IMcpClientConnection> _Clients = new Dictionary<string, IMcpClientConnection>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, string> _ToolToServer = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, List<ToolDefinition>> _ServerTools = new Dictionary<string, List<ToolDefinition>>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, McpConnectionResult> _Results = new Dictionary<string, McpConnectionResult>(StringComparer.OrdinalIgnoreCase);
         private readonly List<McpServerConfig> _Configs;
         private bool _Disposed = false;
+
+        // The most tools/list pages followed for one server.
+        private const int MaxToolListPages = 100;
 
         #endregion
 
@@ -54,9 +59,17 @@ namespace Mux.Core.Tools
         /// <returns>A task representing the asynchronous initialization operation.</returns>
         public async Task InitializeAsync(CancellationToken cancellationToken = default)
         {
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (McpServerConfig config in _Configs)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                // Server names must be unique (tool names are prefixed with them). A later definition with a name
+                // already used is ignored, so the first definition wins and no connection is leaked or replaced.
+                if (!seen.Add(config.Name ?? string.Empty))
+                {
+                    continue;
+                }
 
                 try
                 {
@@ -272,8 +285,9 @@ namespace Mux.Core.Tools
 
             if (_Clients.TryGetValue(name, out IMcpClientConnection? client))
             {
-                client.Shutdown();
-                client.Dispose();
+                // A server that already crashed can throw while shutting down; removal must still complete.
+                try { client.Shutdown(); } catch (Exception) { }
+                DisposeQuietly(client);
                 _Clients.Remove(name);
             }
 
@@ -420,17 +434,41 @@ namespace Mux.Core.Tools
             string listOutcome = MuxTelemetryNames.OutcomeSuccess;
             try
             {
-                JsonElement toolsResult = await client.CallAsync<JsonElement>("tools/list", null, 30000, cancellationToken).ConfigureAwait(false);
                 List<ToolDefinition> serverToolDefs = new List<ToolDefinition>();
 
-                if (toolsResult.TryGetProperty("tools", out JsonElement toolsArray) && toolsArray.ValueKind == JsonValueKind.Array)
+                // tools/list may be paginated: follow nextCursor until the server stops issuing one (bounded, so a
+                // server that always returns a cursor cannot loop forever).
+                string? cursor = null;
+                int pages = 0;
+                do
+                {
+                    object? listParams = cursor == null ? null : new { cursor };
+                    JsonElement toolsResult = await client.CallAsync<JsonElement>("tools/list", listParams, 30000, cancellationToken).ConfigureAwait(false);
+                    pages++;
+                    cursor = toolsResult.ValueKind == JsonValueKind.Object
+                        && toolsResult.TryGetProperty("nextCursor", out JsonElement next)
+                        && next.ValueKind == JsonValueKind.String
+                        && !string.IsNullOrEmpty(next.GetString())
+                        ? next.GetString()
+                        : null;
+
+                if (toolsResult.ValueKind == JsonValueKind.Object && toolsResult.TryGetProperty("tools", out JsonElement toolsArray) && toolsArray.ValueKind == JsonValueKind.Array)
                 {
                     foreach (JsonElement toolElement in toolsArray.EnumerateArray())
                     {
-                        string toolName = toolElement.GetProperty("name").GetString() ?? string.Empty;
+                        // Skip malformed entries (no string name) instead of dropping the server's whole tool list.
+                        if (toolElement.ValueKind != JsonValueKind.Object
+                            || !toolElement.TryGetProperty("name", out JsonElement nameElement)
+                            || nameElement.ValueKind != JsonValueKind.String
+                            || string.IsNullOrWhiteSpace(nameElement.GetString()))
+                        {
+                            continue;
+                        }
+
+                        string toolName = nameElement.GetString()!;
                         string toolDescription = string.Empty;
 
-                        if (toolElement.TryGetProperty("description", out JsonElement descElement))
+                        if (toolElement.TryGetProperty("description", out JsonElement descElement) && descElement.ValueKind == JsonValueKind.String)
                         {
                             toolDescription = descElement.GetString() ?? string.Empty;
                         }
@@ -453,6 +491,8 @@ namespace Mux.Core.Tools
                         _ToolToServer[prefixedName] = config.Name;
                     }
                 }
+                }
+                while (cursor != null && pages < MaxToolListPages);
 
                 _ServerTools[config.Name] = serverToolDefs;
                 MuxTelemetry.SetOk(listActivity);
@@ -534,26 +574,45 @@ namespace Mux.Core.Tools
 
         private async Task<IMcpClientConnection> ConnectStdioClientAsync(McpServerConfig config, CancellationToken cancellationToken)
         {
-            foreach (KeyValuePair<string, string> kvp in config.Env)
-            {
-                string expandedValue = SettingsLoader.ExpandEnvironmentVariables(kvp.Value);
-                Environment.SetEnvironmentVariable(kvp.Key, expandedValue);
-            }
-
             McpClient client = new McpClient();
             List<string> log = new List<string>();
             EventHandler<string> capture = (object? sender, string message) => { lock (log) { log.Add(message ?? string.Empty); } };
             client.Log += capture;
             bool launched;
+
+            // Voltaic's launcher inherits this process's environment and takes no per-server environment, so the
+            // server's env entries are set only for the launch and restored afterwards. Launches are serialized so one
+            // server's values never reach another server or linger in mux.
+            Dictionary<string, string?> previous = new Dictionary<string, string?>(StringComparer.Ordinal);
+            await _StdioLaunchGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                foreach (KeyValuePair<string, string> kvp in config.Env)
+                {
+                    if (!previous.ContainsKey(kvp.Key))
+                    {
+                        previous[kvp.Key] = Environment.GetEnvironmentVariable(kvp.Key);
+                    }
+
+                    Environment.SetEnvironmentVariable(kvp.Key, SettingsLoader.ExpandEnvironmentVariables(kvp.Value));
+                }
+
                 launched = await client.LaunchServerAsync(config.Command, config.Args.ToArray(), cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 client.Log -= capture;
-                client.Dispose();
+                DisposeQuietly(client);
                 throw McpConnectionDiagnostics.DiagnoseStdio(config, SnapshotLog(log), ex);
+            }
+            finally
+            {
+                foreach (KeyValuePair<string, string?> kvp in previous)
+                {
+                    Environment.SetEnvironmentVariable(kvp.Key, kvp.Value);
+                }
+
+                _StdioLaunchGate.Release();
             }
 
             if (!launched)
@@ -561,12 +620,25 @@ namespace Mux.Core.Tools
                 // Give the stderr reader a moment to deliver the server's last words before reporting.
                 await Task.Delay(150, CancellationToken.None).ConfigureAwait(false);
                 client.Log -= capture;
-                client.Dispose();
+                DisposeQuietly(client);
                 throw McpConnectionDiagnostics.DiagnoseStdio(config, SnapshotLog(log), null);
             }
 
             client.Log -= capture;
             return new StdioMcpClientConnection(client);
+        }
+
+        // Disposing a client whose server process already exited can throw (for example "Pipe is broken" while
+        // closing stdin); that must never replace the diagnosis of why the server failed.
+        private static void DisposeQuietly(IDisposable client)
+        {
+            try
+            {
+                client.Dispose();
+            }
+            catch (Exception)
+            {
+            }
         }
 
         private async Task<IMcpClientConnection> ConnectHttpClientAsync(McpServerConfig config, CancellationToken cancellationToken)
@@ -600,7 +672,7 @@ namespace Mux.Core.Tools
 
             if (!connected)
             {
-                client.Dispose();
+                DisposeQuietly(client);
                 cancellationToken.ThrowIfCancellationRequested();
 
                 // The client only reports failure; probe the server to say why (status, body, refused, DNS, TLS).

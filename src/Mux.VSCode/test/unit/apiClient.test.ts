@@ -182,3 +182,57 @@ test('validateMcpServer rejects when the server is unknown', async () => {
     const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
     await assert.rejects(() => client.validateMcpServer('nope'));
 });
+
+test('setSkillCategory puts the id and category and returns the updated skill', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    let capturedBody = '';
+    globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: string }) => {
+        capturedUrl = String(input);
+        capturedMethod = init?.method ?? 'GET';
+        capturedBody = init?.body ?? '';
+        return new Response(JSON.stringify({ Name: 'code-review', Title: 'Review', Description: 'd', Enabled: true, Valid: true, Mutating: false, Commands: 5, Errors: [], Category: 'testing', CategoryOverridden: true, FileCategory: 'review' }), { status: 200 });
+    }) as typeof fetch;
+
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
+    const updated = await client.setSkillCategory('code-review', 'testing');
+    assert.equal(capturedUrl, 'http://127.0.0.1:8710/v1.0/api/skills/category');
+    assert.equal(capturedMethod, 'PUT');
+    assert.deepEqual(JSON.parse(capturedBody), { Id: 'code-review', Category: 'testing' });
+    assert.equal(updated.Category, 'testing');
+    assert.equal(updated.CategoryOverridden, true);
+});
+
+test('setSkillCategory sends null to clear the override', async () => {
+    let capturedBody = '';
+    globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
+        capturedBody = init?.body ?? '';
+        return new Response(JSON.stringify({ Name: 'x', Category: 'review', CategoryOverridden: false }), { status: 200 });
+    }) as typeof fetch;
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
+    const updated = await client.setSkillCategory('x', null);
+    assert.deepEqual(JSON.parse(capturedBody), { Id: 'x', Category: null });
+    assert.equal(updated.CategoryOverridden, false);
+});
+
+test('setSkillCategory rejects a malformed category and an unknown skill', async () => {
+    globalThis.fetch = (async () => new Response('{"Error":"BadRequest","Message":"A category uses letters, digits, and single hyphens."}', { status: 400 })) as typeof fetch;
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
+    await assert.rejects(() => client.setSkillCategory('x', '!!!'));
+    globalThis.fetch = (async () => new Response('{"Error":"NotFound","Message":"No skill named nope."}', { status: 404 })) as typeof fetch;
+    await assert.rejects(() => client.setSkillCategory('nope', 'review'));
+});
+
+test('getSkillCategories reads counts and the canonical list', async () => {
+    let capturedUrl = '';
+    globalThis.fetch = (async (input: unknown) => {
+        capturedUrl = String(input);
+        return new Response(JSON.stringify({ Items: [{ Category: 'review', Count: 5, Known: true }, { Category: 'my-team', Count: 1, Known: false }], Count: 2, Known: ['git', 'review'] }), { status: 200 });
+    }) as typeof fetch;
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
+    const categories = await client.getSkillCategories();
+    assert.equal(capturedUrl, 'http://127.0.0.1:8710/v1.0/api/skills/categories');
+    assert.equal(categories.Count, 2);
+    assert.equal(categories.Items[1].Known, false);
+    assert.deepEqual(categories.Known, ['git', 'review']);
+});

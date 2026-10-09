@@ -1141,7 +1141,16 @@ mux skill run <name> <command> [--arg v ...] [--cwd dir]   # execute determinist
 mux skill new <name>                 # scaffold a skill
 mux skill add <path>                 # import from a directory
 mux skill trust [all|playbooks|ignore|reset] [--cwd dir]   # record or report project skill trust
+mux skill list --category review     # only the skills in one category (list shows a CATEGORY column)
+mux skill category <name> [<category>|--clear]   # print, set, or clear a skill's category override
+mux skill categories                 # categories in use with their skill counts
+mux skill pack list                  # opt-in skill packs with installed/total counts
+mux skill pack install <pack> [--skill <id>] [--force]   # install a pack or one skill from it
+mux skill pack remove <pack> [--skill <id>] [--force]    # remove what the pack installed (never your own skills)
+mux skill import <folder|git-url> [--pack <id>] [--dry-run] [--force]   # import Claude-format skills with normalization
 ```
+
+In the interactive shell, `/packs` lists the packs and opens a picker; `/packs show <pack>`, `/packs install <pack> [skill]`, and `/packs remove <pack> [skill]` work as typed commands, as does `/skills pack ...`. Skills can bundle `scripts/`, `references/`, and other files and refer to them as `${SKILL_DIR}/...`; see [SKILLS_AUTHORING.md](SKILLS_AUTHORING.md#folder-skills-and-skill_dir) for placeholders, packs, and the importer's rules.
 
 `mux skill run` returns the same `stdout`/`stderr`/`exit_code` contract the agent sees, so a Git hook or CI job can invoke a curated procedure with no model in the loop. The full authoring reference is in `SKILLS_AUTHORING.md`.
 
@@ -1172,6 +1181,17 @@ project ships blocked skills; decide with `/trust all`, `/trust playbooks`, `/tr
 Decisions are stored per repository root in `~/.mux/trusted-projects.json`. Headless runs use
 `mux skill trust <level> [--cwd dir]` to record a decision, or `--trust-project-skills` to trust the
 project for one run without recording anything.
+
+### Skill categories
+
+Every skill has a category (`review`, `testing`, `cloud`, and so on) from its `SKILL.md`, inferred from its tags,
+or `general`. The `/skills` inventory shows it on each row (`*` marks your own override), **▾ Filter by category…**
+narrows the list, and each skill's actions include **Set category…** (pick a canonical category, type your own, or
+clear the override). From the composer, `/skills category <name> <category>` sets one, `--clear` removes the
+override, `/skills filter <category>` opens the inventory filtered, and `/skills categories` lists the categories
+with counts. Overrides live in `skills.json`, so `SKILL.md` is never rewritten. The CLI, the web dashboard, the
+desktop app, VS Code, the REST API, and MCP `list_skills` show and edit the same value. See
+[SKILLS_AUTHORING.md](SKILLS_AUTHORING.md#categories).
 
 ### Which skills the model sees
 

@@ -153,6 +153,11 @@ namespace Mux.Core.Skills
                 commands.Add(new { name = command.Name, description = command.Description });
             }
 
+            // The skill's folder and the files it bundles, so instructions such as "run scripts/check.py" can be
+            // followed from any working directory. Placeholders such as ${SKILL_DIR} in the body resolve to it.
+            string directory = SkillPathResolver.NormalizeFolder(skill.DirectoryPath);
+            List<string> files = SkillPathResolver.ListFiles(skill.DirectoryPath, out bool filesTruncated);
+
             return new ToolResult
             {
                 ToolCallId = toolCallId,
@@ -169,7 +174,13 @@ namespace Mux.Core.Skills
                     argument_hint = skill.Manifest.ArgumentHint,
                     commands,
                     resources = ListResources(skill),
-                    body = skill.Body
+                    directory,
+                    files,
+                    files_truncated = filesTruncated,
+                    paths_note = files.Count > 0
+                        ? "Bundled files are relative to directory; run scripts and read references by their full path under directory (for example " + directory + "/" + files[0] + "), not from the project's working directory."
+                        : null,
+                    body = SkillPathResolver.Substitute(skill.Body, skill.DirectoryPath)
                 })
             };
         }
@@ -183,6 +194,7 @@ namespace Mux.Core.Skills
                 {
                     name = skill.Manifest.Name,
                     description = skill.Manifest.Description,
+                    category = skill.Category,
                     scope = skill.Scope == SkillScopeEnum.Project ? "project" : "user",
                     playbook = skill.Manifest.IsPlaybook,
                     commands = skill.Manifest.Commands.Count,

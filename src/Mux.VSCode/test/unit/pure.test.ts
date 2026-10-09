@@ -8,6 +8,7 @@ import { resolveLocale } from '../../src/i18n/locales';
 import { reviewFileInvocation } from '../../src/commands/skillInvocation';
 import { copyButtonHtml, escapeHtml } from '../../src/manage/formCopy';
 import { formatMcpValidation } from '../../src/manage/mcpValidation';
+import { groupSkillsByCategory, isValidSkillCategory, KNOWN_SKILL_CATEGORIES, normalizeSkillCategory } from '../../src/manage/skillCategories';
 
 test('ApiError derives a message from a JSON body', () => {
     const error = new ApiError(404, '{"error":"NotFound","message":"Unknown endpoint: nope"}');
@@ -103,4 +104,31 @@ test('formatMcpValidation lists the tools of a connected server', () => {
     assert.ok(text.includes('Connected (stdio, 40 ms)'));
     assert.ok(text.includes('Tools (2):\n  fs.read\n  fs.write'));
     assert.ok(!text.includes('Failed'));
+});
+
+test('groupSkillsByCategory orders canonical categories first, then others alphabetically', () => {
+    const groups = groupSkillsByCategory([
+        { Name: 'a', Category: 'zeta-team' },
+        { Name: 'b', Category: 'review' },
+        { Name: 'c', Category: 'git' },
+        { Name: 'd' },
+        { Name: 'e', Category: 'alpha-team' },
+        { Name: 'f', Category: 'review' },
+    ]);
+    assert.deepEqual(groups.map((g) => g.category), ['git', 'review', 'general', 'alpha-team', 'zeta-team']);
+    assert.deepEqual(groups[1].skills.map((s) => s.Name), ['b', 'f']);
+    assert.deepEqual(groupSkillsByCategory([]), []);
+});
+
+test('normalizeSkillCategory and isValidSkillCategory match the server rules', () => {
+    assert.equal(normalizeSkillCategory('  Code Review '), 'code-review');
+    assert.equal(normalizeSkillCategory('data_science'), 'data-science');
+    assert.equal(normalizeSkillCategory('a -- b'), 'a-b');
+    assert.equal(normalizeSkillCategory('   '), undefined);
+    assert.equal(normalizeSkillCategory(undefined), undefined);
+    assert.ok(isValidSkillCategory('code-review'));
+    assert.ok(!isValidSkillCategory('café'));
+    assert.ok(!isValidSkillCategory('a'.repeat(41)));
+    assert.equal(KNOWN_SKILL_CATEGORIES[0], 'git');
+    assert.ok(KNOWN_SKILL_CATEGORIES.includes('general'));
 });

@@ -325,6 +325,12 @@ CONFIG:
                         .GetResult());
                 }
 
+                if (args.Length > 1 && string.Equals(args[0], "skill", StringComparison.OrdinalIgnoreCase) && Mux.Cli.Commands.SkillPackCommand.Handles(args.Skip(1).ToArray()))
+                {
+                    string[] packArgs = args.Skip(1).ToArray();
+                    return RunWrapped(() => Mux.Cli.Commands.SkillPackCommand.Run(packArgs));
+                }
+
                 if (args.Length > 0 && string.Equals(args[0], "skill", StringComparison.OrdinalIgnoreCase))
                 {
                     string[] commandArgs = args.Skip(1).ToArray();

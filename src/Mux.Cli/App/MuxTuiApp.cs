@@ -86,6 +86,7 @@ namespace Mux.Cli.App
         private readonly Action<string>? _OnWorkingDirectoryChanged;
         private readonly McpRuntime? _McpRuntime;
         private readonly SkillRuntime? _SkillRuntime;
+        private Mux.Core.Skills.Packaging.SkillPackCatalog? _PackCatalog;
         private string _EndpointName;
         private string _Model;
         private string _EffortLabel = string.Empty;
@@ -120,6 +121,7 @@ namespace Mux.Cli.App
         private int _MentionTokenStart = -1;
         private int _MentionDismissedAt = -1;
         private readonly LoopScheduler? _Loops;
+        private string? _SkillCategoryFilter;
         private readonly Mux.Core.Processes.BackgroundProcessRegistry? _Processes;
         private readonly Mux.Core.Memory.MemoryStore? _Memory;
         private Timer? _LoopTimer;
@@ -329,7 +331,8 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.prompts", "Prompts", "ctrl+p", OpenPromptEditor, "Model", new[] { "prompts", "prompt", "system prompt" }));
             _Catalog.Add(new CommandDescriptor("mux.prompt-catalog", "Operational prompts", null, OpenPromptCatalog, "Model", new[] { "operational-prompts", "prompt-catalog", "catalog" }));
             _Catalog.Add(new CommandDescriptor("mux.mcp", "MCP servers", null, OpenMcpModal, "Model", new[] { "mcp", "mcp-servers", "mcpservers", "servers" }));
-            _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }));
+            _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }, HandleSkillsArgument));
+            _Catalog.Add(new CommandDescriptor("mux.packs", "Skill packs", null, OpenPacksModal, "Model", new[] { "packs", "skill-packs" }, HandlePacksArgument));
             _Catalog.Add(new CommandDescriptor("mux.trust", "Project skill trust", null, () => HandleTrustArgument(string.Empty), "Model", new[] { "trust" }, HandleTrustArgument));
             _Catalog.Add(new CommandDescriptor("mux.plan", "Plan mode", null, () => HandlePlanArgument(string.Empty), "Session", new[] { "plan" }, HandlePlanArgument));
             _Catalog.Add(new CommandDescriptor("mux.loop", "Repeat a prompt", null, () => HandleLoopArgument(string.Empty), "Session", new[] { "loop" }, HandleLoopArgument));
@@ -5199,6 +5202,11 @@ namespace Mux.Cli.App
             }
 
             List<SkillStatus> statuses = _SkillRuntime.GetStatus();
+            if (!string.IsNullOrEmpty(_SkillCategoryFilter))
+            {
+                statuses = statuses.FindAll(s => string.Equals(s.Category, _SkillCategoryFilter, StringComparison.Ordinal));
+            }
+
             List<string> options = new List<string>();
             List<SkillMenuAction> actions = new List<SkillMenuAction>();
 
@@ -5212,7 +5220,7 @@ namespace Mux.Cli.App
                 string glyph = !status.Valid ? "⚠" : (status.Enabled ? "●" : "○");
                 string tags = status.Tags.Count > 0 ? "  [" + string.Join(", ", status.Tags) + "]" : string.Empty;
                 string plural = status.CommandCount == 1 ? string.Empty : "s";
-                options.Add($"{glyph} {status.Title}  ({status.CommandCount} command{plural}){tags}{SlashCollisionNote(status.Name)}");
+                options.Add($"{glyph} {status.Title}  · {status.Category}{(status.CategoryOverridden ? "*" : string.Empty)}  ({status.CommandCount} command{plural}){tags}{SlashCollisionNote(status.Name)}");
                 actions.Add(SkillMenuAction.Manage);
             }
 
@@ -5250,16 +5258,30 @@ namespace Mux.Cli.App
                 actions.Add(SkillMenuAction.None);
             }
 
+            options.Add("▾ Filter by category…");
+            actions.Add(SkillMenuAction.Filter);
+            if (!string.IsNullOrEmpty(_SkillCategoryFilter))
+            {
+                options.Add("✕ Show every category");
+                actions.Add(SkillMenuAction.ClearFilter);
+            }
+
             options.Add("+ New skill…");
             actions.Add(SkillMenuAction.New);
             options.Add("⬇ Import skill…");
             actions.Add(SkillMenuAction.Import);
+            options.Add("▣ Skill packs…");
+            actions.Add(SkillMenuAction.Packs);
             options.Add("↻ Reload skills");
             actions.Add(SkillMenuAction.Reload);
 
             string title = statuses.Count == 0
                 ? "Skills — none yet"
                 : $"Skills — {statuses.Count} ({enabledCount} on, {invalidCount} invalid)";
+            if (!string.IsNullOrEmpty(_SkillCategoryFilter))
+            {
+                title += " · category " + _SkillCategoryFilter;
+            }
             SelectModal modal = new SelectModal(title, options);
             _App.Modals.Push(modal);
             _ = ResolveSkillsModalAsync(modal, statuses, actions);
@@ -5290,6 +5312,16 @@ namespace Mux.Cli.App
                     break;
                 case SkillMenuAction.Import:
                     await ImportSkillAsync().ConfigureAwait(false);
+                    break;
+                case SkillMenuAction.Filter:
+                    await PickSkillCategoryFilterAsync().ConfigureAwait(false);
+                    break;
+                case SkillMenuAction.ClearFilter:
+                    _SkillCategoryFilter = null;
+                    OpenSkillsModal();
+                    break;
+                case SkillMenuAction.Packs:
+                    OpenPacksModal();
                     break;
                 case SkillMenuAction.Reload:
                     _SkillRuntime?.RequestRefresh();
@@ -5883,7 +5915,8 @@ namespace Mux.Cli.App
                 "Edit",
                 status.Enabled ? "Disable" : "Enable",
                 "Duplicate",
-                "Remove"
+                "Remove",
+                "Set category… (now " + status.Category + (status.CategoryOverridden ? ", overridden" : string.Empty) + ")"
             };
 
             SelectModal pick = new SelectModal($"{status.Title} — action", actions);
@@ -5912,9 +5945,295 @@ namespace Mux.Cli.App
                 case 4:
                     await RemoveSkillAsync(status).ConfigureAwait(false);
                     break;
+                case 5:
+                    await SetSkillCategoryAsync(status).ConfigureAwait(false);
+                    break;
                 default:
                     break;
             }
+        }
+
+        // Lists the categories that have skills, with counts, and reopens the inventory filtered to the choice.
+        private async Task PickSkillCategoryFilterAsync()
+        {
+            List<SkillCategoryCount> counts = CountSkillCategories();
+            if (counts.Count == 0)
+            {
+                WriteNotice("No skills to filter.");
+                return;
+            }
+
+            List<string> options = counts.ConvertAll(c => c.Category + "  (" + c.Count + ")");
+            SelectModal pick = new SelectModal("Filter skills by category", options);
+            _App.Modals.Push(pick);
+            object? result = await pick.Completion.ConfigureAwait(false);
+            int index = result is int value ? value : -1;
+            if (index < 0 || index >= counts.Count)
+            {
+                return;
+            }
+
+            _SkillCategoryFilter = counts[index].Category;
+            OpenSkillsModal();
+        }
+
+        private List<SkillCategoryCount> CountSkillCategories()
+        {
+            Dictionary<string, int> map = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (SkillStatus status in _SkillRuntime?.GetStatus() ?? new List<SkillStatus>())
+            {
+                map[status.Category] = map.TryGetValue(status.Category, out int n) ? n + 1 : 1;
+            }
+
+            List<SkillCategoryCount> counts = new List<SkillCategoryCount>();
+            foreach (KeyValuePair<string, int> pair in map)
+            {
+                counts.Add(new SkillCategoryCount { Category = pair.Key, Count = pair.Value, Known = SkillCategories.IsKnown(pair.Key) });
+            }
+
+            counts.Sort((SkillCategoryCount a, SkillCategoryCount b) => SkillCategories.Order(a.Category) != SkillCategories.Order(b.Category)
+                ? SkillCategories.Order(a.Category).CompareTo(SkillCategories.Order(b.Category))
+                : string.CompareOrdinal(a.Category, b.Category));
+            return counts;
+        }
+
+        // Offers the canonical categories, a custom value, and clearing the override. The override is stored in
+        // skills.json; SKILL.md is never rewritten.
+        private async Task SetSkillCategoryAsync(SkillStatus status)
+        {
+            List<string> options = new List<string>();
+            foreach (string known in SkillCategories.Known)
+            {
+                options.Add(known + (string.Equals(known, status.Category, StringComparison.Ordinal) ? "  ✓" : string.Empty));
+            }
+
+            options.Add("Custom…");
+            options.Add("Clear override (use the SKILL.md category)");
+            SelectModal pick = new SelectModal(status.Title + " · category", options);
+            _App.Modals.Push(pick);
+            object? result = await pick.Completion.ConfigureAwait(false);
+            int index = result is int value ? value : -1;
+            if (index < 0)
+            {
+                return;
+            }
+
+            string? category;
+            if (index < SkillCategories.Known.Count)
+            {
+                category = SkillCategories.Known[index];
+            }
+            else if (index == SkillCategories.Known.Count)
+            {
+                PromptModal prompt = new PromptModal("Category for " + status.Name + " (kebab-case)", status.Category);
+                _App.Modals.Push(prompt);
+                object? typed = await prompt.Completion.ConfigureAwait(false);
+                if (!(typed is string text) || string.IsNullOrWhiteSpace(text))
+                {
+                    return;
+                }
+
+                category = text;
+            }
+            else
+            {
+                category = null;
+            }
+
+            ApplySkillCategory(status.Name, category);
+        }
+
+        private void ApplySkillCategory(string name, string? category)
+        {
+            if (_SkillRuntime == null)
+            {
+                WriteNotice("Skills are disabled (settings.json: skillsEnabled).");
+                return;
+            }
+
+            try
+            {
+                string? stored = new SkillManager(_SkillRuntime.SkillsDirectory).SetCategory(name, category);
+                _SkillRuntime.RequestRefresh();
+                WriteNotice(stored == null ? $"✓ Cleared the category override for {name}." : $"✓ {name} is now in category {stored}.");
+            }
+            catch (ArgumentException ex)
+            {
+                WriteNotice("⚠ " + ex.Message.Split(" (Parameter")[0]);
+            }
+        }
+
+        // "/skills" with arguments: "category <name> [<category>|--clear]" sets or clears a category, "filter <category>"
+        // opens the inventory filtered, and anything else opens the inventory.
+        /// <summary>
+        /// The skill packs <c>/packs</c> installs from. Defaults to the packs embedded in mux; tests set their own.
+        /// </summary>
+        public Mux.Core.Skills.Packaging.SkillPackCatalog PackCatalog
+        {
+            get => _PackCatalog ?? Mux.Core.Skills.Packaging.SkillPackCatalog.Embedded;
+            set => _PackCatalog = value;
+        }
+
+        // "/packs [list | show <pack> | install <pack> [skill] [--force] | remove <pack> [skill] [--force]]".
+        private void HandlePacksArgument(string argument)
+        {
+            if (_SkillRuntime == null)
+            {
+                WriteNotice("Skills are disabled (settings.json: skillsEnabled).");
+                return;
+            }
+
+            Mux.Core.Skills.Packaging.SkillPackInstaller installer = new Mux.Core.Skills.Packaging.SkillPackInstaller(_SkillRuntime.SkillsDirectory, PackCatalog);
+            List<string> lines = SkillPackPresenter.Execute(installer, argument, out bool changed);
+            foreach (string line in lines)
+            {
+                WriteNotice(line);
+            }
+
+            if (changed)
+            {
+                _SkillRuntime.RequestRefresh();
+            }
+        }
+
+        private void OpenPacksModal()
+        {
+            if (_SkillRuntime == null)
+            {
+                WriteNotice("Skills are disabled (settings.json: skillsEnabled).");
+                return;
+            }
+
+            Mux.Core.Skills.Packaging.SkillPackInstaller installer = new Mux.Core.Skills.Packaging.SkillPackInstaller(_SkillRuntime.SkillsDirectory, PackCatalog);
+            if (installer.Catalog.Packs.Count == 0)
+            {
+                WriteNotice("No skill packs are bundled with this build.");
+                return;
+            }
+
+            List<string> options = new List<string>();
+            foreach (Mux.Core.Skills.Packaging.SkillPack pack in installer.Catalog.Packs)
+            {
+                options.Add(pack.Id + "  " + installer.InstalledCount(pack.Id) + "/" + pack.Skills.Count + "  " + pack.Title);
+            }
+
+            SelectModal modal = new SelectModal("Skill packs (installed/total)", options);
+            _App.Modals.Push(modal);
+            _ = ResolvePacksModalAsync(modal, installer);
+        }
+
+        private async Task ResolvePacksModalAsync(SelectModal modal, Mux.Core.Skills.Packaging.SkillPackInstaller installer)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            int index = result is int value ? value : -1;
+            if (index >= 0 && index < installer.Catalog.Packs.Count)
+            {
+                OpenPackModal(installer, installer.Catalog.Packs[index]);
+            }
+        }
+
+        private void OpenPackModal(Mux.Core.Skills.Packaging.SkillPackInstaller installer, Mux.Core.Skills.Packaging.SkillPack pack)
+        {
+            List<string> options = new List<string> { "↓ Install every skill in " + pack.Id, "✕ Remove this pack's installed skills" };
+            foreach (Mux.Core.Skills.Packaging.BundledSkill skill in pack.Skills)
+            {
+                options.Add((installer.IsInstalled(pack.Id, skill.Id) ? "[x] " : "[ ] ") + skill.Id);
+            }
+
+            SelectModal modal = new SelectModal(pack.Title + ": select a skill to install or remove it", options);
+            _App.Modals.Push(modal);
+            _ = ResolvePackModalAsync(modal, installer, pack);
+        }
+
+        private async Task ResolvePackModalAsync(SelectModal modal, Mux.Core.Skills.Packaging.SkillPackInstaller installer, Mux.Core.Skills.Packaging.SkillPack pack)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            int index = result is int value ? value : -1;
+            if (index < 0)
+            {
+                return;
+            }
+
+            string argument;
+            if (index == 0)
+            {
+                argument = "install " + pack.Id;
+            }
+            else if (index == 1)
+            {
+                argument = "remove " + pack.Id;
+            }
+            else if (index - 2 < pack.Skills.Count)
+            {
+                string skillId = pack.Skills[index - 2].Id;
+                argument = (installer.IsInstalled(pack.Id, skillId) ? "remove " : "install ") + pack.Id + " " + skillId;
+            }
+            else
+            {
+                return;
+            }
+
+            HandlePacksArgument(argument);
+            OpenPackModal(installer, pack);
+        }
+
+        private void HandleSkillsArgument(string argument)
+        {
+            string[] parts = (argument ?? string.Empty).Trim().Split(' ', 3, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length == 0)
+            {
+                OpenSkillsModal();
+                return;
+            }
+
+            string verb = parts[0].ToLowerInvariant();
+            if (verb == "filter" || verb == "categories")
+            {
+                _SkillCategoryFilter = parts.Length > 1 ? SkillCategories.Normalize(parts[1]) : null;
+                if (verb == "categories" || _SkillCategoryFilter == null)
+                {
+                    List<SkillCategoryCount> counts = CountSkillCategories();
+                    WriteNotice(counts.Count == 0 ? "No skills." : "Skill categories: " + string.Join(", ", counts.ConvertAll(c => c.Category + " (" + c.Count + ")")));
+                    if (verb == "categories") return;
+                }
+
+                OpenSkillsModal();
+                return;
+            }
+
+            if (verb == "pack" || verb == "packs")
+            {
+                HandlePacksArgument(parts.Length > 1 ? string.Join(' ', parts, 1, parts.Length - 1) : string.Empty);
+                return;
+            }
+
+            if (verb != "category")
+            {
+                WriteNotice("Usage: /skills [category <name> [<category>|--clear] | filter <category> | categories]");
+                return;
+            }
+
+            if (parts.Length < 2)
+            {
+                WriteNotice("Usage: /skills category <name> [<category>|--clear]");
+                return;
+            }
+
+            string name = parts[1];
+            SkillStatus? status = _SkillRuntime?.GetStatus().Find(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (status == null)
+            {
+                WriteNotice("⚠ No skill named '" + name + "'.");
+                return;
+            }
+
+            if (parts.Length < 3)
+            {
+                WriteNotice(status.Name + ": " + status.Category + (status.CategoryOverridden ? " (override)" : string.Empty));
+                return;
+            }
+
+            ApplySkillCategory(status.Name, string.Equals(parts[2], "--clear", StringComparison.OrdinalIgnoreCase) ? null : parts[2]);
         }
 
         private async Task EditSkillAsync(SkillStatus status)

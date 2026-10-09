@@ -374,6 +374,15 @@ namespace Mux.Server.Models
         public List<string> Errors { get; set; } = new List<string>();
 
         /// <summary>The SKILL.md body (populated only on the detail route).</summary>
+        /// <summary>The effective category (override, then SKILL.md, then inferred).</summary>
+        public string Category { get; set; } = "general";
+
+        /// <summary>Whether <see cref="Category"/> is a per-user override from skills.json.</summary>
+        public bool CategoryOverridden { get; set; }
+
+        /// <summary>The category written in the skill's SKILL.md, or empty.</summary>
+        public string FileCategory { get; set; } = string.Empty;
+
         public string? Body { get; set; }
     }
 }

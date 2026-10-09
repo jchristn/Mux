@@ -102,7 +102,15 @@ $lines.Add('')
 Set-Content -Path $path -Value ($lines -join ""`n"")
 Write-Output ""Created $path""
 ")
-                });
+                },
+                null,
+                @"Writing a good skill once `create` has made the folder:
+
+- The description is the only part the model sees when choosing a skill, so make it count: the first sentence says what the skill does, the second starts with ""Use when"" and names the requests, keywords, or file types that should trigger it. Stay under 1024 characters, in the third person.
+- Keep SKILL.md short (about 100 lines). Move long reference material into a `references` folder beside it and point to each file through the `${SKILL_DIR}` placeholder, one level deep.
+- Add a command or a script when the step is deterministic (validation, formatting, file generation), the same code would otherwise be written again each time, or errors need explicit handling. Leave judgment in the prose.
+- Gate the listing with `appliesTo` globs (and `requiresTools`) so the skill appears only in projects where it applies, and give it a `category`.
+- Before finishing, check: triggers in the description, consistent terms, a concrete example, no dates or versions that will go stale, and `mux skill validate <id>` passes.");
 
             skills["doc-sync"] = DefaultSkillBuilder.Build(
                 "doc-sync", "Check docs for stale file references", "Reports file paths mentioned in the docs that no longer exist.", false, "docs",

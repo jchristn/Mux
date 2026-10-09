@@ -45,6 +45,7 @@
   "cmd.manage.validateMcp": "Convalida server MCP",
   "cmd.manage.deleteMcp": "Elimina server MCP",
   "cmd.manage.activatePrompt": "Imposta come prompt attivo",
+  "cmd.manage.setSkillCategory": "Imposta categoria della skill",
   "cmd.manage.toggleSkill": "Attiva/disattiva competenza",
   "cmd.manage.editSettings": "Modifica impostazioni",
   "cmd.showHelp": "Guida alla connessione a mux",

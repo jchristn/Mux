@@ -48,7 +48,8 @@ namespace Mux.Core.Skills
         #region Public-Methods
 
         /// <summary>
-        /// Prepares a toolchain skill definition: adds the helper as a resource and prefixes each pwsh command block
+        /// Prepares a toolchain skill definition: adds the helper (and any files adapted from imported skills, see
+        /// <see cref="AdaptedSkillResources"/>) as resources and prefixes each pwsh command block
         /// with <see cref="Prelude"/>. Returns the same instance.
         /// </summary>
         /// <param name="definition">The definition. Must not be null.</param>
@@ -59,6 +60,7 @@ namespace Mux.Core.Skills
             ArgumentNullException.ThrowIfNull(definition);
 
             definition.Resources[HelperPath] = Script;
+            AdaptedSkillResources.AddTo(definition);
             List<DefaultSkillCommandDef> commands = new List<DefaultSkillCommandDef>();
             foreach (DefaultSkillCommandDef command in definition.Commands)
             {

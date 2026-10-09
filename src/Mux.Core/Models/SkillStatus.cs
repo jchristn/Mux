@@ -130,6 +130,16 @@ namespace Mux.Core.Models
             set => _Warnings = value ?? new List<string>();
         }
 
+        /// <summary>
+        /// The skill's effective category (override, then <c>SKILL.md</c>, then inferred). Never null.
+        /// </summary>
+        public string Category { get; set; } = "general";
+
+        /// <summary>
+        /// Whether <see cref="Category"/> comes from a per-user override in <c>skills.json</c>.
+        /// </summary>
+        public bool CategoryOverridden { get; set; }
+
         #endregion
 
         #region Public-Methods
@@ -154,7 +164,9 @@ namespace Mux.Core.Models
                 ShadowsUserSkill = ShadowsUserSkill,
                 UserInvocable = UserInvocable,
                 ArgumentHint = _ArgumentHint,
-                Warnings = new List<string>(_Warnings)
+                Warnings = new List<string>(_Warnings),
+                Category = Category,
+                CategoryOverridden = CategoryOverridden
             };
         }
 

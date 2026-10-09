@@ -135,6 +135,28 @@ All notable changes to mux are documented here.
   per-message stderr log to the method, request id, and size so prompts and answers stay out of MCP client logs;
   `--log-messages` restores the full log. New `scripts/<os>/run-mcp-server.sh` / `.bat` builds quietly and serves a
   source checkout over stdio, ready for `claude mcp add`.
+- **Skill categories.** Every skill has a category (`category:` in SKILL.md, the shipped default, or inferred from
+  tags), overridable without editing SKILL.md (stored in `skills.json`). Shown and editable in the terminal
+  (`/skills`, `/skills category`), the CLI (`mux skill category`, `mux skill categories`, `mux skill list
+  --category`), the web dashboard, the desktop app, and VS Code (the Skills tree groups by category). New
+  `PUT /v1.0/api/skills/category` and `GET /v1.0/api/skills/categories`; skill responses carry `Category`,
+  `CategoryOverridden`, and `FileCategory`; MCP `list_skills` returns categories and takes a `category` filter.
+- **Folder skills and `${SKILL_DIR}`.** Skills can bundle `scripts/`, `references/`, and `assets/`, referenced as
+  `${SKILL_DIR}` (Claude-style aliases also work) in the `skill` tool output, `/skill` invocations, and `mux skill
+  show`; the `skill` tool lists the bundled files, and commands get `SKILL_DIR` and `CLAUDE_SKILL_DIR`.
+- **Skills from alirezarezvani/claude-skills (MIT).** Seventeen new bundled defaults (library: 170): the Playwright
+  family (`pw-init`, `pw-generate`, `pw-fix`, `pw-review`, `pw-coverage`, `pw-migrate`, `pw-report`), `a11y-audit`,
+  `skill-security-auditor`, `security-guidance`, `skill-extract`, `ci-cd-pipeline-builder`, `performance-profiler`,
+  `ship-gate`, `api-design-reviewer`, `tdd-guide`, and `handoff`, gated where they apply. Ten opt-in packs hold 166
+  more (engineering, business, product, compliance, marketing, security, data, research, docs, productivity),
+  installed and removed with `mux skill pack`, `/packs`, the dashboard, the desktop app, or
+  `/v1.0/api/skills/packs`; your own skills are never replaced or removed. Existing skills absorb the best of the
+  collection: `code-review` (blast radius, per-language rules, an adversarial pass), `security-review` (license
+  checks, STRIDE threat modeling), `debug` (a five-phase feature-repair mode), `project-detect` (monorepo tooling),
+  `terraform` and `dockerfile-lint` (review checklists and analyzers), and `explain-codebase`, `todo-scan`,
+  `release-notes`, and `new-skill`. Notices are in `THIRD_PARTY_NOTICES.md`; the plan is `SKILLS_TO_CONSIDER.md`.
+- **`mux skill import <folder|git-url>`** brings in Claude-format skills, rewriting paths, Claude references, and
+  dashes, adding category, source, and license, and flagging features mux does not support.
 - **Skills in `mux print`.** Headless runs now discover skills, list them in the system prompt, and expose
   `skill` and `run_skill`, matching the interactive shell.
 
@@ -171,6 +193,11 @@ All notable changes to mux are documented here.
   agent, or a checkout build) and opens it in a new Terminal window through a self-deleting `.command` script, with a
   login shell. Windows quotes the `start` title correctly and Linux tries seven terminal emulators. When no CLI is
   found the window explains how to install it.
+- MCP client: paginated `tools/list` results are followed (only the first page was registered), malformed tool
+  entries are skipped instead of dropping the server, duplicate server names keep the first definition, a crashed
+  stdio server no longer hides its diagnosis or breaks removal, and a stdio server's `env` entries are set only for its
+  launch instead of leaking into mux and later servers. `PUT /v1.0/api/mcp-servers` rejects a body without `items`
+  (which used to erase every server) and duplicate names; `DELETE` decodes encoded names.
 - Web dashboard: the skill editor's SKILL.md body has its own copy icon in its top-right corner (the footer button
   remains).
 - Desktop: the `/?` help table sizes its command column to the longest command instead of cutting commands off, and
@@ -184,6 +211,14 @@ All notable changes to mux are documented here.
 
 ### Tests
 
+- MCP: 104 new cases in `McpClient`, `McpStdioClient`, `McpConfig`, `McpServerTools`, and `McpEndToEnd`, positive
+  and negative, covering mux as an MCP client (HTTP and stdio, auth, pagination, crashes, malformed servers,
+  configuration, REST routes, `mux print --mcp-config`, the terminal manager) and as an MCP server (every tool's
+  validation, the approval ceiling matrix, serialized runs, cancellation, secret masking, HTTP auth, raw stdio
+  protocol edge cases).
+- Skills: `SkillCategories` (16) and `ImportedSkills` (52, including every imported skill validating with a
+  taxonomy category, unique ids, no em-dashes, every `${SKILL_DIR}` reference resolving, packs, the importer's
+  normalization rules, seeding, REST, and the terminal `/packs` flow).
 - Phase 6 and the separate plans: `FileMentions` (16), `Memory` (16), `PlanMode` (11), `AskUser` (7), `McpServer`
   (17, including mux's own MCP client driving `mux mcp serve` over stdio and HTTP), and `WorktreeIsolation` (20,
   real temporary git repositories). Follow-ups add `WorktreeIsolation` REST route coverage (21 cases),

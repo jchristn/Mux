@@ -14,6 +14,7 @@ namespace Mux.Core.Models
         private string _Id = string.Empty;
         private bool _Enabled = true;
         private string? _PinnedVersion = null;
+        private string? _Category = null;
 
         #endregion
 
@@ -47,6 +48,18 @@ namespace Mux.Core.Models
         {
             get => _PinnedVersion;
             set => _PinnedVersion = value;
+        }
+
+        /// <summary>
+        /// The user's category for the skill, overriding the <c>category:</c> in its <c>SKILL.md</c>, or null to use
+        /// the file's value. Omitted from the file when null.
+        /// </summary>
+        [JsonPropertyName("category")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Category
+        {
+            get => _Category;
+            set => _Category = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
 
         #endregion

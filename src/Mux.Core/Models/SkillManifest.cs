@@ -27,6 +27,9 @@ namespace Mux.Core.Models
         private bool _UserInvocable = true;
         private bool _ModelInvocable = true;
         private string _ArgumentHint = string.Empty;
+        private string _Category = string.Empty;
+        private string _Source = string.Empty;
+        private string _License = string.Empty;
         private List<string> _UnrecognizedFields = new List<string>();
 
         #endregion
@@ -191,6 +194,37 @@ namespace Mux.Core.Models
         {
             get => _ArgumentHint;
             set => _ArgumentHint = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// The author's category from the <c>category:</c> frontmatter field (kebab-case, for example <c>review</c>),
+        /// or empty when unspecified. A user override in <c>skills.json</c> takes precedence; see
+        /// <c>SkillCategories.Resolve</c>. Never null.
+        /// </summary>
+        public string Category
+        {
+            get => _Category;
+            set => _Category = (value ?? string.Empty).Trim();
+        }
+
+        /// <summary>
+        /// Where an imported or pack skill came from (for example a repository URL and commit). Empty for skills written
+        /// here. Informational only.
+        /// </summary>
+        public string Source
+        {
+            get => _Source;
+            set => _Source = (value ?? string.Empty).Trim();
+        }
+
+        /// <summary>
+        /// The license an imported or pack skill is distributed under (for example <c>MIT</c>). Empty when not stated.
+        /// Informational only.
+        /// </summary>
+        public string License
+        {
+            get => _License;
+            set => _License = (value ?? string.Empty).Trim();
         }
 
         /// <summary>

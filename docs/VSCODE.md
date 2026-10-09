@@ -95,7 +95,7 @@ section reads the server's live configuration:
   is active, and browse the operational prompt catalog grouped by kind — edit or reset any entry. Subagent
   personas are listed read-through and deep-link to the subagent editor.
 - **Subagents** — see the configured subagents and their descriptions.
-- **Skills** — see every discovered skill and toggle it on or off.
+- **Skills**: see every discovered skill grouped by category and toggle it on or off. **Set skill category** on a skill's context menu picks a canonical category, a custom one, or clears the override.
 - **Settings** — opens an editor over the server's settings (approval policy, iteration and concurrency
   limits, compaction, task planning, and more).
 - **Usage** — a quick summary of calls, tokens, cost, errors, and latency for the last day.

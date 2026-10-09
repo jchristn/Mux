@@ -54,7 +54,9 @@ namespace Mux.Server.Routes
                 try { payload = JsonSerializer.Deserialize<ListResponse<McpServerDto>>(req.Http.Request.DataAsString ?? string.Empty, _JsonOptions); }
                 catch (Exception) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", "Request body is not valid JSON."); }
 
-                if (payload?.Items == null) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", "An 'items' array is required."); }
+                // The list type initializes Items, so a body without an items array would deserialize to an empty list and
+                // wipe every configured server. Require the array to be present.
+                if (payload?.Items == null || !HasItemsArray(req.Http.Request.DataAsString)) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", "An 'items' array is required."); }
 
                 try
                 {
@@ -63,9 +65,11 @@ namespace Mux.Server.Routes
                         .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
                     List<McpServerConfig> merged = new List<McpServerConfig>();
+                    HashSet<string> names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (McpServerDto dto in payload.Items)
                     {
                         if (string.IsNullOrWhiteSpace(dto.Name)) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", "Every MCP server needs a name."); }
+                        if (!names.Add(dto.Name.Trim())) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", "MCP server names must be unique; '" + dto.Name.Trim() + "' appears more than once."); }
                         existing.TryGetValue(dto.Name, out McpServerConfig? prior);
                         merged.Add(FromDto(dto, prior));
                     }
@@ -81,6 +85,8 @@ namespace Mux.Server.Routes
             {
                 if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();
                 string? name = req.Http.Request.Query.Elements["name"];
+                // Query values may arrive still percent-encoded (a name with a space); decode once.
+                if (!string.IsNullOrEmpty(name)) name = Uri.UnescapeDataString(name);
                 if (string.IsNullOrWhiteSpace(name)) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", "A 'name' query parameter is required."); }
                 try
                 {
@@ -199,6 +205,26 @@ namespace Mux.Server.Routes
         }
 
         private object Unauthorized() => new ApiError("Unauthorized", "Authentication required.");
+
+        private static bool HasItemsArray(string? json)
+        {
+            try
+            {
+                using (JsonDocument document = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json))
+                {
+                    if (document.RootElement.ValueKind != JsonValueKind.Object) return false;
+                    foreach (JsonProperty property in document.RootElement.EnumerateObject())
+                    {
+                        if (string.Equals(property.Name, "items", StringComparison.OrdinalIgnoreCase)) return property.Value.ValueKind == JsonValueKind.Array;
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+            }
+
+            return false;
+        }
 
         private static McpServerDto ToDto(McpServerConfig s)
         {

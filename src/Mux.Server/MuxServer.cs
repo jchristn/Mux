@@ -305,6 +305,7 @@ namespace Mux.Server
             new ContextRoutes(apiKey, _EndpointsProvider).Register(app);
             new MemoryRoutes(apiKey).Register(app);
             new WorktreeRoutes(apiKey).Register(app);
+            new SkillPackRoutes(apiKey).Register(app);
             new SkillRoutes(apiKey).Register(app);
             new OverviewRoutes(apiKey, _EndpointsProvider, _SessionStore, _Version, _StartUtc).Register(app);
             new UsageRoutes(apiKey, _UsageQuery).Register(app);

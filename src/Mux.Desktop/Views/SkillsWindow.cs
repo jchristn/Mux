@@ -24,6 +24,9 @@ namespace Mux.Desktop.Views
         private readonly string _SkillsDirectory;
         private readonly bool _SkillsEnabled;
         private readonly DataTableView<SkillStatus> _Table;
+        private readonly ComboBox _CategoryFilter = new ComboBox { MinWidth = 200, VerticalAlignment = VerticalAlignment.Center };
+        private List<SkillStatus> _All = new List<SkillStatus>();
+        private bool _UpdatingFilter;
 
         /// <summary>
         /// Instantiate the skills manager.
@@ -56,6 +59,7 @@ namespace Mux.Desktop.Views
             {
                 new TableColumn<SkillStatus>(Localizer.T("skill.col.title"), s => string.IsNullOrEmpty(s.Title) ? s.Name : s.Title, new GridLength(2.5, GridUnitType.Star), s => s.Title, s => s.Enabled ? Localizer.T("skill.badge.enabled") : null, tooltip: Localizer.T("skill.col.title.tip")),
                 new TableColumn<SkillStatus>(Localizer.T("skill.col.id"), s => s.Name, new GridLength(2, GridUnitType.Star), s => s.Name, tooltip: Localizer.T("skill.col.id.tip")),
+                new TableColumn<SkillStatus>(Localizer.T("skill.col.category"), s => s.Category + (s.CategoryOverridden ? " *" : string.Empty), new GridLength(1.4, GridUnitType.Star), s => s.Category, tooltip: Localizer.T("skill.col.category.tip")),
                 new TableColumn<SkillStatus>(Localizer.T("skill.col.commands"), s => s.CommandCount.ToString(), new GridLength(1, GridUnitType.Star), s => s.CommandCount, tooltip: Localizer.T("skill.col.commands.tip")),
                 new TableColumn<SkillStatus>(Localizer.T("skill.col.status"), s => s.Valid ? Localizer.T("skill.status.valid") : Localizer.T("skill.status.invalid"), new GridLength(1.4, GridUnitType.Star), s => s.Valid ? 1 : 0, tooltip: Localizer.T("skill.col.status.tip"))
             };
@@ -70,6 +74,7 @@ namespace Mux.Desktop.Views
             }
 
             actions.Add(new TableRowAction<SkillStatus>(Localizer.T("act.edit"), s => OnEdit(s)));
+            actions.Add(new TableRowAction<SkillStatus>(Localizer.T("skill.action.setCategory"), s => OnSetCategory(s)));
             actions.Add(new TableRowAction<SkillStatus>(Localizer.T("act.delete"), s => OnDelete(s), destructive: true));
             return actions;
         }
@@ -92,10 +97,19 @@ namespace Mux.Desktop.Views
 
             StackPanel headerButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top };
 
+            _CategoryFilter.Tip(Localizer.T("skill.filter.tip"));
+            _CategoryFilter.SelectionChanged += (object? sender, SelectionChangedEventArgs e) => { if (!_UpdatingFilter) ApplyFilter(); };
+            headerButtons.Children.Add(_CategoryFilter);
+
             Button import = new Button { Content = "⬇  " + Localizer.T("skill.import"), Background = theme.SurfaceAlt, Foreground = theme.Text, BorderBrush = theme.Border, BorderThickness = new Thickness(1), Padding = new Thickness(12, 6, 12, 6) };
             import.Tip(Localizer.T("skill.import.tip"));
             import.Click += (sender, args) => OnImport();
             headerButtons.Children.Add(import);
+
+            Button packs = new Button { Content = "▣  " + Localizer.T("skill.packs"), Background = theme.SurfaceAlt, Foreground = theme.Text, BorderBrush = theme.Border, BorderThickness = new Thickness(1), Padding = new Thickness(12, 6, 12, 6) };
+            packs.Tip(Localizer.T("skill.packs.tip"));
+            packs.Click += (sender, args) => OnPacks();
+            headerButtons.Children.Add(packs);
 
             Button add = new Button { Content = "＋  " + Localizer.T("skill.add"), Background = theme.AccentButton, Foreground = theme.AccentText, Padding = new Thickness(12, 6, 12, 6) };
             add.Tip(Localizer.T("skill.add.tip"));
@@ -118,11 +132,64 @@ namespace Mux.Desktop.Views
             try
             {
                 SkillLoader loader = new SkillLoader(_SkillsDirectory);
-                _Table.SetRows(new SkillCatalog(loader.Discover()).GetStatus());
+                IReadOnlyList<Skill> skills = loader.Discover();
+                SkillCategories.ApplyOverrides(skills);
+                _All = new List<SkillStatus>(new SkillCatalog(skills).GetStatus());
             }
             catch (Exception)
             {
-                _Table.SetRows(new List<SkillStatus>());
+                _All = new List<SkillStatus>();
+            }
+
+            RefreshFilterOptions();
+            ApplyFilter();
+        }
+
+        // Rebuilds the category picker from the categories in use (with counts), keeping the current choice.
+        private void RefreshFilterOptions()
+        {
+            string? selected = SelectedCategory();
+            Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (SkillStatus status in _All)
+            {
+                counts[status.Category] = counts.TryGetValue(status.Category, out int n) ? n + 1 : 1;
+            }
+
+            List<string> categories = new List<string>(counts.Keys);
+            categories.Sort((string a, string b) => SkillCategories.Order(a) != SkillCategories.Order(b) ? SkillCategories.Order(a).CompareTo(SkillCategories.Order(b)) : string.CompareOrdinal(a, b));
+            List<string> items = new List<string> { Localizer.T("skill.filter.all") };
+            int selectedIndex = 0;
+            foreach (string category in categories)
+            {
+                if (string.Equals(category, selected, StringComparison.Ordinal)) selectedIndex = items.Count;
+                items.Add(category + " (" + counts[category] + ")");
+            }
+
+            _UpdatingFilter = true;
+            _CategoryFilter.ItemsSource = items;
+            _CategoryFilter.SelectedIndex = selectedIndex;
+            _UpdatingFilter = false;
+        }
+
+        private string? SelectedCategory()
+        {
+            if (_CategoryFilter.SelectedIndex <= 0 || !(_CategoryFilter.SelectedItem is string item)) return null;
+            int paren = item.LastIndexOf(" (", StringComparison.Ordinal);
+            return paren > 0 ? item.Substring(0, paren) : item;
+        }
+
+        private void ApplyFilter()
+        {
+            string? category = SelectedCategory();
+            _Table.SetRows(category == null ? _All : _All.FindAll(s => string.Equals(s.Category, category, StringComparison.Ordinal)));
+        }
+
+        private async void OnSetCategory(SkillStatus status)
+        {
+            string? current = new SkillManager(_SkillsDirectory).GetCategoryOverride(status.Name);
+            if (await new SkillCategoryDialog(_SkillsDirectory, status.Name, status.Category, current).ShowDialog<bool>(this))
+            {
+                Reload();
             }
         }
 
@@ -143,6 +210,14 @@ namespace Mux.Desktop.Views
         private async void OnAdd()
         {
             if (await new SkillScaffoldDialog(_SkillsDirectory).ShowDialog<bool>(this))
+            {
+                Reload();
+            }
+        }
+
+        private async void OnPacks()
+        {
+            if (await new SkillPacksDialog(_SkillsDirectory).ShowDialog<bool>(this))
             {
                 Reload();
             }

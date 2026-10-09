@@ -195,18 +195,25 @@ $gaps | ForEach-Object { Write-Output ('- ' + $_) }"))
         private const string ReviewBody = @"Procedure:
 
 1. Pick the input. `uncommitted` for work in progress, `branch [base]` before opening or merging a PR (the base defaults to the origin default branch), `commit <sha>` for one commit, `pr <n>` for a GitHub pull request, `file <path>` for one file. With no input, review `uncommitted`. Add `quick` to read only the changed hunks, or `deep` to also read the callers and callees of every changed function. The default is in between: read each changed hunk plus enough surrounding code to judge it.
-2. Look for problems in this order, and spend most of the effort on the first group:
+2. Gauge the blast radius before judging the change. For each changed file, find its direct dependents (search for imports of it) and note whether it touches a shared contract (types, interfaces, schemas, models, migrations, auth middleware, public API, environment variables). Rate it critical (shared library, data model or migration, auth, public API contract), high (used by three or more modules, shared config), medium (internal to one module), or low (UI, tests, docs). For critical and high changes, read the callers even at the default effort.
+3. Load the review rules: always `${SKILL_DIR}/resources/review-rules/universal.md`, plus the one file under `${SKILL_DIR}/resources/review-rules/languages/` that matches the changed files (python, typescript for .ts/.tsx/.js/.jsx/.mjs, go, swift, kotlin, csharp for .cs/.razor, java, c, cpp, rust, ruby, php, dart). Use them as a checklist; a rule match is a candidate, not a finding, until step 6 confirms it.
+4. Look for problems in this order, and spend most of the effort on the first group:
    - Correctness: wrong logic or conditions, off-by-one and bounds, null or missing values, error paths that swallow or mishandle failures, race conditions and shared state, resource leaks (files, connections, locks), broken API or data contracts, and behavior that changed without the callers changing.
    - Tests: changed behavior with no test, tests that cannot fail, and tests that assert the wrong thing.
    - Maintainability: only problems that will cause bugs later (misleading names, duplicated logic that will drift). Skip style preferences.
-3. Verify every candidate before reporting it: open the code it depends on and confirm the failure can actually happen. Drop anything you cannot confirm, or report it as a question rather than a finding.
-4. Report findings most severe first, in exactly this form, one per finding:
+5. Adversarial pass, at `deep` effort or whenever the user asks for an adversarial or hostile review: go over the change again as three reviewers, and have each name at least one issue or, failing that, the most fragile assumption the code relies on.
+   - The saboteur, trying to break it in production: what is the worst input for each changed function, what if each external call fails, times out, or returns garbage, what if each state change runs twice, concurrently, or never, and what if neither branch of a conditional is right.
+   - The new hire, who must change this in six months with no context: names that hide intent, magic values, logic that needs three or more files to follow, comments that say what instead of why, and tests that check implementation details instead of behavior.
+   - The security auditor: every trust boundary the change crosses (user input, network, database, files, environment), with injection, missing authentication or ownership checks, data exposed in logs or errors, insecure defaults, new dependencies, and secrets.
+   Merge duplicates; an issue two reviewers found independently is more likely real.
+6. Verify every candidate before reporting it: open the code it depends on and confirm the failure can actually happen. Drop anything you cannot confirm, or report it as a question rather than a finding.
+7. Report findings most severe first, in exactly this form, one per finding:
 
    [severity: high|medium|low] path/to/file.ext:LINE - one-sentence problem
    Failure: the concrete input or state and what goes wrong.
    Fix: the smallest change that fixes it.
 
-5. If there are no findings, say ""No findings."" and list what you checked. Do not invent findings to fill space, and do not edit files unless the user asks.";
+8. If there are no findings, say ""No findings."" and list what you checked. Do not invent findings to fill space, and do not edit files unless the user asks.";
 
         private const string SecurityBody = @"Procedure:
 
@@ -217,14 +224,15 @@ $gaps | ForEach-Object { Write-Output ('- ' + $_) }"))
    - Secrets and keys: anything the scan flagged, credentials in config or tests, secrets written to logs, and keys with excessive scope.
    - Unsafe data handling: deserialization of untrusted data, SSRF (server fetching user-supplied URLs), open redirects, unsafe file uploads, and missing size or rate limits.
    - Cryptography: home-grown crypto, weak algorithms (MD5 or SHA1 for security, ECB mode), predictable randomness for tokens, and disabled certificate validation.
-   - Dependencies: for each changed manifest, run the audit skill the dependency check names (js-deps audit, py-deps audit, dotnet-outdated vulnerable, and so on) and report new or upgraded packages with known advisories.
-3. Report only issues with a plausible attack path, most severe first, in exactly this form:
+   - Dependencies: for each changed manifest, run the audit skill the dependency check names (js-deps audit, py-deps audit, dotnet-outdated vulnerable, and so on) and report new or upgraded packages with known advisories. Then check licenses with `python3 ""${SKILL_DIR}/resources/scripts/license_checker.py"" . --policy strict --format json`: a strong copyleft license (GPL, AGPL) pulled into a permissively licensed project is a finding, weak copyleft (LGPL, MPL) needs a note, and an unknown license needs a person to look. Rate upgrades by risk: patches and security fixes now, minor versions batched, major versions as their own task with tests, known breaking changes with a rollback plan.
+3. For a new component, endpoint, or data flow (or when the user asks for a threat model), walk STRIDE per element: external entities (spoofing, repudiation), processes (all six), data stores (tampering, repudiation, information disclosure, denial of service), and data flows (tampering, information disclosure, denial of service). Spoofing maps to authentication, tampering to integrity, repudiation to audit logs, information disclosure to encryption and access control, denial of service to limits and redundancy, and elevation of privilege to least privilege. `python3 ""${SKILL_DIR}/resources/scripts/threat_modeler.py"" --component ""<name>"" --assets ""<a,b>"" --json` drafts the table with DREAD scores (each 1 to 10); every threat averaging 7 or more needs a named mitigation before the design ships.
+4. Report only issues with a plausible attack path, most severe first, in exactly this form:
 
    [severity: critical|high|medium|low] path/to/file.ext:LINE - the vulnerability
    Attack: who can trigger it and how, step by step.
    Fix: the smallest change that closes it.
 
-4. If nothing is exploitable, say ""No security findings."" and list the areas you checked. Never print a full secret value, even when quoting a finding.";
+5. If nothing is exploitable, say ""No security findings."" and list the areas you checked. Never print a full secret value, even when quoting a finding.";
 
         private const string SimplifyBody = @"Procedure:
 

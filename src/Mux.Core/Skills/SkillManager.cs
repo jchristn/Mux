@@ -87,6 +87,62 @@ namespace Mux.Core.Skills
         }
 
         /// <summary>
+        /// Sets or clears a skill's category override in the index (<c>~/.mux/skills.json</c>). The skill's
+        /// <c>SKILL.md</c> is never rewritten; clearing returns the skill to its frontmatter category.
+        /// </summary>
+        /// <param name="id">The skill id. Must not be null or blank.</param>
+        /// <param name="category">The category (normalized, for example "Code Review" becomes code-review), or null or blank to clear.</param>
+        /// <returns>The stored override, or null when cleared.</returns>
+        /// <exception cref="ArgumentException">Thrown when the id is blank or the category is not well-formed.</exception>
+        public string? SetCategory(string id, string? category)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                throw new ArgumentException("A skill id is required.", nameof(id));
+            }
+
+            if (!SkillCategories.TryParse(category, out string? normalized, out string error))
+            {
+                throw new ArgumentException(error, nameof(category));
+            }
+
+            List<SkillIndexEntry> index = SettingsLoader.LoadSkillIndex();
+            SkillIndexEntry? entry = index.Find(e => string.Equals(e.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (entry == null)
+            {
+                if (normalized == null)
+                {
+                    return null;
+                }
+
+                index.Add(new SkillIndexEntry { Id = id, Enabled = true, Category = normalized });
+            }
+            else
+            {
+                entry.Category = normalized;
+            }
+
+            SettingsLoader.SaveSkillIndex(index);
+            return normalized;
+        }
+
+        /// <summary>
+        /// Returns a skill's category override from the index, or null when it has none.
+        /// </summary>
+        /// <param name="id">The skill id.</param>
+        /// <returns>The override, or null.</returns>
+        public string? GetCategoryOverride(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return null;
+            }
+
+            SkillIndexEntry? entry = SettingsLoader.LoadSkillIndex().Find(e => string.Equals(e.Id, id, StringComparison.OrdinalIgnoreCase));
+            return entry?.Category;
+        }
+
+        /// <summary>
         /// Creates a new skill from a scaffold: validates the id, writes <c>SKILL.md</c>, and enables it in
         /// the index.
         /// </summary>

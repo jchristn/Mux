@@ -638,6 +638,55 @@
 					}
 				},
 				{
+					"name": "Set skill category",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/skills/category",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"skills",
+								"category"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{skillId}}\",\n  \"category\": \"review\"\n}"
+						},
+						"description": "Stores a per-user category override for the skill in skills.json (SKILL.md is never rewritten). The value is normalized to kebab-case; send `\"category\": null` or a blank string to clear the override. Returns the updated skill. `400` for a malformed category, `404` for an unknown skill."
+					}
+				},
+				{
+					"name": "List skill categories",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/skills/categories",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"skills",
+								"categories"
+							]
+						},
+						"description": "Returns `{ Items, Count, Known }`: the categories in use with their skill counts (canonical categories first) and the canonical categories to offer when editing."
+					}
+				},
+				{
 					"name": "Delete skill",
 					"request": {
 						"method": "DELETE",
@@ -690,6 +739,121 @@
 						},
 						"description": "Expands typed slash text (`/<skill> args`) into the user message that runs the skill, exactly as the terminal, desktop, and dashboard do. The skill body becomes the message with `$ARGUMENTS` and `$1`..`$9` substituted in prose (never inside code fences); a skill with commands also gets a `run_skill` hint. Project skills under `WorkingDirectory` (`.mux/skills`, `.claude/skills`, `.agents/skills`) shadow user skills; leave `WorkingDirectory` blank to use the server's current directory. Returns `{ Matched, Skill, Arguments, Prompt, IsPlaybook }`; `Matched` is false when no usable, user-invocable skill has that name. `400` when `Input` is missing or the directory does not exist."
 					}
+				},
+				{
+					"name": "List skill packs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/skills/packs",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"skills",
+								"packs"
+							]
+						},
+						"description": "Returns `{ Items, Count }` of the opt-in skill packs shipped with mux: id, title, description, category, source, license, skill count, and installed count."
+					},
+					"response": []
+				},
+				{
+					"name": "Get a skill pack",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/skills/packs/engineering",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"skills",
+								"packs",
+								"engineering"
+							]
+						},
+						"description": "Returns one pack with its skills (id, description, category, installed, file count). `404` for an unknown pack."
+					},
+					"response": []
+				},
+				{
+					"name": "Install a skill pack",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/skills/packs/install",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"skills",
+								"packs",
+								"install"
+							]
+						},
+						"description": "Installs every skill in `Pack`, or just `Skill`. Existing folders are skipped; a skill you created is never replaced, and the pack's own copies are replaced only with `Force`. `400` without a pack, `404` for an unknown pack or skill.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Pack\": \"engineering\",\n  \"Skill\": null,\n  \"Force\": false\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Remove a skill pack",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/skills/packs/remove",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"skills",
+								"packs",
+								"remove"
+							]
+						},
+						"description": "Removes the skills the pack installed (or just `Skill`). Edited copies are kept unless `Force` is set.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Pack\": \"engineering\",\n  \"Skill\": null,\n  \"Force\": false\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					},
+					"response": []
 				}
 			]
 		},

@@ -45,6 +45,7 @@
   "cmd.manage.validateMcp": "Sahkan pelayan MCP",
   "cmd.manage.deleteMcp": "Padam pelayan MCP",
   "cmd.manage.activatePrompt": "Tetapkan sebagai prompt aktif",
+  "cmd.manage.setSkillCategory": "Tetapkan kategori kemahiran",
   "cmd.manage.toggleSkill": "Togol kemahiran",
   "cmd.manage.editSettings": "Edit tetapan",
   "cmd.showHelp": "Bantuan menyambung ke mux",

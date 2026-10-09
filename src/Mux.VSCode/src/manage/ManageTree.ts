@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { MuxServerLifecycle } from '../server/lifecycle';
 import { logError } from '../util/logger';
 import { CatalogGroup, groupCatalogByKind } from './catalog';
+import { groupSkillsByCategory } from './skillCategories';
+import { SkillSummary } from '../api/types';
 
 /**
  * The kind of a management tree node, used to route context-menu actions and to pick an icon. Section nodes
@@ -25,6 +27,7 @@ export type ManageNodeKind =
     | 'catalog-subagent'
     | 'subagent'
     | 'skill'
+    | 'skill-category'
     | 'settings'
     | 'usage'
     | 'info';
@@ -103,6 +106,8 @@ export class ManageTreeProvider implements vscode.TreeDataProvider<ManageNode> {
                     return await this.subagentNodes();
                 case 'section-skills':
                     return await this.skillNodes();
+                case 'skill-category':
+                    return this.skillLeafNodes((element.data as { skills: SkillSummary[] } | undefined)?.skills ?? []);
                 case 'section-usage':
                     return await this.usageNodes();
                 default:
@@ -284,9 +289,21 @@ export class ManageTreeProvider implements vscode.TreeDataProvider<ManageNode> {
             return [this.emptyNode(vscode.l10n.t('No skills discovered'))];
         }
 
+        // Skills are grouped by category, canonical categories first, each group expanded.
+        return groupSkillsByCategory(skills).map((group) => {
+            const node = new ManageNode(group.category, 'skill-category', vscode.TreeItemCollapsibleState.Expanded, group);
+            node.description = String(group.skills.length);
+            node.iconPath = new vscode.ThemeIcon('folder');
+            node.tooltip = vscode.l10n.t('Skills in category {0}', group.category);
+            return node;
+        });
+    }
+
+    private skillLeafNodes(skills: SkillSummary[]): ManageNode[] {
         return skills.map((skill) => {
             const node = new ManageNode(skill.Title || skill.Name, 'skill', vscode.TreeItemCollapsibleState.None, skill);
-            node.description = skill.Enabled ? vscode.l10n.t('enabled') : vscode.l10n.t('disabled');
+            const state = skill.Enabled ? vscode.l10n.t('enabled') : vscode.l10n.t('disabled');
+            node.description = skill.CategoryOverridden ? `${state} · ${vscode.l10n.t('category overridden')}` : state;
             node.iconPath = new vscode.ThemeIcon(skill.Enabled ? 'check' : 'circle-slash');
             node.tooltip = skill.Description;
             ManageTreeProvider.openOnClick(node, 'mux.manage.editSkill');

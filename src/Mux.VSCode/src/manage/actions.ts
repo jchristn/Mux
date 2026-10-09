@@ -5,6 +5,7 @@ import { MuxServerLifecycle } from '../server/lifecycle';
 import { logError } from '../util/logger';
 import { FormField, FormPanel } from './FormPanel';
 import { formatMcpValidation } from './mcpValidation';
+import { isValidSkillCategory, KNOWN_SKILL_CATEGORIES, normalizeSkillCategory } from './skillCategories';
 import { ManageNode } from './ManageTree';
 
 /** Adapter types the endpoint form offers, matching the server's kebab-case values. */
@@ -525,6 +526,62 @@ export class ManageActions {
 
         await this.withClient(async (client) => {
             await client.setSkillEnabled(skill.Name, !skill.Enabled);
+            this.refresh();
+        });
+    }
+
+    /**
+     * Sets or clears the category of the skill on a node. Offers the canonical categories (from the server, or the
+     * built-in list), a custom value, and clearing the override; the override lives in skills.json, never SKILL.md.
+     */
+    public async setSkillCategory(node: ManageNode): Promise<void> {
+        const skill = node.data as { Name: string; Category?: string; CategoryOverridden?: boolean } | undefined;
+        if (!skill) {
+            return;
+        }
+
+        await this.withClient(async (client) => {
+            let known: readonly string[] = KNOWN_SKILL_CATEGORIES;
+            try {
+                const categories = await client.getSkillCategories();
+                if (categories.Known && categories.Known.length > 0) {
+                    known = categories.Known;
+                }
+            } catch {
+                // Older servers have no categories route; the built-in list is the same.
+            }
+
+            const custom = vscode.l10n.t('Custom…');
+            const clear = vscode.l10n.t('Clear override (use the SKILL.md category)');
+            const items = [...known.map((c) => (c === skill.Category ? `${c} ✓` : c)), custom, clear];
+            const picked = await vscode.window.showQuickPick(items, { placeHolder: vscode.l10n.t('Category for {0} (now {1})', skill.Name, skill.Category ?? 'general') });
+            if (!picked) {
+                return;
+            }
+
+            let value: string | null;
+            if (picked === clear) {
+                value = null;
+            } else if (picked === custom) {
+                const typed = await vscode.window.showInputBox({
+                    prompt: vscode.l10n.t('Category for {0} (kebab-case, for example code-review)', skill.Name),
+                    value: skill.Category ?? '',
+                    validateInput: (text) => {
+                        const normalized = normalizeSkillCategory(text);
+                        return normalized === undefined || isValidSkillCategory(normalized) ? undefined : vscode.l10n.t('Use letters, digits, and single hyphens (at most 40 characters).');
+                    },
+                });
+                if (typed === undefined) {
+                    return;
+                }
+
+                value = normalizeSkillCategory(typed) ?? null;
+            } else {
+                value = picked.replace(/ ✓$/, '');
+            }
+
+            const updated = await client.setSkillCategory(skill.Name, value);
+            void vscode.window.showInformationMessage(vscode.l10n.t('Skill "{0}" is now in category {1}.', skill.Name, updated.Category ?? value ?? 'general'));
             this.refresh();
         });
     }

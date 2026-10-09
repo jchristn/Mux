@@ -75,7 +75,7 @@ namespace Mux.Core.Skills
 
             string args = (arguments ?? string.Empty).Trim();
             List<string> positional = SplitArguments(args);
-            string body = (skill.Body ?? string.Empty).Replace("\r\n", "\n").Trim();
+            string body = SkillPathResolver.Substitute(skill.Body, skill.DirectoryPath).Replace("\r\n", "\n").Trim();
 
             // Placeholders are substituted in prose only. Fenced code blocks are left verbatim, because a
             // shell block's own "$1" or "$ARGUMENTS" belongs to the script, not to the invocation.
@@ -135,6 +135,16 @@ namespace Mux.Core.Skills
             if (args.Length > 0 && !hadPlaceholder)
             {
                 builder.Append("\n\nArguments: ").Append(args);
+            }
+
+            // Claude-format skills bundle scripts and references next to SKILL.md and expect to be run from that
+            // folder. Say where it is (mux's own helper under resources/ needs no mention).
+            List<string> bundled = SkillPathResolver.ListFiles(skill.DirectoryPath, out _);
+            if (bundled.Exists((string file) => !file.StartsWith("resources/", StringComparison.Ordinal)))
+            {
+                builder.Append("\n\nThis skill's files are in ")
+                    .Append(SkillPathResolver.NormalizeFolder(skill.DirectoryPath))
+                    .Append("; paths such as scripts/ or references/ in its instructions are relative to that folder.");
             }
 
             if (skill.Manifest.Commands.Count > 0)

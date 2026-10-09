@@ -90,6 +90,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('mux.manage.editSubagent', (node: ManageNode) => manageActions.editSubagent(node)),
         vscode.commands.registerCommand('mux.manage.deleteSubagent', (node: ManageNode) => manageActions.deleteSubagent(node)),
         vscode.commands.registerCommand('mux.manage.toggleSkill', (node: ManageNode) => manageActions.toggleSkill(node)),
+        vscode.commands.registerCommand('mux.manage.setSkillCategory', (node: ManageNode) => manageActions.setSkillCategory(node)),
         vscode.commands.registerCommand('mux.manage.addSkill', () => manageActions.addSkill()),
         vscode.commands.registerCommand('mux.manage.editSkill', (node: ManageNode) => manageActions.editSkill(node)),
         vscode.commands.registerCommand('mux.manage.deleteSkill', (node: ManageNode) => manageActions.deleteSkill(node)),

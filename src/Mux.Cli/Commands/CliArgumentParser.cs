@@ -204,6 +204,12 @@ namespace Mux.Cli.Commands
                     case "--arg":
                         settings.Args.Add(ReadValue(option, inlineValue, args, ref i));
                         break;
+                    case "--category":
+                        settings.Category = ReadValue(option, inlineValue, args, ref i);
+                        break;
+                    case "--clear":
+                        settings.Clear = true;
+                        break;
                     default:
                         if (IsOption(arg))
                         {

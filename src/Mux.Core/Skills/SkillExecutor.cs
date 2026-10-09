@@ -71,7 +71,10 @@ namespace Mux.Core.Skills
                 ProcessStartInfo startInfo = SkillInterpreterResolver.BuildStartInfo(command.Interpreter, scriptPath, arguments);
                 startInfo.WorkingDirectory = string.IsNullOrWhiteSpace(workingDirectory) ? skill.DirectoryPath : workingDirectory;
                 startInfo.Environment["MUX_SKILL_NAME"] = skill.Manifest.Name;
-                startInfo.Environment["MUX_SKILL_DIR"] = skill.DirectoryPath;
+                foreach (string variable in SkillPathResolver.EnvironmentVariables)
+                {
+                    startInfo.Environment[variable] = skill.DirectoryPath;
+                }
                 startInfo.Environment["MUX_SKILL_COMMAND"] = command.Name;
                 foreach (KeyValuePair<string, string> variable in DefaultEnvironment)
                 {

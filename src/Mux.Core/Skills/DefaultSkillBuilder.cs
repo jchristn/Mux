@@ -21,6 +21,7 @@ namespace Mux.Core.Skills
         /// <param name="whenToUse">The when-to-use guidance.</param>
         /// <param name="commands">The commands the skill declares. Must not be null or empty.</param>
         /// <param name="appliesTo">Optional file globs that gate when the skill is listed; null or empty lists it everywhere.</param>
+        /// <param name="body">Optional guidance written after the generated sections of the body.</param>
         /// <returns>The complete <c>SKILL.md</c> content.</returns>
         /// <exception cref="ArgumentNullException">Thrown when a required argument is null.</exception>
         /// <exception cref="ArgumentException">Thrown when <paramref name="commands"/> is empty.</exception>
@@ -32,7 +33,8 @@ namespace Mux.Core.Skills
             string tags,
             string whenToUse,
             IReadOnlyList<DefaultSkillCommandDef> commands,
-            IReadOnlyList<string>? appliesTo = null)
+            IReadOnlyList<string>? appliesTo = null,
+            string? body = null)
         {
             if (id == null) throw new ArgumentNullException(nameof(id));
             if (title == null) throw new ArgumentNullException(nameof(title));
@@ -59,6 +61,7 @@ namespace Mux.Core.Skills
                 Tags = tagList,
                 WhenToUse = whenToUse ?? string.Empty,
                 AppliesTo = appliesTo == null ? new List<string>() : new List<string>(appliesTo),
+                Body = body ?? string.Empty,
                 Commands = new List<DefaultSkillCommandDef>(commands)
             });
         }
@@ -97,6 +100,11 @@ namespace Mux.Core.Skills
             }
 
             builder.Append("tags: [").Append(string.Join(", ", definition.Tags)).Append("]\n");
+            string? category = !string.IsNullOrWhiteSpace(definition.Category) ? definition.Category : DefaultSkillCategories.For(definition.Id);
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                builder.Append("category: ").Append(category).Append('\n');
+            }
             if (definition.AppliesTo.Count > 0)
             {
                 builder.Append("appliesTo: [").Append(string.Join(", ", definition.AppliesTo)).Append("]\n");

@@ -1,0 +1,8 @@
+{
+  "id": "security",
+  "title": "Security",
+  "description": "Application, cloud, AI, and offensive security playbooks.",
+  "category": "security",
+  "source": "https://github.com/alirezarezvani/claude-skills@19392f7",
+  "license": "MIT"
+}

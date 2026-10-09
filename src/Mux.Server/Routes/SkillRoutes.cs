@@ -109,6 +109,45 @@ namespace Mux.Server.Routes
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("SaveFailed", ex.Message); }
             }, Documentation.ApiDoc.SkillsEnabled);
 
+            // Set or clear a skill's category override: body { "id": "...", "category": "review" }; a null or blank
+            // category clears it. SKILL.md is never rewritten.
+            app.Put("/v1.0/api/skills/category", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();
+                SkillCategoryRequestDto? dto;
+                try { dto = JsonSerializer.Deserialize<SkillCategoryRequestDto>(req.Http.Request.DataAsString ?? string.Empty, _JsonOptions); }
+                catch (Exception) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", "Request body is not valid JSON."); }
+                if (dto == null || string.IsNullOrWhiteSpace(dto.Id)) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", "An 'id' is required."); }
+                if (!SkillCategories.TryParse(dto.Category, out string? _, out string error)) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", error); }
+
+                string dir = SkillsDir();
+                if (!SkillManager.IsValidId(dto.Id) || !File.Exists(Path.Combine(dir, dto.Id, "SKILL.md")))
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return (object)new ApiError("NotFound", "No skill named " + dto.Id + ".");
+                }
+
+                try
+                {
+                    new SkillManager(dir).SetCategory(dto.Id, dto.Category);
+                    SkillDto? updated = LoadSkills(includeBody: false).FirstOrDefault(s => string.Equals(s.Name, dto.Id, StringComparison.OrdinalIgnoreCase));
+                    req.Http.Response.StatusCode = 200;
+                    return await Task.FromResult<object>(updated!).ConfigureAwait(false);
+                }
+                catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("SaveFailed", ex.Message); }
+            }, Documentation.ApiDoc.SkillsCategory);
+
+            app.Get("/v1.0/api/skills/categories", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();
+                string dir = SkillsDir();
+                List<Skill> skills = Directory.Exists(dir) ? new List<Skill>(new SkillLoader(dir).Discover()) : new List<Skill>();
+                SkillCategories.ApplyOverrides(skills);
+                List<SkillCategoryCount> counts = SkillCategories.Count(skills);
+                req.Http.Response.StatusCode = 200;
+                return await Task.FromResult<object>(new SkillCategoriesDto { Items = counts, Count = counts.Count, Known = new List<string>(SkillCategories.Known) }).ConfigureAwait(false);
+            }, Documentation.ApiDoc.SkillsCategories);
+
             app.Delete("/v1.0/api/skills", async (req) =>
             {
                 if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();
@@ -201,15 +240,18 @@ namespace Mux.Server.Routes
             if (!Directory.Exists(dir)) return new List<SkillDto>();
 
             Dictionary<string, bool> enabled = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, string> categories = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (SkillIndexEntry entry in SettingsLoader.LoadSkillIndex())
             {
                 if (!string.IsNullOrWhiteSpace(entry.Id)) enabled[entry.Id] = entry.Enabled;
+                if (!string.IsNullOrWhiteSpace(entry.Id) && !string.IsNullOrWhiteSpace(entry.Category)) categories[entry.Id] = entry.Category!;
             }
 
             List<SkillDto> result = new List<SkillDto>();
             foreach (Skill skill in new SkillLoader(dir).Discover())
             {
                 bool isEnabled = enabled.TryGetValue(skill.Manifest.Name, out bool e) ? e : skill.Manifest.Enabled;
+                skill.CategoryOverride = categories.TryGetValue(skill.Manifest.Name, out string? overrideCategory) ? overrideCategory : null;
                 result.Add(new SkillDto
                 {
                     Name = skill.Manifest.Name,
@@ -220,6 +262,9 @@ namespace Mux.Server.Routes
                     Mutating = skill.Manifest.Mutating,
                     Commands = skill.Manifest.Commands.Count,
                     Errors = new List<string>(skill.Validation.Errors),
+                    Category = skill.Category,
+                    CategoryOverridden = skill.CategoryOverride != null,
+                    FileCategory = skill.Manifest.Category,
                     Body = includeBody ? skill.Body : null
                 });
             }

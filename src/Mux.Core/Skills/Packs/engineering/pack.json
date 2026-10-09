@@ -1,0 +1,8 @@
+{
+  "id": "engineering",
+  "title": "Engineering",
+  "description": "Architecture, backend, frontend, data, ML, agents, and reliability playbooks for software teams.",
+  "category": "engineering",
+  "source": "https://github.com/alirezarezvani/claude-skills@19392f7",
+  "license": "MIT"
+}

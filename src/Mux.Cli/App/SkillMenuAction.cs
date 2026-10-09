@@ -39,6 +39,21 @@ namespace Mux.Cli.App
         /// <summary>
         /// Choose a trust level for the current project's checked-in skills.
         /// </summary>
-        Trust
+        Trust,
+
+        /// <summary>
+        /// Show only the skills in one category.
+        /// </summary>
+        Filter,
+
+        /// <summary>
+        /// Remove the category filter.
+        /// </summary>
+        ClearFilter,
+
+        /// <summary>
+        /// Browse, install, and remove the opt-in skill packs.
+        /// </summary>
+        Packs
     }
 }

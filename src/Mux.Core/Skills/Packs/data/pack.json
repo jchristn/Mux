@@ -1,0 +1,8 @@
+{
+  "id": "data",
+  "title": "Data",
+  "description": "Databases, SQL, data quality, and statistics playbooks.",
+  "category": "data",
+  "source": "https://github.com/alirezarezvani/claude-skills@19392f7",
+  "license": "MIT"
+}

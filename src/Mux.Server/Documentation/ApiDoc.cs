@@ -640,6 +640,46 @@ namespace Mux.Server.Documentation
             .WithResponse(400, BadRequest())
             .WithResponse(401, Unauthorized());
 
+        /// <summary>Metadata for <c>GET /v1.0/api/skills/packs</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SkillPacksList = m => Sec(Init(m, TagSkills,
+            "List skill packs",
+            "Returns the opt-in skill packs shipped with mux, each with its title, description, category, source, license, skill count, and how many of its skills are installed in the user's skills directory.",
+            operationId: "listSkillPacks"))
+            .WithResponse(200, OkList("SkillPackDto"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/skills/packs/{id}</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SkillPackGet = m => Sec(Init(m, TagSkills,
+            "Get a skill pack",
+            "Returns one pack with its skills: id, description, category, file count, and whether each is installed. 404 when no pack has the id.",
+            operationId: "getSkillPack"))
+            .WithParameter(OpenApiParameterMetadata.Path("id", "The pack id, for example engineering."))
+            .WithResponse(200, Ok("SkillPackDto"))
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
+        /// <summary>Metadata for <c>POST /v1.0/api/skills/packs/install</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SkillPackInstall = m => Sec(Init(m, TagSkills,
+            "Install a skill pack",
+            "Installs every skill in `Pack`, or just `Skill`, into the user's skills directory. Existing folders are skipped: a skill the user created is never replaced, and this pack's own copies are replaced only with `Force`. Returns what was installed and skipped. 400 without a pack, 404 for an unknown pack or skill.",
+            operationId: "installSkillPack"))
+            .WithRequestBody(Body("SkillPackRequestDto", "The pack (and optionally one skill) to install."))
+            .WithResponse(200, Ok("SkillPackResultDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
+        /// <summary>Metadata for <c>POST /v1.0/api/skills/packs/remove</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SkillPackRemove = m => Sec(Init(m, TagSkills,
+            "Remove a skill pack",
+            "Removes the skills `Pack` installed (or just `Skill`). Only folders the pack installed are removed; one edited since install is kept unless `Force` is set. Returns what was removed and skipped.",
+            operationId: "removeSkillPack"))
+            .WithRequestBody(Body("SkillPackRequestDto", "The pack (and optionally one skill) to remove."))
+            .WithResponse(200, Ok("SkillPackResultDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
         /// <summary>Metadata for <c>GET /v1.0/api/skills</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> SkillsList = m => Sec(Init(m, TagSkills,
             "List skills",
@@ -667,6 +707,25 @@ namespace Mux.Server.Documentation
             .WithRequestBody(Body("SkillToggleRequest", "The skill id and desired enabled state."))
             .WithResponse(200, OkList("SkillDto"))
             .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>PUT /v1.0/api/skills/category</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SkillsCategory = m => Sec(Init(m, TagSkills,
+            "Set or clear a skill's category",
+            "Stores a per-user category override for the skill named by `Id` in skills.json (SKILL.md is never rewritten). The value is normalized to kebab-case (`Code Review` becomes `code-review`); a null or blank `Category` clears the override so the skill uses its SKILL.md category again. Returns the updated skill. 400 for a malformed category, 404 for an unknown skill.",
+            operationId: "setSkillCategory"))
+            .WithRequestBody(Body("SkillCategoryRequest", "The skill id and its new category, or null to clear."))
+            .WithResponse(200, Ok("SkillDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/skills/categories</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SkillsCategories = m => Sec(Init(m, TagSkills,
+            "List skill categories",
+            "Returns the categories in use with their skill counts (canonical categories first, in canonical order) and `Known`, the canonical categories a client should offer when editing.",
+            operationId: "listSkillCategories"))
+            .WithResponse(200, Ok("SkillCategoriesDto"))
             .WithResponse(401, Unauthorized());
 
         /// <summary>Metadata for <c>POST /v1.0/api/skills</c>.</summary>
@@ -1410,6 +1469,43 @@ namespace Mux.Server.Documentation
                 ["IgnoreCertErrors"] = false, ["ShowBoundaryLines"] = false, ["DefaultEnqueueBehavior"] = "ask"
             }, description: "The editable server settings (secrets masked).");
 
+            s["SkillPackSkillDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Id"] = Pstr("The skill id."),
+                ["Description"] = Pstr("The skill's description."),
+                ["Category"] = Pstr("The skill's category, or empty."),
+                ["Installed"] = Pbool("Whether it is installed from this pack."),
+                ["FileCount"] = Pint("How many files it bundles, including SKILL.md.")
+            }, new Dictionary<string, object?> { ["Id"] = "tdd-guide", ["Description"] = "Drive a change test-first.", ["Category"] = "testing", ["Installed"] = false, ["FileCount"] = 3 });
+
+            s["SkillPackDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Id"] = Pstr("The pack id."),
+                ["Title"] = Pstr("A short title."),
+                ["Description"] = Pstr("What the pack contains."),
+                ["Category"] = Pstr("The category its skills belong to."),
+                ["Source"] = Pstr("Where the skills came from."),
+                ["License"] = Pstr("The license the skills are distributed under."),
+                ["SkillCount"] = Pint("How many skills the pack has."),
+                ["InstalledCount"] = Pint("How many of them are installed."),
+                ["Skills"] = Parr(Ref("SkillPackSkillDto"), "The pack's skills (single-pack route only).")
+            }, new Dictionary<string, object?> { ["Id"] = "engineering", ["Title"] = "Engineering", ["Description"] = "Engineering workflow skills.", ["Category"] = "engineering", ["Source"] = "https://github.com/alirezarezvani/claude-skills", ["License"] = "MIT", ["SkillCount"] = 40, ["InstalledCount"] = 2 });
+
+            s["SkillPackRequestDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Pack"] = Pstr("The pack id (required)."),
+                ["Skill"] = PstrNullable("One skill to install or remove; omit for the whole pack."),
+                ["Force"] = Pbool("Reinstall this pack's copies, or remove edited ones.")
+            }, new Dictionary<string, object?> { ["Pack"] = "engineering", ["Skill"] = "tdd-guide", ["Force"] = false });
+
+            s["SkillPackResultDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Pack"] = Pstr("The pack id."),
+                ["Installed"] = Parr(Pstr("A skill id."), "Skill ids installed."),
+                ["Removed"] = Parr(Pstr("A skill id."), "Skill ids removed."),
+                ["Skipped"] = Parr(Pstr("id: reason"), "Skills left alone, with the reason.")
+            }, new Dictionary<string, object?> { ["Pack"] = "engineering", ["Installed"] = new[] { "tdd-guide" }, ["Removed"] = new object[0], ["Skipped"] = new object[0] });
+
             s["SkillDto"] = Obj(new Dictionary<string, M>
             {
                 ["Name"] = Pstr("Skill id/name."),
@@ -1420,12 +1516,36 @@ namespace Mux.Server.Documentation
                 ["Mutating"] = Pbool("Whether the skill is mutating."),
                 ["Commands"] = Pint("Number of commands."),
                 ["Errors"] = Parr(Pstr("A validation error."), "Validation errors, if any."),
+                ["Category"] = Pstr("The effective category: the per-user override, then SKILL.md, then inferred, then `general`."),
+                ["CategoryOverridden"] = Pbool("Whether Category is a per-user override from skills.json."),
+                ["FileCategory"] = Pstr("The category written in SKILL.md, or empty."),
                 ["Body"] = PstrNullable("The SKILL.md body (only on the detail route).")
             }, new Dictionary<string, object?>
             {
                 ["Name"] = "commit", ["Title"] = "Git commit", ["Description"] = "Craft and make a git commit.",
-                ["Enabled"] = true, ["Valid"] = true, ["Mutating"] = true, ["Commands"] = 2, ["Errors"] = new object[0]
+                ["Enabled"] = true, ["Valid"] = true, ["Mutating"] = true, ["Commands"] = 2, ["Errors"] = new object[0],
+                ["Category"] = "git", ["CategoryOverridden"] = false, ["FileCategory"] = "git"
             });
+
+            s["SkillCategoryRequest"] = Obj(new Dictionary<string, M>
+            {
+                ["Id"] = Pstr("The skill id/name."),
+                ["Category"] = PstrNullable("The new category (normalized to kebab-case), or null or blank to clear the override.")
+            }, new Dictionary<string, object?> { ["Id"] = "commit", ["Category"] = "workflow" }, new List<string> { "Id" }, "Set or clear a skill's category override.");
+
+            s["SkillCategoryCount"] = Obj(new Dictionary<string, M>
+            {
+                ["Category"] = Pstr("The category."),
+                ["Count"] = Pint("Skills in it."),
+                ["Known"] = Pbool("Whether it is a canonical category.")
+            }, new Dictionary<string, object?> { ["Category"] = "review", ["Count"] = 5, ["Known"] = true });
+
+            s["SkillCategoriesDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Items"] = Parr(Ref("SkillCategoryCount"), "The categories in use."),
+                ["Count"] = Pint("The number of categories in use."),
+                ["Known"] = Parr(Pstr("A canonical category."), "The canonical categories, in the order clients should offer them.")
+            }, new Dictionary<string, object?> { ["Items"] = new object[0], ["Count"] = 0, ["Known"] = new[] { "git", "review" } });
 
             s["SkillToggleRequest"] = Obj(new Dictionary<string, M>
             {

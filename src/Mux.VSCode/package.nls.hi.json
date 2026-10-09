@@ -45,6 +45,7 @@
   "cmd.manage.validateMcp": "MCP सर्वर सत्यापित करें",
   "cmd.manage.deleteMcp": "MCP सर्वर हटाएँ",
   "cmd.manage.activatePrompt": "सक्रिय प्रॉम्प्ट के रूप में सेट करें",
+  "cmd.manage.setSkillCategory": "स्किल श्रेणी सेट करें",
   "cmd.manage.toggleSkill": "स्किल टॉगल करें",
   "cmd.manage.editSettings": "सेटिंग्स संपादित करें",
   "cmd.showHelp": "mux से कनेक्ट करने में सहायता",

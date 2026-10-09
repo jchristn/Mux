@@ -26,6 +26,21 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Folder-based default skills and opt-in skill packs. Every file is embedded under a logical name that keeps
+         its path relative to the folder (RecursiveDir separators are normalized in code), and nothing under these
+         folders is compiled or copied to the output, so skill scripts and assets are data, never project code. -->
+    <Compile Remove="Skills\Bundled\**;Skills\Packs\**" />
+    <None Remove="Skills\Bundled\**;Skills\Packs\**" />
+    <Content Remove="Skills\Bundled\**;Skills\Packs\**" />
+    <EmbeddedResource Include="Skills\Bundled\**\*" LogicalName="Mux.Core.Skills.Bundled/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Skills\Packs\**\*" LogicalName="Mux.Core.Skills.Packs/%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- Files merged into existing default skills from imported sources (SKILLS_TO_CONSIDER.md "Adapt" items),
+         seeded under each skill's resources/ folder by AdaptedSkillResources. -->
+    <None Remove="Skills\Resources\Adapted\**" />
+    <EmbeddedResource Include="Skills\Resources\Adapted\**\*" LogicalName="Mux.Core.Skills.Adapted/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <!-- Pin the native SQLite bundle to a patched build; the version Microsoft.Data.Sqlite pulls
          transitively (2.1.10) carries advisory GHSA-2m69-gcr7-jv3q. -->

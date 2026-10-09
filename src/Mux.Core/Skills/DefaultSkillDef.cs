@@ -127,6 +127,12 @@ namespace Mux.Core.Skills
         }
 
         /// <summary>
+        /// The skill's category (kebab-case), or empty to use <see cref="DefaultSkillCategories.For"/>. Written to
+        /// the seeded <c>SKILL.md</c> as <c>category:</c>. Never null.
+        /// </summary>
+        public string Category { get; set; } = string.Empty;
+
+        /// <summary>
         /// The prose procedure written into the body after the when-to-use paragraph. May contain
         /// <c>$ARGUMENTS</c> and <c>$1</c> to <c>$9</c> placeholders. Required when there are no commands.
         /// Never null.

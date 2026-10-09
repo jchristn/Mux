@@ -1,0 +1,8 @@
+{
+  "id": "business",
+  "title": "Business",
+  "description": "Executive advisory, board, strategy, and operating playbooks.",
+  "category": "business",
+  "source": "https://github.com/alirezarezvani/claude-skills@19392f7",
+  "license": "MIT"
+}

@@ -1,0 +1,8 @@
+{
+  "id": "research",
+  "title": "Research",
+  "description": "Deep research, literature review, and briefing playbooks.",
+  "category": "research",
+  "source": "https://github.com/alirezarezvani/claude-skills@19392f7",
+  "license": "MIT"
+}

@@ -28,7 +28,14 @@ Get-ChildItem -Recurse -File -Include *.cs,*.ts,*.js,*.py,*.go,*.md -ErrorAction
   }
 if ($found -eq 0) { Write-Output 'No TODO/FIXME/HACK markers found.' }
 ")
-                });
+                },
+                null,
+                @"Turning the markers into a debt plan (the user asks what to fix first, or for a tech-debt review):
+
+1. Run `scan` and group the markers by file and by kind (TODO, FIXME, HACK). Add the debt the markers do not show when you see it: duplicated logic, functions over about 50 lines, missing tests on changed code, outdated dependencies, and workarounds referenced in comments.
+2. Score each item with cost of delay: (business value + urgency + risk reduction) / effort, each rated 1 to 10, where risk covers security, reliability, and compliance, and effort is multiplied by up to 2 for uncertainty. Security and data-loss risks go first regardless of score.
+3. Report a short prioritized list: the item, its location, the score and its parts, and the smallest change that retires it. Recommend fixing the top few within normal work rather than a separate cleanup project, and say which items are cheaper to live with.
+4. Keep the inventory honest: re-run `scan` after a cleanup and compare counts, so the report shows whether debt actually went down.");
 
             skills["dead-code-scan"] = DefaultSkillBuilder.Build(
                 "dead-code-scan", "Find possibly-dead code", "Heuristically flags disabled and obsolete C# code (#if false blocks and [Obsolete] members).", false, "hygiene",

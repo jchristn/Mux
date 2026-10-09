@@ -67,6 +67,7 @@ git status --short
 | `modelInvocable` | bool | `true` | Whether the skill is listed in the system prompt. Claude Code's `disable-model-invocation: true` sets it to `false`; the skill stays callable by name and through the `skill` tool. |
 | `requiresTools` | string[] | empty | Executables that must be on PATH for the skill to be listed in `relevant` mode (`[aws]`); `a\|b` means either (`[terraform\|tofu]`). PATH is scanned, nothing is run, and the answer is cached for the refresh interval. Combined with `appliesTo`, both must pass. |
 | `argumentHint` | string | empty | What the skill expects after its name, for example `"[base-branch]"`. Quote it when it starts with `[`. Claude Code's `argument-hint` maps here. |
+| `category` | string | empty | One kebab-case category that groups the skill on every surface, for example `review` or `testing`. The canonical values are `git`, `review`, `testing`, `debugging`, `languages`, `frontend`, `devops`, `containers`, `kubernetes`, `cloud`, `infrastructure`, `security`, `data`, `docs`, `scaffolding`, `hygiene`, `workflow`, `loops`, `engineering`, `product`, `productivity`, `research`, `marketing`, `compliance`, `business`, and `general`; other kebab-case values are allowed. A value that is not kebab-case is a validation warning and is read normalized (`Code Review` becomes `code-review`). Without it, the category is inferred from the tags, or `general`. A user can override it without editing the file (see below). |
 
 The frontmatter parser accepts a small, fixed subset of YAML — scalars, booleans, inline `[a, b]` or block (`- item`) string lists, and the `commands` list of maps. It is intentionally simple; when in doubt, keep values on one line.
 
@@ -104,6 +105,7 @@ Any user-invocable skill runs by name: `/code-review main` in the terminal, desk
 name: team-review
 description: Review a change the way this team does.
 argumentHint: "[base-branch]"
+category: languages
 appliesTo: [package.json]
 ---
 
@@ -148,7 +150,7 @@ A skill can do exactly what `run_process` can do — no more, no less. `run_skil
 
 ## Resources
 
-Files under `resources/` travel with the skill and are listed when the model opens it. A command reads them from `$MUX_SKILL_DIR/resources/…`. Use them for templates, checklists, or reference text a command needs.
+Files under `resources/` travel with the skill and are listed when the model opens it. A command reads them from `$MUX_SKILL_DIR/resources/…`. Use them for templates, checklists, or reference text a command needs. Larger skills can also carry `scripts/`, `references/`, `assets/`, or `templates/` folders; see [Folder skills and ${SKILL_DIR}](#folder-skills-and-skill_dir).
 
 ## Validating and running
 
@@ -175,3 +177,80 @@ mux skill run json-validate run --arg ./package.json
 **A bundled-script skill.** Point a command at `run: scripts/build.ps1` instead of an inline block when the logic outgrows a fenced block or you want to reuse a script you already have. The script lives in the skill's `scripts/` folder and runs in place.
 
 Start from a seeded skill that resembles what you need, edit its body and command, run `mux skill validate <id>`, and it is ready.
+
+## Categories
+
+Every skill has one effective category, used to group and filter skills in the terminal (`/skills`), the CLI (`mux skill list --category <c>`, `mux skill categories`), the web dashboard, the desktop app, VS Code, the REST API, and MCP `list_skills`. It is resolved in this order:
+
+1. The user's override in `skills.json`, set from any of those surfaces (`mux skill category <name> <category>`, `/skills category <name> <category>`, the dashboard and desktop "Set category" actions, `PUT /v1.0/api/skills/category`). The override never rewrites `SKILL.md`; clearing it (`--clear`) returns the skill to its file category.
+2. The `category:` field in `SKILL.md`.
+3. For the default skills mux ships, the shipped category, so copies seeded before categories existed still group correctly.
+4. A category inferred from the tags (`react` gives `frontend`, `docker` gives `containers`, `review` gives `review`).
+5. `general`.
+
+## Folder skills and ${SKILL_DIR}
+
+A skill can bundle any files next to `SKILL.md`: `scripts/` for code the model runs, `references/` for long reference material it reads on demand, `assets/` and `templates/` for files it copies or fills in. Refer to them through the folder placeholder so the instructions work wherever the skill is installed:
+
+```markdown
+Run `python "${SKILL_DIR}/scripts/audit.py" src/` and compare the output with ${SKILL_DIR}/references/checklist.md.
+```
+
+mux replaces `${SKILL_DIR}` with the skill's absolute folder (forward slashes, no trailing slash) in three places: the `skill` tool's output when the model opens the skill, the prompt a `/skill` invocation sends, and `mux skill show`. These spellings are accepted as aliases, so skills written for other tools work unchanged: `${MUX_SKILL_DIR}`, `${CLAUDE_SKILL_DIR}`, `${CLAUDE_PLUGIN_ROOT}`, `${SKILL_ROOT}`, `{baseDir}`, `{skill_path}`, `{skillDir}`, and the bare `$SKILL_DIR`, `$SKILL_ROOT`, `$MUX_SKILL_DIR`, and `$CLAUDE_SKILL_DIR` (a longer name such as `$SKILL_DIRECTORY` is left alone).
+
+When the model opens a skill, the `skill` tool also returns `directory` and a `files` list (relative paths, sorted, at most 200 files and four folders deep; `files_truncated` is true when the list was cut). `SKILL.md`, dot files and folders, and dependency or build folders (`node_modules`, `__pycache__`, `.venv`, `venv`, `bin`, `obj`) are left out. A `/skill` invocation of a skill with bundled files ends with a line naming the folder, so relative paths such as `scripts/run.py` resolve.
+
+A skill command runs with `MUX_SKILL_DIR`, `SKILL_DIR`, and `CLAUDE_SKILL_DIR` all set to the skill folder.
+
+## Bundled defaults and skill packs
+
+Default skills that need bundled files ship as folders under `src/Mux.Core/Skills/Bundled/<id>/` and are embedded in `Mux.Core`. They seed exactly like the other defaults: written on first run, topped up on upgrade when new ones appear, never overwriting a skill you edited, and never coming back once you delete one (the `.seeded-defaults` manifest remembers them). Files under `scripts/`, files ending in `.sh` or `.py`, and files starting with `#!` are made executable on macOS and Linux.
+
+Opt-in collections ship as **packs** under `src/Mux.Core/Skills/Packs/<pack>/`, one folder per skill plus an optional `pack.json`:
+
+```json
+{ "title": "Marketing", "description": "SEO, content, and campaign skills.", "category": "marketing", "source": "https://github.com/owner/repo", "license": "MIT" }
+```
+
+Packs are not seeded. Install them, or single skills from them, from any surface:
+
+```text
+mux skill pack list
+mux skill pack show marketing
+mux skill pack install marketing [--skill seo-audit] [--force]
+mux skill pack remove marketing [--skill seo-audit] [--force]
+```
+
+The terminal has `/packs` (and the **Skill packs…** entry in `/skills`), the dashboard and desktop Skills views have a **Packs** button, and the REST API has `/v1.0/api/skills/packs`. Installs are recorded in `.installed-packs.json` in the skills directory with a hash of each `SKILL.md`, which gives these guarantees:
+
+- A skill of your own with the same name is never replaced or removed, even with `--force`.
+- A skill installed by another pack is left alone.
+- Installing again skips skills already installed; `--force` reinstalls them.
+- Removing skips a skill you edited since it was installed; `--force` removes it anyway.
+- A skill folder you deleted by hand is simply forgotten.
+
+## Importing skills
+
+`mux skill import` copies Claude-format skills (any folder with a `SKILL.md`) into mux and adapts them:
+
+```text
+mux skill import ./some-skills                          # every skill under the folder, into ~/.mux/skills
+mux skill import https://github.com/owner/repo          # a shallow git clone; the commit is recorded
+mux skill import ./repo --pack marketing                # sets the category to marketing
+mux skill import ./repo --pack marketing --into src/Mux.Core/Skills/Packs   # writes <into>/marketing/<id>/ plus pack.json
+mux skill import ./repo --dry-run                       # report what would change, write nothing
+mux skill import ./repo --force                         # replace skills that already exist
+```
+
+Imported content is treated as untrusted: it is copied and rewritten, never executed. Folders named `.git`, `.gemini` (and other dot folders), `node_modules`, `__pycache__`, `.venv`, and `venv` are skipped, and when two folders produce the same id the first wins. Each skill is validated after it is written; a skill that fails validation is reported as `invalid` and the command exits 1. The report lists every change and flags anything that needs a person to look at it.
+
+The normalization rules, in order:
+
+1. **Folder placeholders.** `${CLAUDE_SKILL_DIR}`, `${CLAUDE_PLUGIN_ROOT}`, `${SKILL_ROOT}`, `${MUX_SKILL_DIR}`, `{baseDir}`, `{skill_path}`, `{skillDir}`, `$SKILL_ROOT`, `$CLAUDE_SKILL_DIR`, and `$CLAUDE_PLUGIN_ROOT` become `${SKILL_DIR}`.
+2. **Script paths.** A runner (`python`, `python3`, `bash`, `sh`, `node`, `pwsh`, `ruby`, `deno`, `bun`, `tsx`, `uv run`, `npx`, and similar) followed by `scripts/`, `references/`, `assets/`, or `templates/` becomes `runner "${SKILL_DIR}/scripts/..."`, but only for folders the skill actually has.
+3. **Bare bundled paths.** Other mentions of those folders (`references/guide.md`) are anchored to `${SKILL_DIR}/`. URLs, nested paths such as `src/scripts/`, and already anchored paths are left alone. Running the rules twice changes nothing.
+4. **Claude references.** In prose, `CLAUDE.md` becomes "the project instruction file (MUX.md, AGENTS.md, or CLAUDE.md)", and inside inline code it becomes `MUX.md`; `~/.claude` becomes `~/.mux`; `claude -p` and `claude --print` become `mux print`; Claude Code tool names become mux tools (`Bash` to `run_process`, `Read` to `read_file`, `Write` to `write_file`, `Edit` to `edit_file`, `Grep` to `grep`, `Glob` to `glob`, `WebFetch` to `web_retrieve`, `WebSearch` to `web_search`, `Task` to `spawn_subagent`, `TodoWrite` to `plan_tasks`, `AskUserQuestion` to `ask_user`). Fenced code blocks are not rewritten. Features with no direct mux equivalent (scheduling tools such as `CronCreate`, `.claude/settings.json`, `.claude/agents`, `/plugin`, `claude mcp`, and others) are flagged with their line number.
+5. **Dashes.** Em and en dashes are removed: a dash after a short lead-in (a heading or a bold label) becomes a colon, a dash in a longer sentence becomes a comma, a numeric range becomes a hyphen, and dashes in code and scripts become hyphens.
+6. **Frontmatter.** A missing `category` is added (from `--pack`, then keywords in the source path, then the description, then `general`), along with `source` (the folder, or `url@commit#path` for git) and `license` (detected from a `LICENSE` file). Existing values are kept; a file without frontmatter gets one with `name` and `description`.
+
+`source` and `license` are ordinary frontmatter fields and are shown by `mux skill show`.

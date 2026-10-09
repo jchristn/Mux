@@ -171,7 +171,14 @@ Procedure:
 5. Narrow until a single cause explains every symptom. If it worked before, git-bisect can find the commit that broke it.
 6. Fix the cause, not the symptom. Prefer the smallest change; do not weaken a test to make it pass.
 7. Verify: re-run the original reproduction, then the nearby tests. Never declare it fixed without re-running the reproduction.
-8. Remove temporary logging and scripts, then report: the cause, the evidence, the fix, and how you verified it.";
+8. Remove temporary logging and scripts, then report: the cause, the evidence, the fix, and how you verified it.
+
+When the request is to make a whole feature or folder work again (several symptoms, not one), repair it in five phases and do not propose a fix before the third is finished:
+- Scope: list every file in the feature, its entry points (imported from elsewhere), and its internal files.
+- Trace: map what the feature depends on (imports, environment variables, config, data models, API calls, packages) and what depends on it, and confirm each import and signature actually exists and matches.
+- Diagnose: collect every problem with its evidence before fixing any of them, and order them by dependency (fix what others rely on first).
+- Fix: one problem at a time, re-running the relevant check after each. If a fix breaks something else, go back to Diagnose. If three fixes in a row create new problems, stop and raise the design question with the user instead of patching further.
+- Verify: re-run every original symptom, the feature's tests, and the tests of its dependents.";
 
         private const string BisectBody = @"Procedure:
 
@@ -191,7 +198,8 @@ Procedure:
    - How it is organized: each important folder or project, and what it owns.
    - How a request or command flows: trace one representative path end to end, file by file.
 4. Mention the build and test commands and where tests live.
-5. Keep it concrete. If something is unclear from the code, say so rather than guessing.";
+5. Keep it concrete. If something is unclear from the code, say so rather than guessing.
+6. For an onboarding document (the user asks for one, or for a guide a new team member can follow), run `python3 ""${SKILL_DIR}/resources/scripts/codebase_analyzer.py"" . --json` for file counts, languages, and config files, then fill `${SKILL_DIR}/resources/onboarding-template.md`. Match the audience: setup steps and guardrails for a junior developer, architecture and operations for a senior one, ownership and integration boundaries for a contractor. Write it only when asked, and show it before saving.";
 
         #endregion
     }

@@ -45,6 +45,7 @@
   "cmd.manage.validateMcp": "验证 MCP 服务器",
   "cmd.manage.deleteMcp": "删除 MCP 服务器",
   "cmd.manage.activatePrompt": "设为活动提示词",
+  "cmd.manage.setSkillCategory": "设置技能类别",
   "cmd.manage.toggleSkill": "切换技能",
   "cmd.manage.editSettings": "编辑设置",
   "cmd.showHelp": "连接 mux 的帮助",

@@ -802,6 +802,11 @@ namespace Mux.Core.Skills
                 if (byId.TryGetValue(skill.Manifest.Name, out SkillIndexEntry? entry))
                 {
                     skill.Manifest.Enabled = entry.Enabled;
+                    skill.CategoryOverride = entry.Category;
+                }
+                else
+                {
+                    skill.CategoryOverride = null;
                 }
             }
         }
@@ -838,6 +843,8 @@ namespace Mux.Core.Skills
                 builder.Append(skill.Manifest.Commands.Count);
                 builder.Append('|');
                 builder.Append(skill.Manifest.Description.GetHashCode());
+                builder.Append('|');
+                builder.Append(skill.Category);
                 builder.Append(';');
             }
 

@@ -1,0 +1,8 @@
+{
+  "id": "marketing",
+  "title": "Marketing",
+  "description": "Brand, positioning, content, and conversion playbooks.",
+  "category": "marketing",
+  "source": "https://github.com/alirezarezvani/claude-skills@19392f7",
+  "license": "MIT"
+}

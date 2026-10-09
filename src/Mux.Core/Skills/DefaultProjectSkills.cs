@@ -23,7 +23,7 @@ namespace Mux.Core.Skills
                     Mutating = false,
                     Tags = new List<string> { "project", "detect" },
                     WhenToUse = "Start here in an unfamiliar repository, before building, testing, or reviewing, to learn which tools and skills the project uses.",
-                    Body = "Run `summary` for a readable report or `json` for a single object other skills can parse. Both read files only; nothing is built or installed. The `skills` line names the mux skills that fit this project, so prefer those over guessing commands.",
+                    Body = "Run `summary` for a readable report or `json` for a single object other skills can parse. Both read files only; nothing is built or installed. The `skills` line names the mux skills that fit this project, so prefer those over guessing commands. The `monorepo` line names workspace tooling (pnpm, npm or yarn workspaces, Turborepo, Nx, Lerna, Rush, Go and Cargo workspaces). In a monorepo, scope every build, test, and lint command to the packages you changed (`turbo run build --filter=...[origin/main]`, `nx affected`, `pnpm --filter <pkg>`), check the blast radius before changing a shared package, and keep each package's own instruction file current. `python3 \"${SKILL_DIR}/resources/scripts/monorepo_analyzer.py\" <root> --json` maps the packages and their internal dependencies.",
                     Commands = new List<DefaultSkillCommandDef>
                     {
                         new DefaultSkillCommandDef("summary", "Print a readable report of the project's toolchain.", "pwsh", DetectScript + "Write-MuxProjectReport -Report $report\n"),
@@ -132,8 +132,18 @@ try {
     }
     foreach ($item in $deploy) { if ($deploySkills.ContainsKey($item)) { $skills.AddRange([string[]]$deploySkills[$item]) } }
 
+    $monorepo = @()
+    foreach ($pair in @(@('pnpm-workspace.yaml', 'pnpm workspaces'), @('turbo.json', 'Turborepo'), @('nx.json', 'Nx'), @('lerna.json', 'Lerna'), @('rush.json', 'Rush'), @('go.work', 'Go workspace'))) {
+        if (Has $pair[0]) { $monorepo += $pair[1] }
+    }
+    $rootPackage = Join-Path $root 'package.json'
+    if ((Test-Path -LiteralPath $rootPackage) -and ((Get-Content -LiteralPath $rootPackage -Raw) -match '""workspaces""\s*:')) { $monorepo += 'npm or yarn workspaces' }
+    $rootCargo = Join-Path $root 'Cargo.toml'
+    if ((Test-Path -LiteralPath $rootCargo) -and ((Get-Content -LiteralPath $rootCargo -Raw) -match '(?m)^\[workspace\]')) { $monorepo += 'Cargo workspace' }
+
     $report = [ordered]@{
         root = $root
+        monorepo = @($monorepo | Select-Object -Unique)
         languages = $languages
         ecosystems = $ecosystems.ToArray()
         testFrameworks = @($tests | Select-Object -Unique)
@@ -155,6 +165,7 @@ function Write-MuxProjectReport([object]$Report) {
     foreach ($e in $Report.ecosystems) { Write-Output ('Ecosystem: ' + $e.name + ' (' + $e.manager + ', ' + $e.manifest + ')') }
     Write-Output ('Tests: ' + $(if ($Report.testFrameworks.Count) { $Report.testFrameworks -join ', ' } else { 'none detected' }))
     Write-Output ('Quality tools: ' + $(if ($Report.qualityTools.Count) { $Report.qualityTools -join ', ' } else { 'none detected' }))
+    Write-Output ('Monorepo: ' + $(if ($Report.monorepo.Count) { $Report.monorepo -join ', ' } else { 'no' }))
     Write-Output ('CI: ' + $(if ($Report.ci.Count) { $Report.ci -join ', ' } else { 'none detected' }))
     Write-Output ('Containers and deploy: ' + $(if ($Report.deploy.Count) { $Report.deploy -join ', ' } else { 'none detected' }))
     Write-Output ('Skills: ' + $(if ($Report.skills.Count) { $Report.skills -join ', ' } else { 'no toolchain skills apply' }))

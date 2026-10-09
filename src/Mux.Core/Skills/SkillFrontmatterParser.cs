@@ -195,6 +195,15 @@ namespace Mux.Core.Skills
                 case "argumenthint":
                     manifest.ArgumentHint = StripQuotes(value);
                     break;
+                case "category":
+                    manifest.Category = StripQuotes(value);
+                    break;
+                case "source":
+                    manifest.Source = StripQuotes(value);
+                    break;
+                case "license":
+                    manifest.License = StripQuotes(value);
+                    break;
                 case "commands":
                     inCommands = true;
                     currentListKey = string.Empty;

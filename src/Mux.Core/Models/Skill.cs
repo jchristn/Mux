@@ -90,6 +90,18 @@ namespace Mux.Core.Models
         public bool ShadowsUserSkill { get; set; }
 
         /// <summary>
+        /// The per-user category override from <c>~/.mux/skills.json</c>, or null when the skill uses the category
+        /// in its <c>SKILL.md</c> (or an inferred one). Applied by the runtime and the surfaces that list skills.
+        /// </summary>
+        public string? CategoryOverride { get; set; }
+
+        /// <summary>
+        /// The effective category: the override, then the frontmatter <c>category</c>, then one inferred from the
+        /// tags, then <c>general</c>.
+        /// </summary>
+        public string Category => Mux.Core.Skills.SkillCategories.Resolve(_Manifest, CategoryOverride);
+
+        /// <summary>
         /// Whether the skill can be offered to the model and run: valid, enabled, and not blocked.
         /// </summary>
         public bool IsUsable => IsValid && _Manifest.Enabled && !CommandsBlocked;

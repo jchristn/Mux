@@ -216,6 +216,7 @@ namespace Test.Shared
                     SkillManagerSuite.Create(),
                     SkillManagementSuite.Create(),
                     SkillEditorCopySuite.Create(),
+                    SkillCategoriesSuite.Create(),
 
                     // Skills: the mux skill CLI verb.
                     SkillCommandSuite.Create(),
@@ -246,11 +247,17 @@ namespace Test.Shared
                     MemorySuite.Create(),
                     FileMentionsSuite.Create(),
                     TerminalLaunchSuite.Create(),
+                    ImportedSkillsSuite.Create(),
 
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
                     McpRuntimeSuite.Create(),
                     McpDiagnosticsSuite.Create(),
+                    McpClientSuite.Create(),
+                    McpStdioClientSuite.Create(),
+                    McpConfigSuite.Create(),
+                    McpServerToolsSuite.Create(),
+                    McpEndToEndSuite.Create(),
 
                     // Command-menu column alignment (F1 / /? menu).
                     CommandMenuFormatterSuite.Create(),
@@ -300,6 +307,7 @@ namespace Test.Shared
                     PublisherManifestSuite.Create(),
                     PublishServiceSuite.Create(),
                     PublisherDriversSuite.Create(),
+                    ImportedSkillsSuite.Create(),
                     StartupRegistrarSuite.Create()
                 };
             }

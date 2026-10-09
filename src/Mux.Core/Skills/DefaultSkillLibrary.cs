@@ -22,6 +22,18 @@ namespace Mux.Core.Skills
         /// <exception cref="InvalidOperationException">Thrown when two categories declare the same skill id.</exception>
         public static IReadOnlyDictionary<string, string> All()
         {
+            return All(Packaging.BundledSkillSet.Embedded);
+        }
+
+        /// <summary>
+        /// Returns the default skills (the C#-defined ones plus the given folder-based bundled skills) as a map of id
+        /// to <c>SKILL.md</c> content.
+        /// </summary>
+        /// <param name="bundled">The folder-based bundled skills to include. Null is treated as none.</param>
+        /// <returns>The default skills, keyed by id.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when two skills declare the same id.</exception>
+        public static IReadOnlyDictionary<string, string> All(Packaging.BundledSkillSet? bundled)
+        {
             Dictionary<string, string> skills = new Dictionary<string, string>(StringComparer.Ordinal);
 
             Merge(skills, DefaultGitSkills.All());
@@ -42,6 +54,16 @@ namespace Mux.Core.Skills
             }
 
             Merge(skills, built);
+
+            // Folder-based defaults (Skills/Bundled/<id>/) carry their own SKILL.md and any scripts, references, or
+            // assets beside it; WriteSkill writes those files too.
+            Dictionary<string, string> folders = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (Packaging.BundledSkill skill in (bundled ?? Packaging.BundledSkillSet.Empty).Skills)
+            {
+                folders[skill.Id] = skill.SkillMarkdown;
+            }
+
+            Merge(skills, folders);
             return skills;
         }
 
@@ -119,11 +141,23 @@ namespace Mux.Core.Skills
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="skillsDirectory"/> is null.</exception>
         public static void SeedInto(string skillsDirectory)
         {
+            SeedInto(skillsDirectory, Packaging.BundledSkillSet.Embedded);
+        }
+
+        /// <summary>
+        /// Writes any default skill (C#-defined or from <paramref name="bundled"/>) whose directory does not already
+        /// exist into <paramref name="skillsDirectory"/>.
+        /// </summary>
+        /// <param name="skillsDirectory">The skills directory. Must not be null.</param>
+        /// <param name="bundled">The folder-based bundled skills. Null is treated as none.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="skillsDirectory"/> is null.</exception>
+        public static void SeedInto(string skillsDirectory, Packaging.BundledSkillSet? bundled)
+        {
             if (skillsDirectory == null) throw new ArgumentNullException(nameof(skillsDirectory));
 
             Directory.CreateDirectory(skillsDirectory);
             IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> resources = AllResources();
-            foreach (KeyValuePair<string, string> skill in All())
+            foreach (KeyValuePair<string, string> skill in All(bundled))
             {
                 string dir = Path.Combine(skillsDirectory, skill.Key);
                 if (Directory.Exists(dir))
@@ -131,7 +165,7 @@ namespace Mux.Core.Skills
                     continue;
                 }
 
-                WriteSkill(dir, skill.Key, skill.Value, resources);
+                WriteSkill(dir, skill.Key, skill.Value, resources, bundled);
             }
         }
 
@@ -155,6 +189,19 @@ namespace Mux.Core.Skills
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="skillsDirectory"/> is null.</exception>
         public static IReadOnlyList<string> SeedNewInto(string skillsDirectory)
         {
+            return SeedNewInto(skillsDirectory, Packaging.BundledSkillSet.Embedded);
+        }
+
+        /// <summary>
+        /// Seeds default skills (C#-defined or from <paramref name="bundled"/>) that have never been seeded before,
+        /// honoring deletions through the manifest. See <see cref="SeedNewInto(string)"/>.
+        /// </summary>
+        /// <param name="skillsDirectory">The skills directory. Must not be null.</param>
+        /// <param name="bundled">The folder-based bundled skills. Null is treated as none.</param>
+        /// <returns>The ids of the defaults written by this call.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="skillsDirectory"/> is null.</exception>
+        public static IReadOnlyList<string> SeedNewInto(string skillsDirectory, Packaging.BundledSkillSet? bundled)
+        {
             if (skillsDirectory == null) throw new ArgumentNullException(nameof(skillsDirectory));
 
             Directory.CreateDirectory(skillsDirectory);
@@ -164,7 +211,7 @@ namespace Mux.Core.Skills
             bool manifestChanged = false;
             IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> resources = AllResources();
 
-            foreach (KeyValuePair<string, string> skill in All())
+            foreach (KeyValuePair<string, string> skill in All(bundled))
             {
                 if (seeded.Contains(skill.Key))
                 {
@@ -174,7 +221,7 @@ namespace Mux.Core.Skills
                 string dir = Path.Combine(skillsDirectory, skill.Key);
                 if (!Directory.Exists(dir))
                 {
-                    WriteSkill(dir, skill.Key, skill.Value, resources);
+                    WriteSkill(dir, skill.Key, skill.Value, resources, bundled);
                     added.Add(skill.Key);
                 }
 
@@ -190,8 +237,15 @@ namespace Mux.Core.Skills
             return added;
         }
 
-        private static void WriteSkill(string dir, string id, string content, IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> resources)
+        private static void WriteSkill(string dir, string id, string content, IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> resources, Packaging.BundledSkillSet? bundled)
         {
+            Packaging.BundledSkill? folder = bundled?.Find(id);
+            if (folder != null)
+            {
+                Packaging.SkillFileWriter.WriteAll(dir, folder.Files, id);
+                return;
+            }
+
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "SKILL.md"), content);
             if (!resources.TryGetValue(id, out IReadOnlyDictionary<string, string>? files))

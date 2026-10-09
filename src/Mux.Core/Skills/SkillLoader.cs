@@ -187,6 +187,11 @@ namespace Mux.Core.Skills
                 result.Warnings.Add($"Frontmatter field '{field}' is not recognized by mux and was ignored.");
             }
 
+            if (manifest.Category.Length > 0 && !SkillCategories.IsValidFormat(manifest.Category))
+            {
+                result.Warnings.Add($"Frontmatter 'category' value '{manifest.Category}' is not kebab-case (lowercase letters, digits, and single hyphens); mux reads it as '{SkillCategories.Normalize(manifest.Category) ?? SkillCategories.General}'.");
+            }
+
             return result;
         }
 

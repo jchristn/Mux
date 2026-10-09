@@ -70,7 +70,7 @@ Everything you can configure in the TUI is available here as a window, each back
 
 - **Endpoints** — add, edit, validate, and remove LLM endpoints (adapter type, base URL, auth, model).
 - **MCP servers**: register stdio/HTTP MCP servers, edit them, and **validate connectivity** (a live probe of the server's tool list). When a server fails, Validate shows the cause on the first line (connection refused, host not found, TLS failure, timeout, an HTTP status such as 401, or a command not found on PATH) and the full diagnosis below it in selectable monospace text with a **Copy details** button: the URL, HTTP status, Content-Type, notable headers (WWW-Authenticate, Retry-After, Server, Mcp-Session-Id presence), the start of the response body, and for stdio servers the resolved command and the server's stderr. Auth secrets are never shown. Hovering a server's ✗ in the list shows the same text.
-- **Skills** — browse, scaffold, edit, and **import** skills from a folder.
+- **Skills**: browse, scaffold, edit, and **import** skills from a folder. A Category column (`*` marks your own override) and a category filter group the list; **Set category…** on a row, or the Category field in the SKILL.md editor, sets or clears the override, which is stored in `skills.json`. **Packs** opens the opt-in skill packs: pick a pack, then install or remove single skills or the whole pack (your own skills with the same names are never touched).
 - **Subagents** — define and edit named subagents.
 - **Prompts** — manage system-prompt profiles.
 - **Custom commands**, **Hooks**, **Keybindings**, **Search providers**, **Pricing** — full CRUD over each, mirroring the CLI's configuration.

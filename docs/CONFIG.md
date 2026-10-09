@@ -48,7 +48,7 @@ If the directory does not exist, `mux` creates it. If `endpoints.json` is missin
 | `system-prompt.md` | Custom default system prompt | No |
 | `prompts.json` | Named, switchable prompt profiles (system + internal prompts) | No |
 | `skills/` | User-authored skills, one folder per skill (`SKILL.md` plus optional `scripts/` and `resources/`); seeded with a curated default set on first run | Created on demand |
-| `skills.json` | Per-skill enablement and pinning, kept separate from each `SKILL.md` so toggling a skill never rewrites it | No |
+| `skills.json` | Per-skill enablement, pinning, and category overrides (`"category": "review"` on a skill's entry; omitted when the skill uses its `SKILL.md` category), kept separate from each `SKILL.md` so toggling or recategorizing a skill never rewrites it | No |
 | `trusted-projects.json` | Per-project trust decisions for checked-in skills with commands (`all`, `playbooks`, or `ignore`), written by `/trust` or `mux skill trust` | No |
 | `MUX.md` | User-level instructions loaded into every system prompt ahead of any project instruction files | No |
 | `sessions/` | Saved interactive sessions (one JSON file per session); the shell autosaves here at each turn boundary and `/sessions` browses/resumes them | Created on demand |

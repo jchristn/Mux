@@ -48,7 +48,9 @@ if ($start -lt 0) { Write-Output 'No section headings found.'; return }
 Write-Output $lines[$start]
 for ($i = $start + 1; $i -lt $lines.Count; $i++) { if ($lines[$i] -like '## *') { break }; Write-Output $lines[$i] }
 ")
-                });
+                },
+                null,
+                @"When CHANGELOG.md has no section for the release yet, build one from the commits since the last tag (`git log <last-tag>..HEAD --format=%s`), grouped by Conventional Commit type: feat (Added), fix (Fixed), perf, refactor, docs, test, build, ci, chore, security, deprecated, and remove. A commit written `type(scope)!: summary`, or with a `BREAKING CHANGE:` footer, is a breaking change: list it first with its migration step. The next version follows from the commits: any breaking change is a major bump, any new feature without one a minor bump, and everything else a patch. Rewrite each line for users (what changed for them, not the implementation), drop chores and merges, and never change a version number without the user's approval.");
 
             skills["pr-description"] = DefaultSkillBuilder.Build(
                 "pr-description", "Draft a pull request description",

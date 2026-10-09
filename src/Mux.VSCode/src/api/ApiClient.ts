@@ -26,6 +26,7 @@ import {
     SessionMetadataPatch,
     SessionSummary,
     SkillExpansion,
+    SkillCategories,
     SkillSummary,
     StreamEvent,
     Subagent,
@@ -238,6 +239,23 @@ export class ApiClient {
         }
 
         return this.getJson<FileCompletion>(`/v1.0/api/files/complete?${query.toString()}`, signal);
+    }
+
+    /**
+     * Sets a skill's category override, or clears it when `category` is null or blank, so the skill uses the
+     * category in its SKILL.md again. Returns the updated skill.
+     *
+     * @param id The skill id.
+     * @param category The new category, or null to clear.
+     * @param signal Optional abort signal.
+     */
+    public async setSkillCategory(id: string, category: string | null, signal?: AbortSignal): Promise<SkillSummary> {
+        return this.sendJson<SkillSummary>('PUT', '/v1.0/api/skills/category', { Id: id, Category: category }, signal);
+    }
+
+    /** Lists the skill categories in use (with counts) and the canonical categories. */
+    public async getSkillCategories(signal?: AbortSignal): Promise<SkillCategories> {
+        return this.getJson<SkillCategories>('/v1.0/api/skills/categories', signal);
     }
 
     /** Enables or disables a skill by id. */

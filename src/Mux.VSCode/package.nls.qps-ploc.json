@@ -42,6 +42,7 @@
   "cmd.manage.addSubagent": "⟦Add subagent·····⟧",
   "cmd.manage.editSubagent": "⟦Edit subagent······⟧",
   "cmd.manage.deleteSubagent": "⟦Delete subagent······⟧",
+  "cmd.manage.setSkillCategory": "[Šéţ šķîļļ çåţéĝöŕý !!!]",
   "cmd.manage.toggleSkill": "⟦Toggle skill·····⟧",
   "cmd.manage.addSkill": "⟦Add skill····⟧",
   "cmd.manage.editSkill": "⟦Edit skill····⟧",

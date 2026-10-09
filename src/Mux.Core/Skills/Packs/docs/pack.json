@@ -1,0 +1,8 @@
+{
+  "id": "docs",
+  "title": "Docs",
+  "description": "Markdown document authoring and review.",
+  "category": "docs",
+  "source": "https://github.com/alirezarezvani/claude-skills@19392f7",
+  "license": "MIT"
+}
