@@ -1,6 +1,6 @@
 # Data pack
 
-Databases, SQL, data quality, and statistics playbooks.
+Data quality, statistics, data science, ML engineering, and web scraping playbooks. (The database skills ship with the default library.)
 
 Install with `mux skill pack install data`; nothing in this pack is listed or seeded until then. Skills marked as bundling scripts call them as `python3 "${SKILL_DIR}/scripts/<name>.py"`, so Python 3 must be on PATH, and a few need third-party packages named in their own instructions.
 

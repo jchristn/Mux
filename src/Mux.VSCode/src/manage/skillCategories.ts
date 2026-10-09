@@ -6,7 +6,7 @@
 
 /** The canonical categories, in the order surfaces offer them (mirrors Mux.Core SkillCategories.Known). */
 export const KNOWN_SKILL_CATEGORIES: readonly string[] = [
-    'git', 'review', 'testing', 'debugging', 'languages', 'frontend', 'devops', 'containers', 'kubernetes', 'cloud',
+    'git', 'review', 'testing', 'debugging', 'languages', 'frontend', 'mobile', 'devops', 'containers', 'kubernetes', 'cloud',
     'infrastructure', 'security', 'data', 'docs', 'scaffolding', 'hygiene', 'workflow', 'loops', 'engineering',
     'product', 'productivity', 'research', 'marketing', 'compliance', 'business', 'general',
 ];

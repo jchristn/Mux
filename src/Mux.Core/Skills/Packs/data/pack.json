@@ -1,7 +1,7 @@
 {
   "id": "data",
   "title": "Data",
-  "description": "Databases, SQL, data quality, and statistics playbooks.",
+  "description": "Data quality, statistics, data science, ML engineering, and web scraping playbooks. (The database skills ship with the default library.)",
   "category": "data",
   "source": "https://github.com/alirezarezvani/claude-skills@19392f7",
   "license": "MIT"

@@ -1144,6 +1144,7 @@ mux skill trust [all|playbooks|ignore|reset] [--cwd dir]   # record or report pr
 mux skill list --category review     # only the skills in one category (list shows a CATEGORY column)
 mux skill category <name> [<category>|--clear]   # print, set, or clear a skill's category override
 mux skill categories                 # categories in use with their skill counts
+mux skill eval [case-id] [--top n] [--cases file] [--live [--endpoint name]] [--output-format json]   # measure how well skills would be chosen
 mux skill pack list                  # opt-in skill packs with installed/total counts
 mux skill pack install <pack> [--skill <id>] [--force]   # install a pack or one skill from it
 mux skill pack remove <pack> [--skill <id>] [--force]    # remove what the pack installed (never your own skills)
@@ -1204,6 +1205,98 @@ every enabled skill stays callable either way. Set `skillListingMode` to `all` o
 Settings in `settings.json`: `skillsEnabled` (default `true`), `skillRefreshIntervalSeconds` (default `30`),
 `skillsDirectory` (override the default `~/.mux/skills`), `projectSkillsEnabled` (default `true`),
 `projectSkillRoots`, and `skillListingMode` (default `relevant`). See [CONFIG.md](CONFIG.md).
+
+### Database skills
+
+Every database skill except `db-migrate` is read-only, and each platform enforces it in the strongest way its
+client allows: SQLite opens the file `-readonly`, Postgres sets `default_transaction_read_only`, MySQL and
+MariaDB run in a read-only transaction, SQL Server rolls its transaction back, Oracle sets `SET TRANSACTION READ
+ONLY`, and Neo4j uses read access mode. The SQL skills also accept only read statements (SELECT, WITH, SHOW,
+EXPLAIN, and similar), one at a time, and the NoSQL and LiteGraph skills offer only read operations. Connection
+strings are read from an environment variable, and only its name ever appears in output; pass `--url-env
+<VARIABLE>` to use a different one.
+
+| Skill | Platform | Connection | Commands |
+|---|---|---|---|
+| `sql-sqlite` | SQLite | the file path | ping, tables, describe, query |
+| `sql-postgres` | PostgreSQL | `$DATABASE_URL` | ping, tables, describe, query |
+| `sql-mysql` | MySQL, MariaDB | `$DATABASE_URL` (mysql://...) | ping, tables, describe, query |
+| `sql-sqlserver` | SQL Server, Azure SQL | `$SQLSERVER_CONNECTION_STRING` | ping, tables, describe, query |
+| `sql-oracle` | Oracle | `$ORACLE_CONNECT` (user/password@//host:1521/service) | ping, tables, describe, query |
+| `nosql-mongodb` | MongoDB | `$MONGODB_URI` | ping, databases, collections, find, count, indexes |
+| `nosql-redis` | Redis, Valkey | `$REDIS_URL` | ping, info, keys, get |
+| `nosql-dynamodb` | DynamoDB | your AWS CLI credentials | tables, describe, scan, get |
+| `nosql-cassandra` | Cassandra, ScyllaDB | `$CASSANDRA_HOST`, `$CASSANDRA_USERNAME`, `$CASSANDRA_PASSWORD` | keyspaces, tables, describe, query |
+| `graph-neo4j` | Neo4j | `$NEO4J_URI`, `$NEO4J_USERNAME`, `$NEO4J_PASSWORD` | ping, labels, relationships, query |
+| `graph-litegraph` | LiteGraph | `$LITEGRAPH_ENDPOINT`, `$LITEGRAPH_API_KEY` | ping, tenants, graphs, stats, nodes, edges, query |
+
+A platform skill is listed when its client is on PATH (`psql`, `mysql`, `sqlcmd`, `mongosh`, and so on);
+`graph-litegraph` talks to LiteGraph's REST API from PowerShell, so it needs no client. `db-migrate` finds EF
+Core, Prisma, Alembic, Django, Rails, Flyway, or golang-migrate migrations and offers `detect`, `status`,
+`plan` (a preview that changes nothing), and `apply`. Apply is refused with exit 3 when the target environment
+(MUX_DB_ENVIRONMENT, ASPNETCORE_ENVIRONMENT, RAILS_ENV, NODE_ENV, and similar, or else the database URL's
+host) matches the production pattern, unless `--confirm <environment>` repeats it.
+
+### Dependency, SBOM, and script skills
+
+`deps-audit audit` runs the vulnerability auditor for each ecosystem it finds (npm, pnpm, or yarn 1;
+pip-audit; cargo-audit; `dotnet list package --vulnerable`; govulncheck), or osv-scanner for all of them, and
+prints one report that exits 1 at or above `--min-severity` (default high). `sbom write [file]` writes a
+CycloneDX SBOM with syft. `shell-lint check [path]` and `shell-lint changed [base]` run shellcheck on shell
+scripts and PSScriptAnalyzer on PowerShell scripts. A tool that is not installed is noted and skipped.
+
+### Upgrade skills
+
+`dotnet-upgrade`, `node-upgrade`, and `py-upgrade` take the target (`net10.0`, `22`, `3.12`). `plan` lists every
+edit and changes nothing; `apply` makes exactly those edits and keeps each file's encoding and line endings.
+They cover project files and global.json; .nvmrc, .node-version, and package.json `engines.node`;
+`requires-python`, ruff and black `target-version`, mypy `python_version`, .python-version, and runtime.txt;
+and, for all three, `node-version` or `python-version` in GitHub workflows and `FROM node:` or `FROM python:` in
+Dockerfiles. What they cannot edit safely (version matrices, classifiers, `@types/node`, framework packages
+still on the old major) is printed as a note. `dotnet-upgrade apply` builds afterwards unless `--no-build`.
+
+### Web framework and diagnosis skills
+
+`web-framework` covers Next.js, Nuxt, SvelteKit, Angular, Astro, Remix, Svelte, Vue, and Vite apps (`detect`,
+`build`, `lint`, `test`, `dev`, `upgrade-check`), preferring the project's own scripts and falling back to the
+framework's tools; `storybook` builds and tests stories. Dev servers are described for `process_start`, not
+started by the skill. `log-triage summarize <file>` groups a log's errors and keeps their stack traces,
+`port-inspect [port]` shows what is listening and which process owns it, and `bench time "<command>"
+["<other>"]` times commands (hyperfine when installed), with `bench dotnet` for BenchmarkDotNet projects and
+`bench k6 <script>` for load tests.
+
+### Evaluating skill selection
+
+The model picks a skill from one line per listed skill, `- name: description`, without reading anything else
+first. So a skill can be missed in two ways: it is not listed for a project where it belongs (a gating
+problem), or it is listed but its name and description do not match how people ask for it (a wording
+problem). `mux skill eval` measures both without calling a model.
+
+Each evaluation case is a prompt, a few project files, the skills that should handle it, and optionally
+skills that must not be listed there. For every case mux builds the files in a temporary directory, lists your
+installed skills exactly as the system prompt would, and ranks that listing against the prompt with BM25 over
+each skill's name and description. A case passes when every expected skill is listed, no `absent` skill is,
+and an expected skill ranks in the top three (`--top` changes the cutoff). Tools in `requiresTools` count as
+installed, so results are the same on every machine.
+
+```bash
+mux skill eval                       # the built-in cases: failures, then the top-1 and top-3 rates
+mux skill eval go-run-tests          # one case, with its ranking
+mux skill eval --cases my-cases.json # your own cases, for skills you write
+```
+
+A case file is a JSON array of objects with `id`, `prompt`, `files` (relative paths; a trailing `/` makes a
+directory), `expect`, and optional `absent`. The command exits 1 when any case fails, so it works as a CI gate
+for a team's own skills. It also lists pairs of skills whose descriptions are similar enough to be confused.
+
+The ranking is a lexical proxy for the model's choice, so treat a miss as a prompt to reread the description
+the way the model would, not as a reason to stuff it with keywords.
+
+`--live` asks a real model instead. For each case mux sends the same skill listing and the same `skill` and
+`run_skill` tool definitions the agent uses, makes one call to the default endpoint (or `--endpoint <name>`),
+and records the skill named by the first `skill` or `run_skill` call. Nothing runs. A case passes when the model
+picks an expected skill, so `--top` does not apply. It costs one model call per case (120 for the built-in
+set), so it is a manual check rather than a CI gate; run it when you change descriptions or switch models.
 
 ### Review, debugging, and codebase skills
 

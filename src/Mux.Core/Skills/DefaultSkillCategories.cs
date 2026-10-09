@@ -59,7 +59,18 @@ namespace Mux.Core.Skills
             ["json-validate"] = "hygiene",
             ["release-notes"] = "workflow",
             ["standup-summary"] = "workflow",
-            ["env-report"] = "workflow"
+            ["env-report"] = "workflow",
+            ["deps-audit"] = "security",
+            ["sbom"] = "security",
+            ["shell-lint"] = "hygiene",
+            ["db-migrate"] = "data",
+            ["node-upgrade"] = "languages",
+            ["py-upgrade"] = "languages",
+            ["web-framework"] = "frontend",
+            ["storybook"] = "frontend",
+            ["log-triage"] = "debugging",
+            ["port-inspect"] = "debugging",
+            ["bench"] = "debugging"
         };
 
         private static readonly string[][] _Prefixes =
@@ -84,7 +95,15 @@ namespace Mux.Core.Skills
             new[] { "huawei-", "cloud" },
             new[] { "ibm-", "cloud" },
             new[] { "linode-", "cloud" },
-            new[] { "new-", "scaffolding" }
+            new[] { "new-", "scaffolding" },
+            new[] { "sql-", "data" },
+            new[] { "nosql-", "data" },
+            new[] { "graph-", "data" },
+            new[] { "ruby-", "languages" },
+            new[] { "php-", "languages" },
+            new[] { "swift-", "mobile" },
+            new[] { "android-", "mobile" },
+            new[] { "flutter-", "mobile" }
         };
 
         #endregion

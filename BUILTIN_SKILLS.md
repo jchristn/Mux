@@ -2,7 +2,7 @@
 
 _Generated from mux's default skill library and its bundled skill packs. Regenerate it when skills change._
 
-mux ships with **170 default skills**, seeded into `~/.mux/skills` on first run and topped up on upgrade without overwriting your edits, and **166 more in 10 opt-in packs** that you install when you want them. Every skill has a category; you can override it on any surface (`mux skill category <name> <category>`, `/skills`, the web dashboard, the desktop app, or VS Code) without editing its SKILL.md.
+mux ships with **208 default skills**, seeded into `~/.mux/skills` on first run and topped up on upgrade without overwriting your edits, and **166 more in 10 opt-in packs** that you install when you want them. Every skill has a category; you can override it on any surface (`mux skill category <name> <category>`, `/skills`, the web dashboard, the desktop app, or VS Code) without editing its SKILL.md.
 
 Most skills are listed to the model only where they apply: a skill can declare `appliesTo` file globs (for example `package.json` or `.github/workflows/*.yml`) and `requiresTools` (for example `gh` or `kubectl`), so a Python project never sees the Java skills. Run any skill by name with `/<skill> [arguments]`, list them with `mux skill list` (add `--category <name>` to filter), and read one with `mux skill show <name>`. **Commands** is the number of deterministic commands a skill offers through `run_skill`; a skill with 0 commands is a playbook the model follows with its normal tools. **Origin** is `mux` for skills written for mux and `claude-skills` for skills adapted from [alirezarezvani/claude-skills](https://github.com/alirezarezvani/claude-skills) (MIT; see THIRD_PARTY_NOTICES.md).
 
@@ -10,20 +10,22 @@ Most skills are listed to the model only where they apply: a skill can declare `
 
 - [cloud](#cloud) (39)
 - [containers](#containers) (4)
-- [debugging](#debugging) (2)
+- [data](#data) (12)
+- [debugging](#debugging) (5)
 - [devops](#devops) (4)
 - [docs](#docs) (6)
-- [frontend](#frontend) (8)
+- [frontend](#frontend) (10)
 - [git](#git) (15)
-- [hygiene](#hygiene) (9)
+- [hygiene](#hygiene) (10)
 - [infrastructure](#infrastructure) (2)
 - [kubernetes](#kubernetes) (6)
-- [languages](#languages) (42)
+- [languages](#languages) (51)
 - [loops](#loops) (4)
+- [mobile](#mobile) (9)
 - [productivity](#productivity) (1)
 - [review](#review) (6)
 - [scaffolding](#scaffolding) (4)
-- [security](#security) (4)
+- [security](#security) (6)
 - [testing](#testing) (8)
 - [workflow](#workflow) (6)
 - [Optional packs](#optional-packs) (166)
@@ -43,7 +45,7 @@ Most skills are listed to the model only where they apply: a skill can declare `
 | `aws-integration` | Lists SQS queues and their depth, SNS topics, secret and parameter names, Route 53 zones, and the caller's IAM policies. | 7 | mux |
 | `aws-observe` | Lists log groups, shows recent log events, lists alarms in ALARM state, and reports month-to-date cost by service. | 4 | mux |
 | `aws-storage` | Lists buckets and objects, syncs folders with a dry run first, and creates presigned URLs. | 4 | mux |
-| `aws-whoami` | Shows the caller identity, configured profiles, and available regions. | 3 | mux |
+| `aws-whoami` | Shows which AWS account and identity the CLI is signed in as, the configured profiles, and the available regions. | 3 | mux |
 | `azure-apps` | Lists and shows web apps and function apps, deploys a package to a web app, and previews or deploys an azd project. | 6 | mux |
 | `azure-compute` | Lists VMs and starts, stops, or deallocates one. | 4 | mux |
 | `azure-containers` | Lists AKS clusters and writes kubeconfig, works with ACR, and lists, reads logs of, or updates Container Apps. | 7 | mux |
@@ -83,12 +85,32 @@ Most skills are listed to the model only where they apply: a skill can declare `
 | `docker-inspect` | Lists containers and images, tails a container's logs, or shows resource use. | 5 | mux |
 | `dockerfile-lint` | Checks the nearest Dockerfile with hadolint, or with a built-in checklist when hadolint is not installed. | 1 | mux |
 
+### data
+
+| Skill | What it does | Commands | Origin |
+|---|---|---:|---|
+| `db-migrate` | Shows database migration status, previews pending schema migrations as SQL, and applies them, for EF Core, Prisma, Alembic, Django, Rails, Flyway, or golang-migrate. | 4 | mux |
+| `graph-litegraph` | LiteGraph graph database: checks health, lists tenants and graphs, shows statistics, lists nodes and edges, or runs a read-only graph query (MATCH ... RETURN). | 7 | mux |
+| `graph-neo4j` | Neo4j graph database: shows the version, lists node labels and relationship types, or runs a read-only Cypher query. | 4 | mux |
+| `nosql-cassandra` | Apache Cassandra and ScyllaDB: lists keyspaces and tables, describes a table, or runs a read-only CQL SELECT. | 4 | mux |
+| `nosql-dynamodb` | Amazon DynamoDB: lists tables, describes a table's keys and indexes, scans a few items, or gets one item by key. | 4 | mux |
+| `nosql-mongodb` | MongoDB: pings the server, lists databases and collections, finds or counts documents with a JSON filter, and shows indexes. | 6 | mux |
+| `nosql-redis` | Redis: shows server info, scans keys by pattern, and reads a key whatever its type (string, hash, list, set, sorted set, or stream). | 4 | mux |
+| `sql-mysql` | MySQL and MariaDB: shows the server version, lists tables, describes a table, or runs a read-only SQL query. | 4 | mux |
+| `sql-oracle` | Oracle Database: shows the version, lists your tables, describes a table, or runs a read-only SQL query. | 4 | mux |
+| `sql-postgres` | PostgreSQL: shows the server version, lists tables, describes a table, or runs a read-only SQL query. | 4 | mux |
+| `sql-sqlite` | SQLite: shows the version, lists tables, describes a table, or runs a read-only SQL query against a database file. | 4 | mux |
+| `sql-sqlserver` | Microsoft SQL Server and Azure SQL: shows the server version, lists tables, describes a table, or runs a read-only T-SQL query. | 4 | mux |
+
 ### debugging
 
 | Skill | What it does | Commands | Origin |
 |---|---|---:|---|
+| `bench` | Benchmarks: times one command or compares two (hyperfine, or a built-in timing loop), runs a BenchmarkDotNet project, or runs a k6 load test script. | 3 | mux |
 | `debug` | A step-by-step procedure for finding the real cause of a bug or failing test before changing code. | 0 | mux |
 | `git-bisect` | Drives git bisect with a test command to find the first bad commit, and always restores the original HEAD. | 3 | mux |
+| `log-triage` | Summarizes a log file's errors and exceptions: groups repeated messages (numbers, GUIDs, and paths masked), counts them, and shows the first occurrence with its stack... | 1 | mux |
+| `port-inspect` | Shows which TCP ports are listening and which process owns each, or what is using one port (for example: what is on port 8080?). | 1 | mux |
 
 ### devops
 
@@ -115,19 +137,21 @@ Most skills are listed to the model only where they apply: a skill can declare `
 | Skill | What it does | Commands | Origin |
 |---|---|---:|---|
 | `a11y-audit` | Accessibility audit skill for scanning, fixing, and verifying WCAG 2.2 Level A and AA compliance across React, Next.js, Vue, Angular, Svelte, and plain HTML codebases... | 2 | claude-skills |
-| `react-build-analyze` | Builds the app and lists the largest emitted JavaScript and CSS files. | 1 | mux |
+| `react-build-analyze` | Builds the app and lists the largest emitted JavaScript and CSS files, to find what makes the bundle large. | 1 | mux |
 | `react-dev-server` | Detects the dev script, framework, port, and ready line, so the dev server can be started in the background and its URL reported. | 1 | mux |
 | `react-lint-hooks` | Reports only react-hooks and jsx-a11y ESLint findings. | 1 | mux |
 | `react-new-component` | Creates a function component and, when the project has a test setup, a test beside it. | 1 | mux |
 | `react-new-hook` | Creates a custom hook and, when the project has a test setup, a test beside it. | 1 | mux |
 | `react-test` | Runs the tests for a single component or hook by name. | 1 | mux |
 | `react-upgrade-check` | Reports the declared React-related versions and what the package manager actually installed. | 1 | mux |
+| `storybook` | Storybook: builds the static Storybook, runs the story tests, or describes the Storybook dev server. | 3 | mux |
+| `web-framework` | Next.js, Nuxt, SvelteKit, Angular, Astro, Remix, Svelte, Vue, and Vite apps: detects the framework, then builds, lints, tests, describes the dev server, or compares... | 6 | mux |
 
 ### git
 
 | Skill | What it does | Commands | Origin |
 |---|---|---:|---|
-| `git-blame-summary` | Summarizes the authors of a path and its commit history. | 2 | mux |
+| `git-blame-summary` | Summarizes who changed a file or folder: its authors and commit history. | 2 | mux |
 | `git-branch` | Creates a new branch or lists existing branches. | 2 | mux |
 | `git-changelog-entry` | Inserts a bullet under the first heading in CHANGELOG.md. | 1 | mux |
 | `git-cherry-pick` | Applies a commit onto the current branch, or aborts an in-progress cherry-pick. | 2 | mux |
@@ -154,6 +178,7 @@ Most skills are listed to the model only where they apply: a skill can declare `
 | `large-file-scan` | Lists working-tree files larger than a size threshold, with their sizes. | 1 | mux |
 | `license-header-check` | Lists C# files whose first non-empty line is not a comment, so they may be missing a license header. | 1 | mux |
 | `line-ending-check` | Reads text files as bytes and reports any with mixed CRLF/LF line endings. | 1 | mux |
+| `shell-lint` | Lints shell scripts (bash, sh) with shellcheck and PowerShell scripts with PSScriptAnalyzer, across the repository, one path, or the files changed on the branch. | 2 | mux |
 | `todo-scan` | Inventories TODO, FIXME, and HACK markers across common source files. | 1 | mux |
 | `yaml-lint` | Flags YAML lines that use a literal tab for indentation. | 1 | mux |
 
@@ -170,7 +195,7 @@ Most skills are listed to the model only where they apply: a skill can declare `
 |---|---|---:|---|
 | `helm` | Lints, renders, diffs, and upgrades Helm releases, and lists releases and history. | 7 | mux |
 | `k8s-apply` | Shows a diff against the cluster, applies manifests, or restarts a deployment, behind the production guard. | 3 | mux |
-| `k8s-context` | Shows the active context, cluster, and namespace, lists contexts, or lists namespaces. | 3 | mux |
+| `k8s-context` | Shows which Kubernetes cluster, context, and namespace kubectl points at, lists contexts, or lists namespaces. | 3 | mux |
 | `k8s-inspect` | Gets and describes resources, shows pod logs, warning events, resource use, and rollout status. | 6 | mux |
 | `k8s-validate` | Validates manifests with a client or server dry run, or against schemas with kubeconform. | 3 | mux |
 | `minikube` | Shows status, starts or stops the cluster, loads local images, gets service URLs, and lists addons. | 6 | mux |
@@ -183,7 +208,7 @@ Most skills are listed to the model only where they apply: a skill can declare `
 | `cargo-clippy` | Runs Clippy with warnings as errors, or applies its fixes. | 2 | mux |
 | `cargo-fmt` | Applies or verifies rustfmt formatting. | 2 | mux |
 | `cargo-test` | Runs cargo test for everything or for tests whose names match a filter. | 2 | mux |
-| `cpp-build` | Builds with CMake, Meson, or Make using every processor core. | 1 | mux |
+| `cpp-build` | Compiles the C or C++ project with CMake, Meson, or Make using every processor core. | 1 | mux |
 | `cpp-configure` | Configures a CMake (or Meson) build tree with compile_commands.json exported. | 3 | mux |
 | `cpp-format` | Applies or verifies clang-format across the project's C and C++ sources. | 2 | mux |
 | `cpp-sanitize` | Configures a separate build tree with AddressSanitizer or UndefinedBehaviorSanitizer, builds it, and runs CTest. | 2 | mux |
@@ -196,6 +221,7 @@ Most skills are listed to the model only where they apply: a skill can declare `
 | `dotnet-publish` | Publish the application, framework-dependent or self-contained. | 2 | mux |
 | `dotnet-restore` | Restore NuGet packages for the current project or solution. | 1 | mux |
 | `dotnet-test` | Run the test suite for the current .NET project or solution. | 2 | mux |
+| `dotnet-upgrade` | Upgrades .NET projects to a new target framework (for example net8.0 to net10.0): plans every TargetFramework and global.json edit, applies them, and builds. | 2 | mux |
 | `go-build` | Builds or vets every package in the module. | 2 | mux |
 | `go-lint` | Runs golangci-lint when the project configures it, otherwise staticcheck. | 1 | mux |
 | `go-mod` | Tidies go.mod and go.sum, or lists dependencies with available updates. | 2 | mux |
@@ -214,13 +240,21 @@ Most skills are listed to the model only where they apply: a skill can declare `
 | `js-scripts` | Lists the project's package.json scripts or runs one. | 2 | mux |
 | `js-test` | Runs Vitest, Jest, Mocha, or node --test in non-watch mode. | 3 | mux |
 | `js-typecheck` | Runs the TypeScript compiler without emitting files. | 1 | mux |
-| `py-deps` | Lists outdated packages or known vulnerabilities in the project's environment. | 2 | mux |
-| `py-env` | Shows which interpreter and environment manager the project uses, or creates the environment. | 2 | mux |
-| `py-format` | Applies or verifies formatting with Ruff, falling back to Black. | 2 | mux |
+| `node-upgrade` | Upgrades the Node.js version a project pins (.nvmrc, .node-version, package.json engines, CI workflows, Dockerfiles) to a new major version. | 2 | mux |
+| `php-deps` | PHP: installs Composer packages, lists outdated ones, or audits them for known vulnerabilities. | 3 | mux |
+| `php-lint` | PHP: runs PHPStan static analysis, or checks or applies PHP-CS-Fixer formatting. | 3 | mux |
+| `php-test` | PHP: runs Pest or PHPUnit from vendor/bin, for everything or a name filter. | 2 | mux |
+| `py-deps` | Lists outdated Python dependencies, or the ones with known vulnerabilities, in the project's environment. | 2 | mux |
+| `py-env` | Shows which Python interpreter, virtual environment, and manager (uv, Poetry, pipenv, or pip) the project uses, or creates the environment. | 2 | mux |
+| `py-format` | Formats Python source files with Ruff (falling back to Black), or verifies the formatting. | 2 | mux |
 | `py-install` | Installs the project's dependencies, or adds a package, with its environment manager. | 2 | mux |
 | `py-lint` | Checks or fixes lint problems with Ruff, falling back to flake8. | 2 | mux |
 | `py-test` | Runs pytest (or unittest when pytest is not installed) inside the project's environment. | 4 | mux |
 | `py-typecheck` | Runs mypy or pyright, whichever the project configures. | 1 | mux |
+| `py-upgrade` | Upgrades the Python version a project targets (requires-python, ruff and mypy targets, .python-version, CI workflows, Dockerfiles) to a new version such as 3.12. | 2 | mux |
+| `ruby-deps` | Ruby: installs the Gemfile's gems with Bundler, or lists outdated gems. | 2 | mux |
+| `ruby-lint` | Ruby: checks style and correctness with RuboCop, or applies its safe corrections. | 2 | mux |
+| `ruby-test` | Ruby: runs RSpec, or Minitest through rails test or rake test, for everything or a name filter. | 2 | mux |
 
 ### loops
 
@@ -230,6 +264,20 @@ Most skills are listed to the model only where they apply: a skill can declare `
 | `fix-until-green` | Runs the detected build and tests, then fixes one failure at a time until everything passes or the iteration budget runs out. | 1 | mux |
 | `flaky-test-hunt` | Runs a test filter (or any command) many times and reports how often it fails, with the first failing output. | 1 | mux |
 | `loop-until` | Re-runs a command until it exits 0 or the attempts run out, printing each attempt's exit code. | 1 | mux |
+
+### mobile
+
+| Skill | What it does | Commands | Origin |
+|---|---|---:|---|
+| `android-build` | Android: builds debug or release APKs, or cleans, through the Gradle wrapper. | 3 | mux |
+| `android-lint` | Android: runs Android Lint on the debug variant. | 1 | mux |
+| `android-test` | Android: runs local unit tests, or instrumented tests on a connected device or emulator. | 2 | mux |
+| `flutter-analyze` | Flutter and Dart: runs the analyzer, or checks or applies dart format. | 3 | mux |
+| `flutter-build` | Flutter: fetches packages, lists outdated ones, or builds an APK, app bundle, iOS app, or web build. | 3 | mux |
+| `flutter-test` | Flutter and Dart: runs the tests, all or those whose names match. | 2 | mux |
+| `swift-build` | Swift and iOS: builds a Swift package in debug or release, or lists an Xcode project's schemes and builds one. | 4 | mux |
+| `swift-format` | Swift: checks or applies swift-format formatting across the package. | 2 | mux |
+| `swift-test` | Swift and iOS: runs swift test for a package, filtered or not, or xcodebuild test for an Xcode scheme. | 3 | mux |
 
 ### productivity
 
@@ -242,7 +290,7 @@ Most skills are listed to the model only where they apply: a skill can declare `
 | Skill | What it does | Commands | Origin |
 |---|---|---:|---|
 | `api-design-reviewer` | Comprehensive REST API design review with automated linting, breaking-change detection, and design scorecards. Catches inconsistent conventions, missing versioning, and... | 3 | claude-skills |
-| `api-surface-diff` | Shows added and removed public members between two git refs. | 1 | mux |
+| `api-surface-diff` | Shows public API members added or removed between two git refs, such as the last release and HEAD. | 1 | mux |
 | `code-review` | Reviews uncommitted changes, a branch, a commit, a pull request, or one file for correctness bugs first, then tests and maintainability. | 5 | mux |
 | `pr-comments` | Lists the review threads on a GitHub pull request, unresolved first, so they can be addressed. | 1 | mux |
 | `simplify` | Lists the files changed on this branch so the model can remove duplication, dead code, and needless complexity without changing behavior. | 1 | mux |
@@ -261,7 +309,9 @@ Most skills are listed to the model only where they apply: a skill can declare `
 
 | Skill | What it does | Commands | Origin |
 |---|---|---:|---|
-| `git-secret-scan` | Checks staged changes for common credential patterns and fails if any are found. | 1 | mux |
+| `deps-audit` | Checks the project's dependencies for known vulnerabilities and security advisories (CVEs) with npm, pnpm, yarn, pip-audit, cargo-audit, dotnet, govulncheck for Go... | 1 | mux |
+| `git-secret-scan` | Checks staged changes for API keys, tokens, and other credentials, and fails if any are found. | 1 | mux |
+| `sbom` | Writes a CycloneDX JSON software bill of materials (SBOM) for the repository with syft. | 1 | mux |
 | `security-guidance` | PreToolUse security-anti-pattern hook for mux. Catches 12 common security risks (command injection, XSS, SQL injection, unsafe deserialization, GitHub Actions workflow... | 0 | claude-skills |
 | `security-review` | Reviews uncommitted changes, a branch, or a pull request for exploitable security problems, with a secret scan and a dependency check. | 3 | mux |
 | `skill-security-auditor` | Security audit and vulnerability scanner for AI agent skills before installation. Use when: (1) evaluating a skill from an untrusted source, (2) auditing a skill... | 1 | claude-skills |
@@ -283,7 +333,7 @@ Most skills are listed to the model only where they apply: a skill can declare `
 
 | Skill | What it does | Commands | Origin |
 |---|---|---:|---|
-| `env-report` | Reports the OS and the versions of common developer tools. | 1 | mux |
+| `env-report` | Reports the OS and the installed versions of git, dotnet, node, python, and pwsh. | 1 | mux |
 | `init` | Surveys the repository and guides writing or updating AGENTS.md: build, test, and run commands, layout, and conventions. | 1 | mux |
 | `project-detect` | Reports languages, package managers, build systems, test frameworks, CI, and container or deploy files, plus the mux skills that apply. | 2 | mux |
 | `release-notes` | Prints the topmost section of CHANGELOG.md as release notes. | 1 | mux |
@@ -364,7 +414,7 @@ Audit preparation and readiness for SOC 2, ISO 27001, ISO 13485, GDPR, FDA, and 
 
 ### data pack (6 skills)
 
-Databases, SQL, data quality, and statistics playbooks.
+Data quality, statistics, data science, ML engineering, and web scraping playbooks. (The database skills ship with the default library.)
 
 | Skill | What it does |
 |---|---|

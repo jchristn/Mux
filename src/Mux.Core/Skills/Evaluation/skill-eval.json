@@ -1,0 +1,1706 @@
+[
+  {
+    "id": "go-run-tests",
+    "prompt": "run the go tests",
+    "files": [
+      "go.mod",
+      "main.go"
+    ],
+    "expect": [
+      "go-test"
+    ],
+    "absent": [
+      "dotnet-test",
+      "dotnet-build",
+      "py-test",
+      "js-test"
+    ]
+  },
+  {
+    "id": "go-race",
+    "prompt": "check the Go code for data races",
+    "files": [
+      "go.mod",
+      "main.go"
+    ],
+    "expect": [
+      "go-test"
+    ]
+  },
+  {
+    "id": "go-vet",
+    "prompt": "build the module and run go vet",
+    "files": [
+      "go.mod",
+      "main.go"
+    ],
+    "expect": [
+      "go-build"
+    ]
+  },
+  {
+    "id": "go-tidy",
+    "prompt": "clean up go.mod, there are unused requirements",
+    "files": [
+      "go.mod",
+      "main.go"
+    ],
+    "expect": [
+      "go-mod"
+    ]
+  },
+  {
+    "id": "go-lint",
+    "prompt": "lint the go code with staticcheck",
+    "files": [
+      "go.mod",
+      "main.go"
+    ],
+    "expect": [
+      "go-lint"
+    ]
+  },
+  {
+    "id": "js-tests",
+    "prompt": "run the unit tests",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "js-test"
+    ],
+    "absent": [
+      "dotnet-test",
+      "dotnet-build",
+      "go-test",
+      "py-test"
+    ]
+  },
+  {
+    "id": "js-install",
+    "prompt": "install the npm dependencies",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "js-install"
+    ]
+  },
+  {
+    "id": "js-typecheck",
+    "prompt": "does the TypeScript compile without type errors?",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "js-typecheck"
+    ]
+  },
+  {
+    "id": "js-format",
+    "prompt": "format everything with prettier",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "js-format"
+    ]
+  },
+  {
+    "id": "js-lint",
+    "prompt": "fix the eslint warnings",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "js-lint"
+    ]
+  },
+  {
+    "id": "js-scripts",
+    "prompt": "what scripts are defined in package.json?",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "js-scripts"
+    ]
+  },
+  {
+    "id": "js-outdated",
+    "prompt": "which npm packages are out of date?",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "js-deps"
+    ]
+  },
+  {
+    "id": "py-tests",
+    "prompt": "run pytest",
+    "files": [
+      "pyproject.toml",
+      "app/main.py"
+    ],
+    "expect": [
+      "py-test"
+    ],
+    "absent": [
+      "dotnet-test",
+      "dotnet-build",
+      "go-test",
+      "js-test"
+    ]
+  },
+  {
+    "id": "py-lint",
+    "prompt": "lint the python code with ruff",
+    "files": [
+      "pyproject.toml",
+      "app/main.py"
+    ],
+    "expect": [
+      "py-lint"
+    ]
+  },
+  {
+    "id": "py-format",
+    "prompt": "reformat the python files",
+    "files": [
+      "pyproject.toml",
+      "app/main.py"
+    ],
+    "expect": [
+      "py-format"
+    ]
+  },
+  {
+    "id": "py-types",
+    "prompt": "run mypy on the project",
+    "files": [
+      "pyproject.toml",
+      "app/main.py"
+    ],
+    "expect": [
+      "py-typecheck"
+    ]
+  },
+  {
+    "id": "py-venv",
+    "prompt": "which virtualenv is this project using?",
+    "files": [
+      "pyproject.toml",
+      "app/main.py"
+    ],
+    "expect": [
+      "py-env"
+    ]
+  },
+  {
+    "id": "py-add",
+    "prompt": "add requests as a dependency",
+    "files": [
+      "pyproject.toml",
+      "app/main.py"
+    ],
+    "expect": [
+      "py-install"
+    ]
+  },
+  {
+    "id": "py-vulns",
+    "prompt": "are any of our python dependencies vulnerable?",
+    "files": [
+      "pyproject.toml",
+      "app/main.py"
+    ],
+    "expect": [
+      "py-deps"
+    ]
+  },
+  {
+    "id": "dotnet-test",
+    "prompt": "run the .NET tests",
+    "files": [
+      "App.sln",
+      "src/App/App.csproj"
+    ],
+    "expect": [
+      "dotnet-test"
+    ],
+    "absent": [
+      "go-test",
+      "py-test",
+      "js-test"
+    ]
+  },
+  {
+    "id": "dotnet-build",
+    "prompt": "build the solution",
+    "files": [
+      "App.sln",
+      "src/App/App.csproj"
+    ],
+    "expect": [
+      "dotnet-build"
+    ]
+  },
+  {
+    "id": "dotnet-format",
+    "prompt": "apply dotnet format to fix style",
+    "files": [
+      "App.sln",
+      "src/App/App.csproj"
+    ],
+    "expect": [
+      "dotnet-format"
+    ]
+  },
+  {
+    "id": "dotnet-outdated",
+    "prompt": "list outdated NuGet packages",
+    "files": [
+      "App.sln",
+      "src/App/App.csproj"
+    ],
+    "expect": [
+      "dotnet-outdated"
+    ]
+  },
+  {
+    "id": "dotnet-pack",
+    "prompt": "create the NuGet package",
+    "files": [
+      "App.sln",
+      "src/App/App.csproj"
+    ],
+    "expect": [
+      "dotnet-pack"
+    ]
+  },
+  {
+    "id": "dotnet-publish",
+    "prompt": "publish a self-contained build of the app",
+    "files": [
+      "App.sln",
+      "src/App/App.csproj"
+    ],
+    "expect": [
+      "dotnet-publish"
+    ]
+  },
+  {
+    "id": "rust-test",
+    "prompt": "run cargo test",
+    "files": [
+      "Cargo.toml",
+      "src/main.rs"
+    ],
+    "expect": [
+      "cargo-test"
+    ],
+    "absent": [
+      "dotnet-test",
+      "dotnet-build"
+    ]
+  },
+  {
+    "id": "rust-clippy",
+    "prompt": "run clippy and fix what it finds",
+    "files": [
+      "Cargo.toml",
+      "src/main.rs"
+    ],
+    "expect": [
+      "cargo-clippy"
+    ]
+  },
+  {
+    "id": "rust-release",
+    "prompt": "build the crate in release mode",
+    "files": [
+      "Cargo.toml",
+      "src/main.rs"
+    ],
+    "expect": [
+      "cargo-build"
+    ]
+  },
+  {
+    "id": "rust-fmt",
+    "prompt": "check rustfmt formatting",
+    "files": [
+      "Cargo.toml",
+      "src/main.rs"
+    ],
+    "expect": [
+      "cargo-fmt"
+    ]
+  },
+  {
+    "id": "java-test",
+    "prompt": "run the JUnit tests",
+    "files": [
+      "pom.xml"
+    ],
+    "expect": [
+      "java-test"
+    ],
+    "absent": [
+      "dotnet-test",
+      "dotnet-build"
+    ]
+  },
+  {
+    "id": "java-deps",
+    "prompt": "show the maven dependency tree",
+    "files": [
+      "pom.xml"
+    ],
+    "expect": [
+      "java-deps"
+    ]
+  },
+  {
+    "id": "java-package",
+    "prompt": "package the jar with maven",
+    "files": [
+      "pom.xml"
+    ],
+    "expect": [
+      "java-build"
+    ]
+  },
+  {
+    "id": "java-class",
+    "prompt": "create a new Java class called OrderService",
+    "files": [
+      "pom.xml"
+    ],
+    "expect": [
+      "java-new-class"
+    ]
+  },
+  {
+    "id": "cpp-build",
+    "prompt": "compile the C++ project",
+    "files": [
+      "CMakeLists.txt",
+      "src/main.cpp"
+    ],
+    "expect": [
+      "cpp-build"
+    ],
+    "absent": [
+      "dotnet-test",
+      "dotnet-build"
+    ]
+  },
+  {
+    "id": "cpp-asan",
+    "prompt": "build with AddressSanitizer and run the tests",
+    "files": [
+      "CMakeLists.txt",
+      "src/main.cpp"
+    ],
+    "expect": [
+      "cpp-sanitize"
+    ]
+  },
+  {
+    "id": "cpp-format",
+    "prompt": "clang-format the sources",
+    "files": [
+      "CMakeLists.txt",
+      "src/main.cpp"
+    ],
+    "expect": [
+      "cpp-format"
+    ]
+  },
+  {
+    "id": "cpp-tidy",
+    "prompt": "run clang-tidy on the files I changed",
+    "files": [
+      "CMakeLists.txt",
+      "src/main.cpp"
+    ],
+    "expect": [
+      "cpp-tidy"
+    ]
+  },
+  {
+    "id": "cpp-configure",
+    "prompt": "generate compile_commands.json",
+    "files": [
+      "CMakeLists.txt",
+      "src/main.cpp"
+    ],
+    "expect": [
+      "cpp-configure"
+    ]
+  },
+  {
+    "id": "react-component",
+    "prompt": "create a React component called UserCard",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "react-new-component"
+    ]
+  },
+  {
+    "id": "react-hook",
+    "prompt": "write a custom hook useDebounce",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "react-new-hook"
+    ]
+  },
+  {
+    "id": "react-bundle",
+    "prompt": "why is the production bundle so large?",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "react-build-analyze"
+    ]
+  },
+  {
+    "id": "react-dev",
+    "prompt": "start the dev server",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "react-dev-server"
+    ]
+  },
+  {
+    "id": "react-version",
+    "prompt": "which React version is actually installed?",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "react-upgrade-check"
+    ]
+  },
+  {
+    "id": "a11y",
+    "prompt": "check the site for accessibility problems",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "a11y-audit"
+    ]
+  },
+  {
+    "id": "pw-flaky",
+    "prompt": "the playwright tests keep failing intermittently, fix them",
+    "files": [
+      "package.json",
+      "playwright.config.ts"
+    ],
+    "expect": [
+      "pw-fix"
+    ]
+  },
+  {
+    "id": "pw-new",
+    "prompt": "generate a playwright test for the login page",
+    "files": [
+      "package.json",
+      "playwright.config.ts"
+    ],
+    "expect": [
+      "pw-generate"
+    ]
+  },
+  {
+    "id": "pw-init",
+    "prompt": "set up playwright in this project",
+    "files": [
+      "package.json",
+      "src/index.ts"
+    ],
+    "expect": [
+      "pw-init"
+    ]
+  },
+  {
+    "id": "pw-cypress",
+    "prompt": "migrate our cypress tests",
+    "files": [
+      "package.json",
+      "cypress.config.ts"
+    ],
+    "expect": [
+      "pw-migrate"
+    ]
+  },
+  {
+    "id": "flaky",
+    "prompt": "this test fails sometimes; run it many times to see how often",
+    "files": [
+      "go.mod",
+      "main.go"
+    ],
+    "expect": [
+      "flaky-test-hunt"
+    ]
+  },
+  {
+    "id": "tdd",
+    "prompt": "help me do test-driven development for a new parser",
+    "files": [
+      "go.mod",
+      "main.go"
+    ],
+    "expect": [
+      "tdd-guide"
+    ]
+  },
+  {
+    "id": "git-commit",
+    "prompt": "commit my changes",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-commit"
+    ]
+  },
+  {
+    "id": "git-push",
+    "prompt": "push this branch",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-push"
+    ]
+  },
+  {
+    "id": "git-branch",
+    "prompt": "create a branch named feature/login",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-branch"
+    ]
+  },
+  {
+    "id": "git-undo",
+    "prompt": "undo the last commit but keep the changes",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-undo-last-commit"
+    ]
+  },
+  {
+    "id": "git-stash",
+    "prompt": "stash my work for now",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-stash-manager"
+    ]
+  },
+  {
+    "id": "git-rebase",
+    "prompt": "rebase onto the latest main",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-sync"
+    ]
+  },
+  {
+    "id": "git-pr",
+    "prompt": "open a pull request",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-open-pr"
+    ]
+  },
+  {
+    "id": "git-conflicts",
+    "prompt": "which files have merge conflicts?",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-conflict-explainer"
+    ]
+  },
+  {
+    "id": "git-tag",
+    "prompt": "tag release v2.3.0",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-release"
+    ]
+  },
+  {
+    "id": "git-blame",
+    "prompt": "who has been changing this file?",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-blame-summary"
+    ]
+  },
+  {
+    "id": "git-cherry",
+    "prompt": "cherry-pick commit abc123 onto this branch",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-cherry-pick"
+    ]
+  },
+  {
+    "id": "git-bisect",
+    "prompt": "find which commit broke the build",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-bisect"
+    ]
+  },
+  {
+    "id": "git-large",
+    "prompt": "what are the biggest files in the repo history?",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-large-files"
+    ]
+  },
+  {
+    "id": "pr-desc",
+    "prompt": "write the PR description",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "pr-description"
+    ]
+  },
+  {
+    "id": "changelog",
+    "prompt": "add a changelog entry for the new flag",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-changelog-entry"
+    ]
+  },
+  {
+    "id": "review",
+    "prompt": "review my changes before I commit",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "code-review"
+    ]
+  },
+  {
+    "id": "review-security",
+    "prompt": "check this branch for security vulnerabilities",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "security-review"
+    ]
+  },
+  {
+    "id": "secrets",
+    "prompt": "did I accidentally stage an API key?",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "git-secret-scan"
+    ]
+  },
+  {
+    "id": "pr-comments",
+    "prompt": "address the review comments on my PR",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "pr-comments"
+    ]
+  },
+  {
+    "id": "simplify",
+    "prompt": "simplify the code I changed, remove duplication",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "simplify"
+    ]
+  },
+  {
+    "id": "test-gaps",
+    "prompt": "which changed files have no tests?",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "test-gap-review"
+    ]
+  },
+  {
+    "id": "api-diff",
+    "prompt": "did we remove any public APIs since the last release?",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "api-surface-diff"
+    ]
+  },
+  {
+    "id": "debug",
+    "prompt": "figure out why this test is failing",
+    "files": [
+      "go.mod",
+      "main.go"
+    ],
+    "expect": [
+      "debug",
+      "fix-until-green"
+    ]
+  },
+  {
+    "id": "fix-green",
+    "prompt": "keep fixing until the build and tests pass",
+    "files": [
+      "go.mod",
+      "main.go"
+    ],
+    "expect": [
+      "fix-until-green"
+    ]
+  },
+  {
+    "id": "retry",
+    "prompt": "retry the command until it succeeds",
+    "files": [],
+    "expect": [
+      "loop-until"
+    ]
+  },
+  {
+    "id": "ci-watch",
+    "prompt": "wait for CI to finish and show me what failed",
+    "files": [
+      ".git/",
+      ".github/workflows/ci.yml"
+    ],
+    "expect": [
+      "ci-watch"
+    ]
+  },
+  {
+    "id": "ci-repro",
+    "prompt": "reproduce the CI build locally",
+    "files": [
+      "App.sln",
+      "src/App/App.csproj"
+    ],
+    "expect": [
+      "ci-repro"
+    ]
+  },
+  {
+    "id": "perf",
+    "prompt": "profile this service, it got slow",
+    "files": [
+      "package.json"
+    ],
+    "expect": [
+      "performance-profiler"
+    ]
+  },
+  {
+    "id": "docker-build",
+    "prompt": "build the docker image",
+    "files": [
+      "Dockerfile"
+    ],
+    "expect": [
+      "docker-build"
+    ],
+    "absent": [
+      "helm"
+    ]
+  },
+  {
+    "id": "docker-logs",
+    "prompt": "show the container logs",
+    "files": [
+      "Dockerfile"
+    ],
+    "expect": [
+      "docker-inspect"
+    ]
+  },
+  {
+    "id": "hadolint",
+    "prompt": "lint the Dockerfile",
+    "files": [
+      "Dockerfile"
+    ],
+    "expect": [
+      "dockerfile-lint"
+    ]
+  },
+  {
+    "id": "compose-up",
+    "prompt": "bring up the compose stack",
+    "files": [
+      "compose.yaml"
+    ],
+    "expect": [
+      "compose"
+    ]
+  },
+  {
+    "id": "k8s-logs",
+    "prompt": "show logs for the api pod",
+    "files": [
+      "k8s/deployment.yaml"
+    ],
+    "expect": [
+      "k8s-inspect"
+    ],
+    "absent": [
+      "docker-build"
+    ]
+  },
+  {
+    "id": "k8s-context",
+    "prompt": "which cluster am I pointed at?",
+    "files": [
+      "k8s/deployment.yaml"
+    ],
+    "expect": [
+      "k8s-context"
+    ]
+  },
+  {
+    "id": "k8s-apply",
+    "prompt": "apply the manifests to the cluster",
+    "files": [
+      "k8s/deployment.yaml"
+    ],
+    "expect": [
+      "k8s-apply"
+    ]
+  },
+  {
+    "id": "k8s-validate",
+    "prompt": "validate the kubernetes manifests",
+    "files": [
+      "k8s/deployment.yaml"
+    ],
+    "expect": [
+      "k8s-validate"
+    ]
+  },
+  {
+    "id": "helm",
+    "prompt": "upgrade the helm release",
+    "files": [
+      "Chart.yaml"
+    ],
+    "expect": [
+      "helm"
+    ]
+  },
+  {
+    "id": "tf-plan",
+    "prompt": "run terraform plan",
+    "files": [
+      "main.tf"
+    ],
+    "expect": [
+      "terraform"
+    ],
+    "absent": [
+      "pulumi"
+    ]
+  },
+  {
+    "id": "pulumi",
+    "prompt": "preview the pulumi stack",
+    "files": [
+      "Pulumi.yaml"
+    ],
+    "expect": [
+      "pulumi"
+    ],
+    "absent": [
+      "terraform"
+    ]
+  },
+  {
+    "id": "aws-who",
+    "prompt": "which AWS account am I logged into?",
+    "files": [],
+    "expect": [
+      "aws-whoami"
+    ]
+  },
+  {
+    "id": "aws-ec2",
+    "prompt": "list our EC2 instances",
+    "files": [],
+    "expect": [
+      "aws-compute"
+    ]
+  },
+  {
+    "id": "aws-s3",
+    "prompt": "list the S3 buckets",
+    "files": [],
+    "expect": [
+      "aws-storage"
+    ]
+  },
+  {
+    "id": "aws-cost",
+    "prompt": "how much have we spent on AWS this month?",
+    "files": [],
+    "expect": [
+      "aws-observe"
+    ]
+  },
+  {
+    "id": "azure-vm",
+    "prompt": "stop the azure VM",
+    "files": [],
+    "expect": [
+      "azure-compute"
+    ]
+  },
+  {
+    "id": "azure-sub",
+    "prompt": "which azure subscription is active?",
+    "files": [],
+    "expect": [
+      "azure-whoami"
+    ]
+  },
+  {
+    "id": "gcp-run",
+    "prompt": "deploy to cloud run",
+    "files": [],
+    "expect": [
+      "gcp-run"
+    ]
+  },
+  {
+    "id": "gke",
+    "prompt": "get credentials for the GKE cluster",
+    "files": [],
+    "expect": [
+      "gcp-gke"
+    ]
+  },
+  {
+    "id": "vercel",
+    "prompt": "deploy a preview to vercel",
+    "files": [
+      "vercel.json"
+    ],
+    "expect": [
+      "vercel"
+    ]
+  },
+  {
+    "id": "netlify",
+    "prompt": "make a draft netlify deploy",
+    "files": [
+      "netlify.toml"
+    ],
+    "expect": [
+      "netlify"
+    ]
+  },
+  {
+    "id": "fly",
+    "prompt": "deploy the app to fly.io",
+    "files": [
+      "fly.toml"
+    ],
+    "expect": [
+      "flyio"
+    ]
+  },
+  {
+    "id": "cf-worker",
+    "prompt": "deploy the cloudflare worker",
+    "files": [
+      "wrangler.toml"
+    ],
+    "expect": [
+      "cloudflare"
+    ]
+  },
+  {
+    "id": "do-droplets",
+    "prompt": "list our digitalocean droplets",
+    "files": [],
+    "expect": [
+      "do-infra"
+    ]
+  },
+  {
+    "id": "adr",
+    "prompt": "write an ADR for switching to Postgres",
+    "files": [],
+    "expect": [
+      "adr-new"
+    ]
+  },
+  {
+    "id": "dead-links",
+    "prompt": "find broken links in the README",
+    "files": [],
+    "expect": [
+      "readme-audit"
+    ]
+  },
+  {
+    "id": "url-check",
+    "prompt": "check that the URLs in the docs still work",
+    "files": [],
+    "expect": [
+      "url-check"
+    ]
+  },
+  {
+    "id": "doc-sync",
+    "prompt": "do the docs reference files that no longer exist?",
+    "files": [],
+    "expect": [
+      "doc-sync"
+    ]
+  },
+  {
+    "id": "explain",
+    "prompt": "explain how this codebase is organized",
+    "files": [],
+    "expect": [
+      "explain-codebase"
+    ]
+  },
+  {
+    "id": "agents-md",
+    "prompt": "write an AGENTS.md for this repo",
+    "files": [],
+    "expect": [
+      "init"
+    ]
+  },
+  {
+    "id": "todos",
+    "prompt": "list all the TODO and FIXME comments",
+    "files": [],
+    "expect": [
+      "todo-scan"
+    ]
+  },
+  {
+    "id": "crlf",
+    "prompt": "are there files with mixed line endings?",
+    "files": [],
+    "expect": [
+      "line-ending-check"
+    ]
+  },
+  {
+    "id": "big-files",
+    "prompt": "find large files in the working tree",
+    "files": [],
+    "expect": [
+      "large-file-scan"
+    ]
+  },
+  {
+    "id": "gitignore",
+    "prompt": "are we committing build output that should be ignored?",
+    "files": [],
+    "expect": [
+      "gitignore-audit"
+    ]
+  },
+  {
+    "id": "json",
+    "prompt": "is config.json valid JSON?",
+    "files": [],
+    "expect": [
+      "json-validate"
+    ]
+  },
+  {
+    "id": "env",
+    "prompt": "what versions of node and dotnet are installed?",
+    "files": [],
+    "expect": [
+      "env-report"
+    ]
+  },
+  {
+    "id": "detect",
+    "prompt": "what kind of project is this?",
+    "files": [],
+    "expect": [
+      "project-detect"
+    ]
+  },
+  {
+    "id": "standup",
+    "prompt": "summarize what everyone committed yesterday for standup",
+    "files": [
+      ".git/"
+    ],
+    "expect": [
+      "standup-summary"
+    ]
+  },
+  {
+    "id": "release-notes",
+    "prompt": "give me the release notes for this version",
+    "files": [],
+    "expect": [
+      "release-notes"
+    ]
+  },
+  {
+    "id": "handoff",
+    "prompt": "I'm ending this session, hand this off",
+    "files": [],
+    "expect": [
+      "handoff"
+    ]
+  },
+  {
+    "id": "new-skill",
+    "prompt": "create a new skill called deploy-check",
+    "files": [],
+    "expect": [
+      "new-skill"
+    ]
+  },
+  {
+    "id": "ship",
+    "prompt": "are we ready to ship this release?",
+    "files": [],
+    "expect": [
+      "ship-gate"
+    ]
+  },
+  {
+    "id": "deps-vulns-npm",
+    "prompt": "do any of our npm dependencies have known vulnerabilities?",
+    "files": [
+      "package.json",
+      "package-lock.json"
+    ],
+    "expect": [
+      "deps-audit"
+    ]
+  },
+  {
+    "id": "deps-cves",
+    "prompt": "check our dependencies for CVEs before the release",
+    "files": [
+      "requirements.txt"
+    ],
+    "expect": [
+      "deps-audit"
+    ]
+  },
+  {
+    "id": "deps-advisories-go",
+    "prompt": "are there security advisories for our Go modules?",
+    "files": [
+      "go.mod"
+    ],
+    "expect": [
+      "deps-audit"
+    ]
+  },
+  {
+    "id": "sbom",
+    "prompt": "generate an SBOM for this repo",
+    "files": [
+      "package.json"
+    ],
+    "expect": [
+      "sbom"
+    ]
+  },
+  {
+    "id": "sbom-inventory",
+    "prompt": "we need a software bill of materials for compliance",
+    "files": [
+      "Cargo.lock",
+      "Cargo.toml"
+    ],
+    "expect": [
+      "sbom"
+    ]
+  },
+  {
+    "id": "shellcheck",
+    "prompt": "run shellcheck on our bash scripts",
+    "files": [
+      "scripts/deploy.sh"
+    ],
+    "expect": [
+      "shell-lint"
+    ]
+  },
+  {
+    "id": "ps-lint",
+    "prompt": "lint the PowerShell scripts",
+    "files": [
+      "build.ps1"
+    ],
+    "expect": [
+      "shell-lint"
+    ]
+  },
+  {
+    "id": "shell-absent",
+    "prompt": "run the go tests",
+    "files": [
+      "go.mod"
+    ],
+    "expect": [
+      "go-test"
+    ],
+    "absent": [
+      "shell-lint"
+    ]
+  },
+  {
+    "id": "migrate-pending",
+    "prompt": "which database migrations are pending?",
+    "files": [
+      "alembic.ini"
+    ],
+    "expect": [
+      "db-migrate"
+    ]
+  },
+  {
+    "id": "migrate-apply",
+    "prompt": "apply the EF Core migrations to the database",
+    "files": [
+      "src/Data/Migrations/AppDbContextModelSnapshot.cs",
+      "src/Data/Data.csproj"
+    ],
+    "expect": [
+      "db-migrate"
+    ]
+  },
+  {
+    "id": "migrate-sql",
+    "prompt": "show me the SQL the Django migrations would run",
+    "files": [
+      "manage.py"
+    ],
+    "expect": [
+      "db-migrate"
+    ]
+  },
+  {
+    "id": "sqlite-tables",
+    "prompt": "what tables are in the sqlite database?",
+    "files": [
+      "app.db"
+    ],
+    "expect": [
+      "sql-sqlite"
+    ]
+  },
+  {
+    "id": "postgres-query",
+    "prompt": "count the rows in the orders table in postgres",
+    "files": [],
+    "expect": [
+      "sql-postgres"
+    ]
+  },
+  {
+    "id": "mysql-describe",
+    "prompt": "describe the users table in our MySQL database",
+    "files": [],
+    "expect": [
+      "sql-mysql"
+    ]
+  },
+  {
+    "id": "mariadb",
+    "prompt": "query the MariaDB database for recent signups",
+    "files": [],
+    "expect": [
+      "sql-mysql"
+    ]
+  },
+  {
+    "id": "sqlserver",
+    "prompt": "list the tables in SQL Server",
+    "files": [],
+    "expect": [
+      "sql-sqlserver"
+    ]
+  },
+  {
+    "id": "azure-sql",
+    "prompt": "run a T-SQL select against Azure SQL",
+    "files": [],
+    "expect": [
+      "sql-sqlserver"
+    ]
+  },
+  {
+    "id": "oracle",
+    "prompt": "query the Oracle database for the employees table",
+    "files": [],
+    "expect": [
+      "sql-oracle"
+    ]
+  },
+  {
+    "id": "mongodb-find",
+    "prompt": "find documents in the mongo orders collection where status is open",
+    "files": [],
+    "expect": [
+      "nosql-mongodb"
+    ]
+  },
+  {
+    "id": "redis-key",
+    "prompt": "what is stored in the redis key session:42?",
+    "files": [],
+    "expect": [
+      "nosql-redis"
+    ]
+  },
+  {
+    "id": "dynamodb",
+    "prompt": "scan a few items from the DynamoDB orders table",
+    "files": [],
+    "expect": [
+      "nosql-dynamodb"
+    ]
+  },
+  {
+    "id": "cassandra",
+    "prompt": "list the keyspaces in Cassandra",
+    "files": [],
+    "expect": [
+      "nosql-cassandra"
+    ]
+  },
+  {
+    "id": "neo4j",
+    "prompt": "run a cypher query in neo4j to count the Person nodes",
+    "files": [],
+    "expect": [
+      "graph-neo4j"
+    ]
+  },
+  {
+    "id": "litegraph-nodes",
+    "prompt": "list the nodes in our LiteGraph graph",
+    "files": [],
+    "expect": [
+      "graph-litegraph"
+    ]
+  },
+  {
+    "id": "litegraph-tenants",
+    "prompt": "which tenants exist in litegraph?",
+    "files": [],
+    "expect": [
+      "graph-litegraph"
+    ]
+  },
+  {
+    "id": "dotnet-upgrade",
+    "prompt": "upgrade the solution from net8.0 to net10.0",
+    "files": [
+      "App.sln",
+      "src/App/App.csproj"
+    ],
+    "expect": [
+      "dotnet-upgrade"
+    ]
+  },
+  {
+    "id": "node-upgrade",
+    "prompt": "move this project to Node 22",
+    "files": [
+      "package.json",
+      ".nvmrc"
+    ],
+    "expect": [
+      "node-upgrade"
+    ]
+  },
+  {
+    "id": "py-upgrade",
+    "prompt": "upgrade the project to Python 3.12",
+    "files": [
+      "pyproject.toml"
+    ],
+    "expect": [
+      "py-upgrade"
+    ]
+  },
+  {
+    "id": "rspec",
+    "prompt": "run the rspec tests",
+    "files": [
+      "Gemfile",
+      "spec/"
+    ],
+    "expect": [
+      "ruby-test"
+    ]
+  },
+  {
+    "id": "rubocop",
+    "prompt": "run rubocop on the ruby code",
+    "files": [
+      "Gemfile"
+    ],
+    "expect": [
+      "ruby-lint"
+    ]
+  },
+  {
+    "id": "phpunit",
+    "prompt": "run the PHPUnit tests",
+    "files": [
+      "composer.json"
+    ],
+    "expect": [
+      "php-test"
+    ]
+  },
+  {
+    "id": "phpstan",
+    "prompt": "run phpstan static analysis",
+    "files": [
+      "composer.json"
+    ],
+    "expect": [
+      "php-lint"
+    ]
+  },
+  {
+    "id": "swift-test",
+    "prompt": "run the swift package tests",
+    "files": [
+      "Package.swift"
+    ],
+    "expect": [
+      "swift-test"
+    ]
+  },
+  {
+    "id": "ios-build",
+    "prompt": "build the iOS app scheme",
+    "files": [
+      "App.xcodeproj/project.pbxproj"
+    ],
+    "expect": [
+      "swift-build"
+    ]
+  },
+  {
+    "id": "android-apk",
+    "prompt": "build a debug APK of the Android app",
+    "files": [
+      "gradlew",
+      "app/src/main/AndroidManifest.xml"
+    ],
+    "expect": [
+      "android-build"
+    ]
+  },
+  {
+    "id": "flutter-test",
+    "prompt": "run the flutter tests",
+    "files": [
+      "pubspec.yaml"
+    ],
+    "expect": [
+      "flutter-test"
+    ]
+  },
+  {
+    "id": "mobile-absent",
+    "prompt": "run the go tests",
+    "files": [
+      "go.mod"
+    ],
+    "expect": [
+      "go-test"
+    ],
+    "absent": [
+      "ruby-test",
+      "php-test",
+      "swift-test",
+      "android-test",
+      "flutter-test"
+    ]
+  },
+  {
+    "id": "nextjs-build",
+    "prompt": "build the Next.js app",
+    "files": [
+      "package.json",
+      "next.config.js"
+    ],
+    "expect": [
+      "web-framework"
+    ]
+  },
+  {
+    "id": "angular-test",
+    "prompt": "run the Angular tests once",
+    "files": [
+      "package.json",
+      "angular.json"
+    ],
+    "expect": [
+      "web-framework"
+    ]
+  },
+  {
+    "id": "sveltekit-dev",
+    "prompt": "start the SvelteKit dev server",
+    "files": [
+      "package.json",
+      "svelte.config.js"
+    ],
+    "expect": [
+      "web-framework",
+      "react-dev-server"
+    ]
+  },
+  {
+    "id": "storybook-build",
+    "prompt": "build storybook",
+    "files": [
+      "package.json",
+      ".storybook/main.ts"
+    ],
+    "expect": [
+      "storybook"
+    ]
+  },
+  {
+    "id": "log-errors",
+    "prompt": "what errors keep repeating in this log file?",
+    "files": [
+      "logs/app.log"
+    ],
+    "expect": [
+      "log-triage"
+    ]
+  },
+  {
+    "id": "stack-trace",
+    "prompt": "find the exception and stack trace in server.log",
+    "files": [],
+    "expect": [
+      "log-triage"
+    ]
+  },
+  {
+    "id": "port-8080",
+    "prompt": "what is running on port 8080?",
+    "files": [],
+    "expect": [
+      "port-inspect"
+    ]
+  },
+  {
+    "id": "eaddrinuse",
+    "prompt": "the dev server fails with EADDRINUSE, which process is using the port?",
+    "files": [
+      "package.json"
+    ],
+    "expect": [
+      "port-inspect"
+    ]
+  },
+  {
+    "id": "bench-compare",
+    "prompt": "benchmark these two commands and compare how fast they are",
+    "files": [],
+    "expect": [
+      "bench"
+    ]
+  },
+  {
+    "id": "k6-load",
+    "prompt": "run the k6 load test against staging",
+    "files": [
+      "load.js"
+    ],
+    "expect": [
+      "bench"
+    ]
+  }
+]

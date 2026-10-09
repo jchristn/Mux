@@ -210,6 +210,24 @@ namespace Mux.Cli.Commands
                     case "--clear":
                         settings.Clear = true;
                         break;
+                    case "--top":
+                        string top = ReadValue(option, inlineValue, args, ref i);
+                        if (!int.TryParse(top, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int topValue) || topValue < 1)
+                        {
+                            throw new InvalidOperationException($"--top needs a positive whole number, got '{top}'.");
+                        }
+
+                        settings.Top = topValue;
+                        break;
+                    case "--cases":
+                        settings.CasesFile = ReadValue(option, inlineValue, args, ref i);
+                        break;
+                    case "--live":
+                        settings.Live = true;
+                        break;
+                    case "--endpoint":
+                        settings.Endpoint = ReadValue(option, inlineValue, args, ref i);
+                        break;
                     default:
                         if (IsOption(arg))
                         {

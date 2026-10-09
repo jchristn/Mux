@@ -4,12 +4,14 @@ namespace Mux.Cli.Commands
     using System.Collections.Generic;
     using System.ComponentModel;
     using System.IO;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Cli.Rendering;
     using Mux.Core.Models;
     using Mux.Core.Settings;
     using Mux.Core.Skills;
+    using Mux.Core.Skills.Evaluation;
     using SkillCommandModel = Mux.Core.Models.SkillCommand;
 
     /// <summary>
@@ -78,6 +80,34 @@ namespace Mux.Cli.Commands
         [Description("For category: clear the override.")]
         [CommandOption("--clear")]
         public bool Clear { get; set; }
+
+        /// <summary>
+        /// For eval: the rank an expected skill must reach (default 3).
+        /// </summary>
+        [Description("For eval: the rank an expected skill must reach (default 3).")]
+        [CommandOption("--top")]
+        public int? Top { get; set; }
+
+        /// <summary>
+        /// For eval: a JSON file of evaluation cases to use instead of the built-in ones.
+        /// </summary>
+        [Description("For eval: a JSON file of cases to use instead of the built-in ones.")]
+        [CommandOption("--cases")]
+        public string? CasesFile { get; set; }
+
+        /// <summary>
+        /// For eval: ask the model instead of ranking lexically (one call per case; costs tokens).
+        /// </summary>
+        [Description("For eval: ask the model which skill it would use (one call per case).")]
+        [CommandOption("--live")]
+        public bool Live { get; set; }
+
+        /// <summary>
+        /// For eval --live: the endpoint to ask (default: the default endpoint).
+        /// </summary>
+        [Description("For eval --live: the endpoint to ask.")]
+        [CommandOption("--endpoint")]
+        public string? Endpoint { get; set; }
     }
 
     /// <summary>
@@ -129,8 +159,10 @@ namespace Mux.Cli.Commands
                         return await HandleRunAsync(skillsDirectory, settings, cancellationToken).ConfigureAwait(false);
                     case "trust":
                         return HandleTrust(settings.Name, settings.WorkingDirectory, json);
+                    case "eval":
+                        return await HandleEvalAsync(skillsDirectory, settings, muxSettings, json, cancellationToken).ConfigureAwait(false);
                     default:
-                        Console.Error.WriteLine("Usage: mux skill list [--category <c>]|show <name>|validate [name]|run <name> <command>|new <name>|add <path>|category <name> [<category>|--clear]|categories|trust [all|playbooks|ignore|reset] [--cwd dir]");
+                        Console.Error.WriteLine("Usage: mux skill list [--category <c>]|show <name>|validate [name]|run <name> <command>|new <name>|add <path>|category <name> [<category>|--clear]|categories|eval [case-id] [--top n] [--cases file] [--live [--endpoint name]]|trust [all|playbooks|ignore|reset] [--cwd dir]");
                         return 1;
                 }
             }
@@ -139,6 +171,152 @@ namespace Mux.Cli.Commands
                 Console.Error.WriteLine("skill error: " + ex.Message);
                 return 1;
             }
+        }
+
+        private static async Task<int> HandleEvalAsync(string skillsDirectory, SkillSettings settings, MuxSettings muxSettings, bool json, CancellationToken cancellationToken)
+        {
+            string? caseId = settings.Name;
+            int? top = settings.Top;
+            string? casesFile = settings.CasesFile;
+            IReadOnlyList<SkillEvalCase> cases;
+            try
+            {
+                cases = string.IsNullOrWhiteSpace(casesFile)
+                    ? SkillSelectionEvaluator.LoadBuiltInCases()
+                    : SkillSelectionEvaluator.ParseCases(File.ReadAllText(casesFile));
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is System.Text.Json.JsonException || ex is ArgumentException)
+            {
+                Console.Error.WriteLine("Could not read the evaluation cases: " + ex.Message);
+                return 1;
+            }
+
+            if (!string.IsNullOrWhiteSpace(caseId))
+            {
+                cases = cases.Where(c => string.Equals(c.Id, caseId, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (cases.Count == 0)
+                {
+                    Console.Error.WriteLine($"No evaluation case has the id '{caseId}'.");
+                    return 1;
+                }
+            }
+
+            SkillSelectionEvaluator evaluator = new SkillSelectionEvaluator(new SkillLoader(skillsDirectory).Discover());
+            if (top.HasValue) evaluator.TopN = top.Value;
+            SkillEvalReport report;
+            string mode = "lexical";
+            if (settings.Live)
+            {
+                if (top.HasValue)
+                {
+                    Console.Error.WriteLine("--top does not apply to --live: the model picks one skill per case.");
+                    return 1;
+                }
+
+                EndpointConfig endpoint;
+                try
+                {
+                    endpoint = SettingsLoader.ResolveEndpoint(SettingsLoader.LoadEndpoints(), settings.Endpoint, null, null, null, null, null);
+                }
+                catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
+                {
+                    Console.Error.WriteLine(ex.Message);
+                    return 1;
+                }
+
+                evaluator.TopN = 1;
+                mode = "live:" + endpoint.Name;
+                using (Mux.Core.Llm.LlmClient client = new Mux.Core.Llm.LlmClient(endpoint, muxSettings.IgnoreCertErrors))
+                {
+                    SkillModelChooser chooser = new SkillModelChooser(client.SendAsync);
+                    int index = 0;
+                    report = await evaluator.EvaluateAsync(cases, async (SkillEvalCase evalCase, IReadOnlyList<Skill> listed, CancellationToken token) =>
+                    {
+                        index++;
+                        if (!json) Console.Error.Write($"\rAsking {endpoint.Name}: case {index} of {cases.Count}   ");
+                        try
+                        {
+                            return await chooser.ChooseAsync(evalCase, listed, token).ConfigureAwait(false);
+                        }
+                        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException || ex is InvalidOperationException || ex is TimeoutException)
+                        {
+                            Console.Error.WriteLine();
+                            Console.Error.WriteLine($"{evalCase.Id}: the model call failed: {ex.Message}");
+                            return new List<string>();
+                        }
+                    }, cancellationToken).ConfigureAwait(false);
+                    if (!json) Console.Error.WriteLine();
+                }
+            }
+            else
+            {
+                report = evaluator.Evaluate(cases);
+            }
+
+            List<SkillCollision> collisions = evaluator.FindCollisions(0.8);
+
+            if (json)
+            {
+                Console.WriteLine(StructuredOutputFormatter.FormatObject(new
+                {
+                    success = report.Passed == report.Results.Count,
+                    mode,
+                    cases = report.Results.Count,
+                    passed = report.Passed,
+                    top = report.TopN,
+                    top1Rate = Math.Round(report.Top1Rate, 4),
+                    topNRate = Math.Round(report.TopNRate, 4),
+                    results = report.Results.Select(r => new
+                    {
+                        id = r.Case.Id,
+                        prompt = r.Case.Prompt,
+                        expect = r.Case.Expect,
+                        passed = r.Passed,
+                        rank = r.Rank,
+                        matched = r.Matched,
+                        notListed = r.NotListed,
+                        wronglyListed = r.WronglyListed,
+                        listed = r.ListedCount,
+                        topSkills = r.Top,
+                        error = r.Error
+                    }),
+                    collisions = collisions.Select(c => new { first = c.First, second = c.Second, similarity = Math.Round(c.Similarity, 3) })
+                }));
+                return report.Passed == report.Results.Count ? 0 : 1;
+            }
+
+            bool single = cases.Count == 1;
+            foreach (SkillEvalCaseResult result in report.Results)
+            {
+                if (result.Passed && !single) continue;
+
+                Console.WriteLine($"{(result.Passed ? "PASS" : "FAIL")}  {result.Case.Id}: \"{result.Case.Prompt}\"");
+                if (!string.IsNullOrEmpty(result.Error))
+                {
+                    Console.WriteLine("      error: " + result.Error);
+                    continue;
+                }
+
+                Console.WriteLine($"      expected {string.Join(" or ", result.Case.Expect)}; rank {(result.Rank == 0 ? "none" : result.Rank.ToString(System.Globalization.CultureInfo.InvariantCulture))} of {result.ListedCount} listed");
+                if (result.NotListed.Count > 0) Console.WriteLine("      not listed for this project: " + string.Join(", ", result.NotListed));
+                if (result.WronglyListed.Count > 0) Console.WriteLine("      listed but should not be: " + string.Join(", ", result.WronglyListed));
+                Console.WriteLine("      top: " + string.Join(", ", result.Top));
+            }
+
+            Console.WriteLine();
+            Console.WriteLine(settings.Live
+                ? $"{report.Passed} of {report.Results.Count} cases passed. The model ({mode.Substring(5)}) chose an expected skill {report.Top1Rate:P0} of the time, {report.GatingFailures.Count} gating failures."
+                : $"{report.Passed} of {report.Results.Count} cases passed. Top-1 {report.Top1Rate:P0}, top-{report.TopN} {report.TopNRate:P0}, {report.GatingFailures.Count} gating failures.");
+            if (collisions.Count > 0)
+            {
+                Console.WriteLine("Similar descriptions (the model may confuse these):");
+                foreach (SkillCollision collision in collisions)
+                {
+                    Console.WriteLine($"  {collision.First} ~ {collision.Second}  {collision.Similarity:0.00}");
+                }
+            }
+
+            return report.Passed == report.Results.Count ? 0 : 1;
         }
 
         private static int HandleTrust(string? level, string? workingDirectory, bool json)

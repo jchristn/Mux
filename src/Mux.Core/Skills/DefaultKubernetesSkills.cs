@@ -36,7 +36,7 @@ $kubeContext = Get-MuxKubeContext
 
             return new List<DefaultSkillDef>
             {
-                kube.Skill("k8s-context", "Show the Kubernetes context", "Shows the active context, cluster, and namespace, lists contexts, or lists namespaces.", false,
+                kube.Skill("k8s-context", "Show the Kubernetes context", "Shows which Kubernetes cluster, context, and namespace kubectl points at, lists contexts, or lists namespaces.", false,
                     "Before any other Kubernetes work, to confirm which cluster commands will reach.",
                     string.Empty,
                     "Run `current` first in any Kubernetes task. Switching contexts is left to the user on purpose; if the context is wrong, say so and stop.",

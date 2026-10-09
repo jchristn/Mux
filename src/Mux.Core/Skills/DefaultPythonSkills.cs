@@ -29,7 +29,7 @@ Set-Location -LiteralPath $dir
         {
             return new List<DefaultSkillDef>
             {
-                Skill("py-env", "Inspect or create the Python environment", "Shows which interpreter and environment manager the project uses, or creates the environment.", true,
+                Skill("py-env", "Inspect or create the Python environment", "Shows which Python interpreter, virtual environment, and manager (uv, Poetry, pipenv, or pip) the project uses, or creates the environment.", true,
                     "Before running Python tools, when imports fail, or when the user asks which Python or virtual environment the project uses.",
                     "Run `info` first when Python behaves unexpectedly: most failures come from running the system interpreter instead of the project's environment. `create` makes the environment with the project's manager (uv venv, poetry install, pipenv install, or python -m venv .venv).",
                     Command("info", "Print the environment manager, interpreter, and version.", @"Write-Output ('Project: ' + $dir)
@@ -108,7 +108,7 @@ else { Exit-MuxNotApplicable 'neither ruff nor flake8 is installed in the projec
 Invoke-MuxPython -Dir $dir -Manager $manager -Arguments @('-m', 'ruff', 'check', '--fix', '.')
 ")),
 
-                Skill("py-format", "Format the Python code", "Applies or verifies formatting with Ruff, falling back to Black.", true,
+                Skill("py-format", "Format the Python code", "Formats Python source files with Ruff (falling back to Black), or verifies the formatting.", true,
                     "The user asks to format Python code or check formatting before committing.",
                     "`apply` rewrites files in place; `verify` exits 1 when any file would change.",
                     Command("apply", "Format files in place.", @"if (Test-MuxPythonModule -Dir $dir -Manager $manager -Module 'ruff') { Invoke-MuxPython -Dir $dir -Manager $manager -Arguments @('-m', 'ruff', 'format', '.') }
@@ -130,7 +130,7 @@ elseif (Test-MuxPythonModule -Dir $dir -Manager $manager -Module 'mypy') { Invok
 else { Exit-MuxNotApplicable 'neither mypy nor pyright is installed in the project environment.' }
 ")),
 
-                Skill("py-deps", "Inspect Python dependencies", "Lists outdated packages or known vulnerabilities in the project's environment.", false,
+                Skill("py-deps", "Inspect Python dependencies", "Lists outdated Python dependencies, or the ones with known vulnerabilities, in the project's environment.", false,
                     "The user asks which Python packages are outdated or vulnerable.",
                     "`outdated` uses the manager's own report where it has one. `audit` needs pip-audit in the environment.",
                     Command("outdated", "List outdated packages.", @"switch ($manager) {

@@ -145,7 +145,7 @@ if (-not $name) { Exit-MuxNotApplicable 'pass a component name: react-test compo
 Invoke-MuxJsTestRunner -Manager $pm -Package $pkg -Mode 'filter' -Filter $name
 ")),
 
-                Skill("react-build-analyze", "Analyze the React production bundle", "Builds the app and lists the largest emitted JavaScript and CSS files.", false,
+                Skill("react-build-analyze", "Analyze the React production bundle", "Builds the app and lists the largest emitted JavaScript and CSS files, to find what makes the bundle large.", false,
                     "The user asks why the bundle is large or wants to see what a build produces.",
                     string.Empty,
                     "`report` runs the `build` script, then lists the 15 largest .js and .css files under dist/, build/, or out/ with their sizes and the total.",

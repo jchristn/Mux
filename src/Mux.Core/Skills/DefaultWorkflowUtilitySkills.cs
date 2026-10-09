@@ -71,7 +71,7 @@ git log --format='- %s' ""$base..HEAD""
 
             skills["env-report"] = DefaultSkillBuilder.Build(
                 "env-report", "Report the tooling environment",
-                "Reports the OS and the versions of common developer tools.", false, "workflow",
+                "Reports the OS and the installed versions of git, dotnet, node, python, and pwsh.", false, "workflow",
                 "The user wants a quick dump of the OS and installed tool versions for a bug report or setup check.",
                 new List<DefaultSkillCommandDef>
                 {

@@ -30,6 +30,11 @@ namespace Mux.Core.Skills
             new[] { "testing", "testing" },
             new[] { "react", "frontend" },
             new[] { "frontend", "frontend" },
+            new[] { "mobile", "mobile" },
+            new[] { "android", "mobile" },
+            new[] { "ios", "mobile" },
+            new[] { "swift", "mobile" },
+            new[] { "flutter", "mobile" },
             new[] { "kubernetes", "kubernetes" },
             new[] { "helm", "kubernetes" },
             new[] { "openstack", "cloud" },
@@ -58,6 +63,8 @@ namespace Mux.Core.Skills
             new[] { "java", "languages" },
             new[] { "cpp", "languages" },
             new[] { "go", "languages" },
+            new[] { "ruby", "languages" },
+            new[] { "php", "languages" },
             new[] { "rust", "languages" },
             new[] { "data", "data" },
             new[] { "workflow", "workflow" }
@@ -75,7 +82,7 @@ namespace Mux.Core.Skills
         /// </summary>
         public static readonly IReadOnlyList<string> Known = new[]
         {
-            "git", "review", "testing", "debugging", "languages", "frontend", "devops", "containers", "kubernetes", "cloud",
+            "git", "review", "testing", "debugging", "languages", "frontend", "mobile", "devops", "containers", "kubernetes", "cloud",
             "infrastructure", "security", "data", "docs", "scaffolding", "hygiene", "workflow", "loops", "engineering",
             "product", "productivity", "research", "marketing", "compliance", "business", "general"
         };

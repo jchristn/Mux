@@ -138,7 +138,7 @@ if ($missing -eq 0) { Write-Output 'No missing references found.' }
                 });
 
             skills["api-surface-diff"] = DefaultSkillBuilder.Build(
-                "api-surface-diff", "Diff the public API surface between two refs", "Shows added and removed public members between two git refs.", false, "docs, dotnet",
+                "api-surface-diff", "Diff the public API surface between two refs", "Shows public API members added or removed between two git refs, such as the last release and HEAD.", false, "docs, dotnet",
                 "The user wants to see public API changes between two git refs.",
                 new List<DefaultSkillCommandDef>
                 {

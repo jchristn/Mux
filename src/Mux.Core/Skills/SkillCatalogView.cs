@@ -127,7 +127,7 @@ namespace Mux.Core.Skills
                 return false;
             }
 
-            if (skill.Manifest.AppliesTo.Count == 0 || projectRoot == null)
+            if (!HasGlobCheck(skill, projectRoot))
             {
                 return true;
             }
@@ -148,6 +148,40 @@ namespace Mux.Core.Skills
             }
 
             return relevant;
+        }
+
+        /// <summary>
+        /// Applies the same listing rule as <see cref="IsRelevant(Skill, string?, AppliesToMatcher, ToolPresenceCache)"/>
+        /// without any caching and with a caller-supplied tool check, so the skill selection evaluation can gate
+        /// skills exactly as the system prompt does while deciding for itself which tools count as installed.
+        /// </summary>
+        /// <param name="skill">The skill. Must not be null.</param>
+        /// <param name="projectRoot">The project root the globs are evaluated against, or null.</param>
+        /// <param name="matcher">The glob matcher. Must not be null.</param>
+        /// <param name="toolsAvailable">Returns whether a skill's <c>requiresTools</c> list is satisfied. Must not be null.</param>
+        /// <returns><c>true</c> when the skill is relevant.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="projectRoot"/> is null.</exception>
+        public static bool IsRelevantUncached(Skill skill, string? projectRoot, AppliesToMatcher matcher, Func<IReadOnlyList<string>, bool> toolsAvailable)
+        {
+            if (skill == null) throw new ArgumentNullException(nameof(skill));
+            if (matcher == null) throw new ArgumentNullException(nameof(matcher));
+            if (toolsAvailable == null) throw new ArgumentNullException(nameof(toolsAvailable));
+
+            if (!toolsAvailable(skill.Manifest.RequiresTools))
+            {
+                return false;
+            }
+
+            return !HasGlobCheck(skill, projectRoot) || matcher.AnyMatch(projectRoot, skill.Manifest.AppliesTo);
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private static bool HasGlobCheck(Skill skill, string? projectRoot)
+        {
+            return skill.Manifest.AppliesTo.Count > 0 && projectRoot != null;
         }
 
         #endregion

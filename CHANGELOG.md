@@ -6,6 +6,49 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **`web-framework` and `storybook` skills.** `web-framework` detects Next.js, Nuxt, SvelteKit, Angular, Astro,
+  Remix, Svelte, Vue, or Vite and runs build, lint, and test through the project's scripts or the framework's
+  tools (tests run once, never in watch mode), describes the dev server for `process_start`, and compares
+  declared and installed versions. `storybook` builds Storybook, runs story tests, and describes its dev server.
+- **Runtime diagnosis skills.** `log-triage summarize <file>` groups a log's errors by message with ids,
+  numbers, and paths masked, and shows each group's count, line range, first line, and stack trace (.NET,
+  Java, Python tracebacks keyed by their final exception, Node, Go, and JSON log entries). `port-inspect
+  [port]` shows what is listening and which process owns it. `bench` times one command or compares two
+  (hyperfine, or a built-in timing loop), runs a BenchmarkDotNet project, or runs a k6 script.
+- **Upgrade skills.** `dotnet-upgrade`, `node-upgrade`, and `py-upgrade` find every place a project pins its
+  runtime version (project files and global.json; .nvmrc, package.json engines; requires-python, ruff and mypy
+  targets, .python-version; plus CI workflows and Dockerfiles). `plan` lists the exact edits and changes
+  nothing, `apply` makes only those edits (keeping BOMs and line endings), and `dotnet-upgrade apply` builds
+  afterwards. Version matrices, classifiers, and framework packages are reported as notes.
+- **Ruby, PHP, Swift, Android, and Flutter skills.** `ruby-deps`, `ruby-test` (RSpec, rails test, or rake
+  test), `ruby-lint` (RuboCop); `php-deps` (install, outdated, `composer audit`), `php-test` (Pest or PHPUnit),
+  `php-lint` (PHPStan, PHP-CS-Fixer); `swift-build` and `swift-test` (Swift packages or Xcode schemes),
+  `swift-format`; `android-build`, `android-test`, `android-lint` through the Gradle wrapper; and
+  `flutter-analyze`, `flutter-test`, `flutter-build` (plain Dart packages use `dart`). A new `mobile` category
+  holds the Swift, Android, and Flutter skills on every surface.
+- **Database skills.** `db-migrate` shows status, previews pending migrations as SQL, and applies them for EF
+  Core, Prisma, Alembic, Django, Rails, Flyway, and golang-migrate, with `apply` behind the production guard.
+  Eleven read-only platform skills connect, list, describe, and query: `sql-sqlite`, `sql-postgres`,
+  `sql-mysql` (MySQL and MariaDB), `sql-sqlserver` (SQL Server and Azure SQL), `sql-oracle`, `nosql-mongodb`,
+  `nosql-redis`, `nosql-dynamodb`, `nosql-cassandra`, `graph-neo4j`, and `graph-litegraph` (LiteGraph's REST
+  API). Each blocks writes the way its platform allows (read-only sessions or transactions, rollbacks, read
+  access mode, read-only operations), the SQL skills accept only read statements one at a time, and connection
+  strings come from named environment variables and are never shown.
+- **`deps-audit` skill.** Finds every ecosystem under the repository root and runs its vulnerability auditor
+  (npm, pnpm, or yarn 1 audit; pip-audit; cargo-audit; `dotnet list package --vulnerable`; govulncheck), or
+  osv-scanner for all of them when it is installed, and prints one report: ecosystem, package, version,
+  severity, advisory, and fixed version. Exits 1 at or above `--min-severity` (default high). A missing auditor
+  is noted, not fatal, and `--from <tool>=<file>` replays saved JSON.
+- **`sbom` skill.** Writes a CycloneDX JSON software bill of materials with syft (`sbom write [file]`).
+- **`shell-lint` skill.** shellcheck for `.sh`, `.bash`, `.ksh`, and shebang scripts and PSScriptAnalyzer for
+  `.ps1` and `.psm1`, across the repository, one path, or only the files changed on the branch.
+- **Skill selection evaluation.** `mux skill eval [case-id] [--top n] [--cases file] [--output-format json]`
+  lists skills for a temporary project exactly as the system prompt does and ranks them against a prompt with
+  BM25 over the name and description. It reports gating mistakes (a skill missing where it belongs, or listed
+  where it does not), the top-1 and top-3 rates, and near-duplicate descriptions. 120 built-in cases cover every
+  default category; the test suites hold the default library to a top-3 floor of 97% and top-1 of 90%.
+  `--live [--endpoint <name>]` asks a real model instead: one call per case with the real listing and skill
+  tools, recording the skill named by its first `skill` or `run_skill` call. Nothing is executed.
 - **`build-vscode.sh` / `build-vscode.bat`** in the repository root package the VS Code extension into
   `src/Mux.VSCode/mux-ai-<version>.vsix` (`npm ci`, then `vsce package`).
 - **Project instruction files.** Every surface (terminal, `mux print`, desktop, and the REST server) loads
@@ -146,7 +189,7 @@ All notable changes to mux are documented here.
 - **Folder skills and `${SKILL_DIR}`.** Skills can bundle `scripts/`, `references/`, and `assets/`, referenced as
   `${SKILL_DIR}` (Claude-style aliases also work) in the `skill` tool output, `/skill` invocations, and `mux skill
   show`; the `skill` tool lists the bundled files, and commands get `SKILL_DIR` and `CLAUDE_SKILL_DIR`.
-- **Skills from alirezarezvani/claude-skills (MIT).** Seventeen new bundled defaults (library: 170): the Playwright
+- **Skills from alirezarezvani/claude-skills (MIT).** Seventeen new bundled defaults (library then: 170): the Playwright
   family (`pw-init`, `pw-generate`, `pw-fix`, `pw-review`, `pw-coverage`, `pw-migrate`, `pw-report`), `a11y-audit`,
   `skill-security-auditor`, `security-guidance`, `skill-extract`, `ci-cd-pipeline-builder`, `performance-profiler`,
   `ship-gate`, `api-design-reviewer`, `tdd-guide`, and `handoff`, gated where they apply. Ten opt-in packs hold 166
@@ -169,6 +212,9 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- The `dotnet-*` skills are listed only in .NET projects (a solution, project file, or `global.json`) instead
+  of in every project. Eleven skill descriptions were rewritten to say what they do in the words people use
+  (for example `git-secret-scan` now mentions API keys and tokens, and `py-format` says Python).
 - **Startup splashes close by themselves.** The terminal splash closes after about 2.5 seconds (any key still
   closes it sooner; the first-run wizard follows it either way). The desktop shows the About window as a
   splash for about 2.5 seconds at launch (a click closes it sooner). The About window is 25% shorter (less top

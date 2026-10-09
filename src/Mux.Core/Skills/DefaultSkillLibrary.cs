@@ -98,6 +98,13 @@ namespace Mux.Core.Skills
             definitions.AddRange(DefaultReviewSkills.All());
             definitions.AddRange(DefaultAgentPlaybookSkills.All());
             definitions.AddRange(DefaultLoopSkills.All());
+            definitions.AddRange(DefaultDependencyAuditSkills.All());
+            definitions.AddRange(DefaultScriptLintSkills.All());
+            definitions.AddRange(DefaultDatabaseSkills.All());
+            definitions.AddRange(DefaultUpgradeSkills.All());
+            definitions.AddRange(DefaultMobileLanguageSkills.All());
+            definitions.AddRange(DefaultWebFrameworkSkills.All());
+            definitions.AddRange(DefaultRuntimeSkills.All());
             return definitions;
         }
 

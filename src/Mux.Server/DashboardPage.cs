@@ -1962,7 +1962,7 @@ function delKb(i){var k=_kb[parseInt(i,10)];confirmModal('Delete binding for "'+
   saveCollection("/v1.0/api/keybindings",list,function(items){_kb=items;renderKb();});});}
 
 /* ================= Skills ================= */
-var _sk=[],_skView=[],_skCat="",_skKnown=["git","review","testing","debugging","languages","frontend","devops","containers","kubernetes","cloud","infrastructure","security","data","docs","scaffolding","hygiene","workflow","loops","engineering","product","productivity","research","marketing","compliance","business","general"];
+var _sk=[],_skView=[],_skCat="",_skKnown=["git","review","testing","debugging","languages","frontend","mobile","devops","containers","kubernetes","cloud","infrastructure","security","data","docs","scaffolding","hygiene","workflow","loops","engineering","product","productivity","research","marketing","compliance","business","general"];
 function loadSkCats(){api("/v1.0/api/skills/categories").then(function(r){if(r&&r.Known&&r.Known.length)_skKnown=r.Known;}).catch(function(){});}
 function skCatOptions(){var sel=el("sk_cat");if(!sel)return;var seen={},cats=[];for(var i=0;i<_sk.length;i++){var c=_sk[i].Category||"general";if(!seen[c]){seen[c]=1;cats.push(c);}}
   cats.sort(function(a,b){var ia=_skKnown.indexOf(a),ib=_skKnown.indexOf(b);ia=ia<0?999:ia;ib=ib<0?999:ib;return ia!==ib?ia-ib:(a<b?-1:a>b?1:0);});

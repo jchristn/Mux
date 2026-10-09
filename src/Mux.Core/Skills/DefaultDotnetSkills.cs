@@ -6,6 +6,9 @@ namespace Mux.Core.Skills
     /// <summary>The default .NET build and quality skills seeded into ~/.mux/skills.</summary>
     public static class DefaultDotnetSkills
     {
+        // Listed only in .NET projects, so a Go or Python repository does not see dotnet-test among its choices.
+        private static readonly IReadOnlyList<string> DotnetAppliesTo = new List<string> { "*.sln", "*.slnx", "**/*.csproj", "**/*.fsproj", "**/*.vbproj", "global.json" };
+
         /// <summary>Returns the .NET default skills, keyed by id.</summary>
         /// <returns>The skills as id to SKILL.md content.</returns>
         public static IReadOnlyDictionary<string, string> All()
@@ -25,7 +28,7 @@ dotnet build -c Release --nologo
 @"$ErrorActionPreference = 'Stop'
 dotnet build -c Debug --nologo
 ")
-                });
+                }, DotnetAppliesTo);
 
             skills["dotnet-test"] = DefaultSkillBuilder.Build(
                 "dotnet-test", "Run the .NET tests", "Run the test suite for the current .NET project or solution.", true, "dotnet, test",
@@ -42,7 +45,7 @@ if ($args.Count -eq 0) { Write-Error 'A filter expression is required.'; exit 1 
 $filter = $args -join ' '
 dotnet test --nologo --filter $filter
 ")
-                });
+                }, DotnetAppliesTo);
 
             skills["dotnet-format"] = DefaultSkillBuilder.Build(
                 "dotnet-format", "Format the .NET code", "Apply or verify code style using dotnet format.", true, "dotnet, style",
@@ -57,7 +60,7 @@ dotnet format
 @"$ErrorActionPreference = 'Stop'
 dotnet format --verify-no-changes
 ")
-                });
+                }, DotnetAppliesTo);
 
             skills["dotnet-restore"] = DefaultSkillBuilder.Build(
                 "dotnet-restore", "Restore .NET dependencies", "Restore NuGet packages for the current project or solution.", true, "dotnet, build",
@@ -68,7 +71,7 @@ dotnet format --verify-no-changes
 @"$ErrorActionPreference = 'Stop'
 dotnet restore
 ")
-                });
+                }, DotnetAppliesTo);
 
             skills["dotnet-outdated"] = DefaultSkillBuilder.Build(
                 "dotnet-outdated", "Inspect package health", "List outdated or vulnerable NuGet packages.", false, "dotnet, deps",
@@ -83,7 +86,7 @@ dotnet list package --outdated
 @"$ErrorActionPreference = 'Stop'
 dotnet list package --vulnerable
 ")
-                });
+                }, DotnetAppliesTo);
 
             skills["dotnet-pack"] = DefaultSkillBuilder.Build(
                 "dotnet-pack", "Pack NuGet packages", "Produce NuGet packages from the current project or solution.", true, "dotnet, packaging",
@@ -94,7 +97,7 @@ dotnet list package --vulnerable
 @"$ErrorActionPreference = 'Stop'
 dotnet pack -c Release --nologo
 ")
-                });
+                }, DotnetAppliesTo);
 
             skills["dotnet-publish"] = DefaultSkillBuilder.Build(
                 "dotnet-publish", "Publish the .NET app", "Publish the application, framework-dependent or self-contained.", true, "dotnet, packaging",
@@ -111,7 +114,7 @@ if ($args.Count -eq 0) { Write-Error 'A runtime identifier is required (e.g. win
 $rid = $args[0]
 dotnet publish -c Release --nologo --self-contained -r $rid
 ")
-                });
+                }, DotnetAppliesTo);
 
             skills["ci-repro"] = DefaultSkillBuilder.Build(
                 "ci-repro", "Reproduce the CI pipeline", "Run the Release build and tests the way CI does.", true, "dotnet, ci",

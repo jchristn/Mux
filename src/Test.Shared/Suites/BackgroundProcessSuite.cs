@@ -334,7 +334,9 @@ namespace Test.Shared.Suites
                         Submit(backend, app, "/processes stop");
                         Submit(backend, app, "/processes frob");
                         Submit(backend, app, "/processes stop p1");
-                        for (int i = 0; i < 100 && registry.HasRunning(); i++) await Task.Delay(50, ct).ConfigureAwait(false);
+                        // The stop runs in the background and writes its notice after the process has exited, so wait
+                        // for the notice itself rather than for the registry to stop reporting the process as running.
+                        for (int i = 0; i < 400 && !string.Join("\n", app.TranscriptSnapshot()).Contains("Stopped p1", StringComparison.Ordinal); i++) await Task.Delay(50, ct).ConfigureAwait(false);
                         Submit(backend, app, "/processes stop p1");
                         Submit(backend, app, "/processes clear");
                         string transcript = string.Join("\n", app.TranscriptSnapshot());

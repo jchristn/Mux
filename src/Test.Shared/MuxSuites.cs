@@ -253,6 +253,14 @@ namespace Test.Shared
                     ScriptCommandsSuite3.Create(),
                     SkillScriptRuntimeSuite.Create(),
                     ShippedSkillsSuite.Create(),
+                    SkillSelectionEvalSuite.Create(),
+                    DependencyAuditSuite.Create(),
+                    ScriptLintSuite.Create(),
+                    DatabaseSkillsSuite.Create(),
+                    UpgradeSkillsSuite.Create(),
+                    MobileLanguageSkillsSuite.Create(),
+                    WebFrameworkSkillsSuite.Create(),
+                    RuntimeSkillsSuite.Create(),
 
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),

@@ -233,7 +233,7 @@ git stash pop
 
             skills["git-blame-summary"] = DefaultSkillBuilder.Build(
                 "git-blame-summary", "Summarize authorship and churn",
-                "Summarizes the authors of a path and its commit history.",
+                "Summarizes who changed a file or folder: its authors and commit history.",
                 false, "git, vcs",
                 "The user wants to know who has worked on a file and how often it has changed.",
                 new List<DefaultSkillCommandDef>
@@ -252,7 +252,7 @@ git log --oneline -- $args[0]
 
             skills["git-secret-scan"] = DefaultSkillBuilder.Build(
                 "git-secret-scan", "Scan the staged diff for secrets",
-                "Checks staged changes for common credential patterns and fails if any are found.",
+                "Checks staged changes for API keys, tokens, and other credentials, and fails if any are found.",
                 false, "git, security",
                 "Before a commit leaves the machine, or when the user asks to check for leaked credentials in staged changes.",
                 new List<DefaultSkillCommandDef>

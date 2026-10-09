@@ -27,7 +27,7 @@ $awsProfile = Get-MuxTarget -Label 'AWS profile' -Resolve { $name = if ($env:AWS
             ToolchainSkillFactory f = new ToolchainSkillFactory(Setup, new[] { "aws", "cloud" }, null, new[] { "aws" }, ToolchainSkillFactory.GuardedExitNote);
             return new List<DefaultSkillDef>
             {
-                f.Skill("aws-whoami", "Show the AWS identity", "Shows the caller identity, configured profiles, and available regions.", false,
+                f.Skill("aws-whoami", "Show the AWS identity", "Shows which AWS account and identity the CLI is signed in as, the configured profiles, and the available regions.", false,
                     "Before any AWS work, or when an AWS command fails with an authentication or permission error.",
                     string.Empty,
                     "`identity` shows the account, ARN, and user or role; `profiles` lists configured profiles; `regions` lists enabled regions. If identity fails, ask the user to sign in (aws sso login) rather than guessing credentials.",

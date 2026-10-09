@@ -76,7 +76,7 @@ namespace Test.Shared.Suites
             });
             Add("KnownListAndOrder", "The canonical list is ordered, ends with general, and orders unknown categories last", (CancellationToken ct) =>
             {
-                MuxAssert.AreEqual(26, SkillCategories.Known.Count, "26 canonical categories");
+                MuxAssert.AreEqual(27, SkillCategories.Known.Count, "27 canonical categories");
                 MuxAssert.AreEqual("git", SkillCategories.Known[0], "git first");
                 MuxAssert.AreEqual("general", SkillCategories.Known[SkillCategories.Known.Count - 1], "general last");
                 MuxAssert.IsTrue(SkillCategories.IsKnown("review") && !SkillCategories.IsKnown("my-team") && !SkillCategories.IsKnown(null), "IsKnown");

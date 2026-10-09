@@ -52,7 +52,7 @@ if (-not $preset) { Invoke-MuxTool -Tool 'cmake' -Arguments @('--list-presets') 
 Invoke-MuxTool -Tool 'cmake' -Arguments @('--preset', $preset) -InstallHint $cmakeHint
 ")),
 
-                Skill("cpp-build", "Build the C++ project", "Builds with CMake, Meson, or Make using every processor core.", true,
+                Skill("cpp-build", "Build the C++ project", "Compiles the C or C++ project with CMake, Meson, or Make using every processor core.", true,
                     "The user asks to build or compile a C or C++ project.",
                     "[debug|release]",
                     "`build [debug|release]` builds the matching tree under build/ (default debug). Configure it first with cpp-configure; an unconfigured CMake tree exits 2 with that instruction.",
