@@ -8,6 +8,11 @@ description: >-
 category: workflow
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/agent-workflow-designer"
 license: MIT
+commands:
+  - name: workflow-scaffolder
+    description: Generate a workflow skeleton config from a pattern.
+    run: scripts/workflow_scaffolder.py
+    interpreter: python
 ---
 
 # Agent Workflow Designer
@@ -88,5 +93,15 @@ Detailed templates: `${SKILL_DIR}/references/workflow-patterns.md`
 2. Keep handoff payloads explicit and bounded.
 3. Validate intermediate outputs before fan-in synthesis.
 4. Enforce budget and timeout limits in every step.
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill agent-workflow-designer workflow-scaffolder --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/workflow_scaffolder.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `workflow-scaffolder` | `scripts/workflow_scaffolder.py` | Generate a workflow skeleton config from a pattern. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/agent-workflow-designer (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

@@ -7,6 +7,19 @@ description: >-
 category: cloud
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/gcp-cloud-architect"
 license: MIT
+commands:
+  - name: architecture-designer
+    description: GCP Architecture Designer - Recommends GCP services based on workload requirements.
+    run: scripts/architecture_designer.py
+    interpreter: python
+  - name: cost-optimizer
+    description: GCP Cost Optimizer - Analyzes GCP resources and recommends cost savings.
+    run: scripts/cost_optimizer.py
+    interpreter: python
+  - name: deployment-manager
+    description: GCP Deployment Manager - Generates gcloud CLI scripts and Terraform configurations.
+    run: scripts/deployment_manager.py
+    interpreter: python
 ---
 
 # GCP Cloud Architect
@@ -448,5 +461,17 @@ Provide these details for architecture design:
 | `${SKILL_DIR}/references/architecture_patterns.md` | 6 patterns: serverless, GKE microservices, three-tier, data pipeline, ML platform, multi-region |
 | `${SKILL_DIR}/references/service_selection.md` | Decision matrices for compute, database, storage, messaging |
 | `${SKILL_DIR}/references/best_practices.md` | Naming, labels, IAM, networking, monitoring, disaster recovery |
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill gcp-cloud-architect architecture-designer --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/architecture_designer.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `architecture-designer` | `scripts/architecture_designer.py` | GCP Architecture Designer - Recommends GCP services based on workload requirements. |
+| `cost-optimizer` | `scripts/cost_optimizer.py` | GCP Cost Optimizer - Analyzes GCP resources and recommends cost savings. |
+| `deployment-manager` | `scripts/deployment_manager.py` | GCP Deployment Manager - Generates gcloud CLI scripts and Terraform configurations. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/gcp-cloud-architect (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

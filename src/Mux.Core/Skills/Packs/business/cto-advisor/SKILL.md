@@ -8,6 +8,15 @@ description: >-
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-advisor/skills/cto-advisor"
 license: MIT
+commands:
+  - name: tech-debt-analyzer
+    description: Analyze technical debt and print a debt score
+    run: scripts/tech_debt_analyzer.py
+    interpreter: python
+  - name: team-scaling-calculator
+    description: Plan engineering team growth and structure
+    run: scripts/team_scaling_calculator.py
+    interpreter: python
 ---
 
 # CTO Advisor
@@ -255,3 +264,14 @@ All output passes the Internal Quality Loop before reaching the founder (see `th
 - `${SKILL_DIR}/references/architecture_decision_records.md`, ADR templates, decision governance, review process
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/c-level-advisor/skills/cto-advisor (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `cto-advisor`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/tech_debt_analyzer.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `tech-debt-analyzer` | `scripts/tech_debt_analyzer.py` | Analyze technical debt and print a debt score. |
+| `team-scaling-calculator` | `scripts/team_scaling_calculator.py` | Plan engineering team growth and structure. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

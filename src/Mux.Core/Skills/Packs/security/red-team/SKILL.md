@@ -7,6 +7,11 @@ description: >-
 category: security
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/red-team"
 license: MIT
+commands:
+  - name: engagement-planner
+    description: Build a structured red team engagement plan from MITRE ATT&CK techniques
+    run: scripts/engagement_planner.py
+    interpreter: python
 ---
 
 # Red Team
@@ -341,3 +346,13 @@ done
 | [security-pen-testing](the `security-pen-testing` skill) | Pen testing focuses on specific vulnerability exploitation; red team focuses on end-to-end kill-chain simulation to crown jewels |
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/red-team (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `red-team`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/engagement_planner.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `engagement-planner` | `scripts/engagement_planner.py` | Build a structured red team engagement plan from MITRE ATT&CK techniques. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors). `engagement-planner` exits 2 when the plan has authorization violations.

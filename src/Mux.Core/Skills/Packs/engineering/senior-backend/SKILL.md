@@ -9,6 +9,24 @@ description: >-
 category: engineering
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-backend"
 license: MIT
+commands:
+  - name: api-load-tester
+    description: Load-test an HTTP API and report latency percentiles, throughput, and errors.
+    run: scripts/api_load_tester.py
+    interpreter: python
+    timeoutMs: 600000
+  - name: api-scaffolder
+    description: Generate Express.js routes, validation, and TypeScript types from an OpenAPI spec.
+    run: scripts/api_scaffolder.py
+    interpreter: python
+  - name: backend-decision-engine
+    description: Pick a backend pattern and stack from constraints, with tradeoffs (never auto-approves).
+    run: scripts/backend_decision_engine.py
+    interpreter: python
+  - name: database-migration-tool
+    description: Analyze SQL schemas, suggest indexes, and generate migrations with rollback.
+    run: scripts/database_migration_tool.py
+    interpreter: python
 ---
 
 # Senior Backend Engineer
@@ -475,3 +493,16 @@ Three surfaces:
 See `agents/engineering/cs-backend-engineer.md` for the full invocation contract.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-backend (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill senior-backend <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `api-load-tester` | `scripts/api_load_tester.py` | Load-test an HTTP API and report latency percentiles, throughput, and errors. |
+| `api-scaffolder` | `scripts/api_scaffolder.py` | Generate Express.js routes, validation, and TypeScript types from an OpenAPI spec. |
+| `backend-decision-engine` | `scripts/backend_decision_engine.py` | Pick a backend pattern and stack from constraints, with tradeoffs (never auto-approves). |
+| `database-migration-tool` | `scripts/database_migration_tool.py` | Analyze SQL schemas, suggest indexes, and generate migrations with rollback. |
+
+`api-load-tester` sends real HTTP requests to the URL you give it; only point it at a service you own. `api-scaffolder` reads YAML specs with PyYAML when it is installed and falls back to a basic parser otherwise.

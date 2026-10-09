@@ -82,7 +82,7 @@ namespace Mux.Core.McpServer
         /// </summary>
         /// <param name="register">Receives the tool name, description, input schema, and handler.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="register"/> is null.</exception>
-        public void RegisterAll(Action<string, string, object, Func<RpcParameters, CancellationToken, Task<object>>> register)
+        public void RegisterAll(Action<string, string, object, Func<RpcParameters?, CancellationToken, Task<object>>> register)
         {
             if (register == null) throw new ArgumentNullException(nameof(register));
 

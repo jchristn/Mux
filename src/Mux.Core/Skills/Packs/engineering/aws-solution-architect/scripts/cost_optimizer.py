@@ -344,3 +344,42 @@ class CostOptimizer:
                 ]
             }
         ]
+
+
+# Command-line entry point added for mux (the upstream module shipped only the class). It keeps the
+# documented usage: --resources current_setup.json --monthly-spend 2000 [--output report.json].
+def _main(argv=None):
+    import argparse
+    import json
+    import sys
+
+    parser = argparse.ArgumentParser(description="Recommend AWS cost optimizations for a resource inventory and monthly spend.")
+    parser.add_argument("--resources", required=True, help="Resource inventory JSON file.")
+    parser.add_argument("--monthly-spend", type=float, required=True, help="Current monthly AWS spend in USD.")
+    parser.add_argument("--output", help="Write the report JSON to this file instead of stdout.")
+    parser.add_argument("--checklist", action="store_true", help="Include the optimization checklist in the output.")
+    args = parser.parse_args(argv)
+
+    try:
+        with open(args.resources, "r", encoding="utf-8") as handle:
+            resources = json.load(handle)
+    except (OSError, ValueError) as error:
+        print("ERROR: cannot read %s: %s" % (args.resources, error), file=sys.stderr)
+        return 2
+
+    optimizer = CostOptimizer(resources, args.monthly_spend)
+    report = optimizer.analyze_and_optimize()
+    if args.checklist:
+        report = {"report": report, "checklist": optimizer.generate_optimization_checklist()}
+
+    text = json.dumps(report, indent=2, default=str)
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as handle:
+            handle.write(text + "\n")
+    else:
+        print(text)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

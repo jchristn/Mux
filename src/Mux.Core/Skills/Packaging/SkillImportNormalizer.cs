@@ -240,15 +240,34 @@ namespace Mux.Core.Skills.Packaging
             string value = (text ?? string.Empty).Replace("\r\n", "\n");
             int end = FrontmatterEnd(value);
             if (end < 0) return null;
-            foreach (string line in value.Substring(4, end - 4).Split('\n'))
+            string[] lines = value.Substring(4, end - 4).Split('\n');
+            for (int i = 0; i < lines.Length; i++)
             {
+                string line = lines[i];
                 int colon = line.IndexOf(':');
-                if (colon <= 0 || char.IsWhiteSpace(line[0])) continue;
-                if (string.Equals(line.Substring(0, colon).Trim(), key, StringComparison.OrdinalIgnoreCase))
+                if (colon <= 0 || line.Length == 0 || char.IsWhiteSpace(line[0])) continue;
+                if (!string.Equals(line.Substring(0, colon).Trim(), key, StringComparison.OrdinalIgnoreCase)) continue;
+
+                string raw = line.Substring(colon + 1).Trim();
+
+                // YAML block scalars: ">" folds the indented lines that follow into one line, "|" keeps their line
+                // breaks; a trailing "-" or "+" chomping indicator changes nothing here.
+                if (raw.Length > 0 && (raw[0] == '>' || raw[0] == '|') && raw.TrimEnd('-', '+').Length == 1)
                 {
-                    string raw = line.Substring(colon + 1).Trim();
-                    return raw.Length >= 2 && (raw[0] == '"' || raw[0] == '\'') && raw[raw.Length - 1] == raw[0] ? raw.Substring(1, raw.Length - 2) : raw;
+                    bool literal = raw[0] == '|';
+                    List<string> parts = new List<string>();
+                    for (int j = i + 1; j < lines.Length; j++)
+                    {
+                        string next = lines[j];
+                        if (next.Trim().Length > 0 && !char.IsWhiteSpace(next[0])) break;
+                        parts.Add(next.Trim());
+                    }
+
+                    while (parts.Count > 0 && parts[parts.Count - 1].Length == 0) parts.RemoveAt(parts.Count - 1);
+                    return literal ? string.Join("\n", parts) : string.Join(" ", parts.FindAll(p => p.Length > 0));
                 }
+
+                return raw.Length >= 2 && (raw[0] == '"' || raw[0] == '\'') && raw[raw.Length - 1] == raw[0] ? raw.Substring(1, raw.Length - 2) : raw;
             }
 
             return null;

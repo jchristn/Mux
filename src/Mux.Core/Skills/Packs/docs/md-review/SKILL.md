@@ -11,6 +11,19 @@ description: >-
 category: docs
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/markdown-html/skills/md-review"
 license: MIT
+commands:
+  - name: diff-parser
+    description: Extract unified diff hunks from markdown review notes
+    run: scripts/diff_parser.py
+    interpreter: python
+  - name: annotation-extractor
+    description: Extract severity-tagged review annotations
+    run: scripts/annotation_extractor.py
+    interpreter: python
+  - name: review-html-renderer
+    description: Render parsed diffs and annotations into a two-column HTML review
+    run: scripts/review_html_renderer.py
+    interpreter: python
 ---
 
 # md-review: Code-review markdown → 2-column HTML
@@ -102,3 +115,15 @@ python3 markdown-html/skills/md-review/scripts/review_html_renderer.py \
 - See `references/` for full citations (diff_rendering_canon, severity_coding, pr_annotation_ux)
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/markdown-html/skills/md-review (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `md-review`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/diff_parser.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `diff-parser` | `scripts/diff_parser.py` | Extract unified diff hunks from markdown review notes. |
+| `annotation-extractor` | `scripts/annotation_extractor.py` | Extract severity-tagged review annotations. |
+| `review-html-renderer` | `scripts/review_html_renderer.py` | Render parsed diffs and annotations into a two-column HTML review. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors). `review-html-renderer` refuses with exit 3 when `--reviewer` is missing and 4 when the input has no diff hunks.

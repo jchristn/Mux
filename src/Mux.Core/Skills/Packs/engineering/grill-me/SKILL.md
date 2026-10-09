@@ -7,6 +7,19 @@ description: >-
 category: review
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/grill-me/skills/grill-me"
 license: MIT
+commands:
+  - name: decision-tree-extractor
+    description: Extract decision branches from a plan/design document.
+    run: scripts/decision_tree_extractor.py
+    interpreter: python
+  - name: grill-session-tracker
+    description: Track grill-me session state across turns.
+    run: scripts/grill_session_tracker.py
+    interpreter: python
+  - name: question-generator
+    description: Generate forcing questions from a plan/design document.
+    run: scripts/question_generator.py
+    interpreter: python
 ---
 
 # Grill Me
@@ -55,5 +68,17 @@ See [${SKILL_DIR}/references/companion_tooling.md](${SKILL_DIR}/references/compa
 
 **Version:** 1.0.0
 **Derived:** Matt Pocock (MIT) + this repo's wrapper
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill grill-me decision-tree-extractor --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/decision_tree_extractor.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `decision-tree-extractor` | `scripts/decision_tree_extractor.py` | Extract decision branches from a plan/design document. |
+| `grill-session-tracker` | `scripts/grill_session_tracker.py` | Track grill-me session state across turns. |
+| `question-generator` | `scripts/question_generator.py` | Generate forcing questions from a plan/design document. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/grill-me/skills/grill-me (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

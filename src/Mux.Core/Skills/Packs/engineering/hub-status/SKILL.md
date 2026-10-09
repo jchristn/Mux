@@ -6,6 +6,21 @@ description: >-
 category: workflow
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/agenthub/skills/hub-status"
 license: MIT
+commands:
+  - name: board-manager
+    description: AgentHub message board manager.
+    run: scripts/board_manager.py
+    interpreter: python
+  - name: dag-analyzer
+    description: Analyze the AgentHub git DAG.
+    run: scripts/dag_analyzer.py
+    interpreter: python
+    timeoutMs: 600000
+  - name: session-manager
+    description: AgentHub session state machine and lifecycle manager.
+    run: scripts/session_manager.py
+    interpreter: python
+    timeoutMs: 600000
 ---
 
 # /hub:hub-status, Session Status
@@ -80,5 +95,17 @@ If all agents have posted results:
 If some agents are still running:
 - Show which are done vs in-progress
 - Suggest waiting or checking again later
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill hub-status board-manager --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/board_manager.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `board-manager` | `scripts/board_manager.py` | AgentHub message board manager. |
+| `dag-analyzer` | `scripts/dag_analyzer.py` | Analyze the AgentHub git DAG. |
+| `session-manager` | `scripts/session_manager.py` | AgentHub session state machine and lifecycle manager. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/agenthub/skills/hub-status (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

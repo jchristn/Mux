@@ -7,6 +7,24 @@ description: >-
 category: frontend
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-frontend"
 license: MIT
+commands:
+  - name: bundle-analyzer
+    description: Analyze a frontend project for bundle size and heavy dependencies.
+    run: scripts/bundle_analyzer.py
+    interpreter: python
+    timeoutMs: 300000
+  - name: component-generator
+    description: Generate React or Next.js components with TypeScript, Tailwind, and tests.
+    run: scripts/component_generator.py
+    interpreter: python
+  - name: frontend-decision-engine
+    description: Pick a frontend framework and rendering mode from constraints, with tradeoffs.
+    run: scripts/frontend_decision_engine.py
+    interpreter: python
+  - name: frontend-scaffolder
+    description: Scaffold a Next.js or React project with TypeScript and Tailwind CSS.
+    run: scripts/frontend_scaffolder.py
+    interpreter: python
 ---
 
 # Senior Frontend
@@ -578,3 +596,14 @@ Three surfaces:
 See `agents/engineering/cs-frontend-engineer.md` for the full invocation contract.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-frontend (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill senior-frontend <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `bundle-analyzer` | `scripts/bundle_analyzer.py` | Analyze a frontend project for bundle size and heavy dependencies. |
+| `component-generator` | `scripts/component_generator.py` | Generate React or Next.js components with TypeScript, Tailwind, and tests. |
+| `frontend-decision-engine` | `scripts/frontend_decision_engine.py` | Pick a frontend framework and rendering mode from constraints, with tradeoffs. |
+| `frontend-scaffolder` | `scripts/frontend_scaffolder.py` | Scaffold a Next.js or React project with TypeScript and Tailwind CSS. |

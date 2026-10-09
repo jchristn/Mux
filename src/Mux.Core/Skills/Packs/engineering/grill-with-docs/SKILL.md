@@ -7,6 +7,19 @@ description: >-
 category: review
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/grill-with-docs/skills/grill-with-docs"
 license: MIT
+commands:
+  - name: adr-scanner
+    description: adr_scanner.py, Walk docs/adr/ and validate ADR files against the format.
+    run: scripts/adr_scanner.py
+    interpreter: python
+  - name: context-md-linter
+    description: context_md_linter.py, Validate a CONTEXT.md against the CONTEXT-FORMAT.md structure.
+    run: scripts/context_md_linter.py
+    interpreter: python
+  - name: glossary-code-consistency
+    description: glossary_code_consistency.py, Cross-reference CONTEXT.md terms against the codebase.
+    run: scripts/glossary_code_consistency.py
+    interpreter: python
 ---
 
 # Grill with Docs
@@ -140,5 +153,17 @@ The additions below are **not** part of Matt's upstream skill. They operationali
 
 **Version:** 1.0.0
 **Derived:** Matt Pocock's grill-with-docs (MIT) + this repo's wrapper
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill grill-with-docs adr-scanner --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/adr_scanner.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `adr-scanner` | `scripts/adr_scanner.py` | adr_scanner.py, Walk docs/adr/ and validate ADR files against the format. |
+| `context-md-linter` | `scripts/context_md_linter.py` | context_md_linter.py, Validate a CONTEXT.md against the CONTEXT-FORMAT.md structure. |
+| `glossary-code-consistency` | `scripts/glossary_code_consistency.py` | glossary_code_consistency.py, Cross-reference CONTEXT.md terms against the codebase. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/grill-with-docs/skills/grill-with-docs (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

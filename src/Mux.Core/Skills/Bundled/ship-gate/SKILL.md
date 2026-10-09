@@ -8,6 +8,12 @@ description: >-
 category: devops
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/ship-gate"
 license: MIT
+commands:
+  - name: ship-gate-scanner
+    description: Run the pre-production audit and print a ship verdict
+    run: scripts/ship_gate_scanner.py
+    interpreter: python
+    timeoutMs: 300000
 ---
 
 # Ship Gate
@@ -187,3 +193,13 @@ This skill does not:
 - **code-reviewer**: general code quality review complements ship-gate's automated checks
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/ship-gate (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `ship-gate`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/ship_gate_scanner.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `ship-gate-scanner` | `scripts/ship_gate_scanner.py` | Run the pre-production audit and print a ship verdict. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors). `ship-gate-scanner` exits 1 for critical items and 2 for high items (ship with caution), so 2 means findings here, not invalid input.

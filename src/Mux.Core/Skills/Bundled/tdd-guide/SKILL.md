@@ -15,6 +15,11 @@ appliesTo:
   - "go.mod"
   - "Cargo.toml"
   - "pom.xml"
+commands:
+  - name: tdd
+    description: Coverage gaps, framework detection, test quality, fixtures, and phase guidance (subcommands coverage, detect, quality, fixtures, guidance)
+    run: scripts/tdd_cli.py
+    interpreter: python
 ---
 
 # TDD Guide
@@ -64,10 +69,7 @@ def divide(a: float, b: float) -> float:
     return a / b
 ```
 
-**Command:**
-```bash
-python3 "${SKILL_DIR}/scripts/test_generator.py" --input math_utils.py --framework pytest
-```
+**How:** detect the framework with `run_skill tdd-guide tdd detect --file math_utils.py`, then write the tests yourself following the patterns below. (Test generation lives in the `TestGenerator` class in `${SKILL_DIR}/scripts/test_generator.py`, which takes structured requirements rather than a source file, so it has no command of its own.)
 
 **Generated test output (`test_math_utils.py`):**
 ```python
@@ -98,7 +100,8 @@ class TestDivide:
 
 **Command:**
 ```bash
-python3 "${SKILL_DIR}/scripts/coverage_analyzer.py" --report lcov.info --threshold 80
+run_skill tdd-guide tdd coverage --report lcov.info --threshold 80
+# outside mux: python3 "${SKILL_DIR}/scripts/tdd_cli.py" coverage --report lcov.info --threshold 80
 ```
 
 **Sample output:**
@@ -121,16 +124,19 @@ Recommended: Generate tests for P0 items first to reach 80% threshold.
 
 ---
 
-## Key Tools
+## Commands
 
-| Tool | Purpose | Usage |
+The `tdd` command (`run_skill tdd-guide tdd <subcommand> ...`, or `python3 "${SKILL_DIR}/scripts/tdd_cli.py" <subcommand> ...` outside mux) wraps the bundled modules. It prints JSON (`--text` for key: value lines).
+
+| Subcommand | Purpose | Example |
 |------|---------|-------|
-| `test_generator.py` | Generate test cases from code/requirements | `python3 "${SKILL_DIR}/scripts/test_generator.py" --input source.py --framework pytest` |
-| `coverage_analyzer.py` | Parse and analyze coverage reports | `python3 "${SKILL_DIR}/scripts/coverage_analyzer.py" --report lcov.info --threshold 80` |
-| `tdd_workflow.py` | Guide red-green-refactor cycles | `python3 "${SKILL_DIR}/scripts/tdd_workflow.py" --phase red --test test_auth.py` |
-| `fixture_generator.py` | Generate test data and mocks | `python3 "${SKILL_DIR}/scripts/fixture_generator.py" --entity User --count 5` |
+| `coverage` | Summarize a coverage report (lcov, json, xml, cobertura) and list files below the threshold; exits 1 when line coverage is below it | `tdd coverage --report lcov.info --threshold 80` |
+| `detect` | Detect a file's language and test framework, and suggest a test file name | `tdd detect --file src/auth.py` |
+| `quality` | Score a test file (assertions per test, isolation, naming) | `tdd quality --file tests/test_auth.py` |
+| `fixtures` | Boundary values for a data type | `tdd fixtures --type int --min 0 --max 100` |
+| `guidance` | Steps for the red, green, or refactor phase | `tdd guidance --phase red` |
 
-Additional scripts: `framework_adapter.py` (convert between frameworks), `metrics_calculator.py` (quality metrics), `format_detector.py` (detect language/framework), `output_formatter.py` (CLI/desktop/CI output).
+The other files (`test_generator.py`, `coverage_analyzer.py`, `tdd_workflow.py`, `fixture_generator.py`, `framework_adapter.py`, `metrics_calculator.py`, `format_detector.py`, `output_formatter.py`) are importable modules with no command line of their own; `tdd_cli.py` is the entry point. Exit codes: 0 success, 1 coverage below the threshold, 2 invalid input (a missing file or bad arguments).
 
 ---
 

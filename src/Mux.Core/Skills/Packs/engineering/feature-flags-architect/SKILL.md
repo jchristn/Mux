@@ -9,6 +9,20 @@ description: >-
 category: devops
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/feature-flags-architect/skills/feature-flags-architect"
 license: MIT
+commands:
+  - name: flag-debt-scanner
+    description: Scan a repo for stale feature flags (Karpathy goal-driven cleanup).
+    run: scripts/flag_debt_scanner.py
+    interpreter: python
+    timeoutMs: 600000
+  - name: kill-switch-audit
+    description: Verify every feature flag in code has a documented kill switch.
+    run: scripts/kill_switch_audit.py
+    interpreter: python
+  - name: rollout-planner
+    description: Generate a phased rollout schedule for a feature flag.
+    run: scripts/rollout_planner.py
+    interpreter: python
 ---
 
 # Feature Flags Architect
@@ -219,5 +233,17 @@ A team using this skill should achieve:
 - `flag_debt_scanner.py --max-age-days 90` returns ≤5 stale flags repo-wide
 - Every flag has a documented owner, type, and kill switch
 - Mean time to retire a Release flag: <60 days from 100% rollout
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill feature-flags-architect flag-debt-scanner --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/flag_debt_scanner.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `flag-debt-scanner` | `scripts/flag_debt_scanner.py` | Scan a repo for stale feature flags (Karpathy goal-driven cleanup). |
+| `kill-switch-audit` | `scripts/kill_switch_audit.py` | Verify every feature flag in code has a documented kill switch. |
+| `rollout-planner` | `scripts/rollout_planner.py` | Generate a phased rollout schedule for a feature flag. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/feature-flags-architect/skills/feature-flags-architect (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

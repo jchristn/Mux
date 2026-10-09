@@ -6,6 +6,12 @@ description: >-
 category: research
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/autoresearch-agent/skills/ar-resume"
 license: MIT
+commands:
+  - name: setup-experiment
+    description: Initialize an experiment (domain, target, evaluator, git branch) or list the built-in evaluators.
+    run: scripts/setup_experiment.py
+    interpreter: python
+    timeoutMs: 600000
 ---
 
 # /ar:ar-resume, Resume Experiment
@@ -79,5 +85,17 @@ How would you like to continue?
 
 If the user picks loop, hand off to `/ar:loop` with the experiment pre-selected.
 If single, hand off to `/ar:run`.
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill ar-resume setup-experiment --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/setup_experiment.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `setup-experiment` | `scripts/setup_experiment.py` | Initialize an experiment (domain, target, evaluator, git branch) or list the built-in evaluators. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
+
+Built-in evaluators ship in `${SKILL_DIR}/evaluators/`; the LLM judges call `mux -p` by default (edit `CLI_TOOL` to use another CLI).
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/autoresearch-agent/skills/ar-resume (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

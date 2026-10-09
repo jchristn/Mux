@@ -9,6 +9,20 @@ description: >-
 category: compliance
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/ra-qm-team/skills/gdpr-dsgvo-expert"
 license: MIT
+commands:
+  - name: gdpr-compliance-checker
+    description: Scan a project for GDPR compliance issues
+    run: scripts/gdpr_compliance_checker.py
+    interpreter: python
+    timeoutMs: 300000
+  - name: dpia-generator
+    description: Generate DPIA documentation
+    run: scripts/dpia_generator.py
+    interpreter: python
+  - name: data-subject-rights-tracker
+    description: Track and manage data subject rights requests
+    run: scripts/data_subject_rights_tracker.py
+    interpreter: python
 ---
 
 # GDPR/DSGVO Expert
@@ -274,3 +288,15 @@ All rights must be fulfilled within **one month of receipt** (Art. 12(3)). The d
 | Scoring | § 31 | Explainable algorithms |
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/ra-qm-team/skills/gdpr-dsgvo-expert (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `gdpr-dsgvo-expert`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/gdpr_compliance_checker.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `gdpr-compliance-checker` | `scripts/gdpr_compliance_checker.py` | Scan a project for GDPR compliance issues. |
+| `dpia-generator` | `scripts/dpia_generator.py` | Generate DPIA documentation. |
+| `data-subject-rights-tracker` | `scripts/data_subject_rights_tracker.py` | Track and manage data subject rights requests. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

@@ -1,6 +1,6 @@
 # Skills to Consider
 
-_Status: imported (2026-10-09). All 197 skills landed: 17 bundled defaults, 166 optional-pack skills, and 14 merges into existing mux skills. `[x]` means done; `[~]` marks script-bearing skills whose scripts were copied and wired through `${SKILL_DIR}` but not executed or wrapped as commands yet (see each Notes line). Phase 0 (directory exposure, placeholder substitution, the importer, pack install, notices, tests, and docs) is done. Every skill also has a category, shown and editable on every surface._
+_Status: done (2026-10-09). All 197 skills landed: 17 bundled defaults, 166 optional-pack skills, and 14 merges into existing mux skills. Every script-bearing skill exposes its scripts as `run_skill` commands (205 commands across 91 skills), each read for safety before it was run and covered by a dry-run test and a real `--help` run (ScriptCommands1 to 3). Deviations: scripts pass their exit codes through instead of being remapped (argparse already uses 2 for invalid input; scanners that use 2 for findings say so in their skill); no skill-level `requiresTools`, so the prose stays available without Python; the `python` interpreter now resolves `python3` (or `py` on Windows) when `python` is missing; and script commands answer `MUX_SKILL_DRY_RUN` generically in the executor. Phase 0 is done, and every skill has a category shown and editable on every surface._
 
 Every skill in [alirezarezvani/claude-skills](https://github.com/alirezarezvani/claude-skills) at commit `19392f7a08264ed00486a251f5b2098321771f94` (committed 2026-08-26) gets a decision here: ship it with mux as a default, offer it in an opt-in pack, fold its best ideas into a skill mux already has, or leave it alone.
 
@@ -46,8 +46,8 @@ Seventeen skills are worth shipping as defaults, and they cluster: the Playwrigh
 | 2 | [fix](#2-fix) | Engineering | Fix failing or flaky Playwright tests. | flaky-test-hunt (detection only) | 9 | 6 | **15** | Adopt as default | [x] |
 | 3 | [generate](#3-generate) | Engineering | Generate Playwright tests. | none (no Playwright test skills) | 9 | 6 | **15** | Adopt as default | [x] |
 | 4 | [pw-init](#4-pw-init) | Engineering | Set up Playwright in a project. | none (no Playwright test skills) | 9 | 6 | **15** | Adopt as default | [x] |
-| 5 | [a11y-audit](#5-a11y-audit) | Engineering | Accessibility audit skill for scanning, fixing, and verifying WCAG 2.2 Level A and AA compliance across... | none | 7 | 7 | **14** | Adopt as default | [~] |
-| 6 | [skill-security-auditor](#6-skill-security-auditor) | Engineering | Security audit and vulnerability scanner for AI agent skills before installation. | project skill trust gate (partial) | 7 | 7 | **14** | Adopt as default | [~] |
+| 5 | [a11y-audit](#5-a11y-audit) | Engineering | Accessibility audit skill for scanning, fixing, and verifying WCAG 2.2 Level A and AA compliance across... | none | 7 | 7 | **14** | Adopt as default | [x] |
+| 6 | [skill-security-auditor](#6-skill-security-auditor) | Engineering | Security audit and vulnerability scanner for AI agent skills before installation. | project skill trust gate (partial) | 7 | 7 | **14** | Adopt as default | [x] |
 | 7 | [adversarial-reviewer](#7-adversarial-reviewer) | Engineering | Adversarial code review that breaks the self-review monoculture. | code-review (partial) | 8 | 6 | **14** | Adapt into code-review | [x] |
 | 8 | [extract](#8-extract) | Engineering | Turn a proven pattern or debugging solution into a standalone reusable skill with SKILL.md, reference... | new-skill (scaffold only) | 8 | 6 | **14** | Adopt as default | [x] |
 | 9 | [security-guidance](#9-security-guidance) | Engineering | PreToolUse security-anti-pattern hook for Claude Code. | tool hooks (mechanism only) | 8 | 6 | **14** | Adopt as default | [x] |
@@ -59,9 +59,9 @@ Seventeen skills are worth shipping as defaults, and they cluster: the Playwrigh
 | 15 | [migrate](#15-migrate) | Engineering | Migrate from Cypress or Selenium to Playwright. | none (no Playwright test skills) | 9 | 5 | **14** | Adopt as default | [x] |
 | 16 | [pw-review](#16-pw-review) | Engineering | Review Playwright tests for quality. | none (no Playwright test skills) | 9 | 5 | **14** | Adopt as default | [x] |
 | 17 | [report](#17-report) | Engineering | Generate test report. Use when user says "test report", "results summary", "test status", "show results",... | none (no Playwright test skills) | 9 | 5 | **14** | Adopt as default | [x] |
-| 18 | [ci-cd-pipeline-builder](#18-ci-cd-pipeline-builder) | Engineering | Generate pragmatic CI/CD pipelines from detected project stack signals. | ci-watch (watches, does not generate) | 7 | 6 | **13** | Adopt as default | [~] |
-| 19 | [performance-profiler](#19-performance-profiler) | Engineering | Systematic performance profiling for Node.js, Python, and Go applications. | none | 7 | 6 | **13** | Adopt as default | [~] |
-| 20 | [ship-gate](#20-ship-gate) | Engineering | Pre-production audit that scans a codebase for security, database, deployment, code quality, AI/LLM,... | security-review, code-review (partial) | 7 | 6 | **13** | Adopt as default | [~] |
+| 18 | [ci-cd-pipeline-builder](#18-ci-cd-pipeline-builder) | Engineering | Generate pragmatic CI/CD pipelines from detected project stack signals. | ci-watch (watches, does not generate) | 7 | 6 | **13** | Adopt as default | [x] |
+| 19 | [performance-profiler](#19-performance-profiler) | Engineering | Systematic performance profiling for Node.js, Python, and Go applications. | none | 7 | 6 | **13** | Adopt as default | [x] |
+| 20 | [ship-gate](#20-ship-gate) | Engineering | Pre-production audit that scans a codebase for security, database, deployment, code quality, AI/LLM,... | security-review, code-review (partial) | 7 | 6 | **13** | Adopt as default | [x] |
 | 21 | [ar-resume](#21-ar-resume) | Engineering | Resume a paused experiment. | /loop, loop-until, fix-until-green | 9 | 4 | **13** | Optional pack: engineering | [x] |
 | 22 | [ar-status](#22-ar-status) | Engineering | Show experiment dashboard with results, active loops, and progress. | /loop, loop-until, fix-until-green | 9 | 4 | **13** | Optional pack: engineering | [x] |
 | 23 | [board](#23-board) | Engineering | Read, write, and browse the AgentHub message board for agent coordination. | worktree isolation, subagents | 9 | 4 | **13** | Optional pack: engineering | [x] |
@@ -83,18 +83,18 @@ Seventeen skills are worth shipping as defaults, and they cluster: the Playwrigh
 | 39 | [spawn](#39-spawn) | Engineering | Launch N parallel subagents in isolated git worktrees to compete on the session task. | worktree isolation, subagents | 9 | 4 | **13** | Optional pack: engineering | [x] |
 | 40 | [strict-api](#40-strict-api) | Engineering | Use when the user says 'no hallucinations', 'verify APIs', 'reality check', or 'don't invent functions'. | none | 9 | 4 | **13** | Optional pack: engineering | [x] |
 | 41 | [zero-hallucination-coder](#41-zero-hallucination-coder) | Engineering | Runs a disciplined Discuss -> Map -> Decompose -> Execute -> Verify loop that grounds code in verified... | none | 9 | 4 | **13** | Optional pack: engineering | [x] |
-| 42 | [api-design-reviewer](#42-api-design-reviewer) | Engineering | Comprehensive REST API design review with automated linting, breaking-change detection, and design scorecards. | none | 6 | 6 | **12** | Adopt as default | [~] |
-| 43 | [ai-security](#43-ai-security) | Engineering | Use when assessing AI/ML systems for prompt injection, jailbreak vulnerabilities, model inversion risk,... | security-review (code only) | 7 | 5 | **12** | Optional pack: security | [~] |
+| 42 | [api-design-reviewer](#42-api-design-reviewer) | Engineering | Comprehensive REST API design review with automated linting, breaking-change detection, and design scorecards. | none | 6 | 6 | **12** | Adopt as default | [x] |
+| 43 | [ai-security](#43-ai-security) | Engineering | Use when assessing AI/ML systems for prompt injection, jailbreak vulnerabilities, model inversion risk,... | security-review (code only) | 7 | 5 | **12** | Optional pack: security | [x] |
 | 44 | [changelog-generator](#44-changelog-generator) | Engineering | Produce consistent, auditable release notes from Conventional Commits. | git-changelog-entry, release-notes | 7 | 5 | **12** | Adapt into release-notes | [x] |
-| 45 | [cloud-security](#45-cloud-security) | Engineering | Use when assessing cloud infrastructure for security misconfigurations, IAM privilege escalation paths, S3... | security-review (code only) | 7 | 5 | **12** | Optional pack: security | [~] |
+| 45 | [cloud-security](#45-cloud-security) | Engineering | Use when assessing cloud infrastructure for security misconfigurations, IAM privilege escalation paths, S3... | security-review (code only) | 7 | 5 | **12** | Optional pack: security | [x] |
 | 46 | [code-reviewer](#46-code-reviewer) | Engineering | Code review automation for TypeScript, JavaScript, Python, Go, Swift, Kotlin, C#, .NET, Java, C, C++,... | code-review | 7 | 5 | **12** | Adapt into code-review | [x] |
 | 47 | [codebase-onboarding](#47-codebase-onboarding) | Engineering | Analyze a codebase and generate onboarding documentation for engineers, tech leads, and contractors. | init, explain-codebase | 7 | 5 | **12** | Adapt into explain-codebase | [x] |
-| 48 | [database-designer](#48-database-designer) | Engineering | Use when the user asks to design database schemas, plan data migrations, optimize queries, choose between... | none | 7 | 5 | **12** | Optional pack: engineering | [~] |
+| 48 | [database-designer](#48-database-designer) | Engineering | Use when the user asks to design database schemas, plan data migrations, optimize queries, choose between... | none | 7 | 5 | **12** | Optional pack: engineering | [x] |
 | 49 | [dependency-auditor](#49-dependency-auditor) | Engineering | Audit and manage dependencies across multi-language projects. | js-deps, py-deps, dotnet-outdated, java-deps, go-mod | 7 | 5 | **12** | Adapt into security-review | [x] |
-| 50 | [mcp-server-builder](#50-mcp-server-builder) | Engineering | Design and ship production-ready MCP (Model Context Protocol) servers from OpenAPI contracts instead of... | mux mcp serve (consumer side only) | 7 | 5 | **12** | Optional pack: engineering | [~] |
-| 51 | [runbook-generator](#51-runbook-generator) | Engineering | Generate operational runbooks from a service name. | none | 7 | 5 | **12** | Optional pack: engineering | [~] |
+| 50 | [mcp-server-builder](#50-mcp-server-builder) | Engineering | Design and ship production-ready MCP (Model Context Protocol) servers from OpenAPI contracts instead of... | mux mcp serve (consumer side only) | 7 | 5 | **12** | Optional pack: engineering | [x] |
+| 51 | [runbook-generator](#51-runbook-generator) | Engineering | Generate operational runbooks from a service name. | none | 7 | 5 | **12** | Optional pack: engineering | [x] |
 | 52 | [senior-security](#52-senior-security) | Engineering | Use when the user asks for STRIDE threat modeling, DREAD risk scoring, data-flow-diagram threat analysis,... | security-review, git-secret-scan | 7 | 5 | **12** | Adapt into security-review | [x] |
-| 53 | [spec-driven-workflow](#53-spec-driven-workflow) | Engineering | Use when the user asks to write specs before code, define acceptance criteria, plan features before... | plan mode (partial) | 7 | 5 | **12** | Optional pack: engineering | [~] |
+| 53 | [spec-driven-workflow](#53-spec-driven-workflow) | Engineering | Use when the user asks to write specs before code, define acceptance criteria, plan features before... | plan mode (partial) | 7 | 5 | **12** | Optional pack: engineering | [x] |
 | 54 | [write-a-skill](#54-write-a-skill) | Engineering | Create new agent skills with proper structure, progressive disclosure, and bundled resources. | new-skill | 7 | 5 | **12** | Adapt into new-skill | [x] |
 | 55 | [email-template-builder](#55-email-template-builder) | Engineering | Build complete transactional email systems: React Email templates, provider integration (Resend, Postmark,... | none | 8 | 4 | **12** | Optional pack: engineering | [x] |
 | 56 | [playwright-pro](#56-playwright-pro) | Engineering | Production-grade Playwright testing toolkit. | none | 8 | 4 | **12** | Adapt into the Playwright family | [x] |
@@ -103,36 +103,36 @@ Seventeen skills are worth shipping as defaults, and they cluster: the Playwrigh
 | 59 | [deepread](#59-deepread) | Research | Use when the user asks to deeply read a book, article, PDF, or document set; extract claims and evidence;... | none | 9 | 3 | **12** | Optional pack: research | [x] |
 | 60 | [embedded-iot-mentor](#60-embedded-iot-mentor) | Engineering | Mentor for embedded and IoT hardware projects. | none | 9 | 3 | **12** | Optional pack: engineering | [x] |
 | 61 | [team-communications](#61-team-communications) | Project management | Write internal company communications. | none | 9 | 3 | **12** | Optional pack: product | [x] |
-| 62 | [tdd-guide](#62-tdd-guide) | Engineering | Test-driven development skill for writing unit tests, generating test fixtures and mocks, analyzing... | test-gap-review (partial) | 5 | 6 | **11** | Adopt as default | [~] |
-| 63 | [handoff (productivity)](#63-handoff-productivity) | Productivity | Compact the current conversation into a handoff document for another agent to pick up. | none (sessions persist, but no handoff document) | 6 | 5 | **11** | Adopt as default | [~] |
-| 64 | [incident-commander](#64-incident-commander) | Engineering | Comprehensive incident response framework from detection through resolution and post-incident review. | none | 6 | 5 | **11** | Optional pack: engineering | [~] |
+| 62 | [tdd-guide](#62-tdd-guide) | Engineering | Test-driven development skill for writing unit tests, generating test fixtures and mocks, analyzing... | test-gap-review (partial) | 5 | 6 | **11** | Adopt as default | [x] |
+| 63 | [handoff (productivity)](#63-handoff-productivity) | Productivity | Compact the current conversation into a handoff document for another agent to pick up. | none (sessions persist, but no handoff document) | 6 | 5 | **11** | Adopt as default | [x] |
+| 64 | [incident-commander](#64-incident-commander) | Engineering | Comprehensive incident response framework from detection through resolution and post-incident review. | none | 6 | 5 | **11** | Optional pack: engineering | [x] |
 | 65 | [monorepo-navigator](#65-monorepo-navigator) | Engineering | Navigate, manage, and optimize monorepos. | project-detect (partial) | 6 | 5 | **11** | Adapt into project-detect | [x] |
-| 66 | [sql-database-assistant](#66-sql-database-assistant) | Engineering | Use when the user asks to write SQL queries, optimize database performance, generate migrations, explore... | none | 6 | 5 | **11** | Optional pack: engineering | [~] |
-| 67 | [agent-designer](#67-agent-designer) | Engineering | Use when the user asks to design a multi-agent system, pick an orchestration pattern... | none | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 68 | [agent-harness](#68-agent-harness) | Engineering | Turn any domain folder of skills into a bounded agentic loop: compile a goal into a verifiable task plan,... | plan mode, /loop, task plans | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 69 | [agent-workflow-designer](#69-agent-workflow-designer) | Engineering | Design production-grade multi-agent workflows with clear pattern choice (sequential, parallel,... | none | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 70 | [aws-solution-architect](#70-aws-solution-architect) | Engineering | Design AWS architectures for startups using serverless patterns and IaC templates. | aws-*, azure-*, gcp-* (operations only) | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 71 | [chaos-engineering](#71-chaos-engineering) | Engineering | Use when planning, running, or learning from chaos engineering experiments. | none | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 72 | [env-secrets-manager](#72-env-secrets-manager) | Engineering | Manage environment-variable hygiene and secrets safety across local development and production. | git-secret-scan, cloud secret listing | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 73 | [feature-flags-architect](#73-feature-flags-architect) | Engineering | Use when adding, retiring, or auditing feature flags. | none | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 74 | [gdpr-dsgvo-expert](#74-gdpr-dsgvo-expert) | Regulatory and quality | GDPR and German DSGVO compliance automation. | none | 7 | 4 | **11** | Optional pack: compliance | [~] |
-| 75 | [grill-me](#75-grill-me) | Engineering | Interview the user relentlessly about a plan or design until reaching shared understanding, resolving each... | plan mode, ask_user | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 76 | [grill-with-docs](#76-grill-with-docs) | Engineering | Docs-anchored grilling session. | plan mode, ask_user | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 77 | [incident-response](#77-incident-response) | Engineering | Use when a security incident has been detected or declared and needs classification, triage, escalation... | none | 7 | 4 | **11** | Optional pack: security | [~] |
-| 78 | [jira-expert](#78-jira-expert) | Project management | Atlassian Jira expert for creating and managing projects, planning, product discovery, JQL queries,... | none | 7 | 4 | **11** | Optional pack: product | [~] |
-| 79 | [kubernetes-operator](#79-kubernetes-operator) | Engineering | Use when building a Kubernetes Operator. | k8s-* (operations only) | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 80 | [md-review](#80-md-review) | Documents | Converts a markdown PR writeup or code review (one with ```diff fenced blocks and severity-tagged >... | code-review output (Markdown only) | 7 | 4 | **11** | Optional pack: docs | [~] |
-| 81 | [observability-designer](#81-observability-designer) | Engineering | Design production-ready observability strategies combining metrics, logs, and traces. | none | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 82 | [rag-architect](#82-rag-architect) | Engineering | Use when the user asks to design a RAG pipeline, choose a chunking strategy or embedding model, pick a... | none | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 83 | [red-team](#83-red-team) | Engineering | Use when planning or executing authorized red team engagements, attack path analysis, or offensive... | none | 7 | 4 | **11** | Optional pack: security | [~] |
-| 84 | [reflect](#84-reflect) | Productivity | Mid-conversation reflection skill that pauses execution and zooms out from detail-mode to honestly... | none | 7 | 4 | **11** | Optional pack: productivity | [~] |
-| 85 | [security-pen-testing](#85-security-pen-testing) | Engineering | Use when the user asks to perform security audits, penetration testing, vulnerability scanning, OWASP Top... | none | 7 | 4 | **11** | Optional pack: security | [~] |
-| 86 | [senior-architect](#86-senior-architect) | Engineering | This skill should be used when the user asks to "design system architecture", "evaluate microservices vs... | none | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 87 | [senior-devops](#87-senior-devops) | Engineering | Comprehensive DevOps skill for CI/CD, infrastructure automation, containerization, and cloud platforms... | none | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 88 | [senior-qa](#88-senior-qa) | Engineering | Generates unit tests, integration tests, and E2E tests for React/Next.js applications. | none | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 89 | [slo-architect](#89-slo-architect) | Engineering | Use when defining, reviewing, or operating SLOs/SLIs/error budgets. | none | 7 | 4 | **11** | Optional pack: engineering | [~] |
-| 90 | [spec-to-repo](#90-spec-to-repo) | Product | Use when the user says 'build me an app', 'create a project from this spec', 'scaffold a new repo',... | none | 7 | 4 | **11** | Optional pack: product | [~] |
-| 91 | [threat-detection](#91-threat-detection) | Engineering | Use when hunting for threats in an environment, analyzing IOCs, or detecting behavioral anomalies in... | none | 7 | 4 | **11** | Optional pack: security | [~] |
+| 66 | [sql-database-assistant](#66-sql-database-assistant) | Engineering | Use when the user asks to write SQL queries, optimize database performance, generate migrations, explore... | none | 6 | 5 | **11** | Optional pack: engineering | [x] |
+| 67 | [agent-designer](#67-agent-designer) | Engineering | Use when the user asks to design a multi-agent system, pick an orchestration pattern... | none | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 68 | [agent-harness](#68-agent-harness) | Engineering | Turn any domain folder of skills into a bounded agentic loop: compile a goal into a verifiable task plan,... | plan mode, /loop, task plans | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 69 | [agent-workflow-designer](#69-agent-workflow-designer) | Engineering | Design production-grade multi-agent workflows with clear pattern choice (sequential, parallel,... | none | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 70 | [aws-solution-architect](#70-aws-solution-architect) | Engineering | Design AWS architectures for startups using serverless patterns and IaC templates. | aws-*, azure-*, gcp-* (operations only) | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 71 | [chaos-engineering](#71-chaos-engineering) | Engineering | Use when planning, running, or learning from chaos engineering experiments. | none | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 72 | [env-secrets-manager](#72-env-secrets-manager) | Engineering | Manage environment-variable hygiene and secrets safety across local development and production. | git-secret-scan, cloud secret listing | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 73 | [feature-flags-architect](#73-feature-flags-architect) | Engineering | Use when adding, retiring, or auditing feature flags. | none | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 74 | [gdpr-dsgvo-expert](#74-gdpr-dsgvo-expert) | Regulatory and quality | GDPR and German DSGVO compliance automation. | none | 7 | 4 | **11** | Optional pack: compliance | [x] |
+| 75 | [grill-me](#75-grill-me) | Engineering | Interview the user relentlessly about a plan or design until reaching shared understanding, resolving each... | plan mode, ask_user | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 76 | [grill-with-docs](#76-grill-with-docs) | Engineering | Docs-anchored grilling session. | plan mode, ask_user | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 77 | [incident-response](#77-incident-response) | Engineering | Use when a security incident has been detected or declared and needs classification, triage, escalation... | none | 7 | 4 | **11** | Optional pack: security | [x] |
+| 78 | [jira-expert](#78-jira-expert) | Project management | Atlassian Jira expert for creating and managing projects, planning, product discovery, JQL queries,... | none | 7 | 4 | **11** | Optional pack: product | [x] |
+| 79 | [kubernetes-operator](#79-kubernetes-operator) | Engineering | Use when building a Kubernetes Operator. | k8s-* (operations only) | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 80 | [md-review](#80-md-review) | Documents | Converts a markdown PR writeup or code review (one with ```diff fenced blocks and severity-tagged >... | code-review output (Markdown only) | 7 | 4 | **11** | Optional pack: docs | [x] |
+| 81 | [observability-designer](#81-observability-designer) | Engineering | Design production-ready observability strategies combining metrics, logs, and traces. | none | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 82 | [rag-architect](#82-rag-architect) | Engineering | Use when the user asks to design a RAG pipeline, choose a chunking strategy or embedding model, pick a... | none | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 83 | [red-team](#83-red-team) | Engineering | Use when planning or executing authorized red team engagements, attack path analysis, or offensive... | none | 7 | 4 | **11** | Optional pack: security | [x] |
+| 84 | [reflect](#84-reflect) | Productivity | Mid-conversation reflection skill that pauses execution and zooms out from detail-mode to honestly... | none | 7 | 4 | **11** | Optional pack: productivity | [x] |
+| 85 | [security-pen-testing](#85-security-pen-testing) | Engineering | Use when the user asks to perform security audits, penetration testing, vulnerability scanning, OWASP Top... | none | 7 | 4 | **11** | Optional pack: security | [x] |
+| 86 | [senior-architect](#86-senior-architect) | Engineering | This skill should be used when the user asks to "design system architecture", "evaluate microservices vs... | none | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 87 | [senior-devops](#87-senior-devops) | Engineering | Comprehensive DevOps skill for CI/CD, infrastructure automation, containerization, and cloud platforms... | none | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 88 | [senior-qa](#88-senior-qa) | Engineering | Generates unit tests, integration tests, and E2E tests for React/Next.js applications. | none | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 89 | [slo-architect](#89-slo-architect) | Engineering | Use when defining, reviewing, or operating SLOs/SLIs/error budgets. | none | 7 | 4 | **11** | Optional pack: engineering | [x] |
+| 90 | [spec-to-repo](#90-spec-to-repo) | Product | Use when the user says 'build me an app', 'create a project from this spec', 'scaffold a new repo',... | none | 7 | 4 | **11** | Optional pack: product | [x] |
+| 91 | [threat-detection](#91-threat-detection) | Engineering | Use when hunting for threats in an environment, analyzing IOCs, or detecting behavioral anomalies in... | none | 7 | 4 | **11** | Optional pack: security | [x] |
 | 92 | [browserstack](#92-browserstack) | Engineering | Run tests on BrowserStack. | none | 8 | 3 | **11** | Optional pack: engineering | [x] |
 | 93 | [named-persona-adversarial-review](#93-named-persona-adversarial-review) | Engineering | Code review through the lens of real engineers' documented philosophies (Torvalds, Thompson, Carmack, Kent... | code-review (partial) | 8 | 3 | **11** | Optional pack: engineering | [x] |
 | 94 | [testrail](#94-testrail) | Engineering | Sync tests with TestRail. Use when user mentions "testrail", "test management", "test cases", "test run",... | none | 8 | 3 | **11** | Optional pack: engineering | [x] |
@@ -166,50 +166,50 @@ Seventeen skills are worth shipping as defaults, and they cluster: the Playwrigh
 | 122 | [stress-test](#122-stress-test) | Executive advisory | Business assumption stress testing. | none | 9 | 2 | **11** | Optional pack: business | [x] |
 | 123 | [vpe-review](#123-vpe-review) | Executive advisory | Throughput-first VP of Engineering interrogation of any plan that touches delivery, eng hiring, team... | none | 9 | 2 | **11** | Optional pack: business | [x] |
 | 124 | [youtube-full](#124-youtube-full) | Marketing | Use when the user needs YouTube transcripts, video search, channel browsing, playlist extraction, or... | none | 9 | 2 | **11** | Optional pack: marketing | [x] |
-| 125 | [browser-automation](#125-browser-automation) | Engineering | Use when the user asks to automate browser tasks, scrape websites, fill forms, capture screenshots,... | web_retrieve (Playwright-backed, read-only) | 5 | 5 | **10** | Optional pack: engineering | [~] |
+| 125 | [browser-automation](#125-browser-automation) | Engineering | Use when the user asks to automate browser tasks, scrape websites, fill forms, capture screenshots,... | web_retrieve (Playwright-backed, read-only) | 5 | 5 | **10** | Optional pack: engineering | [x] |
 | 126 | [tech-debt-tracker](#126-tech-debt-tracker) | Engineering | Scan codebases for technical debt, score severity, track trends, and generate prioritized remediation plans. | todo-scan, dead-code-scan | 5 | 5 | **10** | Adapt into todo-scan | [x] |
 | 127 | [terraform-patterns](#127-terraform-patterns) | Engineering | Terraform infrastructure-as-code agent skill and plugin for Claude Code, Codex, Gemini CLI, Cursor, OpenClaw. | terraform | 5 | 5 | **10** | Adapt into terraform | [x] |
-| 128 | [autoresearch-agent](#128-autoresearch-agent) | Engineering | Autonomous experiment loop that optimizes any file by a measurable metric. | /loop, loop-until, fix-until-green | 6 | 4 | **10** | Optional pack: engineering | [~] |
-| 129 | [azure-cloud-architect](#129-azure-cloud-architect) | Engineering | Design Azure architectures for startups and enterprises. | aws-*, azure-*, gcp-* (operations only) | 6 | 4 | **10** | Optional pack: engineering | [~] |
-| 130 | [code-to-prd](#130-code-to-prd) | Product | Reverse-engineer any codebase into a complete Product Requirements Document (PRD). | none | 6 | 4 | **10** | Optional pack: product | [~] |
+| 128 | [autoresearch-agent](#128-autoresearch-agent) | Engineering | Autonomous experiment loop that optimizes any file by a measurable metric. | /loop, loop-until, fix-until-green | 6 | 4 | **10** | Optional pack: engineering | [x] |
+| 129 | [azure-cloud-architect](#129-azure-cloud-architect) | Engineering | Design Azure architectures for startups and enterprises. | aws-*, azure-*, gcp-* (operations only) | 6 | 4 | **10** | Optional pack: engineering | [x] |
+| 130 | [code-to-prd](#130-code-to-prd) | Product | Reverse-engineer any codebase into a complete Product Requirements Document (PRD). | none | 6 | 4 | **10** | Optional pack: product | [x] |
 | 131 | [docker-development](#131-docker-development) | Engineering | Docker and container development agent skill and plugin for Dockerfile optimization, docker-compose... | docker-build, dockerfile-lint, compose | 6 | 4 | **10** | Adapt into dockerfile-lint | [x] |
-| 132 | [gcp-cloud-architect](#132-gcp-cloud-architect) | Engineering | Design GCP architectures for startups and enterprises. | aws-*, azure-*, gcp-* (operations only) | 6 | 4 | **10** | Optional pack: engineering | [~] |
-| 133 | [karpathy-coder](#133-karpathy-coder) | Engineering | Use when writing, reviewing, or committing code to enforce Karpathy's 4 coding principles. | none | 6 | 4 | **10** | Optional pack: engineering | [~] |
+| 132 | [gcp-cloud-architect](#132-gcp-cloud-architect) | Engineering | Design GCP architectures for startups and enterprises. | aws-*, azure-*, gcp-* (operations only) | 6 | 4 | **10** | Optional pack: engineering | [x] |
+| 133 | [karpathy-coder](#133-karpathy-coder) | Engineering | Use when writing, reviewing, or committing code to enforce Karpathy's 4 coding principles. | none | 6 | 4 | **10** | Optional pack: engineering | [x] |
 | 134 | [loop](#134-loop) | Engineering | Start an autonomous experiment loop with user-selected interval (10min, 1h, daily, weekly, monthly). | /loop, loop-until, fix-until-green | 6 | 4 | **10** | Optional pack: engineering | [x] |
-| 135 | [migration-architect](#135-migration-architect) | Engineering | Zero-downtime migration planning, compatibility validation, and rollback strategy generation. | none | 6 | 4 | **10** | Optional pack: engineering | [~] |
-| 136 | [secrets-vault-manager](#136-secrets-vault-manager) | Engineering | Use when the user asks to set up secret management infrastructure, integrate HashiCorp Vault, configure... | git-secret-scan, cloud secret listing | 6 | 4 | **10** | Optional pack: engineering | [~] |
-| 137 | [senior-backend](#137-senior-backend) | Engineering | Designs and implements backend systems including REST APIs, microservices, database architectures,... | none | 6 | 4 | **10** | Optional pack: engineering | [~] |
-| 138 | [senior-frontend](#138-senior-frontend) | Engineering | Frontend development skill for React, Next.js, TypeScript, and Tailwind CSS applications. | react-* family | 6 | 4 | **10** | Optional pack: engineering | [~] |
-| 139 | [senior-secops](#139-senior-secops) | Engineering | Senior SecOps engineer skill for application security, vulnerability management, compliance verification,... | none | 6 | 4 | **10** | Optional pack: engineering | [~] |
-| 140 | [agent-decision-receipts](#140-agent-decision-receipts) | Regulatory and quality | Mint a tamper-evident, post-quantum-signed receipt for a consequential agent action (deploy, delete, pay,... | none | 7 | 3 | **10** | Optional pack: compliance | [~] |
-| 141 | [apple-hig-expert](#141-apple-hig-expert) | Product | Audits and designs iOS/macOS/watchOS/visionOS interfaces against the Apple Human Interface Guidelines,... | none | 7 | 3 | **10** | Optional pack: product | [~] |
-| 142 | [competitive-teardown](#142-competitive-teardown) | Product | Analyzes competitor products and companies by synthesizing data from pricing pages, app store reviews, job... | none | 7 | 3 | **10** | Optional pack: product | [~] |
-| 143 | [confluence-expert](#143-confluence-expert) | Project management | Atlassian Confluence expert for creating and managing spaces, knowledge bases, and documentation. | none | 7 | 3 | **10** | Optional pack: product | [~] |
-| 144 | [cto-advisor](#144-cto-advisor) | Executive advisory | Technical leadership guidance for engineering teams, architecture decisions, and technology strategy. | none | 7 | 3 | **10** | Optional pack: business | [~] |
-| 145 | [data-quality-auditor](#145-data-quality-auditor) | Engineering | Audit datasets for completeness, consistency, accuracy, and validity. | none | 7 | 3 | **10** | Optional pack: data | [~] |
-| 146 | [dossier](#146-dossier) | Research | Decision-grade entity research skill. | none | 7 | 3 | **10** | Optional pack: research | [~] |
-| 147 | [epic-design](#147-epic-design) | Engineering | Build immersive, cinematic 2.5D interactive websites using scroll storytelling, parallax depth, text... | none | 7 | 3 | **10** | Optional pack: engineering | [~] |
-| 148 | [experiment-designer](#148-experiment-designer) | Product | Use when planning product experiments, writing testable hypotheses, estimating sample size, prioritizing... | none | 7 | 3 | **10** | Optional pack: product | [~] |
-| 149 | [knowledge-ops](#149-knowledge-ops) | Business operations | Use when a Head of Ops, Knowledge Manager, or TPM-Internal needs to author, validate, or clean up company... | none | 7 | 3 | **10** | Optional pack: business | [~] |
-| 150 | [landing-page-generator](#150-landing-page-generator) | Product | Generates high-converting landing pages as complete Next.js/React (TSX) components with Tailwind CSS. | none | 7 | 3 | **10** | Optional pack: product | [~] |
-| 151 | [litreview](#151-litreview) | Research | Academic literature orientation skill that searches papers via free keyless APIs (PubMed E-utilities +... | none | 7 | 3 | **10** | Optional pack: research | [~] |
-| 152 | [md-document](#152-md-document) | Documents | Converts long-form markdown (specs, RFCs, reports, plans, explainers) into a single-file,... | none | 7 | 3 | **10** | Optional pack: docs | [~] |
-| 153 | [product-analytics](#153-product-analytics) | Product | Use when defining product KPIs, building metric dashboards, running cohort or retention analysis, or... | none | 7 | 3 | **10** | Optional pack: product | [~] |
-| 154 | [product-discovery](#154-product-discovery) | Product | Use when validating product opportunities, mapping assumptions, planning discovery sprints, or testing... | none | 7 | 3 | **10** | Optional pack: product | [~] |
-| 155 | [product-manager-toolkit](#155-product-manager-toolkit) | Product | Comprehensive toolkit for product managers including RICE prioritization, customer interview analysis, PRD... | none | 7 | 3 | **10** | Optional pack: product | [~] |
-| 156 | [product-strategist](#156-product-strategist) | Product | Strategic product leadership toolkit for Head of Product covering OKR cascade generation, quarterly... | none | 7 | 3 | **10** | Optional pack: product | [~] |
-| 157 | [pulse](#157-pulse) | Research | Multi-source recency research skill that takes the pulse of any topic across Reddit, Hacker News, the open... | none | 7 | 3 | **10** | Optional pack: research | [~] |
-| 158 | [rfp-responder](#158-rfp-responder) | Commercial | Use when an RFP, RFI, RFQ, security questionnaire, vendor questionnaire, or proposal request arrives and... | none | 7 | 3 | **10** | Optional pack: business | [~] |
-| 159 | [roadmap-communicator](#159-roadmap-communicator) | Product | Use when preparing roadmap narratives, release notes, changelogs, or stakeholder updates tailored for... | release-notes (partial) | 7 | 3 | **10** | Optional pack: product | [~] |
-| 160 | [saas-scaffolder](#160-saas-scaffolder) | Product | Generates complete, production-ready SaaS project boilerplate including authentication, database schemas,... | none | 7 | 3 | **10** | Optional pack: product | [~] |
-| 161 | [scrum-master](#161-scrum-master) | Project management | Advanced Scrum Master skill for data-driven agile team analysis and coaching. | none | 7 | 3 | **10** | Optional pack: product | [~] |
-| 162 | [senior-data-scientist](#162-senior-data-scientist) | Engineering | World-class senior data scientist skill specialising in statistical modeling, experiment design, causal... | none | 7 | 3 | **10** | Optional pack: data | [~] |
-| 163 | [senior-ml-engineer](#163-senior-ml-engineer) | Engineering | ML engineering skill for productionizing models, building MLOps pipelines, and integrating LLMs. | none | 7 | 3 | **10** | Optional pack: data | [~] |
-| 164 | [senior-prompt-engineer](#164-senior-prompt-engineer) | Engineering | Use when the user asks to optimize prompts, design prompt templates, evaluate LLM outputs with an eval... | none | 7 | 3 | **10** | Optional pack: data | [~] |
-| 165 | [snowflake-development](#165-snowflake-development) | Engineering | Use when writing Snowflake SQL, building data pipelines with Dynamic Tables or Streams/Tasks, using Cortex... | none | 7 | 3 | **10** | Optional pack: engineering | [~] |
-| 166 | [statistical-analyst](#166-statistical-analyst) | Engineering | Run hypothesis tests, analyze A/B experiment results, calculate sample sizes, and interpret statistical... | none | 7 | 3 | **10** | Optional pack: data | [~] |
-| 167 | [ui-design-system](#167-ui-design-system) | Product | UI design system toolkit for Senior UI Designer including design token generation, component... | none | 7 | 3 | **10** | Optional pack: product | [~] |
-| 168 | [universal-scraping-architect](#168-universal-scraping-architect) | Engineering | Use for web scraping, crawling, document extraction, API parsing, or building validation-heavy data... | none | 7 | 3 | **10** | Optional pack: data | [~] |
+| 135 | [migration-architect](#135-migration-architect) | Engineering | Zero-downtime migration planning, compatibility validation, and rollback strategy generation. | none | 6 | 4 | **10** | Optional pack: engineering | [x] |
+| 136 | [secrets-vault-manager](#136-secrets-vault-manager) | Engineering | Use when the user asks to set up secret management infrastructure, integrate HashiCorp Vault, configure... | git-secret-scan, cloud secret listing | 6 | 4 | **10** | Optional pack: engineering | [x] |
+| 137 | [senior-backend](#137-senior-backend) | Engineering | Designs and implements backend systems including REST APIs, microservices, database architectures,... | none | 6 | 4 | **10** | Optional pack: engineering | [x] |
+| 138 | [senior-frontend](#138-senior-frontend) | Engineering | Frontend development skill for React, Next.js, TypeScript, and Tailwind CSS applications. | react-* family | 6 | 4 | **10** | Optional pack: engineering | [x] |
+| 139 | [senior-secops](#139-senior-secops) | Engineering | Senior SecOps engineer skill for application security, vulnerability management, compliance verification,... | none | 6 | 4 | **10** | Optional pack: engineering | [x] |
+| 140 | [agent-decision-receipts](#140-agent-decision-receipts) | Regulatory and quality | Mint a tamper-evident, post-quantum-signed receipt for a consequential agent action (deploy, delete, pay,... | none | 7 | 3 | **10** | Optional pack: compliance | [x] |
+| 141 | [apple-hig-expert](#141-apple-hig-expert) | Product | Audits and designs iOS/macOS/watchOS/visionOS interfaces against the Apple Human Interface Guidelines,... | none | 7 | 3 | **10** | Optional pack: product | [x] |
+| 142 | [competitive-teardown](#142-competitive-teardown) | Product | Analyzes competitor products and companies by synthesizing data from pricing pages, app store reviews, job... | none | 7 | 3 | **10** | Optional pack: product | [x] |
+| 143 | [confluence-expert](#143-confluence-expert) | Project management | Atlassian Confluence expert for creating and managing spaces, knowledge bases, and documentation. | none | 7 | 3 | **10** | Optional pack: product | [x] |
+| 144 | [cto-advisor](#144-cto-advisor) | Executive advisory | Technical leadership guidance for engineering teams, architecture decisions, and technology strategy. | none | 7 | 3 | **10** | Optional pack: business | [x] |
+| 145 | [data-quality-auditor](#145-data-quality-auditor) | Engineering | Audit datasets for completeness, consistency, accuracy, and validity. | none | 7 | 3 | **10** | Optional pack: data | [x] |
+| 146 | [dossier](#146-dossier) | Research | Decision-grade entity research skill. | none | 7 | 3 | **10** | Optional pack: research | [x] |
+| 147 | [epic-design](#147-epic-design) | Engineering | Build immersive, cinematic 2.5D interactive websites using scroll storytelling, parallax depth, text... | none | 7 | 3 | **10** | Optional pack: engineering | [x] |
+| 148 | [experiment-designer](#148-experiment-designer) | Product | Use when planning product experiments, writing testable hypotheses, estimating sample size, prioritizing... | none | 7 | 3 | **10** | Optional pack: product | [x] |
+| 149 | [knowledge-ops](#149-knowledge-ops) | Business operations | Use when a Head of Ops, Knowledge Manager, or TPM-Internal needs to author, validate, or clean up company... | none | 7 | 3 | **10** | Optional pack: business | [x] |
+| 150 | [landing-page-generator](#150-landing-page-generator) | Product | Generates high-converting landing pages as complete Next.js/React (TSX) components with Tailwind CSS. | none | 7 | 3 | **10** | Optional pack: product | [x] |
+| 151 | [litreview](#151-litreview) | Research | Academic literature orientation skill that searches papers via free keyless APIs (PubMed E-utilities +... | none | 7 | 3 | **10** | Optional pack: research | [x] |
+| 152 | [md-document](#152-md-document) | Documents | Converts long-form markdown (specs, RFCs, reports, plans, explainers) into a single-file,... | none | 7 | 3 | **10** | Optional pack: docs | [x] |
+| 153 | [product-analytics](#153-product-analytics) | Product | Use when defining product KPIs, building metric dashboards, running cohort or retention analysis, or... | none | 7 | 3 | **10** | Optional pack: product | [x] |
+| 154 | [product-discovery](#154-product-discovery) | Product | Use when validating product opportunities, mapping assumptions, planning discovery sprints, or testing... | none | 7 | 3 | **10** | Optional pack: product | [x] |
+| 155 | [product-manager-toolkit](#155-product-manager-toolkit) | Product | Comprehensive toolkit for product managers including RICE prioritization, customer interview analysis, PRD... | none | 7 | 3 | **10** | Optional pack: product | [x] |
+| 156 | [product-strategist](#156-product-strategist) | Product | Strategic product leadership toolkit for Head of Product covering OKR cascade generation, quarterly... | none | 7 | 3 | **10** | Optional pack: product | [x] |
+| 157 | [pulse](#157-pulse) | Research | Multi-source recency research skill that takes the pulse of any topic across Reddit, Hacker News, the open... | none | 7 | 3 | **10** | Optional pack: research | [x] |
+| 158 | [rfp-responder](#158-rfp-responder) | Commercial | Use when an RFP, RFI, RFQ, security questionnaire, vendor questionnaire, or proposal request arrives and... | none | 7 | 3 | **10** | Optional pack: business | [x] |
+| 159 | [roadmap-communicator](#159-roadmap-communicator) | Product | Use when preparing roadmap narratives, release notes, changelogs, or stakeholder updates tailored for... | release-notes (partial) | 7 | 3 | **10** | Optional pack: product | [x] |
+| 160 | [saas-scaffolder](#160-saas-scaffolder) | Product | Generates complete, production-ready SaaS project boilerplate including authentication, database schemas,... | none | 7 | 3 | **10** | Optional pack: product | [x] |
+| 161 | [scrum-master](#161-scrum-master) | Project management | Advanced Scrum Master skill for data-driven agile team analysis and coaching. | none | 7 | 3 | **10** | Optional pack: product | [x] |
+| 162 | [senior-data-scientist](#162-senior-data-scientist) | Engineering | World-class senior data scientist skill specialising in statistical modeling, experiment design, causal... | none | 7 | 3 | **10** | Optional pack: data | [x] |
+| 163 | [senior-ml-engineer](#163-senior-ml-engineer) | Engineering | ML engineering skill for productionizing models, building MLOps pipelines, and integrating LLMs. | none | 7 | 3 | **10** | Optional pack: data | [x] |
+| 164 | [senior-prompt-engineer](#164-senior-prompt-engineer) | Engineering | Use when the user asks to optimize prompts, design prompt templates, evaluate LLM outputs with an eval... | none | 7 | 3 | **10** | Optional pack: data | [x] |
+| 165 | [snowflake-development](#165-snowflake-development) | Engineering | Use when writing Snowflake SQL, building data pipelines with Dynamic Tables or Streams/Tasks, using Cortex... | none | 7 | 3 | **10** | Optional pack: engineering | [x] |
+| 166 | [statistical-analyst](#166-statistical-analyst) | Engineering | Run hypothesis tests, analyze A/B experiment results, calculate sample sizes, and interpret statistical... | none | 7 | 3 | **10** | Optional pack: data | [x] |
+| 167 | [ui-design-system](#167-ui-design-system) | Product | UI design system toolkit for Senior UI Designer including design token generation, component... | none | 7 | 3 | **10** | Optional pack: product | [x] |
+| 168 | [universal-scraping-architect](#168-universal-scraping-architect) | Engineering | Use for web scraping, crawling, document extraction, API parsing, or building validation-heavy data... | none | 7 | 3 | **10** | Optional pack: data | [x] |
 | 169 | [ai-act-readiness](#169-ai-act-readiness) | Compliance | EU AI Act 6-question forcing interrogation. | none | 8 | 2 | **10** | Optional pack: compliance | [x] |
 | 170 | [aims-audit](#170-aims-audit) | Compliance | ISO/IEC 42001 AIMS internal-audit 6-question forcing interrogation. | none | 8 | 2 | **10** | Optional pack: compliance | [x] |
 | 171 | [board-meeting](#171-board-meeting) | Executive advisory | Multi-agent board meeting protocol for strategic decisions. | none | 8 | 2 | **10** | Optional pack: business | [x] |
@@ -339,7 +339,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** WCAG checks for React, Vue, Angular, Svelte, and HTML fill a clear gap next to the React family; gate on package.json or HTML.
 
 - [x] Port `engineering-team/a11y-audit/skills/a11y-audit/SKILL.md` into a default skill definition (a new `DefaultImportedSkills.cs`, or the family file named under Overlap), rewriting Claude Code references for mux and removing em-dashes.
-- [~] Wrap the 2 Python scripts as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
+- [x] Wrap the 2 Python scripts as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
 - [x] Gate the listing with `appliesTo`: `package.json`, `**/*.html`, `**/*.vue`, `**/*.svelte`.
 - [x] Add positive and negative cases to a new `ImportedSkillsSuite` (loads, validates, gating, body substitution, and each command against a fixture project).
 - [x] Record the source and the MIT notice in `THIRD_PARTY_NOTICES.md`; add the skill to USAGE.md and the CHANGELOG. The notice is in THIRD_PARTY_NOTICES.md; the USAGE.md and CHANGELOG entries come with the release documentation pass.
@@ -357,7 +357,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** mux loads untrusted project skills behind a trust prompt; a scanner that inspects a skill before trusting it is a direct fit.
 
 - [x] Port `engineering/skills/skill-security-auditor/SKILL.md` into a default skill definition (a new `DefaultImportedSkills.cs`, or the family file named under Overlap), rewriting Claude Code references for mux and removing em-dashes.
-- [~] Wrap the 1 Python script as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
+- [x] Wrap the 1 Python script as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
 - [x] Gate the listing with `appliesTo`: `.claude/skills/**`, `.mux/skills/**`, `.agents/skills/**`.
 - [x] Add positive and negative cases to a new `ImportedSkillsSuite` (loads, validates, gating, body substitution, and each command against a fixture project).
 - [x] Record the source and the MIT notice in `THIRD_PARTY_NOTICES.md`; add the skill to USAGE.md and the CHANGELOG. The notice is in THIRD_PARTY_NOTICES.md; the USAGE.md and CHANGELOG entries come with the release documentation pass.
@@ -563,7 +563,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Generating a first CI workflow from detected stack signals pairs naturally with project-detect.
 
 - [x] Port `engineering/skills/ci-cd-pipeline-builder/SKILL.md` into a default skill definition (a new `DefaultImportedSkills.cs`, or the family file named under Overlap), rewriting Claude Code references for mux and removing em-dashes.
-- [~] Wrap the 2 Python scripts as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
+- [x] Wrap the 2 Python scripts as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
 - [x] Gate the listing with `appliesTo`: the same project files as `project-detect` (it is most useful where `.github/workflows` does not exist yet).
 - [x] Add positive and negative cases to a new `ImportedSkillsSuite` (loads, validates, gating, body substitution, and each command against a fixture project).
 - [x] Record the source and the MIT notice in `THIRD_PARTY_NOTICES.md`; add the skill to USAGE.md and the CHANGELOG. The notice is in THIRD_PARTY_NOTICES.md; the USAGE.md and CHANGELOG entries come with the release documentation pass.
@@ -581,7 +581,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Profiling Node, Python, and Go is a real gap; gate per language like the toolchain skills.
 
 - [x] Port `engineering/skills/performance-profiler/SKILL.md` into a default skill definition (a new `DefaultImportedSkills.cs`, or the family file named under Overlap), rewriting Claude Code references for mux and removing em-dashes.
-- [~] Wrap the 1 Python script as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
+- [x] Wrap the 1 Python script as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
 - [x] Gate the listing with `appliesTo`: `package.json`, `pyproject.toml`, `requirements*.txt`, `go.mod`.
 - [x] Add positive and negative cases to a new `ImportedSkillsSuite` (loads, validates, gating, body substitution, and each command against a fixture project).
 - [x] Record the source and the MIT notice in `THIRD_PARTY_NOTICES.md`; add the skill to USAGE.md and the CHANGELOG. The notice is in THIRD_PARTY_NOTICES.md; the USAGE.md and CHANGELOG entries come with the release documentation pass.
@@ -599,7 +599,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** A pre-release audit across security, deployment, and observability complements the review skills.
 
 - [x] Port `engineering/skills/ship-gate/SKILL.md` into a default skill definition (a new `DefaultImportedSkills.cs`, or the family file named under Overlap), rewriting Claude Code references for mux and removing em-dashes.
-- [~] Wrap the 1 Python script as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
+- [x] Wrap the 1 Python script as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
 - [x] Gate the listing with `appliesTo`: none (listed everywhere).
 - [x] Add positive and negative cases to a new `ImportedSkillsSuite` (loads, validates, gating, body substitution, and each command against a fixture project).
 - [x] Record the source and the MIT notice in `THIRD_PARTY_NOTICES.md`; add the skill to USAGE.md and the CHANGELOG. The notice is in THIRD_PARTY_NOTICES.md; the USAGE.md and CHANGELOG entries come with the release documentation pass.
@@ -952,7 +952,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Breaking-change detection on an API surface is a common need; gate on OpenAPI files.
 
 - [x] Port `engineering/skills/api-design-reviewer/SKILL.md` into a default skill definition (a new `DefaultImportedSkills.cs`, or the family file named under Overlap), rewriting Claude Code references for mux and removing em-dashes.
-- [~] Wrap the 3 Python scripts as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
+- [x] Wrap the 3 Python scripts as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
 - [x] Gate the listing with `appliesTo`: `**/openapi*.yaml`, `**/openapi*.json`, `**/swagger*.json`, `**/swagger*.yaml`.
 - [x] Add positive and negative cases to a new `ImportedSkillsSuite` (loads, validates, gating, body substitution, and each command against a fixture project).
 - [x] Record the source and the MIT notice in `THIRD_PARTY_NOTICES.md`; add the skill to USAGE.md and the CHANGELOG. The notice is in THIRD_PARTY_NOTICES.md; the USAGE.md and CHANGELOG entries come with the release documentation pass.
@@ -969,7 +969,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`.
 
 - [x] Import `engineering-team/skills/ai-security/SKILL.md` into `packs/security/ai-security/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1002,7 +1002,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`.
 
 - [x] Import `engineering-team/skills/cloud-security/SKILL.md` into `packs/security/cloud-security/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1053,7 +1053,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Database work is common but varied; offer as a pack rather than a default.
 
 - [x] Import `engineering/skills/database-designer/SKILL.md` into `packs/engineering/database-designer/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1087,7 +1087,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Building MCP servers from OpenAPI is useful for mux users who extend mux with MCP.
 
 - [x] Import `engineering/skills/mcp-server-builder/SKILL.md` into `packs/engineering/mcp-server-builder/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 2 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 2 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1103,7 +1103,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`.
 
 - [x] Import `engineering/skills/runbook-generator/SKILL.md` into `packs/engineering/runbook-generator/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1137,7 +1137,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Plan mode covers the planning half; acceptance-criteria-to-tests is the useful remainder.
 
 - [x] Import `engineering/skills/spec-driven-workflow/SKILL.md` into `packs/engineering/spec-driven-workflow/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1278,7 +1278,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Red-green-refactor guidance is a gap; drop the bundled code templates and keep the procedure.
 
 - [x] Port `engineering-team/skills/tdd-guide/SKILL.md` into a default skill definition (a new `DefaultImportedSkills.cs`, or the family file named under Overlap), rewriting Claude Code references for mux and removing em-dashes.
-- [~] Wrap the 8 Python scripts as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
+- [x] Wrap the 8 Python scripts as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
 - [x] Gate the listing with `appliesTo`: the toolchain project files (`package.json`, `pyproject.toml`, `*.csproj`, `go.mod`, `Cargo.toml`, `pom.xml`).
 - [x] Add positive and negative cases to a new `ImportedSkillsSuite` (loads, validates, gating, body substitution, and each command against a fixture project).
 - [x] Record the source and the MIT notice in `THIRD_PARTY_NOTICES.md`; add the skill to USAGE.md and the CHANGELOG. The notice is in THIRD_PARTY_NOTICES.md; the USAGE.md and CHANGELOG entries come with the release documentation pass.
@@ -1296,7 +1296,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** The fuller of the two handoff variants: configurable save location and secret redaction before writing. Ship this one.
 
 - [x] Port `productivity/handoff/skills/handoff/SKILL.md` into a default skill definition (a new `DefaultImportedSkills.cs`, or the family file named under Overlap), rewriting Claude Code references for mux and removing em-dashes.
-- [~] Wrap the 7 Python scripts as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
+- [x] Wrap the 7 Python scripts as `python` commands with `requiresTools: [python3]`, mapping their exit codes to mux's 0/1/2 convention and adding `MUX_SKILL_DRY_RUN` support; or port the logic to the shared `mux-skill.ps1` helper if it is small.
 - [x] Gate the listing with `appliesTo`: none (listed everywhere).
 - [x] Add positive and negative cases to a new `ImportedSkillsSuite` (loads, validates, gating, body substitution, and each command against a fixture project).
 - [x] Record the source and the MIT notice in `THIRD_PARTY_NOTICES.md`; add the skill to USAGE.md and the CHANGELOG. The notice is in THIRD_PARTY_NOTICES.md; the USAGE.md and CHANGELOG entries come with the release documentation pass.
@@ -1313,7 +1313,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; 471 lines, long for small models; bundled `references/`, `assets/`.
 
 - [x] Import `engineering-team/skills/incident-commander/SKILL.md` into `packs/engineering/incident-commander/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1347,7 +1347,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Database work is common but varied; offer as a pack rather than a default.
 
 - [x] Import `engineering/skills/sql-database-assistant/SKILL.md` into `packs/engineering/sql-database-assistant/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1364,7 +1364,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Relevant to people building LLM systems, which is a subset of mux users.
 
 - [x] Import `engineering/skills/agent-designer/SKILL.md` into `packs/engineering/agent-designer/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1381,7 +1381,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Compiling a goal into a verified task loop overlaps mux plan mode and loops; worth a look for its verification step.
 
 - [x] Import `engineering/agent-harness/skills/agent-harness/SKILL.md` into `packs/engineering/agent-harness/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1398,7 +1398,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Relevant to people building LLM systems, which is a subset of mux users.
 
 - [x] Import `engineering/skills/agent-workflow-designer/SKILL.md` into `packs/engineering/agent-workflow-designer/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1415,7 +1415,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Design guidance complements mux cloud skills, which operate rather than design; keep out of the default listing.
 
 - [x] Import `engineering-team/skills/aws-solution-architect/SKILL.md` into `packs/engineering/aws-solution-architect/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1431,7 +1431,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`, `assets/`.
 
 - [x] Import `engineering/chaos-engineering/skills/chaos-engineering/SKILL.md` into `packs/engineering/chaos-engineering/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1448,7 +1448,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Hygiene guidance; mux never reads secret values, so keep any commands name-only.
 
 - [x] Import `engineering/skills/env-secrets-manager/SKILL.md` into `packs/engineering/env-secrets-manager/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1464,7 +1464,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`, `assets/`.
 
 - [x] Import `engineering/feature-flags-architect/skills/feature-flags-architect/SKILL.md` into `packs/engineering/feature-flags-architect/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1481,7 +1481,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Scans codebases for privacy risks, which is closer to mux's job than the rest of the compliance bundle.
 
 - [x] Import `ra-qm-team/skills/gdpr-dsgvo-expert/SKILL.md` into `packs/compliance/gdpr-dsgvo-expert/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1498,7 +1498,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** mux plan mode and ask_user cover the interview mechanics; the docs-anchored variant adds ADR awareness.
 
 - [x] Import `engineering/grill-me/skills/grill-me/SKILL.md` into `packs/engineering/grill-me/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1515,7 +1515,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** mux plan mode and ask_user cover the interview mechanics; the docs-anchored variant adds ADR awareness.
 
 - [x] Import `engineering/grill-with-docs/skills/grill-with-docs/SKILL.md` into `packs/engineering/grill-with-docs/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1532,7 +1532,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Dual-use; document that it is for authorized engagements only, and keep it out of the default listing.
 
 - [x] Import `engineering-team/skills/incident-response/SKILL.md` into `packs/security/incident-response/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1549,7 +1549,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Developers live in Jira; useful when paired with a Jira MCP server.
 
 - [x] Import `project-management/skills/jira-expert/SKILL.md` into `packs/product/jira-expert/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 2 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 2 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1565,7 +1565,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`, `assets/`.
 
 - [x] Import `engineering/kubernetes-operator/skills/kubernetes-operator/SKILL.md` into `packs/engineering/kubernetes-operator/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1582,7 +1582,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Rendering review findings as a single-file HTML page would pair well with code-review output.
 
 - [x] Import `markdown-html/skills/md-review/SKILL.md` into `packs/docs/md-review/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1598,7 +1598,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`, `assets/`.
 
 - [x] Import `engineering/skills/observability-designer/SKILL.md` into `packs/engineering/observability-designer/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1615,7 +1615,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Relevant to people building LLM systems, which is a subset of mux users.
 
 - [x] Import `engineering/skills/rag-architect/SKILL.md` into `packs/engineering/rag-architect/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1632,7 +1632,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Dual-use; document that it is for authorized engagements only, and keep it out of the default listing.
 
 - [x] Import `engineering-team/skills/red-team/SKILL.md` into `packs/security/red-team/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1649,7 +1649,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** A mid-task pause to re-check direction and assumptions is relevant to long agent runs.
 
 - [x] Import `productivity/reflect/skills/reflect/SKILL.md` into `packs/productivity/reflect/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1666,7 +1666,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Dual-use; document that it is for authorized engagements only, and keep it out of the default listing.
 
 - [x] Import `engineering-team/skills/security-pen-testing/SKILL.md` into `packs/security/security-pen-testing/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1683,7 +1683,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Broad role playbooks; mux toolchain skills already cover the deterministic parts, so these mostly add prose.
 
 - [x] Import `engineering-team/skills/senior-architect/SKILL.md` into `packs/engineering/senior-architect/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1700,7 +1700,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Broad role playbooks; mux toolchain skills already cover the deterministic parts, so these mostly add prose.
 
 - [x] Import `engineering-team/skills/senior-devops/SKILL.md` into `packs/engineering/senior-devops/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1717,7 +1717,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Broad role playbooks; mux toolchain skills already cover the deterministic parts, so these mostly add prose.
 
 - [x] Import `engineering-team/skills/senior-qa/SKILL.md` into `packs/engineering/senior-qa/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1733,7 +1733,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`, `assets/`.
 
 - [x] Import `engineering/skills/slo-architect/SKILL.md` into `packs/engineering/slo-architect/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1749,7 +1749,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`.
 
 - [x] Import `product-team/skills/spec-to-repo/SKILL.md` into `packs/product/spec-to-repo/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -1766,7 +1766,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Dual-use; document that it is for authorized engagements only, and keep it out of the default listing.
 
 - [x] Import `engineering-team/skills/threat-detection/SKILL.md` into `packs/security/threat-detection/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2281,7 +2281,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Needs Playwright installed; mux already ships Playwright for retrieval, so a command skill could reuse it.
 
 - [x] Import `engineering/skills/browser-automation/SKILL.md` into `packs/engineering/browser-automation/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder after installing their third-party packages, documented in the pack README.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder after installing their third-party packages, documented in the pack README.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2332,7 +2332,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** A metric-driven edit-run-keep loop is a nice addition to mux loops; the scheduling half uses CronCreate and must be rewritten for /loop.
 
 - [x] Import `engineering/autoresearch-agent/skills/autoresearch-agent/SKILL.md` into `packs/engineering/autoresearch-agent/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2349,7 +2349,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Design guidance complements mux cloud skills, which operate rather than design; keep out of the default listing.
 
 - [x] Import `engineering-team/skills/azure-cloud-architect/SKILL.md` into `packs/engineering/azure-cloud-architect/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2365,7 +2365,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 2 bundled scripts, standard-library Python; 496 lines, long for small models; bundled `references/`, `assets/`.
 
 - [x] Import `product-team/code-to-prd/skills/code-to-prd/SKILL.md` into `packs/product/code-to-prd/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 2 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 2 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2399,7 +2399,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Design guidance complements mux cloud skills, which operate rather than design; keep out of the default listing.
 
 - [x] Import `engineering-team/skills/gcp-cloud-architect/SKILL.md` into `packs/engineering/gcp-cloud-architect/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2416,7 +2416,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Coding-discipline playbooks; useful as opt-in styles, too opinionated for a default.
 
 - [x] Import `engineering/karpathy-coder/skills/karpathy-coder/SKILL.md` into `packs/engineering/karpathy-coder/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 4 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 4 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2448,7 +2448,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; 428 lines, long for small models; bundled `references/`, `assets/`.
 
 - [x] Import `engineering/skills/migration-architect/SKILL.md` into `packs/engineering/migration-architect/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2465,7 +2465,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Hygiene guidance; mux never reads secret values, so keep any commands name-only.
 
 - [x] Import `engineering/skills/secrets-vault-manager/SKILL.md` into `packs/engineering/secrets-vault-manager/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2482,7 +2482,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Broad role playbooks; mux toolchain skills already cover the deterministic parts, so these mostly add prose.
 
 - [x] Import `engineering-team/skills/senior-backend/SKILL.md` into `packs/engineering/senior-backend/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 4 bundled scripts run from the skill folder after installing their third-party packages, documented in the pack README.
+- [x] Declare `requiresTools: [python3]` and confirm the 4 bundled scripts run from the skill folder after installing their third-party packages, documented in the pack README.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2498,7 +2498,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 4 bundled scripts; 572 lines, long for small models; bundled `references/`.
 
 - [x] Import `engineering-team/skills/senior-frontend/SKILL.md` into `packs/engineering/senior-frontend/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 4 bundled scripts run from the skill folder after installing their third-party packages, documented in the pack README.
+- [x] Declare `requiresTools: [python3]` and confirm the 4 bundled scripts run from the skill folder after installing their third-party packages, documented in the pack README.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2515,7 +2515,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Broad role playbooks; mux toolchain skills already cover the deterministic parts, so these mostly add prose.
 
 - [x] Import `engineering-team/skills/senior-secops/SKILL.md` into `packs/engineering/senior-secops/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2531,7 +2531,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`.
 
 - [x] Import `ra-qm-team/skills/agent-decision-receipts/SKILL.md` into `packs/compliance/agent-decision-receipts/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2547,7 +2547,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`, `templates/`.
 
 - [x] Import `product-team/apple-hig-expert/skills/apple-hig-expert/SKILL.md` into `packs/product/apple-hig-expert/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2563,7 +2563,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script; bundled `references/`.
 
 - [x] Import `product-team/skills/competitive-teardown/SKILL.md` into `packs/product/competitive-teardown/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2579,7 +2579,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 2 bundled scripts, standard-library Python; bundled `references/`.
 
 - [x] Import `project-management/skills/confluence-expert/SKILL.md` into `packs/product/confluence-expert/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 2 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 2 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2595,7 +2595,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 2 bundled scripts, standard-library Python; bundled `references/`.
 
 - [x] Import `c-level-advisor/skills/cto-advisor/SKILL.md` into `packs/business/cto-advisor/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 2 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 2 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2611,7 +2611,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`.
 
 - [x] Import `engineering/data-quality-auditor/skills/data-quality-auditor/SKILL.md` into `packs/data/data-quality-auditor/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2627,7 +2627,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts; bundled `references/`.
 
 - [x] Import `research/dossier/skills/dossier/SKILL.md` into `packs/research/dossier/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2643,7 +2643,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 2 bundled scripts, standard-library Python; bundled `references/`.
 
 - [x] Import `engineering-team/skills/epic-design/SKILL.md` into `packs/engineering/epic-design/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2659,7 +2659,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`.
 
 - [x] Import `product-team/skills/experiment-designer/SKILL.md` into `packs/product/experiment-designer/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2675,7 +2675,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`, `assets/`.
 
 - [x] Import `business-operations/skills/knowledge-ops/SKILL.md` into `packs/business/knowledge-ops/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2691,7 +2691,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script; bundled `references/`.
 
 - [x] Import `product-team/skills/landing-page-generator/SKILL.md` into `packs/product/landing-page-generator/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2707,7 +2707,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 4 bundled scripts, standard-library Python; bundled `references/`.
 
 - [x] Import `research/litreview/skills/litreview/SKILL.md` into `packs/research/litreview/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 4 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 4 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2723,7 +2723,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`, `assets/`.
 
 - [x] Import `markdown-html/skills/md-document/SKILL.md` into `packs/docs/md-document/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2739,7 +2739,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`.
 
 - [x] Import `product-team/skills/product-analytics/SKILL.md` into `packs/product/product-analytics/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2755,7 +2755,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`.
 
 - [x] Import `product-team/skills/product-discovery/SKILL.md` into `packs/product/product-discovery/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2771,7 +2771,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 2 bundled scripts, standard-library Python; bundled `references/`, `assets/`.
 
 - [x] Import `product-team/skills/product-manager-toolkit/SKILL.md` into `packs/product/product-manager-toolkit/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 2 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 2 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2787,7 +2787,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`, `assets/`.
 
 - [x] Import `product-team/skills/product-strategist/SKILL.md` into `packs/product/product-strategist/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2803,7 +2803,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`.
 
 - [x] Import `research/pulse/skills/pulse/SKILL.md` into `packs/research/pulse/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2819,7 +2819,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`, `assets/`.
 
 - [x] Import `commercial/skills/rfp-responder/SKILL.md` into `packs/business/rfp-responder/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2835,7 +2835,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`.
 
 - [x] Import `product-team/skills/roadmap-communicator/SKILL.md` into `packs/product/roadmap-communicator/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2851,7 +2851,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`.
 
 - [x] Import `product-team/skills/saas-scaffolder/SKILL.md` into `packs/product/saas-scaffolder/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2867,7 +2867,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`, `assets/`.
 
 - [x] Import `project-management/skills/scrum-master/SKILL.md` into `packs/product/scrum-master/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2883,7 +2883,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`.
 
 - [x] Import `engineering-team/skills/senior-data-scientist/SKILL.md` into `packs/data/senior-data-scientist/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2899,7 +2899,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`.
 
 - [x] Import `engineering-team/skills/senior-ml-engineer/SKILL.md` into `packs/data/senior-ml-engineer/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2915,7 +2915,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`.
 
 - [x] Import `engineering-team/skills/senior-prompt-engineer/SKILL.md` into `packs/data/senior-prompt-engineer/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2931,7 +2931,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`.
 
 - [x] Import `engineering-team/snowflake-development/skills/snowflake-development/SKILL.md` into `packs/engineering/snowflake-development/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2947,7 +2947,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 3 bundled scripts, standard-library Python; bundled `references/`.
 
 - [x] Import `engineering/statistical-analyst/skills/statistical-analyst/SKILL.md` into `packs/data/statistical-analyst/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2963,7 +2963,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Integration cost:** 1 bundled script, standard-library Python; bundled `references/`, `assets/`.
 
 - [x] Import `product-team/skills/ui-design-system/SKILL.md` into `packs/product/ui-design-system/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 1 bundled script run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 
@@ -2980,7 +2980,7 @@ Each skill's section has a task list and a **Notes:** line. Tick tasks as they l
 - **Assessment:** Depends on Firecrawl or scraping libraries; mux web_retrieve covers simple cases.
 
 - [x] Import `engineering/universal-scraping-architect/skills/universal-scraping-architect/SKILL.md` into `packs/data/universal-scraping-architect/` through the Phase 0 importer (path placeholders, Claude references, and em-dashes normalized).
-- [~] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
+- [x] Declare `requiresTools: [python3]` and confirm the 3 bundled scripts run from the skill folder.
 - [x] Run `mux skill validate` on the imported folder and add it to the pack's load test.
 - [x] List it in the pack README with one line on when to use it.
 

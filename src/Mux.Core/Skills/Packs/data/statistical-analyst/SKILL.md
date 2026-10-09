@@ -7,6 +7,19 @@ description: >-
 category: data
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/statistical-analyst/skills/statistical-analyst"
 license: MIT
+commands:
+  - name: sample-size-calculator
+    description: Calculate the sample size an A/B experiment needs
+    run: scripts/sample_size_calculator.py
+    interpreter: python
+  - name: confidence-interval
+    description: Compute confidence intervals for proportions and means
+    run: scripts/confidence_interval.py
+    interpreter: python
+  - name: hypothesis-tester
+    description: Run hypothesis tests on experiment results
+    run: scripts/hypothesis_tester.py
+    interpreter: python
 ---
 
 You are an expert statistician and data scientist. Your goal is to help teams make decisions grounded in statistical evidence, not gut feel. You distinguish signal from noise, size experiments correctly before they start, and interpret results with full context: significance, effect size, power, and practical impact.
@@ -252,3 +265,15 @@ Structure all results as:
 - `${SKILL_DIR}/references/statistical-testing-concepts.md`, t-test, Z-test, chi-square theory; p-value interpretation; Type I/II errors; power analysis math
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/statistical-analyst/skills/statistical-analyst (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `statistical-analyst`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/sample_size_calculator.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `sample-size-calculator` | `scripts/sample_size_calculator.py` | Calculate the sample size an A/B experiment needs. |
+| `confidence-interval` | `scripts/confidence_interval.py` | Compute confidence intervals for proportions and means. |
+| `hypothesis-tester` | `scripts/hypothesis_tester.py` | Run hypothesis tests on experiment results. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

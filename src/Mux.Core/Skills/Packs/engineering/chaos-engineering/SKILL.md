@@ -10,6 +10,19 @@ description: >-
 category: devops
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/chaos-engineering/skills/chaos-engineering"
 license: MIT
+commands:
+  - name: blast-radius-calculator
+    description: Compute blast radius and risk score for a chaos experiment.
+    run: scripts/blast_radius_calculator.py
+    interpreter: python
+  - name: experiment-designer
+    description: Generate a structured chaos engineering experiment plan.
+    run: scripts/experiment_designer.py
+    interpreter: python
+  - name: experiment-postmortem
+    description: Generate a structured chaos experiment postmortem.
+    run: scripts/experiment_postmortem.py
+    interpreter: python
 ---
 
 # Chaos Engineering
@@ -232,5 +245,17 @@ A team using this skill should achieve:
 - Mean time between chaos experiments <14 days (continuous, not one-off)
 - Each experiment produces ≥1 follow-up action that gets shipped
 - No chaos experiment escalates to a customer-impacting incident in trailing 90 days
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill chaos-engineering blast-radius-calculator --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/blast_radius_calculator.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `blast-radius-calculator` | `scripts/blast_radius_calculator.py` | Compute blast radius and risk score for a chaos experiment. |
+| `experiment-designer` | `scripts/experiment_designer.py` | Generate a structured chaos engineering experiment plan. |
+| `experiment-postmortem` | `scripts/experiment_postmortem.py` | Generate a structured chaos experiment postmortem. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/chaos-engineering/skills/chaos-engineering (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

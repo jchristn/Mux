@@ -11,6 +11,11 @@ description: >-
 category: product
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/product-team/skills/competitive-teardown"
 license: MIT
+commands:
+  - name: competitive-matrix-builder
+    description: Build a weighted competitive matrix with gap analysis from competitor data.
+    run: scripts/competitive_matrix_builder.py
+    interpreter: python
 ---
 
 # Competitive Teardown
@@ -181,3 +186,11 @@ Navigation: global search, keyboard shortcuts, in-app help.
 - **Landing Page Generator** (`product-team/landing-page-generator/`), Competitive positioning informs landing page messaging
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/product-team/skills/competitive-teardown (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill competitive-teardown <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `competitive-matrix-builder` | `scripts/competitive_matrix_builder.py` | Build a weighted competitive matrix with gap analysis from competitor data. |

@@ -6,6 +6,21 @@ description: >-
 category: engineering
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/spec-driven-workflow"
 license: MIT
+commands:
+  - name: spec-generator
+    description: Generate a feature specification template from a name and description.
+    run: scripts/spec_generator.py
+    interpreter: python
+  - name: spec-validator
+    description: Validate a feature specification for completeness and quality.
+    run: scripts/spec_validator.py
+    interpreter: python
+    timeoutMs: 300000
+  - name: test-extractor
+    description: Extract test case stubs from a specification's acceptance criteria.
+    run: scripts/test_extractor.py
+    interpreter: python
+    timeoutMs: 300000
 ---
 
 # Spec-Driven Workflow: POWERFUL
@@ -338,3 +353,13 @@ python test_extractor.py --file specs/auth.md --framework pytest --output tests/
 ```
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/spec-driven-workflow (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill spec-driven-workflow <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `spec-generator` | `scripts/spec_generator.py` | Generate a feature specification template from a name and description. |
+| `spec-validator` | `scripts/spec_validator.py` | Validate a feature specification for completeness and quality. |
+| `test-extractor` | `scripts/test_extractor.py` | Extract test case stubs from a specification's acceptance criteria. |

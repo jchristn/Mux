@@ -6,6 +6,21 @@ description: >-
 category: engineering
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/universal-scraping-architect/skills/universal-scraping-architect"
 license: MIT
+commands:
+  - name: validate-extraction
+    description: Validate extracted JSON records against the expected shape
+    run: scripts/validate_extraction.py
+    interpreter: python
+  - name: local-bs4-example
+    description: Run the local BeautifulSoup and pandas scraping template (needs bs4, pandas, and requests)
+    run: scripts/local_bs4_example.py
+    interpreter: python
+    timeoutMs: 300000
+  - name: firecrawl-example
+    description: Run the Firecrawl extraction template (needs the firecrawl package and an API key)
+    run: scripts/firecrawl_example.py
+    interpreter: python
+    timeoutMs: 300000
 ---
 
 # Universal Scraping Architect
@@ -69,3 +84,15 @@ Surface these issues WITHOUT being asked when you notice them in context:
 - **browser-automation**: Use for highly interactive scraping requiring user emulation (clicks, logins) where Firecrawl is insufficient.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/universal-scraping-architect/skills/universal-scraping-architect (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `universal-scraping-architect`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/validate_extraction.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `validate-extraction` | `scripts/validate_extraction.py` | Validate extracted JSON records against the expected shape. |
+| `local-bs4-example` | `scripts/local_bs4_example.py` | Run the local BeautifulSoup and pandas scraping template (needs bs4, pandas, and requests). |
+| `firecrawl-example` | `scripts/firecrawl_example.py` | Run the Firecrawl extraction template (needs the firecrawl package and an API key). |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

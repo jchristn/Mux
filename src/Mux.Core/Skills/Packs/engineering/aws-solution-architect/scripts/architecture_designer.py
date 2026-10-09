@@ -806,3 +806,43 @@ class ArchitectureDesigner:
         ]
 
         return checklist
+
+
+# Command-line entry point added for mux (the upstream module shipped only the class). It keeps the
+# documented usage: --input requirements.json [--output design.json].
+def _main(argv=None):
+    import argparse
+    import json
+    import sys
+
+    parser = argparse.ArgumentParser(description="Recommend an AWS architecture pattern from a requirements JSON file.")
+    parser.add_argument("--input", help="Requirements JSON (application_type, expected_users, requests_per_second, budget_monthly_usd, team_size, aws_experience, compliance, data_size_gb). Defaults apply when omitted.")
+    parser.add_argument("--output", help="Write the design JSON to this file instead of stdout.")
+    parser.add_argument("--checklist", action="store_true", help="Include the service checklist in the output.")
+    args = parser.parse_args(argv)
+
+    requirements = {}
+    if args.input:
+        try:
+            with open(args.input, "r", encoding="utf-8") as handle:
+                requirements = json.load(handle)
+        except (OSError, ValueError) as error:
+            print("ERROR: cannot read %s: %s" % (args.input, error), file=sys.stderr)
+            return 2
+
+    designer = ArchitectureDesigner(requirements)
+    design = designer.recommend_architecture_pattern()
+    if args.checklist:
+        design = {"design": design, "checklist": designer.generate_service_checklist()}
+
+    text = json.dumps(design, indent=2, default=str)
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as handle:
+            handle.write(text + "\n")
+    else:
+        print(text)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

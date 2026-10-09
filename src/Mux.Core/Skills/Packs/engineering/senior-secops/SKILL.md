@@ -10,6 +10,22 @@ description: >-
 category: security
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-secops"
 license: MIT
+commands:
+  - name: compliance-checker
+    description: Check a codebase against SOC 2, PCI-DSS, HIPAA, and GDPR controls.
+    run: scripts/compliance_checker.py
+    interpreter: python
+    timeoutMs: 300000
+  - name: security-scanner
+    description: Scan source code for security vulnerabilities.
+    run: scripts/security_scanner.py
+    interpreter: python
+    timeoutMs: 300000
+  - name: vulnerability-assessor
+    description: Scan dependencies for known CVEs and security issues.
+    run: scripts/vulnerability_assessor.py
+    interpreter: python
+    timeoutMs: 300000
 ---
 
 # Senior SecOps Engineer
@@ -514,3 +530,15 @@ cosign verify ghcr.io/org/app:latest --certificate-identity=ci@org.com --certifi
 | `${SKILL_DIR}/references/compliance_requirements.md` | SOC 2, PCI-DSS, HIPAA, GDPR full control mappings |
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-secops (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill senior-secops <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `compliance-checker` | `scripts/compliance_checker.py` | Check a codebase against SOC 2, PCI-DSS, HIPAA, and GDPR controls. |
+| `security-scanner` | `scripts/security_scanner.py` | Scan source code for security vulnerabilities. |
+| `vulnerability-assessor` | `scripts/vulnerability_assessor.py` | Scan dependencies for known CVEs and security issues. |
+
+The scanners exit 1 for high-severity findings and 2 for critical findings (or, for `compliance-checker`, critical compliance gaps), so exit 2 here means "stop and fix", not invalid arguments; read the output to tell them apart.

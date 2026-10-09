@@ -8,6 +8,19 @@ description: >-
 category: workflow
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-prompt-engineer"
 license: MIT
+commands:
+  - name: prompt-optimizer
+    description: Analyze and optimize a prompt
+    run: scripts/prompt_optimizer.py
+    interpreter: python
+  - name: rag-evaluator
+    description: Evaluate a retrieval-augmented generation system
+    run: scripts/rag_evaluator.py
+    interpreter: python
+  - name: agent-orchestrator
+    description: Design and validate an agent workflow
+    run: scripts/agent_orchestrator.py
+    interpreter: python
 ---
 
 # Senior Prompt Engineer
@@ -146,3 +159,15 @@ Without the two price flags, `--estimate-cost` reports token estimates only. The
 - `engineering/agent-designer`: full agent system design (this skill validates configs; that one designs the architecture)
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-prompt-engineer (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `senior-prompt-engineer`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/prompt_optimizer.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `prompt-optimizer` | `scripts/prompt_optimizer.py` | Analyze and optimize a prompt. |
+| `rag-evaluator` | `scripts/rag_evaluator.py` | Evaluate a retrieval-augmented generation system. |
+| `agent-orchestrator` | `scripts/agent_orchestrator.py` | Design and validate an agent workflow. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

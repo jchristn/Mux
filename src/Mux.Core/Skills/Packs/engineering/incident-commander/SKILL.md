@@ -8,6 +8,19 @@ description: >-
 category: devops
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/incident-commander"
 license: MIT
+commands:
+  - name: incident-classifier
+    description: Classify incidents and provide response recommendations.
+    run: scripts/incident_classifier.py
+    interpreter: python
+  - name: pir-generator
+    description: Generate Post-Incident Review documents with RCA and action items.
+    run: scripts/pir_generator.py
+    interpreter: python
+  - name: timeline-reconstructor
+    description: Reconstruct incident timeline from timestamped events.
+    run: scripts/timeline_reconstructor.py
+    interpreter: python
 ---
 
 # Incident Commander Skill
@@ -475,5 +488,17 @@ python3 "${SKILL_DIR}/scripts/pir_generator.py" --incident ${SKILL_DIR}/assets/s
 - CI/CD pipeline integration
 - Deployment tracking systems
 - Feature flag platforms for quick rollbacks
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill incident-commander incident-classifier --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/incident_classifier.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `incident-classifier` | `scripts/incident_classifier.py` | Classify incidents and provide response recommendations. |
+| `pir-generator` | `scripts/pir_generator.py` | Generate Post-Incident Review documents with RCA and action items. |
+| `timeline-reconstructor` | `scripts/timeline_reconstructor.py` | Reconstruct incident timeline from timestamped events. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/incident-commander (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

@@ -11,6 +11,19 @@ description: >-
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/commercial/skills/rfp-responder"
 license: MIT
+commands:
+  - name: rfp-parser
+    description: Parse an RFP into structured requirements
+    run: scripts/rfp_parser.py
+    interpreter: python
+  - name: response-drafter
+    description: Build the proof-point matrix, gap audit, and win-theme report
+    run: scripts/response_drafter.py
+    interpreter: python
+  - name: winrate-predictor
+    description: Estimate the win rate and give a bid or no-bid verdict
+    run: scripts/winrate_predictor.py
+    interpreter: python
 ---
 
 # rfp-responder
@@ -158,3 +171,15 @@ Walked one at a time before any script runs. Recommended answer + canon citation
 Walk depth-first. Lock 1-3 before opening 4-7. After all 7 are answered, invoke `rfp_parser.py` → `response_drafter.py` → `winrate_predictor.py` in sequence. If question 6 lands on "we don't have a threshold," set one now or no-bid.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/commercial/skills/rfp-responder (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `rfp-responder`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/rfp_parser.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `rfp-parser` | `scripts/rfp_parser.py` | Parse an RFP into structured requirements. |
+| `response-drafter` | `scripts/response_drafter.py` | Build the proof-point matrix, gap audit, and win-theme report. |
+| `winrate-predictor` | `scripts/winrate_predictor.py` | Estimate the win rate and give a bid or no-bid verdict. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

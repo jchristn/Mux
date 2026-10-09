@@ -6,6 +6,12 @@ description: >-
 category: workflow
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/agenthub/skills/spawn"
 license: MIT
+commands:
+  - name: session-manager
+    description: AgentHub session state machine and lifecycle manager.
+    run: scripts/session_manager.py
+    interpreter: python
+    timeoutMs: 600000
 ---
 
 # /hub:spawn, Launch Parallel Agents
@@ -85,5 +91,15 @@ Tell the user:
 - Each working in an isolated worktree
 - Monitor with `/hub:hub-status`
 - Evaluate when done with `/hub:eval`
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill hub-spawn session-manager --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/session_manager.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `session-manager` | `scripts/session_manager.py` | AgentHub session state machine and lifecycle manager. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/agenthub/skills/spawn (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

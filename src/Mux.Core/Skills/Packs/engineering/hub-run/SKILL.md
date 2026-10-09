@@ -6,6 +6,11 @@ description: >-
 category: workflow
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/agenthub/skills/run"
 license: MIT
+commands:
+  - name: hub-init
+    description: Initialize an AgentHub collaboration session.
+    run: scripts/hub_init.py
+    interpreter: python
 ---
 
 # /hub:run, One-Shot Lifecycle
@@ -112,5 +117,15 @@ If confirmed, run `/hub:merge`. If declined, inform the user they can:
 - **Stop on failure**: if any step fails, report the error and stop
 - **User confirms merge**: never auto-merge without asking
 - **Template is optional**: without `--template`, agents use the default dispatch prompt from `/hub:spawn`
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill hub-run hub-init --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/hub_init.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `hub-init` | `scripts/hub_init.py` | Initialize an AgentHub collaboration session. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/agenthub/skills/run (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

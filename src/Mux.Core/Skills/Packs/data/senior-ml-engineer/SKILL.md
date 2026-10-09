@@ -9,6 +9,19 @@ description: >-
 category: data
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-ml-engineer"
 license: MIT
+commands:
+  - name: model-deployment-pipeline
+    description: Plan a model deployment pipeline
+    run: scripts/model_deployment_pipeline.py
+    interpreter: python
+  - name: ml-monitoring-suite
+    description: Plan ML model monitoring
+    run: scripts/ml_monitoring_suite.py
+    interpreter: python
+  - name: rag-system-builder
+    description: Plan a retrieval-augmented generation system
+    run: scripts/rag_system_builder.py
+    interpreter: python
 ---
 
 # Senior ML Engineer
@@ -312,3 +325,15 @@ Sets up drift detection, alerting, and performance dashboards.
 | Databases | PostgreSQL, BigQuery, Pinecone, Redis |
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-ml-engineer (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `senior-ml-engineer`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/model_deployment_pipeline.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `model-deployment-pipeline` | `scripts/model_deployment_pipeline.py` | Plan a model deployment pipeline. |
+| `ml-monitoring-suite` | `scripts/ml_monitoring_suite.py` | Plan ML model monitoring. |
+| `rag-system-builder` | `scripts/rag_system_builder.py` | Plan a retrieval-augmented generation system. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

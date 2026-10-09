@@ -8,6 +8,12 @@ description: >-
 category: product
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/product-team/skills/spec-to-repo"
 license: MIT
+commands:
+  - name: validate-project
+    description: Validate a generated project directory for common issues.
+    run: scripts/validate_project.py
+    interpreter: python
+    timeoutMs: 300000
 ---
 
 # Spec to Repo
@@ -281,3 +287,11 @@ Ask the user after MVP: "Core is working. Want me to add auth/polish/deploy next
 - Related: `engineering-team/senior-fullstack`, full-stack implementation patterns
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/product-team/skills/spec-to-repo (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill spec-to-repo <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `validate-project` | `scripts/validate_project.py` | Validate a generated project directory for common issues. |

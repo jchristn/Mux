@@ -9,6 +9,15 @@ description: >-
 category: productivity
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/project-management/skills/confluence-expert"
 license: MIT
+commands:
+  - name: content-audit-analyzer
+    description: Analyze a Confluence page inventory for stale, orphaned, and low-value pages.
+    run: scripts/content_audit_analyzer.py
+    interpreter: python
+  - name: space-structure-generator
+    description: Generate a Confluence space hierarchy from a team or project description.
+    run: scripts/space_structure_generator.py
+    interpreter: python
 ---
 
 # Atlassian Confluence Expert
@@ -404,3 +413,12 @@ const example = "code here";
 - **Atlassian Templates** (`project-management/atlassian-templates/`), Template patterns for Confluence content creation
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/project-management/skills/confluence-expert (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill confluence-expert <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `content-audit-analyzer` | `scripts/content_audit_analyzer.py` | Analyze a Confluence page inventory for stale, orphaned, and low-value pages. |
+| `space-structure-generator` | `scripts/space_structure_generator.py` | Generate a Confluence space hierarchy from a team or project description. |

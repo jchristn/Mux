@@ -9,6 +9,11 @@ source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-tea
 license: MIT
 appliesTo:
   - "**/*.sql"
+commands:
+  - name: snowflake-query-helper
+    description: Generate Snowflake SQL: MERGE upserts, Dynamic Table DDL, and RBAC grants.
+    run: scripts/snowflake_query_helper.py
+    interpreter: python
 ---
 
 # Snowflake Development
@@ -302,3 +307,11 @@ Surface these issues without being asked when you notice them in context:
 | `${SKILL_DIR}/references/troubleshooting.md` | Error reference, debugging queries, common fixes |
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/snowflake-development/skills/snowflake-development (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill snowflake-development <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `snowflake-query-helper` | `scripts/snowflake_query_helper.py` | Generate Snowflake SQL: MERGE upserts, Dynamic Table DDL, and RBAC grants. |

@@ -12,6 +12,19 @@ description: >-
 category: research
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/research/pulse/skills/pulse"
 license: MIT
+commands:
+  - name: topic-slug-generator
+    description: Make a filesystem-safe slug for a topic
+    run: scripts/topic_slug_generator.py
+    interpreter: python
+  - name: time-window-calculator
+    description: Compute search window timestamps
+    run: scripts/time_window_calculator.py
+    interpreter: python
+  - name: citation-tracker
+    description: Track the three-count citation audit for a pulse run
+    run: scripts/citation_tracker.py
+    interpreter: python
 ---
 
 # Pulse: Multi-Source Recency Research
@@ -280,3 +293,15 @@ Sources received: M. Sources cited: K. Training knowledge: 0 ([Background] exclu
 **Build pattern:** Path B (direct conversion). Re-grill with `/cs:grill-with-docs` if drift between spec and implementation surfaces.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/research/pulse/skills/pulse (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `pulse`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/topic_slug_generator.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `topic-slug-generator` | `scripts/topic_slug_generator.py` | Make a filesystem-safe slug for a topic. |
+| `time-window-calculator` | `scripts/time_window_calculator.py` | Compute search window timestamps. |
+| `citation-tracker` | `scripts/citation_tracker.py` | Track the three-count citation audit for a pulse run. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

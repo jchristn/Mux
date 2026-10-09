@@ -6,6 +6,19 @@ description: >-
 category: data
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/sql-database-assistant"
 license: MIT
+commands:
+  - name: migration-generator
+    description: Generate up and down migration templates from schema change descriptions.
+    run: scripts/migration_generator.py
+    interpreter: python
+  - name: query-optimizer
+    description: Analyze SQL queries for common performance issues.
+    run: scripts/query_optimizer.py
+    interpreter: python
+  - name: schema-explorer
+    description: Generate introspection SQL and schema documentation templates.
+    run: scripts/schema_explorer.py
+    interpreter: python
 ---
 
 # SQL Database Assistant - POWERFUL Tier Skill
@@ -462,3 +475,13 @@ sqlite3 dbname ".backup backup.db"
 | **observability-platform** | Query performance monitoring, slow query alerts |
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/sql-database-assistant (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill sql-database-assistant <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `migration-generator` | `scripts/migration_generator.py` | Generate up and down migration templates from schema change descriptions. |
+| `query-optimizer` | `scripts/query_optimizer.py` | Analyze SQL queries for common performance issues. |
+| `schema-explorer` | `scripts/schema_explorer.py` | Generate introspection SQL and schema documentation templates. |

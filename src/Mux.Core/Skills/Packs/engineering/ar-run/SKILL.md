@@ -6,6 +6,17 @@ description: >-
 category: research
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/autoresearch-agent/skills/run"
 license: MIT
+commands:
+  - name: run-experiment
+    description: Run one experiment iteration: evaluate, parse the metric, keep or discard, and roll back on failure.
+    run: scripts/run_experiment.py
+    interpreter: python
+    timeoutMs: 1800000
+  - name: setup-experiment
+    description: Initialize an experiment (domain, target, evaluator, git branch) or list the built-in evaluators.
+    run: scripts/setup_experiment.py
+    interpreter: python
+    timeoutMs: 600000
 ---
 
 # /ar:run, Single Experiment Iteration
@@ -86,5 +97,18 @@ After every 10th experiment (check results.tsv line count), update the Strategy 
 - NEVER modify the evaluator (evaluate.py). It's ground truth.
 - Simplicity wins. Equal performance with simpler code is an improvement.
 - No new dependencies.
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill ar-run run-experiment --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/run_experiment.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `run-experiment` | `scripts/run_experiment.py` | Run one experiment iteration: evaluate, parse the metric, keep or discard, and roll back on failure. |
+| `setup-experiment` | `scripts/setup_experiment.py` | Initialize an experiment (domain, target, evaluator, git branch) or list the built-in evaluators. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
+
+`run-experiment` runs the experiment command you configured and can take a long time; its timeout is 30 minutes. Built-in evaluators ship in `${SKILL_DIR}/evaluators/`; the LLM judges call `mux -p` by default (edit `CLI_TOOL` to use another CLI).
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/autoresearch-agent/skills/run (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

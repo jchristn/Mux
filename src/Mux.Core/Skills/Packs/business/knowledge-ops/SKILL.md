@@ -13,6 +13,20 @@ description: >-
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/business-operations/skills/knowledge-ops"
 license: MIT
+commands:
+  - name: kb-ingester
+    description: Walk a markdown knowledge base and report orphans, stale pages, and missing owners
+    run: scripts/kb_ingester.py
+    interpreter: python
+    timeoutMs: 300000
+  - name: runbook-validator
+    description: Validate a runbook against the step-completeness rules
+    run: scripts/runbook_validator.py
+    interpreter: python
+  - name: sop-generator
+    description: Generate a 5W2H-structured SOP from JSON metadata
+    run: scripts/sop_generator.py
+    interpreter: python
 ---
 
 # knowledge-ops
@@ -133,3 +147,15 @@ Before invoking the tools, the orchestrator (or `/cs:grill-bizops`) walks the us
 After all 7 are locked, invoke `kb_ingester.py` → `runbook_validator.py` → `sop_generator.py` in sequence.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/business-operations/skills/knowledge-ops (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `knowledge-ops`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/kb_ingester.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `kb-ingester` | `scripts/kb_ingester.py` | Walk a markdown knowledge base and report orphans, stale pages, and missing owners. |
+| `runbook-validator` | `scripts/runbook_validator.py` | Validate a runbook against the step-completeness rules. |
+| `sop-generator` | `scripts/sop_generator.py` | Generate a 5W2H-structured SOP from JSON metadata. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

@@ -9,6 +9,20 @@ description: >-
 category: testing
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-qa"
 license: MIT
+commands:
+  - name: coverage-analyzer
+    description: Analyze Jest or Istanbul coverage reports for gaps and uncovered branches.
+    run: scripts/coverage_analyzer.py
+    interpreter: python
+    timeoutMs: 300000
+  - name: e2e-test-scaffolder
+    description: Generate Playwright end-to-end tests and page objects from Next.js routes.
+    run: scripts/e2e_test_scaffolder.py
+    interpreter: python
+  - name: test-suite-generator
+    description: Generate Jest and React Testing Library test stubs for React components.
+    run: scripts/test_suite_generator.py
+    interpreter: python
 ---
 
 # Senior QA Engineer
@@ -339,3 +353,13 @@ python3 "${SKILL_DIR}/scripts/coverage_analyzer.py" coverage/coverage-final.json
 ```
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-qa (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill senior-qa <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `coverage-analyzer` | `scripts/coverage_analyzer.py` | Analyze Jest or Istanbul coverage reports for gaps and uncovered branches. |
+| `e2e-test-scaffolder` | `scripts/e2e_test_scaffolder.py` | Generate Playwright end-to-end tests and page objects from Next.js routes. |
+| `test-suite-generator` | `scripts/test_suite_generator.py` | Generate Jest and React Testing Library test stubs for React components. |

@@ -96,7 +96,7 @@ namespace Test.Shared.Support
         /// <param name="text">The text returned.</param>
         public static void Text(McpHttpServer server, string name, string text)
         {
-            server.RegisterTool(name, "Returns " + text, new { type = "object", properties = new { } }, (RpcParameters args) => (object)text);
+            server.RegisterTool(name, "Returns " + text, new { type = "object", properties = new { } }, (RpcParameters? args) => (object)text);
         }
 
         /// <summary>Stops the server.</summary>

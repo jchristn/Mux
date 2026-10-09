@@ -7,6 +7,19 @@ description: >-
 category: devops
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/observability-designer"
 license: MIT
+commands:
+  - name: alert-optimizer
+    description: Analyze alert configurations for noisy, duplicate, and missing alerts.
+    run: scripts/alert_optimizer.py
+    interpreter: python
+  - name: dashboard-generator
+    description: Generate dashboard specifications from a service description.
+    run: scripts/dashboard_generator.py
+    interpreter: python
+  - name: slo-designer
+    description: Generate an SLI and SLO framework for a service.
+    run: scripts/slo_designer.py
+    interpreter: python
 ---
 
 # Observability Designer (POWERFUL)
@@ -278,3 +291,13 @@ Creates comprehensive dashboard specifications:
 - **Tool Evaluation:** Regular assessment of observability tool effectiveness
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/observability-designer (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill observability-designer <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `alert-optimizer` | `scripts/alert_optimizer.py` | Analyze alert configurations for noisy, duplicate, and missing alerts. |
+| `dashboard-generator` | `scripts/dashboard_generator.py` | Generate dashboard specifications from a service description. |
+| `slo-designer` | `scripts/slo_designer.py` | Generate an SLI and SLO framework for a service. |

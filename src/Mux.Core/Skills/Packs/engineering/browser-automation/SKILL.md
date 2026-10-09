@@ -6,6 +6,19 @@ description: >-
 category: frontend
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/browser-automation"
 license: MIT
+commands:
+  - name: anti-detection-checker
+    description: Audit a Playwright script for common bot detection vectors.
+    run: scripts/anti_detection_checker.py
+    interpreter: python
+  - name: form-automation-builder
+    description: Generate Playwright form-fill automation scripts from a JSON field specification.
+    run: scripts/form_automation_builder.py
+    interpreter: python
+  - name: scraping-toolkit
+    description: Generate Playwright scraping script skeletons from URL and selectors.
+    run: scripts/scraping_toolkit.py
+    interpreter: python
 ---
 
 # Browser Automation - POWERFUL
@@ -269,5 +282,17 @@ All scripts are stdlib-only. Run `python3 <script> --help` for full usage.
 - **api-test-suite-builder**: When the website has a public API, hit the API directly instead of scraping the rendered page. Faster, more reliable, less detectable.
 - **performance-profiler**: If your automation scripts are slow, profile the bottlenecks before adding concurrency.
 - **env-secrets-manager**: For securely managing credentials used in authenticated automation workflows.
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill browser-automation anti-detection-checker --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/anti_detection_checker.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `anti-detection-checker` | `scripts/anti_detection_checker.py` | Audit a Playwright script for common bot detection vectors. |
+| `form-automation-builder` | `scripts/form_automation_builder.py` | Generate Playwright form-fill automation scripts from a JSON field specification. |
+| `scraping-toolkit` | `scripts/scraping_toolkit.py` | Generate Playwright scraping script skeletons from URL and selectors. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/browser-automation (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

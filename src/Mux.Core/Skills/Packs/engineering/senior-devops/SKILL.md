@@ -8,6 +8,20 @@ description: >-
 category: devops
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-devops"
 license: MIT
+commands:
+  - name: deployment-manager
+    description: Generate blue/green or rolling Kubernetes manifests and a kubectl runbook, or audit manifests.
+    run: scripts/deployment_manager.py
+    interpreter: python
+  - name: pipeline-generator
+    description: Generate a CI/CD pipeline config for GitHub Actions or CircleCI.
+    run: scripts/pipeline_generator.py
+    interpreter: python
+  - name: terraform-scaffolder
+    description: Generate a Terraform module skeleton for AWS, GCP, or Azure.
+    run: scripts/terraform_scaffolder.py
+    interpreter: python
+    timeoutMs: 600000
 ---
 
 # Senior Devops
@@ -330,3 +344,15 @@ Choose Pulumi when the team strongly prefers TypeScript, Python, Go, or C# over 
 Check the comprehensive troubleshooting section in `${SKILL_DIR}/references/deployment_strategies.md`.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-devops (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill senior-devops <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `deployment-manager` | `scripts/deployment_manager.py` | Generate blue/green or rolling Kubernetes manifests and a kubectl runbook, or audit manifests. |
+| `pipeline-generator` | `scripts/pipeline_generator.py` | Generate a CI/CD pipeline config for GitHub Actions or CircleCI. |
+| `terraform-scaffolder` | `scripts/terraform_scaffolder.py` | Generate a Terraform module skeleton for AWS, GCP, or Azure. |
+
+`terraform-scaffolder` runs `terraform fmt`, `init`, and `validate` on the generated module when Terraform is installed.

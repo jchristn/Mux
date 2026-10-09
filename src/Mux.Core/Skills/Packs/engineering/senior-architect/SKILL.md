@@ -9,6 +9,21 @@ description: >-
 category: engineering
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-architect"
 license: MIT
+commands:
+  - name: architecture-diagram-generator
+    description: Generate architecture diagrams (Mermaid and others) from a project's structure.
+    run: scripts/architecture_diagram_generator.py
+    interpreter: python
+  - name: dependency-analyzer
+    description: Analyze project dependencies and module coupling.
+    run: scripts/dependency_analyzer.py
+    interpreter: python
+    timeoutMs: 300000
+  - name: project-architect
+    description: Detect architectural patterns and structural issues in a project.
+    run: scripts/project_architect.py
+    interpreter: python
+    timeoutMs: 300000
 ---
 
 # Senior Architect
@@ -351,3 +366,13 @@ python3 "${SKILL_DIR}/scripts/project_architect.py" . --output json
 3. Use `--verbose` flag for detailed explanations and recommendations
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-architect (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill senior-architect <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `architecture-diagram-generator` | `scripts/architecture_diagram_generator.py` | Generate architecture diagrams (Mermaid and others) from a project's structure. |
+| `dependency-analyzer` | `scripts/dependency_analyzer.py` | Analyze project dependencies and module coupling. |
+| `project-architect` | `scripts/project_architect.py` | Detect architectural patterns and structural issues in a project. |

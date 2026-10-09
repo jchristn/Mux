@@ -7,6 +7,19 @@ description: >-
 category: cloud
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/aws-solution-architect"
 license: MIT
+commands:
+  - name: architecture-designer
+    description: Recommend an AWS architecture pattern from a requirements JSON file.
+    run: scripts/architecture_designer.py
+    interpreter: python
+  - name: cost-optimizer
+    description: Recommend AWS cost optimizations for a resource inventory and monthly spend.
+    run: scripts/cost_optimizer.py
+    interpreter: python
+  - name: serverless-stack
+    description: Generate infrastructure as code for a serverless AWS application.
+    run: scripts/serverless_stack.py
+    interpreter: python
 ---
 
 # AWS Solution Architect
@@ -385,5 +398,19 @@ Provide these details for architecture design:
 | `${SKILL_DIR}/references/architecture_patterns.md` | 6 patterns: serverless, microservices, three-tier, data processing, GraphQL, multi-region |
 | `${SKILL_DIR}/references/service_selection.md` | Decision matrices for compute, database, storage, messaging |
 | `${SKILL_DIR}/references/best_practices.md` | Serverless design, cost optimization, security hardening, scalability |
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill aws-solution-architect architecture-designer --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/architecture_designer.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `architecture-designer` | `scripts/architecture_designer.py` | Recommend an AWS architecture pattern from a requirements JSON file. |
+| `cost-optimizer` | `scripts/cost_optimizer.py` | Recommend AWS cost optimizations for a resource inventory and monthly spend. |
+| `serverless-stack` | `scripts/serverless_stack.py` | Generate infrastructure as code for a serverless AWS application. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
+
+The three scripts gained command-line entry points in mux (upstream shipped only the classes). Each prints JSON or a template to stdout, or writes `--output`.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/aws-solution-architect (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

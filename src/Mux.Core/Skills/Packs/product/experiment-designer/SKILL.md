@@ -6,6 +6,11 @@ description: >-
 category: product
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/product-team/skills/experiment-designer"
 license: MIT
+commands:
+  - name: sample-size-calculator
+    description: Compute the sample size for a two-proportion A/B test.
+    run: scripts/sample_size_calculator.py
+    interpreter: python
 ---
 
 # Experiment Designer
@@ -109,3 +114,11 @@ python3 "${SKILL_DIR}/scripts/sample_size_calculator.py" \
 ```
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/product-team/skills/experiment-designer (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill experiment-designer <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `sample-size-calculator` | `scripts/sample_size_calculator.py` | Compute the sample size for a two-proportion A/B test. |

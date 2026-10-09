@@ -15,6 +15,24 @@ description: >-
 category: research
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/research/litreview/skills/litreview"
 license: MIT
+commands:
+  - name: framework-recommender
+    description: Pick a PICO, SPIDER, or decomposition framework for a research question
+    run: scripts/framework_recommender.py
+    interpreter: python
+  - name: free-search
+    description: Search free, keyless academic sources (needs network access)
+    run: scripts/free_search.py
+    interpreter: python
+    timeoutMs: 300000
+  - name: cross-search-aggregator
+    description: Aggregate and deduplicate results across searches
+    run: scripts/cross_search_aggregator.py
+    interpreter: python
+  - name: citation-tracker
+    description: Track the three-count citation audit for a literature review session
+    run: scripts/citation_tracker.py
+    interpreter: python
 ---
 
 # Litreview: Academic Literature Orientation
@@ -289,3 +307,16 @@ Plus:
 **Build pattern:** Path B (direct conversion). Sibling of `pulse` (research-pack shape). v1.1.0: free keyless APIs (PubMed + OpenAlex) became the default search lane; Consensus demoted to optional enhancement; plan-tier detection deleted per the 2026-06 newgen audit + ClawHub rule #3 (no paid-service dependencies).
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/research/litreview/skills/litreview (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `litreview`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/framework_recommender.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `framework-recommender` | `scripts/framework_recommender.py` | Pick a PICO, SPIDER, or decomposition framework for a research question. |
+| `free-search` | `scripts/free_search.py` | Search free, keyless academic sources (needs network access). |
+| `cross-search-aggregator` | `scripts/cross_search_aggregator.py` | Aggregate and deduplicate results across searches. |
+| `citation-tracker` | `scripts/citation_tracker.py` | Track the three-count citation audit for a literature review session. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

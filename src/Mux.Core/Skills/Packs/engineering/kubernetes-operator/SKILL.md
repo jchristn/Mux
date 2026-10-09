@@ -12,6 +12,19 @@ source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/kub
 license: MIT
 appliesTo:
   - "go.mod"
+commands:
+  - name: crd-validator
+    description: Validate a Kubernetes CRD YAML against operator-pattern best practices.
+    run: scripts/crd_validator.py
+    interpreter: python
+  - name: operator-capability-audit
+    description: Score an operator against OperatorHub Capability Levels (1-5).
+    run: scripts/operator_capability_audit.py
+    interpreter: python
+  - name: reconcile-lint
+    description: Lint a Go controller reconcile function for operator anti-patterns.
+    run: scripts/reconcile_lint.py
+    interpreter: python
 ---
 
 # Kubernetes Operator
@@ -245,5 +258,17 @@ A team using this skill should achieve:
 - All reconcile functions pass `reconcile_lint.py` strict mode
 - Operators reach OperatorHub Capability Level 3 (Full Lifecycle) before public release
 - Mean time to fix a reconcile bug: <1 day (no infinite loops in production)
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill kubernetes-operator crd-validator --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/crd_validator.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `crd-validator` | `scripts/crd_validator.py` | Validate a Kubernetes CRD YAML against operator-pattern best practices. |
+| `operator-capability-audit` | `scripts/operator_capability_audit.py` | Score an operator against OperatorHub Capability Levels (1-5). |
+| `reconcile-lint` | `scripts/reconcile_lint.py` | Lint a Go controller reconcile function for operator anti-patterns. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/kubernetes-operator/skills/kubernetes-operator (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

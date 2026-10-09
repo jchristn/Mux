@@ -109,12 +109,17 @@ namespace Test.Shared.Suites
             });
             cases.Add(new TestCaseDescriptor(SuiteId, "MacScriptExecutes", "The generated script really runs the CLI from a login shell and cleans itself up", (CancellationToken ct) =>
             {
+                if (OperatingSystem.IsWindows())
+                {
+                    return Task.CompletedTask;
+                }
+
                 WithTemp((string dir) =>
                 {
                     string marker = Path.Combine(dir, "ran.txt");
                     string stub = Path.Combine(dir, "stub cli");
                     File.WriteAllText(stub, "#!/bin/sh\npwd > '" + marker + "'\n");
-                    File.SetUnixFileMode(stub, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                    if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(stub, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
                     string workDir = Path.Combine(dir, "work dir");
                     Directory.CreateDirectory(workDir);
                     string text = TerminalLaunchPlanner.BuildMacCommandFile(new MuxCliLocation { Executable = stub }, workDir)
@@ -122,7 +127,7 @@ namespace Test.Shared.Suites
                         .Replace("clear\n", string.Empty);
                     string script = Path.Combine(dir, "launch.command");
                     File.WriteAllText(script, text);
-                    File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                    if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
                     using (Process process = Process.Start(new ProcessStartInfo { FileName = "/bin/zsh", ArgumentList = { script }, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false })!)
                     {
                         process.WaitForExit(20000);

@@ -661,3 +661,48 @@ output "table_name" {{
 }}
 """
         return terraform
+
+
+# Command-line entry point added for mux (the upstream module shipped only the class). It keeps the
+# documented usage: --app-name my-app --region us-east-1, and adds --format and --output.
+def _main(argv=None):
+    import argparse
+    import json
+    import sys
+
+    parser = argparse.ArgumentParser(description="Generate infrastructure as code for a serverless AWS application.")
+    parser.add_argument("--app-name", required=True, help="Application name, used for resource naming.")
+    parser.add_argument("--region", default="us-east-1", help="AWS region (default us-east-1).")
+    parser.add_argument("--format", choices=["cloudformation", "cdk", "terraform"], default="cloudformation", help="Template format (default cloudformation).")
+    parser.add_argument("--requirements", help="Optional requirements JSON file (API, database, auth settings).")
+    parser.add_argument("--output", help="Write the template to this file instead of stdout.")
+    args = parser.parse_args(argv)
+
+    requirements = {}
+    if args.requirements:
+        try:
+            with open(args.requirements, "r", encoding="utf-8") as handle:
+                requirements = json.load(handle)
+        except (OSError, ValueError) as error:
+            print("ERROR: cannot read %s: %s" % (args.requirements, error), file=sys.stderr)
+            return 2
+
+    requirements.setdefault("region", args.region)
+    generator = ServerlessStackGenerator(args.app_name, requirements)
+    if args.format == "cdk":
+        text = generator.generate_cdk_stack()
+    elif args.format == "terraform":
+        text = generator.generate_terraform_configuration()
+    else:
+        text = generator.generate_cloudformation_template()
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as handle:
+            handle.write(text)
+    else:
+        print(text)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

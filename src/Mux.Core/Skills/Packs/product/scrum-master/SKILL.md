@@ -10,6 +10,19 @@ description: >-
 category: productivity
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/project-management/skills/scrum-master"
 license: MIT
+commands:
+  - name: retrospective-analyzer
+    description: Analyze retrospective data for action-item completion and recurring themes.
+    run: scripts/retrospective_analyzer.py
+    interpreter: python
+  - name: sprint-health-scorer
+    description: Score sprint health across commitment, scope creep, blockers, and completion.
+    run: scripts/sprint_health_scorer.py
+    interpreter: python
+  - name: velocity-analyzer
+    description: Analyze sprint velocity with trends, forecasts, and anomalies.
+    run: scripts/velocity_analyzer.py
+    interpreter: python
 ---
 
 # Scrum Master Expert
@@ -222,3 +235,13 @@ Apply stage-specific facilitation (details in `${SKILL_DIR}/references/team-dyna
 *For deep framework references see `${SKILL_DIR}/references/velocity-forecasting-guide.md` and `${SKILL_DIR}/references/team-dynamics-framework.md`. For template assets see `${SKILL_DIR}/assets/sprint_report_template.md` and `${SKILL_DIR}/assets/team_health_check_template.md`.*
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/project-management/skills/scrum-master (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill scrum-master <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `retrospective-analyzer` | `scripts/retrospective_analyzer.py` | Analyze retrospective data for action-item completion and recurring themes. |
+| `sprint-health-scorer` | `scripts/sprint_health_scorer.py` | Score sprint health across commitment, scope creep, blockers, and completion. |
+| `velocity-analyzer` | `scripts/velocity_analyzer.py` | Analyze sprint velocity with trends, forecasts, and anomalies. |

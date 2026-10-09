@@ -7,6 +7,11 @@ description: >-
 category: frontend
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/full-page-screenshot"
 license: MIT
+commands:
+  - name: full-page-screenshot
+    description: Capture a full-page screenshot through Chrome DevTools (--check, --list, --url <URL>, or a tab id).
+    run: scripts/full-page-screenshot.mjs
+    interpreter: node
 ---
 
 # Full Page Screenshot
@@ -127,5 +132,17 @@ file /tmp/screenshot.png
 
 - [`engineering/browser-automation`](the `browser-automation` skill), General browser automation patterns via CDP/Playwright
 - [`engineering/performance-profiler`](the `performance-profiler` skill), Performance analysis that may complement visual captures
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill full-page-screenshot full-page-screenshot --help`; the arguments after the command go straight to the script. They also run directly, as `node "${SKILL_DIR}/scripts/full-page-screenshot.mjs" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `full-page-screenshot` | `scripts/full-page-screenshot.mjs` | Capture a full-page screenshot through Chrome DevTools (--check, --list, --url <URL>, or a tab id). |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
+
+`full-page-screenshot` needs Node.js 22 or later and Chrome running with remote debugging enabled; it exits 1 for usage errors and connection failures as well as capture errors. Run it with `--check` first.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/full-page-screenshot (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

@@ -10,6 +10,11 @@ description: >-
 category: compliance
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/ra-qm-team/skills/agent-decision-receipts"
 license: MIT
+commands:
+  - name: build-action-manifest
+    description: Build a validated agent action manifest for receipt minting
+    run: scripts/build_action_manifest.py
+    interpreter: python
 ---
 
 # Agent Decision Receipts
@@ -111,3 +116,13 @@ This is the property that makes it evidence: a reviewer who distrusts the issuer
 - OpenAgentOntology (Apache-2.0): the open receipt primitive this skill drives, `pip install "openagentontology[pq]"`.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/ra-qm-team/skills/agent-decision-receipts (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `agent-decision-receipts`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/build_action_manifest.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `build-action-manifest` | `scripts/build_action_manifest.py` | Build a validated agent action manifest for receipt minting. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

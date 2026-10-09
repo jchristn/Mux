@@ -458,9 +458,9 @@ namespace Test.Shared.Suites
                     await runtime.RefreshNowAsync(ct).ConfigureAwait(false);
                     MuxMcpServerOptions options = new MuxMcpServerOptions { DefaultWorkingDirectory = config };
                     MuxMcpTools tools = new MuxMcpTools(options, new FakeMcpRunExecutor(), () => new List<EndpointConfig>(), new SessionStore(Path.Combine(config, "sessions")), runtime);
-                    Dictionary<string, Func<RpcParameters, CancellationToken, Task<object>>> handlers = new Dictionary<string, Func<RpcParameters, CancellationToken, Task<object>>>();
+                    Dictionary<string, Func<RpcParameters?, CancellationToken, Task<object>>> handlers = new Dictionary<string, Func<RpcParameters?, CancellationToken, Task<object>>>();
                     object? schema = null;
-                    tools.RegisterAll((string name, string description, object inputSchema, Func<RpcParameters, CancellationToken, Task<object>> handler) =>
+                    tools.RegisterAll((string name, string description, object inputSchema, Func<RpcParameters?, CancellationToken, Task<object>> handler) =>
                     {
                         handlers[name] = handler;
                         if (name == "list_skills") schema = inputSchema;

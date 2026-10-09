@@ -11,6 +11,19 @@ description: >-
 category: devops
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/slo-architect"
 license: MIT
+commands:
+  - name: error-budget-calculator
+    description: Compute an error budget and multi-window burn-rate alert thresholds.
+    run: scripts/error_budget_calculator.py
+    interpreter: python
+  - name: slo-designer
+    description: Generate a structured SLO definition with required fields enforced.
+    run: scripts/slo_designer.py
+    interpreter: python
+  - name: slo-review
+    description: Audit SLO definitions (Markdown or JSON) for common mistakes.
+    run: scripts/slo_review.py
+    interpreter: python
 ---
 
 # SLO Architect
@@ -238,3 +251,13 @@ A team using this skill should achieve:
 - Quarterly SLO review happens every quarter (not annually)
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/slo-architect (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill slo-architect <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `error-budget-calculator` | `scripts/error_budget_calculator.py` | Compute an error budget and multi-window burn-rate alert thresholds. |
+| `slo-designer` | `scripts/slo_designer.py` | Generate a structured SLO definition with required fields enforced. |
+| `slo-review` | `scripts/slo_review.py` | Audit SLO definitions (Markdown or JSON) for common mistakes. |

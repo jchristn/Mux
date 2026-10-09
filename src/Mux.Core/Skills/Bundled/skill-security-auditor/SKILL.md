@@ -15,6 +15,12 @@ appliesTo:
   - ".claude/skills/**"
   - ".mux/skills/**"
   - ".agents/skills/**"
+commands:
+  - name: skill-security-auditor
+    description: Scan a skill folder for security risks before installing it
+    run: scripts/skill_security_auditor.py
+    interpreter: python
+    timeoutMs: 300000
 ---
 
 # Skill Security Auditor
@@ -176,3 +182,13 @@ For the complete threat model, detection patterns, and known attack vectors agai
 When in doubt after an audit, **don't install**. Ask the skill author for clarification.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/skill-security-auditor (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `skill-security-auditor`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/skill_security_auditor.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `skill-security-auditor` | `scripts/skill_security_auditor.py` | Scan a skill folder for security risks before installing it. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors). `skill-security-auditor` exits 1 for FAIL (or WARN with `--strict`) and 2 for WARN, so 2 means warnings here, not invalid input.

@@ -67,7 +67,7 @@ namespace Test.Shared.Suites
             Add("SchemaPassedThrough", "A tool's input schema reaches the model unchanged", async (CancellationToken ct) =>
             {
                 await using (ScriptableMcpHttpServer server = await ScriptableMcpHttpServer.StartAsync((McpHttpServer s) =>
-                    s.RegisterTool("lookup", "Looks up a user", new { type = "object", properties = new { id = new { type = "integer", minimum = 1 }, verbose = new { type = "boolean" } }, required = new[] { "id" } }, (RpcParameters a) => (object)"ok")).ConfigureAwait(false))
+                    s.RegisterTool("lookup", "Looks up a user", new { type = "object", properties = new { id = new { type = "integer", minimum = 1 }, verbose = new { type = "boolean" } }, required = new[] { "id" } }, (RpcParameters? a) => (object)"ok")).ConfigureAwait(false))
                 using (McpToolManager manager = await Connect(ct, Http("db", server.BaseUrl)).ConfigureAwait(false))
                 {
                     string schema = JsonSerializer.Serialize(manager.GetToolDefinitions()[0].ParametersSchema);
@@ -105,7 +105,7 @@ namespace Test.Shared.Suites
             Add("ArgumentsArriveIntact", "Nested, numeric, boolean, null, and Unicode arguments reach the server intact", async (CancellationToken ct) =>
             {
                 await using (ScriptableMcpHttpServer server = await ScriptableMcpHttpServer.StartAsync((McpHttpServer s) =>
-                    s.RegisterTool("echo_args", "Echoes its arguments", new { type = "object" }, (RpcParameters a) => (object)(a?.RawJson ?? "null"))).ConfigureAwait(false))
+                    s.RegisterTool("echo_args", "Echoes its arguments", new { type = "object" }, (RpcParameters? a) => (object)(a?.RawJson ?? "null"))).ConfigureAwait(false))
                 using (McpToolManager manager = await Connect(ct, Http("srv", server.BaseUrl)).ConfigureAwait(false))
                 {
                     string args = "{\"n\":42.5,\"flag\":true,\"none\":null,\"list\":[1,\"two\",{\"three\":3}],\"text\":\"héllo 世界 \\ud83d\\ude80\"}";
@@ -125,7 +125,7 @@ namespace Test.Shared.Suites
             Add("ToolErrorIsFailure", "A tool error (isError) fails the result and keeps the message for the model", async (CancellationToken ct) =>
             {
                 await using (ScriptableMcpHttpServer server = await ScriptableMcpHttpServer.StartAsync((McpHttpServer s) =>
-                    s.RegisterTool("broken", "Fails", new { type = "object", properties = new { } }, (RpcParameters a) => throw new McpToolException("disk is full"))).ConfigureAwait(false))
+                    s.RegisterTool("broken", "Fails", new { type = "object", properties = new { } }, (RpcParameters? a) => throw new McpToolException("disk is full"))).ConfigureAwait(false))
                 using (McpToolManager manager = await Connect(ct, Http("srv", server.BaseUrl)).ConfigureAwait(false))
                 {
                     ToolResult result = await manager.ExecuteAsync("c", "srv.broken", Json("{}"), ct).ConfigureAwait(false);
@@ -137,7 +137,7 @@ namespace Test.Shared.Suites
             Add("UnexpectedExceptionIsFailure", "An unexpected handler exception still comes back as a failed result, not a crash", async (CancellationToken ct) =>
             {
                 await using (ScriptableMcpHttpServer server = await ScriptableMcpHttpServer.StartAsync((McpHttpServer s) =>
-                    s.RegisterTool("explode", "Throws", new { type = "object", properties = new { } }, (RpcParameters a) => throw new InvalidOperationException("internal detail"))).ConfigureAwait(false))
+                    s.RegisterTool("explode", "Throws", new { type = "object", properties = new { } }, (RpcParameters? a) => throw new InvalidOperationException("internal detail"))).ConfigureAwait(false))
                 using (McpToolManager manager = await Connect(ct, Http("srv", server.BaseUrl)).ConfigureAwait(false))
                 {
                     ToolResult result = await manager.ExecuteAsync("c", "srv.explode", Json("{}"), ct).ConfigureAwait(false);
@@ -148,7 +148,7 @@ namespace Test.Shared.Suites
             Add("SchemaViolationsRejected", "Undeclared arguments and missing required arguments are rejected as tool errors", async (CancellationToken ct) =>
             {
                 await using (ScriptableMcpHttpServer server = await ScriptableMcpHttpServer.StartAsync((McpHttpServer s) =>
-                    s.RegisterTool("strict", "Strict", new { type = "object", properties = new { text = new { type = "string" } }, required = new[] { "text" }, additionalProperties = false }, (RpcParameters a) => (object)("got " + a.GetString("text")))).ConfigureAwait(false))
+                    s.RegisterTool("strict", "Strict", new { type = "object", properties = new { text = new { type = "string" } }, required = new[] { "text" }, additionalProperties = false }, (RpcParameters? a) => (object)("got " + a.GetString("text")))).ConfigureAwait(false))
                 using (McpToolManager manager = await Connect(ct, Http("srv", server.BaseUrl)).ConfigureAwait(false))
                 {
                     ToolResult extra = await manager.ExecuteAsync("c", "srv.strict", Json("{\"text\":\"a\",\"bogus\":1}"), ct).ConfigureAwait(false);
@@ -175,7 +175,7 @@ namespace Test.Shared.Suites
             Add("CancellationStopsSlowTool", "Cancelling a slow tool call returns promptly with a failure", async (CancellationToken ct) =>
             {
                 await using (ScriptableMcpHttpServer server = await ScriptableMcpHttpServer.StartAsync((McpHttpServer s) =>
-                    s.RegisterTool("slow", "Sleeps", new { type = "object", properties = new { } }, async (RpcParameters a) => { await Task.Delay(30000).ConfigureAwait(false); return (object)"late"; })).ConfigureAwait(false))
+                    s.RegisterTool("slow", "Sleeps", new { type = "object", properties = new { } }, async (RpcParameters? a) => { await Task.Delay(30000).ConfigureAwait(false); return (object)"late"; })).ConfigureAwait(false))
                 using (McpToolManager manager = await Connect(ct, Http("srv", server.BaseUrl)).ConfigureAwait(false))
                 using (CancellationTokenSource cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(400)))
                 {
@@ -461,7 +461,7 @@ namespace Test.Shared.Suites
             Add("MultipleContentPartsKept", "A result with several content parts keeps all of them", async (CancellationToken ct) =>
             {
                 await using (ScriptableMcpHttpServer server = await ScriptableMcpHttpServer.StartAsync((McpHttpServer s) =>
-                    s.RegisterTool("multi", "Two parts", new { type = "object", properties = new { } }, (RpcParameters a) => (object)new { content = new object[] { new { type = "text", text = "PART_ONE" }, new { type = "text", text = "PART_TWO" } } })).ConfigureAwait(false))
+                    s.RegisterTool("multi", "Two parts", new { type = "object", properties = new { } }, (RpcParameters? a) => (object)new { content = new object[] { new { type = "text", text = "PART_ONE" }, new { type = "text", text = "PART_TWO" } } })).ConfigureAwait(false))
                 using (McpToolManager manager = await Connect(ct, Http("srv", server.BaseUrl)).ConfigureAwait(false))
                 {
                     ToolResult result = await manager.ExecuteAsync("c", "srv.multi", Json("{}"), ct).ConfigureAwait(false);
@@ -473,7 +473,7 @@ namespace Test.Shared.Suites
             Add("ConcurrentCallsAllSucceed", "Ten concurrent calls to one server all succeed with their own results", async (CancellationToken ct) =>
             {
                 await using (ScriptableMcpHttpServer server = await ScriptableMcpHttpServer.StartAsync((McpHttpServer s) =>
-                    s.RegisterTool("twice", "Doubles n", new { type = "object", properties = new { n = new { type = "integer" } } }, async (RpcParameters a) => { await Task.Delay(50).ConfigureAwait(false); return (object)("v=" + (a.GetInt64("n") * 2)); })).ConfigureAwait(false))
+                    s.RegisterTool("twice", "Doubles n", new { type = "object", properties = new { n = new { type = "integer" } } }, async (RpcParameters? a) => { await Task.Delay(50).ConfigureAwait(false); return (object)("v=" + (a.GetInt64("n") * 2)); })).ConfigureAwait(false))
                 using (McpToolManager manager = await Connect(ct, Http("srv", server.BaseUrl)).ConfigureAwait(false))
                 {
                     List<Task<ToolResult>> calls = new List<Task<ToolResult>>();

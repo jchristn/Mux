@@ -8,6 +8,24 @@ description: >-
 category: engineering
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/karpathy-coder/skills/karpathy-coder"
 license: MIT
+commands:
+  - name: assumption-linter
+    description: Detect hidden assumptions in a plan or proposal (Karpathy Principle 1).
+    run: scripts/assumption_linter.py
+    interpreter: python
+  - name: complexity-checker
+    description: Detect over-engineering in Python/TypeScript files (Karpathy Principle 2).
+    run: scripts/complexity_checker.py
+    interpreter: python
+  - name: diff-surgeon
+    description: Detect diff noise: changes that don't trace to the stated goal (Karpathy Principle 3).
+    run: scripts/diff_surgeon.py
+    interpreter: python
+    timeoutMs: 600000
+  - name: goal-verifier
+    description: Check if a plan has verifiable success criteria (Karpathy Principle 4).
+    run: scripts/goal_verifier.py
+    interpreter: python
 ---
 
 # Karpathy Coder: Active Coding Discipline
@@ -130,5 +148,18 @@ Installs via plugin for mux. For other tools, copy the principles into your sche
 - **`self-eval`**: honest quality scoring after completing work
 - **`code-reviewer`**: broader code review; karpathy-coder focuses on the 4 LLM-specific pitfalls
 - **`llm-wiki`**: compound knowledge; karpathy-coder ensures you don't overcomplicate while building it
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill karpathy-coder assumption-linter --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/assumption_linter.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `assumption-linter` | `scripts/assumption_linter.py` | Detect hidden assumptions in a plan or proposal (Karpathy Principle 1). |
+| `complexity-checker` | `scripts/complexity_checker.py` | Detect over-engineering in Python/TypeScript files (Karpathy Principle 2). |
+| `diff-surgeon` | `scripts/diff_surgeon.py` | Detect diff noise: changes that don't trace to the stated goal (Karpathy Principle 3). |
+| `goal-verifier` | `scripts/goal_verifier.py` | Check if a plan has verifiable success criteria (Karpathy Principle 4). |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/karpathy-coder/skills/karpathy-coder (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

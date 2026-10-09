@@ -20,7 +20,7 @@ namespace Test.Shared.Support
         public object Schema { get; set; } = new object();
 
         /// <summary>The handler.</summary>
-        public Func<RpcParameters, CancellationToken, Task<object>> Handler { get; set; } = (RpcParameters p, CancellationToken c) => Task.FromResult<object>(string.Empty);
+        public Func<RpcParameters?, CancellationToken, Task<object>> Handler { get; set; } = (RpcParameters? p, CancellationToken c) => Task.FromResult<object>(string.Empty);
 
         #endregion
     }

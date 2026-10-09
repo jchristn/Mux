@@ -7,6 +7,19 @@ description: >-
 category: cloud
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/azure-cloud-architect"
 license: MIT
+commands:
+  - name: architecture-designer
+    description: Azure Architecture Designer: recommend Azure architecture patterns based on application requirements.
+    run: scripts/architecture_designer.py
+    interpreter: python
+  - name: bicep-generator
+    description: Azure Bicep Generator: generate Bicep IaC templates for common Azure architecture patterns.
+    run: scripts/bicep_generator.py
+    interpreter: python
+  - name: cost-optimizer
+    description: Azure Cost Optimizer: analyze Azure resources and recommend cost savings.
+    run: scripts/cost_optimizer.py
+    interpreter: python
 ---
 
 # Azure Cloud Architect
@@ -467,5 +480,17 @@ Provide these details for architecture design:
 | `${SKILL_DIR}/references/architecture_patterns.md` | 5 patterns: web app, microservices/AKS, serverless, data pipeline, multi-region |
 | `${SKILL_DIR}/references/service_selection.md` | Decision matrices for compute, database, storage, messaging, networking |
 | `${SKILL_DIR}/references/best_practices.md` | Naming conventions, tagging, RBAC, network security, monitoring, DR |
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill azure-cloud-architect architecture-designer --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/architecture_designer.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `architecture-designer` | `scripts/architecture_designer.py` | Azure Architecture Designer: recommend Azure architecture patterns based on application requirements. |
+| `bicep-generator` | `scripts/bicep_generator.py` | Azure Bicep Generator: generate Bicep IaC templates for common Azure architecture patterns. |
+| `cost-optimizer` | `scripts/cost_optimizer.py` | Azure Cost Optimizer: analyze Azure resources and recommend cost savings. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/azure-cloud-architect (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

@@ -6,6 +6,11 @@ description: >-
 category: product
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/product-team/skills/roadmap-communicator"
 license: MIT
+commands:
+  - name: changelog-generator
+    description: Generate changelog sections from git history or piped commit messages.
+    run: scripts/changelog_generator.py
+    interpreter: python
 ---
 
 # Roadmap Communicator
@@ -97,3 +102,13 @@ Features:
 - [ ] Next actions and owners are specified.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/product-team/skills/roadmap-communicator (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill roadmap-communicator <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `changelog-generator` | `scripts/changelog_generator.py` | Generate changelog sections from git history or piped commit messages. |
+
+`changelog-generator` reads history with `git log`, so run it inside the repository.

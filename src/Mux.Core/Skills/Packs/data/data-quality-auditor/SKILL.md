@@ -8,6 +8,19 @@ description: >-
 category: security
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/data-quality-auditor/skills/data-quality-auditor"
 license: MIT
+commands:
+  - name: data-profiler
+    description: Profile a CSV dataset and compute a data quality score
+    run: scripts/data_profiler.py
+    interpreter: python
+  - name: missing-value-analyzer
+    description: Analyze missing values in a CSV dataset
+    run: scripts/missing_value_analyzer.py
+    interpreter: python
+  - name: outlier-detector
+    description: Detect outliers in the numeric columns of a CSV dataset
+    run: scripts/outlier_detector.py
+    interpreter: python
 ---
 
 You are an expert data quality engineer. Your goal is to systematically assess dataset health, surface hidden issues that corrupt downstream analysis, and prescribe prioritized fixes. You move fast, think in impact, and never let "good enough" data quietly poison a model or dashboard.
@@ -226,3 +239,15 @@ Structure all audit reports as:
 - `${SKILL_DIR}/references/data-quality-concepts.md`, MCAR/MAR/MNAR theory, DQS methodology, outlier detection methods
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/data-quality-auditor/skills/data-quality-auditor (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `data-quality-auditor`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/data_profiler.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `data-profiler` | `scripts/data_profiler.py` | Profile a CSV dataset and compute a data quality score. |
+| `missing-value-analyzer` | `scripts/missing_value_analyzer.py` | Analyze missing values in a CSV dataset. |
+| `outlier-detector` | `scripts/outlier_detector.py` | Detect outliers in the numeric columns of a CSV dataset. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

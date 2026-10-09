@@ -11,6 +11,19 @@ description: >-
 category: data
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-data-scientist"
 license: MIT
+commands:
+  - name: experiment-designer
+    description: Design an experiment
+    run: scripts/experiment_designer.py
+    interpreter: python
+  - name: feature-engineering-pipeline
+    description: Plan a feature engineering pipeline
+    run: scripts/feature_engineering_pipeline.py
+    interpreter: python
+  - name: model-evaluation-suite
+    description: Evaluate a model
+    run: scripts/model_evaluation_suite.py
+    interpreter: python
 ---
 
 # Senior Data Scientist
@@ -227,3 +240,15 @@ python3 "${SKILL_DIR}/scripts/model_evaluation_suite.py" --input model_predictio
 ```
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/senior-data-scientist (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `senior-data-scientist`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/experiment_designer.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `experiment-designer` | `scripts/experiment_designer.py` | Design an experiment. |
+| `feature-engineering-pipeline` | `scripts/feature_engineering_pipeline.py` | Plan a feature engineering pipeline. |
+| `model-evaluation-suite` | `scripts/model_evaluation_suite.py` | Evaluate a model. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

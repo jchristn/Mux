@@ -12,6 +12,16 @@ appliesTo:
   - "**/*.html"
   - "**/*.vue"
   - "**/*.svelte"
+commands:
+  - name: a11y-scanner
+    description: Scan a frontend codebase for WCAG 2.2 accessibility violations
+    run: scripts/a11y_scanner.py
+    interpreter: python
+    timeoutMs: 300000
+  - name: contrast-checker
+    description: Check foreground and background color pairs against WCAG AA and AAA contrast ratios
+    run: scripts/contrast_checker.py
+    interpreter: python
 ---
 
 # Accessibility Audit
@@ -222,3 +232,14 @@ Options:
 - [eslint-plugin-jsx-a11y](https://github.com/jsx-eslint/eslint-plugin-jsx-a11y)
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/a11y-audit/skills/a11y-audit (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `a11y-audit`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/a11y_scanner.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `a11y-scanner` | `scripts/a11y_scanner.py` | Scan a frontend codebase for WCAG 2.2 accessibility violations. |
+| `contrast-checker` | `scripts/contrast_checker.py` | Check foreground and background color pairs against WCAG AA and AAA contrast ratios. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors). `a11y-scanner` exits 1 for critical or serious findings and 2 for moderate or minor findings, so 2 means findings here, not invalid input.

@@ -6,6 +6,17 @@ description: >-
 category: workflow
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/agenthub/skills/eval"
 license: MIT
+commands:
+  - name: result-ranker
+    description: Rank AgentHub agent results.
+    run: scripts/result_ranker.py
+    interpreter: python
+    timeoutMs: 600000
+  - name: session-manager
+    description: AgentHub session state machine and lifecycle manager.
+    run: scripts/session_manager.py
+    interpreter: python
+    timeoutMs: 600000
 ---
 
 # /hub:eval, Evaluate Agent Results
@@ -82,5 +93,16 @@ python3 "${SKILL_DIR}/scripts/session_manager.py" --update {session-id} --state 
    - Ranked results with winner highlighted
    - Next step: `/hub:merge` to merge the winner
    - Or `/hub:merge {session-id} --agent {winner}` to be explicit
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill hub-eval result-ranker --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/result_ranker.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `result-ranker` | `scripts/result_ranker.py` | Rank AgentHub agent results. |
+| `session-manager` | `scripts/session_manager.py` | AgentHub session state machine and lifecycle manager. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/agenthub/skills/eval (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

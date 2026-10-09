@@ -20,6 +20,15 @@ appliesTo:
   - "build.gradle"
   - "build.gradle.kts"
   - "CMakeLists.txt"
+commands:
+  - name: stack-detector
+    description: Detect the language, package manager, and tooling of a repository
+    run: scripts/stack_detector.py
+    interpreter: python
+  - name: pipeline-generator
+    description: Generate CI/CD pipeline YAML from the detected stack
+    run: scripts/pipeline_generator.py
+    interpreter: python
 ---
 
 # CI/CD Pipeline Builder
@@ -108,3 +117,14 @@ python3 "${SKILL_DIR}/scripts/pipeline_generator.py" --repo . --platform gitlab 
 - [README.md](README.md)
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/ci-cd-pipeline-builder (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `ci-cd-pipeline-builder`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/stack_detector.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `stack-detector` | `scripts/stack_detector.py` | Detect the language, package manager, and tooling of a repository. |
+| `pipeline-generator` | `scripts/pipeline_generator.py` | Generate CI/CD pipeline YAML from the detected stack. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

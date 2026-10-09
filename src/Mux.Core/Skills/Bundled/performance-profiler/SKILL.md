@@ -13,6 +13,12 @@ appliesTo:
   - "pyproject.toml"
   - "requirements*.txt"
   - "go.mod"
+commands:
+  - name: performance-profiler
+    description: Analyze a project directory for common performance risk indicators
+    run: scripts/performance_profiler.py
+    interpreter: python
+    timeoutMs: 300000
 ---
 
 # Performance Profiler
@@ -85,3 +91,13 @@ python3 "${SKILL_DIR}/scripts/performance_profiler.py" /path/to/project --large-
 - [${SKILL_DIR}/references/optimization-playbook.md](${SKILL_DIR}/references/optimization-playbook.md), before/after measurement template, quick-win optimization checklist (DB/Node/bundle/API), common pitfalls, best practices
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/performance-profiler (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `performance-profiler`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/performance_profiler.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `performance-profiler` | `scripts/performance_profiler.py` | Analyze a project directory for common performance risk indicators. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

@@ -8,6 +8,12 @@ description: >-
 category: product
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/product-team/apple-hig-expert/skills/apple-hig-expert"
 license: MIT
+commands:
+  - name: hig-checker
+    description: Check tap targets, contrast, and typography against Apple's Human Interface Guidelines.
+    run: scripts/hig_checker.py
+    interpreter: python
+    timeoutMs: 300000
 ---
 
 # Apple HIG Expert
@@ -109,3 +115,11 @@ Surface these WITHOUT being asked: low contrast over translucent layers; interac
 - **landing-page-generator**: web marketing pages, not native apps.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/product-team/apple-hig-expert/skills/apple-hig-expert (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill apple-hig-expert <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `hig-checker` | `scripts/hig_checker.py` | Check tap targets, contrast, and typography against Apple's Human Interface Guidelines. |

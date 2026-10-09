@@ -6,6 +6,11 @@ description: >-
 category: workflow
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/agenthub/skills/hub-init"
 license: MIT
+commands:
+  - name: hub-init
+    description: Initialize an AgentHub collaboration session.
+    run: scripts/hub_init.py
+    interpreter: python
 ---
 
 # /hub:hub-init, Create New Session
@@ -91,5 +96,15 @@ Tell the user:
 - Baseline metric (if captured)
 - Next step: `/hub:spawn` to launch agents
 - Or `/hub:spawn {session-id}` if multiple sessions exist
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill hub-init hub-init --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/hub_init.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `hub-init` | `scripts/hub_init.py` | Initialize an AgentHub collaboration session. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/agenthub/skills/hub-init (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

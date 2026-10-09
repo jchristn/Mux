@@ -7,6 +7,19 @@ description: >-
 category: engineering
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/migration-architect"
 license: MIT
+commands:
+  - name: compatibility-checker
+    description: Analyze schema and API changes between versions for backward compatibility issues.
+    run: scripts/compatibility_checker.py
+    interpreter: python
+  - name: migration-planner
+    description: Generate a phased migration plan with risk assessment from a migration spec.
+    run: scripts/migration_planner.py
+    interpreter: python
+  - name: rollback-generator
+    description: Generate rollback procedures for each phase of a migration plan.
+    run: scripts/rollback_generator.py
+    interpreter: python
 ---
 
 # Migration Architect
@@ -435,3 +448,13 @@ resource "aws_instance" "green_environment" {
 This Migration Architect skill provides a comprehensive framework for planning, executing, and validating complex system migrations while minimizing business impact and technical risk. The combination of automated tools, proven patterns, and detailed procedures enables organizations to confidently undertake even the most complex migration projects.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/migration-architect (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill migration-architect <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `compatibility-checker` | `scripts/compatibility_checker.py` | Analyze schema and API changes between versions for backward compatibility issues. |
+| `migration-planner` | `scripts/migration_planner.py` | Generate a phased migration plan with risk assessment from a migration spec. |
+| `rollback-generator` | `scripts/rollback_generator.py` | Generate rollback procedures for each phase of a migration plan. |

@@ -155,6 +155,11 @@ All notable changes to mux are documented here.
   checks, STRIDE threat modeling), `debug` (a five-phase feature-repair mode), `project-detect` (monorepo tooling),
   `terraform` and `dockerfile-lint` (review checklists and analyzers), and `explain-codebase`, `todo-scan`,
   `release-notes`, and `new-skill`. Notices are in `THIRD_PARTY_NOTICES.md`; the plan is `SKILLS_TO_CONSIDER.md`.
+- **Script commands for imported skills.** Every script-bearing imported skill exposes its scripts as `run_skill`
+  commands (205 commands across 91 skills); `tdd-guide` and `aws-solution-architect` gained command-line entry
+  points, and the autoresearch skills ship their evaluators. Script commands answer `MUX_SKILL_DRY_RUN` by reporting
+  the command instead of running it, and exit codes pass through.
+- **`BUILTIN_SKILLS.md`** lists every default skill by category and every optional pack skill.
 - **`mux skill import <folder|git-url>`** brings in Claude-format skills, rewriting paths, Claude references, and
   dashes, adding category, source, and license, and flagging features mux does not support.
 - **Skills in `mux print`.** Headless runs now discover skills, list them in the system prompt, and expose
@@ -193,6 +198,10 @@ All notable changes to mux are documented here.
   agent, or a checkout build) and opens it in a new Terminal window through a self-deleting `.command` script, with a
   login shell. Windows quotes the `start` title correctly and Linux tries seven terminal emulators. When no CLI is
   found the window explains how to install it.
+- The `python` skill interpreter resolves `python3` (macOS and Linux) or the `py` launcher (Windows) when no
+  `python` is on PATH, so Python skill commands work on systems that only ship `python3`.
+- `mux skill pack show`, `/packs`, and the pack REST routes show real skill descriptions instead of `>-` (YAML
+  block scalars are now read).
 - MCP client: paginated `tools/list` results are followed (only the first page was registered), malformed tool
   entries are skipped instead of dropping the server, duplicate server names keep the first definition, a crashed
   stdio server no longer hides its diagnosis or breaks removal, and a stdio server's `env` entries are set only for its
@@ -216,6 +225,11 @@ All notable changes to mux are documented here.
   configuration, REST routes, `mux print --mcp-config`, the terminal manager) and as an MCP server (every tool's
   validation, the approval ceiling matrix, serialized runs, cancellation, secret masking, HTTP auth, raw stdio
   protocol edge cases).
+- Skills: `ScriptCommands1` to `ScriptCommands3` (141 cases: every script command declared, dry-run, and run with
+  `--help`, plus negative cases), `SkillScriptRuntime` (Python resolution and script dry runs), and `ShippedSkills`
+  (restored checks on all shipped skill content: counts, validity, categories, unique ids, no em-dashes, every
+  `${SKILL_DIR}` reference resolving, packs, and embedded resources). `ImportedSkillsSuite` was registered twice and
+  now runs once. The solution builds with no warnings in a full rebuild.
 - Skills: `SkillCategories` (16) and `ImportedSkills` (52, including every imported skill validating with a
   taxonomy category, unique ids, no em-dashes, every `${SKILL_DIR}` reference resolving, packs, the importer's
   normalization rules, seeding, REST, and the terminal `/packs` flow).

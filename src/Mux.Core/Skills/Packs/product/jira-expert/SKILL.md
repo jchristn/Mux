@@ -8,6 +8,15 @@ description: >-
 category: productivity
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/project-management/skills/jira-expert"
 license: MIT
+commands:
+  - name: jql-query-builder
+    description: Build JQL queries from natural-language descriptions.
+    run: scripts/jql_query_builder.py
+    interpreter: python
+  - name: workflow-validator
+    description: Validate a Jira workflow definition (JSON) for dead ends and other anti-patterns.
+    run: scripts/workflow_validator.py
+    interpreter: python
 ---
 
 # Atlassian Jira Expert
@@ -347,3 +356,12 @@ mcp__atlassian__createIssueLink (cloudId, link type from mcp__atlassian__getIssu
 - **Atlassian Admin** (`project-management/atlassian-admin/`), Permission and user management for Jira projects
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/project-management/skills/jira-expert (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill jira-expert <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `jql-query-builder` | `scripts/jql_query_builder.py` | Build JQL queries from natural-language descriptions. |
+| `workflow-validator` | `scripts/workflow_validator.py` | Validate a Jira workflow definition (JSON) for dead ends and other anti-patterns. |

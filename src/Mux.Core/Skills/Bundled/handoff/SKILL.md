@@ -12,6 +12,35 @@ category: productivity
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/productivity/handoff/skills/handoff"
 license: MIT
 argumentHint: "What will the next session be used for?"
+commands:
+  - name: setup
+    description: First-run setup for the handoff skill
+    run: scripts/setup.py
+    interpreter: python
+  - name: config-loader
+    description: Show the effective handoff configuration
+    run: scripts/config_loader.py
+    interpreter: python
+  - name: handoff-template-generator
+    description: Generate a handoff scaffold
+    run: scripts/handoff_template_generator.py
+    interpreter: python
+  - name: handoff-self-check
+    description: Self-check a handoff draft for fidelity issues
+    run: scripts/handoff_self_check.py
+    interpreter: python
+  - name: redaction-linter
+    description: Scan a handoff draft for secrets and personal data
+    run: scripts/redaction_linter.py
+    interpreter: python
+  - name: skill-recommender
+    description: Recommend skills for the next session
+    run: scripts/skill_recommender.py
+    interpreter: python
+  - name: cleanup
+    description: Remove old handoff scaffolds (guarded by modification time)
+    run: scripts/cleanup.py
+    interpreter: python
 ---
 
 # Handoff
@@ -202,3 +231,19 @@ On the next session, the SessionStart hook scans the configured save location, f
 **Inspired by:** [Matt Pocock's handoff](https://github.com/mattpocock/skills/tree/main/skills/productivity/handoff) (MIT).
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/productivity/handoff/skills/handoff (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `handoff`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/setup.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `setup` | `scripts/setup.py` | First-run setup for the handoff skill. |
+| `config-loader` | `scripts/config_loader.py` | Show the effective handoff configuration. |
+| `handoff-template-generator` | `scripts/handoff_template_generator.py` | Generate a handoff scaffold. |
+| `handoff-self-check` | `scripts/handoff_self_check.py` | Self-check a handoff draft for fidelity issues. |
+| `redaction-linter` | `scripts/redaction_linter.py` | Scan a handoff draft for secrets and personal data. |
+| `skill-recommender` | `scripts/skill_recommender.py` | Recommend skills for the next session. |
+| `cleanup` | `scripts/cleanup.py` | Remove old handoff scaffolds (guarded by modification time). |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

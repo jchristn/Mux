@@ -7,6 +7,11 @@ description: >-
 category: security
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/ai-security"
 license: MIT
+commands:
+  - name: ai-threat-scanner
+    description: Scan prompts and AI configurations for prompt injection, jailbreaks, and ATLAS threats
+    run: scripts/ai_threat_scanner.py
+    interpreter: python
 ---
 
 # AI Security
@@ -370,3 +375,13 @@ fi
 | [security-pen-testing](the `security-pen-testing` skill) | Application-layer security testing covers the web interface and API layer; ai-security covers the model and agent layer |
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/ai-security (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `ai-security`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/ai_threat_scanner.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `ai-threat-scanner` | `scripts/ai_threat_scanner.py` | Scan prompts and AI configurations for prompt injection, jailbreaks, and ATLAS threats. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors). `ai-threat-scanner` exits 2 for critical risk (or when authorization is required) and 1 for high or medium risk.

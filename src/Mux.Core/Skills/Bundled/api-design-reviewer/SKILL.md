@@ -13,6 +13,19 @@ appliesTo:
   - "**/openapi*.json"
   - "**/swagger*.json"
   - "**/swagger*.yaml"
+commands:
+  - name: api-linter
+    description: Lint an OpenAPI or Swagger specification for REST conventions and best practices
+    run: scripts/api_linter.py
+    interpreter: python
+  - name: api-scorecard
+    description: Score an API specification for design quality
+    run: scripts/api_scorecard.py
+    interpreter: python
+  - name: breaking-change-detector
+    description: Compare two API specification versions and report breaking changes
+    run: scripts/breaking_change_detector.py
+    interpreter: python
 ---
 
 # API Design Reviewer
@@ -445,3 +458,15 @@ fi
 Regular use of the linting, breaking change detection, and scoring tools ensures continuous improvement and helps maintain API quality throughout the development lifecycle.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/api-design-reviewer (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `api-design-reviewer`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/api_linter.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `api-linter` | `scripts/api_linter.py` | Lint an OpenAPI or Swagger specification for REST conventions and best practices. |
+| `api-scorecard` | `scripts/api_scorecard.py` | Score an API specification for design quality. |
+| `breaking-change-detector` | `scripts/breaking_change_detector.py` | Compare two API specification versions and report breaking changes. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

@@ -7,6 +7,11 @@ description: >-
 category: security
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/cloud-security"
 license: MIT
+commands:
+  - name: cloud-posture-check
+    description: Check cloud IAM, storage, and security group configurations for posture risks
+    run: scripts/cloud_posture_check.py
+    interpreter: python
 ---
 
 # Cloud Security
@@ -349,3 +354,13 @@ aws s3api get-bucket-policy --bucket "${BUCKET}" | jq '.Policy | fromjson' | \
 | [security-pen-testing](the `security-pen-testing` skill) | Cloud posture findings feed into the infrastructure security section of pen test assessments |
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/cloud-security (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `cloud-security`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/cloud_posture_check.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `cloud-posture-check` | `scripts/cloud_posture_check.py` | Check cloud IAM, storage, and security group configurations for posture risks. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors). `cloud-posture-check` exits 2 when there are critical findings and 1 for high findings.

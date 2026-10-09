@@ -11,6 +11,16 @@ description: >-
 category: product
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/product-team/code-to-prd/skills/code-to-prd"
 license: MIT
+commands:
+  - name: codebase-analyzer
+    description: Extract routes, APIs, models, and structure from a codebase for a PRD.
+    run: scripts/codebase_analyzer.py
+    interpreter: python
+    timeoutMs: 300000
+  - name: prd-scaffolder
+    description: Scaffold a prd/ directory from codebase analysis JSON.
+    run: scripts/prd_scaffolder.py
+    interpreter: python
 ---
 
 ## Name
@@ -498,3 +508,12 @@ Both scripts are **stdlib-only**: no pip install needed.
 This skill was inspired by [code-to-prd](https://github.com/lihanglogan/code-to-prd) by [@lihanglogan](https://github.com/lihanglogan), who proposed the original concept and methodology in [PR #368](https://github.com/alirezarezvani/claude-skills/pull/368). The core three-phase workflow (global scan → page-by-page analysis → structured document generation) originated from that work. This version was rebuilt from scratch in English with added tooling (analysis scripts, scaffolder, framework reference, quality checklist).
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/product-team/code-to-prd/skills/code-to-prd (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill code-to-prd <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `codebase-analyzer` | `scripts/codebase_analyzer.py` | Extract routes, APIs, models, and structure from a codebase for a PRD. |
+| `prd-scaffolder` | `scripts/prd_scaffolder.py` | Scaffold a prd/ directory from codebase analysis JSON. |

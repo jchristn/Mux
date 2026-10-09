@@ -7,6 +7,11 @@ description: >-
 category: devops
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/runbook-generator"
 license: MIT
+commands:
+  - name: runbook-generator
+    description: Generate a Markdown operational runbook skeleton for a service.
+    run: scripts/runbook_generator.py
+    interpreter: python
 ---
 
 # Runbook Generator
@@ -82,3 +87,11 @@ python3 "${SKILL_DIR}/scripts/runbook_generator.py" payments-api --owner platfor
 4. Update runbook content after incidents and postmortems.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/runbook-generator (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill runbook-generator <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `runbook-generator` | `scripts/runbook_generator.py` | Generate a Markdown operational runbook skeleton for a service. |

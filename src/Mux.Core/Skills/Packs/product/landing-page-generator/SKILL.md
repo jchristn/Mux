@@ -10,6 +10,11 @@ description: >-
 category: product
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/product-team/skills/landing-page-generator"
 license: MIT
+commands:
+  - name: landing-page-scaffolder
+    description: Generate a landing page as HTML or Next.js TSX with Tailwind CSS from a config.
+    run: scripts/landing_page_scaffolder.py
+    interpreter: python
 ---
 
 # Landing Page Generator
@@ -207,3 +212,11 @@ Inject `FAQPage` JSON-LD via `<script type="application/ld+json" dangerouslySetI
 - **Competitive Teardown** (`product-team/competitive-teardown/`), Competitive positioning informs landing page messaging and differentiation
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/product-team/skills/landing-page-generator (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill landing-page-generator <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `landing-page-scaffolder` | `scripts/landing_page_scaffolder.py` | Generate a landing page as HTML or Next.js TSX with Tailwind CSS from a config. |

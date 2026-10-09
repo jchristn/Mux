@@ -7,6 +7,20 @@ description: >-
 category: security
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/security-pen-testing"
 license: MIT
+commands:
+  - name: vulnerability-scanner
+    description: Generate OWASP Top 10 checklists and scan source code for vulnerability patterns
+    run: scripts/vulnerability_scanner.py
+    interpreter: python
+    timeoutMs: 300000
+  - name: dependency-auditor
+    description: Analyze package manifests for known vulnerabilities and risky patterns
+    run: scripts/dependency_auditor.py
+    interpreter: python
+  - name: pentest-report-generator
+    description: Generate a penetration test report from structured findings
+    run: scripts/pentest_report_generator.py
+    interpreter: python
 ---
 
 # Security Penetration Testing
@@ -312,3 +326,15 @@ Automated security checks on every PR: secret scanning (TruffleHog), dependency 
 | [code-reviewer](the `code-reviewer` skill (not included in mux)) | Code review practices, includes security review checklist |
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/security-pen-testing (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `security-pen-testing`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/vulnerability_scanner.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `vulnerability-scanner` | `scripts/vulnerability_scanner.py` | Generate OWASP Top 10 checklists and scan source code for vulnerability patterns. |
+| `dependency-auditor` | `scripts/dependency_auditor.py` | Analyze package manifests for known vulnerabilities and risky patterns. |
+| `pentest-report-generator` | `scripts/pentest_report_generator.py` | Generate a penetration test report from structured findings. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

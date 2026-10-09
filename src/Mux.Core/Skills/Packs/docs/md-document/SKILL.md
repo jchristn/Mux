@@ -11,6 +11,19 @@ description: >-
 category: docs
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/markdown-html/skills/md-document"
 license: MIT
+commands:
+  - name: markdown-parser
+    description: Parse markdown into the section tree the converter uses
+    run: scripts/markdown_parser.py
+    interpreter: python
+  - name: html-renderer
+    description: Render a parsed markdown section tree to single-file HTML
+    run: scripts/html_renderer.py
+    interpreter: python
+  - name: interactivity-injector
+    description: Add vanilla JavaScript interactivity to rendered HTML
+    run: scripts/interactivity_injector.py
+    interpreter: python
 ---
 
 # md-document: Long-form Markdown to HTML
@@ -110,3 +123,15 @@ Out of scope: nested lists, HTML inlines, footnotes, definition lists, task list
 - See `references/` for full citations
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/markdown-html/skills/md-document (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `md-document`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/markdown_parser.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `markdown-parser` | `scripts/markdown_parser.py` | Parse markdown into the section tree the converter uses. |
+| `html-renderer` | `scripts/html_renderer.py` | Render a parsed markdown section tree to single-file HTML. |
+| `interactivity-injector` | `scripts/interactivity_injector.py` | Add vanilla JavaScript interactivity to rendered HTML. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

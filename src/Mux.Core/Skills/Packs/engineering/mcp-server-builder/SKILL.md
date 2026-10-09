@@ -8,6 +8,15 @@ description: >-
 category: engineering
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/mcp-server-builder"
 license: MIT
+commands:
+  - name: mcp-validator
+    description: Validate MCP tool manifest files for common contract issues.
+    run: scripts/mcp_validator.py
+    interpreter: python
+  - name: openapi-to-mcp
+    description: Generate MCP server scaffold files from an OpenAPI specification.
+    run: scripts/openapi_to_mcp.py
+    interpreter: python
 ---
 
 # MCP Server Builder
@@ -107,3 +116,14 @@ Full hardening guidance: [${SKILL_DIR}/references/production-hardening-guide.md]
 - [README.md](README.md)
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/mcp-server-builder (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill mcp-server-builder <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `mcp-validator` | `scripts/mcp_validator.py` | Validate MCP tool manifest files for common contract issues. |
+| `openapi-to-mcp` | `scripts/openapi_to_mcp.py` | Generate MCP server scaffold files from an OpenAPI specification. |
+
+`openapi-to-mcp` reads JSON specs directly; YAML specs need PyYAML (`pip install pyyaml`).

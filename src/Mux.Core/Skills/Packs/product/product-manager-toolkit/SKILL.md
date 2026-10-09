@@ -7,6 +7,15 @@ description: >-
 category: product
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/product-team/skills/product-manager-toolkit"
 license: MIT
+commands:
+  - name: customer-interview-analyzer
+    description: Extract insights, patterns, and opportunities from customer interview notes.
+    run: scripts/customer_interview_analyzer.py
+    interpreter: python
+  - name: rice-prioritizer
+    description: Score features with RICE (reach, impact, confidence, effort).
+    run: scripts/rice_prioritizer.py
+    interpreter: python
 ---
 
 # Product Manager Toolkit
@@ -358,3 +367,12 @@ python3 "${SKILL_DIR}/scripts/customer_interview_analyzer.py" interview.txt json
 - `${SKILL_DIR}/references/frameworks.md` - Detailed framework documentation (RICE, MoSCoW, Kano, JTBD, etc.)
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/product-team/skills/product-manager-toolkit (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run the bundled scripts through mux with `run_skill product-manager-toolkit <command> [arguments]` (pass `--help` to see a command's options), or call them directly with `python3 "${SKILL_DIR}/scripts/<file>"`. Exit codes pass through: 0 means success, 1 means findings or a failed check, and 2 means invalid arguments. With `MUX_SKILL_DRY_RUN=1`, mux prints the command instead of running it.
+
+| Command | Script | What it does |
+|---|---|---|
+| `customer-interview-analyzer` | `scripts/customer_interview_analyzer.py` | Extract insights, patterns, and opportunities from customer interview notes. |
+| `rice-prioritizer` | `scripts/rice_prioritizer.py` | Score features with RICE (reach, impact, confidence, effort). |

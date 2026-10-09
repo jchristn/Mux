@@ -76,7 +76,7 @@ namespace Mux.Core.McpServer
                     if (!string.IsNullOrEmpty(_Options.ServerVersion)) server.ServerVersion = _Options.ServerVersion;
                     server.ServerInstructions = Instructions;
                     server.IncludeToolExceptionMessages = false;
-                    _Tools.RegisterAll((string name, string description, object schema, Func<RpcParameters, CancellationToken, Task<object>> handler) =>
+                    _Tools.RegisterAll((string name, string description, object schema, Func<RpcParameters?, CancellationToken, Task<object>> handler) =>
                         server.RegisterTool(name, description, schema, handler));
                     await server.RunAsync(cancellationToken).ConfigureAwait(false);
                 }
@@ -116,7 +116,7 @@ namespace Mux.Core.McpServer
                     server.AuthenticationHandler = (HttpListenerRequest request) => Task.FromResult(Authenticate(request.Headers["Authorization"], expected));
                 }
 
-                _Tools.RegisterAll((string name, string description, object schema, Func<RpcParameters, CancellationToken, Task<object>> handler) =>
+                _Tools.RegisterAll((string name, string description, object schema, Func<RpcParameters?, CancellationToken, Task<object>> handler) =>
                     server.RegisterTool(name, description, schema, handler));
                 using (cancellationToken.Register(() => { try { server.Stop(); } catch (Exception) { } }))
                 {

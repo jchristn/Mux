@@ -13,6 +13,19 @@ description: >-
 category: research
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/research/dossier/skills/dossier"
 license: MIT
+commands:
+  - name: source-tier-classifier
+    description: Classify a source URL as a primary, secondary, or tertiary source
+    run: scripts/source_tier_classifier.py
+    interpreter: python
+  - name: citation-tracker
+    description: Track the hypothesis-testing three-count audit and source tiers for a dossier session
+    run: scripts/citation_tracker.py
+    interpreter: python
+  - name: disconfirming-evidence-balance
+    description: Check that at least 30 percent of the search budget went to disconfirming evidence
+    run: scripts/disconfirming_evidence_balance.py
+    interpreter: python
 ---
 
 # Dossier: Decision-Grade Entity Research
@@ -324,3 +337,15 @@ new ExternalHyperlink({
 **Build pattern:** Path B (direct conversion). Research-pack sibling, hypothesis-testing variant.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/research/dossier/skills/dossier (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `dossier`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/source_tier_classifier.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `source-tier-classifier` | `scripts/source_tier_classifier.py` | Classify a source URL as a primary, secondary, or tertiary source. |
+| `citation-tracker` | `scripts/citation_tracker.py` | Track the hypothesis-testing three-count audit and source tiers for a dossier session. |
+| `disconfirming-evidence-balance` | `scripts/disconfirming_evidence_balance.py` | Check that at least 30 percent of the search budget went to disconfirming evidence. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).

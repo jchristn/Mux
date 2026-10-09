@@ -248,6 +248,11 @@ namespace Test.Shared
                     FileMentionsSuite.Create(),
                     TerminalLaunchSuite.Create(),
                     ImportedSkillsSuite.Create(),
+                    ScriptCommandsSuite2.Create(),
+                    ScriptCommandsSuite1.Create(),
+                    ScriptCommandsSuite3.Create(),
+                    SkillScriptRuntimeSuite.Create(),
+                    ShippedSkillsSuite.Create(),
 
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
@@ -307,7 +312,6 @@ namespace Test.Shared
                     PublisherManifestSuite.Create(),
                     PublishServiceSuite.Create(),
                     PublisherDriversSuite.Create(),
-                    ImportedSkillsSuite.Create(),
                     StartupRegistrarSuite.Create()
                 };
             }

@@ -12,6 +12,20 @@ description: >-
 category: workflow
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/agent-harness/skills/agent-harness"
 license: MIT
+commands:
+  - name: goal-compiler
+    description: Compile a goal into a verifiable task plan from a domain harness manifest.
+    run: scripts/goal_compiler.py
+    interpreter: python
+  - name: harness-manifest-builder
+    description: Scan a domain folder and emit its agent-harness manifest.
+    run: scripts/harness_manifest_builder.py
+    interpreter: python
+  - name: loop-controller
+    description: Bounded execute→verify→close loop state machine for the agent-harness skill.
+    run: scripts/loop_controller.py
+    interpreter: python
+    timeoutMs: 1800000
 ---
 
 # Agent Harness
@@ -139,5 +153,19 @@ python3 "${SKILL_DIR}/scripts/harness_manifest_builder.py" --domain engineering-
 
 See [${SKILL_DIR}/references/domain_harness_design.md](${SKILL_DIR}/references/domain_harness_design.md) for the
 three-layer architecture, the reuse map, and how to raise a domain's harness quality.
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill agent-harness goal-compiler --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/goal_compiler.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `goal-compiler` | `scripts/goal_compiler.py` | Compile a goal into a verifiable task plan from a domain harness manifest. |
+| `harness-manifest-builder` | `scripts/harness_manifest_builder.py` | Scan a domain folder and emit its agent-harness manifest. |
+| `loop-controller` | `scripts/loop_controller.py` | Bounded execute→verify→close loop state machine for the agent-harness skill. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
+
+`loop-controller` runs the commands in the goal file and can take a long time; its timeout is 30 minutes.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/agent-harness/skills/agent-harness (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

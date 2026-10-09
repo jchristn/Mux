@@ -467,7 +467,7 @@ namespace Test.Shared.Suites
         private static Dictionary<string, RegisteredMcpTool> Capture(MuxMcpTools tools)
         {
             Dictionary<string, RegisteredMcpTool> captured = new Dictionary<string, RegisteredMcpTool>(StringComparer.Ordinal);
-            tools.RegisterAll((string name, string description, object schema, Func<RpcParameters, CancellationToken, Task<object>> handler) =>
+            tools.RegisterAll((string name, string description, object schema, Func<RpcParameters?, CancellationToken, Task<object>> handler) =>
                 captured[name] = new RegisteredMcpTool { Description = description, Schema = schema, Handler = handler });
             return captured;
         }

@@ -706,6 +706,28 @@ namespace Test.Shared.Suites
                 }
             });
 
+            AddSync("FrontmatterValuesReadBlockScalars", "Frontmatter values read folded (>) and literal (|) YAML blocks, so no pack skill shows '>-' as its description", (string dir) =>
+            {
+                string folded = "---\nname: x\ndescription: >-\n  First line of the\n  description.\n\n  Second paragraph.\ncategory: data\n---\nBody\n";
+                MuxAssert.AreEqual("First line of the description. Second paragraph.", SkillImportNormalizer.ReadFrontmatterValue(folded, "description"), "folded block joined");
+                MuxAssert.AreEqual("data", SkillImportNormalizer.ReadFrontmatterValue(folded, "category"), "the next key still reads");
+                string literal = "---\nname: x\nnotes: |\n  one\n  two\n---\n";
+                MuxAssert.AreEqual("one\ntwo", SkillImportNormalizer.ReadFrontmatterValue(literal, "notes"), "literal block keeps line breaks");
+                MuxAssert.AreEqual("plain", SkillImportNormalizer.ReadFrontmatterValue("---\nname: x\ndescription: plain\n---\n", "description"), "plain value");
+                MuxAssert.AreEqual("quoted: yes", SkillImportNormalizer.ReadFrontmatterValue("---\nname: x\ndescription: \"quoted: yes\"\n---\n", "description"), "quoted value");
+                MuxAssert.AreEqual(string.Empty, SkillImportNormalizer.ReadFrontmatterValue("---\nname: x\ndescription: >\n---\n", "description"), "empty folded block");
+                MuxAssert.IsNull(SkillImportNormalizer.ReadFrontmatterValue("no frontmatter", "description"), "no frontmatter");
+                MuxAssert.IsNull(SkillImportNormalizer.ReadFrontmatterValue(folded, "missing"), "missing key");
+                foreach (SkillPack pack in SkillPackCatalog.Embedded.Packs)
+                {
+                    foreach (BundledSkill skill in pack.Skills)
+                    {
+                        string? description = SkillImportNormalizer.ReadFrontmatterValue(skill.SkillMarkdown, "description");
+                        MuxAssert.IsTrue(!string.IsNullOrWhiteSpace(description) && description != ">-" && description != ">" && description != "|", pack.Id + "/" + skill.Id + " has a real description: " + description);
+                    }
+                }
+            });
+
             return new TestSuiteDescriptor(SuiteId, "Skill infrastructure: placeholders, bundled skills, packs, importer, surfaces", cases);
         }
 

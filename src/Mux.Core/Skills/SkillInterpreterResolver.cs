@@ -50,7 +50,7 @@ namespace Mux.Core.Skills
                     startInfo.ArgumentList.Add("-File");
                     break;
                 case "python":
-                    startInfo.FileName = "python";
+                    startInfo.FileName = ResolvePython();
                     break;
                 case "node":
                     startInfo.FileName = "node";
@@ -74,6 +74,37 @@ namespace Mux.Core.Skills
             }
 
             return startInfo;
+        }
+
+        /// <summary>
+        /// The Python executable for the <c>python</c> interpreter: the first of <c>python3</c> then <c>python</c> on
+        /// PATH (macOS and many Linux systems ship only <c>python3</c>), or <c>python</c> then <c>py</c> on Windows. Falls
+        /// back to <c>python</c> so a missing interpreter still fails with a clear "not found" error.
+        /// </summary>
+        /// <param name="pathVariable">The PATH to search, or null for the process PATH.</param>
+        /// <param name="isWindows">Whether to use Windows names, or null for the current platform.</param>
+        /// <returns>The executable name or full path.</returns>
+        public static string ResolvePython(string? pathVariable = null, bool? isWindows = null)
+        {
+            bool windows = isWindows ?? OperatingSystem.IsWindows();
+            string[] candidates = windows ? new[] { "python", "py" } : new[] { "python3", "python" };
+            string[] suffixes = windows ? new[] { ".exe", ".cmd", ".bat" } : new[] { string.Empty };
+            foreach (string candidate in candidates)
+            {
+                foreach (string directory in (pathVariable ?? Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(System.IO.Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    foreach (string suffix in suffixes)
+                    {
+                        string full = System.IO.Path.Combine(directory.Trim(), candidate + suffix);
+                        if (System.IO.File.Exists(full))
+                        {
+                            return full;
+                        }
+                    }
+                }
+            }
+
+            return "python";
         }
     }
 }

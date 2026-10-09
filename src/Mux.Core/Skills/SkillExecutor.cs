@@ -69,6 +69,20 @@ namespace Mux.Core.Skills
                 string scriptPath = ResolveScriptPath(skill, command, out tempFile);
 
                 ProcessStartInfo startInfo = SkillInterpreterResolver.BuildStartInfo(command.Interpreter, scriptPath, arguments);
+
+                // A bundled script cannot honor MUX_SKILL_DRY_RUN itself, so a dry run reports the command instead of
+                // running it (inline blocks handle dry runs in their own code, as the pwsh helper does).
+                if (!string.IsNullOrEmpty(command.ScriptPath) && IsDryRun(environment))
+                {
+                    List<string> shown = new List<string> { command.Interpreter, command.ScriptPath! };
+                    if (arguments != null) shown.AddRange(arguments);
+                    return new ToolResult
+                    {
+                        ToolCallId = toolCallId,
+                        Success = true,
+                        Content = JsonSerializer.Serialize(new { stdout = "DRYRUN: " + string.Join(" ", shown) + "\n", stderr = string.Empty, exit_code = 0, timed_out = false })
+                    };
+                }
                 startInfo.WorkingDirectory = string.IsNullOrWhiteSpace(workingDirectory) ? skill.DirectoryPath : workingDirectory;
                 startInfo.Environment["MUX_SKILL_NAME"] = skill.Manifest.Name;
                 foreach (string variable in SkillPathResolver.EnvironmentVariables)
@@ -256,5 +270,20 @@ namespace Mux.Core.Skills
         }
 
         #endregion
+
+        private bool IsDryRun(IReadOnlyDictionary<string, string>? environment)
+        {
+            if (environment != null && environment.TryGetValue(DefaultSkillHelpers.DryRunVariable, out string? value))
+            {
+                return value == "1";
+            }
+
+            if (DefaultEnvironment.TryGetValue(DefaultSkillHelpers.DryRunVariable, out string? configured))
+            {
+                return configured == "1";
+            }
+
+            return Environment.GetEnvironmentVariable(DefaultSkillHelpers.DryRunVariable) == "1";
+        }
     }
 }

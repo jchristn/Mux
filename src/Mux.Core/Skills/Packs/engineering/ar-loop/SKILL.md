@@ -6,6 +6,12 @@ description: >-
 category: research
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/autoresearch-agent/skills/loop"
 license: MIT
+commands:
+  - name: run-experiment
+    description: Run one experiment iteration: evaluate, parse the metric, keep or discard, and roll back on failure.
+    run: scripts/run_experiment.py
+    interpreter: python
+    timeoutMs: 1800000
 ---
 
 # /ar:loop, Autonomous Experiment Loop
@@ -124,5 +130,17 @@ When user runs `/ar:loop stop {experiment}`:
 - **3-day auto-expiry**: /loop jobs expire after 3 days. For longer experiments, the user must re-run `/ar:loop` to restart. Results persist, the new loop picks up where the old one left off.
 - **One loop per experiment**: Don't start multiple loops for the same experiment.
 - **Concurrent experiments**: Multiple experiments can loop simultaneously ONLY if they're on different git branches (which they are by default, each experiment gets `autoresearch/{domain}/{name}`).
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill ar-loop run-experiment --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/run_experiment.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `run-experiment` | `scripts/run_experiment.py` | Run one experiment iteration: evaluate, parse the metric, keep or discard, and roll back on failure. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
+
+`run-experiment` runs the experiment command you configured and can take a long time; its timeout is 30 minutes.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/autoresearch-agent/skills/loop (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

@@ -7,6 +7,11 @@ description: >-
 category: security
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/env-secrets-manager"
 license: MIT
+commands:
+  - name: env-auditor
+    description: Audit a repository for likely secret leaks in env files and source.
+    run: scripts/env_auditor.py
+    interpreter: python
 ---
 
 # Env & Secrets Manager
@@ -264,5 +269,15 @@ This skill covers env hygiene and secret detection. For deeper coverage of relat
 | **CI/CD Pipeline Builder** | `engineering/ci-cd-pipeline-builder` | Pipeline architecture, secret injection patterns |
 | **Infrastructure as Code** | `engineering/infrastructure-as-code` | Terraform/Pulumi secret backend configuration |
 | **Container Orchestration** | `engineering/container-orchestration` | Kubernetes secret mounting, sealed secrets |
+
+## Commands
+
+The bundled scripts are skill commands. Run them with `run_skill`, for example `run_skill env-secrets-manager env-auditor --help`; the arguments after the command go straight to the script. They also run directly, as `python3 "${SKILL_DIR}/scripts/env_auditor.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `env-auditor` | `scripts/env_auditor.py` | Audit a repository for likely secret leaks in env files and source. |
+
+Exit codes pass straight through from the scripts and match mux's convention: 0 means success, 1 means the script reported findings or failed, and 2 means invalid input or a missing dependency. A dry run (`MUX_SKILL_DRY_RUN=1`) prints the command instead of running it.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/engineering/skills/env-secrets-manager (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->

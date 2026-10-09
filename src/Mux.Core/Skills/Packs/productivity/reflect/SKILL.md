@@ -12,6 +12,19 @@ description: >-
 category: productivity
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/productivity/reflect/skills/reflect"
 license: MIT
+commands:
+  - name: bias-pattern-detector
+    description: Scan conversation text for bias signal patterns
+    run: scripts/bias_pattern_detector.py
+    interpreter: python
+  - name: conversation-depth-analyzer
+    description: Detect implicit reflection triggers in a conversation
+    run: scripts/conversation_depth_analyzer.py
+    interpreter: python
+  - name: directional-recommendation-validator
+    description: Verify that a reflection ends with a directional recommendation
+    run: scripts/directional_recommendation_validator.py
+    interpreter: python
 ---
 
 # Reflect: Mid-Conversation Reassessment
@@ -188,3 +201,15 @@ The closing is always specific: never "you should think more about this" or "con
 **Build pattern:** Path B (direct conversion). Productivity light-prompt-flow sibling of capture.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/productivity/reflect/skills/reflect (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
+
+## Commands
+
+Run these with `run_skill` (skill `reflect`); each passes its arguments to the bundled script and returns its output and exit code. Add `--help` to see a script's options. Outside mux, run the same script directly, for example `python3 "${SKILL_DIR}/scripts/bias_pattern_detector.py" --help`.
+
+| Command | Script | What it does |
+|---|---|---|
+| `bias-pattern-detector` | `scripts/bias_pattern_detector.py` | Scan conversation text for bias signal patterns. |
+| `conversation-depth-analyzer` | `scripts/conversation_depth_analyzer.py` | Detect implicit reflection triggers in a conversation. |
+| `directional-recommendation-validator` | `scripts/directional_recommendation_validator.py` | Verify that a reflection ends with a directional recommendation. |
+
+Exit codes pass through from the script: 0 means success, 1 means the script reported problems, and 2 usually means invalid arguments (argparse uses 2 for usage errors).
