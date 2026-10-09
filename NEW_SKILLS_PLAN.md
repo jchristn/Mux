@@ -129,7 +129,7 @@ The full library after this plan is 152 skills. Listed one line each, that is ro
 
 Each family is one category class in `src/Mux.Core/Skills/`, merged in `DefaultSkillLibrary.All()`. Every command skill below uses `pwsh`, detects its tool, sets `appliesTo`, and follows the exit-code convention from the guiding decisions. Commands that take a filter or path read it from `$args[0]`.
 
-**Status:** the shared infrastructure, 2.0 (project detection), 2.1 (JavaScript and TypeScript), and 2.2 (Python) are done: 16 new default skills, 62 in the library. 2.3 through 2.8 are next.
+**Status:** the shared infrastructure, 2.0 (project detection), 2.1 (JavaScript and TypeScript), 2.2 (Python), 2.3 (React), 2.4 (Java), 2.5 (C and C++), and 2.8 (Go and Rust) are done: 42 new default skills, 88 in the library. 2.6 (containers and orchestration) and 2.7 (cloud providers), with the `requiresTools` gate and the production guard, are next.
 
 Shared infrastructure, as built:
 
@@ -174,7 +174,7 @@ Environment detection order: `uv.lock` → uv, `poetry.lock` → poetry, `Pipfil
 | `py-typecheck` | no | `check` | mypy or pyright, whichever is configured in `pyproject.toml`. |
 | `py-deps` | no | `outdated`, `audit` | `audit` uses `pip-audit` when installed. |
 
-### 2.3 React (row 14): `DefaultReactSkills.cs`
+### 2.3 React (row 14): `DefaultReactSkills.cs` (done)
 
 React skills sit on top of the JavaScript detection and only list when `package.json` depends on `react`. `appliesTo` cannot express a dependency check, so the skills use `appliesTo: [package.json]` and each command exits 2 with a note when React is absent. A dependency-aware `appliesTo` is a possible follow-up, not a prerequisite.
 
@@ -187,7 +187,7 @@ React skills sit on top of the JavaScript detection and only list when `package.
 | `react-lint-hooks` | no | `check` | Runs ESLint restricted to `react-hooks/*` and `jsx-a11y/*` rules when those plugins are installed, reporting what it skipped otherwise. |
 | `react-upgrade-check` | no | `report` | Versions of `react`, `react-dom`, `@types/react*`, and peer-dependency conflicts reported by the package manager. |
 
-### 2.4 Java (row 15): `DefaultJavaSkills.cs`
+### 2.4 Java (row 15): `DefaultJavaSkills.cs` (done)
 
 Build tool detection order: `mvnw` → Maven wrapper, `gradlew` → Gradle wrapper, `pom.xml` → `mvn`, `build.gradle*` → `gradle`. Wrappers always win because they pin the version the project tested with. `appliesTo: [pom.xml, build.gradle, build.gradle.kts, mvnw, gradlew]`.
 
@@ -200,7 +200,7 @@ Build tool detection order: `mvnw` → Maven wrapper, `gradlew` → Gradle wrapp
 | `java-deps` | no | `tree`, `updates` | `dependency:tree` / `dependencies`; `versions:display-dependency-updates` or the Gradle versions plugin. |
 | `java-new-class` | yes | `create` | `create com.example.Foo [class\|interface\|record\|enum]` under `src/main/java`, with a matching test under `src/test/java` when JUnit is present. |
 
-### 2.5 C++ (row 22): `DefaultCppSkills.cs`
+### 2.5 C++ (row 22): `DefaultCppSkills.cs` (done)
 
 CMake is the supported path, since it covers most modern C++ projects and `compile_commands.json` makes clang-tidy work. Presets win when `CMakePresets.json` exists. Plain Makefile projects get `cpp-build` only. `appliesTo: [CMakeLists.txt, CMakePresets.json, Makefile, meson.build]`.
 
@@ -322,19 +322,19 @@ Together 2.6 and 2.7 add 50 skills (12 in 2.6, 38 in 2.7), almost all hidden unl
 - [ ] Fixtures: fake CLIs (`aws`, `kubectl`, `helm`, `az`, `gcloud`, and so on) written as small scripts in a temp `PATH` that echo their arguments, so `CloudSkillsSuite` asserts the exact command each skill would run, that previews precede applies, that the production guard refuses without `--confirm`, that secret commands never request values, and that no command line contains `delete`, `destroy`, or `--delete`.
 - [ ] Live runs stay manual: there is no CI account for any provider, and none should be added for this.
 
-### 2.8 Go and Rust (row 21b)
+### 2.8 Go and Rust (row 21b) (done)
 
 Not requested by name, but Go and Rust are each common enough that their absence would read as a hole next to C++ and Java. Each skill is small because the toolchains are already uniform.
 
-- [ ] `DefaultGoSkills.cs`, `appliesTo: [go.mod]`: `go-build` (`build`, `vet`), `go-test` (`all`, `filter`, `race`), `go-lint` (`check` with staticcheck or golangci-lint when installed), `go-mod` (`tidy`, `outdated`).
-- [ ] `DefaultRustSkills.cs`, `appliesTo: [Cargo.toml]`: `cargo-build` (`debug`, `release`), `cargo-test` (`all`, `filter`), `cargo-clippy` (`check`, `fix`), `cargo-fmt` (`apply`, `verify`).
+- [x] `DefaultGoSkills.cs`, `appliesTo: [go.mod]`: `go-build` (`build`, `vet`), `go-test` (`all`, `filter`, `race`), `go-lint` (`check` with staticcheck or golangci-lint when installed), `go-mod` (`tidy`, `outdated`).
+- [x] `DefaultRustSkills.cs`, `appliesTo: [Cargo.toml]`: `cargo-build` (`debug`, `release`), `cargo-test` (`all`, `filter`), `cargo-clippy` (`check`, `fix`), `cargo-fmt` (`apply`, `verify`).
 
 ### Phase 2 tasks
 
-- [~] Add the category classes above (2.0 through 2.8), one class per file. Done: 2.0, 2.1, 2.2.
-- [~] Register them in `DefaultSkillLibrary.Definitions()`. Done for 2.0 through 2.2.
+- [~] Add the category classes above (2.0 through 2.8), one class per file. Done: 2.0 through 2.5 and 2.8. **Changed in 2.3:** `react-lint-hooks` captures ESLint's unix-format output and keeps only `react-hooks/` and `jsx-a11y/` findings, rather than configuring ESLint to run only those rules, so it works with any existing ESLint config. The JavaScript test-runner selection moved into the shared helper (`Invoke-MuxJsTestRunner`) so React reuses it.
+- [~] Register them in `DefaultSkillLibrary.Definitions()`. Done for 2.0 through 2.5 and 2.8.
 - [~] Fixture projects: manifests and lockfiles only, no dependencies installed. **Changed:** fixtures are generated by the test code in temp directories (one small lambda per case) instead of checked into `src/Test.Shared/Fixtures/projects/`, which keeps each case's inputs next to its assertion and avoids committing lockfiles that tooling might try to act on. Done: npm, pnpm, yarn classic and Berry, bun, packageManager field, pnpm workspace package, Vitest, Jest, Mocha-free node --test, Biome, Prettier, uv, poetry with and without a lockfile, pipenv, pip with and without .venv, pyright, and non-projects.
-- [~] `ToolchainSkillsSuite` (named for what it covers): runs each case with `MUX_SKILL_DRY_RUN=1` and asserts the printed command and exit code, so detection is tested on every platform without Node, Python, a JDK, or a compiler in CI; cases are skipped when `pwsh` is not on PATH. It also checks that seeding writes the helper and the prelude, and runs `project-detect json` for real against a mixed repository. 28 cases so far, for 2.0 through 2.2. A manual check ran `js-test all` for real against a `node --test` project: exit 0 when passing and exit 1 when a test fails.
+- [~] `ToolchainSkillsSuite` (named for what it covers): runs each case with `MUX_SKILL_DRY_RUN=1` and asserts the printed command and exit code, so detection is tested on every platform without Node, Python, a JDK, or a compiler in CI; cases are skipped when `pwsh` is not on PATH. It also checks that seeding writes the helper and the prelude, and runs `project-detect json` for real against a mixed repository. 57 cases so far, covering 2.0 through 2.5 and 2.8, including real (non-dry-run) scaffolding by `react-new-component` and `java-new-class` and their refusal to overwrite. A manual check ran `js-test all` for real against a `node --test` project: exit 0 when passing and exit 1 when a test fails.
 - [ ] `ToolchainLiveSuite`: opt-in (skipped unless `MUX_TEST_LIVE_TOOLCHAINS=1`), runs the real commands against fixtures where the toolchain is installed.
 - [ ] `appliesTo` cases: each fixture lists exactly its own family plus the ungated skills.
 

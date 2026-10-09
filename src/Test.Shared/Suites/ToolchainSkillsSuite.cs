@@ -93,15 +93,47 @@ namespace Test.Shared.Suites
                         }
                     }).ConfigureAwait(false);
                 }, skip: !pwsh, skipReason: "pwsh is not on PATH")
-            };
+,
+                new TestCaseDescriptor(SuiteId, "ScaffoldsWriteFilesAndRefuseOverwrite", "react-new-component and java-new-class write files and refuse to overwrite", async (CancellationToken ct) =>
+                {
+                    await WithTempAsync(async (string root) =>
+                    {
+                        string skills = Path.Combine(root, "skills");
+                        DefaultSkillLibrary.SeedInto(skills);
 
-            foreach (ToolchainCase toolchainCase in Cases())
+                        string web = Path.Combine(root, "web");
+                        Directory.CreateDirectory(Path.Combine(web, ".git"));
+                        Write(web, "package.json", "{\"dependencies\":{\"react\":\"18\"}}");
+                        Write(Path.Combine(web, "src"), "index.jsx", string.Empty);
+                        ToolResult created = await RunAsync(skills, "react-new-component", "create", new List<string> { "Card" }, web, false, ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(0, ReadExit(created), "component created: " + created.Content);
+                        string card = Path.Combine(web, "src", "components", "Card.jsx");
+                        MuxAssert.IsTrue(File.Exists(card), "Card.jsx written");
+                        MuxAssert.Contains("export function Card", File.ReadAllText(card), "component body");
+                        ToolResult again = await RunAsync(skills, "react-new-component", "create", new List<string> { "Card" }, web, false, ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(1, ReadExit(again), "second create refuses to overwrite");
+
+                        string api = Path.Combine(root, "api");
+                        Directory.CreateDirectory(Path.Combine(api, ".git"));
+                        Write(api, "pom.xml", "<project><artifactId>junit-jupiter</artifactId></project>");
+                        ToolResult javaCreated = await RunAsync(skills, "java-new-class", "create", new List<string> { "com.example.Orders" }, api, false, ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(0, ReadExit(javaCreated), "class created: " + javaCreated.Content);
+                        string orders = Path.Combine(api, "src", "main", "java", "com", "example", "Orders.java");
+                        string ordersTest = Path.Combine(api, "src", "test", "java", "com", "example", "OrdersTest.java");
+                        MuxAssert.Contains("package com.example;", File.ReadAllText(orders), "package line");
+                        MuxAssert.Contains("org.junit.jupiter.api.Test", File.ReadAllText(ordersTest), "JUnit 5 test");
+                    }).ConfigureAwait(false);
+                }, skip: !pwsh, skipReason: "pwsh is not on PATH")            };
+
+            List<ToolchainCase> all = new List<ToolchainCase>(Cases());
+            all.AddRange(MoreCases());
+            foreach (ToolchainCase toolchainCase in all)
             {
                 ToolchainCase captured = toolchainCase;
                 cases.Add(new TestCaseDescriptor(SuiteId, captured.Id, captured.Name, (CancellationToken ct) => RunCaseAsync(captured, ct), skip: !pwsh, skipReason: "pwsh is not on PATH"));
             }
 
-            return new TestSuiteDescriptor(SuiteId, "Toolchain skills (JavaScript, Python, project detection) in dry-run mode", cases);
+            return new TestSuiteDescriptor(SuiteId, "Toolchain skills (project detection, JavaScript, Python, React, Java, C++, Go, Rust) in dry-run mode", cases);
         }
 
         #endregion
@@ -223,7 +255,133 @@ namespace Test.Shared.Suites
             };
         }
 
-        private static ToolchainCase Js(string id, string name, string packageJson, string lockfile, string skill, string command, string? argument, string expected)
+        private static IEnumerable<ToolchainCase> MoreCases()
+        {
+            const string ReactPackage = "{\"dependencies\":{\"react\":\"18.3.1\",\"react-dom\":\"18.3.1\"},\"devDependencies\":{\"vitest\":\"2\",\"@testing-library/react\":\"16\",\"eslint-plugin-react-hooks\":\"5\"}}";
+
+            // --- React ---
+            yield return Js("ReactRequiresReact", "React skills exit 2 outside React projects", "{}", "package-lock.json", "react-test", "component", "Button", "not a React project", 2);
+            yield return new ToolchainCase
+            {
+                Id = "ReactComponentDryRun",
+                Name = "react-new-component plans a .tsx component and its test",
+                Fixture = (string dir) => { Write(dir, "package.json", ReactPackage); Write(dir, "pnpm-lock.yaml", string.Empty); Write(dir, "tsconfig.json", "{}"); Write(Path.Combine(dir, "src"), "main.tsx", string.Empty); },
+                Skill = "react-new-component",
+                Command = "create",
+                Arguments = new List<string> { "Button" },
+                Expected = new List<string> { "DRYRUN: create", "Button.tsx", "Button.test.tsx" }
+            };
+            yield return Js("ReactComponentNameChecked", "Component names must be PascalCase", ReactPackage, "pnpm-lock.yaml", "react-new-component", "create", "button", "PascalCase", 2);
+            yield return Js("ReactTestComponent", "react-test filters the runner by component name", ReactPackage, "pnpm-lock.yaml", "react-test", "component", "Button", "DRYRUN: pnpm exec vitest run Button");
+            yield return Js("ReactLintHooks", "react-lint-hooks runs ESLint in unix format", ReactPackage, "pnpm-lock.yaml", "react-lint-hooks", "check", null, "DRYRUN: pnpm exec eslint . --format unix");
+            yield return Js("ReactUpgradeCheck", "react-upgrade-check reports declared versions and lists installs", ReactPackage, "pnpm-lock.yaml", "react-upgrade-check", "report", null, "declared react 18.3.1");
+
+            // --- Java ---
+            yield return new ToolchainCase
+            {
+                Id = "MavenWrapperWins",
+                Name = "The Maven wrapper is preferred over mvn",
+                Fixture = (string dir) => { Write(dir, "pom.xml", "<project/>"); Write(dir, "mvnw", string.Empty); Write(dir, "mvnw.cmd", string.Empty); },
+                Skill = "java-test",
+                Command = "all",
+                Expected = new List<string> { "mvnw", "-B test" }
+            };
+            yield return new ToolchainCase
+            {
+                Id = "GradleWrapperFilter",
+                Name = "Gradle filters use --tests through the wrapper",
+                Fixture = (string dir) => { Write(dir, "build.gradle.kts", "plugins { java }"); Write(dir, "gradlew", string.Empty); Write(dir, "gradlew.bat", string.Empty); },
+                Skill = "java-test",
+                Command = "filter",
+                Arguments = new List<string> { "com.example.FooTest" },
+                Expected = new List<string> { "gradlew", "--console=plain test --tests com.example.FooTest" }
+            };
+            yield return Java("MavenPackage", "Maven package skips tests", "pom.xml", "<project/>", "java-build", "package", null, "DRYRUN: mvn -B -q package -DskipTests");
+            yield return Java("SpotlessRequired", "java-format needs Spotless", "pom.xml", "<project/>", "java-format", "apply", null, "Spotless is not configured", 2);
+            yield return Java("GradleSpotless", "Gradle Spotless applies with spotlessApply", "build.gradle.kts", "plugins { id(\"com.diffplug.spotless\") }", "java-format", "apply", null, "DRYRUN: gradle --console=plain spotlessApply");
+            yield return Java("MavenCheckstyle", "Configured Checkstyle runs checkstyle:check", "pom.xml", "<project><artifactId>maven-checkstyle-plugin</artifactId></project>", "java-lint", "check", null, "checkstyle:check");
+            yield return Java("JavaNewClassDryRun", "java-new-class plans the class and a JUnit 5 test", "pom.xml", "<project><artifactId>junit-jupiter</artifactId></project>", "java-new-class", "create", "com.example.UserService", "UserServiceTest.java");
+            yield return new ToolchainCase
+            {
+                Id = "NotAJavaProject",
+                Name = "A directory without a build file exits 2",
+                Fixture = (string dir) => Write(dir, "README.md", "hi"),
+                Skill = "java-build",
+                Command = "compile",
+                Expected = new List<string> { "not a Maven or Gradle project" },
+                ExpectedExit = 2
+            };
+
+            // --- C and C++ ---
+            yield return Cpp("CMakeConfigureDebug", "CMake debug configure exports compile commands", "CMakeLists.txt", "cpp-configure", "debug", null, "DRYRUN: cmake -S . -B build/debug -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON");
+            yield return Cpp("CMakeBuild", "CMake builds in parallel", "CMakeLists.txt", "cpp-build", "build", null, "--parallel");
+            yield return new ToolchainCase
+            {
+                Id = "CMakePreset",
+                Name = "Presets configure with cmake --preset",
+                Fixture = (string dir) => { Write(dir, "CMakeLists.txt", "project(x)"); Write(dir, "CMakePresets.json", "{}"); },
+                Skill = "cpp-configure",
+                Command = "preset",
+                Arguments = new List<string> { "dev" },
+                Expected = new List<string> { "DRYRUN: cmake --preset dev" }
+            };
+            yield return Cpp("CTestFilter", "cpp-test filter passes -R to CTest", "CMakeLists.txt", "cpp-test", "filter", "parser", "DRYRUN: ctest --test-dir build/debug --output-on-failure -R parser");
+            yield return Cpp("MesonSetup", "Meson projects configure with meson setup", "meson.build", "cpp-configure", "debug", null, "DRYRUN: meson setup build/debug --buildtype=debug");
+            yield return Cpp("MakeBuild", "Makefile projects build with make -j", "Makefile", "cpp-build", "build", null, "DRYRUN: make -j");
+            yield return new ToolchainCase
+            {
+                Id = "ClangFormatVerify",
+                Name = "cpp-format verify runs clang-format --dry-run --Werror on sources",
+                Fixture = (string dir) => { Write(dir, "CMakeLists.txt", "project(x)"); Write(Path.Combine(dir, "src"), "main.cpp", "int main() {}"); },
+                Skill = "cpp-format",
+                Command = "verify",
+                Expected = new List<string> { "DRYRUN: clang-format --dry-run --Werror", "main.cpp" }
+            };
+            yield return Cpp("AddressSanitizer", "cpp-sanitize asan uses its own tree and flags", "CMakeLists.txt", "cpp-sanitize", "asan", null, "-fsanitize=address");
+
+            // --- Go and Rust ---
+            yield return Simple("GoTestFilter", "go-test filter passes -run", "go.mod", "module x", "go-test", "filter", "TestParse", "DRYRUN: go test ./... -run TestParse");
+            yield return new ToolchainCase
+            {
+                Id = "GolangciWhenConfigured",
+                Name = "go-lint uses golangci-lint when configured",
+                Fixture = (string dir) => { Write(dir, "go.mod", "module x"); Write(dir, ".golangci.yml", "run: {}"); },
+                Skill = "go-lint",
+                Command = "check",
+                Expected = new List<string> { "DRYRUN: golangci-lint run" }
+            };
+            yield return Simple("GoModTidy", "go-mod tidy runs go mod tidy", "go.mod", "module x", "go-mod", "tidy", null, "DRYRUN: go mod tidy");
+            yield return Simple("ClippyCheck", "cargo-clippy check denies warnings", "Cargo.toml", "[package]", "cargo-clippy", "check", null, "DRYRUN: cargo clippy --all-targets -- -D warnings");
+            yield return Simple("CargoFmtVerify", "cargo-fmt verify runs cargo fmt --check", "Cargo.toml", "[package]", "cargo-fmt", "verify", null, "DRYRUN: cargo fmt --check");
+            yield return Simple("NotARustCrate", "A directory without Cargo.toml exits 2", "README.md", "hi", "cargo-test", "all", null, "not a Rust crate", 2);
+        }
+
+        private static ToolchainCase Java(string id, string name, string file, string content, string skill, string command, string? argument, string expected, int exit = 0)
+        {
+            return Simple(id, name, file, content, skill, command, argument, expected, exit);
+        }
+
+        private static ToolchainCase Cpp(string id, string name, string file, string skill, string command, string? argument, string expected)
+        {
+            return Simple(id, name, file, "project(x)", skill, command, argument, expected);
+        }
+
+        private static ToolchainCase Simple(string id, string name, string file, string content, string skill, string command, string? argument, string expected, int exit = 0)
+        {
+            return new ToolchainCase
+            {
+                Id = id,
+                Name = name,
+                Fixture = (string dir) => Write(dir, file, content),
+                Skill = skill,
+                Command = command,
+                Arguments = argument == null ? new List<string>() : new List<string> { argument },
+                Expected = new List<string> { expected },
+                ExpectedExit = exit
+            };
+        }
+
+        private static ToolchainCase Js(string id, string name, string packageJson, string lockfile, string skill, string command, string? argument, string expected, int exit = 0)
         {
             return new ToolchainCase
             {
@@ -233,7 +391,8 @@ namespace Test.Shared.Suites
                 Skill = skill,
                 Command = command,
                 Arguments = argument == null ? new List<string>() : new List<string> { argument },
-                Expected = new List<string> { expected }
+                Expected = new List<string> { expected },
+                ExpectedExit = exit
             };
         }
 

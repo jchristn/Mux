@@ -199,6 +199,17 @@ function Invoke-MuxPackageBin {
     Invoke-MuxTool -Tool $tool -Arguments $all -InstallHint (Get-MuxNodeInstallHint $Manager) -AllowFailure:$AllowFailure
 }
 
+# Returns @{ Tool; Arguments } for running a project binary through the package manager, without running it.
+function Get-MuxPackageBinCommand {
+    param([string]$Manager, [string]$Bin, [string[]]$Arguments = @())
+    switch ($Manager) {
+        'pnpm' { return @{ Tool = 'pnpm'; Arguments = @('exec', $Bin) + $Arguments } }
+        'yarn' { return @{ Tool = 'yarn'; Arguments = @('run', $Bin) + $Arguments } }
+        'bun' { return @{ Tool = 'bunx'; Arguments = @($Bin) + $Arguments } }
+        default { return @{ Tool = 'npx'; Arguments = @('--no-install', $Bin) + $Arguments } }
+    }
+}
+
 function Get-MuxNodeInstallHint {
     param([string]$Manager)
     switch ($Manager) {
@@ -207,6 +218,62 @@ function Get-MuxNodeInstallHint {
         'bun' { return 'Install bun from https://bun.sh.' }
         default { return 'Install Node.js (which includes npm) from https://nodejs.org.' }
     }
+}
+
+# Picks the JavaScript test runner from the project's dependencies: Vitest, Jest, Mocha, then node --test.
+function Get-MuxJsTestRunner {
+    param($Package)
+    foreach ($runner in @('vitest', 'jest', 'mocha')) { if (Test-MuxPackageDependency $Package $runner) { return $runner } }
+    return 'node'
+}
+
+# Runs the detected JavaScript test runner in non-watch mode. Mode is all, filter, or coverage.
+function Invoke-MuxJsTestRunner {
+    param([string]$Manager, $Package, [string]$Mode, [string]$Filter = '')
+    $env:CI = '1'
+    switch (Get-MuxJsTestRunner $Package) {
+        'vitest' {
+            $a = @('run')
+            if ($Mode -eq 'filter') { $a += $Filter }
+            if ($Mode -eq 'coverage') { $a += '--coverage' }
+            Invoke-MuxPackageBin -Manager $Manager -Bin 'vitest' -Arguments $a
+        }
+        'jest' {
+            $a = @('--ci')
+            if ($Mode -eq 'filter') { $a += $Filter }
+            if ($Mode -eq 'coverage') { $a += '--coverage' }
+            Invoke-MuxPackageBin -Manager $Manager -Bin 'jest' -Arguments $a
+        }
+        'mocha' {
+            $a = @()
+            if ($Mode -eq 'filter') { $a += @('--grep', $Filter) }
+            if ($Mode -eq 'coverage') { Invoke-MuxPackageBin -Manager $Manager -Bin 'c8' -Arguments (@('mocha') + $a) }
+            else { Invoke-MuxPackageBin -Manager $Manager -Bin 'mocha' -Arguments $a }
+        }
+        default {
+            $a = @('--test')
+            if ($Mode -eq 'filter') { $a += ('--test-name-pattern=' + $Filter) }
+            if ($Mode -eq 'coverage') { $a += '--experimental-test-coverage' }
+            Invoke-MuxTool -Tool 'node' -Arguments $a -InstallHint 'Install Node.js from https://nodejs.org.'
+        }
+    }
+}
+
+# Exits 2 unless the project depends on React.
+function Assert-MuxReact {
+    param($Package)
+    if (-not (Test-MuxPackageDependency $Package 'react')) { Exit-MuxNotApplicable 'package.json does not depend on react; this is not a React project.' }
+}
+
+# Writes a new file, refusing to overwrite. In a dry run only prints what would be written.
+function New-MuxFile {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Content)
+    if (Test-Path -LiteralPath $Path) { Write-Output "mux: $Path already exists; not overwriting."; exit 1 }
+    if (Test-MuxDryRun) { Write-Output "DRYRUN: create $Path"; return }
+    $parent = Split-Path -Parent $Path
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+    Set-Content -LiteralPath $Path -Value $Content -NoNewline
+    Write-Output "Created $Path"
 }
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -291,6 +358,98 @@ function Test-MuxPythonModule {
     } catch {
         return $false
     }
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+# Java (Maven and Gradle)
+# ---------------------------------------------------------------------------------------------------------------
+
+function Get-MuxJavaProject {
+    $dir = Find-MuxUp -Names @('mvnw', 'gradlew', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts')
+    if (-not $dir) { Exit-MuxNotApplicable 'no pom.xml, build.gradle, or wrapper found; this is not a Maven or Gradle project.' }
+    return $dir
+}
+
+# Returns @{ Kind = 'maven'|'gradle'; Tool = <wrapper path or mvn/gradle>; BuildFile = <path or empty> }. Wrappers
+# win because they pin the build tool version the project was tested with.
+function Get-MuxJavaBuild {
+    param([Parameter(Mandatory = $true)][string]$Dir)
+    $onWindows = $IsWindows -or $env:OS -eq 'Windows_NT'
+    $mvnw = Join-Path $Dir $(if ($onWindows) { 'mvnw.cmd' } else { 'mvnw' })
+    $gradlew = Join-Path $Dir $(if ($onWindows) { 'gradlew.bat' } else { 'gradlew' })
+    $pom = Join-Path $Dir 'pom.xml'
+    $gradleFile = @('build.gradle.kts', 'build.gradle') | ForEach-Object { Join-Path $Dir $_ } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if (Test-Path -LiteralPath $mvnw) { return @{ Kind = 'maven'; Tool = $mvnw; BuildFile = $pom } }
+    if (Test-Path -LiteralPath $gradlew) { return @{ Kind = 'gradle'; Tool = $gradlew; BuildFile = $gradleFile } }
+    if (Test-Path -LiteralPath $pom) { return @{ Kind = 'maven'; Tool = 'mvn'; BuildFile = $pom } }
+    if ($gradleFile) { return @{ Kind = 'gradle'; Tool = 'gradle'; BuildFile = $gradleFile } }
+    Exit-MuxNotApplicable 'no pom.xml or build.gradle found.'
+}
+
+# Whether the Maven or Gradle build file mentions a plugin or dependency (a plain text search).
+function Test-MuxBuildFileMentions {
+    param($Build, [string]$Text)
+    if (-not $Build.BuildFile -or -not (Test-Path -LiteralPath $Build.BuildFile)) { return $false }
+    return (Get-Content -LiteralPath $Build.BuildFile -Raw) -match [regex]::Escape($Text)
+}
+
+function Invoke-MuxJavaBuild {
+    param($Build, [string[]]$MavenArguments = @(), [string[]]$GradleArguments = @(), [switch]$AllowFailure)
+    $hint = if ($Build.Kind -eq 'maven') { 'Install Maven from https://maven.apache.org or add the Maven wrapper (mvn wrapper:wrapper).' } else { 'Install Gradle from https://gradle.org or add the Gradle wrapper (gradle wrapper).' }
+    if ($Build.Kind -eq 'maven') { Invoke-MuxTool -Tool $Build.Tool -Arguments (@('-B') + $MavenArguments) -InstallHint $hint -AllowFailure:$AllowFailure }
+    else { Invoke-MuxTool -Tool $Build.Tool -Arguments (@('--console=plain') + $GradleArguments) -InstallHint $hint -AllowFailure:$AllowFailure }
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+# C and C++ (CMake, Meson, Make)
+# ---------------------------------------------------------------------------------------------------------------
+
+function Get-MuxCppProject {
+    $dir = Find-MuxUp -Names @('CMakeLists.txt', 'CMakePresets.json', 'meson.build', 'Makefile')
+    if (-not $dir) { Exit-MuxNotApplicable 'no CMakeLists.txt, meson.build, or Makefile found; this is not a C or C++ project.' }
+    return $dir
+}
+
+# Returns cmake, meson, or make for the project directory.
+function Get-MuxCppBuildSystem {
+    param([Parameter(Mandatory = $true)][string]$Dir)
+    if (Test-Path -LiteralPath (Join-Path $Dir 'CMakeLists.txt')) { return 'cmake' }
+    if (Test-Path -LiteralPath (Join-Path $Dir 'meson.build')) { return 'meson' }
+    return 'make'
+}
+
+function Get-MuxProcessorCount {
+    return [Math]::Max(1, [Environment]::ProcessorCount)
+}
+
+# Tracked (or, outside git, discovered) C and C++ source and header files, relative to the current directory.
+function Get-MuxCppSources {
+    param([switch]$ChangedOnly)
+    $pattern = '\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$'
+    if (Test-MuxTool 'git') {
+        if ($ChangedOnly) { $files = @(& git diff --name-only HEAD 2>$null) + @(& git ls-files --others --exclude-standard 2>$null) }
+        else { $files = @(& git ls-files 2>$null) }
+        if ($LASTEXITCODE -eq 0 -and $files.Count -gt 0) { return @($files | Where-Object { $_ -match $pattern -and (Test-Path -LiteralPath $_) } | Select-Object -Unique) }
+    }
+
+    return @(Get-ChildItem -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '[\\/](build|out|third_party|vendor|external)[\\/]' -and $_.Name -match $pattern } |
+        ForEach-Object { [IO.Path]::GetRelativePath((Get-Location).Path, $_.FullName) })
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+# Go and Rust
+# ---------------------------------------------------------------------------------------------------------------
+
+function Get-MuxGoProject {
+    $dir = Find-MuxUp -Names @('go.mod')
+    if (-not $dir) { Exit-MuxNotApplicable 'no go.mod found; this is not a Go module.' }
+    return $dir
+}
+
+function Get-MuxRustProject {
+    $dir = Find-MuxUp -Names @('Cargo.toml')
+    if (-not $dir) { Exit-MuxNotApplicable 'no Cargo.toml found; this is not a Rust crate.' }
+    return $dir
 }
 
 # Returns the positional argument at $Index (from the script's $args), or the default when it is missing or blank.

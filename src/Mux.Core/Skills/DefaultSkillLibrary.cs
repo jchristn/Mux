@@ -57,6 +57,11 @@ namespace Mux.Core.Skills
             definitions.AddRange(DefaultProjectSkills.All());
             definitions.AddRange(DefaultJavaScriptSkills.All());
             definitions.AddRange(DefaultPythonSkills.All());
+            definitions.AddRange(DefaultReactSkills.All());
+            definitions.AddRange(DefaultJavaSkills.All());
+            definitions.AddRange(DefaultCppSkills.All());
+            definitions.AddRange(DefaultGoSkills.All());
+            definitions.AddRange(DefaultRustSkills.All());
             return definitions;
         }
 

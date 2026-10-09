@@ -57,17 +57,18 @@ Invoke-MuxPackageScript -Manager $pm -Script 'build' -Extra @($args)
                     "The user asks to run, filter, or measure coverage of JavaScript or TypeScript tests.",
                     "[filter]",
                     "`all` runs the project's test script (forced out of watch mode with CI=1). `filter <pattern>` runs only matching test files or names, and `coverage` adds coverage. The runner is detected from devDependencies: Vitest, Jest, Mocha, then node's built-in runner.",
-                    Command("all", "Run every test.", TestRunner + @"if ((Test-MuxPackageScript $pkg 'test') -and ($pkg['scripts']['test'] -notmatch 'no test specified')) {
+                    Command("all", "Run every test.", @"$env:CI = '1'
+if ((Test-MuxPackageScript $pkg 'test') -and ($pkg['scripts']['test'] -notmatch 'no test specified')) {
     Invoke-MuxPackageScript -Manager $pm -Script 'test'
 } else {
-    Invoke-MuxTestRunner -Mode 'all'
+    Invoke-MuxJsTestRunner -Manager $pm -Package $pkg -Mode 'all'
 }
 "),
-                    Command("filter", "Run tests matching a file or name pattern.", TestRunner + @"$filter = Get-MuxArg -Arguments $args -Index 0
+                    Command("filter", "Run tests matching a file or name pattern.", @"$filter = Get-MuxArg -Arguments $args -Index 0
 if (-not $filter) { Exit-MuxNotApplicable 'pass a pattern: js-test filter <pattern>' }
-Invoke-MuxTestRunner -Mode 'filter' -Filter $filter
+Invoke-MuxJsTestRunner -Manager $pm -Package $pkg -Mode 'filter' -Filter $filter
 "),
-                    Command("coverage", "Run every test with coverage.", TestRunner + @"Invoke-MuxTestRunner -Mode 'coverage'
+                    Command("coverage", "Run every test with coverage.", @"Invoke-MuxJsTestRunner -Manager $pm -Package $pkg -Mode 'coverage'
 ")),
 
                 Skill("js-lint", "Lint the JavaScript code", "Checks or fixes lint problems with ESLint or Biome.", true,
@@ -140,41 +141,6 @@ Invoke-MuxPackageScript -Manager $pm -Script $name -Extra $extra
         #endregion
 
         #region Private-Methods
-
-        private const string TestRunner = @"$env:CI = '1'
-function Get-MuxJsTestRunner {
-    foreach ($runner in @('vitest', 'jest', 'mocha')) { if (Test-MuxPackageDependency $pkg $runner) { return $runner } }
-    return 'node'
-}
-function Invoke-MuxTestRunner([string]$Mode, [string]$Filter = '') {
-    $runner = Get-MuxJsTestRunner
-    switch ($runner) {
-        'vitest' {
-            $a = @('run')
-            if ($Mode -eq 'filter') { $a += $Filter }
-            if ($Mode -eq 'coverage') { $a += '--coverage' }
-            Invoke-MuxPackageBin -Manager $pm -Bin 'vitest' -Arguments $a
-        }
-        'jest' {
-            $a = @('--ci')
-            if ($Mode -eq 'filter') { $a += $Filter }
-            if ($Mode -eq 'coverage') { $a += '--coverage' }
-            Invoke-MuxPackageBin -Manager $pm -Bin 'jest' -Arguments $a
-        }
-        'mocha' {
-            $a = @()
-            if ($Mode -eq 'filter') { $a += @('--grep', $Filter) }
-            if ($Mode -eq 'coverage') { Invoke-MuxPackageBin -Manager $pm -Bin 'c8' -Arguments (@('mocha') + $a) } else { Invoke-MuxPackageBin -Manager $pm -Bin 'mocha' -Arguments $a }
-        }
-        default {
-            $a = @('--test')
-            if ($Mode -eq 'filter') { $a += ('--test-name-pattern=' + $Filter) }
-            if ($Mode -eq 'coverage') { $a += '--experimental-test-coverage' }
-            Invoke-MuxTool -Tool 'node' -Arguments $a -InstallHint 'Install Node.js from https://nodejs.org.'
-        }
-    }
-}
-";
 
         private const string Linter = @"$linter = 'eslint'
 if ((Test-MuxPackageDependency $pkg '@biomejs/biome') -or (Test-Path -LiteralPath (Join-Path $dir 'biome.json')) -or (Test-Path -LiteralPath (Join-Path $dir 'biome.jsonc'))) { $linter = 'biome' }

@@ -42,6 +42,12 @@ All notable changes to mux are documented here.
   poetry, pipenv, or `.venv` environment with pytest, Ruff (or flake8 and Black), and mypy or pyright. They share a
   seeded `resources/mux-skill.ps1` helper: exit 0/1/2 conventions, install hints, and `MUX_SKILL_DRY_RUN=1` dry
   runs. Default skills can now ship resource files, and `SkillExecutor` accepts per-run environment variables.
+- **More toolchain skills (Phase 2).** React (`react-new-component`, `react-new-hook`, `react-test`,
+  `react-build-analyze`, `react-lint-hooks`, `react-upgrade-check`), Java for Maven and Gradle with wrappers
+  preferred (`java-build`, `java-test`, `java-format`, `java-lint`, `java-deps`, `java-new-class`), C and C++ for
+  CMake (with presets), Meson, and Make (`cpp-configure`, `cpp-build`, `cpp-test`, `cpp-format`, `cpp-tidy`,
+  `cpp-sanitize`), Go (`go-build`, `go-test`, `go-lint`, `go-mod`), and Rust (`cargo-build`, `cargo-test`,
+  `cargo-clippy`, `cargo-fmt`). The library is now 88 skills; scaffolding commands never overwrite files.
 - **Skills in `mux print`.** Headless runs now discover skills, list them in the system prompt, and expose
   `skill` and `run_skill`, matching the interactive shell.
 
@@ -57,8 +63,9 @@ All notable changes to mux are documented here.
 
 ### Tests
 
-- `ToolchainSkills`: 28 cases that dry-run the JavaScript, Python, and project-detection skills against generated
-  fixture projects and assert the exact command and exit code (skipped when `pwsh` is not on PATH).
+- `ToolchainSkills`: 57 cases that dry-run the project-detection, JavaScript, Python, React, Java, C++, Go, and
+  Rust skills against generated fixture projects and assert the exact command and exit code, plus real
+  scaffolding runs that check files are written and never overwritten (skipped when `pwsh` is not on PATH).
 - New suites `ProjectInstructions`, `ProjectSkills`, `SkillInvocation`, and `SkillListing`, plus new
   `DefaultSkills` cases (playbook builder, no em-dashes, colon headings) and a `SkillCommand` case for
   `mux skill trust`.
