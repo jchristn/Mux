@@ -121,7 +121,7 @@ All notable changes to mux are documented here.
   built on Voltaic. Tools: `run` (a headless turn returning the answer and a summary, with progress and cancellation,
   under an approval ceiling `--approval-policy deny|auto-safe|auto`, default `deny`), `list_sessions`,
   `get_session`, `list_endpoints` (no secrets), `list_skills`, and `run_skill` (with `--allow-skills`). See
-  `MCP_SERVER_PLAN.md`.
+  `archive/MCP_SERVER_PLAN.md`.
 - **Worktree isolation.** Subagents (`"isolation": "worktree"`, or `isolation` on `spawn_subagent`) and Core jobs
   can run in their own git worktree on a `mux/<kind>/<name>` branch under `.git/mux-worktrees/`, without the shared
   write lease. Unchanged worktrees are removed; changed ones are committed onto their branch and reported (branch,

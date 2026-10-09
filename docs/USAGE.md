@@ -1123,7 +1123,7 @@ args = ["mcp", "serve", "--approval-policy", "auto-safe"]
 ```
 
 The last block is a `mcp-servers.json` entry that lets one mux delegate work to another, for example one pinned to
-a larger model. See `MCP_SERVER_PLAN.md` for the design.
+a larger model. See `archive/MCP_SERVER_PLAN.md` for the design.
 
 ## Skills
 
