@@ -103,43 +103,7 @@ namespace Mux.Desktop.Views
                 Width = 380
             });
 
-            panel.Children.Add(new TextBlock
-            {
-                Text = localization.Get(StringKeys.HelpHeading),
-                Foreground = theme.Text,
-                FontWeight = FontWeight.SemiBold,
-                TextAlignment = TextAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center
-            });
-
-            panel.Children.Add(new TextBlock
-            {
-                Text = localization.Get(StringKeys.HelpBody),
-                Foreground = theme.Muted,
-                FontSize = 12,
-                TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 420,
-                TextAlignment = TextAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center
-            });
-
-            panel.Children.Add(new Border
-            {
-                BorderBrush = theme.Border,
-                BorderThickness = new Thickness(0, 1, 0, 0),
-                Margin = new Thickness(0, 12, 0, 6),
-                Width = 380
-            });
-
             StackPanel diagnostics = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
-            diagnostics.Children.Add(new TextBlock
-            {
-                Text = localization.Get("about.diagnostics"),
-                Foreground = theme.Text,
-                FontWeight = FontWeight.SemiBold,
-                TextAlignment = TextAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center
-            });
             diagnostics.Children.Add(DiagnosticRow(localization.Get("about.version"), Defaults.ProductVersion, "The mux product version this desktop app was built from.", theme));
             diagnostics.Children.Add(DiagnosticRow(localization.Get("about.configDir"), SafeConfigDirectory(), "Where mux reads and writes its settings, endpoints, and telemetry (set MUX_CONFIG_DIR to override).", theme));
             diagnostics.Children.Add(DiagnosticRow(localization.Get("about.runtime"), RuntimeInformation.FrameworkDescription, "The .NET runtime hosting the app.", theme));
