@@ -1,6 +1,6 @@
 # Worktree Isolation Plan
 
-_Status: done (2026-10-08). Row 28 of `NEW_SKILLS_PLAN.md`. `[ ]` = todo, `[x]` = done. Deviations from the original design are listed at the end._
+_Status: done (2026-10-08). Row 28 of `archive/NEW_SKILLS_PLAN.md`. `[ ]` = todo, `[x]` = done. Deviations from the original design are listed at the end._
 
 mux runs a subagent or a background job in the same working tree as everything else, and it keeps those runs from trampling each other with a single workspace write lease. That works, but it serializes every mutating tool call across every run, and it means a subagent that goes wrong leaves its half-finished edits mixed into your files. Claude Code and Codex both offer a way out: give the delegated run its own checkout, let it work freely, and hand back a branch. Git worktrees make that cheap. A worktree is a second working directory backed by the same repository, so creating one takes a second and costs no clone.
 

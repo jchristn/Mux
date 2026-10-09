@@ -1,6 +1,6 @@
 # mux as an MCP Server Plan
 
-_Status: done (2026-10-08). Row 29 of `NEW_SKILLS_PLAN.md`. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
+_Status: done (2026-10-08). Row 29 of `archive/NEW_SKILLS_PLAN.md`. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
 
 Claude Code ships `claude mcp serve` and Codex ships `codex mcp-server`. Both let another agent, an editor, or a script treat the harness as a tool: hand it a task, get an answer back. mux can already do that over its REST server, but REST is not what other agents speak. They speak MCP. Without an MCP entry point, the only way to put mux inside someone else's agent loop is a shell wrapper around `mux print`, which loses cancellation, progress, and any structure in the result.
 
