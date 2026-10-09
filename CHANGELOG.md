@@ -126,7 +126,7 @@ All notable changes to mux are documented here.
   can run in their own git worktree on a `mux/<kind>/<name>` branch under `.git/mux-worktrees/`, without the shared
   write lease. Unchanged worktrees are removed; changed ones are committed onto their branch and reported (branch,
   commits, diff stat). Your branch, working tree, and stash are never touched. `mux worktree list|prune|remove` and
-  `/worktrees` manage kept worktrees. See `WORKTREE_ISOLATION_PLAN.md`.
+  `/worktrees` manage kept worktrees. See `archive/WORKTREE_ISOLATION_PLAN.md`.
 - **Worktree management everywhere.** `GET /v1.0/api/worktrees`, `POST /v1.0/api/worktrees/prune`, and
   `DELETE /v1.0/api/worktrees?name=` (409 instead of losing work, 404 for unknown names) with OpenAPI docs and Postman
   requests; `/worktrees` in the desktop app; an Isolation choice in the desktop subagent editor (all 11 languages);

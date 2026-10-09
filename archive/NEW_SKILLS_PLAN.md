@@ -38,7 +38,7 @@ The scorecard below lists everything that exists in Claude Code or Codex and is 
 | 24 | Persistent memory (agent-written facts reused across sessions, `#` quick-add) | yes | partial | **done in Phase 6** | 6 | 7 | **13** | 6 |
 | 25 | Plan mode (read-only exploration, then an approved plan, then execution) | yes | partial (approval modes) | **done in Phase 6**: `/plan`, Shift+Tab, `exit_plan`, `mux print --plan` | 6 | 7 | **13** | 6 |
 | 26 | Structured "ask the user" tool (multiple choice mid-turn) | yes | no | **done in Phase 6**: `ask_user` | 6 | 6 | **12** | 6 |
-| 28 | Git worktree isolation for subagents and parallel jobs | yes | yes (cloud) | **done**: see `WORKTREE_ISOLATION_PLAN.md` | 5 | 6 | **11** | 7 |
+| 28 | Git worktree isolation for subagents and parallel jobs | yes | yes (cloud) | **done**: see `archive/WORKTREE_ISOLATION_PLAN.md` | 5 | 6 | **11** | 7 |
 | 29 | Expose mux as an MCP server | yes (`claude mcp serve`) | yes (`codex mcp-server`) | **done**: `mux mcp serve` on Voltaic; see `MCP_SERVER_PLAN.md` | 5 | 6 | **11** | 7 |
 
 Rows 27 (image input), 30 (custom status line), 31 (output styles), 32 (scheduled cloud or cron runs), and 33 (Jupyter notebook editing) were dropped from this plan on 2026-10-08 at the user's request.
@@ -457,7 +457,7 @@ React dev servers, `docker compose up`, and watch-mode test runners do not fit a
 
 ## Phase 7: Larger items (separate plans)
 
-- [x] Worktree isolation (row 28): `isolation: worktree` for subagents and Core jobs, `mux worktree list|prune|remove`, and `/worktrees`. Done; see `WORKTREE_ISOLATION_PLAN.md`. Tests: `WorktreeIsolation` (20).
+- [x] Worktree isolation (row 28): `isolation: worktree` for subagents and Core jobs, `mux worktree list|prune|remove`, and `/worktrees`. Done; see `archive/WORKTREE_ISOLATION_PLAN.md`. Tests: `WorktreeIsolation` (20).
 - [x] MCP server mode (row 29): `mux mcp serve` over stdio or Streamable HTTP on Voltaic 2.2.1, with `run`, `list_sessions`, `get_session`, `list_endpoints`, `list_skills`, and `run_skill` (opt-in). Done; see `MCP_SERVER_PLAN.md`. Tests: `McpServer` (17).
 
 Dropped on 2026-10-08: image input (row 27), custom status line (row 30), output styles (row 31), scheduled runs (row 32), and notebook editing (row 33).
