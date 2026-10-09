@@ -258,12 +258,16 @@ namespace Test.Shared.Suites
             string settingsDir = Path.Combine(c.Root, "litegraph-settings");
             Directory.CreateDirectory(settingsDir);
             DockerResult init = DockerHarness.Run(TimeSpan.FromMinutes(5), "run", "--rm", "--label", DockerHarness.Label, "-v", settingsDir + ":/out", "-e", "LITEGRAPH_INIT_ONLY=true",
-                "--entrypoint", "sh", image, "-c", "dotnet LiteGraph.Server.dll >/dev/null 2>&1; cp /app/litegraph.json /out/litegraph.json");
+                "--entrypoint", "sh", image, "-c", "dotnet LiteGraph.Server.dll >/dev/null 2>&1; cp /app/litegraph.json /out/litegraph.json; chmod -R a+rwX /out");
             string settingsPath = Path.Combine(settingsDir, "litegraph.json");
             MuxAssert.IsTrue(File.Exists(settingsPath), "LiteGraph wrote its default settings: " + init.StandardError);
             System.Text.Json.Nodes.JsonNode settings = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(settingsPath))!;
             settings["Rest"]!["Hostname"] = "*";
-            File.WriteAllText(settingsPath, settings.ToJsonString());
+
+            // On Linux the init container wrote the file as root, so write the edited copy somewhere this process owns.
+            string mountedSettings = Path.Combine(c.Root, "litegraph-server.json");
+            File.WriteAllText(mountedSettings, settings.ToJsonString());
+            settingsPath = mountedSettings;
 
             using (DockerContainer server = DockerHarness.Start(image, new[] { "-p", "127.0.0.1::8701", "-v", settingsPath + ":/app/litegraph.json", "-e", "LITEGRAPH_ADMIN_BEARER_TOKEN=" + token, "-e", "LITEGRAPH_CREATE_DEFAULT_RECORDS=true" }))
             {
