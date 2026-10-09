@@ -7,7 +7,7 @@ namespace Mux.Core.Skills
     /// <summary>
     /// The curated set of skills mux seeds into the skills directory, so the feature is useful immediately
     /// and every default doubles as a worked example. Each entry is a complete, valid <c>SKILL.md</c>.
-    /// <see cref="SeedNewInto(string)"/> is the startup path — it seeds newly shipped defaults on upgrade while
+    /// <see cref="SeedNewInto(string)"/> is the startup path: it seeds newly shipped defaults on upgrade while
     /// honoring deletions via a manifest; <see cref="SeedInto(string)"/> is the simpler write-any-missing form.
     /// The git and .NET skills default to <c>pwsh</c> for cross-platform reach; a real machine needs the
     /// named interpreter installed to run them, but they always validate.

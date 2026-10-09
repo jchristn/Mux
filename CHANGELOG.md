@@ -154,7 +154,7 @@ All notable changes to mux are documented here.
   collection: `code-review` (blast radius, per-language rules, an adversarial pass), `security-review` (license
   checks, STRIDE threat modeling), `debug` (a five-phase feature-repair mode), `project-detect` (monorepo tooling),
   `terraform` and `dockerfile-lint` (review checklists and analyzers), and `explain-codebase`, `todo-scan`,
-  `release-notes`, and `new-skill`. Notices are in `THIRD_PARTY_NOTICES.md`; the plan is `SKILLS_TO_CONSIDER.md`.
+  `release-notes`, and `new-skill`. Notices are in `THIRD_PARTY_NOTICES.md`; the plan is `archive/SKILLS_TO_CONSIDER.md`.
 - **Script commands for imported skills.** Every script-bearing imported skill exposes its scripts as `run_skill`
   commands (205 commands across 91 skills); `tdd-guide` and `aws-solution-architect` gained command-line entry
   points, and the autoresearch skills ship their evaluators. Script commands answer `MUX_SKILL_DRY_RUN` by reporting
