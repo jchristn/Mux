@@ -1,14 +1,85 @@
 name: CI
 
+# Every push and pull request runs the Touchstone console runner, which executes every suite, as a parallel
+# matrix of operating system and target framework. The xUnit and NUnit adapters run the same suites through
+# their test frameworks, so they run weekly and on demand to keep the adapters honest without tripling the
+# time every push takes. The Docker integration suite (real databases and audit tools in throwaway
+# containers) runs on pushes to main and on demand, in its own job, so it never holds up the main result.
+
 on:
   push:
     branches: [main, "feature/**"]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
 
 jobs:
-  build-and-test:
-    name: Build & test (${{ matrix.os }})
+  test:
+    name: Tests (${{ matrix.os }}, ${{ matrix.tfm }})
+    if: github.event_name != 'schedule'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        tfm: [net8.0, net10.0]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET (8.0 + 10.0)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('src/**/*.csproj', 'src/**/Directory.*.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore src/Mux.sln
+
+      - name: Build
+        run: dotnet build src/Mux.sln --configuration Release --no-restore
+
+      - name: Console runner (${{ matrix.tfm }})
+        run: dotnet run --project src/Test.Automated/Test.Automated.csproj --configuration Release --framework ${{ matrix.tfm }} --no-build -- --results results-${{ matrix.tfm }}.json
+
+      - name: Skills validate (default library)
+        if: matrix.tfm == 'net10.0'
+        run: dotnet run --project src/Mux.Cli/Mux.Cli.csproj --configuration Release --framework net10.0 --no-build -- skill validate --config-dir ${{ runner.temp }}/mux-skills-ci
+
+      - name: BUILTIN_SKILLS.md is current
+        if: matrix.tfm == 'net10.0' && matrix.os == 'ubuntu-latest'
+        run: python3 scripts/common/generate-builtin-skills.py --check --no-build --configuration Release
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: touchstone-results-${{ matrix.os }}-${{ matrix.tfm }}
+          path: results-*.json
+          if-no-files-found: ignore
+
+  adapters:
+    name: xUnit and NUnit adapters (${{ matrix.os }})
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -26,20 +97,8 @@ jobs:
             8.0.x
             10.0.x
 
-      - name: Restore
-        run: dotnet restore src/Mux.sln
-
-      - name: Build (net8.0 + net10.0, no restore)
-        run: dotnet build src/Mux.sln --configuration Release --no-restore
-
-      - name: Console runner — net8.0
-        run: dotnet run --project src/Test.Automated/Test.Automated.csproj --configuration Release --framework net8.0 --no-build -- --results results-net8.json
-
-      - name: Console runner — net10.0
-        run: dotnet run --project src/Test.Automated/Test.Automated.csproj --configuration Release --framework net10.0 --no-build -- --results results-net10.json
-
-      - name: Skills validate (default library)
-        run: dotnet run --project src/Mux.Cli/Mux.Cli.csproj --configuration Release --framework net10.0 --no-build -- skill validate --config-dir ${{ runner.temp }}/mux-skills-ci
+      - name: Build
+        run: dotnet build src/Mux.sln --configuration Release
 
       - name: xUnit adapter
         run: dotnet test src/Test.Xunit/Test.Xunit.csproj --configuration Release --no-build
@@ -47,10 +106,34 @@ jobs:
       - name: NUnit adapter
         run: dotnet test src/Test.Nunit/Test.Nunit.csproj --configuration Release --no-build
 
+  docker-integration:
+    name: Docker integration (real services)
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10.0
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build src/Test.Automated/Test.Automated.csproj --configuration Release --framework net10.0
+
+      - name: Docker integration suite
+        run: dotnet run --project src/Test.Automated/Test.Automated.csproj --configuration Release --framework net10.0 --no-build -- --suite DockerServices --docker --results results-docker.json
+
+      - name: Remove leftover test containers
+        if: always()
+        run: docker ps -aq --filter label=mux-test=1 | xargs -r docker rm -f
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: touchstone-results-${{ matrix.os }}
-          path: results-*.json
+          name: touchstone-results-docker
+          path: results-docker.json
           if-no-files-found: ignore

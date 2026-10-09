@@ -223,7 +223,8 @@
       "app/main.py"
     ],
     "expect": [
-      "py-deps"
+      "py-deps",
+      "deps-audit"
     ]
   },
   {

@@ -79,7 +79,7 @@ namespace Test.Shared.Suites
 
                     Case("HostFromUrlExtracts", "HostFromUrl returns the host or null", (CancellationToken ct) =>
                     {
-                        MuxAssert.AreEqual("view.homedns.org", UsageEvent.HostFromUrl("http://view.homedns.org:8900/v1"), "host extracted");
+                        MuxAssert.AreEqual("llm.example.com", UsageEvent.HostFromUrl("http://llm.example.com:8900/v1"), "host extracted");
                         MuxAssert.IsTrue(UsageEvent.HostFromUrl(null) == null, "null in null out");
                         MuxAssert.IsTrue(UsageEvent.HostFromUrl("not a url") == null, "non-url null");
                         return Task.CompletedTask;

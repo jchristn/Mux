@@ -118,6 +118,9 @@ namespace Test.Shared.Suites
                 (await c.Run(true, env, "sql-sqlserver", "query", "exec sp_who").ConfigureAwait(false)).Exit(2).Has("EXEC is not one");
                 (await c.Run(true, env, "sql-oracle", "query", "truncate table t").ConfigureAwait(false)).Exit(2).Has("TRUNCATE is not one");
                 (await c.Run(true, env, "sql-postgres", "query", "with x as (select 1) select * from x").ConfigureAwait(false)).Exit(0);
+                (await c.Run(true, env, "sql-mysql", "query", "select * from users into outfile '/tmp/users.csv'").ConfigureAwait(false)).Exit(2).Has("writes a file on the database server");
+                (await c.Run(true, env, "sql-mysql", "query", "SELECT secret INTO   DUMPFILE '/tmp/x'").ConfigureAwait(false)).Exit(2).Has("INTO OUTFILE or DUMPFILE");
+                (await c.Run(true, env, "sql-mysql", "query", "select 'into outfile' as phrase").ConfigureAwait(false)).Exit(0).Has("into outfile");
                 (await c.Run(true, env, "sql-postgres", "tables", "--url-env", "postgres://a:b@h/db").ConfigureAwait(false)).Exit(2).Has("never the connection string");
                 (await c.Run(true, env, "sql-postgres", "query").ConfigureAwait(false)).Exit(2).Has("usage: sql-postgres query");
             });

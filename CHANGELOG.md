@@ -6,6 +6,17 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **Docker integration tests.** An opt-in `DockerServices` suite (`--docker`, or `MUX_TEST_DOCKER=1`) runs
+  the database and audit skills against real PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, MongoDB, Redis,
+  Neo4j, Cassandra, and LiteGraph servers and real npm audit, pip-audit, and osv-scanner output, each in a
+  throwaway container that is removed afterwards. Client calls reach the servers through shims into the
+  containers, so no database client is needed on the host.
+- **Live skill-selection tests.** An opt-in `SkillSelectionLive` suite asks a real model which skill it would
+  use for the built-in prompts and fails below a floor. Test.Automated takes `--llm-endpoint`, `--llm-model`,
+  `--llm-adapter`, `--llm-api-key`, `--llm-floor`, `--llm-cases`, `--llm-report`, and `--llm-timeout`; the
+  xUnit and NUnit runners read the matching `MUX_TEST_LLM_*` variables.
+- `scripts/common/generate-builtin-skills.py` (with `generate-builtin-skills` wrappers per OS) regenerates
+  BUILTIN_SKILLS.md, and `--check` fails when it is stale.
 - **`ansible` and `bicep` skills.** Ansible lints playbooks, checks syntax, previews with `--check --diff`, and
   runs them with `apply` refused for a production-looking limit or inventory unless confirmed. Bicep builds and
   lints files, previews a resource-group deployment with what-if, and deploys behind the same guard. Neither
@@ -219,6 +230,10 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- **Faster CI.** Every push runs the console runner as a parallel matrix of Linux and Windows by `net8.0` and
+  `net10.0`, cancels superseded runs, caches NuGet packages, and checks that BUILTIN_SKILLS.md is current. The
+  xUnit and NUnit adapters, which run the same suites, now run weekly and on demand, and the Docker
+  integration suite runs in its own job on pushes to `main`.
 - **Pack skills cleaned up.** 502 references to the upstream `/cs:` slash commands across 86 pack files, and the
   bundled `handoff` skill, now name the mux skill that does the job (`/exec-decide`, `/boardroom`, `run_skill
   handoff setup`, and so on); the few upstream commands mux never shipped are marked as such. Descriptions no
@@ -245,6 +260,8 @@ All notable changes to mux are documented here.
 
 ### Fixed
 
+- `sql-mysql` (and every SQL skill) refuses `SELECT ... INTO OUTFILE` and `INTO DUMPFILE`, which write a file on
+  the database server even inside a read-only transaction.
 - Python bytecode no longer ships: seven committed `.pyc` files are gone, `__pycache__` is ignored and excluded
   from the embedded skill resources, and skill processes set `PYTHONDONTWRITEBYTECODE=1` (unless already set)
   so running a skill never writes into its folder.

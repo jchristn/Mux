@@ -244,7 +244,7 @@ namespace Mux.Cli.Commands
                         {
                             return await chooser.ChooseAsync(evalCase, listed, token).ConfigureAwait(false);
                         }
-                        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException || ex is InvalidOperationException || ex is TimeoutException)
+                        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException || ex is InvalidOperationException || ex is TimeoutException || (ex is OperationCanceledException && !token.IsCancellationRequested))
                         {
                             Console.Error.WriteLine();
                             Console.Error.WriteLine($"{evalCase.Id}: the model call failed: {ex.Message}");

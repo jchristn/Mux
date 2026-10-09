@@ -58,6 +58,7 @@ function Assert-MuxReadOnlySql {
     if (-not $first) { Exit-MuxNotApplicable 'pass the statement to run.' }
     if ($Allowed -notcontains $first) { Exit-MuxNotApplicable ('only read statements run here (' + ($Allowed -join ', ') + '); ' + $first.ToUpperInvariant() + ' is not one. Use db-migrate for schema changes.') }
     $quoted = [regex]::Replace($text, '''([^'']|'''')*''|""([^""]|"""")*""', ""''"")
+    if ([regex]::IsMatch($quoted, '\binto\s+(outfile|dumpfile)\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) { Exit-MuxNotApplicable 'SELECT ... INTO OUTFILE or DUMPFILE writes a file on the database server, so it is refused here.' }
     if ($quoted.Trim().TrimEnd(';').Contains(';')) { Exit-MuxNotApplicable 'run one statement at a time.' }
     return ([string]$Sql).Trim().TrimEnd(';').Trim()
 }

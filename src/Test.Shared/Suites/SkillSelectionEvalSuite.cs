@@ -314,11 +314,13 @@ namespace Test.Shared.Suites
             Add("CliEvalLive", "mux skill eval --live asks the configured endpoint, and rejects an unknown endpoint, --top, and a dead server", (CancellationToken ct) => WithConfigAsync(async (string config) =>
             {
                 using (MockHttpServer server = new MockHttpServer())
+                using (System.Net.HttpListener slowListener = StartSilentListener(out string slowUrl))
                 {
+                    var slowServer = new { BaseUrl = slowUrl };
                     server.RegisterResponse("run the go tests", "{\"id\":\"e1\",\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"c1\",\"type\":\"function\",\"function\":{\"name\":\"run_skill\",\"arguments\":\"{\\\"name\\\":\\\"go-test\\\",\\\"command\\\":\\\"all\\\"}\"}}]},\"finish_reason\":\"tool_calls\",\"index\":0}]}");
                     server.Start();
                     SettingsLoader.EnsureConfigDirectory();
-                    File.WriteAllText(Path.Combine(config, "endpoints.json"), "{\"endpoints\":[{\"name\":\"mock\",\"adapterType\":\"openai_compatible\",\"baseUrl\":\"" + server.BaseUrl + "\",\"model\":\"test-model\",\"isDefault\":true,\"timeoutMs\":5000},{\"name\":\"dead\",\"adapterType\":\"openai_compatible\",\"baseUrl\":\"http://127.0.0.1:9\",\"model\":\"m\",\"timeoutMs\":2000}]}");
+                    File.WriteAllText(Path.Combine(config, "endpoints.json"), "{\"endpoints\":[{\"name\":\"mock\",\"adapterType\":\"openai_compatible\",\"baseUrl\":\"" + server.BaseUrl + "\",\"model\":\"test-model\",\"isDefault\":true,\"timeoutMs\":5000},{\"name\":\"dead\",\"adapterType\":\"openai_compatible\",\"baseUrl\":\"http://127.0.0.1:9\",\"model\":\"m\",\"timeoutMs\":2000},{\"name\":\"slow\",\"adapterType\":\"openai_compatible\",\"baseUrl\":\"" + slowServer.BaseUrl + "\",\"model\":\"m\",\"timeoutMs\":1000}]}");
 
                     CliRun live = await RunAsync(new SkillSettings { Action = "eval", Name = "go-run-tests", ConfigDir = config, Live = true }, ct).ConfigureAwait(false);
                     MuxAssert.AreEqual(0, live.Code, "the model picked go-test: " + live.Out + live.Err);
@@ -335,6 +337,11 @@ namespace Test.Shared.Suites
                     CliRun withTop = await RunAsync(new SkillSettings { Action = "eval", ConfigDir = config, Live = true, Top = 3 }, ct).ConfigureAwait(false);
                     MuxAssert.AreEqual(1, withTop.Code, "--top with --live");
                     MuxAssert.Contains("--top does not apply to --live", withTop.Err, "--top message");
+
+                    CliRun slow = await RunAsync(new SkillSettings { Action = "eval", Name = "go-run-tests", ConfigDir = config, Live = true, Endpoint = "slow" }, ct).ConfigureAwait(false);
+                    MuxAssert.AreEqual(1, slow.Code, "a timed-out call fails its case: " + slow.Out + slow.Err);
+                    MuxAssert.Contains("go-run-tests: the model call failed", slow.Err, "the timeout is reported per case, not as a crash");
+                    MuxAssert.Contains("0 of 1 cases passed", slow.Out, "the run still finishes with a summary");
 
                     CliRun dead = await RunAsync(new SkillSettings { Action = "eval", Name = "go-run-tests", ConfigDir = config, Live = true, Endpoint = "dead" }, ct).ConfigureAwait(false);
                     MuxAssert.AreEqual(1, dead.Code, "a dead server fails the case");
@@ -404,6 +411,26 @@ namespace Test.Shared.Suites
             {
                 try { Directory.Delete(root, true); } catch (Exception) { }
             }
+        }
+
+        // A listener that accepts requests and never answers, so a client with a short timeout gives up.
+        private static System.Net.HttpListener StartSilentListener(out string baseUrl)
+        {
+            int port = StubHttpServer.FreeLoopbackPort();
+            baseUrl = "http://127.0.0.1:" + port;
+            System.Net.HttpListener listener = new System.Net.HttpListener();
+            listener.Prefixes.Add(baseUrl + "/");
+            listener.Start();
+            _ = Task.Run(async () =>
+            {
+                List<System.Net.HttpListenerContext> held = new List<System.Net.HttpListenerContext>();
+                while (listener.IsListening)
+                {
+                    try { held.Add(await listener.GetContextAsync().ConfigureAwait(false)); }
+                    catch (Exception) { break; }
+                }
+            });
+            return listener;
         }
 
         private static ConversationMessage Reply(params (string Name, string Arguments)[] calls)

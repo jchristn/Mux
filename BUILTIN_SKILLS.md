@@ -1,6 +1,6 @@
 # Built-in Skills
 
-_Generated from mux's default skill library and its bundled skill packs. Regenerate it when skills change._
+_Generated from mux's default skill library and its bundled skill packs by `scripts/common/generate-builtin-skills.py` (or the `generate-builtin-skills` script for your OS). Regenerate it when skills change; `--check` reports whether it is current._
 
 mux ships with **212 default skills**, seeded into `~/.mux/skills` on first run and topped up on upgrade without overwriting your edits, and **166 more in 10 opt-in packs** that you install when you want them. Every skill has a category; you can override it on any surface (`mux skill category <name> <category>`, `/skills`, the web dashboard, the desktop app, or VS Code) without editing its SKILL.md.
 
