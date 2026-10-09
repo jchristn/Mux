@@ -48,6 +48,26 @@ The scorecard below lists everything that exists in Claude Code or Codex and is 
 
 A few things that look like gaps are not, and they are deliberately absent from the table: sandbox postures, tool allow and deny globs, compaction, resume and fork, subagents, web search and retrieval, undo and redo, task plans, custom slash commands, MCP client support, and usage tracking all exist today.
 
+## What remains
+
+Phases 1 through 5 closed 24 of the 35 scorecard rows (rows 1 through 18, 20 through 23, 21a, and 21b). The library now holds 153 default skills. These rows are still open:
+
+| # | Capability | Simplicity | Value | Total | Phase | Next step |
+|---:|---|---:|---:|---:|:---:|---|
+| 19 | `@file` mentions in the composer | 7 | 7 | **14** | 6 | `@` completion in the TUI composer, then a shared Core helper for desktop and web |
+| 24 | Persistent memory (`#` quick-add, `/memory`) | 6 | 7 | **13** | 6 | `remember` tool, per-repo memory folder, capped prompt section |
+| 25 | Plan mode (`/plan`, `exit_plan`, Shift+Tab) | 6 | 7 | **13** | 6 | read-only posture plus an approval tool that feeds `PlanTasksTool` |
+| 26 | Structured "ask the user" tool | 6 | 6 | **12** | 6 | `ask_user` with 2 to 4 options; modal, card, or a default in `mux print` |
+| 27 | Image input (paste or attach) | 4 | 7 | **11** | 7 | needs its own plan: message content parts per adapter |
+| 28 | Git worktree isolation for subagents and jobs | 5 | 6 | **11** | 7 | needs its own plan |
+| 29 | Expose mux as an MCP server | 5 | 6 | **11** | 7 | needs its own plan: `mux mcp serve` |
+| 30 | Custom status line | 7 | 4 | **11** | 7 | needs its own plan |
+| 31 | Output styles | 8 | 3 | **11** | backlog | mostly covered by prompt profiles |
+| 32 | Scheduled cloud or cron runs | 4 | 5 | **9** | backlog | none yet |
+| 33 | Jupyter notebook editing | 6 | 3 | **9** | backlog | none yet |
+
+One small follow-up from the library section is also open: gate `new-tool` and `new-touchstone-suite` with `appliesTo: [src/Mux.Core/Mux.Core.csproj]` so they are listed only inside the mux repository.
+
 Rows 1, 2, 7, 8, and 16 are harness changes, not skills, but they come first because the new skills depend on them. Most rows from 3 through 15 lean on playbook skills (2), project scoping (8), or name invocation (7). Without them, a React developer would still have to type "please run the react-test skill" instead of `/react-test`, and 152 skills would be listed in every system prompt sent to a 7B model with an 8K window.
 
 ---
@@ -496,9 +516,9 @@ Backlog with no plan yet: output styles (row 31, mostly covered by prompt profil
 | `DefaultReviewSkills` (done) | 0 | 5 | 5 |
 | `DefaultAgentPlaybookSkills` (done) | 0 | 4 | 4 |
 | `DefaultLoopSkills` (done) | 0 | 4 | 4 |
-| **Total** | **46** | **106** | **152** |
+| **Total** | **46** | **107** | **153** |
 
-Existing users receive the new defaults on their next startup through `SeedNewInto`; nothing they have edited or deleted is touched. With relevance gating on, a typical single-language repository lists about 45 skills (the ungated ones, its own family, and the cloud skills for CLIs actually installed) instead of 152.
+The shipped library has 153 skills, one more than first planned. Existing users receive the new defaults on their next startup through `SeedNewInto`; nothing they have edited or deleted is touched. With relevance gating on, a typical single-language repository lists about 45 skills (the ungated ones, its own family, and the cloud skills for CLIs actually installed) instead of 153.
 
 Two existing defaults deserve a second look while this work is open. `new-tool` and `new-touchstone-suite` scaffold mux's own `IToolExecutor` and Touchstone types, which only make sense inside the mux repository. Giving them `appliesTo: [src/Mux.Core/Mux.Core.csproj]` hides them everywhere else at no cost.
 
