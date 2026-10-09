@@ -2,7 +2,7 @@
 
 _Generated from mux's default skill library and its bundled skill packs. Regenerate it when skills change._
 
-mux ships with **208 default skills**, seeded into `~/.mux/skills` on first run and topped up on upgrade without overwriting your edits, and **166 more in 10 opt-in packs** that you install when you want them. Every skill has a category; you can override it on any surface (`mux skill category <name> <category>`, `/skills`, the web dashboard, the desktop app, or VS Code) without editing its SKILL.md.
+mux ships with **212 default skills**, seeded into `~/.mux/skills` on first run and topped up on upgrade without overwriting your edits, and **166 more in 10 opt-in packs** that you install when you want them. Every skill has a category; you can override it on any surface (`mux skill category <name> <category>`, `/skills`, the web dashboard, the desktop app, or VS Code) without editing its SKILL.md.
 
 Most skills are listed to the model only where they apply: a skill can declare `appliesTo` file globs (for example `package.json` or `.github/workflows/*.yml`) and `requiresTools` (for example `gh` or `kubectl`), so a Python project never sees the Java skills. Run any skill by name with `/<skill> [arguments]`, list them with `mux skill list` (add `--category <name>` to filter), and read one with `mux skill show <name>`. **Commands** is the number of deterministic commands a skill offers through `run_skill`; a skill with 0 commands is a playbook the model follows with its normal tools. **Origin** is `mux` for skills written for mux and `claude-skills` for skills adapted from [alirezarezvani/claude-skills](https://github.com/alirezarezvani/claude-skills) (MIT; see THIRD_PARTY_NOTICES.md).
 
@@ -17,14 +17,14 @@ Most skills are listed to the model only where they apply: a skill can declare `
 - [frontend](#frontend) (10)
 - [git](#git) (15)
 - [hygiene](#hygiene) (10)
-- [infrastructure](#infrastructure) (2)
+- [infrastructure](#infrastructure) (4)
 - [kubernetes](#kubernetes) (6)
 - [languages](#languages) (51)
 - [loops](#loops) (4)
 - [mobile](#mobile) (9)
 - [productivity](#productivity) (1)
-- [review](#review) (6)
-- [scaffolding](#scaffolding) (4)
+- [review](#review) (7)
+- [scaffolding](#scaffolding) (5)
 - [security](#security) (6)
 - [testing](#testing) (8)
 - [workflow](#workflow) (6)
@@ -41,7 +41,7 @@ Most skills are listed to the model only where they apply: a skill can declare `
 | `aws-compute` | Lists and describes EC2 instances, starts or stops them, and lists, invokes, or tails Lambda functions. | 7 | mux |
 | `aws-containers` | Lists ECS services and tasks, redeploys a service, lists EKS clusters and writes kubeconfig, and works with ECR repositories. | 8 | mux |
 | `aws-data` | Lists RDS instances and snapshots, DynamoDB tables, and ElastiCache clusters. | 5 | mux |
-| `aws-deploy` | Lists stacks and events, previews change sets, and deploys SAM or CDK apps after a diff. | 8 | mux |
+| `aws-deploy` | Validates and lints CloudFormation templates, lists stacks and events, previews change sets, and deploys SAM or CDK apps after a diff. | 10 | mux |
 | `aws-integration` | Lists SQS queues and their depth, SNS topics, secret and parameter names, Route 53 zones, and the caller's IAM policies. | 7 | mux |
 | `aws-observe` | Lists log groups, shows recent log events, lists alarms in ALARM state, and reports month-to-date cost by service. | 4 | mux |
 | `aws-storage` | Lists buckets and objects, syncs folders with a dry run first, and creates presigned URLs. | 4 | mux |
@@ -186,6 +186,8 @@ Most skills are listed to the model only where they apply: a skill can declare `
 
 | Skill | What it does | Commands | Origin |
 |---|---|---:|---|
+| `ansible` | Ansible: lints playbooks, checks their syntax, previews changes with --check --diff, runs them behind the production guard, and shows the inventory. | 5 | mux |
+| `bicep` | Azure Bicep: builds and lints Bicep files, previews a resource-group deployment with what-if, and deploys it behind the production guard. | 4 | mux |
 | `pulumi` | Shows the account and stacks, previews changes, updates the stack, and shows outputs. | 5 | mux |
 | `terraform` | Formats, validates, initializes, and plans; applies only a saved plan; lists state and outputs. Works with OpenTofu. | 7 | mux |
 
@@ -292,6 +294,7 @@ Most skills are listed to the model only where they apply: a skill can declare `
 | `api-design-reviewer` | Comprehensive REST API design review with automated linting, breaking-change detection, and design scorecards. Catches inconsistent conventions, missing versioning, and... | 3 | claude-skills |
 | `api-surface-diff` | Shows public API members added or removed between two git refs, such as the last release and HEAD. | 1 | mux |
 | `code-review` | Reviews uncommitted changes, a branch, a commit, a pull request, or one file for correctness bugs first, then tests and maintainability. | 5 | mux |
+| `openapi` | OpenAPI and Swagger: lints the API document, and finds breaking API changes against the base branch or between two versions. | 3 | mux |
 | `pr-comments` | Lists the review threads on a GitHub pull request, unresolved first, so they can be addressed. | 1 | mux |
 | `simplify` | Lists the files changed on this branch so the model can remove duplication, dead code, and needless complexity without changing behavior. | 1 | mux |
 | `test-gap-review` | Lists changed source files that have no matching test change, using each language's test naming conventions. | 1 | mux |
@@ -304,6 +307,7 @@ Most skills are listed to the model only where they apply: a skill can declare `
 | `new-skill` | Creates a new skill directory with starter SKILL.md content. | 1 | mux |
 | `new-tool` | Creates an IToolExecutor implementation stub. | 1 | mux |
 | `new-touchstone-suite` | Creates a touchstone test suite stub with one placeholder case. | 1 | mux |
+| `openapi-client` | Generates an API client or server stub from an OpenAPI document with openapi-generator (typescript-fetch, csharp, python, go, java, and more). | 2 | mux |
 
 ### security
 
@@ -350,39 +354,39 @@ Executive advisory, board, strategy, and operating playbooks.
 
 | Skill | What it does |
 |---|---|
-| `board-deck-builder` | Assembles comprehensive board and investor update decks by pulling perspectives from all C-suite roles. Use when preparing board meetings, investor updates, quarterly... |
+| `board-deck-builder` | Assembles board and investor update decks from the perspectives of every C-suite role. Use when preparing board meetings, investor updates, quarterly business reviews... |
 | `board-meeting` | Multi-agent board meeting protocol for strategic decisions. Runs a structured 6-phase deliberation: context loading, independent C-suite contributions (isolated, no... |
 | `board-prep` | Board meeting preparation for the adversarial scenario, not the friendly one. Forces numbers-cold mastery, anticipates hard questions, builds a narrative that... |
-| `boardroom` | /cs:boardroom <brief>, 6-phase multi-role deliberation across the C-suite with Phase 2 isolation, critic pre-screen, and synthesis. Outputs a board memo. Use when a... |
+| `boardroom` | 6-phase multi-role deliberation across the C-suite with Phase 2 isolation, critic pre-screen, and synthesis. Outputs a board memo. Use when a decision spans multiple... |
 | `business-investment-advisor` | Business investment analysis and capital allocation advisor. Use when evaluating whether to invest in equipment, real estate, a new business, hiring, technology, or any... |
-| `caio-review` | /cs:caio-review <plan>, Eval-demanding Chief AI Officer interrogation of any plan that involves AI: model selection, risk classification, cost economics, or AI hiring... |
-| `cco-review` | /cs:cco-review <plan>, Retention-obsessed Chief Customer Officer interrogation of any plan that touches customer retention, segmentation, CS team sizing, or CS team... |
-| `cdo-review` | /cs:cdo-review <plan>, Decision-driven Chief Data Officer interrogation of any plan that touches training data, data architecture, data productization, or data team... |
-| `cfo-review` | /cs:cfo-review <plan>, Numerate-skeptic interrogation of any plan that touches money. Unit economics, runway, dilution, capital allocation. Use when a plan commits... |
+| `caio-review` | Eval-demanding Chief AI Officer interrogation of any plan that involves AI: model selection, risk classification, cost economics, or AI hiring. Use when shipping an AI... |
+| `cco-review` | Retention-obsessed Chief Customer Officer interrogation of any plan that touches customer retention, segmentation, CS team sizing, or CS team hiring. Use when gross... |
+| `cdo-review` | Decision-driven Chief Data Officer interrogation of any plan that touches training data, data architecture, data productization, or data team hiring. Use when validating... |
+| `cfo-review` | Numerate-skeptic interrogation of any plan that touches money. Unit economics, runway, dilution, capital allocation. Use when a plan commits meaningful spend, e.g. a... |
 | `change-management` | Framework for rolling out organizational changes without chaos. Covers the ADKAR model adapted for startups, communication templates, resistance patterns, and change... |
 | `chief-of-staff` | C-suite orchestration layer. Routes founder questions to the right advisor role(s), triggers multi-role board meetings for complex decisions, synthesizes outputs, and... |
-| `ciso-review` | /cs:ciso-review <plan>, Risk-paranoid interrogation of any plan that touches data, compliance, or production access. Use when launching features that handle customer... |
-| `cmo-review` | /cs:cmo-review <plan>, Narrative-first interrogation of positioning, ICP, message house, and channel mix. Use when launching a campaign or repositioning, or when CAC is... |
+| `ciso-review` | Risk-paranoid interrogation of any plan that touches data, compliance, or production access. Use when launching features that handle customer data, before a SOC 2 / ISO... |
+| `cmo-review` | Narrative-first interrogation of positioning, ICP, message house, and channel mix. Use when launching a campaign or repositioning, or when CAC is rising and the... |
 | `company-os` | The meta-framework for how a company runs, the connective tissue between all C-suite roles. Covers operating system selection (EOS, Scaling Up, OKR-native, hybrid)... |
 | `competitive-intel` | Systematic competitor tracking that feeds CMO positioning, CRO battlecards, and CPO roadmap decisions. Use when analyzing competitors, building sales battlecards... |
 | `context-engine` | Loads and manages company context for all C-suite advisor skills. Reads ~/.mux/company-context.md, detects stale context (>90 days), enriches context during... |
 | `contract-and-proposal-writer` | Generate professional, jurisdiction-aware business documents: freelance contracts, project proposals, SOWs, NDAs, and MSAs. Structured Markdown output with docx... |
-| `cpo-review` | /cs:cpo-review <plan>, JTBD-driven interrogation of product roadmap, PMF signal, and portfolio focus. Use when committing a quarter's roadmap, deciding whether to kill a... |
-| `cro-review` | /cs:cro-review <plan>, Pipeline-paranoid interrogation of revenue, win rate, NRR, and ramp time. Use when the forecast misses pipeline coverage, win rates drop, or... |
-| `cross-eval` | /cs:cross-eval <memo>, Multi-model consensus on a board memo or strategy brief. Claude + Codex + Gemini cross-review with graceful degradation. Use when a high-stakes... |
-| `cs-onboard` | Founder onboarding interview that captures company context across 7 dimensions. Invoke with /cs:setup for initial interview or /cs:update for quarterly refresh... |
+| `cpo-review` | JTBD-driven interrogation of product roadmap, PMF signal, and portfolio focus. Use when committing a quarter's roadmap, deciding whether to kill a feature, or claiming... |
+| `cro-review` | Pipeline-paranoid interrogation of revenue, win rate, NRR, and ramp time. Use when the forecast misses pipeline coverage, win rates drop, or before scaling the sales... |
+| `cross-eval` | Multi-model consensus on a board memo or strategy brief. Claude + Codex + Gemini cross-review with graceful degradation. Use when a high-stakes memo needs an independent... |
+| `cs-onboard` | Founder onboarding interview that captures company context across 7 dimensions. Run it for the initial interview and again for a quarterly refresh. Generates... |
 | `cto-advisor` | Technical leadership guidance for engineering teams, architecture decisions, and technology strategy. Use when assessing technical debt, scaling engineering teams... |
-| `cto-review` | /cs:cto-review <plan>, Architecture and scaling interrogation. Tech debt, scaling cliffs, team scaling, build-vs-buy. Use when committing to an architecture, planning... |
+| `cto-review` | Architecture and scaling interrogation. Tech debt, scaling cliffs, team scaling, build-vs-buy. Use when committing to an architecture, planning for 10x load, or weighing... |
 | `culture-architect` | Build, measure, and evolve company culture as operational behavior, not wall posters. Covers mission/vision/values workshops, values-to-behaviors translation, culture... |
-| `exec-brief` | /cs:brief <topic>, Generate a one-page strategy brief from an office-hours intake. First step in the strategic sprint pipeline. Use when a strategic question needs to be... |
-| `exec-decide` | /cs:decide <memo>, Log a decision to two-layer memory via decision-logger. Approved memo becomes durable; raw transcripts kept for reference. Use when the founder has... |
-| `exec-execute` | /cs:execute <decision>, Generate a 90-day execution plan with weekly milestones, DRIs, and check-in cadence from an approved decision. Use when a logged decision needs... |
-| `exec-freeze` | /cs:freeze <decision> <days>, Lock a strategic decision for a cooldown period to prevent impulse reversal. Mirrors gstack's safety primitives for the business layer. Use... |
-| `exec-onboard` | /cs:onboard, Founder interview that populates ~/.mux/company-context.md using the canonical 7-dimension cs-onboard schema. The first command to run when starting with... |
-| `exec-post-mortem` | /cs:post-mortem <decision>, Honest retrospective on an executed decision, scored against original assumptions and dissent. Closes the strategic sprint loop. Use when a... |
+| `exec-brief` | Generate a one-page strategy brief from an office-hours intake. First step in the strategic sprint pipeline. Use when a strategic question needs to be framed before... |
+| `exec-decide` | Log a decision to two-layer memory via decision-logger. Approved memo becomes durable; raw transcripts kept for reference. Use when the founder has approved a boardroom... |
+| `exec-execute` | Generate a 90-day execution plan with weekly milestones, DRIs, and check-in cadence from an approved decision. Use when a logged decision needs to become an operating... |
+| `exec-freeze` | Lock a strategic decision for a cooldown period to prevent impulse reversal. Mirrors gstack's safety primitives for the business layer. Use when an irreversible decision... |
+| `exec-onboard` | Founder interview that populates ~/.mux/company-context.md using the canonical 7-dimension cs-onboard schema. The first command to run when starting with c-level-agents... |
+| `exec-post-mortem` | Honest retrospective on an executed decision, scored against original assumptions and dissent. Closes the strategic sprint loop. Use when a decision hits its 90-day... |
 | `founder-coach` | Personal leadership development for founders and first-time CEOs. Covers founder archetype identification, delegation frameworks, energy management, CEO calendar audits... |
-| `founder-mode` | /cs:founder-mode <question>, Auto-routes any founder question to the right C-role advisor or to /cs:boardroom for multi-role topics. The single-command entry point. Use... |
-| `gc-review` | /cs:gc-review <plan>, General Counsel interrogation of contracts, IP, regulatory, term sheets, and employment-law surface. Use when reviewing a term sheet before... |
+| `founder-mode` | Auto-routes any founder question to the right C-role advisor or to /boardroom for multi-role topics. The single-command entry point. Use when a founder asks any... |
+| `gc-review` | General Counsel interrogation of contracts, IP, regulatory, term sheets, and employment-law surface. Use when reviewing a term sheet before signing, redlining a customer... |
 | `internal-narrative` | Build and maintain one coherent company story across all audiences, employees, investors, customers, candidates, and partners. Detects narrative contradictions and... |
 | `intl-expansion` | International market expansion strategy. Market selection, entry modes, localization, regulatory compliance, and go-to-market by region. Use when expanding to new... |
 | `knowledge-ops` | Use when a Head of Ops, Knowledge Manager, or TPM-Internal needs to author, validate, or clean up company SOPs and internal runbooks (procurement intake, vendor... |
@@ -391,9 +395,9 @@ Executive advisory, board, strategy, and operating playbooks.
 | `mentor-hard-call` | /em:hard-call, Framework for decisions with no good options. Use when every option is painful and a structured 10/10/10 + regret-minimization pass is needed, e.g... |
 | `mentor-postmortem` | /em:postmortem, Honest analysis of what went wrong. Use after a failed launch, missed quarter, or bad hire to run a blameless 5-Whys retrospective with a change... |
 | `mentor-stress-test` | /em:stress-test, Business assumption stress testing. Use before betting on a plan whose core assumptions are unvalidated, e.g. stress-testing 'enterprise buyers will... |
-| `office-hours` | /cs:office-hours <topic>, YC-style 6-question founder interrogation before any advice. Forces clarity on problem, customer, distribution, defensibility, capital, and... |
+| `office-hours` | YC-style 6-question founder interrogation before any advice. Forces clarity on problem, customer, distribution, defensibility, capital, and founder fit. Use when a... |
 | `rfp-responder` | Use when an RFP, RFI, RFQ, security questionnaire, vendor questionnaire, or proposal request arrives and the team needs a structured response, parsing multi-section... |
-| `vpe-review` | /cs:vpe-review <plan>, Throughput-first VP of Engineering interrogation of any plan that touches delivery, eng hiring, team structure, or production discipline. Use when... |
+| `vpe-review` | Throughput-first VP of Engineering interrogation of any plan that touches delivery, eng hiring, team structure, or production discipline. Use when cycle time balloons... |
 
 ### compliance pack (10 skills)
 
@@ -402,15 +406,15 @@ Audit preparation and readiness for SOC 2, ISO 27001, ISO 13485, GDPR, FDA, and 
 | Skill | What it does |
 |---|---|
 | `agent-decision-receipts` | Mint a tamper-evident, post-quantum-signed receipt for a consequential agent action (deploy, delete, pay, grant-access, model decision) so it can be verified later from... |
-| `ai-act-readiness` | /cs:ai-act-readiness <system>, EU AI Act 6-question forcing interrogation. Use during AI-system intake, before EU deployment, or during annual compliance refresh as... |
-| `aims-audit` | /cs:aims-audit <scope>, ISO/IEC 42001 AIMS internal-audit 6-question forcing interrogation. Use before certification stage 1, before annual internal audit cycles, or... |
-| `compliance-readiness` | /cs:compliance-readiness <program>, Multi-framework compliance officer 6-question forcing interrogation of any compliance program. Use before starting a new framework... |
-| `fda-qsr-audit-prep` | /cs:fda-qsr-audit-prep <scope>, FDA 21 CFR 820 (QSR / QMSR) audit 6-question forcing interrogation. Post-Feb 2026 substantially harmonized with ISO 13485. Use before... |
-| `gdpr-audit-prep` | /cs:gdpr-audit-prep <scope>, GDPR audit 6-question Article-cited forcing interrogation. Use before annual internal GDPR review, post-breach internal audit, DPA... |
+| `ai-act-readiness` | EU AI Act 6-question forcing interrogation. Use during AI-system intake, before EU deployment, or during annual compliance refresh as Article 113 obligations phase in... |
+| `aims-audit` | ISO/IEC 42001 AIMS internal-audit 6-question forcing interrogation. Use before certification stage 1, before annual internal audit cycles, or when onboarding a new AI... |
+| `compliance-readiness` | Multi-framework compliance officer 6-question forcing interrogation of any compliance program. Use before starting a new framework, planning the annual audit calendar... |
+| `fda-qsr-audit-prep` | FDA 21 CFR 820 (QSR / QMSR) audit 6-question forcing interrogation. Post-Feb 2026 substantially harmonized with ISO 13485. Use before annual internal QSR audit... |
+| `gdpr-audit-prep` | GDPR audit 6-question Article-cited forcing interrogation. Use before annual internal GDPR review, post-breach internal audit, DPA investigation readiness, or... |
 | `gdpr-dsgvo-expert` | GDPR and German DSGVO compliance automation. Scans codebases for privacy risks, generates DPIA documentation, tracks data subject rights requests with Art. 12(3)... |
-| `iso13485-audit-prep` | /cs:iso13485-audit-prep <scope>, ISO 13485 QMS audit 6-question forcing interrogation. Design controls + CAPA + post-market focused. Use before Clause 8.2.4 internal... |
-| `iso27001-audit-prep` | /cs:iso27001-audit-prep <scope>, ISO 27001 ISMS audit readiness 6-question forcing interrogation. Use before annual Clause 9.2 internal audit, surveillance audit prep... |
-| `soc2-audit-prep` | /cs:soc2-audit-prep <scope>, SOC 2 Type II readiness 6-question forcing interrogation. Observation-period focused. Use before Type II observation begins, mid-period... |
+| `iso13485-audit-prep` | ISO 13485 QMS audit 6-question forcing interrogation. Design controls + CAPA + post-market focused. Use before Clause 8.2.4 internal audit, MDR / FDA QSR alignment... |
+| `iso27001-audit-prep` | ISO 27001 ISMS audit readiness 6-question forcing interrogation. Use before annual Clause 9.2 internal audit, surveillance audit prep, or stage 1 certification readiness. |
+| `soc2-audit-prep` | SOC 2 Type II readiness 6-question forcing interrogation. Observation-period focused. Use before Type II observation begins, mid-period checkpoint, or pre-field-test... |
 
 ### data pack (6 skills)
 
@@ -419,7 +423,7 @@ Data quality, statistics, data science, ML engineering, and web scraping playboo
 | Skill | What it does |
 |---|---|
 | `data-quality-auditor` | Audit datasets for completeness, consistency, accuracy, and validity. Profile data distributions, detect anomalies and outliers, surface structural issues, and produce... |
-| `senior-data-scientist` | World-class senior data scientist skill specialising in statistical modeling, experiment design, causal inference, and predictive analytics. Covers A/B testing (sample... |
+| `senior-data-scientist` | Statistical modeling, experiment design, causal inference, and predictive analytics. Covers A/B testing (sample sizing, two-proportion z-tests, Bonferroni correction)... |
 | `senior-ml-engineer` | ML engineering skill for productionizing models, building MLOps pipelines, and integrating LLMs. Covers model deployment, feature stores, drift monitoring, RAG systems... |
 | `senior-prompt-engineer` | Use when the user asks to optimize prompts, design prompt templates, evaluate LLM outputs with an eval set, measure RAG retrieval quality, validate agent/tool... |
 | `statistical-analyst` | Run hypothesis tests, analyze A/B experiment results, calculate sample sizes, and interpret statistical significance with effect sizes. Use when you need to validate... |
@@ -475,7 +479,7 @@ Architecture, backend, frontend, data, ML, agents, and reliability playbooks for
 | `hub-run` | One-shot lifecycle command that chains init → baseline → spawn → eval → merge in a single invocation. Use when the user runs /hub:run or asks to execute a full AgentHub... |
 | `hub-spawn` | Launch N parallel subagents in isolated git worktrees to compete on the session task. Use when the user runs /hub:spawn or asks to start the competing agents for an... |
 | `hub-status` | Show DAG state, agent progress, and branch status for an AgentHub session. Use when the user runs /hub:hub-status or asks how the AgentHub agents are doing. |
-| `incident-commander` | Comprehensive incident response framework from detection through resolution and post-incident review. Battle-tested SRE/DevOps practices: severity classification... |
+| `incident-commander` | Incident response from detection through resolution and post-incident review, with SRE practices for severity classification, timeline reconstruction, and structured... |
 | `karpathy-coder` | Use when writing, reviewing, or committing code to enforce Karpathy's 4 coding principles, surface assumptions before coding, keep it simple, make surgical changes... |
 | `kubernetes-operator` | Use when building a Kubernetes Operator: custom controllers that reconcile CRD state. Triggers on "build an operator", "CRD design", "reconcile loop"... |
 | `llm-cost-optimizer` | Use proactively whenever LLM API costs come up -- or should. Triggers include: 'my AI costs are too high', 'optimize token usage', 'which model should I use', 'LLM spend... |
@@ -492,10 +496,10 @@ Architecture, backend, frontend, data, ML, agents, and reliability playbooks for
 | `self-eval` | Honestly evaluate AI work quality using a two-axis scoring system. Use after completing a task, code review, or work session to get an unbiased assessment. Detects score... |
 | `senior-architect` | This skill should be used when the user asks to "design system architecture", "evaluate microservices vs monolith", "create architecture diagrams", "analyze... |
 | `senior-backend` | Designs and implements backend systems including REST APIs, microservices, database architectures, authentication flows, and security hardening. Use when the user asks... |
-| `senior-devops` | Comprehensive DevOps skill for CI/CD, infrastructure automation, containerization, and cloud platforms (AWS, GCP, Azure). Includes pipeline setup, infrastructure as... |
+| `senior-devops` | DevOps for CI/CD, infrastructure automation, containerization, and cloud platforms (AWS, GCP, Azure). Includes pipeline setup, infrastructure as code, deployment... |
 | `senior-frontend` | Frontend development skill for React, Next.js, TypeScript, and Tailwind CSS applications. Use when building React components, optimizing Next.js performance, analyzing... |
 | `senior-qa` | Generates unit tests, integration tests, and E2E tests for React/Next.js applications. Scans components to create Jest + React Testing Library test stubs, analyzes... |
-| `senior-secops` | Senior SecOps engineer skill for application security, vulnerability management, compliance verification, and secure development practices. Runs SAST/DAST scans... |
+| `senior-secops` | Application security, vulnerability management, compliance verification, and secure development practices. Runs SAST/DAST scans, generates CVE remediation plans, checks... |
 | `slo-architect` | Use when defining, reviewing, or operating SLOs/SLIs/error budgets. Triggers on "define an SLO", "what should our SLO be", "error budget", "burn rate", "SLI", "service... |
 | `snowflake-development` | Use when writing Snowflake SQL, building data pipelines with Dynamic Tables or Streams/Tasks, using Cortex AI functions, creating Cortex Agents, writing Snowpark Python... |
 | `spec-driven-workflow` | Use when the user asks to write specs before code, define acceptance criteria, plan features before implementation, generate tests from specifications, or follow... |
@@ -531,21 +535,21 @@ Product discovery, strategy, analytics, roadmaps, and design playbooks.
 | `apple-hig-expert` | Audits and designs iOS/macOS/watchOS/visionOS interfaces against the Apple Human Interface Guidelines, including the Liquid Glass design language (announced WWDC25... |
 | `code-to-prd` | Reverse-engineer any codebase into a complete Product Requirements Document (PRD). Analyzes routes, components, state management, API integrations, and user interactions... |
 | `competitive-teardown` | Analyzes competitor products and companies by synthesizing data from pricing pages, app store reviews, job postings, SEO signals, and social media into structured... |
-| `confluence-expert` | Atlassian Confluence expert for creating and managing spaces, knowledge bases, and documentation. Configures space permissions and hierarchies, creates page templates... |
+| `confluence-expert` | Atlassian Confluence: creates and manages spaces, knowledge bases, and documentation. Configures space permissions and hierarchies, creates page templates with macros... |
 | `experiment-designer` | Use when planning product experiments, writing testable hypotheses, estimating sample size, prioritizing tests, or interpreting A/B outcomes with practical statistical... |
-| `jira-expert` | Atlassian Jira expert for creating and managing projects, planning, product discovery, JQL queries, workflows, custom fields, automation, reporting, and all Jira... |
+| `jira-expert` | Atlassian Jira: creates and manages projects, planning, product discovery, JQL queries, workflows, custom fields, automation, and reporting. Use when setting up or... |
 | `landing-page-generator` | Generates high-converting landing pages as complete Next.js/React (TSX) components with Tailwind CSS. Creates hero sections, feature grids, pricing tables, FAQ... |
 | `meeting-analyzer` | Analyzes meeting transcripts and recordings to surface behavioral patterns, communication anti-patterns, and actionable coaching feedback. Use this skill whenever the... |
 | `product-analytics` | Use when defining product KPIs, building metric dashboards, running cohort or retention analysis, or interpreting feature adoption trends across product stages. |
 | `product-discovery` | Use when validating product opportunities, mapping assumptions, planning discovery sprints, or testing problem-solution fit before committing delivery resources. |
-| `product-manager-toolkit` | Comprehensive toolkit for product managers including RICE prioritization, customer interview analysis, PRD templates, discovery frameworks, and go-to-market strategies... |
+| `product-manager-toolkit` | Product management toolkit: RICE prioritization, customer interview analysis, PRD templates, discovery frameworks, and go-to-market strategy. Use when prioritizing... |
 | `product-strategist` | Strategic product leadership toolkit for Head of Product covering OKR cascade generation, quarterly planning, competitive landscape analysis, product vision documents... |
 | `roadmap-communicator` | Use when preparing roadmap narratives, release notes, changelogs, or stakeholder updates tailored for executives, engineering teams, and customers. |
 | `saas-scaffolder` | Generates complete, production-ready SaaS project boilerplate including authentication, database schemas, billing integration, API routes, and a working dashboard using... |
 | `scrum-master` | Advanced Scrum Master skill for data-driven agile team analysis and coaching. Use when the user asks about sprint planning, velocity tracking, retrospectives, standup... |
 | `spec-to-repo` | Use when the user says 'build me an app', 'create a project from this spec', 'scaffold a new repo', 'generate a starter', 'turn this idea into code', 'bootstrap a... |
 | `team-communications` | Write internal company communications: 3P updates (Progress/Plans/Problems), company-wide newsletters, FAQ roundups, incident reports, leadership updates, status... |
-| `ui-design-system` | UI design system toolkit for Senior UI Designer including design token generation, component documentation, responsive design calculations, and developer handoff tools... |
+| `ui-design-system` | UI design system toolkit: design token generation, component documentation, responsive design calculations, and developer handoff tools. Use when creating design... |
 
 ### productivity pack (1 skills)
 

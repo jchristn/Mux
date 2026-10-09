@@ -1,10 +1,10 @@
 ---
 name: cs-onboard
 description: >-
-  Founder onboarding interview that captures company context across 7 dimensions. Invoke with /cs:setup for initial
-  interview or /cs:update for quarterly refresh. Generates ~/.mux/company-context.md used by all C-suite advisor
-  skills. Use when setting up the C-suite advisors for the first time, or when company context is missing or more
-  than 90 days old, e.g. after a fundraise or pivot.
+  Founder onboarding interview that captures company context across 7 dimensions. Run it for the initial interview and
+  again for a quarterly refresh. Generates ~/.mux/company-context.md used by all C-suite advisor skills. Use when
+  setting up the C-suite advisors for the first time, or when company context is missing or more than 90 days old,
+  e.g. after a fundraise or pivot.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-advisor/skills/cs-onboard"
 license: MIT
@@ -16,8 +16,8 @@ Structured founder interview that builds the company context file powering every
 
 ## Commands
 
-- `/cs:setup`, Full onboarding interview (~45 min, 7 dimensions)
-- `/cs:update`, Quarterly refresh (~15 min, "what changed?")
+- `/cs-onboard`, Full onboarding interview (~45 min, 7 dimensions)
+- `/cs-onboard`, Quarterly refresh (~15 min, "what changed?")
 
 ## Keywords
 cs:setup, cs:update, company context, founder interview, onboarding, company profile, c-suite setup, advisor setup
@@ -75,11 +75,11 @@ After the interview, generate `~/.mux/company-context.md` using `${SKILL_DIR}/te
 
 Fill every section. Write `[not captured]` for unknowns, never leave blank. Add timestamp, mark as `fresh`.
 
-Tell the founder: *"I've captured everything in your company context. Every advisor will use this to give specific, relevant advice. Run /cs:update in 90 days to keep it current."*
+Tell the founder: *"I've captured everything in your company context. Every advisor will use this to give specific, relevant advice. Run /cs-onboard in 90 days to keep it current."*
 
 ---
 
-## /cs:update, Quarterly Refresh
+## /cs-onboard, Quarterly Refresh
 
 **Trigger:** Every 90 days or after a major change. Duration: ~15 minutes.
 

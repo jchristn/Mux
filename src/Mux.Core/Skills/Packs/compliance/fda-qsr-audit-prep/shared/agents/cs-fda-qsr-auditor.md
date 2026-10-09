@@ -157,7 +157,7 @@ python ../../compliance-os/skills/compliance-os/scripts/audit_simulator.py fda_q
 ## References
 
 - Skill: [../../ra-qm-team/skills/fda-consultant-specialist/SKILL.md](../../ra-qm-team/skills/fda-consultant-specialist/SKILL.md)
-- Sibling command: [`/cs:fda-qsr-audit-prep`](../skills/fda-qsr-audit-prep/SKILL.md)
+- Sibling command: [`/fda-qsr-audit-prep`](../skills/fda-qsr-audit-prep/SKILL.md)
 
 ---
 

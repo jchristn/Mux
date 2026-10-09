@@ -74,7 +74,7 @@ python ../../c-level-advisor/skills/chief-customer-officer-advisor/scripts/reten
 # 4. Cross-check expansion math with cs-cro-advisor
 # 5. Cross-check product gaps surfaced by churn with cs-cpo-advisor
 # 6. Output: top-3 leakage points + 90-day mitigation plan
-# 7. Log via /cs:decide
+# 7. Log via /exec-decide
 ```
 
 ### Workflow 2: Customer Segmentation Audit (1 day)
@@ -87,7 +87,7 @@ python ../../c-level-advisor/skills/chief-customer-officer-advisor/scripts/custo
 # 3. Surface kill list (customers where support cost > 50% of ARR AND ICP fit < 5)
 # 4. Surface upgrade candidates (high ICP fit + expansion potential)
 # 5. For kill list: decide path, non-renewal / downgrade-to-tech-touch / raise-price
-# 6. Log via /cs:decide
+# 6. Log via /exec-decide
 ```
 
 ### Workflow 3: CS Team Sizing (1 week)
@@ -100,7 +100,7 @@ python ../../c-level-advisor/skills/chief-customer-officer-advisor/scripts/cs_co
 # 3. Review manager-trigger thresholds (CS manager needed if any tier has 5+ CSMs)
 # 4. Cross-check 12mo cost with cs-cfo-advisor
 # 5. Cross-check hiring plan + comp design with cs-chro-advisor
-# 6. Output: 12-month hiring plan; log via /cs:decide
+# 6. Output: 12-month hiring plan; log via /exec-decide
 ```
 
 ### Workflow 4: CS Team Roadmap (1 week)
@@ -166,7 +166,7 @@ python ../../c-level-advisor/skills/chief-customer-officer-advisor/scripts/cs_co
 
 - Skill: [../../c-level-advisor/skills/chief-customer-officer-advisor/SKILL.md](../../c-level-advisor/skills/chief-customer-officer-advisor/SKILL.md)
 - Voice spec: [../references/persona-voices.md](../references/persona-voices.md)
-- Sibling command: [`/cs:cco-review`](../skills/cco-review/SKILL.md)
+- Sibling command: [`/cco-review`](../skills/cco-review/SKILL.md)
 
 ---
 

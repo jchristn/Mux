@@ -228,10 +228,10 @@ These skills are invoked for specific cross-cutting needs, not for general domai
 ### Orchestration & Infrastructure
 | Skill | Trigger | File |
 |-------|---------|------|
-| C-Suite Onboard | `/cs:setup`, first-time setup, "tell me about your company" | cs-onboard |
+| C-Suite Onboard | `/cs-onboard`, first-time setup, "tell me about your company" | cs-onboard |
 | Context Engine | Auto-loaded; staleness check | context-engine |
-| Board Meeting | `/cs:boardroom`, multi-role decisions, score ≥ 4 | board-meeting |
-| Decision Logger | After board meetings, `/cs:decisions`, `/cs:review` | decision-logger |
+| Board Meeting | `/boardroom`, multi-role decisions, score ≥ 4 | board-meeting |
+| Decision Logger | After board meetings, `decisions (not shipped with mux)`, `review (not shipped with mux)` | decision-logger |
 | Agent Protocol | Inter-role invocations, loop detection | agent-protocol |
 
 ### Cross-Cutting Capabilities

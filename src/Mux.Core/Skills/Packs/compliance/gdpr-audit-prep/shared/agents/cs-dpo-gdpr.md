@@ -150,7 +150,7 @@ python dpia_generator.py processing_activity.json
 
 - Skill: [../../ra-qm-team/skills/gdpr-dsgvo-expert/SKILL.md](../../ra-qm-team/skills/gdpr-dsgvo-expert/SKILL.md)
 - Playbook: [../../ra-qm-team/skills/gdpr-dsgvo-expert/references/gdpr_audit_playbook.md](../../ra-qm-team/skills/gdpr-dsgvo-expert/references/gdpr_audit_playbook.md)
-- Sibling command: [`/cs:gdpr-audit-prep`](../skills/gdpr-audit-prep/SKILL.md)
+- Sibling command: [`/gdpr-audit-prep`](../skills/gdpr-audit-prep/SKILL.md)
 
 ---
 

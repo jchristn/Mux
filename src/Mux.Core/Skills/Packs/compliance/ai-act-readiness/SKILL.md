@@ -1,17 +1,16 @@
 ---
 name: ai-act-readiness
 description: >-
-  /cs:ai-act-readiness <system>, EU AI Act 6-question forcing interrogation. Use during AI-system intake, before EU
-  deployment, or during annual compliance refresh as Article 113 obligations phase in (2025-02-02 / 2025-08-02 /
-  2026-08-02 / 2027-08-02).
+  EU AI Act 6-question forcing interrogation. Use during AI-system intake, before EU deployment, or during annual
+  compliance refresh as Article 113 obligations phase in (2025-02-02 / 2025-08-02 / 2026-08-02 / 2027-08-02).
 category: compliance
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/compliance-os/skills/ai-act-readiness"
 license: MIT
 ---
 
-# /cs:ai-act-readiness, EU AI Act Forcing Questions
+# /ai-act-readiness, EU AI Act Forcing Questions
 
-**Command:** `/cs:ai-act-readiness <system>`
+**Command:** `/ai-act-readiness <system>`
 
 The EU AI Act compliance operator pressure-tests any AI system before EU deployment. Six Article-cited questions before any EU placement, conformity assessment, or annual compliance refresh.
 
@@ -137,12 +136,12 @@ python3 "${SKILL_DIR}/shared/compliance-os/scripts/cross_framework_mapper.py" pr
 
 ## Routing
 
-- `/cs:compliance-readiness`, for multi-framework view (combine with ISO 42001 + GDPR)
-- `/cs:aims-audit`, for ISO 42001 deep-dive
-- `/cs:caio-review`, for executive AI strategy decisions
-- `/cs:gc-review`, for novel-case legal review (GPAI threshold, Article 5 boundary, substantial-modification)
-- `/cs:decide`, to log the verdict
-- `/cs:freeze 30`, on EU launch commitments (regulatory exposure)
+- `/compliance-readiness`, for multi-framework view (combine with ISO 42001 + GDPR)
+- `/aims-audit`, for ISO 42001 deep-dive
+- `/caio-review`, for executive AI strategy decisions
+- `/gc-review`, for novel-case legal review (GPAI threshold, Article 5 boundary, substantial-modification)
+- `/exec-decide`, to log the verdict
+- `/exec-freeze 30`, on EU launch commitments (regulatory exposure)
 
 ## Related
 

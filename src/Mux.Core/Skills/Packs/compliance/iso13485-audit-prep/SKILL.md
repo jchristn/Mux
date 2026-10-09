@@ -1,17 +1,16 @@
 ---
 name: iso13485-audit-prep
 description: >-
-  /cs:iso13485-audit-prep <scope>, ISO 13485 QMS audit 6-question forcing interrogation. Design controls + CAPA +
-  post-market focused. Use before Clause 8.2.4 internal audit, MDR / FDA QSR alignment review, or product-launch DHF
-  closure audit.
+  ISO 13485 QMS audit 6-question forcing interrogation. Design controls + CAPA + post-market focused. Use before
+  Clause 8.2.4 internal audit, MDR / FDA QSR alignment review, or product-launch DHF closure audit.
 category: compliance
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/compliance-os/skills/iso13485-audit-prep"
 license: MIT
 ---
 
-# /cs:iso13485-audit-prep, ISO 13485 QMS Forcing Questions
+# /iso13485-audit-prep, ISO 13485 QMS Forcing Questions
 
-**Command:** `/cs:iso13485-audit-prep <scope>`
+**Command:** `/iso13485-audit-prep <scope>`
 
 The ISO 13485 QMS auditor pressure-tests any medical-device QMS work. Six traceability-obsessed questions before any internal audit, MDR / FDA QSR review, or product launch.
 
@@ -144,12 +143,12 @@ python3 "${SKILL_DIR}/shared/compliance-os/scripts/audit_simulator.py" iso13485_
 
 ## Routing
 
-- `/cs:compliance-readiness`, for multi-framework view
-- `/cs:fda-qsr-audit-prep`, for FDA-specific overlay
-- `/cs:aims-audit`, for AI-enabled medical device ISO 42001 layer
-- `/cs:gdpr-audit-prep`, for personal-data overlap (clinical data, customer data)
-- `/cs:cpo-review`, for executive product strategy decisions
-- `/cs:decide`, to log the verdict
+- `/compliance-readiness`, for multi-framework view
+- `/fda-qsr-audit-prep`, for FDA-specific overlay
+- `/aims-audit`, for AI-enabled medical device ISO 42001 layer
+- `/gdpr-audit-prep`, for personal-data overlap (clinical data, customer data)
+- `/cpo-review`, for executive product strategy decisions
+- `/exec-decide`, to log the verdict
 
 ## Related
 

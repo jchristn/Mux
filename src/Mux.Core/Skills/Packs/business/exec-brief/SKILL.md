@@ -1,24 +1,24 @@
 ---
 name: exec-brief
 description: >-
-  /cs:brief <topic>, Generate a one-page strategy brief from an office-hours intake. First step in the strategic
-  sprint pipeline. Use when a strategic question needs to be framed before boardroom deliberation, e.g. locking
-  options, assumptions, and success criteria for a pricing change or a market-entry decision.
+  Generate a one-page strategy brief from an office-hours intake. First step in the strategic sprint pipeline. Use
+  when a strategic question needs to be framed before boardroom deliberation, e.g. locking options, assumptions, and
+  success criteria for a pricing change or a market-entry decision.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/brief"
 license: MIT
 ---
 
-# /cs:brief, One-Page Strategy Brief
+# /exec-brief, One-Page Strategy Brief
 
-**Command:** `/cs:brief <topic>` or `/cs:brief <office-hours-output>`
+**Command:** `/exec-brief <topic>` or `/exec-brief <office-hours-output>`
 
 Turns intake (raw question or office-hours output) into a one-page strategy brief that the boardroom can deliberate on. This is **Step 1** of the strategic sprint pipeline.
 
 ## Pipeline Position
 
 ```
-/cs:office-hours  →  /cs:brief  →  /cs:boardroom  →  /cs:decide  →  /cs:execute  →  /cs:post-mortem
+/office-hours  →  /exec-brief  →  /boardroom  →  /exec-decide  →  /exec-execute  →  /exec-post-mortem
                        ↑ you are here
 ```
 
@@ -63,7 +63,7 @@ A single Markdown file under `~/.mux/briefs/YYYY-MM-DD-<slug>.md` with this stru
 - Reversibility: <one-way door | two-way door>
 
 ## Affected Roles
-[Which cs-* advisors should weigh in. Used to route to /cs:boardroom panel composition.]
+[Which cs-* advisors should weigh in. Used to route to /boardroom panel composition.]
 
 - [ ] cs-ceo-advisor
 - [ ] cs-cfo-advisor
@@ -98,7 +98,7 @@ A single Markdown file under `~/.mux/briefs/YYYY-MM-DD-<slug>.md` with this stru
 3. If input is a raw topic, prompt the founder for the missing pieces
 4. Draft 2-3 options (never just one, every brief needs a counterfactual)
 5. Make assumptions and constraints explicit
-6. Identify affected roles → drives panel composition for `/cs:boardroom`
+6. Identify affected roles → drives panel composition for `/boardroom`
 7. Write success + kill criteria BEFORE the decision (this is the rigor moment)
 8. Save to `~/.mux/briefs/`
 
@@ -110,9 +110,9 @@ This is also the **artifact handoff**: the next command consumes this file, not 
 
 ## Routing
 
-- `/cs:boardroom <brief>`, multi-role deliberation
-- `/cs:cross-eval <brief>`, multi-model sanity check before boardroom (for high-stakes)
-- `/cs:freeze <brief>`, cooldown lock for irreversible decisions
+- `/boardroom <brief>`, multi-role deliberation
+- `/cross-eval <brief>`, multi-model sanity check before boardroom (for high-stakes)
+- `/exec-freeze <brief>`, cooldown lock for irreversible decisions
 
 ## Related
 

@@ -1,16 +1,16 @@
 ---
 name: cpo-review
 description: >-
-  /cs:cpo-review <plan>, JTBD-driven interrogation of product roadmap, PMF signal, and portfolio focus. Use when
-  committing a quarter's roadmap, deciding whether to kill a feature, or claiming PMF without a retention curve.
+  JTBD-driven interrogation of product roadmap, PMF signal, and portfolio focus. Use when committing a quarter's
+  roadmap, deciding whether to kill a feature, or claiming PMF without a retention curve.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/cpo-review"
 license: MIT
 ---
 
-# /cs:cpo-review, CPO Forcing Questions
+# /cpo-review, CPO Forcing Questions
 
-**Command:** `/cs:cpo-review <plan>`
+**Command:** `/cpo-review <plan>`
 
 The JTBD-driven builder cuts the roadmap in half. Six questions to surface what to ship and what to kill.
 
@@ -100,9 +100,9 @@ python product-team/skills/product-manager-toolkit/scripts/rice_prioritizer.py
 
 ## Routing
 
-- `/cs:cmo-review`, does the positioning support this feature?
-- `/cs:execute`, build the 90-day plan
-- `/cs:post-mortem`, if kill criteria triggered
+- `/cmo-review`, does the positioning support this feature?
+- `/exec-execute`, build the 90-day plan
+- `/exec-post-mortem`, if kill criteria triggered
 
 ## Related
 

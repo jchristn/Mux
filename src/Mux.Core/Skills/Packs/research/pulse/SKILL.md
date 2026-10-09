@@ -290,7 +290,7 @@ Sources received: M. Sources cited: K. Training knowledge: 0 ([Background] exclu
 
 **Version:** 1.0.0
 **Source spec:** `megaprompts/01-pulse-megaprompt.md` (maintainer-local draft spec, gitignored, not present in the public repository)
-**Build pattern:** Path B (direct conversion). Re-grill with `/cs:grill-with-docs` if drift between spec and implementation surfaces.
+**Build pattern:** Path B (direct conversion). Re-grill with `/grill-with-docs` if drift between spec and implementation surfaces.
 
 <!-- Adapted for mux from https://github.com/alirezarezvani/claude-skills@19392f7/research/pulse/skills/pulse (MIT License, Copyright (c) 2025 Alireza Rezvani). See THIRD_PARTY_NOTICES.md. -->
 

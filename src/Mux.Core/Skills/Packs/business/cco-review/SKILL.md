@@ -1,17 +1,17 @@
 ---
 name: cco-review
 description: >-
-  /cs:cco-review <plan>, Retention-obsessed Chief Customer Officer interrogation of any plan that touches customer
-  retention, segmentation, CS team sizing, or CS team hiring. Use when gross retention is slipping, before approving
-  CSM headcount, or when deciding which customer segments to keep or fire.
+  Retention-obsessed Chief Customer Officer interrogation of any plan that touches customer retention, segmentation,
+  CS team sizing, or CS team hiring. Use when gross retention is slipping, before approving CSM headcount, or when
+  deciding which customer segments to keep or fire.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/cco-review"
 license: MIT
 ---
 
-# /cs:cco-review, CCO Forcing Questions
+# /cco-review, CCO Forcing Questions
 
-**Command:** `/cs:cco-review <plan>`
+**Command:** `/cco-review <plan>`
 
 The retention-obsessed CCO pressure-tests any plan that touches customer experience. Six questions before any retention claim, segmentation change, CS team expansion, or major CS hire.
 
@@ -118,12 +118,12 @@ python3 "${SKILL_DIR}/shared/c-level-advisor/skills/chief-customer-officer-advis
 
 ## Routing
 
-- `/cs:cpo-review`, if churn root cause is product_fit or no_value_realized
-- `/cs:cro-review`, if expansion math or comp alignment is in question
-- `/cs:cfo-review`, for CS cost commitments and retention-impact-on-revenue
+- `/cpo-review`, if churn root cause is product_fit or no_value_realized
+- `/cro-review`, if expansion math or comp alignment is in question
+- `/cfo-review`, for CS cost commitments and retention-impact-on-revenue
 - `cs-chro-advisor` agent: for CS hires, comp, ladder
-- `/cs:decide`, log the verdict
-- `/cs:freeze 30`, on multi-year CS comp plan changes
+- `/exec-decide`, log the verdict
+- `/exec-freeze 30`, on multi-year CS comp plan changes
 
 ## Related
 

@@ -3,6 +3,7 @@ namespace Test.Shared.Suites
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
@@ -107,6 +108,51 @@ namespace Test.Shared.Suites
                 List<string> found = new List<string>();
                 foreach (string folder in AllSkillFolders(skillsRoot)) found.AddRange(ImportedSkillChecks.FilesWithEmDash(folder).ConvertAll(f => Rel(skillsRoot, folder) + "/" + f));
                 MuxAssert.AreEqual(0, found.Count, "files with em-dashes: " + string.Join(", ", found));
+            });
+            Add("NoForeignSlashCommands", "No shipped skill file refers to the upstream /cs: commands, which do not exist in mux", () =>
+            {
+                List<string> found = new List<string>();
+                foreach (string folder in AllSkillFolders(skillsRoot))
+                {
+                    foreach (string file in TextFiles(folder))
+                    {
+                        if (File.ReadAllText(file).Contains("/cs:", StringComparison.Ordinal)) found.Add(Rel(skillsRoot, file));
+                    }
+                }
+
+                MuxAssert.AreEqual(0, found.Count, "files with /cs: references: " + string.Join(", ", found));
+            });
+            Add("DescriptionsSayWhatAndWhen", "No default or pack description uses persona or marketing phrasing, and every pack description says when to use the skill", () =>
+            {
+                Regex persona = new Regex(@"\b(world[- ]class|best[- ]in[- ]class|battle[- ]tested|cutting[- ]edge|state[- ]of[- ]the[- ]art|comprehensive)\b|\bexpert (for|in)\b|^senior\b|\bfor senior\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                Regex trigger = new Regex(@"\b(use|run|invoke|trigger)s?\b[^.]{0,30}\b(when|whenever|during|before|after|for|if)\b|\btriggers?\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                List<string> personaHits = new List<string>();
+                List<string> noTrigger = new List<string>();
+                foreach (DefaultSkillDef def in DefaultSkillLibrary.Definitions())
+                {
+                    if (persona.IsMatch(def.Description)) personaHits.Add(def.Id);
+                }
+
+                foreach (string pack in PackFolders(skillsRoot))
+                {
+                    foreach (string folder in SkillFolders(pack))
+                    {
+                        string description = new SkillLoader(pack).Load(folder).Manifest.Description;
+                        if (persona.IsMatch(description)) personaHits.Add(Rel(skillsRoot, folder));
+                        if (!trigger.IsMatch(description)) noTrigger.Add(Rel(skillsRoot, folder));
+                    }
+                }
+
+                MuxAssert.AreEqual(0, personaHits.Count, "persona or marketing phrasing: " + string.Join(", ", personaHits));
+                MuxAssert.AreEqual(0, noTrigger.Count, "no when-to-use phrase: " + string.Join(", ", noTrigger));
+            });
+            Add("NoBytecodeShips", "No __pycache__ folder or .pyc file is embedded or committed with the shipped skills", () =>
+            {
+                List<string> embedded = typeof(DefaultSkillLibrary).Assembly.GetManifestResourceNames()
+                    .Where(n => n.Contains("__pycache__", StringComparison.Ordinal) || n.EndsWith(".pyc", StringComparison.OrdinalIgnoreCase)).ToList();
+                MuxAssert.AreEqual(0, embedded.Count, "embedded bytecode: " + string.Join(", ", embedded));
+                string gitignore = Path.Combine(Path.GetDirectoryName(src!)!, ".gitignore");
+                MuxAssert.Contains("__pycache__/", File.ReadAllText(gitignore), "bytecode is ignored by git");
             });
             Add("SkillDirReferencesResolve", "Every ${SKILL_DIR}/... reference in every shipped file points at a file or folder that ships with the skill", () =>
             {

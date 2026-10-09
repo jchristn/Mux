@@ -70,7 +70,11 @@ namespace Mux.Core.Skills
             ["storybook"] = "frontend",
             ["log-triage"] = "debugging",
             ["port-inspect"] = "debugging",
-            ["bench"] = "debugging"
+            ["bench"] = "debugging",
+            ["ansible"] = "infrastructure",
+            ["bicep"] = "infrastructure",
+            ["openapi"] = "review",
+            ["openapi-client"] = "scaffolding"
         };
 
         private static readonly string[][] _Prefixes =

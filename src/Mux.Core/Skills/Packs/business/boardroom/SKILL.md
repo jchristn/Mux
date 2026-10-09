@@ -1,24 +1,24 @@
 ---
 name: boardroom
 description: >-
-  /cs:boardroom <brief>, 6-phase multi-role deliberation across the C-suite with Phase 2 isolation, critic
-  pre-screen, and synthesis. Outputs a board memo. Use when a decision spans multiple executive domains, e.g. a
-  pricing change touching finance, positioning, and product, or a raise-vs-cut runway call.
+  6-phase multi-role deliberation across the C-suite with Phase 2 isolation, critic pre-screen, and synthesis. Outputs
+  a board memo. Use when a decision spans multiple executive domains, e.g. a pricing change touching finance,
+  positioning, and product, or a raise-vs-cut runway call.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/boardroom"
 license: MIT
 ---
 
-# /cs:boardroom, Multi-Role Boardroom Deliberation
+# /boardroom, Multi-Role Boardroom Deliberation
 
-**Command:** `/cs:boardroom <brief-path>`
+**Command:** `/boardroom <brief-path>`
 
 Runs the `board-meeting` skill protocol across the C-suite for a single strategy brief. This is the **heart of the plugin**, the multi-role deliberation that gstack's review chain only approximates.
 
 ## Pipeline Position
 
 ```
-/cs:office-hours  →  /cs:brief  →  /cs:boardroom  →  /cs:decide  →  /cs:execute  →  /cs:post-mortem
+/office-hours  →  /exec-brief  →  /boardroom  →  /exec-decide  →  /exec-execute  →  /exec-post-mortem
                                      ↑ you are here
 ```
 
@@ -55,7 +55,7 @@ Runs the `board-meeting` skill protocol across the C-suite for a single strategy
 ### Phase 6: Decision Hand-off
 - Memo is presented to the founder.
 - Founder accepts, modifies, or rejects.
-- Approved memo routes to `/cs:decide` for logging.
+- Approved memo routes to `/exec-decide` for logging.
 
 ## Output: Board Memo
 
@@ -64,7 +64,7 @@ Saved to `~/.mux/boardroom/YYYY-MM-DD-<slug>.md`:
 ```markdown
 # Board Memo: <topic>
 **Date:** YYYY-MM-DD
-**Brief:** <link to /cs:brief file>
+**Brief:** <link to /exec-brief file>
 **Status:** AWAITING FOUNDER DECISION | APPROVED | REJECTED
 
 ## Question
@@ -93,10 +93,10 @@ Saved to `~/.mux/boardroom/YYYY-MM-DD-<slug>.md`:
 [Copied from brief, refined by the panel]
 
 ## Recommended Decision Path
-- `/cs:decide` → log the decision
-- `/cs:execute` → 90-day plan
-- `/cs:cross-eval` → multi-model sanity check (optional, high-stakes)
-- `/cs:freeze N` → cooldown lock (optional, irreversible)
+- `/exec-decide` → log the decision
+- `/exec-execute` → 90-day plan
+- `/cross-eval` → multi-model sanity check (optional, high-stakes)
+- `/exec-freeze N` → cooldown lock (optional, irreversible)
 ```
 
 ## Why Phase 2 Isolation Matters
@@ -105,7 +105,7 @@ If advisors see each other's positions before forming their own, they anchor. Ph
 
 ## Why This Beats gstack's Review Chain
 
-| | gstack `/autoplan` | `/cs:boardroom` |
+| | gstack `/autoplan` | `/boardroom` |
 |---|---|---|
 | Roles | CEO → design → eng (3) | Up to 10 C-roles |
 | Order | Sequential | Phase 2 isolation, then simultaneous |
@@ -126,9 +126,9 @@ If advisors see each other's positions before forming their own, they anchor. Ph
 
 ## Routing
 
-- `/cs:decide`, log approved memo
-- `/cs:cross-eval`, high-stakes second opinion
-- `/cs:freeze`, cooldown lock
+- `/exec-decide`, log approved memo
+- `/cross-eval`, high-stakes second opinion
+- `/exec-freeze`, cooldown lock
 
 ## Related
 

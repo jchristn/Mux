@@ -1,16 +1,16 @@
 ---
 name: cmo-review
 description: >-
-  /cs:cmo-review <plan>, Narrative-first interrogation of positioning, ICP, message house, and channel mix. Use when
-  launching a campaign or repositioning, or when CAC is rising and the one-sentence positioning test fails.
+  Narrative-first interrogation of positioning, ICP, message house, and channel mix. Use when launching a campaign or
+  repositioning, or when CAC is rising and the one-sentence positioning test fails.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/cmo-review"
 license: MIT
 ---
 
-# /cs:cmo-review, CMO Forcing Questions
+# /cmo-review, CMO Forcing Questions
 
-**Command:** `/cs:cmo-review <plan>`
+**Command:** `/cmo-review <plan>`
 
 The narrative-first strategist pressure-tests positioning before debating tactics.
 
@@ -91,9 +91,9 @@ One-sentence statement: <here>
 
 ## Routing
 
-- `/cs:cro-review`, pipeline contribution check
-- `/cs:cpo-review`, product ↔ positioning alignment
-- `/cs:decide`, log the verdict
+- `/cro-review`, pipeline contribution check
+- `/cpo-review`, product ↔ positioning alignment
+- `/exec-decide`, log the verdict
 
 ## Related
 

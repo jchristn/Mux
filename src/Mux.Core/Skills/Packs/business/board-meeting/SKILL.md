@@ -3,7 +3,7 @@ name: board-meeting
 description: >-
   Multi-agent board meeting protocol for strategic decisions. Runs a structured 6-phase deliberation: context
   loading, independent C-suite contributions (isolated, no cross-pollination), critic analysis, synthesis, founder
-  review, and decision extraction. Use when the user invokes /cs:boardroom, calls a board meeting, or wants
+  review, and decision extraction. Use when the user invokes /boardroom, calls a board meeting, or wants
   structured multi-perspective executive deliberation on a strategic question.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-advisor/skills/board-meeting"
@@ -15,10 +15,10 @@ license: MIT
 Structured multi-agent deliberation that prevents groupthink, captures minority views, and produces clean, actionable decisions.
 
 ## Keywords
-board meeting, executive deliberation, strategic decision, C-suite, multi-agent, /cs:boardroom, founder review, decision extraction, independent perspectives
+board meeting, executive deliberation, strategic decision, C-suite, multi-agent, /boardroom, founder review, decision extraction, independent perspectives
 
 ## Invoke
-`/cs:boardroom [topic]`, e.g. `/cs:boardroom Should we expand to Spain in Q3?`
+`/boardroom [topic]`, e.g. `/boardroom Should we expand to Spain in Q3?`
 
 ---
 
@@ -108,7 +108,7 @@ Options: ✅ Approve | ✏️ Modify | ❌ Reject | ❓ Ask follow-up
 **Rules:**
 - User corrections OVERRIDE agent proposals. No pushback. No "but the CFO said..."
 - 30-min inactivity → auto-close as "pending review"
-- Reopen any time with `/cs:boardroom resume`
+- Reopen any time with `/boardroom resume`
 
 ---
 

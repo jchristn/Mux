@@ -18,3 +18,7 @@ obj/
 
 # Installer build output (scripts/*/build-installers.{sh,bat})
 /installers/
+
+# Python bytecode (skill scripts run during tests must never be committed or embedded)
+__pycache__/
+*.pyc

@@ -70,7 +70,7 @@ python ../../c-level-advisor/skills/chief-data-officer-advisor/scripts/ai_traini
 # 3. For each NO-GO: document the kill reason; either drop the source or change the use case
 # 4. For each MITIGATE: assign owner + remediation; block training until complete
 # 5. Cross-check top-3 mitigations with cs-general-counsel-advisor
-# 6. Log via /cs:decide
+# 6. Log via /exec-decide
 ```
 
 ### Workflow 2: Data Architecture Decision (1 day)
@@ -83,7 +83,7 @@ python ../../c-level-advisor/skills/chief-data-officer-advisor/scripts/data_prod
 # 3. Cross-check architecture choice with cs-cto-advisor (engineering capacity)
 # 4. Cross-check 3-year TCO with cs-cfo-advisor
 # 5. Identify kill criteria explicitly; commit to revisiting in Q4
-# 6. Log via /cs:decide; consider /cs:freeze 90 on multi-year SaaS contracts
+# 6. Log via /exec-decide; consider /exec-freeze 90 on multi-year SaaS contracts
 ```
 
 ### Workflow 3: Data Asset Valuation for M&A Prep (3 days)
@@ -97,7 +97,7 @@ python ../../c-level-advisor/skills/chief-data-officer-advisor/scripts/data_asse
 # 4. Surface contractual carve-outs to cs-general-counsel-advisor
 # 5. Decide productization path (benchmark → embedding → license, in viability order)
 # 6. Customer trust impact assessment (CEO + Head of CS sign-off)
-# 7. Log via /cs:decide
+# 7. Log via /exec-decide
 ```
 
 ### Workflow 4: Data Team Roadmap (1 week)
@@ -155,7 +155,7 @@ echo "Kill criteria + checkpoint dates in each output."
 
 - Skill: [../../c-level-advisor/skills/chief-data-officer-advisor/SKILL.md](../../c-level-advisor/skills/chief-data-officer-advisor/SKILL.md)
 - Voice spec: [../references/persona-voices.md](../references/persona-voices.md)
-- Sibling command: [`/cs:cdo-review`](../skills/cdo-review/SKILL.md)
+- Sibling command: [`/cdo-review`](../skills/cdo-review/SKILL.md)
 
 ---
 

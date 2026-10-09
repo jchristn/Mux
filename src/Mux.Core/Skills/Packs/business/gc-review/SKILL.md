@@ -1,17 +1,17 @@
 ---
 name: gc-review
 description: >-
-  /cs:gc-review <plan>, General Counsel interrogation of contracts, IP, regulatory, term sheets, and employment-law
-  surface. Use when reviewing a term sheet before signing, redlining a customer MSA, or checking IP assignment and
-  regulatory exposure on a new product.
+  General Counsel interrogation of contracts, IP, regulatory, term sheets, and employment-law surface. Use when
+  reviewing a term sheet before signing, redlining a customer MSA, or checking IP assignment and regulatory exposure
+  on a new product.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/gc-review"
 license: MIT
 ---
 
-# /cs:gc-review, General Counsel Forcing Questions
+# /gc-review, General Counsel Forcing Questions
 
-**Command:** `/cs:gc-review <plan>`
+**Command:** `/gc-review <plan>`
 
 The General Counsel lens. Six questions before any contract, term sheet, IP move, or regulatory commitment. This is a lane gstack has zero of, and one where a single missed clause costs more than a year of engineering.
 
@@ -108,9 +108,9 @@ The General Counsel lens. Six questions before any contract, term sheet, IP move
 
 ## Routing
 
-- `/cs:ciso-review`, for any data-touching contract
-- `/cs:cfo-review`, for any commitment > 1 year or > 1% of revenue
-- `/cs:decide`, log the verdict after outside counsel review
+- `/ciso-review`, for any data-touching contract
+- `/cfo-review`, for any commitment > 1 year or > 1% of revenue
+- `/exec-decide`, log the verdict after outside counsel review
 
 ## Workflow Integration with `general-counsel-advisor` skill
 

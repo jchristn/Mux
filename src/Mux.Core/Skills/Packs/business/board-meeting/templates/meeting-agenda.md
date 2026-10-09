@@ -1,6 +1,6 @@
 # Board Meeting Agenda Template
 
-Use this to structure a board meeting before invoking `/cs:boardroom`.
+Use this to structure a board meeting before invoking `/boardroom`.
 Paste it into the conversation or save it as `~/.mux/decisions/agenda-YYYY-MM-DD.md`.
 
 ---

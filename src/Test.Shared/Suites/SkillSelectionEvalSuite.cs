@@ -31,6 +31,9 @@ namespace Test.Shared.Suites
         private const double TopThreeFloor = 0.98;
         private const double TopOneFloor = 0.93;
 
+        // Prompts aimed at pack skills, evaluated with every pack installed (2026-10-09: 16 of 16, top-1 94%).
+        private const string PackCases = @"[{""id"":""pk-incident"",""prompt"":""we have an outage, help me run the incident response"",""files"":[],""expect"":[""incident-commander""]},{""id"":""pk-jira"",""prompt"":""write a JQL query for open bugs in Jira"",""files"":[],""expect"":[""jira-expert""]},{""id"":""pk-confluence"",""prompt"":""restructure our Confluence space"",""files"":[],""expect"":[""confluence-expert""]},{""id"":""pk-board-deck"",""prompt"":""build the investor update deck for the board"",""files"":[],""expect"":[""board-deck-builder""]},{""id"":""pk-boardroom"",""prompt"":""this pricing decision spans finance and product; deliberate across the C-suite"",""files"":[],""expect"":[""boardroom""]},{""id"":""pk-cto"",""prompt"":""interrogate this architecture plan for scaling risks"",""files"":[],""expect"":[""cto-review""]},{""id"":""pk-gdpr"",""prompt"":""prepare for a GDPR audit"",""files"":[],""expect"":[""gdpr-audit-prep""]},{""id"":""pk-soc2"",""prompt"":""get us ready for SOC 2"",""files"":[],""expect"":[""soc2-audit-prep""]},{""id"":""pk-threat"",""prompt"":""hunt for threats in our telemetry and check these IOCs"",""files"":[],""expect"":[""threat-detection""]},{""id"":""pk-stats"",""prompt"":""is this A/B test result statistically significant?"",""files"":[],""expect"":[""statistical-analyst"",""senior-data-scientist""]},{""id"":""pk-rag"",""prompt"":""design a RAG pipeline and pick a chunking strategy"",""files"":[],""expect"":[""rag-architect""]},{""id"":""pk-llm-cost"",""prompt"":""our LLM API costs are too high"",""files"":[],""expect"":[""llm-cost-optimizer""]},{""id"":""pk-schema"",""prompt"":""design the database schema and ERD for the orders domain"",""files"":[],""expect"":[""database-schema-designer"",""database-designer""]},{""id"":""pk-prd"",""prompt"":""write a PRD and prioritize features with RICE"",""files"":[],""expect"":[""product-manager-toolkit""]},{""id"":""pk-markdown"",""prompt"":""render this markdown document as a styled HTML page"",""files"":[],""expect"":[""md-document""]},{""id"":""pk-devops"",""prompt"":""set up a CI/CD pipeline and infrastructure automation on AWS"",""files"":[],""expect"":[""senior-devops""]}]";
+
         private static readonly Lazy<List<Skill>> _Defaults = new Lazy<List<Skill>>(LoadDefaults, LazyThreadSafetyMode.ExecutionAndPublication);
 
         #endregion
@@ -351,6 +354,31 @@ namespace Test.Shared.Suites
                 MuxAssert.Throws<InvalidOperationException>(() => CliArgumentParser.ParseSkill(new[] { "eval", "--top", "zero" }), "non-numeric --top");
                 MuxAssert.Throws<InvalidOperationException>(() => CliArgumentParser.ParseSkill(new[] { "eval", "--top", "0" }), "--top below 1");
                 MuxAssert.Throws<InvalidOperationException>(() => CliArgumentParser.ParseSkill(new[] { "eval", "--top" }), "--top without a value");
+                return Task.CompletedTask;
+            });
+
+            Add("PackSkillsWithPacksInstalled", "With every pack installed, pack skills are listed and chosen for the prompts they serve", (CancellationToken ct) =>
+            {
+                string root = Path.Combine(Path.GetTempPath(), "mux-skilleval-packs-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(root);
+                try
+                {
+                    DefaultSkillLibrary.SeedInto(root);
+                    Mux.Core.Skills.Packaging.SkillPackInstaller installer = new Mux.Core.Skills.Packaging.SkillPackInstaller(root);
+                    foreach (Mux.Core.Skills.Packaging.SkillPack pack in installer.Catalog.Packs) installer.Install(pack.Id);
+                    List<Skill> all = new List<Skill>(new SkillLoader(root).Discover());
+                    MuxAssert.IsTrue(all.Count > 300, "defaults and packs loaded (" + all.Count + ")");
+                    SkillEvalReport report = new SkillSelectionEvaluator(all).Evaluate(SkillSelectionEvaluator.ParseCases(PackCases));
+                    string misses = string.Join("\n", report.Results.Where(r => !r.Passed).Select(Describe));
+                    MuxAssert.AreEqual(0, report.GatingFailures.Count, "gating:\n" + misses);
+                    MuxAssert.AreEqual(1.0, report.TopNRate, "every pack case in the top three:\n" + misses);
+                    MuxAssert.IsTrue(report.Top1Rate >= 0.9, $"top-1 {report.Top1Rate:P1} is below 90%");
+                }
+                finally
+                {
+                    try { Directory.Delete(root, true); } catch (Exception) { }
+                }
+
                 return Task.CompletedTask;
             });
 

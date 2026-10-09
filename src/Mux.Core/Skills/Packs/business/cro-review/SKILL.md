@@ -1,16 +1,16 @@
 ---
 name: cro-review
 description: >-
-  /cs:cro-review <plan>, Pipeline-paranoid interrogation of revenue, win rate, NRR, and ramp time. Use when the
-  forecast misses pipeline coverage, win rates drop, or before scaling the sales team.
+  Pipeline-paranoid interrogation of revenue, win rate, NRR, and ramp time. Use when the forecast misses pipeline
+  coverage, win rates drop, or before scaling the sales team.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/cro-review"
 license: MIT
 ---
 
-# /cs:cro-review, CRO Forcing Questions
+# /cro-review, CRO Forcing Questions
 
-**Command:** `/cs:cro-review <plan>`
+**Command:** `/cro-review <plan>`
 
 The pipeline-paranoid operator pressure-tests revenue assumptions. Six questions that surface next-quarter pain this quarter.
 
@@ -99,10 +99,10 @@ python3 "${SKILL_DIR}/shared/c-level-advisor/skills/cro-advisor/scripts/churn_an
 
 ## Routing
 
-- `/cs:cfo-review`, does this hit the cash plan?
-- `/cs:cmo-review`, is pipeline source-mix healthy?
-- `/cs:execute`, quarterly plan if GREEN
-- `/cs:boardroom`, if RED
+- `/cfo-review`, does this hit the cash plan?
+- `/cmo-review`, is pipeline source-mix healthy?
+- `/exec-execute`, quarterly plan if GREEN
+- `/boardroom`, if RED
 
 ## Related
 

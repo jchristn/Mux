@@ -129,7 +129,7 @@ python conformity_assessment_planner.py system.json
 ## References
 
 - Skill: [../../ra-qm-team/skills/eu-ai-act-specialist/SKILL.md](../../ra-qm-team/skills/eu-ai-act-specialist/SKILL.md)
-- Sibling command: [`/cs:ai-act-readiness`](../skills/ai-act-readiness/SKILL.md)
+- Sibling command: [`/ai-act-readiness`](../skills/ai-act-readiness/SKILL.md)
 
 ---
 

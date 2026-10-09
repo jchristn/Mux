@@ -1,17 +1,16 @@
 ---
 name: cfo-review
 description: >-
-  /cs:cfo-review <plan>, Numerate-skeptic interrogation of any plan that touches money. Unit economics, runway,
-  dilution, capital allocation. Use when a plan commits meaningful spend, e.g. a hiring wave, a fundraise decision,
-  or a new channel budget.
+  Numerate-skeptic interrogation of any plan that touches money. Unit economics, runway, dilution, capital allocation.
+  Use when a plan commits meaningful spend, e.g. a hiring wave, a fundraise decision, or a new channel budget.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/cfo-review"
 license: MIT
 ---
 
-# /cs:cfo-review, CFO Forcing Questions
+# /cfo-review, CFO Forcing Questions
 
-**Command:** `/cs:cfo-review <plan>`
+**Command:** `/cfo-review <plan>`
 
 The numerate skeptic stress-tests anything that touches money. Six questions before any spend or fundraise.
 
@@ -97,9 +96,9 @@ The numerate skeptic stress-tests anything that touches money. Six questions bef
 
 ## Routing
 
-- `/cs:decide`, log the verdict
-- `/cs:execute`, build 90-day plan if GREEN
-- `/cs:boardroom`, escalate if multi-role implications
+- `/exec-decide`, log the verdict
+- `/exec-execute`, build 90-day plan if GREEN
+- `/boardroom`, escalate if multi-role implications
 
 ## Related
 

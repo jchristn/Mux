@@ -1,17 +1,16 @@
 ---
 name: fda-qsr-audit-prep
 description: >-
-  /cs:fda-qsr-audit-prep <scope>, FDA 21 CFR 820 (QSR / QMSR) audit 6-question forcing interrogation. Post-Feb 2026
-  substantially harmonized with ISO 13485. Use before annual internal QSR audit, pre-FDA-inspection readiness, or
-  Form 483 response.
+  FDA 21 CFR 820 (QSR / QMSR) audit 6-question forcing interrogation. Post-Feb 2026 substantially harmonized with ISO
+  13485. Use before annual internal QSR audit, pre-FDA-inspection readiness, or Form 483 response.
 category: compliance
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/compliance-os/skills/fda-qsr-audit-prep"
 license: MIT
 ---
 
-# /cs:fda-qsr-audit-prep, FDA QSR Forcing Questions
+# /fda-qsr-audit-prep, FDA QSR Forcing Questions
 
-**Command:** `/cs:fda-qsr-audit-prep <scope>`
+**Command:** `/fda-qsr-audit-prep <scope>`
 
 The FDA QSR auditor pressure-tests any US medical-device QSR work. Six questions before any internal audit, FDA inspection, Form 483 response, or recall decision.
 
@@ -146,10 +145,10 @@ python3 "${SKILL_DIR}/shared/compliance-os/scripts/audit_simulator.py" fda_qsr_s
 
 ## Routing
 
-- `/cs:compliance-readiness`, for multi-framework view
-- `/cs:iso13485-audit-prep`, for ISO 13485 cross-walk pair (substantially harmonized)
-- `/cs:gdpr-audit-prep`, if connected device handles personal data
-- `/cs:gc-review`, for Warning Letter response coordination
+- `/compliance-readiness`, for multi-framework view
+- `/iso13485-audit-prep`, for ISO 13485 cross-walk pair (substantially harmonized)
+- `/gdpr-audit-prep`, if connected device handles personal data
+- `/gc-review`, for Warning Letter response coordination
 
 ## Related
 

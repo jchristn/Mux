@@ -1702,5 +1702,76 @@
     "expect": [
       "bench"
     ]
+  },
+  {
+    "id": "ansible-check",
+    "prompt": "dry run the ansible playbook against staging",
+    "files": [
+      "site.yml",
+      "ansible.cfg"
+    ],
+    "expect": [
+      "ansible"
+    ]
+  },
+  {
+    "id": "bicep-whatif",
+    "prompt": "preview the Bicep deployment with what-if",
+    "files": [
+      "main.bicep"
+    ],
+    "expect": [
+      "bicep"
+    ]
+  },
+  {
+    "id": "cfn-lint",
+    "prompt": "lint the CloudFormation template",
+    "files": [
+      "template.yaml"
+    ],
+    "expect": [
+      "aws-deploy"
+    ]
+  },
+  {
+    "id": "cdk-diff",
+    "prompt": "show the CDK diff before deploying",
+    "files": [
+      "cdk.json"
+    ],
+    "expect": [
+      "aws-deploy"
+    ]
+  },
+  {
+    "id": "openapi-lint",
+    "prompt": "lint the OpenAPI spec",
+    "files": [
+      "openapi.yaml"
+    ],
+    "expect": [
+      "openapi"
+    ]
+  },
+  {
+    "id": "openapi-breaking",
+    "prompt": "does this API change break existing clients?",
+    "files": [
+      "openapi.yaml"
+    ],
+    "expect": [
+      "openapi"
+    ]
+  },
+  {
+    "id": "openapi-client",
+    "prompt": "generate a TypeScript client from the swagger spec",
+    "files": [
+      "swagger.json"
+    ],
+    "expect": [
+      "openapi-client"
+    ]
   }
 ]

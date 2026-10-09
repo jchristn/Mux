@@ -72,7 +72,7 @@ python ../../c-level-advisor/skills/chief-ai-officer-advisor/scripts/model_build
 # 3. Cross-check with cs-cfo-advisor on budget commitment (multi-year vendor / GPU)
 # 4. Cross-check with cs-cto-advisor on engineering capacity (esp. for fine-tune)
 # 5. Cross-check with cs-cdo-advisor if customer data is involved in fine-tune
-# 6. Log via /cs:decide; consider /cs:freeze 60 on multi-year vendor commitment
+# 6. Log via /exec-decide; consider /exec-freeze 60 on multi-year vendor commitment
 ```
 
 ### Workflow 2: AI Risk Classification (2-4 hours)
@@ -87,7 +87,7 @@ python ../../c-level-advisor/skills/chief-ai-officer-advisor/scripts/ai_risk_cla
 # 4. For LIMITED: implement transparency requirements before launch
 # 5. Cross-check with cs-general-counsel-advisor on contract / liability implications
 # 6. Cross-check with cs-ciso-advisor on technical safeguards
-# 7. Log via /cs:decide
+# 7. Log via /exec-decide
 ```
 
 ### Workflow 3: API vs Self-Hosted Breakeven (1 day)
@@ -100,7 +100,7 @@ python ../../c-level-advisor/skills/chief-ai-officer-advisor/scripts/ai_cost_eco
 # 3. Estimate migration cost (3-6 months, 2-3 engineers = $150-300K)
 # 4. Cross-check with cs-cfo-advisor on capex commitment + reserved GPU pricing
 # 5. Cross-check with cs-cto-advisor on platform readiness + on-call capacity
-# 6. Log via /cs:decide; pair with /cs:freeze if signing multi-year GPU commitment
+# 6. Log via /exec-decide; pair with /exec-freeze if signing multi-year GPU commitment
 ```
 
 ### Workflow 4: AI Team Roadmap (1 week)
@@ -139,7 +139,7 @@ python ../../c-level-advisor/skills/chief-ai-officer-advisor/scripts/ai_risk_cla
 python ../../c-level-advisor/skills/chief-ai-officer-advisor/scripts/ai_cost_economics.py workload.json
 
 # Required before ship:
-#   ☐ Recommendation logged via /cs:decide
+#   ☐ Recommendation logged via /exec-decide
 #   ☐ All HIGH-risk controls in place (if applicable)
 #   ☐ Eval set committed with documented SLO
 #   ☐ Fallback behavior defined for model failure
@@ -168,7 +168,7 @@ python ../../c-level-advisor/skills/chief-ai-officer-advisor/scripts/ai_cost_eco
 
 - Skill: [../../c-level-advisor/skills/chief-ai-officer-advisor/SKILL.md](../../c-level-advisor/skills/chief-ai-officer-advisor/SKILL.md)
 - Voice spec: [../references/persona-voices.md](../references/persona-voices.md)
-- Sibling command: [`/cs:caio-review`](../skills/caio-review/SKILL.md)
+- Sibling command: [`/caio-review`](../skills/caio-review/SKILL.md)
 
 ---
 

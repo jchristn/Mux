@@ -1,6 +1,6 @@
 # Skill Completeness Plan
 
-_Status: in progress (started 2026-10-09). `[ ]` = todo, `[~]` = in progress, `[x]` = done. Update the table and the task lists as work lands; record anything that changed from the design under Deviations at the end._
+_Status: done (2026-10-09). `[ ]` = todo, `[~]` = in progress, `[x]` = done. Update the table and the task lists as work lands; record anything that changed from the design under Deviations at the end._
 
 mux ships 170 default skills and 166 more in optional packs. Count is no longer the problem. The defaults cover building, testing, linting, and formatting in seven language families, git, review, the long-running loops, and a wide spread of cloud and Kubernetes work, all behind the guardrails that keep infrastructure skills from deleting anything or reading secrets. What the library cannot yet tell you is whether the model picks the right skill when you ask for something, and it still has holes in places most real repositories touch: dependency vulnerabilities, databases, shell scripts, version upgrades, logs, and several languages and frameworks.
 
@@ -18,9 +18,9 @@ This plan closes those gaps in the order I would want them closed. The evaluatio
 | 6 | Missing languages and mobile | languages, mobile | `ruby-*`, `php-*`, `swift-*`, `android-*`, `flutter-*` (15) | [x] |
 | 7 | Frontend frameworks beyond React | frontend | `web-framework`, `storybook` | [x] |
 | 8 | Logs and runtime diagnosis | debugging | `log-triage`, `port-inspect`, `bench` | [x] |
-| 9 | Missing infrastructure tools | infrastructure | `ansible`, `bicep`, `cloudformation`, `cdk` | [ ] |
-| 10 | API contracts | review | `openapi` | [ ] |
-| 11 | Pack description cleanup | (packs) | none | [ ] |
+| 9 | Missing infrastructure tools | infrastructure | `ansible`, `bicep` (CloudFormation and CDK were already in `aws-deploy`) | [x] |
+| 10 | API contracts | review | `openapi`, `openapi-client` | [x] |
+| 11 | Pack description cleanup | (packs) | none | [x] |
 
 Each skill follows the existing conventions: a pwsh command per action built with `ToolchainSkillFactory` or a family `Skill(...)` helper, `appliesTo` and `requiresTools` gates so it only lists where it applies, exit codes 0 (success), 1 (the tool reported problems), 2 (the tool or project is missing), and 3 (refused by the production guard) where something can change state, a dry run through `MUX_SKILL_DRY_RUN`, and a category in `DefaultSkillCategories`. `BUILTIN_SKILLS.md`, the README skill count, and the CHANGELOG are updated in the same commit as the skills.
 
@@ -110,24 +110,24 @@ Rather than seven near-identical families, one `web-framework` skill detects Nex
 
 Same guardrails as `terraform` and `pulumi`: read and preview freely, apply only with confirmation and never against production without it, never destroy.
 
-- [ ] `ansible lint|syntax|check|apply` (`--check --diff` for preview).
-- [ ] `bicep build|lint|what-if|deploy`.
-- [ ] `cloudformation validate|lint|changeset|deploy` (cfn-lint, change sets described before execution).
-- [ ] `cdk synth|diff|deploy`.
-- [ ] Tests: dry runs, the production guard, no destroy path exists in any command.
+- [x] `ansible lint|syntax|check|apply|inventory` (`--check --diff` for preview).
+- [x] `bicep build|lint|what-if|deploy`.
+- [x] CloudFormation: `aws-deploy` already listed stacks, created change sets, and deployed SAM; it gains `cfn-validate` and `cfn-lint` instead of a duplicate skill.
+- [x] CDK: already covered by `aws-deploy` (`cdk-synth`, `cdk-diff`, `cdk-deploy`).
+- [x] Tests (`InfraSkillsSuite`, 4 cases): dry runs, the production guard on apply and deploy, no destroy command, and the CloudFormation checks.
 
 ## Phase 10: API contracts
 
-- [ ] `openapi validate|lint|diff|client`: validation and lint through `redocly` or `spectral`, breaking-change diff through `oasdiff`, client generation through `openapi-generator-cli` into a named directory.
-- [ ] Tests: a valid and an invalid spec, a breaking diff, a missing tool.
+- [x] `openapi lint|diff|breaking` and `openapi-client generate|generators` (split like `deps-audit` and `sbom`, so linting never needs approval): validation and lint through `redocly` or `spectral`, breaking-change diff through `oasdiff`, client generation through `openapi-generator-cli` into a named directory.
+- [x] Tests (`ApiContractSkillsSuite`, 5 cases): spec discovery that skips node_modules, a diff against a real git base, a spec new on the branch, two-file comparison, and client generation refusing paths outside the repository.
 
 ## Phase 11: Pack description cleanup
 
 The imported packs keep their source's voice, and some descriptions read like a persona ("World-class senior data scientist skill...") instead of telling the model when to use the skill. The evaluation from phase 1 makes this measurable, so the cleanup is a rewrite of each pack description into a trigger sentence plus what the skill does, checked by the evaluation and a lint rule.
 
-- [ ] Rewrite pack descriptions that open with a persona or marketing phrasing.
-- [ ] `ShippedSkillsSuite` rule: no pack or default description contains "world-class", "senior", "expert", or similar persona words, and every description says when to use the skill.
-- [ ] Evaluation cases for the packs, run with the pack installed.
+- [x] Rewrite pack descriptions that open with a persona or marketing phrasing (9 rewritten), and drop the `/cs:` usage line that opened 30 of them.
+- [x] `ShippedSkillsSuite` rule: no pack or default description contains "world-class", "senior", "expert", or similar persona words, and every description says when to use the skill.
+- [x] Evaluation cases for the packs, run with every pack installed (16 cases: all in the top three, top-1 94%).
 
 ## Risks
 
@@ -139,6 +139,7 @@ Some tools these skills call (osv-scanner, syft, oasdiff, PSScriptAnalyzer) are 
 
 ## Deviations
 
+- Phase 9: no `cloudformation` or `cdk` skill was added, because `aws-deploy` already creates change sets and runs `cdk synth`, `diff`, and `deploy`; a second skill would split the model's choice. `aws-deploy` gained `cfn-validate` and `cfn-lint` instead. Phase 10: generation is its own mutating `openapi-client` skill. Phase 11 grew: the pack bodies, not just descriptions, carried 502 references to upstream `/cs:` commands that do not exist in mux, so every reference was rewritten to the mux skill that does the job, and a check keeps them out. The cleanup also found seven committed `.pyc` files and that any local `__pycache__` was being embedded in the build; both are fixed, and skill processes no longer write bytecode.
 - Phase 8: `bench` times commands with a built-in loop when hyperfine is missing, so it is useful on a stock machine; `log-triage` keys a Python traceback by its final exception line, which is the informative one. Phase 7: dev servers are described for process_start, as react-dev-server does, rather than started by the skill. The evaluation case for starting a SvelteKit dev server accepts react-dev-server too, because it handles any Vite dev script.
 - Phase 5: `dotnet-upgrade` adds the new framework to a `TargetFrameworks` list rather than replacing one, since multi-targeting is usually deliberate, and leaves `@types/node`, classifiers, matrices, and framework packages to the user as notes. Phase 6: Android is gated on `AndroidManifest.xml` rather than the Android Gradle plugin, which a glob cannot see; Swift covers Xcode projects through `xcodebuild` schemes as well as packages; the evaluation floor rose to top-3 98% and top-1 93% (155 of 157 cases).
 - Phase 3: the generic `db-query` was replaced by one skill per platform after the user asked for basic coverage of every major SQL, NoSQL, and graph database, including LiteGraph. LiteGraph is reached through its REST API rather than its `lg` console, because `lg` in database-file mode initializes the file it is given, which is a write. SQLite statements go to `sqlite3` on standard input, because a statement starting with a `--` comment was read as a command-line option.

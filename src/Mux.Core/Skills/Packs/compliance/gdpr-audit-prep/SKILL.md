@@ -1,16 +1,16 @@
 ---
 name: gdpr-audit-prep
 description: >-
-  /cs:gdpr-audit-prep <scope>, GDPR audit 6-question Article-cited forcing interrogation. Use before annual internal
-  GDPR review, post-breach internal audit, DPA investigation readiness, or acquisition due diligence.
+  GDPR audit 6-question Article-cited forcing interrogation. Use before annual internal GDPR review, post-breach
+  internal audit, DPA investigation readiness, or acquisition due diligence.
 category: compliance
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/compliance-os/skills/gdpr-audit-prep"
 license: MIT
 ---
 
-# /cs:gdpr-audit-prep, GDPR DPO Forcing Questions
+# /gdpr-audit-prep, GDPR DPO Forcing Questions
 
-**Command:** `/cs:gdpr-audit-prep <scope>`
+**Command:** `/gdpr-audit-prep <scope>`
 
 The GDPR DPO auditor pressure-tests any privacy compliance work. Six Article-cited questions before any internal audit, breach response, DPA investigation, or acquisition due diligence.
 
@@ -152,11 +152,11 @@ python3 "${SKILL_DIR}/shared/compliance-os/scripts/cross_framework_mapper.py" pr
 
 ## Routing
 
-- `/cs:compliance-readiness`, for multi-framework view
-- `/cs:iso27001-audit-prep`, for Article 32 organizational measures
-- `/cs:ai-act-readiness`, for EU AI Act Article 27 FRIA integration
-- `/cs:soc2-audit-prep`, for SOC 2 Privacy TSC overlap
-- `/cs:gc-review`, for novel-case legal review
+- `/compliance-readiness`, for multi-framework view
+- `/iso27001-audit-prep`, for Article 32 organizational measures
+- `/ai-act-readiness`, for EU AI Act Article 27 FRIA integration
+- `/soc2-audit-prep`, for SOC 2 Privacy TSC overlap
+- `/gc-review`, for novel-case legal review
 
 ## Related
 

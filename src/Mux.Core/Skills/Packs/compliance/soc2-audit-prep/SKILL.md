@@ -1,16 +1,16 @@
 ---
 name: soc2-audit-prep
 description: >-
-  /cs:soc2-audit-prep <scope>, SOC 2 Type II readiness 6-question forcing interrogation. Observation-period focused.
-  Use before Type II observation begins, mid-period checkpoint, or pre-field-test month-10 readiness.
+  SOC 2 Type II readiness 6-question forcing interrogation. Observation-period focused. Use before Type II observation
+  begins, mid-period checkpoint, or pre-field-test month-10 readiness.
 category: compliance
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/compliance-os/skills/soc2-audit-prep"
 license: MIT
 ---
 
-# /cs:soc2-audit-prep, SOC 2 Type II Forcing Questions
+# /soc2-audit-prep, SOC 2 Type II Forcing Questions
 
-**Command:** `/cs:soc2-audit-prep <scope>`
+**Command:** `/soc2-audit-prep <scope>`
 
 The SOC 2 Type II auditor pressure-tests any SOC 2 work. Six observation-period-disciplined questions before any Type II cycle.
 
@@ -140,10 +140,10 @@ python3 "${SKILL_DIR}/shared/compliance-os/scripts/audit_simulator.py" soc2_scop
 
 ## Routing
 
-- `/cs:compliance-readiness`, for multi-framework view
-- `/cs:iso27001-audit-prep`, for ISO 27001 cross-walk pair (75% overlap)
-- `/cs:gdpr-audit-prep`, for Privacy TSC overlap
-- `/cs:ciso-review`, for executive cybersecurity strategy
+- `/compliance-readiness`, for multi-framework view
+- `/iso27001-audit-prep`, for ISO 27001 cross-walk pair (75% overlap)
+- `/gdpr-audit-prep`, for Privacy TSC overlap
+- `/ciso-review`, for executive cybersecurity strategy
 
 ## Related
 

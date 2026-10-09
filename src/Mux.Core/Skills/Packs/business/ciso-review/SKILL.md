@@ -1,17 +1,16 @@
 ---
 name: ciso-review
 description: >-
-  /cs:ciso-review <plan>, Risk-paranoid interrogation of any plan that touches data, compliance, or production
-  access. Use when launching features that handle customer data, before a SOC 2 / ISO audit, or after any incident or
-  near-miss.
+  Risk-paranoid interrogation of any plan that touches data, compliance, or production access. Use when launching
+  features that handle customer data, before a SOC 2 / ISO audit, or after any incident or near-miss.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/ciso-review"
 license: MIT
 ---
 
-# /cs:ciso-review, CISO Forcing Questions
+# /ciso-review, CISO Forcing Questions
 
-**Command:** `/cs:ciso-review <plan>`
+**Command:** `/ciso-review <plan>`
 
 The risk-paranoid threat-modeler. Six questions before any production change that touches customer data or compliance scope.
 
@@ -103,10 +102,10 @@ python3 "${SKILL_DIR}/shared/c-level-advisor/skills/ciso-advisor/scripts/complia
 
 ## Routing
 
-- `/cs:cto-review`, architecture alignment
-- `/cs:gc-review`, DPA, regulatory implications
-- `/cs:decide`, log risk acceptance
-- `/cs:boardroom`, for CRITICAL risks
+- `/cto-review`, architecture alignment
+- `/gc-review`, DPA, regulatory implications
+- `/exec-decide`, log risk acceptance
+- `/boardroom`, for CRITICAL risks
 
 ## Related
 

@@ -1,16 +1,16 @@
 ---
 name: iso27001-audit-prep
 description: >-
-  /cs:iso27001-audit-prep <scope>, ISO 27001 ISMS audit readiness 6-question forcing interrogation. Use before annual
-  Clause 9.2 internal audit, surveillance audit prep, or stage 1 certification readiness.
+  ISO 27001 ISMS audit readiness 6-question forcing interrogation. Use before annual Clause 9.2 internal audit,
+  surveillance audit prep, or stage 1 certification readiness.
 category: compliance
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/compliance-os/skills/iso27001-audit-prep"
 license: MIT
 ---
 
-# /cs:iso27001-audit-prep, ISO 27001 ISMS Audit Forcing Questions
+# /iso27001-audit-prep, ISO 27001 ISMS Audit Forcing Questions
 
-**Command:** `/cs:iso27001-audit-prep <scope>`
+**Command:** `/iso27001-audit-prep <scope>`
 
 The ISO 27001 ISMS auditor pressure-tests any ISMS work. Six sample-driven questions before any internal audit, stage 1 readiness, or surveillance audit.
 
@@ -124,12 +124,12 @@ python3 "${SKILL_DIR}/shared/compliance-os/scripts/cross_framework_mapper.py" pr
 
 ## Routing
 
-- `/cs:compliance-readiness`, for multi-framework view
-- `/cs:soc2-audit-prep`, for SOC 2 cross-walk pair (75% overlap)
-- `/cs:aims-audit`, for ISO 42001 AIMS cross-walk
-- `/cs:gdpr-audit-prep`, for Article 32 organizational measures overlap
-- `/cs:ciso-review`, for executive cybersecurity strategy
-- `/cs:decide`, to log the verdict
+- `/compliance-readiness`, for multi-framework view
+- `/soc2-audit-prep`, for SOC 2 cross-walk pair (75% overlap)
+- `/aims-audit`, for ISO 42001 AIMS cross-walk
+- `/gdpr-audit-prep`, for Article 32 organizational measures overlap
+- `/ciso-review`, for executive cybersecurity strategy
+- `/exec-decide`, to log the verdict
 
 ## Related
 

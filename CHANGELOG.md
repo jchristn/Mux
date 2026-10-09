@@ -6,6 +6,13 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **`ansible` and `bicep` skills.** Ansible lints playbooks, checks syntax, previews with `--check --diff`, and
+  runs them with `apply` refused for a production-looking limit or inventory unless confirmed. Bicep builds and
+  lints files, previews a resource-group deployment with what-if, and deploys behind the same guard. Neither
+  offers a destroy command. `aws-deploy` gains `cfn-validate` and `cfn-lint` for CloudFormation templates.
+- **`openapi` and `openapi-client` skills.** `openapi lint` (Redocly or Spectral), `openapi diff` against the
+  base branch and `openapi breaking <old> <new>` (oasdiff, exits 1 on breaking changes), and `openapi-client
+  generate <generator> <dir>` (openapi-generator, into a relative folder only).
 - **`web-framework` and `storybook` skills.** `web-framework` detects Next.js, Nuxt, SvelteKit, Angular, Astro,
   Remix, Svelte, Vue, or Vite and runs build, lint, and test through the project's scripts or the framework's
   tools (tests run once, never in watch mode), describes the dev server for `process_start`, and compares
@@ -212,6 +219,12 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- **Pack skills cleaned up.** 502 references to the upstream `/cs:` slash commands across 86 pack files, and the
+  bundled `handoff` skill, now name the mux skill that does the job (`/exec-decide`, `/boardroom`, `run_skill
+  handoff setup`, and so on); the few upstream commands mux never shipped are marked as such. Descriptions no
+  longer open with a `/cs:` usage line, and nine that read like a persona ("World-class senior data scientist
+  skill...", "Atlassian Jira expert for...") now say what the skill does. Shipped-skill checks keep both from
+  coming back.
 - The `dotnet-*` skills are listed only in .NET projects (a solution, project file, or `global.json`) instead
   of in every project. Eleven skill descriptions were rewritten to say what they do in the words people use
   (for example `git-secret-scan` now mentions API keys and tokens, and `py-format` says Python).
@@ -232,6 +245,9 @@ All notable changes to mux are documented here.
 
 ### Fixed
 
+- Python bytecode no longer ships: seven committed `.pyc` files are gone, `__pycache__` is ignored and excluded
+  from the embedded skill resources, and skill processes set `PYTHONDONTWRITEBYTECODE=1` (unless already set)
+  so running a skill never writes into its folder.
 - **Windows background processes.** `process_start` passed the command to `cmd.exe` with C-runtime quoting,
   which `cmd /c` does not understand, so commands containing quotes ran mangled. The command now goes through
   verbatim, as `run_process` passes it.

@@ -105,6 +105,7 @@ namespace Mux.Core.Skills
             definitions.AddRange(DefaultMobileLanguageSkills.All());
             definitions.AddRange(DefaultWebFrameworkSkills.All());
             definitions.AddRange(DefaultRuntimeSkills.All());
+            definitions.AddRange(DefaultApiContractSkills.All());
             return definitions;
         }
 

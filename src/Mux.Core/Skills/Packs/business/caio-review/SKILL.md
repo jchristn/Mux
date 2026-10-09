@@ -1,17 +1,17 @@
 ---
 name: caio-review
 description: >-
-  /cs:caio-review <plan>, Eval-demanding Chief AI Officer interrogation of any plan that involves AI: model
-  selection, risk classification, cost economics, or AI hiring. Use when shipping an AI feature without an eval set,
-  choosing between API, fine-tune, and self-hosted, or classifying a use case under the EU AI Act.
+  Eval-demanding Chief AI Officer interrogation of any plan that involves AI: model selection, risk classification,
+  cost economics, or AI hiring. Use when shipping an AI feature without an eval set, choosing between API, fine-tune,
+  and self-hosted, or classifying a use case under the EU AI Act.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/caio-review"
 license: MIT
 ---
 
-# /cs:caio-review, CAIO Forcing Questions
+# /caio-review, CAIO Forcing Questions
 
-**Command:** `/cs:caio-review <plan>`
+**Command:** `/caio-review <plan>`
 
 The eval-demanding CAIO pressure-tests any plan that involves AI. Six questions before any AI feature ships, any multi-year vendor commitment, or any AI team expansion.
 
@@ -127,13 +127,13 @@ python3 "${SKILL_DIR}/shared/c-level-advisor/skills/chief-ai-officer-advisor/scr
 
 ## Routing
 
-- `/cs:cdo-review`, for any training-data implications
-- `/cs:gc-review`, for AI vendor contracts, output liability, training-data licensing
-- `/cs:ciso-review`, for prompt injection / jailbreak / training-data poisoning threat model
-- `/cs:cfo-review`, for multi-year vendor or GPU commitment TCO
+- `/cdo-review`, for any training-data implications
+- `/gc-review`, for AI vendor contracts, output liability, training-data licensing
+- `/ciso-review`, for prompt injection / jailbreak / training-data poisoning threat model
+- `/cfo-review`, for multi-year vendor or GPU commitment TCO
 - `cs-chro-advisor` agent: for AI team hires (comp, ladder, leveling)
-- `/cs:decide`, log the verdict
-- `/cs:freeze 60`, on multi-year AI commitments
+- `/exec-decide`, log the verdict
+- `/exec-freeze 60`, on multi-year AI commitments
 
 ## Related
 

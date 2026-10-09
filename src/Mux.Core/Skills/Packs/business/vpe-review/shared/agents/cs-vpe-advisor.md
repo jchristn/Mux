@@ -72,7 +72,7 @@ Differentiates clearly:
 python ../../c-level-advisor/skills/vpe-advisor/scripts/delivery_throughput_analyzer.py sprint_metrics.json
 # Cross-check architectural causes with cs-cto-advisor
 # Output: top bottleneck + one engineer named to own the fix
-# Log via /cs:decide
+# Log via /exec-decide
 ```
 
 ### Workflow 2: Hiring Funnel Diagnosis (1 day)
@@ -155,7 +155,7 @@ python ../../c-level-advisor/skills/vpe-advisor/scripts/eng_team_structure_desig
 
 - Skill: [../../c-level-advisor/skills/vpe-advisor/SKILL.md](../../c-level-advisor/skills/vpe-advisor/SKILL.md)
 - Voice spec: [../references/persona-voices.md](../references/persona-voices.md)
-- Sibling command: [`/cs:vpe-review`](../skills/vpe-review/SKILL.md)
+- Sibling command: [`/vpe-review`](../skills/vpe-review/SKILL.md)
 
 ---
 

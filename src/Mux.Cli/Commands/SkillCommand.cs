@@ -173,6 +173,12 @@ namespace Mux.Cli.Commands
             }
         }
 
+        // A whole-number percentage with no culture-specific spacing ("100%", never "100 %").
+        private static string Percent(double rate)
+        {
+            return Math.Round(rate * 100).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "%";
+        }
+
         private static async Task<int> HandleEvalAsync(string skillsDirectory, SkillSettings settings, MuxSettings muxSettings, bool json, CancellationToken cancellationToken)
         {
             string? caseId = settings.Name;
@@ -305,8 +311,8 @@ namespace Mux.Cli.Commands
 
             Console.WriteLine();
             Console.WriteLine(settings.Live
-                ? $"{report.Passed} of {report.Results.Count} cases passed. The model ({mode.Substring(5)}) chose an expected skill {report.Top1Rate:P0} of the time, {report.GatingFailures.Count} gating failures."
-                : $"{report.Passed} of {report.Results.Count} cases passed. Top-1 {report.Top1Rate:P0}, top-{report.TopN} {report.TopNRate:P0}, {report.GatingFailures.Count} gating failures.");
+                ? $"{report.Passed} of {report.Results.Count} cases passed. The model ({mode.Substring(5)}) chose an expected skill {Percent(report.Top1Rate)} of the time, {report.GatingFailures.Count} gating failures."
+                : $"{report.Passed} of {report.Results.Count} cases passed. Top-1 {Percent(report.Top1Rate)}, top-{report.TopN} {Percent(report.TopNRate)}, {report.GatingFailures.Count} gating failures.");
             if (collisions.Count > 0)
             {
                 Console.WriteLine("Similar descriptions (the model may confuse these):");

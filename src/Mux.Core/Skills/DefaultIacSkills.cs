@@ -27,8 +27,73 @@ $workspace = Get-MuxTarget -Label 'Terraform workspace' -Resolve { & $tf workspa
 $stackName = Get-MuxTarget -Label 'Pulumi stack' -Resolve { pulumi stack --show-name 2>$null } -LoginHint 'Sign in with pulumi login and select a stack with pulumi stack select, then retry.'
 ", new[] { "pulumi", "iac" }, new[] { "Pulumi.yaml" }, new[] { "pulumi" }, ToolchainSkillFactory.GuardedExitNote);
 
+            ToolchainSkillFactory ansible = new ToolchainSkillFactory(@"$ansibleHint = 'Install Ansible (pip install ansible) and ansible-lint (pip install ansible-lint).'
+$split = Split-MuxOptions -Arguments $args -Names @('-i', '--inventory', '--limit', '-l', '--confirm')
+$inventory = @($split.Options['-i'], $split.Options['--inventory']) | Where-Object { $_ } | Select-Object -First 1
+$limit = @($split.Options['--limit'], $split.Options['-l']) | Where-Object { $_ } | Select-Object -First 1
+$playbook = Get-MuxArg -Arguments $split.Rest -Index 0
+$common = @()
+if ($inventory) { $common += @('-i', $inventory) }
+if ($limit) { $common += @('--limit', $limit) }
+function Assert-MuxPlaybook {
+    if (-not $playbook) { Exit-MuxNotApplicable 'pass the playbook, for example site.yml.' }
+    if (-not (Test-MuxDryRun) -and -not (Test-Path -LiteralPath $playbook -PathType Leaf)) { Exit-MuxNotApplicable ('playbook not found: ' + $playbook) }
+}
+", new[] { "ansible", "iac" }, new[] { "ansible.cfg", "**/ansible.cfg", "site.yml", "playbook*.yml", "**/playbooks/*.yml", "**/roles/*/tasks/main.yml" }, new[] { "ansible-playbook" }, ToolchainSkillFactory.GuardedExitNote);
+
+            ToolchainSkillFactory bicep = new ToolchainSkillFactory(@"$azHint = 'Install the Azure CLI (https://learn.microsoft.com/cli/azure/install-azure-cli) and sign in with az login.'
+$split = Split-MuxOptions -Arguments $args -Names @('--resource-group', '-g', '--parameters', '-p', '--confirm')
+$file = Get-MuxArg -Arguments $split.Rest -Index 0
+$group = @($split.Options['--resource-group'], $split.Options['-g']) | Where-Object { $_ } | Select-Object -First 1
+$parameters = @($split.Options['--parameters'], $split.Options['-p']) | Where-Object { $_ } | Select-Object -First 1
+function Assert-MuxBicepFile {
+    if (-not $file) { Exit-MuxNotApplicable 'pass the Bicep file, for example main.bicep.' }
+    if (-not (Test-MuxDryRun) -and -not (Test-Path -LiteralPath $file -PathType Leaf)) { Exit-MuxNotApplicable ('Bicep file not found: ' + $file) }
+}
+function Get-MuxDeploymentArgs {
+    param([string]$Verb)
+    if (-not $group) { Exit-MuxNotApplicable ('pass the target: bicep ' + $Verb + ' <file> --resource-group <name>') }
+    $deployment = @('deployment', 'group', $Verb, '--resource-group', $group, '--template-file', $file)
+    if ($parameters) { $deployment += @('--parameters', $parameters) }
+    return ,$deployment
+}
+", new[] { "bicep", "azure", "iac" }, new[] { "*.bicep", "**/*.bicep" }, new[] { "az" }, ToolchainSkillFactory.GuardedExitNote);
+
             return new List<DefaultSkillDef>
             {
+                ansible.Skill("ansible", "Lint, check, and run Ansible playbooks", "Ansible: lints playbooks, checks their syntax, previews changes with --check --diff, runs them behind the production guard, and shows the inventory.", true,
+                    "The project has Ansible playbooks, roles, or ansible.cfg, or the user asks to configure servers with Ansible.",
+                    "<playbook> [-i inventory] [--limit hosts] [--confirm target]",
+                    "Work in this order: `lint`, `syntax <playbook>`, `check <playbook>` (a dry run with `--check --diff` that changes nothing on the hosts), show the user the diff, then `apply <playbook>`. Pass `-i <inventory>` and `--limit <hosts>` to any of them. `apply` treats the limit (or else the inventory, or else all) as the target and refuses one that matches the production pattern unless `--confirm <target>` repeats it after the user approves. `inventory` shows the host graph. There is no command that removes hosts or resources.",
+                    C("lint", "Run ansible-lint.", @"$target = if ($playbook) { @($playbook) } else { @() }
+Invoke-MuxTool -Tool 'ansible-lint' -Arguments $target -InstallHint $ansibleHint"),
+                    C("syntax", "Check a playbook's syntax.", @"Assert-MuxPlaybook
+Invoke-MuxTool -Tool 'ansible-playbook' -Arguments (@('--syntax-check') + $common + @($playbook)) -InstallHint $ansibleHint"),
+                    C("check", "Preview a playbook with --check --diff.", @"Assert-MuxPlaybook
+Invoke-MuxTool -Tool 'ansible-playbook' -Arguments (@('--check', '--diff') + $common + @($playbook)) -InstallHint $ansibleHint"),
+                    C("apply", "Run a playbook (production guarded).", @"Assert-MuxPlaybook
+$target = if ($limit) { $limit } elseif ($inventory) { [System.IO.Path]::GetFileNameWithoutExtension($inventory) } else { 'all' }
+Write-Output ('Target: ' + $target)
+Assert-MuxNotProduction -Target $target -Confirm ([string]$split.Options['--confirm'])
+Invoke-MuxTool -Tool 'ansible-playbook' -Arguments (@('--diff') + $common + @($playbook)) -InstallHint $ansibleHint"),
+                    C("inventory", "Show the inventory graph.", @"$inv = if ($inventory) { @('-i', $inventory) } else { @() }
+Invoke-MuxTool -Tool 'ansible-inventory' -Arguments ($inv + @('--graph')) -InstallHint $ansibleHint")),
+
+                bicep.Skill("bicep", "Build, preview, and deploy Bicep", "Azure Bicep: builds and lints Bicep files, previews a resource-group deployment with what-if, and deploys it behind the production guard.", true,
+                    "The project has .bicep files, or the user asks to deploy Azure infrastructure with Bicep.",
+                    "<file> [--resource-group name] [--parameters file] [--confirm group]",
+                    "Work in this order: `lint <file>`, `build <file>` (compiles to ARM JSON on standard output, writing nothing), `what-if <file> --resource-group <name>`, show the user the result, then `deploy` with the same arguments. `--parameters <file.bicepparam | file.json>` passes parameters. `deploy` refuses a resource group that matches the production pattern unless `--confirm <group>` repeats it after the user approves. Only resource-group deployments are offered, and there is no delete command.",
+                    C("build", "Compile a Bicep file to ARM JSON on standard output.", @"Assert-MuxBicepFile
+Invoke-MuxTool -Tool 'az' -Arguments @('bicep', 'build', '--file', $file, '--stdout') -InstallHint $azHint"),
+                    C("lint", "Lint a Bicep file.", @"Assert-MuxBicepFile
+Invoke-MuxTool -Tool 'az' -Arguments @('bicep', 'lint', '--file', $file) -InstallHint $azHint"),
+                    C("what-if", "Preview a resource-group deployment.", @"Assert-MuxBicepFile
+Invoke-MuxTool -Tool 'az' -Arguments (Get-MuxDeploymentArgs 'what-if') -InstallHint $azHint"),
+                    C("deploy", "Deploy to a resource group (production guarded).", @"Assert-MuxBicepFile
+$deployment = Get-MuxDeploymentArgs 'create'
+Assert-MuxNotProduction -Target $group -Confirm ([string]$split.Options['--confirm'])
+Invoke-MuxTool -Tool 'az' -Arguments $deployment -InstallHint $azHint")),
+
                 terraform.Skill("terraform", "Plan and apply Terraform", "Formats, validates, initializes, and plans; applies only a saved plan; lists state and outputs. Works with OpenTofu.", true,
                     "The project has .tf files, or the user asks to change infrastructure managed by Terraform or OpenTofu.",
                     "[--confirm <workspace>]",

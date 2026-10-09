@@ -1,17 +1,16 @@
 ---
 name: aims-audit
 description: >-
-  /cs:aims-audit <scope>, ISO/IEC 42001 AIMS internal-audit 6-question forcing interrogation. Use before
-  certification stage 1, before annual internal audit cycles, or when onboarding a new AI system into an existing
-  AIMS.
+  ISO/IEC 42001 AIMS internal-audit 6-question forcing interrogation. Use before certification stage 1, before annual
+  internal audit cycles, or when onboarding a new AI system into an existing AIMS.
 category: compliance
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/compliance-os/skills/aims-audit"
 license: MIT
 ---
 
-# /cs:aims-audit, AIMS ISO 42001 Forcing Questions
+# /aims-audit, AIMS ISO 42001 Forcing Questions
 
-**Command:** `/cs:aims-audit <scope>`
+**Command:** `/aims-audit <scope>`
 
 The ISO 42001 AIMS specialist pressure-tests any AI Management System work. Six questions before any certification commitment, internal audit cycle, or new-system onboarding.
 
@@ -120,12 +119,12 @@ python3 "${SKILL_DIR}/shared/compliance-os/scripts/cross_framework_mapper.py" pr
 
 ## Routing
 
-- `/cs:compliance-readiness`, for multi-framework view
-- `/cs:ai-act-readiness`, if EU AI Act also applies
-- `/cs:caio-review`, for executive AI strategy decisions
-- `/cs:ciso-review`, for ISO 27001 cross-framework alignment
-- `/cs:decide`, to log the verdict
-- `/cs:freeze 30`, on certification commitments
+- `/compliance-readiness`, for multi-framework view
+- `/ai-act-readiness`, if EU AI Act also applies
+- `/caio-review`, for executive AI strategy decisions
+- `/ciso-review`, for ISO 27001 cross-framework alignment
+- `/exec-decide`, to log the verdict
+- `/exec-freeze 30`, on certification commitments
 
 ## Related
 

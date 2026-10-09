@@ -1,10 +1,10 @@
 ---
 name: incident-commander
 description: >-
-  Comprehensive incident response framework from detection through resolution and post-incident review. Battle-tested
-  SRE/DevOps practices: severity classification, timeline reconstruction, structured post-incident analysis. Use when
-  declaring an incident, coordinating multi-team response during an outage, leading a post-mortem, or setting up
-  on-call practices for a new service.
+  Incident response from detection through resolution and post-incident review, with SRE practices for severity
+  classification, timeline reconstruction, and structured post-incident analysis. Use when declaring an incident,
+  coordinating multi-team response during an outage, leading a post-mortem, or setting up on-call practices for a new
+  service.
 category: devops
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/engineering-team/skills/incident-commander"
 license: MIT

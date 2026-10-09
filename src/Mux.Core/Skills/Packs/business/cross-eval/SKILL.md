@@ -1,17 +1,17 @@
 ---
 name: cross-eval
 description: >-
-  /cs:cross-eval <memo>, Multi-model consensus on a board memo or strategy brief. Claude + Codex + Gemini
-  cross-review with graceful degradation. Use when a high-stakes memo needs an independent sanity check before the
-  boardroom, e.g. a bet-the-company pivot or fundraise terms.
+  Multi-model consensus on a board memo or strategy brief. Claude + Codex + Gemini cross-review with graceful
+  degradation. Use when a high-stakes memo needs an independent sanity check before the boardroom, e.g. a
+  bet-the-company pivot or fundraise terms.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/cross-eval"
 license: MIT
 ---
 
-# /cs:cross-eval, Multi-Model Consensus
+# /cross-eval, Multi-Model Consensus
 
-**Command:** `/cs:cross-eval <memo-or-brief>`
+**Command:** `/cross-eval <memo-or-brief>`
 
 Runs the same memo through multiple model providers and reconciles divergences. Use for **high-stakes, irreversible decisions** where single-model bias is too costly: M&A, major fundraises, layoffs, strategic pivots, regulatory commitments.
 
@@ -107,9 +107,9 @@ This is weaker than true multi-model. Treat the result as suggestive, not conclu
 
 ## Routing
 
-- `/cs:decide`, if consensus is GO
-- `/cs:freeze`, if consensus is PAUSE
-- `/cs:boardroom` (re-run), if consensus is STOP
+- `/exec-decide`, if consensus is GO
+- `/exec-freeze`, if consensus is PAUSE
+- `/boardroom` (re-run), if consensus is STOP
 
 ## Related
 

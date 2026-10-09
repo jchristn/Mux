@@ -62,7 +62,7 @@ Recommended answer: [your call + 1-sentence rationale]
 
 ## Tooling
 
-See [${SKILL_DIR}/references/companion_tooling.md](${SKILL_DIR}/references/companion_tooling.md). Tools: extractor + generator + tracker. Agent: `cs-grill-master`. Command: `/cs:grill-me`.
+See [${SKILL_DIR}/references/companion_tooling.md](${SKILL_DIR}/references/companion_tooling.md). Tools: extractor + generator + tracker. Agent: `cs-grill-master`. Command: `/grill-me`.
 
 ---
 

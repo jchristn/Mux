@@ -1,17 +1,16 @@
 ---
 name: compliance-readiness
 description: >-
-  /cs:compliance-readiness <program>, Multi-framework compliance officer 6-question forcing interrogation of any
-  compliance program. Use before starting a new framework, planning the annual audit calendar, or preparing for
-  certification stage 1.
+  Multi-framework compliance officer 6-question forcing interrogation of any compliance program. Use before starting a
+  new framework, planning the annual audit calendar, or preparing for certification stage 1.
 category: compliance
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/compliance-os/skills/compliance-readiness"
 license: MIT
 ---
 
-# /cs:compliance-readiness, Compliance Officer Forcing Questions
+# /compliance-readiness, Compliance Officer Forcing Questions
 
-**Command:** `/cs:compliance-readiness <program>`
+**Command:** `/compliance-readiness <program>`
 
 The multi-framework compliance officer pressure-tests any compliance program. Six questions before any new-framework commitment, audit cycle planning, or certification readiness sign-off.
 
@@ -123,13 +122,13 @@ python3 "${SKILL_DIR}/shared/compliance-os/scripts/audit_simulator.py" scope.jso
 
 ## Routing
 
-- `/cs:aims-audit`, for ISO 42001-specific forcing questions
-- `/cs:ai-act-readiness`, for EU AI Act-specific forcing questions
-- `/cs:ciso-review`, for cybersecurity strategy
-- `/cs:caio-review`, for executive AI strategy
-- `/cs:gc-review`, for novel-case legal review
-- `/cs:decide`, to log the verdict
-- `/cs:freeze 30`, on certification commitments (multi-year financial impact)
+- `/aims-audit`, for ISO 42001-specific forcing questions
+- `/ai-act-readiness`, for EU AI Act-specific forcing questions
+- `/ciso-review`, for cybersecurity strategy
+- `/caio-review`, for executive AI strategy
+- `/gc-review`, for novel-case legal review
+- `/exec-decide`, to log the verdict
+- `/exec-freeze 30`, on certification commitments (multi-year financial impact)
 
 ## Related
 

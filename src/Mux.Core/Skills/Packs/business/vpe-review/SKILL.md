@@ -1,17 +1,17 @@
 ---
 name: vpe-review
 description: >-
-  /cs:vpe-review <plan>, Throughput-first VP of Engineering interrogation of any plan that touches delivery, eng
-  hiring, team structure, or production discipline. Use when cycle time balloons, DORA metrics slide, or before
-  committing to an eng hiring wave or a reorg.
+  Throughput-first VP of Engineering interrogation of any plan that touches delivery, eng hiring, team structure, or
+  production discipline. Use when cycle time balloons, DORA metrics slide, or before committing to an eng hiring wave
+  or a reorg.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/vpe-review"
 license: MIT
 ---
 
-# /cs:vpe-review, VPE Forcing Questions
+# /vpe-review, VPE Forcing Questions
 
-**Command:** `/cs:vpe-review <plan>`
+**Command:** `/vpe-review <plan>`
 
 The throughput-first VPE pressure-tests any plan touching eng operations. Six questions before any delivery commitment, eng hiring expansion, team restructure, or production-discipline change.
 
@@ -117,12 +117,12 @@ python3 "${SKILL_DIR}/shared/c-level-advisor/skills/vpe-advisor/scripts/eng_team
 
 ## Routing
 
-- `/cs:cto-review`, for architectural causes of throughput problems
+- `/cto-review`, for architectural causes of throughput problems
 - `cs-chro-advisor` agent: for hiring funnel comp/leveling issues
-- `/cs:cfo-review`, for cost-per-hire envelope and eng budget
-- `/cs:ciso-review`, for production discipline + compliance overlap
-- `/cs:decide`, log the verdict
-- `/cs:freeze 30`, on multi-year hiring commitments
+- `/cfo-review`, for cost-per-hire envelope and eng budget
+- `/ciso-review`, for production discipline + compliance overlap
+- `/exec-decide`, log the verdict
+- `/exec-freeze 30`, on multi-year hiring commitments
 
 ## Related
 

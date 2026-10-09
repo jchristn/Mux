@@ -122,7 +122,7 @@ python aims_audit_scheduler.py audit_scope.json
 ## References
 
 - Skill: [../../ra-qm-team/skills/iso42001-specialist/SKILL.md](../../ra-qm-team/skills/iso42001-specialist/SKILL.md)
-- Sibling command: [`/cs:aims-audit`](../skills/aims-audit/SKILL.md)
+- Sibling command: [`/aims-audit`](../skills/aims-audit/SKILL.md)
 
 ---
 

@@ -1,30 +1,30 @@
 ---
 name: exec-execute
 description: >-
-  /cs:execute <decision>, Generate a 90-day execution plan with weekly milestones, DRIs, and check-in cadence from an
-  approved decision. Use when a logged decision needs to become an operating plan, e.g. turning an approved
-  market-entry call into weekly milestones with DRIs.
+  Generate a 90-day execution plan with weekly milestones, DRIs, and check-in cadence from an approved decision. Use
+  when a logged decision needs to become an operating plan, e.g. turning an approved market-entry call into weekly
+  milestones with DRIs.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/execute"
 license: MIT
 ---
 
-# /cs:execute, 90-Day Execution Plan
+# /exec-execute, 90-Day Execution Plan
 
-**Command:** `/cs:execute <decision-path>`
+**Command:** `/exec-execute <decision-path>`
 
 Turns an approved decision into a 90-day plan with weekly milestones, named DRIs, and a check-in cadence. Where most decisions die: between "we decided" and "what's next Monday?"
 
 ## Pipeline Position
 
 ```
-/cs:office-hours  →  /cs:brief  →  /cs:boardroom  →  /cs:decide  →  /cs:execute  →  /cs:post-mortem
+/office-hours  →  /exec-brief  →  /boardroom  →  /exec-decide  →  /exec-execute  →  /exec-post-mortem
                                                                        ↑ you are here
 ```
 
 ## Input
 
-An approved decision record (output of `/cs:decide`).
+An approved decision record (output of `/exec-decide`).
 
 ## Output Plan Format
 
@@ -32,7 +32,7 @@ Saved to `~/.mux/execution/YYYY-MM-DD-<slug>.md`:
 
 ```markdown
 # Execution Plan: <decision title>
-**Decision:** <link to /cs:decide record>
+**Decision:** <link to /exec-decide record>
 **Owner (Sponsor):** <founder or exec>
 **Start:** YYYY-MM-DD
 **Checkpoint:** YYYY-MM-DD (90d)
@@ -92,8 +92,8 @@ Saved to `~/.mux/execution/YYYY-MM-DD-<slug>.md`:
 
 ## Routing
 
-- `/cs:post-mortem <decision>`, at day 90 (or earlier if kill criteria trigger)
-- `/cs:boardroom`, if a checkpoint reveals a need to re-decide
+- `/exec-post-mortem <decision>`, at day 90 (or earlier if kill criteria trigger)
+- `/boardroom`, if a checkpoint reveals a need to re-decide
 
 ## Related
 

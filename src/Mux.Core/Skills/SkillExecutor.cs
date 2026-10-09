@@ -39,6 +39,12 @@ namespace Mux.Core.Skills
         /// </summary>
         public static readonly IReadOnlyList<string> PythonUtf8Variables = new[] { "PYTHONUTF8", "PYTHONIOENCODING" };
 
+        /// <summary>
+        /// Set on every skill process (unless already set) so Python never writes __pycache__ folders into a skill's
+        /// directory.
+        /// </summary>
+        public const string PythonNoBytecodeVariable = "PYTHONDONTWRITEBYTECODE";
+
         #endregion
 
         #region Public-Methods
@@ -95,6 +101,11 @@ namespace Mux.Core.Skills
                     startInfo.Environment[variable] = skill.DirectoryPath;
                 }
                 startInfo.Environment["MUX_SKILL_COMMAND"] = command.Name;
+                if (!startInfo.Environment.ContainsKey(PythonNoBytecodeVariable) || string.IsNullOrEmpty(startInfo.Environment[PythonNoBytecodeVariable]))
+                {
+                    startInfo.Environment[PythonNoBytecodeVariable] = "1";
+                }
+
                 // Python writes to a redirected pipe in the system code page on Windows (cp1252), so a script that
                 // prints a character outside it (an arrow in --help text) crashes. Default to UTF-8 unless the user
                 // chose an encoding.

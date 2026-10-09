@@ -1265,6 +1265,15 @@ started by the skill. `log-triage summarize <file>` groups a log's errors and ke
 ["<other>"]` times commands (hyperfine when installed), with `bench dotnet` for BenchmarkDotNet projects and
 `bench k6 <script>` for load tests.
 
+### Ansible, Bicep, and OpenAPI skills
+
+`ansible` and `bicep` follow the Terraform pattern: lint and preview freely (`ansible check` runs
+`--check --diff`, `bicep what-if` previews a resource-group deployment), show the user the result, then
+`ansible apply` or `bicep deploy`, which are refused for a production-looking target unless `--confirm
+<target>` repeats it. Neither has a destroy command. `openapi lint` uses Redocly or Spectral, `openapi diff
+[spec] [base-ref]` compares the spec with the base branch through oasdiff and exits 1 on breaking changes,
+and `openapi-client generate <generator> <dir>` writes a client with openapi-generator into a relative folder.
+
 ### Evaluating skill selection
 
 The model picks a skill from one line per listed skill, `- name: description`, without reading anything else

@@ -142,10 +142,10 @@ if (-not $table) { Exit-MuxNotApplicable 'pass a table: aws-data dynamodb-descri
 Invoke-MuxTool -Tool 'aws' -Arguments @('dynamodb', 'describe-table', '--table-name', $table, '--output', 'json') -InstallHint $awsHint"),
                     C("elasticache-clusters", "List ElastiCache clusters.", @"Invoke-MuxTool -Tool 'aws' -Arguments @('elasticache', 'describe-cache-clusters', '--query', 'CacheClusters[].[CacheClusterId,Engine,EngineVersion,CacheClusterStatus,CacheNodeType]', '--output', 'table') -InstallHint $awsHint")),
 
-                f.Skill("aws-deploy", "Deploy with CloudFormation, SAM, or CDK", "Lists stacks and events, previews change sets, and deploys SAM or CDK apps after a diff.", true,
+                f.Skill("aws-deploy", "Deploy with CloudFormation, SAM, or CDK", "Validates and lints CloudFormation templates, lists stacks and events, previews change sets, and deploys SAM or CDK apps after a diff.", true,
                     "The project uses CloudFormation, SAM (template.yaml, samconfig.toml), or CDK (cdk.json), or the user asks to deploy one.",
                     "<stack> [template] [apply] [--confirm <profile>]",
-                    "Read with `cfn-stacks` and `cfn-events <stack>`. Preview with `cfn-changeset <stack> <template>` (creates a change set without executing it), `sam-validate`, `cdk-synth`, and `cdk-diff [stack]`. `sam-deploy` and `cdk-deploy [stack]` preview by default and deploy only when `apply` is passed; deploying on a production profile also needs `--confirm <profile>`.",
+                    "Read with `cfn-stacks` and `cfn-events <stack>`. Check a template with `cfn-validate <template>` (the CloudFormation API) and `cfn-lint <template>` (best practices and resource properties). Preview with `cfn-changeset <stack> <template>` (creates a change set without executing it), `sam-validate`, `cdk-synth`, and `cdk-diff [stack]`. `sam-deploy` and `cdk-deploy [stack]` preview by default and deploy only when `apply` is passed; deploying on a production profile also needs `--confirm <profile>`.",
                     C("cfn-stacks", "List CloudFormation stacks.", @"Invoke-MuxTool -Tool 'aws' -Arguments @('cloudformation', 'list-stacks', '--stack-status-filter', 'CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE', 'ROLLBACK_COMPLETE', 'CREATE_IN_PROGRESS', 'UPDATE_IN_PROGRESS', '--query', 'StackSummaries[].[StackName,StackStatus,LastUpdatedTime]', '--output', 'table') -InstallHint $awsHint"),
                     C("cfn-events", "Show a stack's recent events.", @"$stack = Get-MuxArg -Arguments $args -Index 0
 if (-not $stack) { Exit-MuxNotApplicable 'pass a stack: aws-deploy cfn-events <stack>' }
@@ -154,6 +154,13 @@ Invoke-MuxTool -Tool 'aws' -Arguments @('cloudformation', 'describe-stack-events
 $template = Get-MuxArg -Arguments $args -Index 1
 if (-not $stack -or -not $template) { Exit-MuxNotApplicable 'pass a stack and template: aws-deploy cfn-changeset <stack> <template>' }
 Invoke-MuxTool -Tool 'aws' -Arguments @('cloudformation', 'deploy', '--stack-name', $stack, '--template-file', $template, '--no-execute-changeset', '--capabilities', 'CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM') -InstallHint $awsHint"),
+                    C("cfn-validate", "Validate a CloudFormation template with the AWS API.", @"$template = Get-MuxArg -Arguments $args -Index 0
+if (-not $template) { Exit-MuxNotApplicable 'pass a template: aws-deploy cfn-validate <template>' }
+if (-not (Test-MuxDryRun) -and -not (Test-Path -LiteralPath $template -PathType Leaf)) { Exit-MuxNotApplicable ('template not found: ' + $template) }
+Invoke-MuxTool -Tool 'aws' -Arguments @('cloudformation', 'validate-template', '--template-body', ('file://' + $template), '--output', 'json') -InstallHint $awsHint"),
+                    C("cfn-lint", "Lint a CloudFormation template with cfn-lint.", @"$template = Get-MuxArg -Arguments $args -Index 0
+if (-not $template) { Exit-MuxNotApplicable 'pass a template: aws-deploy cfn-lint <template>' }
+Invoke-MuxTool -Tool 'cfn-lint' -Arguments @($template) -InstallHint 'Install cfn-lint: pip install cfn-lint.'"),
                     C("sam-validate", "Validate the SAM template.", @"Invoke-MuxTool -Tool 'sam' -Arguments @('validate', '--lint') -InstallHint 'Install the AWS SAM CLI.'"),
                     C("sam-deploy", "Preview, or with apply deploy, the SAM app.", @"$split = Split-MuxConfirm -Arguments $args
 if ((Get-MuxArg -Arguments $split.Rest -Index 0) -eq 'apply') {

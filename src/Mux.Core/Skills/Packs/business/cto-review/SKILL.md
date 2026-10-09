@@ -1,17 +1,16 @@
 ---
 name: cto-review
 description: >-
-  /cs:cto-review <plan>, Architecture and scaling interrogation. Tech debt, scaling cliffs, team scaling,
-  build-vs-buy. Use when committing to an architecture, planning for 10x load, or weighing a rebuild against a
-  vendor.
+  Architecture and scaling interrogation. Tech debt, scaling cliffs, team scaling, build-vs-buy. Use when committing
+  to an architecture, planning for 10x load, or weighing a rebuild against a vendor.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/cto-review"
 license: MIT
 ---
 
-# /cs:cto-review, CTO Forcing Questions
+# /cto-review, CTO Forcing Questions
 
-**Command:** `/cs:cto-review <plan>`
+**Command:** `/cto-review <plan>`
 
 Pressure-tests architecture and engineering scaling decisions. Six questions to surface the next scaling cliff before you hit it.
 
@@ -107,10 +106,10 @@ python3 "${SKILL_DIR}/shared/c-level-advisor/skills/cto-advisor/scripts/team_sca
 
 ## Routing
 
-- `/cs:ciso-review`, mandatory if data surface changes
-- `/cs:cfo-review`, for build-vs-buy > $100K
-- `/cs:execute`, quarterly plan
-- `/cs:boardroom`, for architecture pivots
+- `/ciso-review`, mandatory if data surface changes
+- `/cfo-review`, for build-vs-buy > $100K
+- `/exec-execute`, quarterly plan
+- `/boardroom`, for architecture pivots
 
 ## Related
 

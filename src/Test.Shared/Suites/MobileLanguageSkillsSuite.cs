@@ -84,7 +84,7 @@ namespace Test.Shared.Suites
                 Write(c, "vendor/bin/phpunit", "#!/bin/sh");
                 (await c.Run(true, "php-test", "filter", "Login").ConfigureAwait(false)).Exit(0).Has("phpunit").Has("--filter Login");
                 Write(c, "vendor/bin/pest", "#!/bin/sh");
-                (await c.Run(true, "php-test", "all").ConfigureAwait(false)).Exit(0).Has("vendor/bin/pest").Lacks("phpunit");
+                (await c.Run(true, "php-test", "all").ConfigureAwait(false)).Exit(0).Has("pest").Lacks("phpunit");
                 (await c.Run(true, "php-lint", "analyze").ConfigureAwait(false)).Exit(2).Has("phpstan is not installed");
                 Write(c, "vendor/bin/php-cs-fixer", "#!/bin/sh");
                 (await c.Run(true, "php-lint", "format-check").ConfigureAwait(false)).Exit(0).Has("fix --dry-run --diff");

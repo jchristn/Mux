@@ -33,8 +33,8 @@
     <Compile Remove="Skills\Bundled\**;Skills\Packs\**" />
     <None Remove="Skills\Bundled\**;Skills\Packs\**" />
     <Content Remove="Skills\Bundled\**;Skills\Packs\**" />
-    <EmbeddedResource Include="Skills\Bundled\**\*" LogicalName="Mux.Core.Skills.Bundled/%(RecursiveDir)%(Filename)%(Extension)" />
-    <EmbeddedResource Include="Skills\Packs\**\*" LogicalName="Mux.Core.Skills.Packs/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Skills\Bundled\**\*" Exclude="Skills\**\__pycache__\**;Skills\**\*.pyc" LogicalName="Mux.Core.Skills.Bundled/%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Skills\Packs\**\*" Exclude="Skills\**\__pycache__\**;Skills\**\*.pyc" LogicalName="Mux.Core.Skills.Packs/%(RecursiveDir)%(Filename)%(Extension)" />
     <!-- Files merged into existing default skills from imported sources (SKILLS_TO_CONSIDER.md "Adapt" items),
          seeded under each skill's resources/ folder by AdaptedSkillResources. -->
     <None Remove="Skills\Resources\Adapted\**" />

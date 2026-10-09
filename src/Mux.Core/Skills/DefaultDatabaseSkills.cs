@@ -119,14 +119,14 @@ function Get-MuxMigrationTools {
             $dir = $dir.Parent
         }
         if ($project) {
-            $p = [System.IO.Path]::GetRelativePath($Root, $project.FullName)
+            $p = [System.IO.Path]::GetRelativePath($Root, $project.FullName).Replace('\', '/')
             $tools.Add(@{ Name = 'efcore'; Label = 'EF Core (' + $p + ')'; Exe = 'dotnet'; Hint = 'Install the .NET SDK and dotnet-ef: dotnet tool install --global dotnet-ef.'
                 Status = @('ef', 'migrations', 'list', '--project', $p); Plan = @('ef', 'migrations', 'script', '--idempotent', '--project', $p); Apply = @('ef', 'database', 'update', '--project', $p) })
         }
     }
     $prisma = Find-MuxFile $Root 'schema.prisma' 3
     if ($prisma) {
-        $schema = [System.IO.Path]::GetRelativePath($Root, $prisma.FullName)
+        $schema = [System.IO.Path]::GetRelativePath($Root, $prisma.FullName).Replace('\', '/')
         $tools.Add(@{ Name = 'prisma'; Label = 'Prisma (' + $schema + ')'; Exe = 'npx'; Hint = 'Install Node.js and the prisma package.'
             Status = @('prisma', 'migrate', 'status', '--schema', $schema); Plan = @('prisma', 'migrate', 'status', '--schema', $schema); Apply = @('prisma', 'migrate', 'deploy', '--schema', $schema)
             PlanNote = 'Prisma has no offline SQL preview for deploy; the pending migrations are listed above, and each one is a folder of SQL under prisma/migrations.' })

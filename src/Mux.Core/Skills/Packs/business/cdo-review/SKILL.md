@@ -1,17 +1,17 @@
 ---
 name: cdo-review
 description: >-
-  /cs:cdo-review <plan>, Decision-driven Chief Data Officer interrogation of any plan that touches training data,
-  data architecture, data productization, or data team hiring. Use when validating training-data rights before model
-  work, choosing warehouse vs lakehouse vs mesh, or valuing data assets for productization or M&A.
+  Decision-driven Chief Data Officer interrogation of any plan that touches training data, data architecture, data
+  productization, or data team hiring. Use when validating training-data rights before model work, choosing warehouse
+  vs lakehouse vs mesh, or valuing data assets for productization or M&A.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/cdo-review"
 license: MIT
 ---
 
-# /cs:cdo-review, CDO Forcing Questions
+# /cdo-review, CDO Forcing Questions
 
-**Command:** `/cs:cdo-review <plan>`
+**Command:** `/cdo-review <plan>`
 
 The decision-driven CDO pressure-tests any plan that touches data strategy. Six questions before any commitment to a data architecture, AI training run, data productization, or data team hire.
 
@@ -114,12 +114,12 @@ python3 "${SKILL_DIR}/shared/c-level-advisor/skills/chief-data-officer-advisor/s
 
 ## Routing
 
-- `/cs:gc-review`, for any productization or licensing path
-- `/cs:ciso-review`, for any architecture change touching customer data
-- `/cs:cfo-review`, for build-vs-buy TCO and M&A valuation math
+- `/gc-review`, for any productization or licensing path
+- `/ciso-review`, for any architecture change touching customer data
+- `/cfo-review`, for build-vs-buy TCO and M&A valuation math
 - `cs-chro-advisor` agent: for data team hires (comp, ladder, leveling)
-- `/cs:decide`, log the verdict
-- `/cs:freeze 90`, on multi-year infrastructure contracts
+- `/exec-decide`, log the verdict
+- `/exec-freeze 90`, on multi-year infrastructure contracts
 
 ## Related
 

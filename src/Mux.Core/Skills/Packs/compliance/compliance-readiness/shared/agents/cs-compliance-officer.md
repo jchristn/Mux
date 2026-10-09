@@ -190,7 +190,7 @@ python ../skills/compliance-os/scripts/evidence_pool_generator.py program.json
 ## References
 
 - Skill: [../skills/compliance-os/SKILL.md](../skills/compliance-os/SKILL.md)
-- Sibling commands: [`/cs:compliance-readiness`](../skills/compliance-readiness/SKILL.md), [`/cs:aims-audit`](../skills/aims-audit/SKILL.md), [`/cs:ai-act-readiness`](../skills/ai-act-readiness/SKILL.md)
+- Sibling commands: [`/compliance-readiness`](../skills/compliance-readiness/SKILL.md), [`/aims-audit`](../skills/aims-audit/SKILL.md), [`/ai-act-readiness`](../skills/ai-act-readiness/SKILL.md)
 
 ---
 

@@ -1,18 +1,17 @@
 ---
 name: exec-onboard
 description: >-
-  /cs:onboard, Founder interview that populates ~/.mux/company-context.md using the canonical 7-dimension cs-onboard
-  schema. The first command to run when starting with c-level-agents. Use when setting up the virtual C-suite for a
-  new company, or when advisors lack company context, e.g. before a first /cs:boardroom or after a fundraise changes
-  the numbers.
+  Founder interview that populates ~/.mux/company-context.md using the canonical 7-dimension cs-onboard schema. The
+  first command to run when starting with c-level-agents. Use when setting up the virtual C-suite for a new company,
+  or when advisors lack company context, e.g. before a first /boardroom or after a fundraise changes the numbers.
 category: business
 source: "https://github.com/alirezarezvani/claude-skills@19392f7/c-level-agents/skills/onboard"
 license: MIT
 ---
 
-# /cs:onboard, Founder Interview
+# /exec-onboard, Founder Interview
 
-**Command:** `/cs:onboard`
+**Command:** `/exec-onboard`
 
 The first command to run when adopting c-level-agents. A structured founder interview that produces `~/.mux/company-context.md`, the file every cs-* advisor reads before responding. Without this, the advisors are guessing.
 
@@ -21,7 +20,7 @@ The first command to run when adopting c-level-agents. A structured founder inte
 `~/.mux/company-context.md`, a single file with the durable facts about the company. Read by:
 - `cs-chief-of-staff` (routing decisions)
 - Every cs-* advisor (context for any question)
-- `/cs:brief` (assumptions in any new decision)
+- `/exec-brief` (assumptions in any new decision)
 
 ## The Interview (12 Questions)
 
@@ -112,7 +111,7 @@ The intake summary captured by the 12 questions:
 - After a major pivot or product launch
 - After 6+ months (most facts have drifted)
 - After a major hire (team distribution changes)
-- Always before a `/cs:boardroom` for a high-stakes decision
+- Always before a `/boardroom` for a high-stakes decision
 
 ## Persistence
 

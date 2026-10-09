@@ -261,6 +261,8 @@ namespace Test.Shared
                     MobileLanguageSkillsSuite.Create(),
                     WebFrameworkSkillsSuite.Create(),
                     RuntimeSkillsSuite.Create(),
+                    InfraSkillsSuite.Create(),
+                    ApiContractSkillsSuite.Create(),
 
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
