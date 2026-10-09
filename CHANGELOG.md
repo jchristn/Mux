@@ -2,10 +2,12 @@
 
 All notable changes to mux are documented here.
 
-## Unreleased
+## 1.2.0
 
 ### Added
 
+- **`build-vscode.sh` / `build-vscode.bat`** in the repository root package the VS Code extension into
+  `src/Mux.VSCode/mux-ai-<version>.vsix` (`npm ci`, then `vsce package`).
 - **Project instruction files.** Every surface (terminal, `mux print`, desktop, and the REST server) loads
   `MUX.md`, `AGENTS.md`, or `CLAUDE.md` (the first found in each directory) from the repository root down to
   the working directory, plus a user-level `MUX.md` in the config directory, into the system prompt. Nearer

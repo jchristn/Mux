@@ -19,7 +19,7 @@ using Mux.Server;
 SessionStore sessions = new SessionStore(); // ~/.mux/sessions
 using MuxServer server = new MuxServer(
     new Mux.Core.Settings.RestServerSettings { Hostname = "127.0.0.1", Port = 8710 },
-    productVersion: "1.1.1",
+    productVersion: "1.2.0",
     sessionStore: sessions,
     endpointsProvider: () => Mux.Core.Settings.SettingsLoader.LoadEndpoints());
 server.Start();

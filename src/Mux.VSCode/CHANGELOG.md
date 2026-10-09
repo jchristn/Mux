@@ -2,7 +2,7 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
-## Unreleased
+## 1.2.0
 
 - **Review current file** now runs the `code-review` skill (`/code-review file <path>`), falling back to the
   previous prompt when the skill is unavailable.

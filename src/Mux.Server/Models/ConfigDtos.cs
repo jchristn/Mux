@@ -373,7 +373,6 @@ namespace Mux.Server.Models
         /// <summary>Validation errors, if any.</summary>
         public List<string> Errors { get; set; } = new List<string>();
 
-        /// <summary>The SKILL.md body (populated only on the detail route).</summary>
         /// <summary>The effective category (override, then SKILL.md, then inferred).</summary>
         public string Category { get; set; } = "general";
 
@@ -383,6 +382,7 @@ namespace Mux.Server.Models
         /// <summary>The category written in the skill's SKILL.md, or empty.</summary>
         public string FileCategory { get; set; } = string.Empty;
 
+        /// <summary>The SKILL.md body (populated only on the detail route).</summary>
         public string? Body { get; set; }
     }
 }

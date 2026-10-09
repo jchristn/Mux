@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <Version>1.1.1</Version>
+    <Version>1.2.0</Version>
     <Title>Mux.Desktop.Core</Title>
     <PackageId>Mux.Desktop.Core</PackageId>
     <Nullable>enable</Nullable>
