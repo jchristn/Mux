@@ -28,6 +28,7 @@ namespace Mux.Desktop.Views
         private readonly TextBox _SystemPrompt = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 120, FontFamily = new FontFamily("Cascadia Code, Consolas, monospace") };
         private readonly TextBox _AllowedTools = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 72 };
         private readonly TextBox _MaxIterations = new TextBox { Width = 120, HorizontalAlignment = HorizontalAlignment.Left };
+        private readonly ComboBox _Isolation = new ComboBox { Width = 280, HorizontalAlignment = HorizontalAlignment.Left };
         private readonly TextBlock _Error = new TextBlock { Foreground = new SolidColorBrush(Color.Parse("#cf222e")), FontSize = 12 };
 
         /// <summary>
@@ -69,6 +70,8 @@ namespace Mux.Desktop.Views
             _SystemPrompt.Text = definition.SystemPrompt;
             _AllowedTools.Text = string.Join(Environment.NewLine, definition.AllowedTools);
             _MaxIterations.Text = definition.MaxIterations?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            _Isolation.ItemsSource = new List<string> { Localizer.T("subagent.form.isolation.none"), Localizer.T("subagent.form.isolation.worktree") };
+            _Isolation.SelectedIndex = string.Equals(definition.Isolation, "worktree", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
 
             Content = BuildContent();
         }
@@ -100,6 +103,7 @@ namespace Mux.Desktop.Views
             form.Children.Add(Field(Localizer.T("subagent.form.systemPrompt"), _SystemPrompt, Localizer.T("subagent.form.systemPrompt.tip")));
             form.Children.Add(Field(Localizer.T("subagent.form.allowedTools"), _AllowedTools, Localizer.T("subagent.form.allowedTools.tip")));
             form.Children.Add(Field(Localizer.T("subagent.form.maxIterations"), _MaxIterations, Localizer.T("subagent.form.maxIterations.tip")));
+            form.Children.Add(Field(Localizer.T("subagent.form.isolation"), _Isolation, Localizer.T("subagent.form.isolation.tip")));
 
             root.Children.Add(new ScrollViewer { Classes = { Mux.Desktop.Styling.MuxThemeStyles.GutterClass }, Content = form });
             return root;
@@ -142,6 +146,7 @@ namespace Mux.Desktop.Views
             _Definition.SystemPrompt = _SystemPrompt.Text ?? string.Empty;
             _Definition.AllowedTools = ParseLines(_AllowedTools.Text);
             _Definition.MaxIterations = maxIterations;
+            _Definition.Isolation = _Isolation.SelectedIndex == 1 ? "worktree" : null;
             Close(true);
         }
 

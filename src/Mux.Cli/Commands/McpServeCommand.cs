@@ -25,7 +25,7 @@ namespace Mux.Cli.Commands
         #region Public-Members
 
         /// <summary>The usage text.</summary>
-        public const string Usage = "Usage: mux mcp serve [--http <port>] [--host <name>] [--api-key <key>] [--allow-skills] [--approval-policy deny|auto-safe|auto] [--yolo] [--endpoint <name>] [--working-directory <dir>]";
+        public const string Usage = "Usage: mux mcp serve [--http <port>] [--host <name>] [--api-key <key>] [--allow-skills] [--log-messages] [--approval-policy deny|auto-safe|auto] [--yolo] [--endpoint <name>] [--working-directory <dir>]";
 
         #endregion
 
@@ -82,6 +82,9 @@ namespace Mux.Cli.Commands
                         break;
                     case "--allow-skills":
                         result.AllowSkills = true;
+                        break;
+                    case "--log-messages":
+                        result.LogMessages = true;
                         break;
                     case "--approval-policy":
                         policy = Next();
@@ -147,6 +150,7 @@ namespace Mux.Cli.Commands
                 ServerName = "mux",
                 ServerVersion = Defaults.ProductVersion,
                 AllowSkills = parsed.AllowSkills,
+                LogMessages = parsed.LogMessages,
                 MaxApprovalPolicy = parsed.MaxApprovalPolicy,
                 DefaultEndpoint = parsed.Endpoint,
                 DefaultWorkingDirectory = parsed.WorkingDirectory ?? Directory.GetCurrentDirectory(),

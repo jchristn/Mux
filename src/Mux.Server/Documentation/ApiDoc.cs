@@ -48,6 +48,9 @@ namespace Mux.Server.Documentation
         /// <summary>Persistent memory.</summary>
         public const string TagMemory = "Memory";
 
+        /// <summary>Tag for the isolated git worktree routes.</summary>
+        public const string TagWorktrees = "Worktrees";
+
         /// <summary>Subagent definitions.</summary>
         public const string TagSubagents = "Subagents";
 
@@ -160,7 +163,8 @@ namespace Mux.Server.Documentation
                 new OpenApiTag { Name = TagUsage, Description = "Query usage telemetry (summary, time series, breakdowns, events) and manage pricing." },
                 new OpenApiTag { Name = TagRuns, Description = "List active and recently-finished runs, inspect a run's state and task plan, and cancel a run." },
                 new OpenApiTag { Name = TagContext, Description = "Build a model-context block (map, summary, or truncation) from a large file." },
-                new OpenApiTag { Name = TagMemory, Description = "List, save, and delete the persistent memories the agent reads at the start of every turn." }
+                new OpenApiTag { Name = TagMemory, Description = "List, save, and delete the persistent memories the agent reads at the start of every turn." },
+                new OpenApiTag { Name = TagWorktrees, Description = "List, prune, and remove the isolated git worktrees mux keeps for subagents and jobs." }
             };
 
             RegisterSchemas(settings.Schemas);
@@ -484,6 +488,43 @@ namespace Mux.Server.Documentation
             .WithResponse(400, BadRequest())
             .WithResponse(401, Unauthorized())
             .WithResponse(404, NotFound());
+
+        // --- Worktrees ---
+
+        /// <summary>Metadata for <c>GET /v1.0/api/worktrees</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> WorktreesGet = m => Sec(Init(m, TagWorktrees,
+            "List isolated worktrees",
+            "Returns the worktrees mux created under `.git/mux-worktrees` for the repository containing `workingDirectory`, with each one's branch, base commit, commits ahead, and whether it has uncommitted changes. 400 outside a git repository.",
+            operationId: "listWorktrees"))
+            .WithParameter(Query("workingDirectory", "A folder inside the repository. Defaults to the server's current directory.", false, M.String()))
+            .WithResponse(200, OkList("WorktreeDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>POST /v1.0/api/worktrees/prune</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> WorktreesPrune = m => Sec(Init(m, TagWorktrees,
+            "Prune unchanged worktrees",
+            "Removes worktrees (and their branches) that have no commits and no uncommitted changes, and forgets worktrees whose folder is already gone. Returns the names removed. Worktrees holding work are never touched.",
+            operationId: "pruneWorktrees"))
+            .WithParameter(Query("workingDirectory", "A folder inside the repository.", false, M.String()))
+            .WithResponse(200, RespJson("The names of the removed worktrees.", new M { Type = "object", Description = "A self-describing list envelope.", Properties = new Dictionary<string, M> { ["Items"] = M.CreateArray(Pstr("A worktree name.")), ["Count"] = Pint("The number of items.") } }))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>DELETE /v1.0/api/worktrees</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> WorktreesDelete = m => Sec(Init(m, TagWorktrees,
+            "Remove a worktree",
+            "Removes one worktree by `name` (its name, `mux/` branch, or path). Refuses with 409 when it has uncommitted changes or unmerged commits, unless `force=true` (discard) or `keepBranch=true` (keep the branch). 404 when no worktree matches.",
+            operationId: "removeWorktree"))
+            .WithParameter(Query("name", "The worktree name, branch, or path.", true))
+            .WithParameter(Query("force", "`true` to discard uncommitted changes and unmerged commits.", false, M.String()))
+            .WithParameter(Query("keepBranch", "`true` to remove the folder but keep the branch.", false, M.String()))
+            .WithParameter(Query("workingDirectory", "A folder inside the repository.", false, M.String()))
+            .WithResponse(200, Ok("WorktreeDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound())
+            .WithResponse(409, BadRequest());
 
         // --- Subagents ---
 
@@ -1179,6 +1220,20 @@ namespace Mux.Server.Documentation
                 ["CreatedUtc"] = Pstr("When it was created (UTC)."),
                 ["UpdatedUtc"] = Pstr("When it was last changed (UTC).")
             }, new Dictionary<string, object?> { ["Name"] = "test-command", ["Scope"] = "project", ["Description"] = "Run tests with dotnet test src/Mux.sln", ["Content"] = "Run tests with dotnet test src/Mux.sln", ["CreatedUtc"] = "2026-10-08T12:00:00Z", ["UpdatedUtc"] = "2026-10-08T12:00:00Z" });
+
+            s["WorktreeDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Name"] = Pstr("The worktree name (its folder under .git/mux-worktrees)."),
+                ["Path"] = Pstr("The worktree folder."),
+                ["Branch"] = Pstr("Its mux/ branch."),
+                ["Head"] = Pstr("The commit the worktree is on."),
+                ["BaseCommit"] = Pstr("The commit it was created from."),
+                ["Kind"] = Pstr("What created it, for example subagent or job."),
+                ["CreatedUtc"] = PstrNullable("When it was created (UTC)."),
+                ["Exists"] = Pbool("Whether the folder still exists."),
+                ["Dirty"] = Pbool("Whether it has uncommitted changes."),
+                ["CommitsAhead"] = Pint("Commits on its branch since the base, or -1 when the base is unknown.")
+            }, new Dictionary<string, object?> { ["Name"] = "subagent-reviewer", ["Path"] = "/src/app/.git/mux-worktrees/subagent-reviewer", ["Branch"] = "mux/subagent/reviewer", ["Head"] = "3f2a9c1", ["BaseCommit"] = "9b1e7d0", ["Kind"] = "subagent", ["CreatedUtc"] = "2026-10-08T12:00:00Z", ["Exists"] = true, ["Dirty"] = false, ["CommitsAhead"] = 2 });
 
             s["MemoryListDto"] = Obj(new Dictionary<string, M>
             {

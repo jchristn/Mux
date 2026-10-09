@@ -73,6 +73,41 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    Case("DashboardScriptParses", "Every inline script in the web dashboard is valid JavaScript (node --check)", (CancellationToken ct) =>
+                    {
+                        string? node = FindOnPath("node");
+                        if (node == null)
+                        {
+                            return Task.CompletedTask;
+                        }
+
+                        string html = DashboardPage.Render(null, "9.9.9-test");
+                        MatchCollection scripts = Regex.Matches(html, "<script(?![^>]*\\bsrc=)[^>]*>(.*?)</script>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+                        MuxAssert.IsTrue(scripts.Count > 0, "the page has inline scripts");
+                        string file = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mux-dashboard-" + Guid.NewGuid().ToString("N") + ".js");
+                        try
+                        {
+                            StringBuilder all = new StringBuilder();
+                            foreach (Match script in scripts) all.Append(script.Groups[1].Value).Append(";\n");
+                            System.IO.File.WriteAllText(file, all.ToString());
+                            System.Diagnostics.ProcessStartInfo info = new System.Diagnostics.ProcessStartInfo(node) { RedirectStandardError = true, RedirectStandardOutput = true, UseShellExecute = false };
+                            info.ArgumentList.Add("--check");
+                            info.ArgumentList.Add(file);
+                            using (System.Diagnostics.Process process = System.Diagnostics.Process.Start(info)!)
+                            {
+                                string error = process.StandardError.ReadToEnd();
+                                process.WaitForExit(30000);
+                                MuxAssert.AreEqual(0, process.ExitCode, "dashboard JavaScript parses: " + error);
+                            }
+                        }
+                        finally
+                        {
+                            try { System.IO.File.Delete(file); } catch (Exception) { }
+                        }
+
+                        return Task.CompletedTask;
+                    }),
+
                     Case("Osc52EncodesUtf8", "OSC 52 wraps base64 UTF-8 in the clipboard escape sequence", (CancellationToken ct) =>
                     {
                         string sequence = TerminalClipboard.BuildOsc52("héllo ✓");
@@ -102,6 +137,10 @@ namespace Test.Shared.Suites
                         string html = DashboardPage.Render(null, "9.9.9-test");
                         MuxAssert.Contains("{label:t(\"act.copyskill\"),onClick:function(){var b=el(\"f_Body\");copyText(b?b.value:body,this);}}", html, "editor copies the live textarea");
                         MuxAssert.Contains("{label:t(\"act.copyskill\"),onClick:function(){copyText(s.Body||\"\",this);}}", html, "viewer copies the body");
+                        MuxAssert.Contains("{id:\"Body\",label:\"SKILL.md\",type:\"textarea\",rows:20,copy:true,", html, "the SKILL.md body field carries its own copy icon");
+                        MuxAssert.Contains("class=\"copybtn icon fieldcopy\" data-copy-target=", html, "copyable textareas render an inline copy button");
+                        MuxAssert.Contains(".copywrap .fieldcopy{position:absolute;top:6px;right:8px;", html, "the icon sits in the field's top-right corner");
+                        MuxAssert.Contains("querySelectorAll(\".fieldcopy\")", html, "the icon is wired to copy the live field value");
                         MuxAssert.Contains("function formModal(title,fields,values,onSave,size,extraButtons)", html, "form modal takes extra buttons");
                         int copyJson = Regex.Matches(html, "\"act\\.copyjson\":").Count;
                         int copySkill = Regex.Matches(html, "\"act\\.copyskill\":").Count;
@@ -120,6 +159,21 @@ namespace Test.Shared.Suites
         private static TestCaseDescriptor Case(string id, string name, Func<CancellationToken, Task> body)
         {
             return new TestCaseDescriptor(SuiteId, id, name, body);
+        }
+
+        private static string? FindOnPath(string executable)
+        {
+            string[] names = OperatingSystem.IsWindows() ? new[] { executable + ".exe", executable + ".cmd" } : new[] { executable };
+            foreach (string directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(System.IO.Path.PathSeparator))
+            {
+                foreach (string name in names)
+                {
+                    string candidate = System.IO.Path.Combine(directory, name);
+                    if (!string.IsNullOrWhiteSpace(directory) && System.IO.File.Exists(candidate)) return candidate;
+                }
+            }
+
+            return null;
         }
 
         #endregion

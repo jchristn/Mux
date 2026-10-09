@@ -869,6 +869,104 @@
 			]
 		},
 		{
+			"name": "Worktrees",
+			"description": "The isolated git worktrees mux keeps for subagents and jobs (the same operations as `mux worktree` and `/worktrees`).",
+			"item": [
+				{
+					"name": "List worktrees",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/worktrees?workingDirectory={{workingDirectory}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"worktrees"
+							],
+							"query": [
+								{
+									"key": "workingDirectory",
+									"value": "{{workingDirectory}}",
+									"description": "A folder inside the repository. Optional; defaults to the server's current directory."
+								}
+							]
+						},
+						"description": "Returns `{ Items, Count }` of mux worktrees under `.git/mux-worktrees`: name, path, `mux/` branch, head, base commit, kind, created time, whether the folder exists, whether it has uncommitted changes, and commits ahead. `400` outside a git repository."
+					},
+					"response": []
+				},
+				{
+					"name": "Prune unchanged worktrees",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/worktrees/prune?workingDirectory={{workingDirectory}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"worktrees",
+								"prune"
+							],
+							"query": [
+								{
+									"key": "workingDirectory",
+									"value": "{{workingDirectory}}",
+									"description": "A folder inside the repository. Optional; defaults to the server's current directory."
+								}
+							]
+						},
+						"description": "Removes worktrees with no commits and no uncommitted changes, and forgets registrations whose folder is gone. Returns `{ Items, Count }` of the names removed. Worktrees holding work are never touched."
+					},
+					"response": []
+				},
+				{
+					"name": "Remove a worktree",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/worktrees?name=subagent-reviewer&keepBranch=true&workingDirectory={{workingDirectory}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"worktrees"
+							],
+							"query": [
+								{
+									"key": "name",
+									"value": "subagent-reviewer",
+									"description": "The worktree name, its `mux/` branch, or its path."
+								},
+								{
+									"key": "keepBranch",
+									"value": "true",
+									"description": "Optional: remove the folder but keep the branch to merge later."
+								},
+								{
+									"key": "workingDirectory",
+									"value": "{{workingDirectory}}",
+									"description": "A folder inside the repository. Optional; defaults to the server's current directory."
+								}
+							]
+						},
+						"description": "Removes one worktree. `409` when it has uncommitted changes or unmerged commits and neither `force=true` nor `keepBranch=true` is given; `404` when no worktree matches."
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Sessions",
 			"description": "Persisted chat sessions under `~/.mux/sessions`. List, export to HTML/Markdown, or delete.",
 			"item": [

@@ -2961,6 +2961,9 @@ namespace Mux.Desktop.Shell
                 case "/plan":
                     HandlePlanSlash(argument);
                     break;
+                case "/worktrees":
+                    _ = HandleWorktreesSlashAsync(argument);
+                    break;
                 case "/processes":
                 case "/ps":
                     _ = HandleProcessesSlashAsync(argument);
@@ -3111,6 +3114,62 @@ namespace Mux.Desktop.Shell
             catch (Exception ex)
             {
                 AddNotice("Memory error: " + ex.Message, isError: true);
+            }
+        }
+
+        // "/worktrees [list|prune|remove <name> [--force] [--keep-branch]]": the isolated git worktrees mux keeps for
+        // subagents and jobs in the current conversation's repository.
+        private async System.Threading.Tasks.Task HandleWorktreesSlashAsync(string argument)
+        {
+            Mux.Core.Worktrees.WorktreeManager manager = new Mux.Core.Worktrees.WorktreeManager();
+            string workingDirectory = _Runner.WorkingDirectory;
+            List<string> words = new List<string>((argument ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            string verb = words.Count > 0 ? words[0].ToLowerInvariant() : "list";
+            try
+            {
+                switch (verb)
+                {
+                    case "list":
+                        IReadOnlyList<Mux.Core.Worktrees.WorktreeInfo> worktrees = await manager.ListAsync(workingDirectory, CancellationToken.None);
+                        if (worktrees.Count == 0)
+                        {
+                            AddNotice("No isolated worktrees. Subagents with isolation \"worktree\" create them.", isError: false);
+                            return;
+                        }
+
+                        System.Text.StringBuilder text = new System.Text.StringBuilder("Isolated worktrees:");
+                        foreach (Mux.Core.Worktrees.WorktreeInfo info in worktrees)
+                        {
+                            string state = !info.Exists ? "folder missing" : (info.Dirty ? "uncommitted changes" : (info.CommitsAhead > 0 ? info.CommitsAhead + " commit(s)" : "no changes"));
+                            text.Append('\n').Append(info.Name).Append("  ").Append(info.Branch).Append("  ").Append(state);
+                        }
+
+                        text.Append("\n/worktrees prune removes unchanged ones; /worktrees remove <name> [--force] [--keep-branch] removes one.");
+                        AddNotice(text.ToString(), isError: false);
+                        return;
+                    case "prune":
+                        IReadOnlyList<string> pruned = await manager.PruneAsync(workingDirectory, CancellationToken.None);
+                        AddNotice(pruned.Count == 0 ? "Nothing to prune." : "Pruned " + string.Join(", ", pruned) + ".", isError: false);
+                        return;
+                    case "remove":
+                        string? name = words.Find(w => !w.StartsWith("--", StringComparison.Ordinal) && !string.Equals(w, "remove", StringComparison.OrdinalIgnoreCase));
+                        if (string.IsNullOrWhiteSpace(name))
+                        {
+                            AddNotice("Usage: /worktrees remove <name> [--force] [--keep-branch]", isError: true);
+                            return;
+                        }
+
+                        Mux.Core.Worktrees.WorktreeInfo removed = await manager.RemoveAsync(workingDirectory, name, words.Contains("--force"), words.Contains("--keep-branch"), CancellationToken.None);
+                        AddNotice("Removed worktree " + removed.Name + ".", isError: false);
+                        return;
+                    default:
+                        AddNotice("Usage: /worktrees [list | prune | remove <name> [--force] [--keep-branch]]", isError: true);
+                        return;
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                AddNotice(ex.Message, isError: true);
             }
         }
 
@@ -3297,6 +3356,7 @@ namespace Mux.Desktop.Shell
             card.Children.Add(CommandRow("/instructions", "List the project instruction files the agent loads"));
             card.Children.Add(CommandRow("/plan [prompt|off]", "Plan mode: explore read-only, then approve a plan before anything changes"));
             card.Children.Add(CommandRow("/processes", "List, inspect, or stop background processes the agent started"));
+            card.Children.Add(CommandRow("/worktrees", "List, prune, or remove isolated git worktrees"));
             card.Children.Add(CommandRow("/memory", "List, show, or delete memories; start a message with # to remember a line"));
             card.Children.Add(CommandRow("/trust <level>", "Trust this project's skills: all, playbooks, ignore, reset"));
             card.Children.Add(CommandRow("/<skill> <args>", "Run a skill by name"));

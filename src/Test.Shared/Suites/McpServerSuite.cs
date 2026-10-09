@@ -333,6 +333,7 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual("completed", result.Status, "status");
                         MuxAssert.AreEqual("mock", result.Endpoint, "endpoint");
                         MuxAssert.IsTrue(result.Iterations >= 1, "iterations counted");
+                        MuxAssert.IsTrue(File.Exists(Path.Combine(configDir, "usage.db")), "the run recorded durable usage telemetry");
 
                         McpRunResult missing = await executor.RunAsync(new McpRunRequest { Prompt = "x", Endpoint = "no-such-endpoint", WorkingDirectory = configDir }, (string m) => Task.CompletedTask, ct).ConfigureAwait(false);
                         MuxAssert.AreEqual("failed", missing.Status, "unknown endpoint fails");
@@ -344,7 +345,59 @@ namespace Test.Shared.Suites
                     }
                 }
             });
+            Add("LogFilterSummarizes", "The stdio log filter shortens message lines to method, id, and size and passes other lines through", (CancellationToken ct) =>
+            {
+                string received = McpLogFilterWriter.Summarize("[10:00:00.000Z] Received: {\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"run\",\"arguments\":{\"prompt\":\"TOP SECRET PLAN\"}}}");
+                MuxAssert.Contains("[10:00:00.000Z] Received: tools/call (id 7, ", received, "method and id kept");
+                MuxAssert.Contains(" bytes)", received, "size kept");
+                MuxAssert.DoesNotContain("TOP SECRET PLAN", received, "prompt removed");
+                string sent = McpLogFilterWriter.Summarize("[10:00:01.000Z] Sent: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"THE ANSWER\"}]}}");
+                MuxAssert.Contains("Sent: response (id 7, ", sent, "responses summarized");
+                MuxAssert.DoesNotContain("THE ANSWER", sent, "answer removed");
+                MuxAssert.Contains("Sent: error response (id 3, ", McpLogFilterWriter.Summarize("[t] Sent: {\"id\":3,\"error\":{\"code\":-1}}"), "errors summarized");
+                MuxAssert.Contains("Received: notifications/initialized (", McpLogFilterWriter.Summarize("[t] Received: {\"method\":\"notifications/initialized\"}"), "notifications have no id");
+                MuxAssert.Contains("Received: batch of 2 (", McpLogFilterWriter.Summarize("[t] Received: [{},{}]"), "batches counted");
+                MuxAssert.Contains("Received: unparsed message (", McpLogFilterWriter.Summarize("[t] Received: {not json"), "bad JSON never echoed");
+                MuxAssert.AreEqual("[t] MCP server started", McpLogFilterWriter.Summarize("[t] MCP server started"), "other lines unchanged");
+                MuxAssert.AreEqual(string.Empty, McpLogFilterWriter.Summarize(string.Empty), "empty line");
+
+                StringWriter inner = new StringWriter();
+                McpLogFilterWriter writer = new McpLogFilterWriter(inner);
+                writer.Write("[t] Received: {\"id\":1,\"method\":\"run\",");
+                writer.Write("\"params\":{\"prompt\":\"SPLIT SECRET\"}}\r\nplain line");
+                writer.WriteLine();
+                writer.WriteLine("second");
+                writer.Flush();
+                string output = inner.ToString();
+                MuxAssert.Contains("Received: run (id 1, ", output, "a message split across writes is summarized once");
+                MuxAssert.DoesNotContain("SPLIT SECRET", output, "split prompt removed");
+                MuxAssert.Contains("plain line" + Environment.NewLine + "second", output, "plain lines kept in order");
+                MuxAssert.Throws<ArgumentNullException>(() => new McpLogFilterWriter(null!), "null inner writer");
+                return Task.CompletedTask;
+            });
             string? cliDll = FindCliDll();
+            cases.Add(new TestCaseDescriptor(SuiteId, "StdioLogsOmitPrompts", "Over stdio, stderr shows message summaries instead of prompts unless --log-messages is passed", async (CancellationToken ct) =>
+            {
+                using (MockHttpServer model = new MockHttpServer())
+                {
+                    model.RegisterStreamingResponse("stdio log check", new List<string> { AgentTestHarness.BuildTextSseChunk("LOGGED ANSWER TEXT") });
+                    model.Start();
+                    string configDir = ConfigDir(model.BaseUrl);
+                    try
+                    {
+                        string quiet = await RunStdioSessionAsync(cliDll!, configDir, false, ct).ConfigureAwait(false);
+                        MuxAssert.Contains("Received: tools/call (id 2, ", quiet, "the call is summarized: " + quiet);
+                        MuxAssert.DoesNotContain("PRIVATE PROMPT TEXT", quiet, "the prompt is not logged");
+                        MuxAssert.DoesNotContain("LOGGED ANSWER TEXT", quiet, "the answer is not logged");
+                        string verbose = await RunStdioSessionAsync(cliDll!, configDir, true, ct).ConfigureAwait(false);
+                        MuxAssert.Contains("PRIVATE PROMPT TEXT", verbose, "--log-messages keeps the full log");
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(configDir, true); } catch (Exception) { }
+                    }
+                }
+            }, skip: cliDll == null, skipReason: "Mux.Cli.dll was not found next to the test build"));
             cases.Add(new TestCaseDescriptor(SuiteId, "StdioChildProcessEndToEnd", "mux's MCP client launches `mux mcp serve` over stdio and runs a real turn against a mock model", async (CancellationToken ct) =>
             {
                 using (MockHttpServer model = new MockHttpServer())
@@ -450,6 +503,51 @@ namespace Test.Shared.Suites
             List<string> copy = new List<string>(names);
             copy.Sort(StringComparer.Ordinal);
             return copy;
+        }
+
+        // Drives `mux mcp serve` over raw stdio: initialize, initialized, one run call, then closes stdin and returns
+        // everything the server wrote to stderr.
+        private static async Task<string> RunStdioSessionAsync(string cliDll, string configDir, bool logMessages, CancellationToken ct)
+        {
+            System.Diagnostics.ProcessStartInfo info = new System.Diagnostics.ProcessStartInfo("dotnet")
+            {
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            foreach (string argument in new[] { cliDll, "mcp", "serve", "--config-dir", configDir, "--working-directory", configDir }) info.ArgumentList.Add(argument);
+            if (logMessages) info.ArgumentList.Add("--log-messages");
+            using (System.Diagnostics.Process process = System.Diagnostics.Process.Start(info)!)
+            {
+                Task<string> stderr = process.StandardError.ReadToEndAsync();
+                string initialize = JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 1, method = "initialize", @params = new { protocolVersion = McpProtocol.LatestProtocolVersion, capabilities = new { }, clientInfo = new { name = "test", version = "1" } } });
+                await process.StandardInput.WriteLineAsync(initialize).ConfigureAwait(false);
+                await process.StandardInput.FlushAsync().ConfigureAwait(false);
+                await ReadUntilIdAsync(process, 1, ct).ConfigureAwait(false);
+                await process.StandardInput.WriteLineAsync("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}").ConfigureAwait(false);
+                string call = JsonSerializer.Serialize(new { jsonrpc = "2.0", id = 2, method = "tools/call", @params = new { name = "run", arguments = new { prompt = "PRIVATE PROMPT TEXT stdio log check" } } });
+                await process.StandardInput.WriteLineAsync(call).ConfigureAwait(false);
+                await process.StandardInput.FlushAsync().ConfigureAwait(false);
+                await ReadUntilIdAsync(process, 2, ct).ConfigureAwait(false);
+                process.StandardInput.Close();
+                if (!process.WaitForExit(20000)) { try { process.Kill(true); } catch (Exception) { } }
+                return await stderr.ConfigureAwait(false);
+            }
+        }
+
+        private static async Task ReadUntilIdAsync(System.Diagnostics.Process process, int id, CancellationToken ct)
+        {
+            using (CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            {
+                timeout.CancelAfter(TimeSpan.FromSeconds(60));
+                while (true)
+                {
+                    string? line = await process.StandardOutput.ReadLineAsync(timeout.Token).ConfigureAwait(false);
+                    if (line == null) throw new InvalidOperationException("the server closed stdout before answering id " + id);
+                    if (line.Contains("\"id\":" + id + ",", StringComparison.Ordinal) || line.EndsWith("\"id\":" + id + "}", StringComparison.Ordinal)) return;
+                }
+            }
         }
 
         private static string ConfigDir(string modelBaseUrl)

@@ -73,8 +73,13 @@ namespace Mux.Cli.Commands
                 return new McpRunResult { Status = "failed", ErrorMessage = ex.Message, Endpoint = request.Endpoint ?? string.Empty };
             }
 
+            // Durable usage telemetry, as for mux print: each run's model calls land in the usage database and the
+            // /usage views. Disposed after the run so its events are flushed.
+            using Mux.Core.Telemetry.UsageTelemetry usageTelemetry = Mux.Core.Telemetry.UsageTelemetry.Create(
+                runtime.MuxSettings, runtime.Metadata.ConfigDirectory, null);
             AgentLoopOptions options = new AgentLoopOptions(runtime.Endpoint)
             {
+                UsageRecorder = usageTelemetry.Recorder,
                 MuxSettings = runtime.MuxSettings,
                 IgnoreCertErrors = runtime.MuxSettings.IgnoreCertErrors,
                 SystemPrompt = runtime.SystemPrompt,

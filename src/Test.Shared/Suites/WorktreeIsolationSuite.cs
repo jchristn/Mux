@@ -382,6 +382,102 @@ namespace Test.Shared.Suites
             });
 
             // --- CLI and terminal ---
+            Add("RestRoutes", "The worktree REST routes list, prune, and remove with auth, input checks, 404, and 409", async (string root, CancellationToken ct) =>
+            {
+                GitFixture repo = NewRepo(root, out string head);
+                WorktreeManager manager = new WorktreeManager();
+                WorktreeLease clean = await manager.CreateAsync(repo.Directory, "job", "clean", ct).ConfigureAwait(false);
+                WorktreeLease work = await manager.CreateAsync(repo.Directory, "job", "work", ct).ConfigureAwait(false);
+                CommitIn(work.Path, "w.txt", "w", "work");
+                Mux.Server.MuxServer? server = null;
+                int port = 0;
+                try
+                {
+                    Mux.Core.Models.RestServerSettings rest = new Mux.Core.Models.RestServerSettings { Hostname = "127.0.0.1", ApiKey = "wtkey" };
+                    for (int attempt = 0; attempt < 10 && server == null; attempt++)
+                    {
+                        port = StubHttpServer.FreeLoopbackPort();
+                        rest.Port = port;
+                        Mux.Server.MuxServer candidate = new Mux.Server.MuxServer(rest, "9.9.9-test", new Mux.Core.Sessions.SessionStore(Path.Combine(root, ".sessions")), () => new List<EndpointConfig>(), null);
+                        try { candidate.Start(); server = candidate; } catch (Exception) { candidate.Dispose(); Thread.Sleep(50); }
+                    }
+
+                    MuxAssert.IsNotNull(server, "server bound");
+                    string baseUrl = "http://127.0.0.1:" + port + "/v1.0/api/worktrees";
+                    string dir = "?workingDirectory=" + Uri.EscapeDataString(repo.Directory);
+                    using (System.Net.Http.HttpClient http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) })
+                    {
+                        for (int attempt = 0; attempt < 20; attempt++)
+                        {
+                            try { await http.GetAsync("http://127.0.0.1:" + port + "/v1.0/api/health", ct).ConfigureAwait(false); break; }
+                            catch (Exception) { await Task.Delay(100, ct).ConfigureAwait(false); }
+                        }
+
+                        using (System.Net.Http.HttpResponseMessage noKey = await http.GetAsync(baseUrl + dir, ct).ConfigureAwait(false))
+                        {
+                            MuxAssert.AreEqual(401, (int)noKey.StatusCode, "a key is required");
+                        }
+
+                        http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "wtkey");
+                        using (System.Net.Http.HttpResponseMessage list = await http.GetAsync(baseUrl + dir, ct).ConfigureAwait(false))
+                        {
+                            string body = await list.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                            MuxAssert.AreEqual(200, (int)list.StatusCode, "listed: " + body);
+                            MuxAssert.Contains("\"Count\":2", body, "two worktrees in the envelope");
+                            MuxAssert.Contains("mux/job/work", body, "branch listed");
+                        }
+
+                        Directory.CreateDirectory(Path.Combine(root, "plain"));
+                        using (System.Net.Http.HttpResponseMessage outside = await http.GetAsync(baseUrl + "?workingDirectory=" + Uri.EscapeDataString(Path.Combine(root, "plain")), ct).ConfigureAwait(false))
+                        {
+                            MuxAssert.AreEqual(400, (int)outside.StatusCode, "outside git is 400");
+                        }
+
+                        using (System.Net.Http.HttpResponseMessage missingDir = await http.GetAsync(baseUrl + "?workingDirectory=" + Uri.EscapeDataString(Path.Combine(root, "nope")), ct).ConfigureAwait(false))
+                        {
+                            MuxAssert.AreEqual(400, (int)missingDir.StatusCode, "missing directory is 400");
+                        }
+
+                        using (System.Net.Http.HttpResponseMessage noName = await http.DeleteAsync(baseUrl + dir, ct).ConfigureAwait(false))
+                        {
+                            MuxAssert.AreEqual(400, (int)noName.StatusCode, "a name is required");
+                        }
+
+                        using (System.Net.Http.HttpResponseMessage unknown = await http.DeleteAsync(baseUrl + dir + "&name=nope", ct).ConfigureAwait(false))
+                        {
+                            MuxAssert.AreEqual(404, (int)unknown.StatusCode, "unknown worktree is 404");
+                        }
+
+                        using (System.Net.Http.HttpResponseMessage conflict = await http.DeleteAsync(baseUrl + dir + "&name=job-work", ct).ConfigureAwait(false))
+                        {
+                            string body = await conflict.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                            MuxAssert.AreEqual(409, (int)conflict.StatusCode, "work is protected: " + body);
+                            MuxAssert.Contains("1 commit(s)", body, "explains why");
+                        }
+
+                        using (System.Net.Http.HttpResponseMessage prune = await http.PostAsync(baseUrl + "/prune" + dir, null, ct).ConfigureAwait(false))
+                        {
+                            string body = await prune.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                            MuxAssert.AreEqual(200, (int)prune.StatusCode, "pruned: " + body);
+                            MuxAssert.Contains("job-clean", body, "the clean worktree was pruned");
+                            MuxAssert.DoesNotContain("job-work", body, "work was kept");
+                        }
+
+                        using (System.Net.Http.HttpResponseMessage kept = await http.DeleteAsync(baseUrl + dir + "&name=job-work&keepBranch=true", ct).ConfigureAwait(false))
+                        {
+                            MuxAssert.AreEqual(200, (int)kept.StatusCode, "removed with keepBranch");
+                        }
+                    }
+
+                    MuxAssert.IsFalse(Directory.Exists(clean.Path) || Directory.Exists(work.Path), "both folders are gone");
+                    MuxAssert.IsTrue(BranchExists(repo, work.Branch), "the work branch was kept");
+                    AssertMainUntouched(repo, head);
+                }
+                finally
+                {
+                    server?.Dispose();
+                }
+            });
             Add("WorktreeVerb", "mux worktree list, remove, and prune work, and bad usage is rejected", async (string root, CancellationToken ct) =>
             {
                 GitFixture repo = NewRepo(root, out string head);

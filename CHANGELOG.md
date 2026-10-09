@@ -127,6 +127,14 @@ All notable changes to mux are documented here.
   write lease. Unchanged worktrees are removed; changed ones are committed onto their branch and reported (branch,
   commits, diff stat). Your branch, working tree, and stash are never touched. `mux worktree list|prune|remove` and
   `/worktrees` manage kept worktrees. See `WORKTREE_ISOLATION_PLAN.md`.
+- **Worktree management everywhere.** `GET /v1.0/api/worktrees`, `POST /v1.0/api/worktrees/prune`, and
+  `DELETE /v1.0/api/worktrees?name=` (409 instead of losing work, 404 for unknown names) with OpenAPI docs and Postman
+  requests; `/worktrees` in the desktop app; an Isolation choice in the desktop subagent editor (all 11 languages);
+  and `scripts/<os>/worktrees.sh` / `worktrees.bat`.
+- **MCP server follow-ups.** `run` now records usage telemetry like `mux print`. Over stdio, mux shortens Voltaic's
+  per-message stderr log to the method, request id, and size so prompts and answers stay out of MCP client logs;
+  `--log-messages` restores the full log. New `scripts/<os>/run-mcp-server.sh` / `.bat` builds quietly and serves a
+  source checkout over stdio, ready for `claude mcp add`.
 - **Skills in `mux print`.** Headless runs now discover skills, list them in the system prompt, and expose
   `skill` and `run_skill`, matching the interactive shell.
 
@@ -163,6 +171,8 @@ All notable changes to mux are documented here.
   agent, or a checkout build) and opens it in a new Terminal window through a self-deleting `.command` script, with a
   login shell. Windows quotes the `start` title correctly and Linux tries seven terminal emulators. When no CLI is
   found the window explains how to install it.
+- Web dashboard: the skill editor's SKILL.md body has its own copy icon in its top-right corner (the footer button
+  remains).
 - Desktop: the `/?` help table sizes its command column to the longest command instead of cutting commands off, and
   clicking a command that takes an argument (`/cwd <path>`) puts it in the composer to finish.
 - `GET /v1.0/api/context/instructions` URL-decodes `workingDirectory`, so paths with spaces work.
@@ -176,7 +186,9 @@ All notable changes to mux are documented here.
 
 - Phase 6 and the separate plans: `FileMentions` (16), `Memory` (16), `PlanMode` (11), `AskUser` (7), `McpServer`
   (17, including mux's own MCP client driving `mux mcp serve` over stdio and HTTP), and `WorktreeIsolation` (20,
-  real temporary git repositories). `TerminalLaunch` (9) covers CLI location and the generated terminal scripts,
+  real temporary git repositories). Follow-ups add `WorktreeIsolation` REST route coverage (21 cases),
+  `McpServer` log filtering, a raw stdio session that keeps prompts out of stderr, and run telemetry (19 cases), and a
+  `SkillEditorCopy` check that the dashboard's inline JavaScript parses (`node --check`). `TerminalLaunch` (9) covers CLI location and the generated terminal scripts,
   including running the macOS script; `DefaultSkills` checks the scaffold gating.
 - `BackgroundProcesses` (20 cases) runs real processes through the registry, the four tools, `/processes` in a
   headless terminal, and `mux print` (asserting the process is killed at exit), plus `react-dev-server` detection.

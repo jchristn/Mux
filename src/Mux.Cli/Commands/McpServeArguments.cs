@@ -21,6 +21,9 @@ namespace Mux.Cli.Commands
         /// <summary>Whether <c>run_skill</c> is registered.</summary>
         public bool AllowSkills { get; set; }
 
+        /// <summary>Whether stdio mode keeps the full per-message log on stderr (<c>--log-messages</c>).</summary>
+        public bool LogMessages { get; set; }
+
         /// <summary>The most permissive approval policy a <c>run</c> call may use. Defaults to deny.</summary>
         public ApprovalPolicyEnum MaxApprovalPolicy { get; set; } = ApprovalPolicyEnum.Deny;
 

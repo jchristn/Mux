@@ -15,7 +15,7 @@ Out of scope, on purpose:
 - Merging. mux reports the branch and the diff; merging stays a human decision (or a later explicit tool call).
 - Copying uncommitted changes into the worktree. The worktree starts from `HEAD`. A run that needs your in-progress edits should run in the shared tree, and the result says when your tree was dirty so the difference is never silent.
 - Repositories without a commit, and directories outside git. Isolation refuses cleanly there instead of falling back to the shared tree, because a silent fallback would defeat the point.
-- A desktop or dashboard UI for worktrees. The data is reachable through the CLI verb and the terminal; the other surfaces can add views later.
+- A web dashboard view for worktrees. The desktop app has `/worktrees` and an isolation choice in the subagent editor, and the REST routes below give the dashboard, VS Code, and scripts everything a view would need.
 
 ## Design decisions
 
@@ -40,10 +40,13 @@ Out of scope, on purpose:
 - [x] `/worktrees [list | prune | remove <name> [--force] [--keep-branch]]` in the terminal.
 - [x] The REST subagent DTO round-trips `Isolation`, and the OpenAPI schema documents it.
 - [x] Docs: `docs/USAGE.md` (Worktree isolation), `docs/CONFIG.md` (`subagents.json` `isolation`).
+- [x] REST: `GET /v1.0/api/worktrees`, `POST /v1.0/api/worktrees/prune`, and `DELETE /v1.0/api/worktrees?name=` (with `force` and `keepBranch`), returning 400 outside git, 404 for an unknown name, and 409 when removal would lose work; OpenAPI entries and a `WorktreeDto` schema.
+- [x] Desktop: an Isolation choice (shared working tree or git worktree) in the subagent editor, translated in all 11 languages, and `/worktrees [list | prune | remove <name> [--force] [--keep-branch]]` with a help-table row.
+- [x] Docs: `docs/REST_API.md`, `docs/DESKTOP.md`, the Postman collection, and `scripts/` helpers.
 
 ## Tests
 
-`WorktreeIsolationSuite` (20 cases) runs everything against real temporary repositories. It covers creation (branch, folder, base commit, metadata, subdirectory mapping), the keep-or-remove decision (no changes, uncommitted edits committed onto the branch, commits the run made itself), branch name collisions with an existing branch and a live worktree, a dirty base tree (flagged, not copied, and still intact afterwards with no stash entries), refusals (outside git, no commits, a missing directory), `list` leaving the user's own worktrees out, `remove` protecting work unless forced and keeping the branch on request, and `prune` touching only clean and missing worktrees. On top of the manager it runs `spawn_subagent` end to end with a scripted executor (kept work, cleanup when nothing changed, the per-call override, bad values, isolation outside git, and an executor that fails halfway with its partial work kept), isolated and shared jobs side by side in one `JobManager`, a job manager with no base directory, `TaskOrchestrator.IsolateTasks` putting two tasks on two branches, the CLI verb, and `/worktrees` in a headless terminal. Every case that touches a repository checks that the main tree is still on `main` at the same commit.
+`WorktreeIsolationSuite` (21 cases) runs everything against real temporary repositories. It covers creation (branch, folder, base commit, metadata, subdirectory mapping), the keep-or-remove decision (no changes, uncommitted edits committed onto the branch, commits the run made itself), branch name collisions with an existing branch and a live worktree, a dirty base tree (flagged, not copied, and still intact afterwards with no stash entries), refusals (outside git, no commits, a missing directory), `list` leaving the user's own worktrees out, `remove` protecting work unless forced and keeping the branch on request, and `prune` touching only clean and missing worktrees. On top of the manager it runs `spawn_subagent` end to end with a scripted executor (kept work, cleanup when nothing changed, the per-call override, bad values, isolation outside git, and an executor that fails halfway with its partial work kept), isolated and shared jobs side by side in one `JobManager`, a job manager with no base directory, `TaskOrchestrator.IsolateTasks` putting two tasks on two branches, the CLI verb, `/worktrees` in a headless terminal, and the REST routes (auth, input checks, 404, 409, prune, and keeping a branch). Every case that touches a repository checks that the main tree is still on `main` at the same commit.
 
 ## Risks
 
@@ -57,4 +60,4 @@ Large monorepos make `git worktree add` slower because it checks out every file.
 
 - Jobs gained isolation at the `JobManager` level rather than through a new "background job" surface: the interactive shells still run one turn at a time, so job isolation is reachable today through the Core API and `TaskOrchestrator.IsolateTasks`. Subagents are the user-facing entry point.
 - A kept worktree's uncommitted changes are committed onto its branch when the run ends, so the branch always carries the whole result and `git merge` works without visiting the folder.
-- The desktop subagent editor does not show an `isolation` field yet; it preserves the value when editing, and `subagents.json` and the REST API carry it.
+- The desktop subagent editor shows the `isolation` choice; the first pass only preserved the value, and the follow-up added the field.

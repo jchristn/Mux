@@ -26,6 +26,12 @@ namespace Mux.Core.McpServer
         public bool AllowSkills { get; set; }
 
         /// <summary>
+        /// Whether stdio mode keeps Voltaic's full per-message log on stderr. Off by default: message lines are
+        /// shortened to the method, id, and size so prompts and answers do not land in MCP client logs.
+        /// </summary>
+        public bool LogMessages { get; set; }
+
+        /// <summary>
         /// The most permissive approval policy a <c>run</c> call may use: <see cref="ApprovalPolicyEnum.Deny"/> (the
         /// default), <see cref="ApprovalPolicyEnum.AutoSafe"/>, or <see cref="ApprovalPolicyEnum.AutoApprove"/>.
         /// <see cref="ApprovalPolicyEnum.Ask"/> is treated as <see cref="ApprovalPolicyEnum.Deny"/> because no person

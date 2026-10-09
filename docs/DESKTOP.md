@@ -62,6 +62,8 @@ Start a message with `#` to save the rest of the line as a memory for this proje
 
 `/processes` (alias `/ps`) lists the background processes the agent started with `process_start` (dev servers, watchers), `/processes output <id>` shows recent output, `/processes stop <id>` (or `all`) stops one, and `/processes clear` removes exited ones. Every tab shares one list, and closing the app stops them all. See [USAGE.md](USAGE.md#background-processes).
 
+`/worktrees` lists the isolated git worktrees that subagents with worktree isolation left behind (branch and state), `/worktrees prune` removes the unchanged ones, and `/worktrees remove <name> [--force] [--keep-branch]` removes one without losing work by accident. The subagent editor's Isolation choice (shared working tree or git worktree) sets whether a subagent runs in its own worktree. See [USAGE.md](USAGE.md#worktree-isolation).
+
 ## Managers
 
 Everything you can configure in the TUI is available here as a window, each backed by the same `Mux.Core` stores:

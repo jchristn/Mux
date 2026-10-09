@@ -108,7 +108,10 @@ All paths are versioned under `/v1.0/api`.
 | GET | `/v1.0/api/memory?workingDirectory=<dir>&query=<words>&name=<name>` | key | The persistent memories visible from a directory (project first, then global, newest first). `query` filters by words; `name` returns one (404 when missing). See [Memory](#memory). |
 | POST | `/v1.0/api/memory` | key | Create (201) or update (200) a memory: `{ "Name", "Description", "Content", "Scope", "WorkingDirectory" }`. |
 | DELETE | `/v1.0/api/memory?name=<name>&scope=<scope>&workingDirectory=<dir>` | key | Delete a memory and return it (404 when missing). |
-| GET/PUT | `/v1.0/api/subagents` | key | Subagent definitions. |
+| GET | `/v1.0/api/worktrees?workingDirectory=<dir>` | key | The isolated git worktrees mux keeps for subagents and jobs, as `{ Items, Count }` (400 outside git). See [Worktrees](#worktrees). |
+| POST | `/v1.0/api/worktrees/prune?workingDirectory=<dir>` | key | Remove unchanged worktrees and forget ones whose folder is gone; returns the names removed. |
+| DELETE | `/v1.0/api/worktrees?name=<name>&force=<bool>&keepBranch=<bool>&workingDirectory=<dir>` | key | Remove one worktree (404 when unknown, 409 when it would lose work without `force` or `keepBranch`). |
+| GET/PUT | `/v1.0/api/subagents` | key | Subagent definitions (including `Isolation`: `worktree` or empty). |
 | GET/PUT | `/v1.0/api/hooks` | key | Plugin config: `{ "hooks": [ … ], "commands": [ … ] }`. |
 | GET/PUT | `/v1.0/api/keybindings` | key | Command-id → chord overrides. |
 | GET | `/v1.0/api/skills` | key | Skills list (name, description, enabled, valid, command count). |
@@ -196,6 +199,17 @@ is none). `POST /v1.0/api/memory` with `{ Name, Description, Content, Scope, Wor
 `DELETE /v1.0/api/memory?name=<name>&scope=<scope>&workingDirectory=<dir>` deletes one and returns it (404 when it
 does not exist). A `workingDirectory` that does not exist is a 400. These read and write the same files as the
 terminal, the desktop app, `mux memory`, and the model's `remember` tool.
+
+## Worktrees
+
+`GET /v1.0/api/worktrees?workingDirectory=<dir>` lists the isolated git worktrees mux created for subagents and jobs
+in the repository containing `<dir>` (under `.git/mux-worktrees`), as `{ Items, Count }`. Each item has `Name`,
+`Path`, `Branch` (`mux/...`), `Head`, `BaseCommit`, `Kind`, `CreatedUtc`, `Exists`, `Dirty`, and `CommitsAhead`.
+`POST /v1.0/api/worktrees/prune` removes the ones with no commits and no uncommitted changes (and forgets
+registrations whose folder is gone) and returns the names removed. `DELETE /v1.0/api/worktrees?name=<name>` removes
+one by name, branch, or path; it answers 409 rather than lose uncommitted changes or unmerged commits, unless
+`force=true` (discard) or `keepBranch=true` (remove the folder, keep the branch). A directory outside git is a 400 and
+an unknown name a 404. These are the same operations as `mux worktree` and `/worktrees`.
 
 ## Web dashboard
 

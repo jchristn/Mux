@@ -426,7 +426,10 @@ mux worktree remove <name> --force        # discard everything
 mux worktree prune                        # remove unchanged worktrees, forget ones whose folder is gone
 ```
 
-`/worktrees` (with `list`, `prune`, and `remove <name> [--force] [--keep-branch]`) does the same in the terminal.
+`/worktrees` (with `list`, `prune`, and `remove <name> [--force] [--keep-branch]`) does the same in the terminal and
+the desktop app, `scripts/<os>/worktrees.sh` (or `.bat`) runs the verb from a source checkout, and the REST server
+offers `GET /v1.0/api/worktrees`, `POST /v1.0/api/worktrees/prune`, and `DELETE /v1.0/api/worktrees?name=` (see
+[REST_API.md](REST_API.md#worktrees)). The desktop subagent editor has an Isolation choice for the same setting.
 Developers embedding `Mux.Core` can isolate jobs too: `JobManager.EnqueueAsync(..., IsolationModeEnum.Worktree, ...)`
 runs a job in a `mux/job/<id>` worktree and reports the result on `Job.WorktreeOutcome`, and
 `TaskOrchestrator.IsolateTasks` does it for every task of a plan.
@@ -1088,6 +1091,15 @@ mux mcp serve --http 8811 --api-key "$MUX_MCP_KEY"    # http://localhost:8811/mc
 
 Over HTTP the server binds `localhost` (loopback clients only) unless `--host` says otherwise; a non-loopback host
 without a key prints a warning. The key can also come from the `mcpServeApiKey` setting.
+
+Over stdio, the underlying Voltaic server logs every message to stderr, and MCP clients keep that log. mux shortens
+those lines to the method, request id, and size (`Received: tools/call (id 2, 412 bytes)`), so prompts and answers
+stay out of client logs; `--log-messages` restores the full log for debugging. Each `run` records usage telemetry
+like `mux print`, so MCP-driven turns appear in `/usage` and the dashboard.
+
+To serve the build from a source checkout, use `scripts/macos/run-mcp-server.sh` (or the `linux` or `windows`
+equivalent). It builds quietly, then runs `mux mcp serve` with the arguments you pass, so it can be registered
+directly: `claude mcp add mux -- /path/to/mux/scripts/macos/run-mcp-server.sh --approval-policy auto-safe`.
 
 Client configuration:
 

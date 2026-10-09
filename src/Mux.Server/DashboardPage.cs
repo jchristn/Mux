@@ -438,6 +438,8 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 .copybtn:hover{border-color:var(--accent);color:var(--accent)}
 .copybtn.ok{color:var(--accent);border-color:var(--accent)}
 .copybtn.icon{padding:3px 8px;font-size:13px;line-height:1}
+.copywrap{position:relative}.copywrap textarea{width:100%;box-sizing:border-box;padding-right:44px}
+.copywrap .fieldcopy{position:absolute;top:6px;right:8px;background:var(--panel,var(--bg));z-index:1}
 .langsel{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;line-height:1;max-width:150px}
 .langsel:hover{border-color:var(--accent);color:var(--text)}
 .langsel:focus{outline:2px solid var(--accent);outline-offset:1px}
@@ -1541,7 +1543,7 @@ function fieldHtml(f){
   if(f.type==="section")return '<div class="form-section">'+esc(f.label)+'</div>';
   var id="f_"+f.id,sub=f.sub?' <span class="sub">'+esc(f.sub)+'</span>':'',inp,tall="";
   if(f.type==="checkbox")inp='<input type="checkbox" id="'+id+'">';
-  else if(f.type==="textarea"||f.type==="lines"){inp='<textarea id="'+id+'" rows="'+(f.rows||4)+'"'+(f.placeholder?' placeholder="'+esc(f.placeholder)+'"':'')+'></textarea>';tall=" tall";}
+  else if(f.type==="textarea"||f.type==="lines"){inp='<textarea id="'+id+'" rows="'+(f.rows||4)+'"'+(f.placeholder?' placeholder="'+esc(f.placeholder)+'"':'')+'></textarea>';if(f.copy)inp='<div class="copywrap">'+inp+'<button type="button" class="copybtn icon fieldcopy" data-copy-target="'+id+'" title="'+esc(t("act.copyskill"))+'" aria-label="'+esc(t("act.copyskill"))+'">⧉</button></div>';tall=" tall";}
   else if(f.type==="select"){var o="";for(var i=0;i<f.options.length;i++)o+='<option>'+esc(f.options[i])+'</option>';inp='<select id="'+id+'">'+o+'</select>';}
   else if(f.type==="multiselect"){var c="";for(var i=0;i<f.options.length;i++){var ov=f.options[i];c+='<label class="chip"><input type="checkbox" value="'+esc(ov)+'">'+esc(ov)+'</label>';}inp='<div class="chips" id="'+id+'">'+c+'</div>';tall=" tall";}
   else inp='<input type="'+(f.type==="password"?"password":(f.type==="number"?"number":"text"))+'" id="'+id+'"'+(f.placeholder?' placeholder="'+esc(f.placeholder)+'"':'')+(f.step?' step="'+f.step+'"':'')+(f.tip?' title="'+esc(f.tip)+'"':'')+'>';
@@ -1570,6 +1572,7 @@ function formModal(title,fields,values,onSave,size,extraButtons){
   var h="";for(var i=0;i<fields.length;i++)h+=fieldHtml(fields[i]);
   openModal(title,h,(extraButtons||[]).concat([{label:t("act.cancel"),onClick:closeModal},{label:t("act.save"),primary:true,onClick:function(){onSave(collectForm(fields));}}]),size||true);
   setFields(fields,values);
+  var cps=el("modalBody").querySelectorAll(".fieldcopy");for(var ci=0;ci<cps.length;ci++){cps[ci].addEventListener("click",function(){var tg=el(this.getAttribute("data-copy-target"));copyText(tg?tg.value:"",this);});}
   fields.forEach(function(f){if(f.type==="section")return;var e=el("f_"+f.id);if(e)e.addEventListener("change",function(){applyShowIf(fields);});});
   applyShowIf(fields);
   var first=el("modalBody").querySelector("input:not([disabled]),select:not([disabled]),textarea:not([disabled])");if(first)first.focus();
@@ -1973,7 +1976,7 @@ function viewSk(name){api("/v1.0/api/skills/detail?id="+encodeURIComponent(name)
 function skEditor(name,body,isEdit){
   formModal(isEdit?("Edit skill · "+name):"Create skill",
     [{id:"Name",label:"Name",disabled:isEdit,sub:"(folder id)",tip:"The skill's unique folder id (letters, digits, dashes). Cannot be changed after creation."},
-     {id:"Body",label:"SKILL.md",type:"textarea",rows:20,tip:"The full SKILL.md source: YAML frontmatter (name, description, commands) followed by the skill instructions."}],
+     {id:"Body",label:"SKILL.md",type:"textarea",rows:20,copy:true,tip:"The full SKILL.md source: YAML frontmatter (name, description, commands) followed by the skill instructions."}],
     {Name:name,Body:body},function(v){
       if(!v.Name){toast(t("toast.nameReq"),true);return;}
       if(isEdit){api("/v1.0/api/skills/body","PUT",{Id:name,Body:v.Body}).then(function(r){_sk=(r&&r.Items)||[];closeModal();renderSk();toast(t("toast.saved"));}).catch(function(e){toast(e.message,true);});}

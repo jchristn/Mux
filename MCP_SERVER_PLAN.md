@@ -82,7 +82,7 @@ mux mcp serve --http 8811 --api-key "$MUX_MCP_KEY"
 ### Phase B: CLI
 
 - [x] `src/Mux.Cli/Commands/McpRunExecutor.cs`: the headless turn, resolved like `mux print`, with skills, hooks, and background processes, and nothing written to stdout.
-- [x] `src/Mux.Cli/Commands/McpServeCommand.cs`: `mux mcp serve [--http <port>] [--host <name>] [--api-key <key>] [--allow-skills] [--approval-policy deny|auto-safe|auto] [--yolo] [--endpoint <name>] [-w <dir>]`, dispatched from `Program.cs` without the stdout banner or spacing wrapper.
+- [x] `src/Mux.Cli/Commands/McpServeCommand.cs`: `mux mcp serve [--http <port>] [--host <name>] [--api-key <key>] [--allow-skills] [--log-messages] [--approval-policy deny|auto-safe|auto] [--yolo] [--endpoint <name>] [-w <dir>]`, dispatched from `Program.cs` without the stdout banner or spacing wrapper.
 - [x] Setting `mcpServeApiKey` (used when `--api-key` is not given).
 
 ### Phase C: Tests and docs
@@ -95,11 +95,11 @@ mux mcp serve --http 8811 --api-key "$MUX_MCP_KEY"
 The build stayed on Voltaic 2.2.1; every API the design needed was already there. A few details changed on the way:
 
 - Progress is reported after every tool call as well as after every agent step, which keeps clients with short timeouts alive during long tool runs.
-- `run` records no durable usage telemetry yet (`mux print` does); the run summary carries the token counts instead.
+- `run` records durable usage telemetry like `mux print` (the first pass did not; the follow-up added it), and the run summary carries the token counts as well.
 - `mux mcp serve` is excluded from the "serve" detection that starts the Prometheus listener for `mux serve`.
-- Voltaic writes a log line per message to stderr. MCP clients usually keep that log, so prompts sent to `run` appear in it; secrets do not, because tool results never contain them.
+- Voltaic 2.2.1's stdio server writes every message it receives and sends to stderr in full, and MCP clients keep that log. `mux mcp serve` wraps stderr with `McpLogFilterWriter`, which shortens those lines to the method, the request id, and the size, so prompts and answers stay out of client logs. `--log-messages` restores the full log for debugging. The HTTP transport only logs through an event mux does not subscribe to.
 
-Tests: `McpServerSuite` (17 cases) passes on net8.0 and net10.0, including the stdio child-process run and mux's own MCP client connecting over HTTP with and without the bearer key.
+Tests: `McpServerSuite` (19 cases) passes on net8.0 and net10.0, including the stdio child-process run, mux's own MCP client connecting over HTTP with and without the bearer key, the log filter, a raw stdio session whose stderr keeps the prompt out unless `--log-messages` is passed, and the usage database written by a real `run`.
 
 ## Risks
 
