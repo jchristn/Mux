@@ -48,11 +48,24 @@ All notable changes to mux are documented here.
   CMake (with presets), Meson, and Make (`cpp-configure`, `cpp-build`, `cpp-test`, `cpp-format`, `cpp-tidy`,
   `cpp-sanitize`), Go (`go-build`, `go-test`, `go-lint`, `go-mod`), and Rust (`cargo-build`, `cargo-test`,
   `cargo-clippy`, `cargo-fmt`). The library is now 88 skills; scaffolding commands never overwrite files.
+- **Infrastructure and cloud skills (Phase 2).** 51 more default skills (library: 139), listed only when the
+  project has matching files and, for clouds, the provider's CLI is installed (new `requiresTools` frontmatter,
+  checked by scanning PATH). Containers and orchestration: `docker-build`, `docker-inspect`, `compose`,
+  `dockerfile-lint`, `k8s-context`, `k8s-inspect`, `k8s-validate`, `k8s-apply`, `minikube`, `helm`, and
+  `openstack-whoami`/`-inspect`/`-heat`. Clouds: eight AWS skills (identity, EC2 and Lambda, ECS/EKS/ECR, S3, RDS
+  and DynamoDB, CloudFormation/SAM/CDK, logs/alarms/cost, SQS/SNS/secret names/Route 53/IAM), six each for Azure and
+  Google Cloud, three for DigitalOcean, Rackspace, Vercel, Netlify, Cloudflare, fly.io, Alibaba Cloud, Huawei
+  Cloud, IBM Cloud, and Linode, plus `terraform` (also OpenTofu) and `pulumi`. Every command prints its target
+  first, changes preview by default, and a production guard (new `skillProdPattern` setting, default
+  `prod|production|live`) refuses matching targets with exit 3 unless confirmed with `--confirm <name>`. No
+  command deletes, destroys, or reads secret values. `project-detect` now suggests these families.
 - **Skills in `mux print`.** Headless runs now discover skills, list them in the system prompt, and expose
   `skill` and `run_skill`, matching the interactive shell.
 
 ### Changed
 
+- Relevance gating (`appliesTo`) now also applies when `projectSkillsEnabled` is false, and the listing prints the
+  "more skills are installed" footer even when every skill is hidden.
 - **Repository scripts moved under `scripts/`.** Windows `.bat` scripts now live in `scripts/windows/`, and the
   shell scripts in both `scripts/linux/` and `scripts/macos/` (for example `scripts/windows/install-tool.bat`,
   `./scripts/macos/run-desktop.sh`). Each script resolves the repository root from its own location, so they
@@ -63,9 +76,11 @@ All notable changes to mux are documented here.
 
 ### Tests
 
-- `ToolchainSkills`: 57 cases that dry-run the project-detection, JavaScript, Python, React, Java, C++, Go, and
-  Rust skills against generated fixture projects and assert the exact command and exit code, plus real
-  scaffolding runs that check files are written and never overwritten (skipped when `pwsh` is not on PATH).
+- `ToolchainSkills`: 87 cases that dry-run the toolchain and infrastructure skills against generated fixture
+  projects and assert the exact command and exit code, including production-guard refusals and confirmations,
+  preview-by-default behavior, and bounded logs; real scaffolding runs; and a scan proving no infrastructure command
+  deletes, destroys, or reads secrets (skipped when `pwsh` is not on PATH). `SkillListing` adds `requiresTools`,
+  tool-presence caching, and production-pattern cases.
 - New suites `ProjectInstructions`, `ProjectSkills`, `SkillInvocation`, and `SkillListing`, plus new
   `DefaultSkills` cases (playbook builder, no em-dashes, colon headings) and a `SkillCommand` case for
   `mux skill trust`.

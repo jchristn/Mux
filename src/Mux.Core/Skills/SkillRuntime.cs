@@ -39,6 +39,7 @@ namespace Mux.Core.Skills
         private readonly TaskCompletionSource<bool> _FirstRefresh = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly Dictionary<string, SkillCatalogView> _ProjectViews = new Dictionary<string, SkillCatalogView>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
         private readonly AppliesToMatcher _Matcher = new AppliesToMatcher();
+        private ToolPresenceCache _Tools = new ToolPresenceCache();
 
         private IReadOnlyList<Skill> _UserSkills = new List<Skill>();
         private SkillCatalogView? _UserView;
@@ -71,6 +72,7 @@ namespace Mux.Core.Skills
             _LoadIndex = loadIndex ?? throw new ArgumentNullException(nameof(loadIndex));
             _OnSkillsChanged = onSkillsChanged ?? throw new ArgumentNullException(nameof(onSkillsChanged));
             _Interval = interval ?? TimeSpan.FromSeconds(30);
+            _Tools.TimeToLive = _Interval;
         }
 
         /// <summary>
@@ -87,7 +89,7 @@ namespace Mux.Core.Skills
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             if (onSkillsChanged == null) throw new ArgumentNullException(nameof(onSkillsChanged));
 
-            return new SkillRuntime(
+            SkillRuntime runtime = new SkillRuntime(
                 SettingsLoader.ResolveSkillsDirectory(settings),
                 SettingsLoader.LoadSkillIndex,
                 onSkillsChanged,
@@ -98,6 +100,8 @@ namespace Mux.Core.Skills
                 ListingMode = settings.SkillListingMode,
                 TrustStore = new ProjectTrustStore(SettingsLoader.GetTrustedProjectsPath())
             };
+            runtime.Executor.DefaultEnvironment[ProdPatternVariable] = settings.SkillProdPattern;
+            return runtime;
         }
 
         #endregion
@@ -106,6 +110,26 @@ namespace Mux.Core.Skills
 
         /// <inheritdoc/>
         public string Name => "skills";
+
+        /// <summary>
+        /// The environment variable that carries <see cref="MuxSettings.SkillProdPattern"/> to skill processes.
+        /// </summary>
+        public const string ProdPatternVariable = "MUX_SKILL_PROD_PATTERN";
+
+        /// <summary>
+        /// The executor that runs skill commands; its <see cref="SkillExecutor.DefaultEnvironment"/> applies to every
+        /// run.
+        /// </summary>
+        public SkillExecutor Executor => _Executor;
+
+        /// <summary>
+        /// The cache that answers whether a <c>requiresTools</c> executable is on PATH. Replaceable for tests. Never null.
+        /// </summary>
+        public ToolPresenceCache Tools
+        {
+            get { lock (_Sync) { return _Tools; } }
+            set { lock (_Sync) { _Tools = value ?? new ToolPresenceCache(); } }
+        }
 
         /// <summary>
         /// The directory this runtime scans for user skills.
@@ -416,6 +440,8 @@ namespace Mux.Core.Skills
             }
 
             bool filter = mode == "relevant" && !string.IsNullOrWhiteSpace(workingDirectory);
+            string? relevanceRoot = filter ? RepositoryRootLocator.FindProjectRoot(workingDirectory) : null;
+            ToolPresenceCache tools = Tools;
             List<Skill> listed = new List<Skill>();
             int hidden = 0;
             foreach (Skill skill in view.Catalog.GetEnabledValidSkills())
@@ -425,7 +451,7 @@ namespace Mux.Core.Skills
                     continue;
                 }
 
-                if (filter && !view.IsRelevant(skill, _Matcher))
+                if (filter && !view.IsRelevant(skill, relevanceRoot, _Matcher, tools))
                 {
                     hidden++;
                     continue;
@@ -434,13 +460,18 @@ namespace Mux.Core.Skills
                 listed.Add(skill);
             }
 
-            if (listed.Count == 0)
+            if (listed.Count == 0 && hidden == 0)
             {
                 return string.Empty;
             }
 
             StringBuilder builder = new StringBuilder();
-            builder.Append("\n\n").Append(PromptResolver.Shared.GetEffective("section.skills")).Append('\n');
+            builder.Append("\n\n");
+            if (listed.Count > 0)
+            {
+                builder.Append(PromptResolver.Shared.GetEffective("section.skills")).Append('\n');
+            }
+
             foreach (Skill skill in listed)
             {
                 builder.Append($"- {skill.Manifest.Name}: {skill.Manifest.Description}\n");

@@ -105,6 +105,68 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    Case("RequiresToolsGatesListing", "Skills that require a missing CLI are hidden until it is on PATH", async (ProjectSkillsFixture f, CancellationToken ct) =>
+                    {
+                        string bin = Path.Combine(f.Root, "bin");
+                        Directory.CreateDirectory(bin);
+                        WriteGatedTools(f.UserSkills, "cloud-thing", "[fakecloud]");
+                        WriteGatedTools(f.UserSkills, "either-thing", "[faketf|faketofu]");
+                        using (SkillRuntime runtime = f.CreateRuntime())
+                        {
+                            runtime.Tools = new ToolPresenceCache(() => bin) { TimeToLive = TimeSpan.Zero };
+                            await runtime.RefreshNowAsync(ct).ConfigureAwait(false);
+                            string hidden = runtime.BuildPromptSection(f.Project);
+                            MuxAssert.DoesNotContain("- cloud-thing:", hidden, "hidden without the CLI");
+                            MuxAssert.Contains("2 more skills are installed", hidden, "counted in the footer");
+
+                            File.WriteAllText(Path.Combine(bin, OperatingSystem.IsWindows() ? "fakecloud.exe" : "fakecloud"), string.Empty);
+                            File.WriteAllText(Path.Combine(bin, OperatingSystem.IsWindows() ? "faketofu.exe" : "faketofu"), string.Empty);
+                            string shown = runtime.BuildPromptSection(f.Project);
+                            MuxAssert.Contains("- cloud-thing:", shown, "listed once the CLI exists");
+                            MuxAssert.Contains("- either-thing:", shown, "an alternative satisfies the requirement");
+
+                            runtime.ListingMode = "all";
+                            runtime.Tools = new ToolPresenceCache(() => string.Empty);
+                            MuxAssert.Contains("- cloud-thing:", runtime.BuildPromptSection(f.Project), "all mode ignores tool requirements");
+                        }
+                    }),
+
+                    Case("ToolPresenceCacheRules", "Tool presence handles blanks, alternatives, paths, and caching", (ProjectSkillsFixture f, CancellationToken ct) =>
+                    {
+                        string bin = Path.Combine(f.Root, "bin2");
+                        Directory.CreateDirectory(bin);
+                        ToolPresenceCache cache = new ToolPresenceCache(() => bin) { TimeToLive = TimeSpan.FromMinutes(5) };
+                        MuxAssert.IsTrue(cache.IsAvailable("  "), "blank requirement is met");
+                        MuxAssert.IsTrue(cache.AllAvailable(null), "null list is met");
+                        MuxAssert.IsFalse(cache.IsAvailable("nothere"), "missing tool");
+                        File.WriteAllText(Path.Combine(bin, OperatingSystem.IsWindows() ? "nothere.exe" : "nothere"), string.Empty);
+                        MuxAssert.IsFalse(cache.IsAvailable("nothere"), "cached answer until the TTL passes");
+                        cache.Clear();
+                        MuxAssert.IsTrue(cache.IsAvailable("nothere"), "found after clearing");
+                        MuxAssert.IsFalse(cache.IsAvailable("../etc/passwd"), "paths are never treated as tools");
+                        return Task.CompletedTask;
+                    }),
+
+                    Case("RelevanceWithoutProjectSkills", "appliesTo gating works when project skills are disabled", async (ProjectSkillsFixture f, CancellationToken ct) =>
+                    {
+                        WriteGated(f.UserSkills, "py-thing", "[pyproject.toml]");
+                        using (SkillRuntime runtime = f.CreateRuntime())
+                        {
+                            runtime.ProjectSkillsEnabled = false;
+                            await runtime.RefreshNowAsync(ct).ConfigureAwait(false);
+                            MuxAssert.DoesNotContain("- py-thing:", runtime.BuildPromptSection(f.Project), "still filtered by appliesTo");
+                        }
+                    }),
+
+                    Case("ProdPatternSetting", "skillProdPattern defaults, accepts regexes, and rejects invalid ones", (ProjectSkillsFixture f, CancellationToken ct) =>
+                    {
+                        MuxAssert.AreEqual("prod|production|live", new MuxSettings().SkillProdPattern, "default");
+                        MuxAssert.AreEqual("^prd-", new MuxSettings { SkillProdPattern = " ^prd- " }.SkillProdPattern, "custom pattern trimmed");
+                        MuxAssert.AreEqual("prod|production|live", new MuxSettings { SkillProdPattern = "([unclosed" }.SkillProdPattern, "invalid falls back");
+                        MuxAssert.AreEqual("prod|production|live", new MuxSettings { SkillProdPattern = "  " }.SkillProdPattern, "blank falls back");
+                        return Task.CompletedTask;
+                    }),
+
                     Case("FooterPromptIsEditable", "The hidden-skills footer is a catalog prompt with a {Count} placeholder", (ProjectSkillsFixture f, CancellationToken ct) =>
                     {
                         MuxAssert.Contains("{Count}", PromptResolver.Shared.GetEffective("section.skills.more"), "placeholder in default");
@@ -130,6 +192,13 @@ namespace Test.Shared.Suites
                     try { Directory.Delete(fixture.Root, true); } catch (Exception) { }
                 }
             });
+        }
+
+        private static void WriteGatedTools(string root, string id, string requiresTools)
+        {
+            string dir = Path.Combine(root, id);
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "SKILL.md"), "---\nname: " + id + "\ndescription: tool-gated " + id + "\nrequiresTools: " + requiresTools + "\n---\nDo the thing.\n");
         }
 
         private static void WriteGated(string root, string id, string appliesTo)

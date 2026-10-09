@@ -37,6 +37,7 @@ namespace Mux.Core.Models
         private string _SkillListingMode = "relevant";
         private bool _ProjectInstructionsEnabled = true;
         private int _ProjectInstructionsMaxBytes = 32768;
+        private string _SkillProdPattern = DefaultSkillProdPattern;
         private bool _TaskPlanningEnabled = true;
         private bool _TaskParallelismEnabled = false;
         private bool _SetupCompleted = false;
@@ -350,6 +351,25 @@ namespace Mux.Core.Models
         }
 
         /// <summary>
+        /// The default <see cref="SkillProdPattern"/>.
+        /// </summary>
+        public const string DefaultSkillProdPattern = "prod|production|live";
+
+        /// <summary>
+        /// A case-insensitive regular expression that marks a deployment target (Kubernetes context, cloud profile or
+        /// project, Terraform workspace, Helm release target) as production. Skills that change infrastructure refuse
+        /// to act on a matching target (exit 3) unless their arguments repeat the target name with
+        /// <c>--confirm &lt;name&gt;</c>. Defaults to <c>prod|production|live</c>; blank or invalid patterns fall back
+        /// to the default.
+        /// </summary>
+        [JsonPropertyName("skillProdPattern")]
+        public string SkillProdPattern
+        {
+            get => _SkillProdPattern;
+            set => _SkillProdPattern = IsValidPattern(value) ? value!.Trim() : DefaultSkillProdPattern;
+        }
+
+        /// <summary>
         /// Whether project instruction files (<c>MUX.md</c>, <c>AGENTS.md</c>, <c>CLAUDE.md</c>, plus the
         /// user-level <c>MUX.md</c> in the config directory) are loaded into the system prompt. Defaults to true.
         /// </summary>
@@ -528,6 +548,24 @@ namespace Mux.Core.Models
                 default:
                     normalized = "relevant";
                     return false;
+            }
+        }
+
+        private static bool IsValidPattern(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            try
+            {
+                _ = new System.Text.RegularExpressions.Regex(value);
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                return false;
             }
         }
 

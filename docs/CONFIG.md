@@ -274,6 +274,7 @@ Example:
   "skillListingMode": "relevant",
   "projectInstructionsEnabled": true,
   "projectInstructionsMaxBytes": 32768,
+  "skillProdPattern": "prod|production|live",
   "taskPlanningEnabled": true,
   "taskParallelismEnabled": false,
   "setupCompleted": false,
@@ -310,6 +311,7 @@ Fields:
 | `projectSkillRoots` | string[] | project skill directories, in precedence order; rooted and `..` entries are dropped, and an empty list restores the default `[".mux/skills", ".claude/skills", ".agents/skills"]` |
 | `skillListingMode` | string | which enabled skills are listed in the system prompt: `relevant` (default; skills with `appliesTo` globs are listed only when a glob matches a file in the project, and a footer counts the rest), `all`, or `none` (skills stay callable through the `skill` tool and by name) |
 | `projectInstructionsEnabled` | bool | load project instruction files into the system prompt: the user-level `MUX.md` in the config directory, then `MUX.md`, `AGENTS.md`, or `CLAUDE.md` (the first found in each directory) from the repository root down to the working directory; default `true`; `--no-project-instructions` skips them for one run |
+| `skillProdPattern` | string | case-insensitive regular expression that marks a deployment target (Kubernetes context, cloud profile, subscription, or project, Terraform workspace, Pulumi stack) as production; infrastructure skills refuse to change a matching target (exit 3) unless the command repeats the exact name with `--confirm <name>`; blank or invalid patterns fall back to the default `prod|production|live` |
 | `projectInstructionsMaxBytes` | int | cap on the combined size of the instruction files, in UTF-8 bytes; the files farthest from the working directory are dropped first, and a single oversized file is cut short; clamped to `0-1048576`, `0` disables loading; default `32768` |
 | `maxConcurrency` | int | maximum number of interactive jobs allowed to run at once; clamped to `1-32`, default `3` |
 | `taskPlanningEnabled` | bool | offer the `plan_tasks`/`update_task` tools and teach the model to decompose large requests into a tracked task plan; default `true` |

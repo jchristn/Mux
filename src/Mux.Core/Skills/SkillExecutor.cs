@@ -20,6 +20,22 @@ namespace Mux.Core.Skills
     /// </summary>
     public sealed class SkillExecutor
     {
+        #region Private-Members
+
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _DefaultEnvironment = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.Ordinal);
+
+        #endregion
+
+        #region Public-Members
+
+        /// <summary>
+        /// Environment variables set for every run of this executor (for example the production-guard pattern).
+        /// Per-run variables passed to <see cref="ExecuteAsync"/> override these. Thread-safe. Never null.
+        /// </summary>
+        public System.Collections.Concurrent.ConcurrentDictionary<string, string> DefaultEnvironment => _DefaultEnvironment;
+
+        #endregion
+
         #region Public-Methods
 
         /// <summary>
@@ -57,6 +73,10 @@ namespace Mux.Core.Skills
                 startInfo.Environment["MUX_SKILL_NAME"] = skill.Manifest.Name;
                 startInfo.Environment["MUX_SKILL_DIR"] = skill.DirectoryPath;
                 startInfo.Environment["MUX_SKILL_COMMAND"] = command.Name;
+                foreach (KeyValuePair<string, string> variable in DefaultEnvironment)
+                {
+                    startInfo.Environment[variable.Key] = variable.Value;
+                }
                 if (environment != null)
                 {
                     foreach (KeyValuePair<string, string> variable in environment)

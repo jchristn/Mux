@@ -105,25 +105,34 @@ namespace Mux.Core.Skills
         #region Public-Methods
 
         /// <summary>
-        /// Returns whether a skill's <c>appliesTo</c> globs match this view's project, evaluating each skill
-        /// once per view. A skill without globs, or a view without a project root, is always relevant.
-        /// Thread-safe.
+        /// Returns whether a skill should be listed for a project root: every <c>requiresTools</c> entry is on PATH
+        /// and, when the skill has <c>appliesTo</c> globs, at least one matches under the root. Glob results are
+        /// cached per root and skill for the life of the view; tool presence is cached by
+        /// <paramref name="tools"/>. A null root skips the glob check. Thread-safe.
         /// </summary>
         /// <param name="skill">The skill. Must not be null.</param>
-        /// <param name="matcher">The matcher used to evaluate globs. Must not be null.</param>
+        /// <param name="projectRoot">The project root the globs are evaluated against, or null.</param>
+        /// <param name="matcher">The glob matcher. Must not be null.</param>
+        /// <param name="tools">The tool presence cache. Must not be null.</param>
         /// <returns><c>true</c> when the skill is relevant.</returns>
-        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
-        public bool IsRelevant(Skill skill, AppliesToMatcher matcher)
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="skill"/>, <paramref name="matcher"/>, or <paramref name="tools"/> is null.</exception>
+        public bool IsRelevant(Skill skill, string? projectRoot, AppliesToMatcher matcher, ToolPresenceCache tools)
         {
             if (skill == null) throw new ArgumentNullException(nameof(skill));
             if (matcher == null) throw new ArgumentNullException(nameof(matcher));
+            if (tools == null) throw new ArgumentNullException(nameof(tools));
 
-            if (skill.Manifest.AppliesTo.Count == 0 || _ProjectRoot == null)
+            if (!tools.AllAvailable(skill.Manifest.RequiresTools))
+            {
+                return false;
+            }
+
+            if (skill.Manifest.AppliesTo.Count == 0 || projectRoot == null)
             {
                 return true;
             }
 
-            string key = skill.Manifest.Name;
+            string key = projectRoot + "|" + skill.Manifest.Name;
             lock (_RelevanceSync)
             {
                 if (_Relevance.TryGetValue(key, out bool cached))
@@ -132,7 +141,7 @@ namespace Mux.Core.Skills
                 }
             }
 
-            bool relevant = matcher.AnyMatch(_ProjectRoot, skill.Manifest.AppliesTo);
+            bool relevant = matcher.AnyMatch(projectRoot, skill.Manifest.AppliesTo);
             lock (_RelevanceSync)
             {
                 _Relevance[key] = relevant;

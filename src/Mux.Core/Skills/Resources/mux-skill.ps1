@@ -6,7 +6,8 @@
 # Exit codes used by every toolchain skill:
 #   0  success
 #   1  the tool ran and reported problems (failing tests, lint findings, a failed build)
-#   2  the tool is not installed, or the project does not use this toolchain
+#   2  the tool is not installed, the CLI is not signed in, or the project does not use this toolchain
+#   3  refused by the production guard: the target looks like production and was not confirmed
 #
 # Set MUX_SKILL_DRY_RUN=1 to print each command as "DRYRUN: <command>" instead of running it. Detection still
 # runs, so dry runs show exactly what a skill would execute in a given project without needing the tool.
@@ -450,6 +451,107 @@ function Get-MuxRustProject {
     $dir = Find-MuxUp -Names @('Cargo.toml')
     if (-not $dir) { Exit-MuxNotApplicable 'no Cargo.toml found; this is not a Rust crate.' }
     return $dir
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+# Deployment targets and the production guard (containers, Kubernetes, clouds, infrastructure as code)
+# ---------------------------------------------------------------------------------------------------------------
+
+function Get-MuxProdPattern {
+    if ($env:MUX_SKILL_PROD_PATTERN) { return $env:MUX_SKILL_PROD_PATTERN }
+    return 'prod|production|live'
+}
+
+# Separates "--confirm <name>" from the other arguments. Returns @{ Confirm = <name or empty>; Rest = <string[]> }.
+function Split-MuxConfirm {
+    param([object[]]$Arguments)
+    $rest = New-Object System.Collections.Generic.List[string]
+    $confirm = ''
+    $list = @($Arguments)
+    for ($i = 0; $i -lt $list.Count; $i++) {
+        if ([string]$list[$i] -eq '--confirm' -and ($i + 1) -lt $list.Count) {
+            $confirm = [string]$list[$i + 1]
+            $i++
+        } else {
+            $rest.Add([string]$list[$i])
+        }
+    }
+
+    return @{ Confirm = $confirm; Rest = $rest.ToArray() }
+}
+
+# Refuses (exit 3) to change a target whose name matches the production pattern, unless the arguments repeated the
+# exact name with --confirm. The model should only pass --confirm after the user explicitly approved the change.
+function Assert-MuxNotProduction {
+    param([string]$Target, [string]$Confirm)
+    $pattern = Get-MuxProdPattern
+    if ($Target -and ($Target -match $pattern) -and ($Confirm -cne $Target)) {
+        Write-Output ("mux: refused: '" + $Target + "' looks like production (matches skillProdPattern '" + $pattern + "'). Only if the user explicitly approved this change, re-run with --confirm " + $Target + '.')
+        exit 3
+    }
+}
+
+# Resolves and prints the deployment target (cluster context, cloud profile, project, workspace) so every command
+# shows where it acts. Dry runs use MUX_SKILL_DRY_RUN_TARGET (default dry-run-target) and need no credentials. A
+# failed lookup usually means the CLI is not signed in: exit 2 with the login hint. Mux never runs a login flow.
+function Get-MuxTarget {
+    param([string]$Label, [scriptblock]$Resolve, [string]$LoginHint = '')
+    if (Test-MuxDryRun) {
+        $value = if ($env:MUX_SKILL_DRY_RUN_TARGET) { $env:MUX_SKILL_DRY_RUN_TARGET } else { 'dry-run-target' }
+    } else {
+        $value = $null
+        $global:LASTEXITCODE = 0
+        try {
+            $value = & $Resolve 2>$null | Select-Object -First 1
+            if ($LASTEXITCODE -ne 0) { $value = $null }
+        } catch {
+            $value = $null
+        }
+
+        if (-not $value) { Exit-MuxNotApplicable ('could not read the ' + $Label + '. ' + $LoginHint).Trim() }
+        $value = ([string]$value).Trim()
+    }
+
+    Write-Host ($Label + ': ' + $value)
+    return $value
+}
+
+function Get-MuxKubeContext {
+    return Get-MuxTarget -Label 'Kubernetes context' -Resolve { kubectl config current-context } -LoginHint 'Configure a cluster with kubectl config use-context <name> (or your cloud CLI kubeconfig command).'
+}
+
+# The kubectl arguments that apply a path: -k for a kustomization directory, otherwise -f.
+function Get-MuxKubeApplyArguments {
+    param([string]$Path)
+    if ((Test-Path -LiteralPath $Path -PathType Container) -and ((Test-Path -LiteralPath (Join-Path $Path 'kustomization.yaml')) -or (Test-Path -LiteralPath (Join-Path $Path 'kustomization.yml')))) {
+        return @('-k', $Path)
+    }
+
+    if (Test-Path -LiteralPath $Path -PathType Container) { return @('-f', $Path, '--recursive') }
+    return @('-f', $Path)
+}
+
+# The nearest Helm chart directory (with Chart.yaml), or the argument when one was passed.
+function Get-MuxHelmChart {
+    param([string]$Chart = '')
+    if ($Chart) { return $Chart }
+    $dir = Find-MuxUp -Names @('Chart.yaml')
+    if (-not $dir) { Exit-MuxNotApplicable 'no Chart.yaml found here or in a parent; pass the chart path.' }
+    return $dir
+}
+
+function Get-MuxComposeFile {
+    $file = Find-MuxFileUp -Names @('compose.yaml', 'compose.yml', 'docker-compose.yaml', 'docker-compose.yml')
+    if (-not $file) { Exit-MuxNotApplicable 'no compose.yaml or docker-compose.yml found.' }
+    return $file
+}
+
+# A short, bounded line count from an argument (default 200, at most 5000).
+function Get-MuxLineLimit {
+    param([string]$Value, [int]$Default = 200)
+    $parsed = 0
+    if ([int]::TryParse($Value, [ref]$parsed) -and $parsed -gt 0) { return [Math]::Min($parsed, 5000) }
+    return $Default
 }
 
 # Returns the positional argument at $Index (from the script's $args), or the default when it is missing or blank.

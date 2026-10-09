@@ -33,6 +33,12 @@ namespace Test.Shared.Support
         /// <summary>Substrings that must all appear in stdout.</summary>
         public List<string> Expected { get; set; } = new List<string>();
 
+        /// <summary>Substrings that must not appear in stdout.</summary>
+        public List<string> Unexpected { get; set; } = new List<string>();
+
+        /// <summary>Extra environment variables for the run (for example the dry-run target name).</summary>
+        public Dictionary<string, string> Environment { get; set; } = new Dictionary<string, string>();
+
         /// <summary>The expected exit code.</summary>
         public int ExpectedExit { get; set; }
     }

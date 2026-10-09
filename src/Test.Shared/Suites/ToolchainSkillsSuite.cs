@@ -52,6 +52,36 @@ namespace Test.Shared.Suites
                     return Task.CompletedTask;
                 })),
 
+                new TestCaseDescriptor(SuiteId, "InfrastructureSkillsNeverDestroy", "Container, Kubernetes, cloud, and IaC commands never delete, destroy, prune, or read secret values", (CancellationToken ct) =>
+                {
+                    string[] forbidden = { "delete", "destroy", "terminate", "prune", "get-secret-value", "with-decryption", "secrets reveal", "--volumes" };
+                    HashSet<string> families = new HashSet<string> { "docker", "kubernetes", "openstack", "aws", "azure", "gcp", "digitalocean", "vercel", "netlify", "cloudflare", "fly", "alibaba", "huawei", "ibm-cloud", "linode", "terraform", "pulumi", "rackspace" };
+                    int checkedCommands = 0;
+                    foreach (DefaultSkillDef definition in DefaultSkillLibrary.Definitions())
+                    {
+                        bool infrastructure = false;
+                        foreach (string tag in definition.Tags)
+                        {
+                            if (families.Contains(tag)) infrastructure = true;
+                        }
+
+                        if (!infrastructure) continue;
+                        foreach (DefaultSkillCommandDef command in definition.Commands)
+                        {
+                            string code = command.Code.Substring(DefaultSkillHelpers.Prelude.Length).ToLowerInvariant();
+                            foreach (string word in forbidden)
+                            {
+                                MuxAssert.IsFalse(code.Contains(word), definition.Id + " " + command.Name + " contains '" + word + "'");
+                            }
+
+                            checkedCommands++;
+                        }
+                    }
+
+                    MuxAssert.IsTrue(checkedCommands > 100, "scanned the infrastructure commands (" + checkedCommands + ")");
+                    return Task.CompletedTask;
+                }),
+
                 new TestCaseDescriptor(SuiteId, "SeedNewIntoWritesResources", "SeedNewInto writes resources for newly shipped skills", (CancellationToken ct) => WithTempAsync((string root) =>
                 {
                     DefaultSkillLibrary.SeedNewInto(root);
@@ -127,13 +157,14 @@ namespace Test.Shared.Suites
 
             List<ToolchainCase> all = new List<ToolchainCase>(Cases());
             all.AddRange(MoreCases());
+            all.AddRange(InfrastructureCases());
             foreach (ToolchainCase toolchainCase in all)
             {
                 ToolchainCase captured = toolchainCase;
                 cases.Add(new TestCaseDescriptor(SuiteId, captured.Id, captured.Name, (CancellationToken ct) => RunCaseAsync(captured, ct), skip: !pwsh, skipReason: "pwsh is not on PATH"));
             }
 
-            return new TestSuiteDescriptor(SuiteId, "Toolchain skills (project detection, JavaScript, Python, React, Java, C++, Go, Rust) in dry-run mode", cases);
+            return new TestSuiteDescriptor(SuiteId, "Toolchain and infrastructure skills in dry-run mode", cases);
         }
 
         #endregion
@@ -356,6 +387,52 @@ namespace Test.Shared.Suites
             yield return Simple("NotARustCrate", "A directory without Cargo.toml exits 2", "README.md", "hi", "cargo-test", "all", null, "not a Rust crate", 2);
         }
 
+        private static IEnumerable<ToolchainCase> InfrastructureCases()
+        {
+            Dictionary<string, string> Target(string name) => new Dictionary<string, string> { ["MUX_SKILL_DRY_RUN_TARGET"] = name };
+            Action<string> k8sFixture = (string dir) => Write(Path.Combine(dir, "k8s"), "app.yaml", "kind: Deployment");
+
+            // --- Kubernetes and Helm ---
+            yield return new ToolchainCase { Id = "K8sApplyRefusesProduction", Name = "k8s-apply refuses a production context", Fixture = k8sFixture, Skill = "k8s-apply", Command = "apply", Arguments = new List<string> { "k8s" }, Environment = Target("prod-east"), Expected = new List<string> { "Kubernetes context: prod-east", "refused" }, Unexpected = new List<string> { "DRYRUN: kubectl apply" }, ExpectedExit = 3 };
+            yield return new ToolchainCase { Id = "K8sApplyConfirmed", Name = "k8s-apply proceeds when the context is confirmed", Fixture = k8sFixture, Skill = "k8s-apply", Command = "apply", Arguments = new List<string> { "k8s", "--confirm", "prod-east" }, Environment = Target("prod-east"), Expected = new List<string> { "DRYRUN: kubectl apply -f k8s --recursive" } };
+            yield return new ToolchainCase { Id = "K8sWrongConfirmRefused", Name = "Confirming a different name does not pass the guard", Fixture = k8sFixture, Skill = "k8s-apply", Command = "apply", Arguments = new List<string> { "k8s", "--confirm", "prod-west" }, Environment = Target("prod-east"), Expected = new List<string> { "refused" }, ExpectedExit = 3 };
+            yield return new ToolchainCase { Id = "K8sKustomizeUsesK", Name = "A kustomization directory is applied with -k", Fixture = (string dir) => Write(Path.Combine(dir, "overlays", "dev"), "kustomization.yaml", "resources: []"), Skill = "k8s-apply", Command = "diff", Arguments = new List<string> { "overlays/dev" }, Expected = new List<string> { "DRYRUN: kubectl diff -k overlays/dev" } };
+            yield return new ToolchainCase { Id = "K8sValidateServer", Name = "k8s-validate server runs a server-side dry run", Fixture = k8sFixture, Skill = "k8s-validate", Command = "server", Arguments = new List<string> { "k8s" }, Expected = new List<string> { "DRYRUN: kubectl apply --dry-run=server -f k8s --recursive" } };
+            yield return new ToolchainCase { Id = "HelmUpgradeAtomic", Name = "helm upgrade installs atomically and waits", Fixture = k8sFixture, Skill = "helm", Command = "upgrade", Arguments = new List<string> { "web", "./chart", "values.yaml" }, Expected = new List<string> { "DRYRUN: helm upgrade web ./chart --install --atomic --wait --timeout 5m -f values.yaml" } };
+            yield return new ToolchainCase { Id = "HelmUpgradeGuarded", Name = "helm upgrade refuses a production context", Fixture = k8sFixture, Skill = "helm", Command = "upgrade", Arguments = new List<string> { "web", "./chart" }, Environment = Target("live-cluster"), Expected = new List<string> { "refused" }, ExpectedExit = 3 };
+            yield return new ToolchainCase { Id = "MinikubeStartOptions", Name = "minikube start passes the driver and version", Fixture = k8sFixture, Skill = "minikube", Command = "start", Arguments = new List<string> { "docker", "v1.30.0" }, Expected = new List<string> { "DRYRUN: minikube start --driver=docker --kubernetes-version=v1.30.0" } };
+            yield return new ToolchainCase { Id = "ProdPatternConfigurable", Name = "A custom production pattern changes what the guard matches", Fixture = k8sFixture, Skill = "k8s-apply", Command = "apply", Arguments = new List<string> { "k8s" }, Environment = new Dictionary<string, string> { ["MUX_SKILL_DRY_RUN_TARGET"] = "prod-east", ["MUX_SKILL_PROD_PATTERN"] = "^prd-" }, Expected = new List<string> { "DRYRUN: kubectl apply" } };
+
+            // --- Docker and Compose ---
+            yield return new ToolchainCase { Id = "DockerBuildDefaultTag", Name = "docker-build tags with the folder name", Fixture = (string dir) => Write(Path.Combine(dir, "api"), "Dockerfile", "FROM scratch"), RunIn = "api", Skill = "docker-build", Command = "build", Expected = new List<string> { "DRYRUN: docker build -t api:dev" } };
+            yield return new ToolchainCase { Id = "DockerPushGuarded", Name = "Pushing a production-named image needs confirmation", Fixture = (string dir) => Write(dir, "Dockerfile", "FROM scratch"), Skill = "docker-build", Command = "push", Arguments = new List<string> { "registry.example.com/app:prod" }, Expected = new List<string> { "refused" }, ExpectedExit = 3 };
+            yield return new ToolchainCase { Id = "ComposeDownKeepsVolumes", Name = "compose down never removes volumes", Fixture = (string dir) => Write(dir, "compose.yaml", "services: {}"), Skill = "compose", Command = "down", Expected = new List<string> { "compose -f", " down" }, Unexpected = new List<string> { " -v", "--volumes" } };
+            yield return new ToolchainCase { Id = "ComposeLogsBounded", Name = "compose logs are bounded", Fixture = (string dir) => Write(dir, "compose.yaml", "services: {}"), Skill = "compose", Command = "logs", Arguments = new List<string> { "web", "50" }, Expected = new List<string> { "logs --no-color --tail 50 web" } };
+            if (!IsOnPath("hadolint"))
+            {
+                yield return new ToolchainCase { Id = "DockerfileChecklist", Name = "dockerfile-lint flags unpinned images and root users", Fixture = (string dir) => Write(dir, "Dockerfile", "FROM node\nCMD [\"node\", \"app.js\"]\n"), Skill = "dockerfile-lint", Command = "check", Expected = new List<string> { "not pinned", "No USER", "No HEALTHCHECK" }, ExpectedExit = 1 };
+            }
+
+            // --- Clouds ---
+            yield return new ToolchainCase { Id = "S3SyncPreviewsByDefault", Name = "s3-sync is a dry run unless apply is passed", Fixture = k8sFixture, Skill = "aws-storage", Command = "s3-sync", Arguments = new List<string> { "./dist", "s3://bucket/site" }, Expected = new List<string> { "AWS profile: dev-local", "DRYRUN: aws s3 sync ./dist s3://bucket/site --dryrun" }, Unexpected = new List<string> { "--delete" } };
+            yield return new ToolchainCase { Id = "S3SyncApplyGuarded", Name = "s3-sync apply refuses a production profile", Fixture = k8sFixture, Skill = "aws-storage", Command = "s3-sync", Arguments = new List<string> { "./dist", "s3://bucket/site", "apply" }, Environment = Target("prod-admin"), Expected = new List<string> { "refused" }, ExpectedExit = 3 };
+            yield return new ToolchainCase { Id = "Ec2StopConfirmed", Name = "ec2-stop runs on a confirmed production profile", Fixture = k8sFixture, Skill = "aws-compute", Command = "ec2-stop", Arguments = new List<string> { "i-0abc", "--confirm", "production" }, Environment = Target("production"), Expected = new List<string> { "DRYRUN: aws ec2 stop-instances --instance-ids i-0abc --output table" } };
+            yield return new ToolchainCase { Id = "CdkDeployPreviewsByDefault", Name = "cdk-deploy shows a diff unless apply is passed", Fixture = k8sFixture, Skill = "aws-deploy", Command = "cdk-deploy", Expected = new List<string> { "Preview only", "DRYRUN: cdk diff" }, Unexpected = new List<string> { "cdk deploy" } };
+            yield return new ToolchainCase { Id = "SecretsListNamesOnly", Name = "secrets-list asks for names, never values", Fixture = k8sFixture, Skill = "aws-integration", Command = "secrets-list", Expected = new List<string> { "list-secrets", "SecretList[].[Name,LastChangedDate]" }, Unexpected = new List<string> { "get-secret-value" } };
+            yield return new ToolchainCase { Id = "AzureDeallocateConfirmed", Name = "vm-deallocate runs when confirmed", Fixture = k8sFixture, Skill = "azure-compute", Command = "vm-deallocate", Arguments = new List<string> { "rg", "vm1", "--confirm", "Prod Subscription" }, Environment = Target("Prod Subscription"), Expected = new List<string> { "Azure subscription: Prod Subscription", "DRYRUN: az vm deallocate --resource-group rg --name vm1" } };
+            yield return new ToolchainCase { Id = "CloudRunNoTraffic", Name = "Cloud Run deploys go out with no traffic", Fixture = k8sFixture, Skill = "gcp-run", Command = "run-deploy", Arguments = new List<string> { "api", "gcr.io/x/api:1", "us-central1" }, Expected = new List<string> { "--no-traffic", "--region us-central1" } };
+            yield return new ToolchainCase { Id = "VercelProdNeedsConfirm", Name = "Vercel production deploys always need confirmation", Fixture = (string dir) => Write(dir, "vercel.json", "{}"), Skill = "vercel", Command = "deploy-prod", Expected = new List<string> { "refused" }, ExpectedExit = 3 };
+            yield return new ToolchainCase { Id = "VercelProdConfirmed", Name = "Vercel production deploys run when confirmed", Fixture = (string dir) => Write(dir, "vercel.json", "{}"), Skill = "vercel", Command = "deploy-prod", Arguments = new List<string> { "--confirm", "production" }, Expected = new List<string> { "DRYRUN: vercel deploy --prod --yes" } };
+            yield return new ToolchainCase { Id = "CloudflareStagingDeploy", Name = "Cloudflare deploys to a named environment without the guard", Fixture = (string dir) => Write(dir, "wrangler.toml", "name = \"w\""), Skill = "cloudflare", Command = "deploy", Arguments = new List<string> { "staging" }, Expected = new List<string> { "DRYRUN: wrangler deploy --env staging" } };
+            yield return new ToolchainCase { Id = "HeatPreviewIsDryRun", Name = "openstack-heat preview is a dry run", Fixture = (string dir) => Write(dir, "clouds.yaml", "clouds: {}"), Skill = "openstack-heat", Command = "preview", Arguments = new List<string> { "web", "stack.hot.yaml" }, Expected = new List<string> { "DRYRUN: openstack stack create --dry-run -t stack.hot.yaml web" } };
+
+            // --- Infrastructure as code ---
+            yield return new ToolchainCase { Id = "TerraformPlanSaves", Name = "terraform plan writes mux.tfplan", Fixture = (string dir) => Write(dir, "main.tf", "terraform {}"), Skill = "terraform", Command = "plan", Expected = new List<string> { "plan -input=false -out=mux.tfplan" } };
+            yield return new ToolchainCase { Id = "TerraformApplyGuarded", Name = "terraform apply refuses a production workspace", Fixture = (string dir) => Write(dir, "main.tf", "terraform {}"), Skill = "terraform", Command = "apply", Environment = Target("prod"), Expected = new List<string> { "Terraform workspace: prod", "refused" }, ExpectedExit = 3 };
+            yield return new ToolchainCase { Id = "TerraformApplySavedPlan", Name = "terraform apply applies only the saved plan", Fixture = (string dir) => Write(dir, "main.tf", "terraform {}"), Skill = "terraform", Command = "apply", Expected = new List<string> { "apply -input=false mux.tfplan" }, Unexpected = new List<string> { "-auto-approve" } };
+            yield return new ToolchainCase { Id = "PulumiPreview", Name = "pulumi preview shows a diff non-interactively", Fixture = (string dir) => Write(dir, "Pulumi.yaml", "name: x"), Skill = "pulumi", Command = "preview", Expected = new List<string> { "DRYRUN: pulumi preview --diff --non-interactive" } };
+        }
+
         private static ToolchainCase Java(string id, string name, string file, string content, string skill, string command, string? argument, string expected, int exit = 0)
         {
             return Simple(id, name, file, content, skill, command, argument, expected, exit);
@@ -421,17 +498,22 @@ namespace Test.Shared.Suites
                 toolchainCase.Fixture(project);
                 string runIn = string.IsNullOrEmpty(toolchainCase.RunIn) ? project : Path.Combine(project, toolchainCase.RunIn);
 
-                ToolResult result = await RunAsync(skills, toolchainCase.Skill, toolchainCase.Command, toolchainCase.Arguments, runIn, true, ct).ConfigureAwait(false);
+                ToolResult result = await RunAsync(skills, toolchainCase.Skill, toolchainCase.Command, toolchainCase.Arguments, runIn, true, ct, toolchainCase.Environment).ConfigureAwait(false);
                 string stdout = ReadField(result, "stdout");
                 MuxAssert.AreEqual(toolchainCase.ExpectedExit, ReadExit(result), "exit code: " + result.Content);
                 foreach (string expected in toolchainCase.Expected)
                 {
                     MuxAssert.Contains(expected, stdout, "output of " + toolchainCase.Skill + " " + toolchainCase.Command);
                 }
+
+                foreach (string unexpected in toolchainCase.Unexpected)
+                {
+                    MuxAssert.DoesNotContain(unexpected, stdout, "output of " + toolchainCase.Skill + " " + toolchainCase.Command);
+                }
             });
         }
 
-        private static async Task<ToolResult> RunAsync(string skillsDirectory, string skillId, string command, List<string> arguments, string workingDirectory, bool dryRun, CancellationToken ct)
+        private static async Task<ToolResult> RunAsync(string skillsDirectory, string skillId, string command, List<string> arguments, string workingDirectory, bool dryRun, CancellationToken ct, Dictionary<string, string>? extraEnvironment = null)
         {
             Skill skill = new SkillLoader(skillsDirectory).Load(Path.Combine(skillsDirectory, skillId));
             MuxAssert.IsTrue(skill.IsValid, skillId + " valid: " + string.Join("; ", skill.Validation.Errors));
@@ -449,6 +531,16 @@ namespace Test.Shared.Suites
             if (dryRun)
             {
                 environment[DefaultSkillHelpers.DryRunVariable] = "1";
+            }
+
+            environment["MUX_SKILL_PROD_PATTERN"] = MuxSettings.DefaultSkillProdPattern;
+            environment["MUX_SKILL_DRY_RUN_TARGET"] = "dev-local";
+            if (extraEnvironment != null)
+            {
+                foreach (KeyValuePair<string, string> variable in extraEnvironment)
+                {
+                    environment[variable.Key] = variable.Value;
+                }
             }
 
             return await new SkillExecutor().ExecuteAsync("t", skill, found!, arguments, workingDirectory, ct, environment).ConfigureAwait(false);

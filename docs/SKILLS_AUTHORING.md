@@ -65,6 +65,7 @@ git status --short
 | `appliesTo` | string[] | empty | File globs, relative to the project root, that make the skill relevant (`[package.json]`, `[pyproject.toml, requirements*.txt]`, `[**/*.csproj]`). In the default `relevant` listing mode the skill is advertised to the model only when a glob matches. Empty means always relevant. |
 | `userInvocable` | bool | `true` | Whether `/<name> args` runs the skill. Claude Code's `user-invocable` maps here. |
 | `modelInvocable` | bool | `true` | Whether the skill is listed in the system prompt. Claude Code's `disable-model-invocation: true` sets it to `false`; the skill stays callable by name and through the `skill` tool. |
+| `requiresTools` | string[] | empty | Executables that must be on PATH for the skill to be listed in `relevant` mode (`[aws]`); `a\|b` means either (`[terraform\|tofu]`). PATH is scanned, nothing is run, and the answer is cached for the refresh interval. Combined with `appliesTo`, both must pass. |
 | `argumentHint` | string | empty | What the skill expects after its name, for example `"[base-branch]"`. Quote it when it starts with `[`. Claude Code's `argument-hint` maps here. |
 
 The frontmatter parser accepts a small, fixed subset of YAML — scalars, booleans, inline `[a, b]` or block (`- item`) string lists, and the `commands` list of maps. It is intentionally simple; when in doubt, keep values on one line.
@@ -121,8 +122,15 @@ A project skill with commands runs code from the repository, so it loads only af
 The default toolchain skills (`project-detect`, `js-*`, `py-*`, and the families that follow) share one PowerShell helper, `resources/mux-skill.ps1`, which each command dot-sources on its first line. Copy that pattern when you write a toolchain skill of your own, and keep its conventions:
 
 - **Exit codes.** 0 means success. 1 means the tool ran and reported problems (failing tests, lint findings, a failed build). 2 means the tool is not installed or the project does not use this toolchain, and the output says which, with an install hint. A model can tell "your tests failed" from "you have no test runner" without reading the text.
+- **Exit 3** means the production guard refused (see below).
 - **Dry runs.** With `MUX_SKILL_DRY_RUN=1` in the environment, `Invoke-MuxTool` prints `DRYRUN: <command>` instead of running anything, while detection still runs. That shows exactly what a skill would do in a given project, and it is how the test suite checks every skill on every platform without installing the toolchains.
 - **Detection lives in the skill.** `Get-MuxNodePackageManager` reads the `packageManager` field, then lockfiles (bun, pnpm, yarn, npm) in the package or repository root; `Get-MuxPythonManager` picks uv, poetry, pipenv, or a project `.venv`, and `Invoke-MuxPython` runs tools as `python -m <tool>` inside that environment. The model calls `js-test all` or `py-test all`; the skill decides the actual command.
+
+Infrastructure skills (Docker, Kubernetes, Helm, OpenStack, the cloud providers, Terraform, Pulumi) add three rules on top:
+
+- **Show the target first.** `Get-MuxTarget` prints the cluster context, profile, subscription, project, or workspace on the first line, and its lookup doubles as an authentication check: a CLI that is not signed in exits 2 with the login command for the user to run. Skills never run a login flow themselves. In a dry run the target comes from `MUX_SKILL_DRY_RUN_TARGET`, so the guard can be tested without credentials.
+- **Preview before change, and guard production.** Changes default to a preview (`kubectl diff`, server dry runs, `helm diff`, `--dryrun`, `terraform plan`, `pulumi preview`, Cloud Run `--no-traffic`). `Assert-MuxNotProduction` refuses (exit 3) when the target matches `skillProdPattern` (passed to skills as `MUX_SKILL_PROD_PATTERN`) unless the arguments include `--confirm <exact target name>`. The model should add `--confirm` only after the user explicitly approves.
+- **Never destroy or reveal.** No default infrastructure command deletes, destroys, terminates, prunes, or reads a secret's value; secret and environment commands list names only. A test scans every infrastructure command for those words.
 
 The helper is seeded into each skill folder and is yours to edit; mux never overwrites a skill folder that already exists.
 

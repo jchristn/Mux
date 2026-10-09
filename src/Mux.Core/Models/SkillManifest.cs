@@ -23,6 +23,7 @@ namespace Mux.Core.Models
         private List<string> _Tags = new List<string>();
         private List<SkillCommand> _Commands = new List<SkillCommand>();
         private List<string> _AppliesTo = new List<string>();
+        private List<string> _RequiresTools = new List<string>();
         private bool _UserInvocable = true;
         private bool _ModelInvocable = true;
         private string _ArgumentHint = string.Empty;
@@ -146,6 +147,18 @@ namespace Mux.Core.Models
         {
             get => _AppliesTo;
             set => _AppliesTo = value ?? new List<string>();
+        }
+
+        /// <summary>
+        /// Executables that must be on <c>PATH</c> for the skill to be advertised in the <c>relevant</c> listing
+        /// mode (for example <c>aws</c>). An entry may name alternatives separated by <c>|</c>, such as
+        /// <c>terraform|tofu</c>, meaning any one of them. Presence is checked by scanning <c>PATH</c>; the tool is
+        /// never run. Empty means no tool is required. Never null.
+        /// </summary>
+        public List<string> RequiresTools
+        {
+            get => _RequiresTools;
+            set => _RequiresTools = value ?? new List<string>();
         }
 
         /// <summary>

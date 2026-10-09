@@ -1,6 +1,6 @@
 # New Default Skills and OOBE Parity Plan
 
-_Status: Phase 1 done (2026-10-08); Phase 2 in progress; Phases 3 through 7 proposed. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
+_Status: Phases 1 and 2 done (2026-10-08); Phases 3 through 7 proposed. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
 
 mux ships 46 default skills, and nearly all of them assume a git repository, a .NET solution, or both. Someone who opens mux in a React app, a Django service, a Maven project, or a CMake tree gets git helpers and nothing that knows how their code builds or tests. That gap is the first thing a Claude Code or Codex user notices, and it is the reason for this plan. The second thing they notice is subtler: both of those harnesses read a project instruction file on startup, can review a diff on request, and let skills be invoked by name with arguments. mux has a strong engine (subagents, MCP, sandboxing, undo, compaction, sessions across four surfaces) but the out-of-box experience still feels like a toolkit rather than an agent that already knows the job.
 
@@ -14,26 +14,26 @@ The scorecard below lists everything that exists in Claude Code or Codex and is 
 | 2 | Instruction-only ("playbook") default skills: prose procedures with no mandatory commands | yes | yes | **done in Phase 1**: `DefaultSkillDef` builds playbooks; the playbooks themselves land in Phase 3 | 9 | 8 | **17** | 1 |
 | 3 | Code review on demand (uncommitted, vs branch, a commit, a PR) | yes (`/code-review`) | yes (`/review`) | VS Code "review file" only | 8 | 9 | **17** | 3 |
 | 4 | `/init`: survey the repo and write an instruction file | yes | yes | none | 9 | 8 | **17** | 3 |
-| 5 | JavaScript / TypeScript toolchain skills | via model + shell | via model + shell | none | 9 | 8 | **17** | 2 |
-| 6 | Python toolchain skills | via model + shell | via model + shell | none | 9 | 8 | **17** | 2 |
+| 5 | JavaScript / TypeScript toolchain skills | via model + shell | via model + shell | **done in Phase 2** | 9 | 8 | **17** | 2 |
+| 6 | Python toolchain skills | via model + shell | via model + shell | **done in Phase 2** | 9 | 8 | **17** | 2 |
 | 7 | Invoke a skill by name with arguments (`/code-review main`, `$ARGUMENTS`) | yes | yes (custom prompts) | **done in Phase 1**: terminal, desktop, dashboard, and `mux print` | 7 | 9 | **16** | 1 |
 | 8 | Project-scoped skills (checked into the repo) and Claude-format skill import | yes (`.claude/skills`) | yes (`.agents/skills`) | **done in Phase 1**, with a per-project trust gate | 8 | 8 | **16** | 1 |
 | 9 | Security review of pending changes | yes (`/security-review`) | via `/review` | `git-secret-scan` only (regex on staged diff) | 9 | 7 | **16** | 3 |
 | 10 | Iterate-until-green loops (retry a check, fix-build-test cycle, CI watch) | via model | via model | none | 8 | 8 | **16** | 4 |
-| 11 | Project detection (languages, package managers, build and test commands) | implicit | implicit | none | 9 | 7 | **16** | 2 |
+| 11 | Project detection (languages, package managers, build and test commands) | implicit | implicit | **done in Phase 2** | 9 | 7 | **16** | 2 |
 | 12 | Simplify / cleanup pass on changed code | yes (`/simplify`) | no | none | 9 | 6 | **15** | 3 |
 | 13 | PR review comments fetched for the agent to address | yes (`/pr-comments`) | no | `git-open-pr status` only | 9 | 6 | **15** | 3 |
-| 14 | React skills | via model + shell | via model + shell | none | 8 | 7 | **15** | 2 |
-| 15 | Java skills (Maven and Gradle) | via model + shell | via model + shell | none | 8 | 7 | **15** | 2 |
+| 14 | React skills | via model + shell | via model + shell | **done in Phase 2** | 8 | 7 | **15** | 2 |
+| 15 | Java skills (Maven and Gradle) | via model + shell | via model + shell | **done in Phase 2** | 8 | 7 | **15** | 2 |
 | 16 | Relevance-gated skill listing so 100+ skills do not flood a small context window | progressive disclosure | progressive disclosure | **done in Phase 1**: `appliesTo` globs and `skillListingMode` | 7 | 7 | **14** | 1 |
 | 17 | Tool-level hooks (`pre-tool-use`, `post-tool-use`, `stop`) | yes | partial (`notify`) | `session-start`, `user-prompt-submit`, `session-end` only | 6 | 8 | **14** | 5 |
 | 18 | Background processes (start a dev server, read its output later, stop it) | yes | partial | `run_process` is foreground with a timeout | 5 | 9 | **14** | 5 |
 | 19 | `@file` mentions in the composer | yes | yes | none | 7 | 7 | **14** | 6 |
 | 20 | Debugging playbook and `git bisect` driver | via model | via model | none | 9 | 5 | **14** | 3 |
-| 21 | Containers and orchestration skills (Docker, Docker Compose, Kubernetes, Minikube, Helm, OpenStack) | via model + shell | via model + shell | none | 8 | 8 | **16** | 2 |
-| 21a | Cloud provider skills (AWS, Azure, Google Cloud, DigitalOcean, Rackspace, Vercel, Alibaba, Huawei, IBM Cloud, Linode, Netlify, Cloudflare, fly.io) plus Terraform and Pulumi | via model + shell | via model + shell | none | 6 | 8 | **14** | 2 |
-| 21b | Go and Rust skills | via model + shell | via model + shell | none | 9 | 5 | **14** | 2 |
-| 22 | C++ skills (CMake, CTest, clang-format, clang-tidy, sanitizers) | via model + shell | via model + shell | none | 7 | 6 | **13** | 2 |
+| 21 | Containers and orchestration skills (Docker, Docker Compose, Kubernetes, Minikube, Helm, OpenStack) | via model + shell | via model + shell | **done in Phase 2** | 8 | 8 | **16** | 2 |
+| 21a | Cloud provider skills (AWS, Azure, Google Cloud, DigitalOcean, Rackspace, Vercel, Alibaba, Huawei, IBM Cloud, Linode, Netlify, Cloudflare, fly.io) plus Terraform and Pulumi | via model + shell | via model + shell | **done in Phase 2** | 6 | 8 | **14** | 2 |
+| 21b | Go and Rust skills | via model + shell | via model + shell | **done in Phase 2** | 9 | 5 | **14** | 2 |
+| 22 | C++ skills (CMake, CTest, clang-format, clang-tidy, sanitizers) | via model + shell | via model + shell | **done in Phase 2** | 7 | 6 | **13** | 2 |
 | 23 | `/loop`: re-run a prompt on an interval or self-paced | yes | no | none | 6 | 7 | **13** | 4 |
 | 24 | Persistent memory (agent-written facts reused across sessions, `#` quick-add) | yes | partial | none | 6 | 7 | **13** | 6 |
 | 25 | Plan mode (read-only exploration, then an approved plan, then execution) | yes | partial (approval modes) | `--sandbox read-only` covers the read-only half | 6 | 7 | **13** | 6 |
@@ -125,11 +125,11 @@ The full library after this plan is 152 skills. Listed one line each, that is ro
 
 ---
 
-## Phase 2: Language and toolchain skills (in progress)
+## Phase 2: Language, toolchain, infrastructure, and cloud skills (done)
 
 Each family is one category class in `src/Mux.Core/Skills/`, merged in `DefaultSkillLibrary.All()`. Every command skill below uses `pwsh`, detects its tool, sets `appliesTo`, and follows the exit-code convention from the guiding decisions. Commands that take a filter or path read it from `$args[0]`.
 
-**Status:** the shared infrastructure, 2.0 (project detection), 2.1 (JavaScript and TypeScript), 2.2 (Python), 2.3 (React), 2.4 (Java), 2.5 (C and C++), and 2.8 (Go and Rust) are done: 42 new default skills, 88 in the library. 2.6 (containers and orchestration) and 2.7 (cloud providers), with the `requiresTools` gate and the production guard, are next.
+**Status:** done. 93 new default skills across 2.0 through 2.8, for 139 in the library (the remaining 13 of the planned 152 are the Phase 3 and 4 playbooks and loops). The full build has no errors or warnings, and all runners pass on net8.0 and net10.0 (Touchstone 1096 cases: 1089 passed, 7 skipped by design; xUnit and NUnit 1090 each). Not done: the opt-in `ToolchainLiveSuite` (see Phase 2 tasks).
 
 Shared infrastructure, as built:
 
@@ -213,7 +213,7 @@ CMake is the supported path, since it covers most modern C++ projects and `compi
 | `cpp-tidy` | no | `check` | clang-tidy against `compile_commands.json`, limited to changed files when given `changed`. |
 | `cpp-sanitize` | yes | `asan`, `ubsan` | Configures a separate build tree with the sanitizer flags, builds, and runs CTest. |
 
-### 2.6 Containers, orchestration, and private cloud (row 21)
+### 2.6 Containers, orchestration, and private cloud (row 21) (done)
 
 These skills touch running systems, not just files, so they follow stricter rules than the language families. Every command that talks to a cluster or cloud prints the target first (Docker context, Kubernetes context and namespace, OpenStack cloud and project) on its first line of output, so the model and the transcript always show where a command ran. Read-only commands are `mutating: false`. Anything that changes a cluster runs as a preview by default (`--dry-run=server`, `helm diff`, `helm template`, `--dry-run` for compose) and only applies when the caller passes `apply` explicitly. A guard refuses to apply when the active context, profile, or project name matches `settings.skillProdPattern` (default `prod|production|live`) unless the arguments repeat that name with `--confirm <name>`. No skill ships a delete, destroy, or prune command; those stay with the user.
 
@@ -245,7 +245,7 @@ These skills touch running systems, not just files, so they follow stricter rule
 | `openstack-inspect` | no | `servers`, `images`, `flavors`, `networks`, `volumes`, `stacks` | Table output trimmed to the useful columns. |
 | `openstack-heat` | yes | `validate`, `preview`, `create`, `update`, `events` | `preview` runs `stack create --dry-run`; `create`/`update` sit behind the production guard. |
 
-### 2.7 Cloud providers (row 21a)
+### 2.7 Cloud providers (row 21a) (done)
 
 Each provider gets a small family built on its official CLI (`aws`, `az` and `azd`, `gcloud`, `doctl`, `vercel`, `aliyun`, `hcloud` (KooCLI), `ibmcloud`, `linode-cli`, `netlify`, `wrangler`, `flyctl`), plus two cross-cloud infrastructure-as-code skills. The same rules as 2.6 apply: the account, subscription, or project is printed first; reads are the default; changes go through a preview or plan; the production guard applies; and nothing deletes. Two rules are specific to cloud work. Skills never print secret values (secret and environment-variable commands list names and last-updated times only). Skills never run a login flow: when the CLI is not authenticated, the command exits 2 with the exact login command for the user to run.
 
@@ -318,9 +318,10 @@ Most of these providers leave no file in the repository, so `appliesTo` alone ca
 
 Together 2.6 and 2.7 add 50 skills (12 in 2.6, 38 in 2.7), almost all hidden unless the matching CLI or files are present.
 
-- [ ] Harness: `requiresTools` (above) and `settings.skillProdPattern` (default `prod|production|live`, a case-insensitive regex) with the shared guard implemented once in a bundled `resources/guard.ps1` that each skill dot-sources.
-- [ ] Fixtures: fake CLIs (`aws`, `kubectl`, `helm`, `az`, `gcloud`, and so on) written as small scripts in a temp `PATH` that echo their arguments, so `CloudSkillsSuite` asserts the exact command each skill would run, that previews precede applies, that the production guard refuses without `--confirm`, that secret commands never request values, and that no command line contains `delete`, `destroy`, or `--delete`.
-- [ ] Live runs stay manual: there is no CI account for any provider, and none should be added for this.
+- [x] Harness: `requiresTools` (`ToolPresenceCache` scans PATH and PATHEXT, caches per refresh interval, and accepts `a|b` alternatives; `SkillRuntime.Tools` is replaceable for tests) and `settings.skillProdPattern` (validated as a regex, passed to every skill run as `MUX_SKILL_PROD_PATTERN` through the new `SkillExecutor.DefaultEnvironment`). **Changed:** the guard lives in the shared `resources/mux-skill.ps1` (`Assert-MuxNotProduction`, `Split-MuxConfirm`, `Get-MuxTarget`) rather than a separate `guard.ps1`, and a refusal exits **3**, a code of its own, so it cannot be confused with "tool missing" (2). `Get-MuxTarget` prints the target first, doubles as the authentication check (exit 2 with the login command), and never runs a login flow.
+- [x] Tests. **Changed:** instead of fake CLI scripts on a temp PATH (shell scripts behave differently across Windows, macOS, and Linux), every case runs in dry-run mode and sets the target name through `MUX_SKILL_DRY_RUN_TARGET`, which exercises the same guard code with no credentials. The cases live in `ToolchainSkillsSuite` rather than a separate `CloudSkillsSuite`: guard refusal on production contexts, profiles, workspaces, and image names; passing with the exact `--confirm` name and failing with a different one; a custom `skillProdPattern`; previews by default (`s3-sync --dryrun`, `cdk diff`, `terraform plan` to a saved file, `apply` of that file only, `pulumi preview`, Cloud Run `--no-traffic`, Heat `--dry-run`); `compose down` without volumes; bounded logs; secret listing by name; and a scan of every infrastructure command for delete, destroy, terminate, prune, secret-value, and decryption terms.
+- [x] Live runs stay manual: there is no CI account for any provider, and none should be added for this.
+- **Other changes from the tables above, with reasons:** the AWS guard matches the profile name only, not an instance `Environment` tag (that needs an extra API call per command and tag conventions vary); Azure `webapp-logs` became `webapp-show` and Netlify `logs` became `sites`, Cloudflare `tail` became `deployments` (those log commands stream without end, which a skill with a timeout cannot bound); `openstack-whoami project` folded into `token`, which already shows the project; Cloud Run deploys also tag the new revision `candidate` so it has a test URL; minikube is also gated on the `minikube` CLI; Alibaba, Huawei, IBM, and Linode share `DefaultRegionalCloudSkills.cs` instead of four files, and dockerfile-lint runs without the Docker CLI. `project-detect` now suggests the container, Kubernetes, IaC, and platform skills it finds.
 
 ### 2.8 Go and Rust (row 21b) (done)
 
@@ -331,12 +332,12 @@ Not requested by name, but Go and Rust are each common enough that their absence
 
 ### Phase 2 tasks
 
-- [~] Add the category classes above (2.0 through 2.8), one class per file. Done: 2.0 through 2.5 and 2.8. **Changed in 2.3:** `react-lint-hooks` captures ESLint's unix-format output and keeps only `react-hooks/` and `jsx-a11y/` findings, rather than configuring ESLint to run only those rules, so it works with any existing ESLint config. The JavaScript test-runner selection moved into the shared helper (`Invoke-MuxJsTestRunner`) so React reuses it.
-- [~] Register them in `DefaultSkillLibrary.Definitions()`. Done for 2.0 through 2.5 and 2.8.
-- [~] Fixture projects: manifests and lockfiles only, no dependencies installed. **Changed:** fixtures are generated by the test code in temp directories (one small lambda per case) instead of checked into `src/Test.Shared/Fixtures/projects/`, which keeps each case's inputs next to its assertion and avoids committing lockfiles that tooling might try to act on. Done: npm, pnpm, yarn classic and Berry, bun, packageManager field, pnpm workspace package, Vitest, Jest, Mocha-free node --test, Biome, Prettier, uv, poetry with and without a lockfile, pipenv, pip with and without .venv, pyright, and non-projects.
-- [~] `ToolchainSkillsSuite` (named for what it covers): runs each case with `MUX_SKILL_DRY_RUN=1` and asserts the printed command and exit code, so detection is tested on every platform without Node, Python, a JDK, or a compiler in CI; cases are skipped when `pwsh` is not on PATH. It also checks that seeding writes the helper and the prelude, and runs `project-detect json` for real against a mixed repository. 57 cases so far, covering 2.0 through 2.5 and 2.8, including real (non-dry-run) scaffolding by `react-new-component` and `java-new-class` and their refusal to overwrite. A manual check ran `js-test all` for real against a `node --test` project: exit 0 when passing and exit 1 when a test fails.
-- [ ] `ToolchainLiveSuite`: opt-in (skipped unless `MUX_TEST_LIVE_TOOLCHAINS=1`), runs the real commands against fixtures where the toolchain is installed.
-- [ ] `appliesTo` cases: each fixture lists exactly its own family plus the ungated skills.
+- [x] Add the category classes above (2.0 through 2.8), one class per file. A small `ToolchainSkillFactory` (setup block, tags, gates, exit-code note) keeps the 2.6 and 2.7 families short. **Changed in 2.3:** `react-lint-hooks` captures ESLint's unix-format output and keeps only `react-hooks/` and `jsx-a11y/` findings, rather than configuring ESLint to run only those rules, so it works with any existing ESLint config. The JavaScript test-runner selection moved into the shared helper (`Invoke-MuxJsTestRunner`) so React reuses it.
+- [x] Register them in `DefaultSkillLibrary.Definitions()`.
+- [x] Fixture projects: manifests and lockfiles only, no dependencies installed. **Changed:** fixtures are generated by the test code in temp directories (one small lambda per case) instead of checked into `src/Test.Shared/Fixtures/projects/`, which keeps each case's inputs next to its assertion and avoids committing lockfiles that tooling might try to act on. Done: npm, pnpm, yarn classic and Berry, bun, packageManager field, pnpm workspace package, Vitest, Jest, Mocha-free node --test, Biome, Prettier, uv, poetry with and without a lockfile, pipenv, pip with and without .venv, pyright, and non-projects.
+- [x] `ToolchainSkillsSuite` (named for what it covers): runs each case with `MUX_SKILL_DRY_RUN=1` and asserts the printed command and exit code, so detection is tested on every platform without Node, Python, a JDK, or a compiler in CI; cases are skipped when `pwsh` is not on PATH. It also checks that seeding writes the helper and the prelude, and runs `project-detect json` for real against a mixed repository. 87 cases covering 2.0 through 2.8, including real (non-dry-run) scaffolding by `react-new-component` and `java-new-class` and their refusal to overwrite. A manual check ran `js-test all` for real against a `node --test` project: exit 0 when passing and exit 1 when a test fails.
+- [ ] `ToolchainLiveSuite`: opt-in (skipped unless `MUX_TEST_LIVE_TOOLCHAINS=1`), runs the real commands against fixtures where the toolchain is installed. Not built yet; manual live checks so far: `js-test all` against a `node --test` project (exit 0 passing, exit 1 failing), and `project-detect` on the mux repository.
+- [x] `appliesTo` and `requiresTools` cases in `SkillListingSuite` (gated skills hidden and counted in the footer, shown once the file or CLI exists, alternatives, `all` mode ignoring gates, and gating with project skills disabled, which was broken in Phase 1 and is fixed).
 
 ---
 
@@ -468,10 +469,7 @@ Backlog with no plan yet: output styles (row 31, mostly covered by prompt profil
 | `DefaultDigitalOceanSkills` | 0 | 3 | 3 |
 | `DefaultRackspaceSkills` | 0 | 1 | 1 |
 | `DefaultEdgePlatformSkills` (Vercel, Netlify, Cloudflare, fly.io) | 0 | 4 | 4 |
-| `DefaultAlibabaSkills` | 0 | 2 | 2 |
-| `DefaultHuaweiSkills` | 0 | 2 | 2 |
-| `DefaultIbmCloudSkills` | 0 | 2 | 2 |
-| `DefaultLinodeSkills` | 0 | 2 | 2 |
+| `DefaultRegionalCloudSkills` (Alibaba, Huawei, IBM Cloud, Linode) | 0 | 8 | 8 |
 | `DefaultIacSkills` (Terraform, Pulumi) | 0 | 2 | 2 |
 | `DefaultReviewSkills` | 0 | 5 | 5 |
 | `DefaultAgentPlaybookSkills` | 0 | 4 | 4 |

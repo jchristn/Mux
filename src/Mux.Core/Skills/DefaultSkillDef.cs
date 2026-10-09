@@ -21,6 +21,7 @@ namespace Mux.Core.Skills
         private List<string> _Tags = new List<string>();
         private string _WhenToUse = string.Empty;
         private List<string> _AppliesTo = new List<string>();
+        private List<string> _RequiresTools = new List<string>();
         private string _ArgumentHint = string.Empty;
         private string _Body = string.Empty;
         private List<DefaultSkillCommandDef> _Commands = new List<DefaultSkillCommandDef>();
@@ -103,6 +104,16 @@ namespace Mux.Core.Skills
         {
             get => _AppliesTo;
             set => _AppliesTo = value ?? new List<string>();
+        }
+
+        /// <summary>
+        /// Executables that must be on PATH for the skill to be listed (alternatives separated by <c>|</c>). Empty
+        /// means none. Never null.
+        /// </summary>
+        public List<string> RequiresTools
+        {
+            get => _RequiresTools;
+            set => _RequiresTools = value ?? new List<string>();
         }
 
         /// <summary>

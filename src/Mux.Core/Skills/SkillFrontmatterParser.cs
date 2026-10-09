@@ -180,6 +180,9 @@ namespace Mux.Core.Skills
                 case "appliesto":
                     ApplyListKey(manifest, "appliesto", value, ref currentListKey);
                     break;
+                case "requirestools":
+                    ApplyListKey(manifest, "requirestools", value, ref currentListKey);
+                    break;
                 case "userinvocable":
                     manifest.UserInvocable = ParseBool(value, true);
                     break;
@@ -254,6 +257,10 @@ namespace Mux.Core.Skills
             else if (string.Equals(listKey, "appliesto", StringComparison.OrdinalIgnoreCase))
             {
                 manifest.AppliesTo.Add(item);
+            }
+            else if (string.Equals(listKey, "requirestools", StringComparison.OrdinalIgnoreCase))
+            {
+                manifest.RequiresTools.Add(item);
             }
         }
 

@@ -62,6 +62,17 @@ namespace Mux.Core.Skills
             definitions.AddRange(DefaultCppSkills.All());
             definitions.AddRange(DefaultGoSkills.All());
             definitions.AddRange(DefaultRustSkills.All());
+            definitions.AddRange(DefaultContainerSkills.All());
+            definitions.AddRange(DefaultKubernetesSkills.All());
+            definitions.AddRange(DefaultOpenStackSkills.All());
+            definitions.AddRange(DefaultAwsSkills.All());
+            definitions.AddRange(DefaultAzureSkills.All());
+            definitions.AddRange(DefaultGcpSkills.All());
+            definitions.AddRange(DefaultDigitalOceanSkills.All());
+            definitions.AddRange(DefaultRackspaceSkills.All());
+            definitions.AddRange(DefaultEdgePlatformSkills.All());
+            definitions.AddRange(DefaultRegionalCloudSkills.All());
+            definitions.AddRange(DefaultIacSkills.All());
             return definitions;
         }
 

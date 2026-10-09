@@ -76,7 +76,10 @@ try {
         foreach ($t in @('vitest', 'jest', 'mocha', '@playwright/test', 'cypress', 'ava')) { if (Test-MuxPackageDependency $pkg $t) { $tests.Add($t) } }
         foreach ($q in @('eslint', '@biomejs/biome', 'prettier', 'typescript')) { if (Test-MuxPackageDependency $pkg $q) { $quality.Add($q) } }
         $skills.AddRange([string[]]@('js-install', 'js-build', 'js-test', 'js-lint', 'js-typecheck', 'js-format', 'js-deps', 'js-scripts'))
-        if (Test-MuxPackageDependency $pkg 'react') { $ecosystems.Add([ordered]@{ name = 'React'; manager = $pm; manifest = 'package.json' }) }
+        if (Test-MuxPackageDependency $pkg 'react') {
+            $ecosystems.Add([ordered]@{ name = 'React'; manager = $pm; manifest = 'package.json' })
+            $skills.AddRange([string[]]@('react-new-component', 'react-new-hook', 'react-test', 'react-build-analyze', 'react-lint-hooks', 'react-upgrade-check'))
+        }
     }
     if ((Has 'pyproject.toml') -or (Has 'requirements*.txt') -or (Has 'setup.py') -or (Has 'Pipfile')) {
         $pyDir = Find-MuxUp -Names @('pyproject.toml', 'requirements*.txt', 'setup.py', 'setup.cfg', 'Pipfile')
@@ -90,10 +93,11 @@ try {
         $tool = if ((Has 'mvnw') -or (Has 'pom.xml')) { if (Has 'mvnw') { 'maven (wrapper)' } else { 'maven' } } else { if (Has 'gradlew') { 'gradle (wrapper)' } else { 'gradle' } }
         $ecosystems.Add([ordered]@{ name = 'Java/JVM'; manager = $tool; manifest = 'pom.xml / build.gradle' })
         $tests.Add('junit (via ' + $tool + ')')
+        $skills.AddRange([string[]]@('java-build', 'java-test', 'java-format', 'java-lint', 'java-deps', 'java-new-class'))
     }
-    if ((Has 'CMakeLists.txt') -or (Has 'meson.build')) { $ecosystems.Add([ordered]@{ name = 'C/C++'; manager = $(if (Has 'CMakeLists.txt') { 'cmake' } else { 'meson' }); manifest = 'CMakeLists.txt' }); $tests.Add('ctest') }
-    if (Has 'go.mod') { $ecosystems.Add([ordered]@{ name = 'Go'; manager = 'go modules'; manifest = 'go.mod' }); $tests.Add('go test') }
-    if (Has 'Cargo.toml') { $ecosystems.Add([ordered]@{ name = 'Rust'; manager = 'cargo'; manifest = 'Cargo.toml' }); $tests.Add('cargo test') }
+    if ((Has 'CMakeLists.txt') -or (Has 'meson.build')) { $ecosystems.Add([ordered]@{ name = 'C/C++'; manager = $(if (Has 'CMakeLists.txt') { 'cmake' } else { 'meson' }); manifest = 'CMakeLists.txt' }); $tests.Add('ctest'); $skills.AddRange([string[]]@('cpp-configure', 'cpp-build', 'cpp-test', 'cpp-format', 'cpp-tidy', 'cpp-sanitize')) }
+    if (Has 'go.mod') { $ecosystems.Add([ordered]@{ name = 'Go'; manager = 'go modules'; manifest = 'go.mod' }); $tests.Add('go test'); $skills.AddRange([string[]]@('go-build', 'go-test', 'go-lint', 'go-mod')) }
+    if (Has 'Cargo.toml') { $ecosystems.Add([ordered]@{ name = 'Rust'; manager = 'cargo'; manifest = 'Cargo.toml' }); $tests.Add('cargo test'); $skills.AddRange([string[]]@('cargo-build', 'cargo-test', 'cargo-clippy', 'cargo-fmt')) }
     if ((Has '*.sln') -or (Has '*.slnx') -or (Has '*.csproj') -or (Has '*.fsproj')) {
         $ecosystems.Add([ordered]@{ name = '.NET'; manager = 'dotnet'; manifest = '*.sln / *.csproj' })
         $tests.Add('dotnet test')
@@ -116,9 +120,17 @@ try {
     if (Has 'kustomization.yaml') { $deploy += 'Kustomize' }
     if (Has '*.tf') { $deploy += 'Terraform' }
     if (Has 'Pulumi.yaml') { $deploy += 'Pulumi' }
-    foreach ($pair in @(@('vercel.json', 'Vercel'), @('netlify.toml', 'Netlify'), @('fly.toml', 'fly.io'), @('wrangler.toml', 'Cloudflare'), @('serverless.yml', 'Serverless'), @('samconfig.toml', 'AWS SAM'), @('cdk.json', 'AWS CDK'), @('azure.yaml', 'Azure Developer CLI'), @('app.yaml', 'Google App Engine'))) {
+    foreach ($pair in @(@('vercel.json', 'Vercel'), @('netlify.toml', 'Netlify'), @('fly.toml', 'fly.io'), @('wrangler.toml', 'Cloudflare'), @('serverless.yml', 'Serverless'), @('samconfig.toml', 'AWS SAM'), @('cdk.json', 'AWS CDK'), @('azure.yaml', 'Azure Developer CLI'), @('app.yaml', 'Google App Engine'), @('clouds.yaml', 'OpenStack'))) {
         if (Has $pair[0]) { $deploy += $pair[1] }
     }
+    $deploySkills = @{
+        'Docker' = @('docker-build', 'docker-inspect', 'dockerfile-lint'); 'Docker Compose' = @('compose', 'docker-inspect');
+        'Helm' = @('helm', 'k8s-context', 'k8s-inspect', 'k8s-validate', 'k8s-apply'); 'Kustomize' = @('k8s-context', 'k8s-inspect', 'k8s-validate', 'k8s-apply');
+        'Terraform' = @('terraform'); 'Pulumi' = @('pulumi'); 'Vercel' = @('vercel'); 'Netlify' = @('netlify'); 'fly.io' = @('flyio'); 'Cloudflare' = @('cloudflare');
+        'AWS SAM' = @('aws-whoami', 'aws-deploy'); 'AWS CDK' = @('aws-whoami', 'aws-deploy'); 'Azure Developer CLI' = @('azure-whoami', 'azure-apps');
+        'Google App Engine' = @('gcp-whoami', 'gcp-run'); 'OpenStack' = @('openstack-whoami', 'openstack-inspect', 'openstack-heat')
+    }
+    foreach ($item in $deploy) { if ($deploySkills.ContainsKey($item)) { $skills.AddRange([string[]]$deploySkills[$item]) } }
 
     $report = [ordered]@{
         root = $root

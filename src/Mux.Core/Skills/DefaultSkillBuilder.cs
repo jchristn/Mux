@@ -99,6 +99,11 @@ namespace Mux.Core.Skills
                 builder.Append("appliesTo: [").Append(string.Join(", ", definition.AppliesTo)).Append("]\n");
             }
 
+            if (definition.RequiresTools.Count > 0)
+            {
+                builder.Append("requiresTools: [").Append(string.Join(", ", definition.RequiresTools)).Append("]\n");
+            }
+
             if (definition.Commands.Count > 0)
             {
                 builder.Append("commands:\n");
