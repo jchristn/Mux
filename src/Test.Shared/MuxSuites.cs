@@ -231,6 +231,9 @@ namespace Test.Shared
                     // Phase 2 toolchain skills (JavaScript, Python, project detection) in dry-run mode.
                     ToolchainSkillsSuite.Create(),
 
+                    // Phase 3 review and playbook skills against real git repositories.
+                    ReviewSkillsSuite.Create(),
+
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
                     McpRuntimeSuite.Create(),

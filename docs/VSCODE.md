@@ -46,7 +46,12 @@ the selection- and diagnostic-anchored ones also appear as code actions:
 - **Fix this problem** acts on the diagnostic at the cursor.
 - **Generate tests** uses the selection, or the whole file when nothing is selected.
 - **Write commit message** describes your staged diff.
-- **Summarize diff** and **Review current file** speak for themselves.
+- **Summarize diff** speaks for itself.
+- **Review current file** runs the `code-review` skill on the file (`/code-review file <path>`), so findings use
+  the skill's format; it falls back to a plain review prompt when the server has no such skill.
+
+Any `/name` the panel does not recognize is expanded as a skill through the server, so `/code-review branch` or
+`/security-review` work in the panel as they do in the terminal.
 
 Each command attaches the right context automatically — the diagnostic for a fix, the staged diff for a commit
 message — and streams its answer in the panel.

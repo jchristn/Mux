@@ -1,6 +1,6 @@
 # New Default Skills and OOBE Parity Plan
 
-_Status: Phases 1 and 2 done (2026-10-08); Phases 3 through 7 proposed. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
+_Status: Phases 1 through 3 done (2026-10-08); Phases 4 through 7 proposed. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
 
 mux ships 46 default skills, and nearly all of them assume a git repository, a .NET solution, or both. Someone who opens mux in a React app, a Django service, a Maven project, or a CMake tree gets git helpers and nothing that knows how their code builds or tests. That gap is the first thing a Claude Code or Codex user notices, and it is the reason for this plan. The second thing they notice is subtler: both of those harnesses read a project instruction file on startup, can review a diff on request, and let skills be invoked by name with arguments. mux has a strong engine (subagents, MCP, sandboxing, undo, compaction, sessions across four surfaces) but the out-of-box experience still feels like a toolkit rather than an agent that already knows the job.
 
@@ -11,25 +11,25 @@ The scorecard below lists everything that exists in Claude Code or Codex and is 
 | # | Capability | Claude Code | Codex | mux today | Simplicity | Value | Total | Phase |
 |---:|---|:---:|:---:|---|---:|---:|---:|:---:|
 | 1 | Project instruction file loaded into the system prompt (`AGENTS.md`, `CLAUDE.md`, hierarchical) | yes (`CLAUDE.md`) | yes (`AGENTS.md`) | **done in Phase 1**: `MUX.md` / `AGENTS.md` / `CLAUDE.md` on every surface | 9 | 10 | **19** | 1 |
-| 2 | Instruction-only ("playbook") default skills: prose procedures with no mandatory commands | yes | yes | **done in Phase 1**: `DefaultSkillDef` builds playbooks; the playbooks themselves land in Phase 3 | 9 | 8 | **17** | 1 |
-| 3 | Code review on demand (uncommitted, vs branch, a commit, a PR) | yes (`/code-review`) | yes (`/review`) | VS Code "review file" only | 8 | 9 | **17** | 3 |
-| 4 | `/init`: survey the repo and write an instruction file | yes | yes | none | 9 | 8 | **17** | 3 |
+| 2 | Instruction-only ("playbook") default skills: prose procedures with no mandatory commands | yes | yes | **done in Phase 1**: `DefaultSkillDef` builds playbooks; four default playbooks shipped in Phase 3 | 9 | 8 | **17** | 1 |
+| 3 | Code review on demand (uncommitted, vs branch, a commit, a PR) | yes (`/code-review`) | yes (`/review`) | **done in Phase 3**: `code-review` (uncommitted, branch, commit, pr, file); VS Code routes to it | 8 | 9 | **17** | 3 |
+| 4 | `/init`: survey the repo and write an instruction file | yes | yes | **done in Phase 3**: `init` | 9 | 8 | **17** | 3 |
 | 5 | JavaScript / TypeScript toolchain skills | via model + shell | via model + shell | **done in Phase 2** | 9 | 8 | **17** | 2 |
 | 6 | Python toolchain skills | via model + shell | via model + shell | **done in Phase 2** | 9 | 8 | **17** | 2 |
 | 7 | Invoke a skill by name with arguments (`/code-review main`, `$ARGUMENTS`) | yes | yes (custom prompts) | **done in Phase 1**: terminal, desktop, dashboard, and `mux print` | 7 | 9 | **16** | 1 |
 | 8 | Project-scoped skills (checked into the repo) and Claude-format skill import | yes (`.claude/skills`) | yes (`.agents/skills`) | **done in Phase 1**, with a per-project trust gate | 8 | 8 | **16** | 1 |
-| 9 | Security review of pending changes | yes (`/security-review`) | via `/review` | `git-secret-scan` only (regex on staged diff) | 9 | 7 | **16** | 3 |
+| 9 | Security review of pending changes | yes (`/security-review`) | via `/review` | **done in Phase 3**: `security-review` | 9 | 7 | **16** | 3 |
 | 10 | Iterate-until-green loops (retry a check, fix-build-test cycle, CI watch) | via model | via model | none | 8 | 8 | **16** | 4 |
 | 11 | Project detection (languages, package managers, build and test commands) | implicit | implicit | **done in Phase 2** | 9 | 7 | **16** | 2 |
-| 12 | Simplify / cleanup pass on changed code | yes (`/simplify`) | no | none | 9 | 6 | **15** | 3 |
-| 13 | PR review comments fetched for the agent to address | yes (`/pr-comments`) | no | `git-open-pr status` only | 9 | 6 | **15** | 3 |
+| 12 | Simplify / cleanup pass on changed code | yes (`/simplify`) | no | **done in Phase 3**: `simplify` | 9 | 6 | **15** | 3 |
+| 13 | PR review comments fetched for the agent to address | yes (`/pr-comments`) | no | **done in Phase 3**: `pr-comments` | 9 | 6 | **15** | 3 |
 | 14 | React skills | via model + shell | via model + shell | **done in Phase 2** | 8 | 7 | **15** | 2 |
 | 15 | Java skills (Maven and Gradle) | via model + shell | via model + shell | **done in Phase 2** | 8 | 7 | **15** | 2 |
 | 16 | Relevance-gated skill listing so 100+ skills do not flood a small context window | progressive disclosure | progressive disclosure | **done in Phase 1**: `appliesTo` globs and `skillListingMode` | 7 | 7 | **14** | 1 |
 | 17 | Tool-level hooks (`pre-tool-use`, `post-tool-use`, `stop`) | yes | partial (`notify`) | `session-start`, `user-prompt-submit`, `session-end` only | 6 | 8 | **14** | 5 |
 | 18 | Background processes (start a dev server, read its output later, stop it) | yes | partial | `run_process` is foreground with a timeout | 5 | 9 | **14** | 5 |
 | 19 | `@file` mentions in the composer | yes | yes | none | 7 | 7 | **14** | 6 |
-| 20 | Debugging playbook and `git bisect` driver | via model | via model | none | 9 | 5 | **14** | 3 |
+| 20 | Debugging playbook and `git bisect` driver | via model | via model | **done in Phase 3**: `debug` and `git-bisect` | 9 | 5 | **14** | 3 |
 | 21 | Containers and orchestration skills (Docker, Docker Compose, Kubernetes, Minikube, Helm, OpenStack) | via model + shell | via model + shell | **done in Phase 2** | 8 | 8 | **16** | 2 |
 | 21a | Cloud provider skills (AWS, Azure, Google Cloud, DigitalOcean, Rackspace, Vercel, Alibaba, Huawei, IBM Cloud, Linode, Netlify, Cloudflare, fly.io) plus Terraform and Pulumi | via model + shell | via model + shell | **done in Phase 2** | 6 | 8 | **14** | 2 |
 | 21b | Go and Rust skills | via model + shell | via model + shell | **done in Phase 2** | 9 | 5 | **14** | 2 |
@@ -341,7 +341,9 @@ Not requested by name, but Go and Rust are each common enough that their absence
 
 ---
 
-## Phase 3: Review and agent playbooks
+## Phase 3: Review and agent playbooks (done)
+
+**Status:** done. Nine new default skills, for 148 in the library. Deviations from the tables below: `code-review` also has a `file <path>` command (used by the VS Code extension); `security-review` scans untracked new files as well as the diff and runs a masked secret scan from the shared helper instead of calling `git-secret-scan`; `pr-comments list` accepts `--from-file <json>` so it can be tested and used offline; `init` and `explain-codebase` are not gated on git, so they work in any folder; diffs are cut at `MUX_SKILL_DIFF_MAX_BYTES` (default 200000). The full build has no errors or warnings, and all runners pass on net8.0 and net10.0 (Touchstone 1145 cases: 1138 passed, 7 skipped by design; xUnit and NUnit 1139 each). The VS Code extension lints clean and its 57 unit tests pass.
 
 These are the skills Claude Code and Codex users reach for by name. Each is a hybrid: read-only commands gather inputs deterministically, and the body holds the procedure. Bodies are written as procedures, not essays. They tell the model what to collect, what to check, how to rank findings, and the exact output format, because a small model follows a format far better than it follows advice.
 
@@ -364,10 +366,11 @@ These are the skills Claude Code and Codex users reach for by name. Each is a hy
 | `git-bisect` | yes | `start`, `run`, `reset` | `start <good> [bad]`, then `run <command...>` drives `git bisect run` with the given test command, then reports the first bad commit with its message and diff stat. `reset` always restores the original HEAD. Refuses to start with a dirty working tree. |
 | `explain-codebase` | no | `map` | `map` prints a depth-limited tree with file counts and the detected entry points. Body: give a layered explanation (what it does, how it is organized, how a request flows through it) citing real paths. |
 
-- [ ] Add both category classes.
-- [ ] Remove `review file` duplication in the VS Code extension by having its "review file" action call `/code-review` with the file path, so review behavior has one definition.
-- [ ] `ReviewSkillsSuite`: against a fixture git repo built in a temp directory, each diff command returns the expected hunks for uncommitted, branch, and commit modes; `git-bisect` finds a planted bad commit and always resets.
-- [ ] Prompt-quality check: run `/code-review` on three seeded-bug fixtures with the default local model and record whether the planted bug is found. Not a pass or fail gate; the numbers go into the PR description so body wording changes are measured, not guessed.
+- [x] Add both category classes (`DefaultReviewSkills.cs`, `DefaultAgentPlaybookSkills.cs`) and a git section in `mux-skill.ps1` (default branch, merge base, capped output, untracked files, masked secret findings, manifest audit hints, review threads).
+- [x] Remove `review file` duplication in the VS Code extension: **Review current file** sends `/code-review file <path>` through `POST /v1.0/api/skills/expand` and falls back to the old prompt when the skill is missing. Unknown `/name` commands in the panel now expand as skills too.
+- [x] `ReviewSkillsSuite` (49 cases) against real temp git repositories (`Test.Shared/Support/GitFixture.cs`): every `code-review` mode and its invalid-input errors, capping, secret findings (positive, removed-line, and clean cases), manifest hints, `pr-comments` from JSON and dry runs, `test-gap-review`, `init` and `explain-codebase`, and a `git-bisect` run that finds a planted bad commit and restores HEAD, plus refusals for dirty trees, unknown refs, and a bisect already in progress. Git and `gh` gating is covered.
+- [x] The Phase 1 deferral: every default playbook body is at least 400 characters (`PlaybookBodiesAreSubstantial`).
+- [x] Prompt-quality check (not a gate): `mux print "/code-review uncommitted"` with `homedns-qwen3-coder-30b` on three seeded-bug fixtures. All three planted bugs were found and reported at high severity in the skill's format: a JavaScript off-by-one (`i <= items.length`), an inverted Python authorization check (`!=` for `==`), and a C# percentage divisor (`/ 10m` for `/ 100m`). Two of the runs needed a retry after HTTP 502 errors from the proxy.
 
 ---
 
@@ -471,8 +474,8 @@ Backlog with no plan yet: output styles (row 31, mostly covered by prompt profil
 | `DefaultEdgePlatformSkills` (Vercel, Netlify, Cloudflare, fly.io) | 0 | 4 | 4 |
 | `DefaultRegionalCloudSkills` (Alibaba, Huawei, IBM Cloud, Linode) | 0 | 8 | 8 |
 | `DefaultIacSkills` (Terraform, Pulumi) | 0 | 2 | 2 |
-| `DefaultReviewSkills` | 0 | 5 | 5 |
-| `DefaultAgentPlaybookSkills` | 0 | 4 | 4 |
+| `DefaultReviewSkills` (done) | 0 | 5 | 5 |
+| `DefaultAgentPlaybookSkills` (done) | 0 | 4 | 4 |
 | `DefaultLoopSkills` | 0 | 4 | 4 |
 | **Total** | **46** | **106** | **152** |
 
@@ -484,13 +487,14 @@ Two existing defaults deserve a second look while this work is open. `new-tool` 
 
 ## Documentation
 
-- [~] `docs/SKILLS_AUTHORING.md`: playbook skills, hybrids, `appliesTo`, `userInvocable`, `argumentHint`, `$ARGUMENTS`, project scopes and the trust gate, and Claude-format compatibility are documented (Phase 1). Still to come: the exit-code convention and `MUX_SKILL_DRY_RUN` (Phase 2).
-- [~] `docs/USAGE.md`: invoking skills by name, project skills and trust, the listing mode, and project instruction files are documented (Phase 1). Still to come: `/loop` and `/loops`, `/processes`, `/plan`, `/memory`, `@` mentions.
+- [~] `docs/SKILLS_AUTHORING.md`: playbook skills, hybrids, `appliesTo`, `userInvocable`, `argumentHint`, `$ARGUMENTS`, project scopes and the trust gate, and Claude-format compatibility are documented (Phase 1); the exit-code convention, `MUX_SKILL_DRY_RUN`, the production guard (Phase 2), and the review helpers with `MUX_SKILL_DIFF_MAX_BYTES` (Phase 3) are too.
+- [~] `docs/USAGE.md`: invoking skills by name, project skills and trust, the listing mode, and project instruction files are documented (Phase 1), and so are the review, debugging, and codebase skills (Phase 3). Still to come: `/loop` and `/loops`, `/processes`, `/plan`, `/memory`, `@` mentions.
 - [~] `docs/CONFIG.md`: the Phase 1 settings and files (`trusted-projects.json`, `MUX.md`) are documented. Later phases add theirs.
 - [~] `docs/REST_API.md` and the Postman collection: `GET /v1.0/api/context/instructions` and `POST /v1.0/api/skills/expand` are documented, both in a new Postman **Context** folder and in the **Skills** folder, with a `workingDirectory` variable. Loop and process routes come later.
-- [~] `README.md`: project instruction files and slash invocation are in Highlights, and the two new flags are in the options table. The new skill families get added as they land.
-- [~] `CHANGELOG.md`: Phase 1 is recorded under `Unreleased`. No version number was changed.
+- [~] `README.md`: project instruction files and slash invocation are in Highlights, and the two new flags are in the options table. The skills paragraph names the 148-skill library and its families (Phase 3).
+- [~] `CHANGELOG.md`: Phases 1 through 3 are recorded under `Unreleased`, and the VS Code extension's `CHANGELOG.md` records the review routing. No version number was changed.
 - [x] `docs/DESKTOP.md`: `/<skill>`, `/instructions`, and `/trust` (Phase 1).
+- [x] `docs/VSCODE.md`: **Review current file** runs `code-review`, and unknown `/name` commands expand as skills (Phase 3).
 - [ ] Final pass over every new doc and every skill body for em-dashes and the phrasing rules in `WRITING_DOCUMENTS.md`.
 
 ## Testing summary

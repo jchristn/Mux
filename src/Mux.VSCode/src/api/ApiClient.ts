@@ -23,6 +23,7 @@ import {
     SessionDetail,
     SessionMetadataPatch,
     SessionSummary,
+    SkillExpansion,
     SkillSummary,
     StreamEvent,
     Subagent,
@@ -199,6 +200,17 @@ export class ApiClient {
     public async getSkillBody(id: string, signal?: AbortSignal): Promise<string> {
         const detail = await this.getJson<{ Body?: string }>(`/v1.0/api/skills/detail?id=${encodeURIComponent(id)}`, signal);
         return detail.Body ?? '';
+    }
+
+    /**
+     * Expands typed slash text (`/<skill> args`) into the message that runs the skill, the same way the terminal,
+     * desktop, and dashboard do. Returns `Matched: false` when no usable, user-invocable skill has that name.
+     *
+     * @param input The slash text, for example `/code-review file src/app.ts`.
+     * @param workingDirectory The directory whose project skills apply; omitted uses the server's directory.
+     */
+    public expandSkill(input: string, workingDirectory?: string, signal?: AbortSignal): Promise<SkillExpansion> {
+        return this.sendJson<SkillExpansion>('POST', '/v1.0/api/skills/expand', { Input: input, WorkingDirectory: workingDirectory ?? null }, signal);
     }
 
     /** Enables or disables a skill by id. */

@@ -73,6 +73,8 @@ namespace Mux.Core.Skills
             definitions.AddRange(DefaultEdgePlatformSkills.All());
             definitions.AddRange(DefaultRegionalCloudSkills.All());
             definitions.AddRange(DefaultIacSkills.All());
+            definitions.AddRange(DefaultReviewSkills.All());
+            definitions.AddRange(DefaultAgentPlaybookSkills.All());
             return definitions;
         }
 

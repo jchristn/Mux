@@ -59,6 +59,17 @@ All notable changes to mux are documented here.
   first, changes preview by default, and a production guard (new `skillProdPattern` setting, default
   `prod|production|live`) refuses matching targets with exit 3 unless confirmed with `--confirm <name>`. No
   command deletes, destroys, or reads secret values. `project-detect` now suggests these families.
+- **Review, debugging, and codebase skills (Phase 3).** Nine more default skills (library: 148).
+  `code-review` reviews uncommitted changes (untracked files included), a branch against its base, one commit, a
+  pull request, or one file, with `quick` and `deep` effort words and a fixed finding format
+  (`[severity: high|medium|low] path:LINE`, `Failure:`, `Fix:`). `security-review` adds a masked secret scan of
+  added lines and the audit command for each changed dependency manifest. `simplify` lists changed files for a
+  behavior-preserving cleanup pass, `pr-comments` gathers a pull request's review threads (unresolved first) through
+  `gh`, and `test-gap-review` pairs changed source files with changed tests. Playbooks `init` (surveys the project
+  and drafts `AGENTS.md`), `debug` (reproduce, isolate, fix, verify), `git-bisect` (start, run, and reset, always
+  restoring HEAD), and `explain-codebase` (a bounded tree map with entry points). Large diffs are cut at
+  `MUX_SKILL_DIFF_MAX_BYTES` (default 200000) with a note. Git-based skills are listed only inside a repository,
+  and `pr-comments` only when `gh` is installed.
 - **Skills in `mux print`.** Headless runs now discover skills, list them in the system prompt, and expose
   `skill` and `run_skill`, matching the interactive shell.
 
@@ -76,6 +87,13 @@ All notable changes to mux are documented here.
 
 ### Tests
 
+- `ReviewSkills`: 48 cases that run the Phase 3 skills against real throwaway git repositories (`GitFixture`):
+  every `code-review` mode and its invalid-input errors, diff capping, masked secret findings (and no finding for
+  removed lines or clean changes), manifest audit hints, `pr-comments` from JSON fixtures and dry runs,
+  `test-gap-review` pairing, `init` and `explain-codebase` surveys, a `git-bisect` run that finds a planted bad
+  commit and restores HEAD, and checks that playbook bodies are substantial, review bodies define the output
+  format, and git and `gh` gating hides the skills elsewhere. Skill test helpers moved to `SkillTestContext` and
+  `SkillRunResult` in `Test.Shared/Support`.
 - `ToolchainSkills`: 87 cases that dry-run the toolchain and infrastructure skills against generated fixture
   projects and assert the exact command and exit code, including production-guard refusals and confirmations,
   preview-by-default behavior, and bounded logs; real scaffolding runs; and a scan proving no infrastructure command

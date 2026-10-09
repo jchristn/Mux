@@ -2,6 +2,13 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## Unreleased
+
+- **Review current file** now runs the `code-review` skill (`/code-review file <path>`), falling back to the
+  previous prompt when the skill is unavailable.
+- Unknown `/name` commands in the panel are expanded as skills through `POST /v1.0/api/skills/expand`.
+  `ApiClient.expandSkill` and the `SkillExpansion` type were added.
+
 ## 1.1.1
 
 - Versioned `1.1.1` in step with the rest of mux; no extension changes.

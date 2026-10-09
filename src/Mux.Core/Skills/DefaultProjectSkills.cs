@@ -33,7 +33,7 @@ namespace Mux.Core.Skills
             };
         }
 
-        private const string DetectScript = @"$root = Get-MuxRepoRoot
+        internal const string DetectScript = @"$root = Get-MuxRepoRoot
 Push-Location $root
 try {
     $skip = '(^|[\\/])(node_modules|bin|obj|target|dist|build|out|\.venv|venv|__pycache__|\.git|\.gradle|\.idea|vendor)([\\/]|$)'

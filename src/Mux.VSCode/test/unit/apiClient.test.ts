@@ -68,3 +68,42 @@ test('buildFileContext posts to the context route and returns the built block', 
     assert.ok(capturedBody.includes('summarize'), 'the request carries the mode');
     assert.ok(capturedBody.includes('claude'), 'the request carries the selected endpoint');
 });
+
+test('expandSkill posts the slash text and working directory and returns the expansion', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    let capturedBody = '';
+    globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: string }) => {
+        capturedUrl = String(input);
+        capturedMethod = init?.method ?? 'GET';
+        capturedBody = init?.body ?? '';
+        return new Response(JSON.stringify({ Matched: true, Skill: 'code-review', Arguments: 'file src/a.ts', Prompt: 'Run the "code-review" skill...', IsPlaybook: false }), { status: 200 });
+    }) as typeof fetch;
+
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: 'secret' });
+    const result = await client.expandSkill('/code-review file src/a.ts', '/work/repo');
+    assert.equal(capturedUrl, 'http://127.0.0.1:8710/v1.0/api/skills/expand');
+    assert.equal(capturedMethod, 'POST');
+    assert.deepEqual(JSON.parse(capturedBody), { Input: '/code-review file src/a.ts', WorkingDirectory: '/work/repo' });
+    assert.equal(result.Matched, true);
+    assert.equal(result.Skill, 'code-review');
+});
+
+test('expandSkill sends a null working directory when none is given and reports no match', async () => {
+    let capturedBody = '';
+    globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
+        capturedBody = init?.body ?? '';
+        return new Response(JSON.stringify({ Matched: false, Skill: '', Arguments: '', Prompt: '', IsPlaybook: false }), { status: 200 });
+    }) as typeof fetch;
+
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
+    const result = await client.expandSkill('/no-such-skill');
+    assert.equal(JSON.parse(capturedBody).WorkingDirectory, null);
+    assert.equal(result.Matched, false);
+});
+
+test('expandSkill rejects when the server fails', async () => {
+    globalThis.fetch = (async () => new Response('{"error":"BadRequest"}', { status: 400 })) as typeof fetch;
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
+    await assert.rejects(() => client.expandSkill(''));
+});

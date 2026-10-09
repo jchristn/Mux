@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import * as vscode from 'vscode';
 import { ChatViewProvider } from '../chat/ChatViewProvider';
 import { workspaceRootPath } from '../context/providers';
+import { reviewFileInvocation } from './skillInvocation';
 
 /**
  * The inline commands that turn a location in the editor into a mux run without composing a prompt. Each one
@@ -40,10 +41,16 @@ export function registerInlineCommands(context: vscode.ExtensionContext, chat: C
             }
         }),
         vscode.commands.registerCommand('mux.reviewFile', () => {
-            const text = activeFileText();
-            if (text) {
-                void run(vscode.l10n.t('Review this file for bugs, risks, and clarity, and summarize what you find.'));
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                return;
             }
+
+            // The code-review skill owns the review procedure, so the editor action and a typed /code-review
+            // behave the same; the plain request is the fallback when the skill is unavailable.
+            const relative = vscode.workspace.asRelativePath(editor.document.uri, false);
+            const fallback = vscode.l10n.t('Review this file for bugs, risks, and clarity, and summarize what you find.');
+            void chat.runSkillFromCommand(reviewFileInvocation(relative), fallback);
         }),
         vscode.commands.registerCommand('mux.summarizeDiff', () => {
             void run(vscode.l10n.t('Summarize the working-tree changes.'));

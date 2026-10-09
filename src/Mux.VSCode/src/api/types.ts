@@ -143,6 +143,15 @@ export interface Subagent {
 }
 
 /** A skill summary as returned by `GET /v1.0/api/skills`. */
+/** The result of expanding typed slash text into a skill invocation (POST /v1.0/api/skills/expand). */
+export interface SkillExpansion {
+    Matched: boolean;
+    Skill: string;
+    Arguments: string;
+    Prompt: string;
+    IsPlaybook: boolean;
+}
+
 export interface SkillSummary {
     Name: string;
     Title: string;

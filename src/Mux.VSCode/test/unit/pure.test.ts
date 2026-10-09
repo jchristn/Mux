@@ -5,6 +5,7 @@ import { composePrompt, estimateTokens } from '../../src/context/composePrompt';
 import { checkContract } from '../../src/server/contract';
 import { formatList, formatRelativeTime, formatTokens } from '../../src/i18n/format';
 import { resolveLocale } from '../../src/i18n/locales';
+import { reviewFileInvocation } from '../../src/commands/skillInvocation';
 
 test('ApiError derives a message from a JSON body', () => {
     const error = new ApiError(404, '{"error":"NotFound","message":"Unknown endpoint: nope"}');
@@ -59,4 +60,12 @@ test('formatters produce locale-aware output without hand-rolled strings', () =>
     assert.ok(formatTokens('en', 1500).length > 0);
     const rel = formatRelativeTime('en', new Date(1_000_000).toISOString(), 1_000_000 + 3_600_000);
     assert.ok(/hour/.test(rel));
+});
+
+test('reviewFileInvocation builds a code-review file invocation', () => {
+    assert.equal(reviewFileInvocation('src/app.ts'), '/code-review file src/app.ts');
+});
+
+test('reviewFileInvocation normalizes backslashes and quotes paths with spaces', () => {
+    assert.equal(reviewFileInvocation('src\\My Folder\\app.ts'), '/code-review file "src/My Folder/app.ts"');
 });

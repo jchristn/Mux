@@ -304,6 +304,34 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         await this.runTurn(text);
     }
 
+    /**
+     * Runs a skill by name from a command: expands `/<skill> args` through the server so the skill's own
+     * procedure drives the turn, and falls back to the plain request when the skill is unavailable (disabled,
+     * deleted, or an older server).
+     *
+     * @param slashText The slash invocation, for example `/code-review file src/app.ts`.
+     * @param fallback The request to send when the skill cannot be expanded.
+     */
+    public async runSkillFromCommand(slashText: string, fallback: string): Promise<void> {
+        const expanded = await this.tryExpandSkill(slashText);
+        await vscode.commands.executeCommand('mux.chat.focus');
+        this.post({ type: 'echo', text: expanded ? slashText : fallback });
+        await this.runTurn(expanded ?? fallback);
+    }
+
+    // Asks the server to expand "/<skill> args"; returns the prompt, or undefined when nothing matched or the
+    // server could not be reached.
+    private async tryExpandSkill(slashText: string): Promise<string | undefined> {
+        try {
+            const client = this.client ?? (await this.lifecycle.getClient(new vscode.CancellationTokenSource().token));
+            const expansion = await client.expandSkill(slashText, workspaceRootPath());
+            return expansion.Matched && expansion.Prompt ? expansion.Prompt : undefined;
+        } catch (error) {
+            logError('skill expansion failed', error);
+            return undefined;
+        }
+    }
+
     private async onMessage(message: InboundMessage): Promise<void> {
         switch (message.type) {
             case 'send':
@@ -361,10 +389,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             case '/cwd':
                 await vscode.commands.executeCommand('mux.setWorkingDirectory');
                 break;
-            default:
+            default: {
+                // Anything else may name a skill: expand it and run it, as the terminal and dashboard do.
+                const expanded = await this.tryExpandSkill(input);
+                if (expanded) {
+                    this.post({ type: 'echo', text: input });
+                    await this.runTurn(expanded);
+                    break;
+                }
+
                 this.post({ type: 'notice', message: vscode.l10n.t('Unknown command: {0}', command) });
                 this.postHelp();
                 break;
+            }
         }
     }
 

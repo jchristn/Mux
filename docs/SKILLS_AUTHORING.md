@@ -132,6 +132,8 @@ Infrastructure skills (Docker, Kubernetes, Helm, OpenStack, the cloud providers,
 - **Preview before change, and guard production.** Changes default to a preview (`kubectl diff`, server dry runs, `helm diff`, `--dryrun`, `terraform plan`, `pulumi preview`, Cloud Run `--no-traffic`). `Assert-MuxNotProduction` refuses (exit 3) when the target matches `skillProdPattern` (passed to skills as `MUX_SKILL_PROD_PATTERN`) unless the arguments include `--confirm <exact target name>`. The model should add `--confirm` only after the user explicitly approves.
 - **Never destroy or reveal.** No default infrastructure command deletes, destroys, terminates, prunes, or reads a secret's value; secret and environment commands list names only. A test scans every infrastructure command for those words.
 
+Review skills (`code-review`, `security-review`, `simplify`, `test-gap-review`) use the helper's git section: `Assert-MuxGitRepo`, `Get-MuxDefaultBranch`, `Get-MuxChangeBase`, `Write-MuxLimited` (cuts output at `MUX_SKILL_DIFF_MAX_BYTES`, default 200000), `Write-MuxSecretFindings` (masked), and `Write-MuxManifestChanges`. Their commands gather facts; the body defines the finding format the model writes.
+
 The helper is seeded into each skill folder and is yours to edit; mux never overwrites a skill folder that already exists.
 
 ## Cross-platform notes

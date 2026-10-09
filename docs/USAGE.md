@@ -920,6 +920,33 @@ Settings in `settings.json`: `skillsEnabled` (default `true`), `skillRefreshInte
 `skillsDirectory` (override the default `~/.mux/skills`), `projectSkillsEnabled` (default `true`),
 `projectSkillRoots`, and `skillListingMode` (default `relevant`). See [CONFIG.md](CONFIG.md).
 
+### Review, debugging, and codebase skills
+
+These default skills cover the review and investigation workflows of other agent harnesses. Run them by name:
+
+```text
+/code-review                       # uncommitted changes, untracked files included
+/code-review branch [base]         # this branch against its merge base (default branch when omitted)
+/code-review commit <sha> deep     # one commit; quick or deep sets the effort
+/code-review pr 42                 # a pull request (needs gh)
+/code-review file src/app.ts       # one file in full
+/security-review [uncommitted|branch|pr <n>]
+/simplify [base]                   # behavior-preserving cleanup of changed files
+/pr-comments [n]                   # review threads, unresolved first (needs gh)
+/test-gap-review [base]            # changed source files with no matching test change
+/debug <symptom>                   # reproduce, isolate, fix, verify
+/git-bisect start <good> [bad]     # then: run <test command>; reset
+/init                              # survey the project and draft AGENTS.md
+/explain-codebase [depth]          # tree map (depth 1-4) with entry points
+```
+
+Review findings use one format: `[severity: high|medium|low] path:LINE`, then `Failure:` (the concrete input or
+state that goes wrong) and `Fix:`, or `No findings.`. `security-review` adds `Attack:` and prints a secret scan of
+added lines (values masked) and the audit command for each changed dependency manifest. Diffs longer than
+`MUX_SKILL_DIFF_MAX_BYTES` (default 200000) are cut with a note. `git-bisect run` always resets the bisect and
+restores HEAD, even when the test command fails. The git-based skills are listed only inside a repository, and
+`pr-comments` only when `gh` is installed.
+
 ## Project Instructions (MUX.md, AGENTS.md, CLAUDE.md)
 
 mux reads project instruction files into the system prompt on every surface (terminal, `mux print`, desktop,

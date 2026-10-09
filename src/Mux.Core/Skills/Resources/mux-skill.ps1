@@ -554,6 +554,244 @@ function Get-MuxLineLimit {
     return $Default
 }
 
+# ---------------------------------------------------------------------------------------------------------------
+# Git (review and playbook skills)
+# ---------------------------------------------------------------------------------------------------------------
+
+# Exits 2 unless git is installed and the current directory is inside a work tree.
+function Assert-MuxGitRepo {
+    if (-not (Test-MuxTool 'git')) { Exit-MuxNotApplicable 'git was not found on PATH.' }
+    $inside = & git rev-parse --is-inside-work-tree 2>$null
+    if ($LASTEXITCODE -ne 0 -or "$inside".Trim() -ne 'true') { Exit-MuxNotApplicable 'this is not a git repository.' }
+}
+
+function Test-MuxGitRef {
+    param([string]$Ref)
+    & git rev-parse --verify --quiet ($Ref + '^{commit}') *> $null
+    return $LASTEXITCODE -eq 0
+}
+
+# The branch to compare against: origin's default branch, then origin/main, origin/master, main, master, trunk,
+# or develop, whichever exists first. Returns $null when none does.
+function Get-MuxDefaultBranch {
+    $ref = & git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>$null
+    if ($LASTEXITCODE -eq 0 -and $ref) { return "$ref".Trim() }
+    foreach ($name in @('origin/main', 'origin/master', 'main', 'master', 'trunk', 'develop')) {
+        if (Test-MuxGitRef $name) { return $name }
+    }
+
+    return $null
+}
+
+# Removes the review effort words (quick, deep) from an argument list.
+function Remove-MuxEffortWords {
+    param([object[]]$Arguments)
+    return @($Arguments | Where-Object { [string]$_ -notin @('quick', 'deep') })
+}
+
+# The maximum characters of git output printed by the review commands (MUX_SKILL_DIFF_MAX_BYTES, default 200000).
+function Get-MuxDiffLimit {
+    $parsed = 0
+    if ([int]::TryParse("$env:MUX_SKILL_DIFF_MAX_BYTES", [ref]$parsed) -and $parsed -ge 1000) { return $parsed }
+    return 200000
+}
+
+# Runs a read-only git command and returns its output as one string. A git failure exits 2 with git's message.
+function Get-MuxGitText {
+    param([string[]]$Arguments)
+    $text = (& git -c core.quotepath=off @Arguments 2>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host $text.TrimEnd()
+        Exit-MuxNotApplicable ('git ' + ($Arguments -join ' ') + ' failed.')
+    }
+
+    return $text
+}
+
+# Prints text, cut at the diff limit with a note telling the model how to see the rest.
+function Write-MuxLimited {
+    param([string]$Text)
+    $limit = Get-MuxDiffLimit
+    if ($Text.Length -gt $limit) {
+        Write-Output $Text.Substring(0, $limit)
+        Write-Output ('[mux: output cut at ' + $limit + ' characters; review the remaining files one at a time with code-review file <path>]')
+    } else {
+        Write-Output $Text.TrimEnd()
+    }
+}
+
+# Prints each untracked file (not ignored) as added lines, skipping binary files and capping each at 400 lines.
+# The number of files is left in $script:MuxUntrackedCount.
+function Write-MuxUntrackedFiles {
+    $files = @(& git -c core.quotepath=off ls-files --others --exclude-standard 2>$null)
+    foreach ($file in $files) {
+        Write-Output ('=== new untracked file: ' + $file)
+        try {
+            $bytes = [IO.File]::ReadAllBytes((Join-Path (Get-Location).Path $file))
+            $probe = [Math]::Min($bytes.Length, 8000)
+            if ([Array]::IndexOf($bytes, [byte]0, 0, $probe) -ge 0) { Write-Output '(binary file)'; continue }
+            $lines = @(Get-Content -LiteralPath $file -TotalCount 401)
+            $lines | Select-Object -First 400 | ForEach-Object { Write-Output ('+' + $_) }
+            if ($lines.Count -gt 400) { Write-Output '[mux: file cut at 400 lines]' }
+        } catch {
+            Write-Output ('(could not read: ' + $_.Exception.Message + ')')
+        }
+    }
+
+    $script:MuxUntrackedCount = $files.Count
+}
+
+# Returns the untracked (not ignored) text files as unified-diff text of added lines, so scans that read diffs also
+# see brand-new files. Binary files and anything past 2000 lines per file are skipped.
+function Get-MuxUntrackedAsDiff {
+    $builder = New-Object System.Text.StringBuilder
+    foreach ($file in @(& git -c core.quotepath=off ls-files --others --exclude-standard 2>$null)) {
+        try {
+            $bytes = [IO.File]::ReadAllBytes((Join-Path (Get-Location).Path $file))
+            if ([Array]::IndexOf($bytes, [byte]0, 0, [Math]::Min($bytes.Length, 8000)) -ge 0) { continue }
+            [void]$builder.AppendLine('+++ b/' + $file)
+            [void]$builder.AppendLine('@@ -0,0 +1 @@')
+            foreach ($line in @(Get-Content -LiteralPath $file -TotalCount 2000)) { [void]$builder.AppendLine('+' + $line) }
+        } catch {
+            continue
+        }
+    }
+
+    return $builder.ToString()
+}
+
+# The merge base between HEAD and a base ref. Exits 2 when the base does not exist.
+function Get-MuxMergeBase {
+    param([string]$Base)
+    if (-not (Test-MuxGitRef $Base)) { Exit-MuxNotApplicable ("'" + $Base + "' is not a branch, tag, or commit in this repository.") }
+    $mergeBase = & git merge-base HEAD $Base 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $mergeBase) { Exit-MuxNotApplicable ("HEAD and '" + $Base + "' share no history.") }
+    return "$mergeBase".Trim()
+}
+
+# Files changed since a base (committed and uncommitted, deletions excluded) plus untracked files.
+function Get-MuxChangedFiles {
+    param([string]$Since)
+    $files = New-Object System.Collections.Generic.List[string]
+    if ($Since) { @(& git -c core.quotepath=off diff --name-only --diff-filter=d $Since 2>$null) | ForEach-Object { if ($_) { $files.Add($_) } } }
+    @(& git -c core.quotepath=off ls-files --others --exclude-standard 2>$null) | ForEach-Object { if ($_) { $files.Add($_) } }
+    return @($files | Select-Object -Unique)
+}
+
+# The commit to compare the working tree against for "changed files": the merge base with the given or default
+# branch when there is one, otherwise HEAD (only uncommitted changes), or nothing in a repository with no commits.
+function Get-MuxChangeBase {
+    param([string]$Base)
+    $hasHead = Test-MuxGitRef 'HEAD'
+    if (-not $hasHead) { return $null }
+    if (-not $Base) { $Base = Get-MuxDefaultBranch }
+    if (-not $Base) { return 'HEAD' }
+    return Get-MuxMergeBase $Base
+}
+
+# Scans the added lines of a unified diff for likely secrets and prints each with a masked value. The number found
+# is left in $script:MuxSecretCount.
+function Write-MuxSecretFindings {
+    param([string]$DiffText)
+    $patterns = @(
+        @('AWS access key id', 'AKIA[0-9A-Z]{16}'),
+        @('private key', '-----BEGIN [A-Z ]*PRIVATE KEY-----'),
+        @('GitHub token', '(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}'),
+        @('Slack token', 'xox[abprs]-[A-Za-z0-9-]{10,}'),
+        @('API secret key', 'sk-[A-Za-z0-9_-]{20,}'),
+        @('hard-coded credential', '(?i)(password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token)["'']?\s*[:=]\s*["''][^"''\s]{8,}["'']')
+    )
+    $file = ''
+    $line = 0
+    $count = 0
+    foreach ($row in ($DiffText -split "`r?`n")) {
+        if ($row -match '^\+\+\+ (b/)?(.+)$') { $file = $Matches[2]; continue }
+        if ($row -match '^@@ -\d+(,\d+)? \+(\d+)') { $line = [int]$Matches[2] - 1; continue }
+        if ($row.StartsWith('-')) { continue }
+        if ($row.StartsWith('+')) {
+            $line++
+            foreach ($pattern in $patterns) {
+                $hit = [regex]::Match($row, $pattern[1])
+                if ($hit.Success) {
+                    $value = $hit.Value
+                    $masked = if ($value.Length -gt 8) { $value.Substring(0, 4) + ('*' * [Math]::Min(12, $value.Length - 4)) } else { '****' }
+                    if ($count -eq 0) { Write-Output 'Possible secrets in added lines (verify each; values are masked):' }
+                    Write-Output ('- ' + $file + ':' + $line + '  ' + $pattern[0] + '  ' + $masked)
+                    $count++
+                    break
+                }
+            }
+        } elseif (-not $row.StartsWith('\')) {
+            $line++
+        }
+    }
+
+    if ($count -eq 0) { Write-Output 'No likely secrets in added lines.' }
+    $script:MuxSecretCount = $count
+}
+
+# Lists dependency manifests touched by a diff and the audit skills that apply to them.
+function Write-MuxManifestChanges {
+    param([string[]]$Files)
+    $map = [ordered]@{
+        'js-deps audit' = '(^|/)(package\.json|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$'
+        'py-deps audit' = '(^|/)(requirements[^/]*\.txt|pyproject\.toml|poetry\.lock|uv\.lock|Pipfile(\.lock)?|setup\.py)$'
+        'dotnet-outdated vulnerable' = '(\.csproj|\.fsproj|(^|/)Directory\.Packages\.props|(^|/)packages\.lock\.json)$'
+        'java-deps tree' = '(^|/)(pom\.xml|build\.gradle(\.kts)?|gradle\.lockfile)$'
+        'go-mod outdated' = '(^|/)(go\.mod|go\.sum)$'
+        'cargo-build (then cargo audit if installed)' = '(^|/)(Cargo\.toml|Cargo\.lock)$'
+    }
+    $touched = @()
+    foreach ($entry in $map.GetEnumerator()) {
+        $hits = @($Files | Where-Object { ($_ -replace '\\', '/') -match $entry.Value })
+        if ($hits.Count -gt 0) { $touched += ('- ' + ($hits -join ', ') + '  ->  run ' + $entry.Key) }
+    }
+
+    if ($touched.Count -eq 0) { Write-Output 'No dependency manifests changed.'; return }
+    Write-Output 'Dependency manifests changed (check new or upgraded packages for advisories):'
+    $touched | ForEach-Object { Write-Output $_ }
+}
+
+# Formats GitHub review threads (the GraphQL reviewThreads shape) with unresolved threads first.
+function Write-MuxReviewThreads {
+    param($Threads)
+    $open = @($Threads | Where-Object { -not $_.isResolved })
+    $done = @($Threads | Where-Object { $_.isResolved })
+    Write-Output ('Review threads: ' + $open.Count + ' unresolved, ' + $done.Count + ' resolved.')
+    foreach ($group in @(@('UNRESOLVED', $open), @('RESOLVED', $done))) {
+        foreach ($thread in $group[1]) {
+            $where = if ($thread.path) { $thread.path + $(if ($thread.line) { ':' + $thread.line } else { '' }) } else { '(pull request)' }
+            $comments = @($thread.comments.nodes)
+            Write-Output ('[' + $group[0] + '] ' + $where)
+            foreach ($comment in $comments) {
+                $author = if ($comment.author) { $comment.author.login } else { 'unknown' }
+                $text = ("$($comment.body)" -replace "`r?`n", ' ').Trim()
+                if ($text.Length -gt 600) { $text = $text.Substring(0, 600) + '...' }
+                Write-Output ('    ' + $author + ': ' + $text)
+            }
+        }
+    }
+}
+
+# Whether a path looks like a test file in any common convention.
+function Test-MuxTestPath {
+    param([string]$Path)
+    $p = $Path -replace '\\', '/'
+    $name = Split-Path -Leaf $p
+    return ($p -match '(^|/)(tests?|__tests__|spec|specs|testing|Test\.[^/]+|[^/]*\.Tests?)/') -or
+        ($name -match '(?i)^test_.*\.py$|_test\.(py|go|rs|exs?)$|\.(test|spec)\.[cm]?[jt]sx?$|(Tests?|Spec|IT)\.(cs|fs|vb|java|kt|scala|swift)$|_spec\.rb$|Test\.php$')
+}
+
+# The bare stem used to pair a source file with its tests (lower case, test affixes removed).
+function Get-MuxTestStem {
+    param([string]$Path)
+    $name = [IO.Path]::GetFileNameWithoutExtension((Split-Path -Leaf $Path))
+    $name = $name -replace '(?i)\.(test|spec)$', ''
+    $name = $name -replace '(?i)^test_', ''
+    $name = $name -replace '(?i)(_test|_spec|Tests?|Spec|IT)$', ''
+    return $name.ToLowerInvariant()
+}
+
 # Returns the positional argument at $Index (from the script's $args), or the default when it is missing or blank.
 function Get-MuxArg {
     param([object[]]$Arguments, [int]$Index, [string]$Default = '')
