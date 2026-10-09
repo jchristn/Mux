@@ -114,10 +114,20 @@ namespace Mux.Cli.App
         private readonly MenuBar _MenuBar;
         private Job? _ActiveJob;
         private bool _TurnInFlight;
+        private Mux.Core.Context.FileMentionResolver? _MentionResolver;
+        private List<string> _MentionSuggestions = new List<string>();
+        private int _MentionIndex;
+        private int _MentionTokenStart = -1;
+        private int _MentionDismissedAt = -1;
         private readonly LoopScheduler? _Loops;
         private readonly Mux.Core.Processes.BackgroundProcessRegistry? _Processes;
+        private readonly Mux.Core.Memory.MemoryStore? _Memory;
         private Timer? _LoopTimer;
         private string? _ActiveLoopId;
+        private Mux.Core.Interaction.InteractionModeEnum _Mode = Mux.Core.Interaction.InteractionModeEnum.Normal;
+        private Mux.Core.Interaction.PlanProposal? _ApprovedPlan;
+        private Mux.Core.Interaction.PlanReviewDecisionEnum _ApprovedDecision;
+        private Mux.Core.Interaction.PlanProposal? _PlanToSeed;
         private int _LoopTickBusy;
         // Consumes the fabric: mirrors the current conversation so a run finishing on any other surface
         // reloads this transcript automatically. On by default.
@@ -191,6 +201,7 @@ namespace Mux.Cli.App
         /// <param name="usageQuery">Optional usage-telemetry query service backing the <c>/usage</c> view. Null disables it (the command reports telemetry unavailable).</param>
         /// <param name="enableFirstRunWizard">When true, the first-run setup wizard is offered on launch if no endpoint is configured and setup has not been completed. Off by default so test harnesses driving the run loop are not interrupted; the production launcher opts in.</param>
         /// <param name="loopScheduler">Optional scheduler for recurring prompts (<c>/loop</c>, <c>/loops</c>). Null disables loops.</param>
+        /// <param name="memoryStore">Optional persistent memory store enabling <c>#</c> quick-add and <c>/memory</c>. Null disables both.</param>
         /// <param name="processRegistry">Optional registry of background processes started by the model (<c>/processes</c>). Null hides the command. The caller owns and disposes it.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
@@ -217,8 +228,10 @@ namespace Mux.Cli.App
             Mux.Core.Telemetry.UsageQueryService? usageQuery = null,
             bool enableFirstRunWizard = false,
             LoopScheduler? loopScheduler = null,
-            Mux.Core.Processes.BackgroundProcessRegistry? processRegistry = null)
+            Mux.Core.Processes.BackgroundProcessRegistry? processRegistry = null,
+            Mux.Core.Memory.MemoryStore? memoryStore = null)
         {
+            _Memory = memoryStore;
             _EnableFirstRunWizard = enableFirstRunWizard;
             _Loops = loopScheduler;
             _Processes = processRegistry;
@@ -318,14 +331,17 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.mcp", "MCP servers", null, OpenMcpModal, "Model", new[] { "mcp", "mcp-servers", "mcpservers", "servers" }));
             _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }));
             _Catalog.Add(new CommandDescriptor("mux.trust", "Project skill trust", null, () => HandleTrustArgument(string.Empty), "Model", new[] { "trust" }, HandleTrustArgument));
+            _Catalog.Add(new CommandDescriptor("mux.plan", "Plan mode", null, () => HandlePlanArgument(string.Empty), "Session", new[] { "plan" }, HandlePlanArgument));
             _Catalog.Add(new CommandDescriptor("mux.loop", "Repeat a prompt", null, () => HandleLoopArgument(string.Empty), "Session", new[] { "loop" }, HandleLoopArgument));
+            _Catalog.Add(new CommandDescriptor("mux.memory", "Memory", null, () => HandleMemoryArgument(string.Empty), "Session", new[] { "memory", "memories" }, HandleMemoryArgument));
+            _Catalog.Add(new CommandDescriptor("mux.worktrees", "Worktrees", null, () => HandleWorktreesArgument(string.Empty), "Session", new[] { "worktrees", "worktree" }, HandleWorktreesArgument));
             _Catalog.Add(new CommandDescriptor("mux.processes", "Background processes", null, () => HandleProcessesArgument(string.Empty), "Session", new[] { "processes", "ps", "procs" }, HandleProcessesArgument));
             _Catalog.Add(new CommandDescriptor("mux.loops", "Loops", null, () => HandleLoopsArgument(string.Empty), "Session", new[] { "loops" }, HandleLoopsArgument));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.cwd", "Working directory", null, ShowWorkingDirectory, "Session", new[] { "cwd", "cd", "chdir" }, ChangeWorkingDirectory));
             _Catalog.Add(new CommandDescriptor("mux.label", "Labels", null, ShowSessionLabels, "Session", new[] { "label", "labels" }, HandleLabelArgument));
             _Catalog.Add(new CommandDescriptor("mux.tag", "Tags", null, ShowSessionTags, "Session", new[] { "tag", "tags" }, HandleTagArgument));
-            _Catalog.Add(new CommandDescriptor("mux.tasks", "Tasks", null, OpenTasksModal, "View", new[] { "tasks", "task", "plan", "todo" }));
+            _Catalog.Add(new CommandDescriptor("mux.tasks", "Tasks", null, OpenTasksModal, "View", new[] { "tasks", "task", "todo" }));
             _Catalog.Add(new CommandDescriptor("mux.usage", "Usage", null, OpenUsageView, "View", new[] { "usage", "stats", "spend" }, OpenUsageViewFiltered));
             _Catalog.Add(new CommandDescriptor("mux.effort", "Reasoning effort", null, OpenEffortSelector, "Model", new[] { "effort", "reasoning", "reasoning-effort" }));
             _Catalog.Add(new CommandDescriptor("mux.compact", "Compact conversation", null, CompactConversation, "Session", new[] { "compact", "compress", "summarize" }));
@@ -1798,6 +1814,18 @@ namespace Mux.Cli.App
             // Shift+Enter and Ctrl+J (the terminal-independent line-feed chord) insert a newline. Ctrl+J is
             // handled here rather than in the Ctrl switch below.
             SubmitDecision submit = _SubmitResolver.Resolve(key);
+            if (_MentionSuggestions.Count > 0 && HandleMentionKey(key, submit))
+            {
+                return true;
+            }
+
+            // Shift+Tab cycles the turn mode: normal, auto-approve, plan.
+            if (key.Code == KeyCode.Tab && (key.Modifiers & KeyModifiers.Shift) != 0)
+            {
+                CycleInteractionMode();
+                return true;
+            }
+
             if (submit == SubmitDecision.Submit)
             {
                 OnEnter();
@@ -1963,7 +1991,164 @@ namespace Mux.Cli.App
                 return;
             }
 
+            if (TryQuickRemember(prompt))
+            {
+                return;
+            }
+
             EnqueueOrRun(prompt);
+        }
+
+        // "# text" saves a project memory and "#global text" a global one, without a model call. A prompt that
+        // starts with "#" but has nothing after it, or a Markdown heading ("## ..."), is sent as a normal prompt.
+        private bool TryQuickRemember(string prompt)
+        {
+            if (_Memory == null || !Mux.Core.Memory.MemoryQuickAdd.TryParse(prompt, out Mux.Core.Memory.MemoryScopeEnum scope, out string text))
+            {
+                return false;
+            }
+
+            try
+            {
+                WriteNotice("🧠 " + Mux.Core.Memory.MemoryQuickAdd.Save(_Memory, scope, text, _HookWorkingDirectory) + " /memory lists memories.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("⚠ Could not save the memory: " + ex.Message);
+            }
+
+            return true;
+        }
+
+        private void HandleMemoryArgument(string argument)
+        {
+            if (_Memory == null)
+            {
+                WriteNotice("Memory is turned off (settings.json: memoryEnabled).");
+                return;
+            }
+
+            string[] parts = (argument ?? string.Empty).Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            string verb = parts.Length > 0 ? parts[0].ToLowerInvariant() : "list";
+            string rest = parts.Length > 1 ? parts[1] : string.Empty;
+            try
+            {
+                switch (verb)
+                {
+                    case "list":
+                        WriteMemoryList();
+                        return;
+                    case "show":
+                    case "delete":
+                    case "rm":
+                    case "edit":
+                        if (string.IsNullOrWhiteSpace(rest))
+                        {
+                            WriteNotice("⚠ Name a memory: /memory " + verb + " <name>.");
+                            return;
+                        }
+
+                        Mux.Core.Memory.MemoryEntry? entry = _Memory.Get(rest, null, _HookWorkingDirectory);
+                        if (entry == null)
+                        {
+                            WriteNotice("⚠ No memory named '" + rest + "'. /memory lists them.");
+                            return;
+                        }
+
+                        if (verb == "show")
+                        {
+                            WriteNotice("── " + entry.Slug + " (" + ScopeLabel(entry.Scope) + ", updated " + entry.UpdatedUtc.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " UTC) ──");
+                            WriteNotice(entry.Description);
+                            if (!string.Equals(entry.Content, entry.Description, StringComparison.Ordinal))
+                            {
+                                WriteNotice(entry.Content);
+                            }
+
+                            return;
+                        }
+
+                        if (verb == "edit")
+                        {
+                            _ = EditMemoryAsync(entry);
+                            return;
+                        }
+
+                        _Memory.Delete(entry.Slug, entry.Scope, _HookWorkingDirectory);
+                        WriteNotice("✓ Deleted " + ScopeLabel(entry.Scope) + " memory '" + entry.Slug + "'.");
+                        return;
+                    case "clear":
+                        bool confirmed = rest.IndexOf("--yes", StringComparison.OrdinalIgnoreCase) >= 0;
+                        Mux.Core.Memory.MemoryScopeEnum scope = rest.IndexOf("global", StringComparison.OrdinalIgnoreCase) >= 0
+                            ? Mux.Core.Memory.MemoryScopeEnum.Global
+                            : Mux.Core.Memory.MemoryScopeEnum.Project;
+                        int count = _Memory.List(scope, _HookWorkingDirectory).Count;
+                        if (count == 0)
+                        {
+                            WriteNotice("No " + ScopeLabel(scope) + " memories to clear.");
+                            return;
+                        }
+
+                        if (!confirmed)
+                        {
+                            WriteNotice("⚠ This deletes " + count + " " + ScopeLabel(scope) + (count == 1 ? " memory" : " memories") + ". Confirm with /memory clear " + (scope == Mux.Core.Memory.MemoryScopeEnum.Global ? "global " : string.Empty) + "--yes");
+                            return;
+                        }
+
+                        WriteNotice("✓ Cleared " + _Memory.Clear(scope, _HookWorkingDirectory) + " " + ScopeLabel(scope) + " memories.");
+                        return;
+                    default:
+                        WriteNotice("Usage: /memory [list | show <name> | edit <name> | delete <name> | clear [global] [--yes]]. Start a prompt with # to remember a line (#global for every project).");
+                        return;
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("⚠ Memory error: " + ex.Message);
+            }
+        }
+
+        private void WriteMemoryList()
+        {
+            List<Mux.Core.Memory.MemoryEntry> entries = _Memory!.ListAll(_HookWorkingDirectory);
+            if (entries.Count == 0)
+            {
+                WriteNotice("No memories yet. Start a prompt with # to remember a line, or ask the model to remember something.");
+                return;
+            }
+
+            WriteNotice("Memories (" + entries.Count + "):");
+            foreach (Mux.Core.Memory.MemoryEntry entry in entries)
+            {
+                WriteNotice("  [" + ScopeLabel(entry.Scope) + "] " + entry.Slug + ": " + Truncate(entry.Description, 90));
+            }
+
+            WriteNotice("/memory show|edit|delete <name>; /memory clear [global] --yes.");
+        }
+
+        private async Task EditMemoryAsync(Mux.Core.Memory.MemoryEntry entry)
+        {
+            SkillEditorModal editor = new SkillEditorModal(entry.Slug + " (memory)", entry.Content);
+            _App.Modals.Push(editor);
+            object? result = await editor.Completion.ConfigureAwait(false);
+            if (!(result is string edited) || string.Equals(edited, entry.Content, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            try
+            {
+                _Memory!.Save(entry.Slug, entry.Description, edited, entry.Scope, _HookWorkingDirectory, out _);
+                WriteNotice("✓ Saved memory '" + entry.Slug + "'.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("⚠ Could not save the memory: " + ex.Message);
+            }
+        }
+
+        private static string ScopeLabel(Mux.Core.Memory.MemoryScopeEnum scope)
+        {
+            return scope == Mux.Core.Memory.MemoryScopeEnum.Global ? "global" : "project";
         }
 
         /// <summary>
@@ -2054,6 +2239,10 @@ namespace Mux.Cli.App
             // real turns in order rather than prompts that are still waiting in the queue.
             EchoPrompt(prompt);
 
+            // @path mentions attach the named files (or directory listings) to what the model receives; the
+            // transcript keeps the prompt as typed, and the conversation history keeps what was actually sent.
+            string submitted = ExpandFileMentions(prompt);
+
             List<ConversationMessage> seed;
             lock (_Sync)
             {
@@ -2061,7 +2250,7 @@ namespace Mux.Cli.App
             }
 
             Job job = _JobManager
-                .SubmitAsync(prompt, _ApprovalPolicy, seed, _Cts.Token)
+                .SubmitAsync(submitted, EffectiveApprovalPolicy(), seed, ConfigureJob, _Cts.Token)
                 .GetAwaiter()
                 .GetResult();
 
@@ -2104,7 +2293,7 @@ namespace Mux.Cli.App
                     // otherwise block every subsequent cross-surface reload (the reload guard skips while a turn
                     // is in flight) and the turn would never be persisted for other surfaces to pick up.
                     long total = stopwatch.ElapsedMilliseconds;
-                    OnTurnComplete(prompt, projector, total, ttft[0]);
+                    OnTurnComplete(submitted, projector, total, ttft[0]);
                 }
             });
 
@@ -2179,6 +2368,271 @@ namespace Mux.Cli.App
             {
                 RunTurn(next);
             }
+
+            StartApprovedPlan();
+        }
+
+        // The approval policy for the next turn: auto-approve mode overrides the session's policy.
+        private ApprovalPolicyEnum EffectiveApprovalPolicy()
+        {
+            return _Mode == Mux.Core.Interaction.InteractionModeEnum.AutoApprove ? ApprovalPolicyEnum.AutoApprove : _ApprovalPolicy;
+        }
+
+        // Applies the turn mode to a new job before it starts: plan mode, and the steps of a just-approved plan as the
+        // job's task list.
+        private void ConfigureJob(Job job)
+        {
+            job.PlanMode = _Mode == Mux.Core.Interaction.InteractionModeEnum.Plan;
+            Mux.Core.Interaction.PlanProposal? seed;
+            lock (_Sync)
+            {
+                seed = _PlanToSeed;
+                _PlanToSeed = null;
+            }
+
+            if (seed != null && seed.Steps.Count > 0)
+            {
+                try
+                {
+                    job.TaskPlan.SetPlan(seed.ToTasks());
+                }
+                catch (Exception)
+                {
+                    // An invalid step list leaves the plan empty; the model can still call plan_tasks.
+                }
+            }
+        }
+
+        // After a turn in which the user approved a plan: leave plan mode (auto-approve when the user chose
+        // auto-accept) and submit the plan for execution, seeding its steps as the task list.
+        private void StartApprovedPlan()
+        {
+            Mux.Core.Interaction.PlanProposal? plan;
+            Mux.Core.Interaction.PlanReviewDecisionEnum decision;
+            lock (_Sync)
+            {
+                plan = _ApprovedPlan;
+                decision = _ApprovedDecision;
+                _ApprovedPlan = null;
+                if (plan != null)
+                {
+                    _PlanToSeed = plan;
+                }
+            }
+
+            if (plan == null)
+            {
+                return;
+            }
+
+            SetInteractionMode(decision == Mux.Core.Interaction.PlanReviewDecisionEnum.ApproveAutoAccept
+                ? Mux.Core.Interaction.InteractionModeEnum.AutoApprove
+                : Mux.Core.Interaction.InteractionModeEnum.Normal);
+            WriteNotice("✓ Plan approved. Carrying it out" + (decision == Mux.Core.Interaction.PlanReviewDecisionEnum.ApproveAutoAccept ? " with edits auto-approved." : " with normal approvals."));
+            EnqueueOrRun(plan.ToExecutionPrompt());
+        }
+
+        /// <summary>
+        /// The current turn mode (normal, auto-approve, or plan).
+        /// </summary>
+        public Mux.Core.Interaction.InteractionModeEnum InteractionMode => _Mode;
+
+        /// <summary>
+        /// Cycles the turn mode: normal, auto-approve, plan, and back (Shift+Tab).
+        /// </summary>
+        public void CycleInteractionMode()
+        {
+            SetInteractionMode(_Mode switch
+            {
+                Mux.Core.Interaction.InteractionModeEnum.Normal => Mux.Core.Interaction.InteractionModeEnum.AutoApprove,
+                Mux.Core.Interaction.InteractionModeEnum.AutoApprove => Mux.Core.Interaction.InteractionModeEnum.Plan,
+                _ => Mux.Core.Interaction.InteractionModeEnum.Normal
+            });
+        }
+
+        /// <summary>
+        /// Sets the turn mode for the next turns and announces it.
+        /// </summary>
+        /// <param name="mode">The mode.</param>
+        public void SetInteractionMode(Mux.Core.Interaction.InteractionModeEnum mode)
+        {
+            _Mode = mode;
+            WriteNotice(mode switch
+            {
+                Mux.Core.Interaction.InteractionModeEnum.Plan => "Mode: plan. Turns explore read-only and end with a plan for you to approve (Shift+Tab or /plan to leave).",
+                Mux.Core.Interaction.InteractionModeEnum.AutoApprove => "Mode: auto-approve. Every tool call runs without asking (Shift+Tab to change).",
+                _ => "Mode: normal approvals."
+            });
+            RefreshSidebar();
+            RefreshFooter();
+        }
+
+        // "/plan" toggles plan mode; "/plan <prompt>" enters plan mode and submits the prompt.
+        private void HandlePlanArgument(string argument)
+        {
+            if (string.IsNullOrWhiteSpace(argument))
+            {
+                SetInteractionMode(_Mode == Mux.Core.Interaction.InteractionModeEnum.Plan
+                    ? Mux.Core.Interaction.InteractionModeEnum.Normal
+                    : Mux.Core.Interaction.InteractionModeEnum.Plan);
+                return;
+            }
+
+            if (_Mode != Mux.Core.Interaction.InteractionModeEnum.Plan)
+            {
+                SetInteractionMode(Mux.Core.Interaction.InteractionModeEnum.Plan);
+            }
+
+            EnqueueOrRun(argument.Trim());
+        }
+
+        /// <summary>
+        /// Shows an <c>ask_user</c> question: the options, plus "Other" for a typed answer. Escape dismisses it.
+        /// </summary>
+        /// <param name="request">The question. Must not be null.</param>
+        /// <param name="cancellationToken">Closes the question when cancelled.</param>
+        /// <returns>The answer.</returns>
+        public async Task<Mux.Core.Interaction.AskUserResponse> AskUserAsync(Mux.Core.Interaction.AskUserRequest request, CancellationToken cancellationToken)
+        {
+            if (request is null) throw new ArgumentNullException(nameof(request));
+
+            WriteNotice("? " + request.Question);
+            List<string> labels = new List<string>();
+            foreach (Mux.Core.Interaction.AskUserOption option in request.Options)
+            {
+                labels.Add(string.IsNullOrWhiteSpace(option.Description) ? option.Label : option.Label + ": " + option.Description);
+            }
+
+            const string otherLabel = "Other (type an answer)";
+            labels.Add(otherLabel);
+            List<string> chosen = new List<string>();
+            bool other = false;
+            if (request.MultiSelect)
+            {
+                MultiSelectModal<string> modal = new MultiSelectModal<string>(request.Question + " (Space to check, Enter to confirm)", labels, null);
+                _App.Modals.Push(modal);
+                object? result;
+                using (CancellationTokenRegistration registration = Link(cancellationToken, () => modal.RequestClose(null)))
+                {
+                    result = await modal.Completion.ConfigureAwait(false);
+                }
+
+                if (result is not IReadOnlyList<int> indices)
+                {
+                    return Mux.Core.Interaction.AskUserResponse.Dismiss();
+                }
+
+                foreach (int index in indices)
+                {
+                    if (index == labels.Count - 1) other = true;
+                    else if (index >= 0 && index < request.Options.Count) chosen.Add(request.Options[index].Label);
+                }
+            }
+            else
+            {
+                SelectModal modal = new SelectModal(request.Question, labels);
+                _App.Modals.Push(modal);
+                object? result;
+                using (CancellationTokenRegistration registration = Link(cancellationToken, () => modal.RequestClose(-1)))
+                {
+                    result = await modal.Completion.ConfigureAwait(false);
+                }
+
+                int index = result is int value ? value : -1;
+                if (index < 0)
+                {
+                    return Mux.Core.Interaction.AskUserResponse.Dismiss();
+                }
+
+                if (index == labels.Count - 1) other = true;
+                else chosen.Add(request.Options[index].Label);
+            }
+
+            string? typed = null;
+            if (other)
+            {
+                PromptModal prompt = new PromptModal(request.Question, string.Empty);
+                _App.Modals.Push(prompt);
+                using (CancellationTokenRegistration registration = Link(cancellationToken, () => prompt.RequestClose(null)))
+                {
+                    typed = await prompt.Completion.ConfigureAwait(false) as string;
+                }
+            }
+
+            Mux.Core.Interaction.AskUserResponse response = new Mux.Core.Interaction.AskUserResponse { Selected = chosen, OtherText = string.IsNullOrWhiteSpace(typed) ? null : typed };
+            if (chosen.Count == 0 && response.OtherText == null)
+            {
+                return Mux.Core.Interaction.AskUserResponse.Dismiss();
+            }
+
+            WriteNotice("  → " + string.Join(", ", chosen) + (response.OtherText != null ? (chosen.Count > 0 ? ", " : string.Empty) + response.OtherText : string.Empty));
+            return response;
+        }
+
+        /// <summary>
+        /// Shows a plan presented with <c>exit_plan</c> and asks the user to approve it (with or without auto-accept)
+        /// or keep planning with feedback. An approval is carried out after the current turn ends.
+        /// </summary>
+        /// <param name="proposal">The plan. Must not be null.</param>
+        /// <param name="cancellationToken">Closes the review when cancelled.</param>
+        /// <returns>The review.</returns>
+        public async Task<Mux.Core.Interaction.PlanReview> ReviewPlanAsync(Mux.Core.Interaction.PlanProposal proposal, CancellationToken cancellationToken)
+        {
+            if (proposal is null) throw new ArgumentNullException(nameof(proposal));
+
+            WriteNotice("── Proposed plan ──");
+            _Conversation.WriteLine(Text.From(proposal.ToText()));
+            SelectModal modal = new SelectModal("Approve this plan?", new List<string>
+            {
+                "Approve and auto-accept edits",
+                "Approve (ask before edits)",
+                "Keep planning (give feedback)"
+            });
+            _App.Modals.Push(modal);
+            object? result;
+            using (CancellationTokenRegistration registration = Link(cancellationToken, () => modal.RequestClose(-1)))
+            {
+                result = await modal.Completion.ConfigureAwait(false);
+            }
+
+            int index = result is int value ? value : -1;
+            if (index == 0 || index == 1)
+            {
+                Mux.Core.Interaction.PlanReviewDecisionEnum decision = index == 0
+                    ? Mux.Core.Interaction.PlanReviewDecisionEnum.ApproveAutoAccept
+                    : Mux.Core.Interaction.PlanReviewDecisionEnum.Approve;
+                lock (_Sync)
+                {
+                    _ApprovedPlan = proposal;
+                    _ApprovedDecision = decision;
+                }
+
+                return new Mux.Core.Interaction.PlanReview { Decision = decision };
+            }
+
+            string? feedback = null;
+            if (index == 2)
+            {
+                PromptModal prompt = new PromptModal("What should change in the plan?", string.Empty);
+                _App.Modals.Push(prompt);
+                using (CancellationTokenRegistration registration = Link(cancellationToken, () => prompt.RequestClose(null)))
+                {
+                    feedback = await prompt.Completion.ConfigureAwait(false) as string;
+                }
+            }
+
+            return new Mux.Core.Interaction.PlanReview
+            {
+                Decision = Mux.Core.Interaction.PlanReviewDecisionEnum.KeepPlanning,
+                Feedback = string.IsNullOrWhiteSpace(feedback) ? "The user did not approve the plan yet; ask what to change or refine it." : feedback!
+            };
+        }
+
+        // Closes a modal when the turn is cancelled (the turn's token) or, for callers without one, when the shell
+        // shuts down. A job's token is already cancelled on shutdown, so one registration covers both.
+        private CancellationTokenRegistration Link(CancellationToken token, Action close)
+        {
+            return token.CanBeCanceled ? token.Register(close) : _Cts.Token.Register(close);
         }
 
         // When a turn ends with no assistant answer and no error or cancellation, the model finished
@@ -2232,6 +2686,8 @@ namespace Mux.Cli.App
         // visible as they are typed. Called after any composer edit; rebuilds the layout only on a change.
         private void RefreshComposerLayout()
         {
+            UpdateMentionSuggestions();
+
             int desired = Math.Clamp(ComposerLineCount(), 1, MaxComposerRows);
             lock (_Sync)
             {
@@ -5061,6 +5517,67 @@ namespace Mux.Cli.App
             }
         }
 
+        // "/worktrees [list | prune | remove <name> [--force] [--keep-branch]]": the git worktrees isolated subagents
+        // and jobs left behind because they changed something.
+        private void HandleWorktreesArgument(string argument)
+        {
+            _ = HandleWorktreesAsync(argument ?? string.Empty);
+        }
+
+        private async Task HandleWorktreesAsync(string argument)
+        {
+            string[] parts = argument.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            string verb = parts.Length > 0 ? parts[0].ToLowerInvariant() : "list";
+            Mux.Core.Worktrees.WorktreeManager manager = new Mux.Core.Worktrees.WorktreeManager();
+            try
+            {
+                switch (verb)
+                {
+                    case "list":
+                        IReadOnlyList<Mux.Core.Worktrees.WorktreeInfo> worktrees = await manager.ListAsync(_HookWorkingDirectory, _Cts.Token).ConfigureAwait(false);
+                        if (worktrees.Count == 0)
+                        {
+                            WriteNotice("No mux worktrees. Isolated subagents and jobs leave one only when they changed something.");
+                            return;
+                        }
+
+                        WriteNotice("Worktrees (name, branch, state, path):");
+                        foreach (Mux.Core.Worktrees.WorktreeInfo info in worktrees)
+                        {
+                            WriteNotice("  " + Mux.Cli.Commands.WorktreeCommand.Describe(info));
+                        }
+
+                        WriteNotice("Merge a branch with git merge <branch>; /worktrees remove <name> discards one; /worktrees prune removes the unchanged ones.");
+                        return;
+                    case "prune":
+                        IReadOnlyList<string> pruned = await manager.PruneAsync(_HookWorkingDirectory, _Cts.Token).ConfigureAwait(false);
+                        WriteNotice(pruned.Count == 0 ? "Nothing to prune." : "✓ Pruned " + string.Join(", ", pruned) + ".");
+                        return;
+                    case "remove":
+                    case "rm":
+                        string target = parts.Length > 1 && !parts[1].StartsWith("--", StringComparison.Ordinal) ? parts[1] : string.Empty;
+                        if (target.Length == 0)
+                        {
+                            WriteNotice("⚠ Name a worktree: /worktrees remove <name> [--force] [--keep-branch].");
+                            return;
+                        }
+
+                        bool force = Array.IndexOf(parts, "--force") >= 0;
+                        bool keepBranch = Array.IndexOf(parts, "--keep-branch") >= 0;
+                        Mux.Core.Worktrees.WorktreeInfo removed = await manager.RemoveAsync(_HookWorkingDirectory, target, force, keepBranch, _Cts.Token).ConfigureAwait(false);
+                        WriteNotice("✓ Removed worktree " + removed.Name + (keepBranch ? " (kept branch " + removed.Branch + ")." : " and branch " + removed.Branch + "."));
+                        return;
+                    default:
+                        WriteNotice("Usage: /worktrees [list | prune | remove <name> [--force] [--keep-branch]]");
+                        return;
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                WriteNotice("⚠ " + ex.Message);
+            }
+        }
+
         private void HandleProcessesArgument(string argument)
         {
             if (_Processes == null)
@@ -5869,10 +6386,194 @@ namespace Mux.Cli.App
 
         private void RefreshFooter()
         {
-            SetFooterHint(BuildFooterHint());
+            if (_MentionSuggestions.Count > 0)
+            {
+                SetFooterHint(BuildMentionHint());
+                return;
+            }
+
+            SetFooterHint(BuildFooterHint(_Mode));
         }
 
-        private static StyledText BuildFooterHint()
+        // Keys while @ suggestions are showing: Tab (or Enter) accepts the highlighted path, Up and Down move the
+        // highlight, Esc dismisses the list for this mention. Enter submits as usual when the typed path already
+        // matches the highlighted suggestion exactly.
+        private bool HandleMentionKey(KeyEvent key, SubmitDecision submit)
+        {
+            if (key.Code == KeyCode.Tab || submit == SubmitDecision.Submit)
+            {
+                if (submit == SubmitDecision.Submit && MentionQueryMatchesSelection())
+                {
+                    ClearMentionSuggestions();
+                    return false;
+                }
+
+                AcceptMention();
+                return true;
+            }
+
+            if (key.Code == KeyCode.Escape)
+            {
+                _MentionDismissedAt = _MentionTokenStart;
+                ClearMentionSuggestions();
+                return true;
+            }
+
+            if (key.Code == KeyCode.Up || key.Code == KeyCode.Down)
+            {
+                int count = _MentionSuggestions.Count;
+                _MentionIndex = (_MentionIndex + (key.Code == KeyCode.Down ? 1 : count - 1)) % count;
+                RefreshFooter();
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool MentionQueryMatchesSelection()
+        {
+            string text = _Composer.Text.Replace("\r\n", "\n").Replace("\r", "\n");
+            string before = text.Substring(0, Math.Min(ComposerCaretOffset(text), text.Length));
+            return Mux.Core.Context.FileMentionResolver.TryGetActiveToken(before, out _, out string query)
+                && string.Equals(query, _MentionSuggestions[_MentionIndex], StringComparison.Ordinal);
+        }
+
+        private void AcceptMention()
+        {
+            string text = _Composer.Text.Replace("\r\n", "\n").Replace("\r", "\n");
+            int caret = Math.Min(ComposerCaretOffset(text), text.Length);
+            if (!Mux.Core.Context.FileMentionResolver.TryGetActiveToken(text.Substring(0, caret), out int start, out _))
+            {
+                ClearMentionSuggestions();
+                return;
+            }
+
+            string chosen = _MentionSuggestions[Math.Clamp(_MentionIndex, 0, _MentionSuggestions.Count - 1)];
+            for (int i = 0; i < caret - start; i++)
+            {
+                _Composer.Backspace();
+            }
+
+            // A directory stays open so its contents are offered next; a file ends the mention with a space.
+            bool directory = chosen.EndsWith("/", StringComparison.Ordinal);
+            _Composer.InsertText(Mux.Core.Context.FileMentionResolver.FormatMention(chosen) + (directory ? string.Empty : " "));
+            RefreshComposerLayout();
+        }
+
+        private void UpdateMentionSuggestions()
+        {
+            string text = _Composer.Text.Replace("\r\n", "\n").Replace("\r", "\n");
+            string before = text.Substring(0, Math.Min(ComposerCaretOffset(text), text.Length));
+            if (!Mux.Core.Context.FileMentionResolver.TryGetActiveToken(before, out int start, out string query))
+            {
+                _MentionDismissedAt = -1;
+                ClearMentionSuggestions();
+                return;
+            }
+
+            if (start == _MentionDismissedAt)
+            {
+                return;
+            }
+
+            List<string> suggestions;
+            try
+            {
+                suggestions = GetMentionResolver().Complete(query, 6);
+            }
+            catch (Exception)
+            {
+                suggestions = new List<string>();
+            }
+
+            bool hadSuggestions = _MentionSuggestions.Count > 0;
+            _MentionSuggestions = suggestions;
+            _MentionTokenStart = start;
+            if (_MentionIndex >= suggestions.Count) _MentionIndex = 0;
+            if (suggestions.Count > 0 || hadSuggestions)
+            {
+                RefreshFooter();
+            }
+        }
+
+        private void ClearMentionSuggestions()
+        {
+            if (_MentionSuggestions.Count == 0)
+            {
+                return;
+            }
+
+            _MentionSuggestions = new List<string>();
+            _MentionIndex = 0;
+            _MentionTokenStart = -1;
+            RefreshFooter();
+        }
+
+        private Mux.Core.Context.FileMentionResolver GetMentionResolver()
+        {
+            Mux.Core.Context.FileMentionResolver? resolver = _MentionResolver;
+            if (resolver == null || !string.Equals(resolver.WorkingDirectory, Path.GetFullPath(_HookWorkingDirectory).TrimEnd(Path.DirectorySeparatorChar), StringComparison.Ordinal))
+            {
+                resolver = new Mux.Core.Context.FileMentionResolver(_HookWorkingDirectory, LoadFileMentionBudget());
+                _MentionResolver = resolver;
+            }
+
+            return resolver;
+        }
+
+        private static int LoadFileMentionBudget()
+        {
+            try
+            {
+                return SettingsLoader.LoadSettings().FileMentionMaxBytes;
+            }
+            catch (Exception)
+            {
+                return Mux.Core.Context.FileMentionResolver.DefaultMaxBytes;
+            }
+        }
+
+        // Resolves @path mentions and reports what was attached; returns the text to send to the model.
+        private string ExpandFileMentions(string prompt)
+        {
+            if (string.IsNullOrEmpty(prompt) || prompt.IndexOf('@') < 0)
+            {
+                return prompt ?? string.Empty;
+            }
+
+            try
+            {
+                Mux.Core.Context.FileMentionResolver resolver = new Mux.Core.Context.FileMentionResolver(_HookWorkingDirectory, LoadFileMentionBudget());
+                Mux.Core.Context.FileMentionResult result = resolver.ResolveAsync(prompt, _Cts.Token).GetAwaiter().GetResult();
+                foreach (string line in Mux.Core.Context.FileMentionResolver.Describe(result))
+                {
+                    WriteNotice((line.StartsWith("Attached ", StringComparison.Ordinal) ? "📎 " : "⚠ ") + line);
+                }
+
+                return result.Prompt;
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                WriteNotice("⚠ Could not attach @ mentions: " + ex.Message);
+                return prompt;
+            }
+        }
+
+        private StyledText BuildMentionHint()
+        {
+            StyledText hint = Text.From(new string(' ', PromptText.Length) + "@ ").Green().Bold();
+            for (int i = 0; i < _MentionSuggestions.Count; i++)
+            {
+                if (i > 0) hint = hint.Append(Text.From("  ").Dim());
+                hint = i == _MentionIndex
+                    ? hint.Append(Text.From("[" + _MentionSuggestions[i] + "]").Green().Bold())
+                    : hint.Append(Text.From(_MentionSuggestions[i]).Dim());
+            }
+
+            return hint.Append(Text.From("   Tab accept · ↑↓ choose · Esc dismiss").Dim());
+        }
+
+        private static StyledText BuildFooterHint(Mux.Core.Interaction.InteractionModeEnum mode)
         {
             // The chords are terminal-independent (Ctrl/F1/Esc work everywhere), so the hint is stable
             // across platforms; only the modifier labels adapt (e.g. Alt renders as OPTION on macOS).
@@ -5881,8 +6582,19 @@ namespace Mux.Cli.App
             string ctrl = ModifierLabel(KeyModifiers.Ctrl);
             // Indent by the prompt-marker width so the hint aligns under the composer's typed text (which
             // begins after the "> " marker) rather than under the marker itself.
-            StyledText hint = Text.From(new string(' ', PromptText.Length) + "Type a prompt and press ENTER").Dim();
+            StyledText hint = Text.From(new string(' ', PromptText.Length));
+            if (mode == Mux.Core.Interaction.InteractionModeEnum.Plan)
+            {
+                hint = hint.Append(Text.From("PLAN MODE (read-only) ").Yellow().Bold());
+            }
+            else if (mode == Mux.Core.Interaction.InteractionModeEnum.AutoApprove)
+            {
+                hint = hint.Append(Text.From("AUTO-APPROVE ").Yellow().Bold());
+            }
+
+            hint = hint.Append(Text.From("Type a prompt and press ENTER").Dim());
             hint = AppendFooterHint(hint, ctrl + "+J", "newline");
+            hint = AppendFooterHint(hint, "Shift+Tab", "mode");
             hint = AppendFooterHint(hint, "F1", "help");
             hint = AppendFooterHint(hint, "F12", "mouse");
             hint = AppendFooterHint(hint, "Esc", "cancel");

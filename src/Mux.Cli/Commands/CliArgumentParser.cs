@@ -77,6 +77,9 @@ namespace Mux.Cli.Commands
                     case "--no-stream":
                         settings.Buffer = ReadBool(option, inlineValue, defaultValue: true);
                         return true;
+                    case "--plan":
+                        settings.Plan = ReadBool(option, inlineValue, defaultValue: true);
+                        return true;
                     case "--loop":
                         settings.Loop = ReadValue(option, inlineValue, values, ref index);
                         return true;

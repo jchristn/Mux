@@ -1,6 +1,6 @@
 # New Default Skills and OOBE Parity Plan
 
-_Status: Phases 1 through 5 done (2026-10-08); Phases 6 and 7 proposed. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
+_Status: all phases done (2026-10-08). Rows 27 and 30 through 33 were dropped; rows 28 and 29 have their own plans, also done. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
 
 mux ships 46 default skills, and nearly all of them assume a git repository, a .NET solution, or both. Someone who opens mux in a React app, a Django service, a Maven project, or a CMake tree gets git helpers and nothing that knows how their code builds or tests. That gap is the first thing a Claude Code or Codex user notices, and it is the reason for this plan. The second thing they notice is subtler: both of those harnesses read a project instruction file on startup, can review a diff on request, and let skills be invoked by name with arguments. mux has a strong engine (subagents, MCP, sandboxing, undo, compaction, sessions across four surfaces) but the out-of-box experience still feels like a toolkit rather than an agent that already knows the job.
 
@@ -28,45 +28,26 @@ The scorecard below lists everything that exists in Claude Code or Codex and is 
 | 16 | Relevance-gated skill listing so 100+ skills do not flood a small context window | progressive disclosure | progressive disclosure | **done in Phase 1**: `appliesTo` globs and `skillListingMode` | 7 | 7 | **14** | 1 |
 | 17 | Tool-level hooks (`pre-tool-use`, `post-tool-use`, `stop`) | yes | partial (`notify`) | **done in Phase 5**: `pre-tool-use`, `post-tool-use`, `stop` with matchers, on every surface | 6 | 8 | **14** | 5 |
 | 18 | Background processes (start a dev server, read its output later, stop it) | yes | partial | **done in Phase 5**: `process_start`, `process_output`, `process_list`, `process_stop`, `/processes` | 5 | 9 | **14** | 5 |
-| 19 | `@file` mentions in the composer | yes | yes | none | 7 | 7 | **14** | 6 |
+| 19 | `@file` mentions in the composer | yes | yes | **done in Phase 6** | 7 | 7 | **14** | 6 |
 | 20 | Debugging playbook and `git bisect` driver | via model | via model | **done in Phase 3**: `debug` and `git-bisect` | 9 | 5 | **14** | 3 |
 | 21 | Containers and orchestration skills (Docker, Docker Compose, Kubernetes, Minikube, Helm, OpenStack) | via model + shell | via model + shell | **done in Phase 2** | 8 | 8 | **16** | 2 |
 | 21a | Cloud provider skills (AWS, Azure, Google Cloud, DigitalOcean, Rackspace, Vercel, Alibaba, Huawei, IBM Cloud, Linode, Netlify, Cloudflare, fly.io) plus Terraform and Pulumi | via model + shell | via model + shell | **done in Phase 2** | 6 | 8 | **14** | 2 |
 | 21b | Go and Rust skills | via model + shell | via model + shell | **done in Phase 2** | 9 | 5 | **14** | 2 |
 | 22 | C++ skills (CMake, CTest, clang-format, clang-tidy, sanitizers) | via model + shell | via model + shell | **done in Phase 2** | 7 | 6 | **13** | 2 |
 | 23 | `/loop`: re-run a prompt on an interval or self-paced | yes | no | **done in Phase 4**: `/loop`, `/loops`, `schedule_next`, `mux print --loop` | 6 | 7 | **13** | 4 |
-| 24 | Persistent memory (agent-written facts reused across sessions, `#` quick-add) | yes | partial | none | 6 | 7 | **13** | 6 |
-| 25 | Plan mode (read-only exploration, then an approved plan, then execution) | yes | partial (approval modes) | `--sandbox read-only` covers the read-only half | 6 | 7 | **13** | 6 |
-| 26 | Structured "ask the user" tool (multiple choice mid-turn) | yes | no | none | 6 | 6 | **12** | 6 |
-| 27 | Image input (paste or attach a screenshot) | yes | yes | none | 4 | 7 | **11** | 7 |
-| 28 | Git worktree isolation for subagents and parallel jobs | yes | yes (cloud) | single working tree plus write lease | 5 | 6 | **11** | 7 |
-| 29 | Expose mux as an MCP server | yes (`claude mcp serve`) | yes (`codex mcp-server`) | REST + WebSocket only | 5 | 6 | **11** | 7 |
-| 30 | Custom status line | yes | no | fixed sidebar | 7 | 4 | **11** | 7 |
-| 31 | Output styles | yes | no | prompt profiles cover most of it | 8 | 3 | **11** | backlog |
-| 32 | Scheduled cloud or cron runs | yes (routines) | yes (cloud tasks) | none | 4 | 5 | **9** | backlog |
-| 33 | Jupyter notebook editing | yes | no | none | 6 | 3 | **9** | backlog |
+| 24 | Persistent memory (agent-written facts reused across sessions, `#` quick-add) | yes | partial | **done in Phase 6** | 6 | 7 | **13** | 6 |
+| 25 | Plan mode (read-only exploration, then an approved plan, then execution) | yes | partial (approval modes) | **done in Phase 6**: `/plan`, Shift+Tab, `exit_plan`, `mux print --plan` | 6 | 7 | **13** | 6 |
+| 26 | Structured "ask the user" tool (multiple choice mid-turn) | yes | no | **done in Phase 6**: `ask_user` | 6 | 6 | **12** | 6 |
+| 28 | Git worktree isolation for subagents and parallel jobs | yes | yes (cloud) | **done**: see `WORKTREE_ISOLATION_PLAN.md` | 5 | 6 | **11** | 7 |
+| 29 | Expose mux as an MCP server | yes (`claude mcp serve`) | yes (`codex mcp-server`) | **done**: `mux mcp serve` on Voltaic; see `MCP_SERVER_PLAN.md` | 5 | 6 | **11** | 7 |
+
+Rows 27 (image input), 30 (custom status line), 31 (output styles), 32 (scheduled cloud or cron runs), and 33 (Jupyter notebook editing) were dropped from this plan on 2026-10-08 at the user's request.
 
 A few things that look like gaps are not, and they are deliberately absent from the table: sandbox postures, tool allow and deny globs, compaction, resume and fork, subagents, web search and retrieval, undo and redo, task plans, custom slash commands, MCP client support, and usage tracking all exist today.
 
 ## What remains
 
-Phases 1 through 5 closed 24 of the 35 scorecard rows (rows 1 through 18, 20 through 23, 21a, and 21b). The library now holds 153 default skills. These rows are still open:
-
-| # | Capability | Simplicity | Value | Total | Phase | Next step |
-|---:|---|---:|---:|---:|:---:|---|
-| 19 | `@file` mentions in the composer | 7 | 7 | **14** | 6 | `@` completion in the TUI composer, then a shared Core helper for desktop and web |
-| 24 | Persistent memory (`#` quick-add, `/memory`) | 6 | 7 | **13** | 6 | `remember` tool, per-repo memory folder, capped prompt section |
-| 25 | Plan mode (`/plan`, `exit_plan`, Shift+Tab) | 6 | 7 | **13** | 6 | read-only posture plus an approval tool that feeds `PlanTasksTool` |
-| 26 | Structured "ask the user" tool | 6 | 6 | **12** | 6 | `ask_user` with 2 to 4 options; modal, card, or a default in `mux print` |
-| 27 | Image input (paste or attach) | 4 | 7 | **11** | 7 | needs its own plan: message content parts per adapter |
-| 28 | Git worktree isolation for subagents and jobs | 5 | 6 | **11** | 7 | needs its own plan |
-| 29 | Expose mux as an MCP server | 5 | 6 | **11** | 7 | needs its own plan: `mux mcp serve` |
-| 30 | Custom status line | 7 | 4 | **11** | 7 | needs its own plan |
-| 31 | Output styles | 8 | 3 | **11** | backlog | mostly covered by prompt profiles |
-| 32 | Scheduled cloud or cron runs | 4 | 5 | **9** | backlog | none yet |
-| 33 | Jupyter notebook editing | 6 | 3 | **9** | backlog | none yet |
-
-One small follow-up from the library section is also open: gate `new-tool` and `new-touchstone-suite` with `appliesTo: [src/Mux.Core/Mux.Core.csproj]` so they are listed only inside the mux repository.
+Nothing. All 30 rows still in the scorecard are done (Phases 1 through 6, plus rows 28 and 29 under their own plans). Rows 27, 30, 31, 32, and 33 were dropped at the user's request. The library holds 153 default skills, and `new-tool` and `new-touchstone-suite` are listed only inside the mux repository.
 
 Rows 1, 2, 7, 8, and 16 are harness changes, not skills, but they come first because the new skills depend on them. Most rows from 3 through 15 lean on playbook skills (2), project scoping (8), or name invocation (7). Without them, a React developer would still have to type "please run the react-test skill" instead of `/react-test`, and 152 skills would be listed in every system prompt sent to a 7B model with an 8K window.
 
@@ -463,25 +444,23 @@ React dev servers, `docker compose up`, and watch-mode test runners do not fit a
 
 ---
 
-## Phase 6: Interaction gaps
+## Phase 6: Interaction gaps (done)
 
-- [ ] **`@file` mentions (row 19).** TUI composer completion on `@` over `glob` results; on submit, mentioned files go through `FileContextBuilder` (so large files become maps, not truncations) and attach to the user message. Desktop and web get the same through a shared Core helper.
-- [ ] **Persistent memory (row 24).** `~/.mux/memory/<repo-key>/` holding one Markdown file per fact plus an index. A `remember` tool (mutating, write lease) and a prompt section that includes the index, capped by a `memoryMaxBytes` setting. `#` at the start of a TUI prompt saves the rest of the line as a memory without a model call. `/memory` lists, edits, and deletes.
-- [ ] **Plan mode (row 25).** `/plan` toggles: the run uses the `read-only` sandbox posture plus an `exit_plan` tool that presents the plan for approval; on approval, the posture returns to the session's setting and the plan becomes the task plan through `PlanTasksTool`. Shift+Tab cycles normal, auto-approve, and plan in the TUI.
-- [ ] **Ask-the-user tool (row 26).** `ask_user` with 2 to 4 options and a free-text fallback, rendered as a modal in the TUI and desktop and as a card in web and VS Code. In `mux print`, it returns "no user available; choose a sensible default and state it."
+**Status:** done. Deviations are listed with each item.
+
+- [x] **`@file` mentions (row 19).** `@path`, `@folder/`, and `@"path with spaces"` attach files (large ones as structural maps) in a delimited block, capped by `fileMentionMaxBytes`; paths outside the working directory are refused. The terminal completes paths in the footer (Tab or Enter accepts, Esc dismisses); `mux print`, desktop, the web dashboard, and VS Code resolve mentions (the last two server-side). New `GET /v1.0/api/files/complete`. Deviations: no completion popup on desktop, web, or VS Code yet; terminal suggestions render in the footer. Tests: `FileMentions` (16).
+- [x] **Persistent memory (row 24).** Markdown files under `~/.mux/memory/<project-key>/` and `~/.mux/memory/global/` with a `MEMORY.md` index; `remember`, `forget` (mutating), and `recall` (read-only) tools; a prompt section capped by `memoryMaxBytes`; `#` and `#global` quick-add in the terminal and desktop; `/memory`; `mux memory`; `GET`/`POST`/`DELETE /v1.0/api/memory`. Deviations: `/memory clear` confirms with `--yes`; no desktop edit, dashboard view, or VS Code UI; a new `IPromptSectionProvider` lets tool providers add prompt sections. Tests: `Memory` (16).
+- [x] **Plan mode (row 25).** `/plan`, `/plan <prompt>`, and Shift+Tab (normal, auto-approve, plan) in the terminal; plan turns are read-only and end with `exit_plan`; approve, approve with auto-accept, or keep planning with feedback; the approved plan runs next with its steps as the task list. `mux print --plan`, desktop `/plan` with a review card, and the chat API's `planMode` flag with a `plan` event. Deviations: steps become the task list only in the terminal (desktop and server put them in the execution prompt); the mode shows in the footer, not the sidebar; web and VS Code do not render the `plan` event yet. Tests: `PlanMode` (11).
+- [x] **Ask-the-user tool (row 26).** `ask_user` with 2 to 4 options, multi-select, and a free-text Other; a pop-up in the terminal and a dialog on desktop; elsewhere the model is told to choose a sensible default and say so. `ask_user` and `exit_plan` never need tool approval. Deviations: web and VS Code get the no-user default (no question channel exists on the server yet); the desktop dialogs are not localized. Tests: `AskUser` (7).
 
 ---
 
 ## Phase 7: Larger items (separate plans)
 
-Each of these deserves its own plan file. They are listed so the scorecard stays honest about what parity still requires after Phases 1 through 6.
+- [x] Worktree isolation (row 28): `isolation: worktree` for subagents and Core jobs, `mux worktree list|prune|remove`, and `/worktrees`. Done; see `WORKTREE_ISOLATION_PLAN.md`. Tests: `WorktreeIsolation` (20).
+- [x] MCP server mode (row 29): `mux mcp serve` over stdio or Streamable HTTP on Voltaic 2.2.1, with `run`, `list_sessions`, `get_session`, `list_endpoints`, `list_skills`, and `run_skill` (opt-in). Done; see `MCP_SERVER_PLAN.md`. Tests: `McpServer` (17).
 
-- [ ] Image input (row 27): attachment plumbing through `ConversationMessage`, per-adapter content parts, a model capability flag, and paste support in each surface.
-- [ ] Worktree isolation (row 28): optional `isolation: worktree` on subagents and background jobs, with the existing `GitCheckpointService` patterns reused for cleanup.
-- [ ] MCP server mode (row 29): `mux mcp serve` exposing a `run` tool (prompt in, final answer out) and read-only session tools over stdio.
-- [ ] Custom status line (row 30): a command in settings whose stdout replaces the sidebar footer, refreshed per turn.
-
-Backlog with no plan yet: output styles (row 31, mostly covered by prompt profiles), scheduled runs outside a live session (row 32), notebook editing (row 33).
+Dropped on 2026-10-08: image input (row 27), custom status line (row 30), output styles (row 31), scheduled runs (row 32), and notebook editing (row 33).
 
 ---
 
@@ -520,14 +499,14 @@ Backlog with no plan yet: output styles (row 31, mostly covered by prompt profil
 
 The shipped library has 153 skills, one more than first planned. Existing users receive the new defaults on their next startup through `SeedNewInto`; nothing they have edited or deleted is touched. With relevance gating on, a typical single-language repository lists about 45 skills (the ungated ones, its own family, and the cloud skills for CLIs actually installed) instead of 153.
 
-Two existing defaults deserve a second look while this work is open. `new-tool` and `new-touchstone-suite` scaffold mux's own `IToolExecutor` and Touchstone types, which only make sense inside the mux repository. Giving them `appliesTo: [src/Mux.Core/Mux.Core.csproj]` hides them everywhere else at no cost.
+Done: `new-tool` and `new-touchstone-suite` scaffold mux's own `IToolExecutor` and Touchstone types, so they now carry `appliesTo: [src/Mux.Core/Mux.Core.csproj]` and are listed only inside the mux repository (test `MuxOnlyScaffoldsGated`).
 
 ---
 
 ## Documentation
 
 - [~] `docs/SKILLS_AUTHORING.md`: playbook skills, hybrids, `appliesTo`, `userInvocable`, `argumentHint`, `$ARGUMENTS`, project scopes and the trust gate, and Claude-format compatibility are documented (Phase 1); the exit-code convention, `MUX_SKILL_DRY_RUN`, the production guard (Phase 2), and the review helpers with `MUX_SKILL_DIFF_MAX_BYTES` (Phase 3) are too.
-- [~] `docs/USAGE.md`: invoking skills by name, project skills and trust, the listing mode, and project instruction files are documented (Phase 1), and so are the review, debugging, and codebase skills (Phase 3). Phase 4 added `/loop`, `/loops`, `mux print --loop`, and the loop skills; Phase 5 added tool hooks and background processes. Still to come: `/plan`, `/memory`, `@` mentions.
+- [~] `docs/USAGE.md`: invoking skills by name, project skills and trust, the listing mode, and project instruction files are documented (Phase 1), and so are the review, debugging, and codebase skills (Phase 3). Phase 4 added `/loop`, `/loops`, `mux print --loop`, and the loop skills; Phase 5 added tool hooks and background processes. Phase 6 added `@` mentions, memory, `/plan`, and `ask_user`.
 - [~] `docs/CONFIG.md`: the Phase 1 settings and files (`trusted-projects.json`, `MUX.md`), `skillProdPattern` (Phase 2), and `loopMaxIterations` and `loopMinIntervalSeconds` (Phase 4), and the hook events and `backgroundProcess*` settings (Phase 5) are documented. Later phases add theirs.
 - [~] `docs/REST_API.md` and the Postman collection: `GET /v1.0/api/context/instructions` and `POST /v1.0/api/skills/expand` are documented, both in a new Postman **Context** folder and in the **Skills** folder, with a `workingDirectory` variable. Loop and process routes come later.
 - [~] `README.md`: project instruction files and slash invocation are in Highlights, and the two new flags are in the options table. The skills paragraph names the 148-skill library and its families (Phase 3).

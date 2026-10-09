@@ -99,6 +99,34 @@ All notable changes to mux are documented here.
   `mux print` run, the desktop app, or `mux serve` ends. `/processes` (alias `/ps`) in the terminal and desktop lists
   processes, shows output, stops, and clears them, and the terminal sidebar shows each one. New skill
   `react-dev-server` detects the dev script, framework, port, and ready line (library: 153).
+- **`@file` mentions (Phase 6).** Type `@path`, `@folder/`, or `@"path with spaces"` to attach files to a prompt on
+  every surface; large files arrive as structural maps, paths outside the working directory are refused, and the new
+  `fileMentionMaxBytes` setting (default 256 KB) caps the total. The terminal composer completes paths (Tab or Enter
+  accepts, Esc dismisses). New `GET /v1.0/api/files/complete`; chat routes resolve mentions server-side, so the web
+  dashboard and VS Code get them with no client changes.
+- **Persistent memory (Phase 6).** The model saves, searches, and deletes durable facts with `remember`, `recall`,
+  and `forget`; every turn's prompt lists the project's and global memories within `memoryMaxBytes`, stored as
+  Markdown under `~/.mux/memory/`. `#` at the start of a terminal or desktop prompt saves a memory without a model
+  call (`#global` for every project). Also `/memory`, `mux memory list|show|add|delete`,
+  `GET`/`POST`/`DELETE /v1.0/api/memory`, and the settings `memoryEnabled` and `memoryMaxBytes`.
+- **Plan mode (Phase 6).** Shift+Tab cycles normal, auto-approve, and plan, or use `/plan` and `/plan <prompt>`. Plan
+  turns are read-only and end with the model presenting a plan through the new `exit_plan` tool; approve it
+  (optionally auto-accepting edits) or keep planning with feedback, and the approved plan runs next with its steps as
+  the task list. Also `mux print --plan`, desktop `/plan`, and the chat API's `planMode` flag with a `plan` event.
+- **Ask the user (Phase 6).** The model can ask a 2 to 4 option question mid-turn (multi-select and a free-text
+  Other) with `ask_user`, shown as a pop-up in the terminal and a dialog on desktop; where no one can answer it is
+  told to pick a sensible default and say so. `ask_user` and `exit_plan` never need tool approval.
+- **MCP server.** `mux mcp serve` exposes mux as an MCP server over stdio (default) or Streamable HTTP
+  (`--http <port>`, loopback by default, optional bearer key via `--api-key` or the new `mcpServeApiKey` setting),
+  built on Voltaic. Tools: `run` (a headless turn returning the answer and a summary, with progress and cancellation,
+  under an approval ceiling `--approval-policy deny|auto-safe|auto`, default `deny`), `list_sessions`,
+  `get_session`, `list_endpoints` (no secrets), `list_skills`, and `run_skill` (with `--allow-skills`). See
+  `MCP_SERVER_PLAN.md`.
+- **Worktree isolation.** Subagents (`"isolation": "worktree"`, or `isolation` on `spawn_subagent`) and Core jobs
+  can run in their own git worktree on a `mux/<kind>/<name>` branch under `.git/mux-worktrees/`, without the shared
+  write lease. Unchanged worktrees are removed; changed ones are committed onto their branch and reported (branch,
+  commits, diff stat). Your branch, working tree, and stash are never touched. `mux worktree list|prune|remove` and
+  `/worktrees` manage kept worktrees. See `WORKTREE_ISOLATION_PLAN.md`.
 - **Skills in `mux print`.** Headless runs now discover skills, list them in the system prompt, and expose
   `skill` and `run_skill`, matching the interactive shell.
 
@@ -130,6 +158,15 @@ All notable changes to mux are documented here.
   error on hover; the terminal MCP manager shows the cause on each offline row and a "Show connection errors"
   action, and multi-line notices render one row per line. New `POST /v1.0/api/mcp-servers/validate`, with Validate
   actions in the web dashboard and the VS Code extension.
+- Tray agent: Launch Terminal opens the mux terminal again. On macOS it ran `open -a Terminal mux`, which opened a
+  file named `mux` instead of running it; it now locates the CLI (`MUX_CLI`, PATH, `~/.dotnet/tools`, beside the
+  agent, or a checkout build) and opens it in a new Terminal window through a self-deleting `.command` script, with a
+  login shell. Windows quotes the `start` title correctly and Linux tries seven terminal emulators. When no CLI is
+  found the window explains how to install it.
+- Desktop: the `/?` help table sizes its command column to the longest command instead of cutting commands off, and
+  clicking a command that takes an argument (`/cwd <path>`) puts it in the composer to finish.
+- `GET /v1.0/api/context/instructions` URL-decodes `workingDirectory`, so paths with spaces work.
+- `new-tool` and `new-touchstone-suite` are listed only inside the mux repository (`appliesTo`).
 - Web dashboard: the shared copy helper no longer hides the translation function, so copying without a button
   shows the "copied" toast instead of throwing.
 - Skill helper: `Exit-MuxNotApplicable` writes its message with `Write-Host`, so the reason is shown even when the
@@ -137,6 +174,10 @@ All notable changes to mux are documented here.
 
 ### Tests
 
+- Phase 6 and the separate plans: `FileMentions` (16), `Memory` (16), `PlanMode` (11), `AskUser` (7), `McpServer`
+  (17, including mux's own MCP client driving `mux mcp serve` over stdio and HTTP), and `WorktreeIsolation` (20,
+  real temporary git repositories). `TerminalLaunch` (9) covers CLI location and the generated terminal scripts,
+  including running the macOS script; `DefaultSkills` checks the scaffold gating.
 - `BackgroundProcesses` (20 cases) runs real processes through the registry, the four tools, `/processes` in a
   headless terminal, and `mux print` (asserting the process is killed at exit), plus `react-dev-server` detection.
   `ToolHooks` (13 cases) runs real hook processes against a mock model: blocking, warnings, timeouts, payload fields,

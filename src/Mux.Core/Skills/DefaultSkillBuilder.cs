@@ -20,6 +20,7 @@ namespace Mux.Core.Skills
         /// <param name="tags">The tags, joined into an inline list.</param>
         /// <param name="whenToUse">The when-to-use guidance.</param>
         /// <param name="commands">The commands the skill declares. Must not be null or empty.</param>
+        /// <param name="appliesTo">Optional file globs that gate when the skill is listed; null or empty lists it everywhere.</param>
         /// <returns>The complete <c>SKILL.md</c> content.</returns>
         /// <exception cref="ArgumentNullException">Thrown when a required argument is null.</exception>
         /// <exception cref="ArgumentException">Thrown when <paramref name="commands"/> is empty.</exception>
@@ -30,7 +31,8 @@ namespace Mux.Core.Skills
             bool mutating,
             string tags,
             string whenToUse,
-            IReadOnlyList<DefaultSkillCommandDef> commands)
+            IReadOnlyList<DefaultSkillCommandDef> commands,
+            IReadOnlyList<string>? appliesTo = null)
         {
             if (id == null) throw new ArgumentNullException(nameof(id));
             if (title == null) throw new ArgumentNullException(nameof(title));
@@ -56,6 +58,7 @@ namespace Mux.Core.Skills
                 Mutating = mutating,
                 Tags = tagList,
                 WhenToUse = whenToUse ?? string.Empty,
+                AppliesTo = appliesTo == null ? new List<string>() : new List<string>(appliesTo),
                 Commands = new List<DefaultSkillCommandDef>(commands)
             });
         }

@@ -92,7 +92,8 @@ namespace Mux.Core.Subagents
         }
 
         /// <summary>
-        /// Determines whether a definition is usable: it has a non-empty name and a non-empty system prompt.
+        /// Determines whether a definition is usable: it has a non-empty name, a non-empty system prompt, and a recognized
+        /// <see cref="SubagentDefinition.Isolation"/> (empty, <c>none</c>, or <c>worktree</c>).
         /// </summary>
         /// <param name="definition">The definition to test.</param>
         /// <returns>True when the definition is valid.</returns>
@@ -104,7 +105,8 @@ namespace Mux.Core.Subagents
             }
 
             return !string.IsNullOrWhiteSpace(definition.Name)
-                && !string.IsNullOrWhiteSpace(definition.SystemPrompt);
+                && !string.IsNullOrWhiteSpace(definition.SystemPrompt)
+                && Mux.Core.Worktrees.WorktreeManager.TryParseIsolation(definition.Isolation, out _);
         }
 
         #endregion

@@ -723,6 +723,148 @@
 						},
 						"description": "Lists the project instruction files a run in `workingDirectory` loads into its system prompt: the user-level `MUX.md` in the config directory, then `MUX.md`, `AGENTS.md`, or `CLAUDE.md` (the first found) at each directory from the repository root down to the working directory. Returns `{ WorkingDirectory, Enabled, Sources, DroppedSources, TotalBytes, Truncated, Text }`. Files beyond `projectInstructionsMaxBytes` appear in `DroppedSources`, outermost first. `400` when the directory does not exist."
 					}
+				},
+				{
+					"name": "Complete file mentions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/files/complete?prefix=app&workingDirectory={{workingDirectory}}&max=20",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"files",
+								"complete"
+							],
+							"query": [
+								{
+									"key": "prefix",
+									"value": "app",
+									"description": "The text typed after @. Optional; empty lists top-level entries."
+								},
+								{
+									"key": "workingDirectory",
+									"value": "{{workingDirectory}}",
+									"description": "The directory paths are relative to. Optional; defaults to the server's current directory."
+								},
+								{
+									"key": "max",
+									"value": "20",
+									"description": "The most paths to return, 1 to 100. Optional; defaults to 20."
+								}
+							]
+						},
+						"description": "Completion for @ file mentions: project paths matching `prefix`, best first, with forward slashes; directories end with `/`. Dependency and build folders are never offered. Returns `{ WorkingDirectory, Prefix, Paths, Mentions }`. `400` when the directory does not exist or `max` is out of range. Chat routes resolve @path mentions server-side."
+					}
+				}
+			]
+		},
+		{
+			"name": "Memory",
+			"item": [
+				{
+					"name": "List or search memories",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/memory?workingDirectory={{workingDirectory}}&query=docker",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"memory"
+							],
+							"query": [
+								{
+									"key": "workingDirectory",
+									"value": "{{workingDirectory}}",
+									"description": "Selects the project scope. Optional; defaults to the server's current directory."
+								},
+								{
+									"key": "query",
+									"value": "docker",
+									"description": "Optional: words that must all appear (case-insensitive)."
+								}
+							]
+						},
+						"description": "Returns `{ WorkingDirectory, ProjectKey, Enabled, Memories }`: the project's memories, then the global ones, newest first within each. `query` keeps only memories containing every word; `name` returns one memory (404 when there is none). `400` when the directory does not exist."
+					}
+				},
+				{
+					"name": "Save a memory",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"test-command\",\n  \"Description\": \"Run tests with dotnet test src/Mux.sln\",\n  \"Content\": \"Run tests with dotnet test src/Mux.sln; they take about four minutes.\",\n  \"Scope\": \"project\",\n  \"WorkingDirectory\": \"{{workingDirectory}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/memory",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"memory"
+							]
+						},
+						"description": "Creates a memory (201) or updates the one whose name slugs the same (200). `Scope` is `project` (default) or `global`. Returns the saved `MemoryDto`."
+					}
+				},
+				{
+					"name": "Delete a memory",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/memory?name=test-command&scope=project&workingDirectory={{workingDirectory}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"memory"
+							],
+							"query": [
+								{
+									"key": "name",
+									"value": "test-command",
+									"description": "The memory's name."
+								},
+								{
+									"key": "scope",
+									"value": "project",
+									"description": "Optional: project or global. Without it, the project scope is tried first."
+								},
+								{
+									"key": "workingDirectory",
+									"value": "{{workingDirectory}}",
+									"description": "Selects the project scope."
+								}
+							]
+						},
+						"description": "Deletes a memory and returns it. `404` when no memory has that name."
+					}
 				}
 			]
 		},

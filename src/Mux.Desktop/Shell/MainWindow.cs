@@ -51,6 +51,10 @@ namespace Mux.Desktop.Shell
         private readonly IUsageRecorder _UsageRecorder;
         private McpRuntime? _Mcp;
         private Mux.Core.Processes.BackgroundProcessRegistry? _Processes;
+        private bool _PlanMode;
+        private bool _AutoApprove;
+        private Mux.Core.Interaction.PlanProposal? _ApprovedPlan;
+        private Mux.Core.Interaction.PlanReviewDecisionEnum _ApprovedDecision;
         private SkillRuntime? _Skills;
         private readonly string _ConfigDirectory;
         private readonly UsageQueryService? _UsageQuery;
@@ -247,6 +251,8 @@ namespace Mux.Desktop.Shell
             runner.Mcp = _Mcp;
             runner.Skills = _Skills;
             runner.Processes = EnsureProcessRegistry();
+            runner.AskUserHandler = AskUserAsync;
+            runner.ReviewPlanHandler = ReviewPlanAsync;
             // The runner publishes every turn to the hub itself (best-effort) so desktop runs are mirrorable
             // live on any surface; no per-runner wiring is needed here.
             return runner;
@@ -2538,6 +2544,23 @@ namespace Mux.Desktop.Shell
                 return;
             }
 
+            // "# text" (or "#global text") saves a memory without a model call.
+            if (SettingsLoader.LoadSettings().MemoryEnabled
+                && Mux.Core.Memory.MemoryQuickAdd.TryParse(prompt, out Mux.Core.Memory.MemoryScopeEnum memoryScope, out string memoryText))
+            {
+                _Composer.Text = string.Empty;
+                try
+                {
+                    AddNotice(Mux.Core.Memory.MemoryQuickAdd.Save(Mux.Core.Memory.MemoryStore.FromConfigDirectory(), memoryScope, memoryText, _Runner.WorkingDirectory) + " /memory lists memories.", isError: false);
+                }
+                catch (Exception ex)
+                {
+                    AddNotice("Could not save the memory: " + ex.Message, isError: true);
+                }
+
+                return;
+            }
+
             // Only block a second turn in the SAME tab; other tabs may run their own turns concurrently.
             if (_Active != null && _Active.IsBusy)
             {
@@ -2590,9 +2613,34 @@ namespace Mux.Desktop.Shell
                 }
             }
 
+            // @path mentions attach the named files (or directory listings) to what the model receives; the bubble
+            // keeps the prompt as typed.
+            string submitted = prompt;
+            if (prompt.IndexOf('@') >= 0)
+            {
+                try
+                {
+                    Mux.Core.Context.FileMentionResolver resolver = new Mux.Core.Context.FileMentionResolver(context.Runner.WorkingDirectory, SettingsLoader.LoadSettings().FileMentionMaxBytes);
+                    Mux.Core.Context.FileMentionResult mentions = await resolver.ResolveAsync(prompt, context.TurnCts!.Token);
+                    submitted = mentions.Prompt;
+                    List<string> lines = Mux.Core.Context.FileMentionResolver.Describe(mentions);
+                    if (lines.Count > 0)
+                    {
+                        bool problems = mentions.Unresolved.Count > 0 || mentions.Notes.Count > 0;
+                        WithContext(context, () => AddNotice(string.Join("\n", lines), isError: problems));
+                    }
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException))
+                {
+                    WithContext(context, () => AddNotice("Could not attach @ mentions: " + ex.Message, isError: true));
+                }
+            }
+
+            context.Runner.PlanMode = _PlanMode;
+            context.Runner.AutoApprove = _AutoApprove;
             try
             {
-                TurnProjection projection = await conversation.RunTurnAsync(prompt, context.TurnCts!.Token);
+                TurnProjection projection = await conversation.RunTurnAsync(submitted, context.TurnCts!.Token);
                 if (projection.WasCancelled)
                 {
                     WithContext(context, () => AddNotice(L("main.stopped"), isError: false));
@@ -2615,6 +2663,119 @@ namespace Mux.Desktop.Shell
                 await PersistCurrentAsync(context);
                 await LoadThreadsAsync();
             }
+
+            await StartApprovedPlanAsync();
+        }
+
+        // After a turn in which the user approved a plan: leave plan mode (auto-approving edits when chosen) and send
+        // the plan as the next prompt.
+        private async System.Threading.Tasks.Task StartApprovedPlanAsync()
+        {
+            Mux.Core.Interaction.PlanProposal? plan = _ApprovedPlan;
+            _ApprovedPlan = null;
+            if (plan == null)
+            {
+                return;
+            }
+
+            _PlanMode = false;
+            _AutoApprove = _ApprovedDecision == Mux.Core.Interaction.PlanReviewDecisionEnum.ApproveAutoAccept;
+            UpdateModeIndicator();
+            AddNotice("Plan approved. Carrying it out" + (_AutoApprove ? " with edits auto-approved (/plan off resets approvals)." : " with normal approvals."), isError: false);
+            _Composer.Text = plan.ToExecutionPrompt();
+            await SendAsync();
+        }
+
+        // "/plan" toggles plan mode; "/plan off" leaves it and restores normal approvals; "/plan <prompt>" enters it
+        // and sends the prompt.
+        private void HandlePlanSlash(string argument)
+        {
+            string trimmed = (argument ?? string.Empty).Trim();
+            if (string.Equals(trimmed, "off", StringComparison.OrdinalIgnoreCase))
+            {
+                _PlanMode = false;
+                _AutoApprove = false;
+            }
+            else if (trimmed.Length == 0)
+            {
+                _PlanMode = !_PlanMode;
+            }
+            else
+            {
+                _PlanMode = true;
+            }
+
+            UpdateModeIndicator();
+            AddNotice(_PlanMode
+                ? "Plan mode on: turns explore read-only and end with a plan for you to approve. /plan again to leave."
+                : "Plan mode off" + (_AutoApprove ? "; edits are auto-approved." : "."), isError: false);
+            if (_PlanMode && trimmed.Length > 0 && !string.Equals(trimmed, "on", StringComparison.OrdinalIgnoreCase))
+            {
+                _Composer.Text = trimmed;
+                _ = SendAsync();
+            }
+        }
+
+        // The composer placeholder doubles as the mode indicator.
+        private void UpdateModeIndicator()
+        {
+            _Composer.PlaceholderText = _PlanMode
+                ? "PLAN MODE (read-only): describe what to plan. /plan to leave."
+                : (_AutoApprove ? "AUTO-APPROVE: " : string.Empty) + L(StringKeys.ComposerPlaceholder);
+        }
+
+        // ask_user: show the question as a dialog on the UI thread.
+        private System.Threading.Tasks.Task<Mux.Core.Interaction.AskUserResponse> AskUserAsync(Mux.Core.Interaction.AskUserRequest request, CancellationToken token)
+        {
+            TaskCompletionSource<Mux.Core.Interaction.AskUserResponse> completion = new TaskCompletionSource<Mux.Core.Interaction.AskUserResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Dispatcher.UIThread.Post(async () =>
+            {
+                try
+                {
+                    AskUserDialog dialog = new AskUserDialog(request);
+                    using (token.Register(() => Dispatcher.UIThread.Post(() => dialog.Close(Mux.Core.Interaction.AskUserResponse.Dismiss()))))
+                    {
+                        Mux.Core.Interaction.AskUserResponse? result = await dialog.ShowDialog<Mux.Core.Interaction.AskUserResponse?>(this);
+                        completion.TrySetResult(result ?? Mux.Core.Interaction.AskUserResponse.Dismiss());
+                    }
+                }
+                catch (Exception)
+                {
+                    completion.TrySetResult(Mux.Core.Interaction.AskUserResponse.Dismiss());
+                }
+            });
+            return completion.Task;
+        }
+
+        // exit_plan: show the plan for approval; an approval is carried out after the turn ends.
+        private System.Threading.Tasks.Task<Mux.Core.Interaction.PlanReview> ReviewPlanAsync(Mux.Core.Interaction.PlanProposal proposal, CancellationToken token)
+        {
+            TaskCompletionSource<Mux.Core.Interaction.PlanReview> completion = new TaskCompletionSource<Mux.Core.Interaction.PlanReview>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Dispatcher.UIThread.Post(async () =>
+            {
+                Mux.Core.Interaction.PlanReview review;
+                try
+                {
+                    PlanReviewDialog dialog = new PlanReviewDialog(proposal);
+                    using (token.Register(() => Dispatcher.UIThread.Post(() => dialog.Close(null))))
+                    {
+                        review = await dialog.ShowDialog<Mux.Core.Interaction.PlanReview?>(this) ?? new Mux.Core.Interaction.PlanReview { Feedback = "The user closed the plan without approving it." };
+                    }
+                }
+                catch (Exception)
+                {
+                    review = new Mux.Core.Interaction.PlanReview { Feedback = "The plan could not be shown for review." };
+                }
+
+                if (review.Approved)
+                {
+                    _ApprovedPlan = proposal;
+                    _ApprovedDecision = review.Decision;
+                }
+
+                completion.TrySetResult(review);
+            });
+            return completion.Task;
         }
 
         private static string CheckpointLabel(string prompt)
@@ -2793,6 +2954,13 @@ namespace Mux.Desktop.Shell
                 case "/instructions":
                     ShowProjectInstructions();
                     break;
+                case "/memory":
+                case "/memories":
+                    HandleMemorySlash(argument);
+                    break;
+                case "/plan":
+                    HandlePlanSlash(argument);
+                    break;
                 case "/processes":
                 case "/ps":
                     _ = HandleProcessesSlashAsync(argument);
@@ -2864,6 +3032,85 @@ namespace Mux.Desktop.Shell
             catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException || ex is System.IO.IOException || ex is UnauthorizedAccessException)
             {
                 AddNotice("Could not record trust: " + ex.Message, isError: true);
+            }
+        }
+
+        // "/memory [list|show <name>|delete <name>|clear [global] [--yes]]": persistent memories for this conversation's
+        // project and the global scope. Editing happens in the Skills-style editor of the memory file on disk.
+        private void HandleMemorySlash(string argument)
+        {
+            if (!SettingsLoader.LoadSettings().MemoryEnabled)
+            {
+                AddNotice("Memory is turned off (settings.json: memoryEnabled).", isError: false);
+                return;
+            }
+
+            Mux.Core.Memory.MemoryStore store = Mux.Core.Memory.MemoryStore.FromConfigDirectory();
+            string workingDirectory = _Runner.WorkingDirectory;
+            string[] parts = (argument ?? string.Empty).Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            string verb = parts.Length > 0 ? parts[0].ToLowerInvariant() : "list";
+            string rest = parts.Length > 1 ? parts[1] : string.Empty;
+            try
+            {
+                if (verb == "list")
+                {
+                    List<Mux.Core.Memory.MemoryEntry> entries = store.ListAll(workingDirectory);
+                    if (entries.Count == 0)
+                    {
+                        AddNotice("No memories yet. Start a message with # to remember a line (#global for every project).", isError: false);
+                        return;
+                    }
+
+                    System.Text.StringBuilder text = new System.Text.StringBuilder("Memories (" + entries.Count + "):");
+                    foreach (Mux.Core.Memory.MemoryEntry entry in entries)
+                    {
+                        text.Append("\n[").Append(entry.Scope == Mux.Core.Memory.MemoryScopeEnum.Global ? "global" : "project").Append("] ").Append(entry.Slug).Append(": ").Append(entry.Description);
+                    }
+
+                    text.Append("\n/memory show|delete <name>; /memory clear [global] --yes. Files: ").Append(store.RootDirectory);
+                    AddNotice(text.ToString(), isError: false);
+                    return;
+                }
+
+                if (verb == "clear")
+                {
+                    Mux.Core.Memory.MemoryScopeEnum scope = rest.IndexOf("global", StringComparison.OrdinalIgnoreCase) >= 0 ? Mux.Core.Memory.MemoryScopeEnum.Global : Mux.Core.Memory.MemoryScopeEnum.Project;
+                    int count = store.List(scope, workingDirectory).Count;
+                    if (rest.IndexOf("--yes", StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        AddNotice("This deletes " + count + " memories. Confirm with /memory clear " + (scope == Mux.Core.Memory.MemoryScopeEnum.Global ? "global " : string.Empty) + "--yes", isError: false);
+                        return;
+                    }
+
+                    AddNotice("Cleared " + store.Clear(scope, workingDirectory) + " memories.", isError: false);
+                    return;
+                }
+
+                if ((verb == "show" || verb == "delete") && !string.IsNullOrWhiteSpace(rest))
+                {
+                    Mux.Core.Memory.MemoryEntry? found = store.Get(rest, null, workingDirectory);
+                    if (found == null)
+                    {
+                        AddNotice("No memory named '" + rest + "'.", isError: true);
+                        return;
+                    }
+
+                    if (verb == "show")
+                    {
+                        AddNotice(found.Slug + ": " + found.Description + (string.Equals(found.Content, found.Description, StringComparison.Ordinal) ? string.Empty : "\n" + found.Content) + "\nFile: " + found.FilePath, isError: false);
+                        return;
+                    }
+
+                    store.Delete(found.Slug, found.Scope, workingDirectory);
+                    AddNotice("Deleted memory '" + found.Slug + "'.", isError: false);
+                    return;
+                }
+
+                AddNotice("Usage: /memory [list | show <name> | delete <name> | clear [global] --yes]. Start a message with # to remember a line.", isError: true);
+            }
+            catch (Exception ex)
+            {
+                AddNotice("Memory error: " + ex.Message, isError: true);
             }
         }
 
@@ -3027,6 +3274,8 @@ namespace Mux.Desktop.Shell
         private void ShowHelpMenu()
         {
             StackPanel card = new StackPanel { Spacing = 4 };
+            // Every row's command column shares one width, sized to the longest command, so nothing is cut off.
+            Grid.SetIsSharedSizeScope(card, true);
             card.Children.Add(new TextBlock { Text = L("main.quickCommands"), FontWeight = FontWeight.SemiBold, Foreground = _Theme.Text });
             card.Children.Add(CommandRow("/clear", L("main.help.clear")));
             card.Children.Add(CommandRow("/context", L("main.help.context")));
@@ -3046,7 +3295,9 @@ namespace Mux.Desktop.Shell
             card.Children.Add(CommandRow("/effort", L("main.help.effort")));
             card.Children.Add(CommandRow("/cwd <path>", "Show or change the working directory"));
             card.Children.Add(CommandRow("/instructions", "List the project instruction files the agent loads"));
+            card.Children.Add(CommandRow("/plan [prompt|off]", "Plan mode: explore read-only, then approve a plan before anything changes"));
             card.Children.Add(CommandRow("/processes", "List, inspect, or stop background processes the agent started"));
+            card.Children.Add(CommandRow("/memory", "List, show, or delete memories; start a message with # to remember a line"));
             card.Children.Add(CommandRow("/trust <level>", "Trust this project's skills: all, playbooks, ignore, reset"));
             card.Children.Add(CommandRow("/<skill> <args>", "Run a skill by name"));
             card.Children.Add(CommandRow("/label <text>", L("main.help.labels")));
@@ -3072,9 +3323,15 @@ namespace Mux.Desktop.Shell
 
         private Control CommandRow(string command, string description)
         {
-            StackPanel content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
-            content.Children.Add(new TextBlock { Text = command, Width = 90, Foreground = _Theme.Accent, FontFamily = new FontFamily("Cascadia Mono,Consolas,Menlo,monospace"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
-            content.Children.Add(new TextBlock { Text = description, Foreground = _Theme.Muted, FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+            Grid content = new Grid();
+            content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, SharedSizeGroup = "HelpCommand" });
+            content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            TextBlock commandText = new TextBlock { Text = command, MinWidth = 90, Margin = new Thickness(0, 0, 14, 0), Foreground = _Theme.Accent, FontFamily = new FontFamily("Cascadia Mono,Consolas,Menlo,monospace"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+            TextBlock descriptionText = new TextBlock { Text = description, Foreground = _Theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(commandText, 0);
+            Grid.SetColumn(descriptionText, 1);
+            content.Children.Add(commandText);
+            content.Children.Add(descriptionText);
 
             Button button = new Button
             {
@@ -3085,7 +3342,20 @@ namespace Mux.Desktop.Shell
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 Padding = new Thickness(4)
             };
-            button.Click += (sender, args) => HandleSlashCommand(command);
+            button.Click += (sender, args) =>
+            {
+                // A command that needs an argument ("/cwd <path>") is put in the composer to finish, not run as is.
+                int placeholder = command.IndexOf(" <", StringComparison.Ordinal);
+                if (placeholder > 0)
+                {
+                    _Composer.Text = command.Substring(0, placeholder) + " ";
+                    _Composer.CaretIndex = _Composer.Text.Length;
+                    _Composer.Focus();
+                    return;
+                }
+
+                HandleSlashCommand(command);
+            };
             return button;
         }
 

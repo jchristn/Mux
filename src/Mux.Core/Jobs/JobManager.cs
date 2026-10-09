@@ -84,7 +84,15 @@ namespace Mux.Core.Jobs
                 (Job job, string prompt, CancellationToken cancellationToken) =>
                 {
                     AgentLoopOptions options = CloneOptionsForJob(templateOptions, job);
-                    options.WriteLease = lease;
+
+                    // An isolated job works in its own worktree and does not share the write lease: nothing else
+                    // writes there, so serializing with the shared tree's jobs would only slow both down.
+                    options.WriteLease = job.Worktree == null ? lease : null;
+                    if (job.Worktree != null)
+                    {
+                        options.WorkingDirectory = job.Worktree.WorkingDirectory;
+                    }
+
                     options.JobId = job.Id;
                     options.OnWriteLeaseWaitChanged = (bool waiting) => ApplyLeaseWaitState(job, waiting);
                     options.TaskPlan = job.TaskPlan;
@@ -92,7 +100,10 @@ namespace Mux.Core.Jobs
                 },
                 maxConcurrency,
                 sessionId,
-                lease);
+                lease)
+            {
+                IsolationDirectoryProvider = () => templateOptions.WorkingDirectory
+            };
         }
 
         #endregion
@@ -225,6 +236,26 @@ namespace Mux.Core.Jobs
         }
 
         /// <summary>
+        /// Submits a prompt, letting the caller configure the job (for example plan mode or a seeded task plan) before
+        /// it can start.
+        /// </summary>
+        /// <param name="prompt">The prompt to submit.</param>
+        /// <param name="approvalPolicy">The per-job approval policy.</param>
+        /// <param name="conversationHistory">Optional history to fork; focused history is used when null.</param>
+        /// <param name="configure">Called with the new job before it is published or started. Null skips it.</param>
+        /// <param name="cancellationToken">A token to observe before enqueueing.</param>
+        /// <returns>The created job.</returns>
+        public Task<Job> SubmitAsync(
+            string prompt,
+            ApprovalPolicyEnum approvalPolicy,
+            IEnumerable<ConversationMessage>? conversationHistory,
+            Action<Job>? configure,
+            CancellationToken cancellationToken)
+        {
+            return AddJobAsync(prompt, approvalPolicy, conversationHistory, cancellationToken, configure);
+        }
+
+        /// <summary>
         /// Enqueues a prompt and starts it when the scheduler allows.
         /// </summary>
         /// <param name="prompt">The prompt to enqueue.</param>
@@ -240,6 +271,39 @@ namespace Mux.Core.Jobs
         {
             return AddJobAsync(prompt, approvalPolicy, conversationHistory, cancellationToken);
         }
+
+        /// <summary>
+        /// Enqueues a prompt with an isolation mode. A <see cref="IsolationModeEnum.Worktree"/> job runs in its own git
+        /// worktree (created from <see cref="IsolationDirectoryProvider"/>) without the shared write lease; when it ends,
+        /// the worktree is removed if nothing changed, or kept with its changes committed on a <c>mux/job/&lt;id&gt;</c>
+        /// branch, and <see cref="Job.WorktreeOutcome"/> reports which.
+        /// </summary>
+        /// <param name="prompt">The prompt to enqueue.</param>
+        /// <param name="approvalPolicy">The per-job approval policy.</param>
+        /// <param name="conversationHistory">Optional history to fork; focused history is used when null.</param>
+        /// <param name="isolation">Where the job works.</param>
+        /// <param name="cancellationToken">A token to observe before enqueueing.</param>
+        /// <returns>The created job.</returns>
+        public Task<Job> EnqueueAsync(
+            string prompt,
+            ApprovalPolicyEnum approvalPolicy,
+            IEnumerable<ConversationMessage>? conversationHistory,
+            IsolationModeEnum isolation,
+            CancellationToken cancellationToken)
+        {
+            return AddJobAsync(prompt, approvalPolicy, conversationHistory, cancellationToken, (Job job) => job.Isolation = isolation);
+        }
+
+        /// <summary>
+        /// Returns the directory isolated jobs branch their worktree from (any directory inside the repository). Set
+        /// by <see cref="CreateForAgentLoop"/> to the template's working directory; null makes isolated jobs fail.
+        /// </summary>
+        public Func<string>? IsolationDirectoryProvider { get; set; }
+
+        /// <summary>
+        /// The manager that creates and cleans up isolated worktrees. Defaults to a new <see cref="Mux.Core.Worktrees.WorktreeManager"/>.
+        /// </summary>
+        public Mux.Core.Worktrees.WorktreeManager Worktrees { get; set; } = new Mux.Core.Worktrees.WorktreeManager();
 
         /// <summary>
         /// Appends a follow-up prompt to an existing non-terminal job.
@@ -563,7 +627,8 @@ namespace Mux.Core.Jobs
             string prompt,
             ApprovalPolicyEnum approvalPolicy,
             IEnumerable<ConversationMessage>? conversationHistory,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            Action<Job>? configure = null)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(prompt))
@@ -585,6 +650,7 @@ namespace Mux.Core.Jobs
                     approvalPolicy,
                     effectiveHistory);
                 job.ParentContext = Activity.Current?.Context ?? default(ActivityContext);
+                configure?.Invoke(job);
 
                 _Jobs.Add(job);
                 if (_FocusedJobId == null)
@@ -641,6 +707,19 @@ namespace Mux.Core.Jobs
             {
                 try
                 {
+                    // An isolated job gets its own worktree before its first run; a failure to create one fails the
+                    // job rather than silently running it in the shared tree.
+                    if (job.Isolation == IsolationModeEnum.Worktree && job.Worktree == null)
+                    {
+                        string? baseDirectory = IsolationDirectoryProvider?.Invoke();
+                        if (string.IsNullOrWhiteSpace(baseDirectory))
+                        {
+                            throw new InvalidOperationException("Worktree isolation needs a working directory, and this job manager has none.");
+                        }
+
+                        job.Worktree = await Worktrees.CreateAsync(baseDirectory, "job", job.Id, linkedTokenSource.Token).ConfigureAwait(false);
+                    }
+
                     while (true)
                     {
                         linkedTokenSource.Token.ThrowIfCancellationRequested();
@@ -683,12 +762,14 @@ namespace Mux.Core.Jobs
                         }
                     }
 
+                    await FinishWorktreeAsync(job).ConfigureAwait(false);
                     CompleteWorkerJob(job, JobState.Completed, string.Empty);
                     jobOutcome = "completed";
                     MuxTelemetry.SetOk(jobActivity);
                 }
                 catch (OperationCanceledException)
                 {
+                    await FinishWorktreeAsync(job).ConfigureAwait(false);
                     CompleteWorkerJob(job, JobState.Cancelled, string.Empty);
                     jobOutcome = "cancelled";
                     MuxTelemetry.SetError(jobActivity, jobOutcome, "job cancelled");
@@ -705,6 +786,7 @@ namespace Mux.Core.Jobs
                     };
                     job.RecordEvent(errorEvent);
                     job.EventWriter.TryWrite(errorEvent);
+                    await FinishWorktreeAsync(job).ConfigureAwait(false);
                     CompleteWorkerJob(job, JobState.Failed, exception.Message);
                 }
                 finally
@@ -750,6 +832,33 @@ namespace Mux.Core.Jobs
                 queued.SetEndTime(startedUtc);
                 MuxTelemetry.Stop(queued);
                 Activity.Current = jobActivity;
+            }
+        }
+
+        // Ends an isolated job's worktree before the job is marked terminal, so anyone waiting on the job sees its
+        // outcome. Never throws: a cleanup problem is reported on the outcome instead.
+        private async Task FinishWorktreeAsync(Job job)
+        {
+            if (job.Worktree == null || job.WorktreeOutcome != null)
+            {
+                return;
+            }
+
+            try
+            {
+                job.WorktreeOutcome = await Worktrees.FinishAsync(job.Worktree, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                job.WorktreeOutcome = new Mux.Core.Worktrees.WorktreeOutcome
+                {
+                    Name = job.Worktree.Name,
+                    Path = job.Worktree.Path,
+                    Branch = job.Worktree.Branch,
+                    BaseCommit = job.Worktree.BaseCommit,
+                    Changed = true,
+                    Warning = "Could not finish the worktree: " + ex.Message
+                };
             }
         }
 
@@ -893,6 +1002,9 @@ namespace Mux.Core.Jobs
                 AdditionalTools = templateOptions.AdditionalTools == null ? null : new List<ToolDefinition>(templateOptions.AdditionalTools),
                 ExternalToolProviders = templateOptions.ExternalToolProviders == null ? null : new List<IExternalToolProvider>(templateOptions.ExternalToolProviders),
                 PromptUserFunc = templateOptions.PromptUserFunc,
+                AskUserFunc = templateOptions.AskUserFunc,
+                ReviewPlanFunc = templateOptions.ReviewPlanFunc,
+                PlanMode = job.PlanMode,
                 Hooks = templateOptions.Hooks,
                 ExternalToolExecutor = templateOptions.ExternalToolExecutor,
                 OnRetry = templateOptions.OnRetry,

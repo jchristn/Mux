@@ -138,6 +138,12 @@ namespace Mux.Core.Jobs
         }
 
         /// <summary>
+        /// Whether this job runs in plan mode (read-only exploration ending with <c>exit_plan</c>). Set before the job
+        /// starts, through the configure callback of <see cref="JobManager.SubmitAsync(string, ApprovalPolicyEnum, IEnumerable{Mux.Core.Models.ConversationMessage}, Action{Job}, System.Threading.CancellationToken)"/>.
+        /// </summary>
+        public bool PlanMode { get; set; }
+
+        /// <summary>
         /// The approval policy scoped to this job.
         /// </summary>
         public ApprovalPolicyEnum ApprovalPolicy
@@ -343,6 +349,25 @@ namespace Mux.Core.Jobs
         {
             get => _TaskPlan;
         }
+
+        /// <summary>
+        /// Where the job works: the shared working tree (the default) or its own git worktree. Set before the job
+        /// starts; <see cref="JobManager.EnqueueAsync(string, ApprovalPolicyEnum, IEnumerable{ConversationMessage}?, IsolationModeEnum, CancellationToken)"/>
+        /// sets it.
+        /// </summary>
+        public IsolationModeEnum Isolation { get; set; } = IsolationModeEnum.None;
+
+        /// <summary>
+        /// The isolated worktree while an isolated job runs, or null. Runners use its
+        /// <see cref="Mux.Core.Worktrees.WorktreeLease.WorkingDirectory"/> instead of the shared one.
+        /// </summary>
+        public Mux.Core.Worktrees.WorktreeLease? Worktree { get; set; }
+
+        /// <summary>
+        /// What an isolated job left behind (kept branch and changes, or removed), set when the job ends; null for jobs
+        /// in the shared tree.
+        /// </summary>
+        public Mux.Core.Worktrees.WorktreeOutcome? WorktreeOutcome { get; set; }
 
         /// <summary>
         /// The number of queued follow-up prompts waiting behind the active turn.

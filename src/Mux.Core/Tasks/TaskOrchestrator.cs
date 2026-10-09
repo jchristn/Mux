@@ -46,6 +46,17 @@ namespace Mux.Core.Tasks
 
         #endregion
 
+        #region Public-Members
+
+        /// <summary>
+        /// Whether each task job runs in its own git worktree instead of the shared working tree (and without the
+        /// shared write lease), so independent tasks can edit files in parallel. Each task's changes end up on its
+        /// own <c>mux/job/&lt;id&gt;</c> branch. Defaults to false.
+        /// </summary>
+        public bool IsolateTasks { get; set; }
+
+        #endregion
+
         #region Public-Methods
 
         /// <summary>
@@ -123,7 +134,9 @@ namespace Mux.Core.Tasks
                 // Mark in progress before submitting so the next readiness pass does not redispatch it.
                 _Plan.TryUpdateTask(task.Id, AgentTaskStatusEnum.InProgress, null, out _);
 
-                Job job = await _JobManager.SubmitAsync(task.Title, cancellationToken).ConfigureAwait(false);
+                Job job = IsolateTasks
+                    ? await _JobManager.EnqueueAsync(task.Title, ApprovalPolicyEnum.Ask, null, IsolationModeEnum.Worktree, cancellationToken).ConfigureAwait(false)
+                    : await _JobManager.SubmitAsync(task.Title, cancellationToken).ConfigureAwait(false);
                 lock (_SyncRoot)
                 {
                     _JobToTask[job.Id] = task.Id;

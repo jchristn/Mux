@@ -303,6 +303,7 @@ namespace Mux.Server
             new ConfigRoutes(apiKey).Register(app);
             new PromptCatalogRoutes(apiKey).Register(app);
             new ContextRoutes(apiKey, _EndpointsProvider).Register(app);
+            new MemoryRoutes(apiKey).Register(app);
             new SkillRoutes(apiKey).Register(app);
             new OverviewRoutes(apiKey, _EndpointsProvider, _SessionStore, _Version, _StartUtc).Register(app);
             new UsageRoutes(apiKey, _UsageQuery).Register(app);

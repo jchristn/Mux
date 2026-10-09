@@ -468,6 +468,7 @@ namespace Mux.Server.Routes
                     // When the server was started with interactive web tools enabled, such tools instead
                     // prompt the browser for approval over the SSE channel.
                     ApprovalPolicy = ApprovalPolicyEnum.AutoSafe,
+                    PlanMode = request.PlanMode,
                     PromptUserFunc = _AllowInteractiveTools
                         ? toolCall => RequestBrowserApprovalAsync(ctx, runHandle, toolCall)
                         : (Func<ToolCall, Task<string>>)(_ => Task.FromResult("n")),
@@ -491,6 +492,30 @@ namespace Mux.Server.Routes
                     {
                         options.ExternalToolProviders ??= new List<IExternalToolProvider>();
                         options.ExternalToolProviders.Add(new Mux.Core.Processes.BackgroundProcessToolProvider(_Processes));
+                    }
+
+                    // Persistent memory for the run's directory: the tools plus the memory index.
+                    if (settings.MemoryEnabled)
+                    {
+                        Mux.Core.Memory.MemoryToolProvider memoryProvider = new Mux.Core.Memory.MemoryToolProvider(
+                            Mux.Core.Memory.MemoryStore.FromConfigDirectory(), settings.MemoryMaxBytes);
+                        options.ExternalToolProviders ??= new List<IExternalToolProvider>();
+                        options.ExternalToolProviders.Add(memoryProvider);
+                        options.SystemPrompt += memoryProvider.BuildPromptSection(runDirectory);
+                    }
+                }
+
+                // Resolve @path mentions against the run's directory so a browser or editor client only sends text;
+                // the attached files reach the model in a delimited block.
+                if (prompt.IndexOf('@') >= 0)
+                {
+                    try
+                    {
+                        prompt = (await new Mux.Core.Context.FileMentionResolver(runDirectory, settings.FileMentionMaxBytes).ResolveAsync(prompt, runHandle.Token).ConfigureAwait(false)).Prompt;
+                    }
+                    catch (Exception ex) when (!(ex is OperationCanceledException))
+                    {
+                        // A mention that cannot be read leaves the prompt as typed.
                     }
                 }
 
@@ -552,6 +577,18 @@ namespace Mux.Server.Routes
                 }
 
                 long totalMs = stopwatch.ElapsedMilliseconds;
+
+                // Plan mode: the plan the model presented with exit_plan, for the client to show and approve (an
+                // approval is a follow-up turn without planMode).
+                Mux.Core.Interaction.PlanProposal? proposal = request.PlanMode ? loop.Interaction.LastProposal : null;
+                if (proposal != null)
+                {
+                    await ctx.Response.SendEvent(new ServerSentEvent
+                    {
+                        Event = "plan",
+                        Data = JsonSerializer.Serialize(new { plan = proposal.Plan, steps = proposal.Steps, text = proposal.ToText(), executionPrompt = proposal.ToExecutionPrompt() })
+                    }, false, ctx.Token).ConfigureAwait(false);
+                }
 
                 if (errorMessage != null && content.Length == 0)
                 {

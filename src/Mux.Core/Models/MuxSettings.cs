@@ -37,10 +37,13 @@ namespace Mux.Core.Models
         private string _SkillListingMode = "relevant";
         private bool _ProjectInstructionsEnabled = true;
         private int _ProjectInstructionsMaxBytes = 32768;
+        private int _FileMentionMaxBytes = Mux.Core.Context.FileMentionResolver.DefaultMaxBytes;
         private int _LoopMaxIterations = Mux.Core.Jobs.LoopScheduler.DefaultMaxIterations;
         private int _LoopMinIntervalSeconds = Mux.Core.Jobs.LoopScheduler.DefaultMinIntervalSeconds;
         private int _BackgroundProcessMaxConcurrent = Mux.Core.Processes.BackgroundProcessRegistry.DefaultMaxConcurrent;
         private int _BackgroundProcessOutputBytes = Mux.Core.Processes.BackgroundProcessRegistry.DefaultOutputCapacity;
+        private bool _MemoryEnabled = true;
+        private int _MemoryMaxBytes = DefaultMemoryMaxBytes;
         private string _SkillProdPattern = DefaultSkillProdPattern;
         private bool _TaskPlanningEnabled = true;
         private bool _TaskParallelismEnabled = false;
@@ -397,6 +400,17 @@ namespace Mux.Core.Models
         }
 
         /// <summary>
+        /// The most text, in UTF-8 bytes, that <c>@path</c> mentions in a prompt may attach. A mention that does not fit
+        /// is left out with a note; <c>0</c> turns attachments off. Clamped to 0..16777216. Defaults to 262144.
+        /// </summary>
+        [JsonPropertyName("fileMentionMaxBytes")]
+        public int FileMentionMaxBytes
+        {
+            get => _FileMentionMaxBytes;
+            set => _FileMentionMaxBytes = Math.Clamp(value, 0, Mux.Core.Context.FileMentionResolver.MaxBytesLimit);
+        }
+
+        /// <summary>
         /// The iteration cap for a recurring prompt (<c>/loop</c>, <c>mux print --loop</c>) that does not ask for
         /// one, and the most any loop may ask for. Clamped to 1..1000. Defaults to 50.
         /// </summary>
@@ -430,6 +444,33 @@ namespace Mux.Core.Models
         }
 
         /// <summary>
+        /// Whether persistent memory is on: the <c>remember</c>, <c>forget</c>, and <c>recall</c> tools, the memory index in
+        /// the system prompt, <c>#</c> quick-add, and <c>/memory</c>. Defaults to true.
+        /// </summary>
+        [JsonPropertyName("memoryEnabled")]
+        public bool MemoryEnabled
+        {
+            get => _MemoryEnabled;
+            set => _MemoryEnabled = value;
+        }
+
+        /// <summary>
+        /// The default <see cref="MemoryMaxBytes"/>.
+        /// </summary>
+        public const int DefaultMemoryMaxBytes = 16384;
+
+        /// <summary>
+        /// The most UTF-8 bytes the memory index may add to the system prompt; the oldest entries are left out first.
+        /// <c>0</c> leaves the index out (the memory tools still work). Clamped to 0..262144. Defaults to 16384.
+        /// </summary>
+        [JsonPropertyName("memoryMaxBytes")]
+        public int MemoryMaxBytes
+        {
+            get => _MemoryMaxBytes;
+            set => _MemoryMaxBytes = Math.Clamp(value, 0, 262144);
+        }
+
+        /// <summary>
         /// The output kept per background process, newest first; older output is dropped. Clamped to 16384..16777216.
         /// Defaults to 1048576 (1 MB).
         /// </summary>
@@ -439,6 +480,13 @@ namespace Mux.Core.Models
             get => _BackgroundProcessOutputBytes;
             set => _BackgroundProcessOutputBytes = Math.Clamp(value, Mux.Core.Processes.BackgroundProcessRegistry.MinOutputCapacity, Mux.Core.Processes.BackgroundProcessRegistry.MaxOutputCapacity);
         }
+
+        /// <summary>
+        /// The bearer key HTTP clients of <c>mux mcp serve --http</c> must send when <c>--api-key</c> is not given.
+        /// Null or empty means no key is required. Ignored by the stdio transport.
+        /// </summary>
+        [JsonPropertyName("mcpServeApiKey")]
+        public string? McpServeApiKey { get; set; }
 
         /// <summary>
         /// Whether the model may decompose a job into a tracked plan of background tasks and advance

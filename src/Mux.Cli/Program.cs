@@ -56,7 +56,7 @@ namespace Mux.Cli
             // OpenTelemetry export (off unless "observability.enabled" or MUX_OBSERVABILITY_ENABLED). One host per
             // process, disposed on exit so buffered spans and metrics flush. Only `mux serve` is long-running
             // enough to serve the Prometheus endpoint; other commands push over OTLP. Never throws.
-            bool isServeCommand = args.Any(a => a == "serve");
+            bool isServeCommand = args.Any(a => a == "serve") && !(args.Length > 0 && string.Equals(args[0], "mcp", StringComparison.OrdinalIgnoreCase));
             using Mux.Hosting.MuxObservabilityHost observability = Mux.Hosting.MuxObservabilityHost.StartFromSettings(isServeCommand, null);
 
             bool isNonInteractiveCommand = args.Any(a =>
@@ -68,6 +68,9 @@ namespace Mux.Cli
                 || a == "serve"
                 || a == "export"
                 || a == "plugin"
+                || a == "worktree"
+                || a == "memory"
+                || a == "mcp"
                 || a == "mirror");
 
             if (!isNonInteractiveCommand && !Console.IsOutputRedirected)
@@ -114,7 +117,9 @@ USAGE:
     mux endpoint <list|ls|show|models> [OPTIONS] Inspect endpoints and enumerate models
     mux export <id> [OPTIONS]            Export a saved session to Markdown or HTML
     mux plugin list [OPTIONS]            List configured event hooks and custom commands
+    mux worktree <list|prune|remove>     Manage worktrees left by isolated subagents and jobs
     mux mirror <sessionId> [OPTIONS]     Live-tail a run on a running mux server (read-only)
+    mux mcp serve [OPTIONS]              Serve mux as an MCP server (stdio, or --http <port>)
 
 OPTIONS:
     -h, --help, /?                       Show this help message and exit
@@ -192,6 +197,11 @@ EXPORT (local, server-free session sharing):
 PLUGIN (event hooks + custom commands from ~/.mux/hooks.json):
     mux plugin list                                Show configured hooks and custom commands
     mux plugin list --output-format json
+
+WORKTREE (isolated subagents and jobs, branches mux/<kind>/<id>):
+    mux worktree list [--cwd <dir>] [--output-format json]
+    mux worktree prune                             Remove worktrees with no changes; forget missing ones
+    mux worktree remove <name> [--force] [--keep-branch]
 
 EXAMPLES:
     mux                                  Start interactive session (default endpoint)
@@ -359,6 +369,34 @@ CONFIG:
                         .RunAsync(commandArgs, CancellationToken.None)
                         .GetAwaiter()
                         .GetResult());
+                }
+
+                if (args.Length > 0 && string.Equals(args[0], "memory", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] memoryArgs = args.Skip(1).ToArray();
+                    return RunWrapped(() => new Mux.Cli.Commands.MemoryCommand()
+                        .RunAsync(memoryArgs, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult());
+                }
+
+                if (args.Length > 0 && string.Equals(args[0], "worktree", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] worktreeArgs = args.Skip(1).ToArray();
+                    return RunWrapped(() => new Mux.Cli.Commands.WorktreeCommand()
+                        .RunAsync(worktreeArgs, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult());
+                }
+
+                // `mux mcp serve`: stdout carries the MCP protocol, so no banner and no spacing wrapper.
+                if (args.Length > 0 && string.Equals(args[0], "mcp", StringComparison.OrdinalIgnoreCase))
+                {
+                    string[] commandArgs = args.Skip(1).ToArray();
+                    return new Mux.Cli.Commands.McpServeCommand()
+                        .RunAsync(commandArgs, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
                 }
 
                 if (args.Length > 0 && string.Equals(args[0], "plugin", StringComparison.OrdinalIgnoreCase))
@@ -565,6 +603,16 @@ CONFIG:
                 new Mux.Core.Processes.BackgroundProcessToolProvider(processRegistry)
             };
 
+            // Persistent memory: the remember/forget/recall tools plus the memory index in the system prompt. Any
+            // change (a tool call, '#' quick-add, /memory) rebinds so the next turn sees the new index.
+            Mux.Core.Memory.MemoryStore memoryStore = Mux.Core.Memory.MemoryStore.FromConfigDirectory();
+            Mux.Core.Memory.MemoryToolProvider memoryProvider = new Mux.Core.Memory.MemoryToolProvider(memoryStore, runtime.MuxSettings.MemoryMaxBytes);
+            if (runtime.MuxSettings.MemoryEnabled)
+            {
+                toolBinder.AdditionalProviders.Add(memoryProvider);
+                memoryStore.Changed += (object? sender, EventArgs e) => toolBinder.Rebind();
+            }
+
             mcpRuntime = new McpRuntime(
                 SettingsLoader.LoadMcpServers,
                 toolBinder.Rebind,
@@ -687,6 +735,8 @@ CONFIG:
                         template.IgnoreCertErrors = changed.IgnoreCertErrors;
                         loopScheduler.Configure(changed.LoopMaxIterations, changed.LoopMinIntervalSeconds);
                         processRegistry.Configure(changed.BackgroundProcessMaxConcurrent, changed.BackgroundProcessOutputBytes);
+                        memoryProvider.MaxPromptBytes = changed.MemoryMaxBytes;
+                        toolBinder.Rebind();
                     },
                     showSplash: string.IsNullOrWhiteSpace(settings.Prompt),
                     showBoundaries: runtime.MuxSettings.ShowBoundaryLines,
@@ -701,7 +751,8 @@ CONFIG:
                         new Mux.Core.Telemetry.SessionStoreMetadataIndex(sessionStore)),
                     enableFirstRunWizard: true,
                     loopScheduler: loopScheduler,
-                    processRegistry: processRegistry);
+                    processRegistry: processRegistry,
+                    memoryStore: runtime.MuxSettings.MemoryEnabled ? memoryStore : null);
 
                 // Expose the shell so MCP connection notices (raised on the runtime's background thread once
                 // Start() is called below) can be written into the transcript.
@@ -715,6 +766,8 @@ CONFIG:
                 // CreateForAgentLoop and read per job run, so setting this before the run loop starts
                 // (jobs only run after the user submits) takes effect for every job.
                 template.PromptUserFunc = (ToolCall toolCall) => app.RequestApprovalAsync(toolCall);
+                template.AskUserFunc = app.AskUserAsync;
+                template.ReviewPlanFunc = app.ReviewPlanAsync;
 
                 // Connect MCP servers and discover skills in the background. Once skills are known, report the
                 // project instruction files and any project skills waiting on a trust decision.

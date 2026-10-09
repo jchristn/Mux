@@ -6,6 +6,13 @@ namespace Mux.Core.Skills
     /// <summary>The default scaffolding and documentation skills seeded into ~/.mux/skills.</summary>
     public static class DefaultScaffoldDocsSkills
     {
+        #region Private-Members
+
+        // new-tool and new-touchstone-suite scaffold mux's own types, so they are listed only inside the mux repository.
+        private static readonly IReadOnlyList<string> MuxRepositoryOnly = new[] { "src/Mux.Core/Mux.Core.csproj" };
+
+        #endregion
+
         /// <summary>Returns the scaffolding and documentation default skills, keyed by id.</summary>
         /// <returns>The skills as id to SKILL.md content.</returns>
         public static IReadOnlyDictionary<string, string> All()
@@ -44,7 +51,8 @@ $content = ""namespace Mux.Core.Tools`n{`n    using System;`n    using System.Th
 Set-Content -Path $path -Value $content -NoNewline
 Write-Output ""Created $path""
 ")
-                });
+                },
+                MuxRepositoryOnly);
 
             skills["new-touchstone-suite"] = DefaultSkillBuilder.Build(
                 "new-touchstone-suite", "Scaffold a new touchstone test suite", "Creates a touchstone test suite stub with one placeholder case.", true, "scaffold, test",
@@ -60,7 +68,8 @@ $content = ""namespace Mux.Core.Touchstone`n{`n    using System;`n    using Syst
 Set-Content -Path $path -Value $content -NoNewline
 Write-Output ""Created $path""
 ")
-                });
+                },
+                MuxRepositoryOnly);
 
             skills["new-skill"] = DefaultSkillBuilder.Build(
                 "new-skill", "Scaffold a new skill", "Creates a new skill directory with starter SKILL.md content.", true, "scaffold",

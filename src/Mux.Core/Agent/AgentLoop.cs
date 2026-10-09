@@ -40,6 +40,7 @@ namespace Mux.Core.Agent
         private IUsageRecorder _UsageRecorder;
         private bool _Disposed = false;
         private List<ConversationMessage> _FinalConversation = new List<ConversationMessage>();
+        private readonly Mux.Core.Interaction.InteractionToolProvider _Interaction;
 
         #endregion
 
@@ -58,6 +59,19 @@ namespace Mux.Core.Agent
             _ToolRegistry = new BuiltInToolRegistry(options.MuxSettings, options.TaskPlan, options.Subagents, options.SubagentExecutor, options.Endpoint?.ContextWindow ?? 0);
             _ApprovalRouter = new ApprovalRouter(options.ApprovalPolicy, options.AutoSafeApprovalAllowlist);
             _UsageRecorder = options.UsageRecorder ?? NullUsageRecorder.Instance;
+
+            // Plan mode: read-only exploration that ends with exit_plan. The options object is per run (jobs and
+            // surfaces build a fresh one), so forcing the posture and adding the guidance here affects only this run.
+            if (options.PlanMode)
+            {
+                options.SandboxPosture = SandboxPostureEnum.ReadOnly;
+                if ((options.SystemPrompt ?? string.Empty).IndexOf("# Plan mode", StringComparison.Ordinal) < 0)
+                {
+                    options.SystemPrompt = (options.SystemPrompt ?? string.Empty) + Mux.Core.Interaction.InteractionToolProvider.PlanModeGuidance;
+                }
+            }
+
+            _Interaction = new Mux.Core.Interaction.InteractionToolProvider(options.AskUserFunc, options.ReviewPlanFunc, options.PlanMode);
         }
 
         #endregion
@@ -73,6 +87,14 @@ namespace Mux.Core.Agent
         public IReadOnlyList<ConversationMessage> FinalConversation
         {
             get => _FinalConversation;
+        }
+
+        /// <summary>
+        /// The run's <c>ask_user</c> and <c>exit_plan</c> tools, exposing the last plan presented and its review.
+        /// </summary>
+        public Mux.Core.Interaction.InteractionToolProvider Interaction
+        {
+            get => _Interaction;
         }
 
         #endregion
@@ -474,7 +496,9 @@ namespace Mux.Core.Agent
                             MutationKind = ClassifyTool(toolCall.Name)
                         };
 
-                        approved = await _ApprovalRouter
+                        // ask_user and exit_plan are the user's own channel; asking permission to ask would be noise,
+                        // and a Deny policy must not silence them.
+                        approved = _Interaction.HasTool(toolCall.Name) || await _ApprovalRouter
                             .RequestApprovalAsync(
                                 approvalRequest,
                                 async (ApprovalRequest request, CancellationToken escalationToken) =>
@@ -865,6 +889,9 @@ namespace Mux.Core.Agent
                 }
             }
 
+            // ask_user (and exit_plan in plan mode): the model's channel to the user.
+            allTools.AddRange(_Interaction.GetToolDefinitions());
+
             // Apply tool governance so the model is never offered a tool it may not call: drop tools
             // excluded by the allow/deny policy, and (under the read-only posture) drop mutating tools.
             bool hasAllowDeny = (_Options.AllowedTools != null && _Options.AllowedTools.Count > 0)
@@ -896,6 +923,11 @@ namespace Mux.Core.Agent
 
         private IExternalToolProvider? FindProviderFor(string toolName)
         {
+            if (_Interaction != null && _Interaction.HasTool(toolName))
+            {
+                return _Interaction;
+            }
+
             if (_Options.ExternalToolProviders == null)
             {
                 return null;

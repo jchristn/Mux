@@ -103,7 +103,11 @@ All paths are versioned under `/v1.0/api`.
 | GET | `/v1.0/api/prompts/catalog` | key | The operational prompt catalog: every model-facing prompt grouped by kind, with its coded default, current effective value, required placeholders, `Overridden` flag, and whether it is `Editable`. Returns `{ "items": [ … ] }`. |
 | PUT | `/v1.0/api/prompts/catalog` | key | Set or clear one global-scoped override: `{ "key": "<catalog key>", "content": "<text>" }`. A blank/omitted `content` clears the override (restores the default). Rejects an unknown or profile-scoped key (`400`) and an override that drops a required placeholder (`400`). Returns the updated entry. |
 | POST | `/v1.0/api/context/file` | key | Build a model-context block from a file: `{ "path", "content", "mode"?, "inlineThresholdBytes"?, "headLines"?, "summaryChunkLines"? }`. A file at or below the inline threshold returns whole; a larger file is **mapped** (a structural outline with line ranges), **summarized** (an iterative map-reduce summary the server runs), or **truncated**, per `mode` (default from settings). Returns `{ "Text", "Mode", "Inlined", "OutlineEntryCount", "FromCache" }`. Lets a thin client offload mapping/summarizing to the server. |
+| GET | `/v1.0/api/files/complete?prefix=<text>&workingDirectory=<dir>&max=<n>` | key | Completion for `@` file mentions: project paths matching `prefix` (the text after `@`), best first, relative to `workingDirectory` (default: the server's current directory) with forward slashes; directories end with `/`. Dependency and build folders are never offered. `max` is 1 to 100 (default 20). Returns `{ "WorkingDirectory", "Prefix", "Paths", "Mentions" }`, where `Mentions` are the paths formatted as mentions (quoted when they contain spaces). `400` when the directory does not exist or `max` is out of range. The chat routes resolve `@path` mentions in prompts server-side, so clients only need this for completion. |
 | GET | `/v1.0/api/context/instructions?workingDirectory=<dir>` | key | The project instruction files a run in `workingDirectory` (default: the server's current directory) loads into its system prompt: the user-level `MUX.md` in the config directory, then `MUX.md`, `AGENTS.md`, or `CLAUDE.md` (the first found) at each level from the repository root down. Returns `{ "WorkingDirectory", "Enabled", "Sources", "DroppedSources", "TotalBytes", "Truncated", "Text" }`; files beyond `projectInstructionsMaxBytes` are listed in `DroppedSources`, outermost first. `400` when the directory does not exist. |
+| GET | `/v1.0/api/memory?workingDirectory=<dir>&query=<words>&name=<name>` | key | The persistent memories visible from a directory (project first, then global, newest first). `query` filters by words; `name` returns one (404 when missing). See [Memory](#memory). |
+| POST | `/v1.0/api/memory` | key | Create (201) or update (200) a memory: `{ "Name", "Description", "Content", "Scope", "WorkingDirectory" }`. |
+| DELETE | `/v1.0/api/memory?name=<name>&scope=<scope>&workingDirectory=<dir>` | key | Delete a memory and return it (404 when missing). |
 | GET/PUT | `/v1.0/api/subagents` | key | Subagent definitions. |
 | GET/PUT | `/v1.0/api/hooks` | key | Plugin config: `{ "hooks": [ … ], "commands": [ … ] }`. |
 | GET/PUT | `/v1.0/api/keybindings` | key | Command-id → chord overrides. |
@@ -117,7 +121,7 @@ All paths are versioned under `/v1.0/api`.
 | GET | `/v1.0/api/sessions/export?id=<id>&format=md\|html` | key | Render a session → `{ "format", "filename", "content" }` for download. |
 | DELETE | `/v1.0/api/sessions?id=<id>` | key | Delete a session. |
 | POST | `/v1.0/api/chat` | key | Plain (tool-free) chat completion against a configured endpoint. Body: `{ "endpoint": "<name>", "messages": [{ "role": "user", "content": "…" }] }` → `{ "role": "assistant", "content": "…", "endpoint", "model", "stats": { "ttftMs", "streamingMs", "totalMs", "inputTokens", "outputTokens", "totalTokens" } }`. |
-| POST | `/v1.0/api/chat/stream` | key | Agentic run over Server-Sent Events (`run`/`token`/`thinking`/`tool`/`approval`/`done`/`canceled`/`error`). The first event is `run` — `{ "RunId", "SessionId" }` — so the client can address the run (cancel it via `POST /v1.0/api/runs/{runId}/cancel`, or subscribe over the WebSocket). Body adds optional `id` (session), `workingDirectory` (the directory tools resolve paths against — must exist, else `400`; falls back to the session's recorded directory, then the server's), and, with `mux serve --allow-tools`, mutating tools raise an `approval` event answered by `POST /v1.0/api/chat/approve`. Persists the turn to the shared session store. |
+| POST | `/v1.0/api/chat/stream` | key | Agentic run over Server-Sent Events (`run`/`token`/`thinking`/`tool`/`approval`/`done`/`canceled`/`error`). The first event is `run` (`{ "RunId", "SessionId" }`) so the client can address the run (cancel it via `POST /v1.0/api/runs/{runId}/cancel`, or subscribe over the WebSocket). Body adds optional `id` (session), `workingDirectory` (the directory tools resolve paths against; it must exist, else `400`; falls back to the session's recorded directory, then the server's), and, with `mux serve --allow-tools`, mutating tools raise an `approval` event answered by `POST /v1.0/api/chat/approve`. `planMode: true` runs the turn in plan mode (read-only tools only); when the model presents its plan with `exit_plan`, a `plan` event carries `{ plan, steps, text, executionPrompt }` before `done`, and the client approves by sending `executionPrompt` as the next turn without `planMode`. The model's `ask_user` tool gets the no-user answer over the REST API. Persists the turn to the shared session store. |
 | GET | `/v1.0/api/settings` | key | Editable settings subset, **secrets masked** (`rest.apiKeySet` instead of the key). |
 | PUT | `/v1.0/api/settings` | key | Update settings (validated/clamped, written to `settings.json`). The REST API key changes only when a non-blank `rest.apiKey` is supplied. |
 | GET | `/v1.0/api/usage/summary` | key | Window KPI summary. Query: `from`/`to` (epoch ms) or `range=hour\|day\|week\|month\|all`, plus `endpoint`, `model`, `callKind`, `session`, `label` (comma-separated), `tag` (comma-separated `key:value`). Label/tag filters resolve to the sessions carrying them (query-time join) and compose with AND. Returns `{ FromUnixMs, ToUnixMs, Metrics }`. |
@@ -181,6 +185,17 @@ The agent's `read_file` tool applies the same setting: a file over its inline ca
 (default) rather than a `file_too_large` refusal, while an explicit `offset`/`limit` still pages the exact
 range the map points at. Summarizing needs a model call, so the tool itself maps; a thin client asks the
 server to summarize via `POST /v1.0/api/context/file`, which runs the summarizer and serves the cache.
+
+## Memory
+
+`GET /v1.0/api/memory?workingDirectory=<dir>` lists the persistent memories visible from a directory: its project's
+memories, then the global ones, newest first within each, as `{ WorkingDirectory, ProjectKey, Enabled, Memories }`.
+Add `query=<words>` to keep only memories that contain every word, or `name=<name>` for one memory (404 when there
+is none). `POST /v1.0/api/memory` with `{ Name, Description, Content, Scope, WorkingDirectory }` creates a memory
+(201) or updates the one with the same name (200); `Scope` is `project` (default) or `global`.
+`DELETE /v1.0/api/memory?name=<name>&scope=<scope>&workingDirectory=<dir>` deletes one and returns it (404 when it
+does not exist). A `workingDirectory` that does not exist is a 400. These read and write the same files as the
+terminal, the desktop app, `mux memory`, and the model's `remember` tool.
 
 ## Web dashboard
 

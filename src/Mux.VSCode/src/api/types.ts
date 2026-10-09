@@ -152,6 +152,14 @@ export interface SkillExpansion {
     IsPlaybook: boolean;
 }
 
+/** The result of `GET /v1.0/api/files/complete`: paths matching what was typed after `@`, best first. */
+export interface FileCompletion {
+    WorkingDirectory: string;
+    Prefix: string;
+    Paths: string[];
+    Mentions: string[];
+}
+
 /** The result of `POST /v1.0/api/mcp-servers/validate`. */
 export interface McpValidation {
     Name: string;

@@ -6,6 +6,7 @@ namespace Mux.Agent
     using System.Linq;
     using Mux.Core.Models;
     using Mux.Core.Sessions;
+    using Mux.Core.Hosting;
     using Mux.Core.Settings;
     using Mux.Server;
 
@@ -167,51 +168,57 @@ namespace Mux.Agent
         }
 
         /// <summary>
-        /// Launch the interactive mux terminal UI (the TUI) as an independent process. Best-effort; never
-        /// throws. Opens a fresh terminal window so the full-screen shell has a console to draw into.
+        /// Launch the interactive mux terminal UI (the TUI) in a new terminal window. Best-effort; never throws. The
+        /// tray usually runs with a minimal PATH (macOS gives Dock and login-item apps only the system folders), so the
+        /// CLI is located explicitly (MUX_CLI, PATH, ~/.dotnet/tools, beside the agent, or a checkout build) and the
+        /// window starts a login shell. When no CLI is found, the window explains how to install it.
         /// </summary>
         public void LaunchTerminal()
         {
-            // The TUI needs its own console. Spawn a new terminal window that runs `mux`, rather than
-            // launching the CLI directly (which, from a GUI tray process, would have no console attached).
+            string workingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            MuxCliLocation? location = MuxCliLocator.Locate();
             try
             {
-                if (OperatingSystem.IsWindows())
-                {
-                    // `start "" cmd /k mux` opens a new console window and keeps it open running the TUI.
-                    Process.Start(new ProcessStartInfo { FileName = "cmd", Arguments = "/c start \"mux\" cmd /k mux", UseShellExecute = true });
-                    return;
-                }
-
                 if (OperatingSystem.IsMacOS())
                 {
-                    Process.Start(new ProcessStartInfo { FileName = "open", Arguments = "-a Terminal mux", UseShellExecute = false });
+                    // Terminal runs a .command file in a new window; unlike AppleScript this needs no automation
+                    // permission. The script deletes itself once it starts.
+                    string script = Path.Combine(Path.GetTempPath(), "mux-terminal-" + Guid.NewGuid().ToString("N") + ".command");
+                    File.WriteAllText(script, TerminalLaunchPlanner.BuildMacCommandFile(location, workingDirectory));
+                    File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                    ProcessStartInfo open = new ProcessStartInfo { FileName = "/usr/bin/open", UseShellExecute = false };
+                    open.ArgumentList.Add("-a");
+                    open.ArgumentList.Add("Terminal");
+                    open.ArgumentList.Add(script);
+                    Process.Start(open);
                     return;
                 }
 
-                // Linux: try common terminal emulators in turn.
-                foreach (string terminal in new[] { "x-terminal-emulator", "gnome-terminal", "konsole", "xterm" })
+                if (OperatingSystem.IsWindows())
+                {
+                    TerminalCommand windows = TerminalLaunchPlanner.BuildWindowsCommand(location, workingDirectory);
+                    Process.Start(new ProcessStartInfo { FileName = windows.FileName, Arguments = windows.RawArguments ?? string.Empty, UseShellExecute = false, CreateNoWindow = true });
+                    return;
+                }
+
+                foreach (TerminalCommand candidate in TerminalLaunchPlanner.BuildLinuxCommands(location, workingDirectory))
                 {
                     try
                     {
-                        Process.Start(new ProcessStartInfo { FileName = terminal, Arguments = "-e mux", UseShellExecute = false });
+                        ProcessStartInfo start = new ProcessStartInfo { FileName = candidate.FileName, UseShellExecute = false };
+                        foreach (string argument in candidate.Arguments)
+                        {
+                            start.ArgumentList.Add(argument);
+                        }
+
+                        Process.Start(start);
                         return;
                     }
                     catch (Exception)
                     {
-                        // Try the next emulator.
+                        // Not installed; try the next emulator.
                     }
                 }
-            }
-            catch (Exception)
-            {
-                // Fall through to a direct launch below.
-            }
-
-            // Last resort: spawn `mux` directly (works when the tray was itself started from a console).
-            try
-            {
-                Process.Start(new ProcessStartInfo { FileName = "mux", UseShellExecute = true });
             }
             catch (Exception)
             {

@@ -350,6 +350,24 @@ namespace Mux.Core.Agent
         }
 
         /// <summary>
+        /// Shows an <c>ask_user</c> question to the user and returns the answer. Nullable; when null the tool tells the
+        /// model that no user is available and to choose a sensible default.
+        /// </summary>
+        public Func<Mux.Core.Interaction.AskUserRequest, CancellationToken, Task<Mux.Core.Interaction.AskUserResponse>>? AskUserFunc { get; set; }
+
+        /// <summary>
+        /// Shows a plan presented with <c>exit_plan</c> and returns the user's review. Nullable; when null the plan is
+        /// recorded as the result and the model is told to stop.
+        /// </summary>
+        public Func<Mux.Core.Interaction.PlanProposal, CancellationToken, Task<Mux.Core.Interaction.PlanReview>>? ReviewPlanFunc { get; set; }
+
+        /// <summary>
+        /// Whether this run is in plan mode: the read-only sandbox posture is forced, the system prompt gains the
+        /// plan-mode section, and the <c>exit_plan</c> tool is offered. Defaults to false.
+        /// </summary>
+        public bool PlanMode { get; set; }
+
+        /// <summary>
         /// A callback for executing external (MCP) tools by name.
         /// Parameters: toolName, arguments, workingDirectory, cancellationToken.
         /// Nullable.

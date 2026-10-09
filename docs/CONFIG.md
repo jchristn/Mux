@@ -274,11 +274,15 @@ Example:
   "skillListingMode": "relevant",
   "projectInstructionsEnabled": true,
   "projectInstructionsMaxBytes": 32768,
+  "fileMentionMaxBytes": 262144,
   "skillProdPattern": "prod|production|live",
   "loopMaxIterations": 50,
   "loopMinIntervalSeconds": 30,
   "backgroundProcessMaxConcurrent": 8,
   "backgroundProcessOutputBytes": 1048576,
+  "mcpServeApiKey": null,
+  "memoryEnabled": true,
+  "memoryMaxBytes": 16384,
   "taskPlanningEnabled": true,
   "taskParallelismEnabled": false,
   "setupCompleted": false,
@@ -320,6 +324,10 @@ Fields:
 | `loopMinIntervalSeconds` | int | shortest fixed-loop interval and shortest `schedule_next` delay, in seconds; clamped to `1-3600`; default `30` |
 | `backgroundProcessMaxConcurrent` | int | most background processes (`process_start`) running at once per session; clamped to `1-64`; default `8` |
 | `backgroundProcessOutputBytes` | int | output kept per background process; older output is dropped first; clamped to `16384-16777216`; default `1048576` |
+| `mcpServeApiKey` | string | bearer key HTTP clients of `mux mcp serve --http` must send when `--api-key` is not given; null or empty requires none; ignored over stdio; default `null` |
+| `memoryEnabled` | bool | persistent memory: the `remember`, `recall`, and `forget` tools, the memory index in the system prompt, `#` quick-add, and `/memory`; default `true` |
+| `memoryMaxBytes` | int | UTF-8 bytes the memory index may add to the system prompt; the oldest entries are left out first; `0` omits the index (the tools still work); clamped to `0-262144`; default `16384` |
+| `fileMentionMaxBytes` | int | most text, in UTF-8 bytes, that `@path` mentions in one prompt may attach; a large file falls back to its structural map to fit, and a mention that still does not fit is left out with a note; clamped to `0-16777216`, `0` turns attachments off; default `262144` |
 | `projectInstructionsMaxBytes` | int | cap on the combined size of the instruction files, in UTF-8 bytes; the files farthest from the working directory are dropped first, and a single oversized file is cut short; clamped to `0-1048576`, `0` disables loading; default `32768` |
 | `maxConcurrency` | int | maximum number of interactive jobs allowed to run at once; clamped to `1-32`, default `3` |
 | `taskPlanningEnabled` | bool | offer the `plan_tasks`/`update_task` tools and teach the model to decompose large requests into a tracked task plan; default `true` |
@@ -624,7 +632,8 @@ offered to the model only when at least one valid subagent is defined.
       "systemPrompt": "You are a meticulous code reviewer. Inspect the described files and report concrete bugs and risks. Do not modify any files.",
       "endpointName": null,
       "allowedTools": ["read_file", "grep", "glob", "list_directory", "file_metadata"],
-      "maxIterations": null
+      "maxIterations": null,
+      "isolation": null
     }
   ]
 }
@@ -638,6 +647,7 @@ offered to the model only when at least one valid subagent is defined.
 | `endpointName` | string or null | Endpoint the subagent runs under; `null` inherits the parent's endpoint. |
 | `allowedTools` | string[] | Tool-name globs the child is limited to; empty inherits the parent's tool policy. A tight list is the main way to constrain a delegated task. |
 | `maxIterations` | int or null | Agent-loop cap for the child; `null` inherits the parent's cap. |
+| `isolation` | string or null | `worktree` runs the subagent in its own git worktree on a new `mux/subagent/<name>` branch (see [USAGE.md](USAGE.md#worktree-isolation)); `null` or `none` uses the shared working tree. Any other value makes the definition invalid. The `isolation` argument of `spawn_subagent` overrides it per call. |
 
 A subagent cannot itself spawn subagents, and it never carries the parent's task plan. `spawn_subagent`
 does not hold the workspace write lease, so a delegated task's own mutating tools serialize normally.

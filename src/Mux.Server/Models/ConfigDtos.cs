@@ -287,6 +287,9 @@ namespace Mux.Server.Models
 
         /// <summary>Iteration cap, or null to inherit.</summary>
         public int? MaxIterations { get; set; }
+
+        /// <summary>Where the subagent works: <c>none</c> (null) or <c>worktree</c>.</summary>
+        public string? Isolation { get; set; }
     }
 
     /// <summary>An event hook projected for editing.</summary>

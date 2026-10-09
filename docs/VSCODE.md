@@ -66,6 +66,11 @@ falls back to truncation. The panel tells you when an attachment was truncated t
 source could not be provided — terminal scrollback, for one, which the stable VS Code API does not expose.
 Nothing is dropped silently.
 
+Type `@path` in the chat input to attach a file, `@folder/` for a folder listing, or `@"path with spaces"`. The
+server resolves mentions against the workspace folder and sends the files to the model in a delimited block (a
+large file as a structural map), so the model sees exactly what you pointed at. `ApiClient.completeFiles` wraps
+`GET /v1.0/api/files/complete` for completion.
+
 ## Sessions
 
 The **Sessions** view lists the shared mux session store, newest first. Resume opens a conversation into the

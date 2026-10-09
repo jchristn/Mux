@@ -44,6 +44,22 @@ namespace Test.Shared.Suites
                             return Task.CompletedTask;
                         })),
 
+                    Case("MuxOnlyScaffoldsGated", "new-tool and new-touchstone-suite are listed only inside the mux repository; other scaffolds everywhere", (CancellationToken ct) =>
+                        WithDirAsync((root) =>
+                        {
+                            DefaultSkillLibrary.SeedInto(root);
+                            foreach (string id in new[] { "new-tool", "new-touchstone-suite" })
+                            {
+                                Skill gated = new SkillLoader(root).Load(Path.Combine(root, id));
+                                MuxAssert.IsTrue(gated.IsValid, id + " valid");
+                                MuxAssert.AreEqual("src/Mux.Core/Mux.Core.csproj", string.Join(",", gated.Manifest.AppliesTo), id + " gated on the mux project file");
+                            }
+
+                            Skill open = new SkillLoader(root).Load(Path.Combine(root, "new-class"));
+                            MuxAssert.AreEqual(0, open.Manifest.AppliesTo.Count, "new-class stays ungated");
+                            return Task.CompletedTask;
+                        })),
+
                     Case("NoDefaultContainsEmDash", "No seeded default skill contains an em-dash", (CancellationToken ct) =>
                     {
                         foreach (KeyValuePair<string, string> entry in DefaultSkillLibrary.All())

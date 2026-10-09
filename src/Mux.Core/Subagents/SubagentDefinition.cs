@@ -20,6 +20,7 @@ namespace Mux.Core.Subagents
         private string _Description = string.Empty;
         private string _SystemPrompt = string.Empty;
         private List<string> _AllowedTools = new List<string>();
+        private string? _Isolation = null;
 
         #endregion
 
@@ -84,6 +85,18 @@ namespace Mux.Core.Subagents
         [JsonPropertyName("maxIterations")]
         public int? MaxIterations { get; set; }
 
+        /// <summary>
+        /// Where the subagent works: <c>none</c> (the default, the shared working tree) or <c>worktree</c> (its own git
+        /// worktree on a new <c>mux/subagent/&lt;name&gt;</c> branch, kept only when it changed something), or null for
+        /// <c>none</c>. The <c>isolation</c> argument of <c>spawn_subagent</c> overrides it per call.
+        /// </summary>
+        [JsonPropertyName("isolation")]
+        public string? Isolation
+        {
+            get => _Isolation;
+            set => _Isolation = string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
+        }
+
         #endregion
 
         #region Public-Methods
@@ -101,7 +114,8 @@ namespace Mux.Core.Subagents
                 SystemPrompt = _SystemPrompt,
                 EndpointName = EndpointName,
                 AllowedTools = new List<string>(_AllowedTools),
-                MaxIterations = MaxIterations
+                MaxIterations = MaxIterations,
+                Isolation = _Isolation
             };
         }
 

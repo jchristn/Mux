@@ -239,6 +239,13 @@ namespace Test.Shared
                     LoopSkillsSuite.Create(),
                     LoopSchedulerSuite.Create(),
                     BackgroundProcessSuite.Create(),
+                    McpServerSuite.Create(),
+                    PlanModeSuite.Create(),
+                    AskUserSuite.Create(),
+                    WorktreeIsolationSuite.Create(),
+                    MemorySuite.Create(),
+                    FileMentionsSuite.Create(),
+                    TerminalLaunchSuite.Create(),
 
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),

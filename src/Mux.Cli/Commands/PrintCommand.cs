@@ -120,6 +120,14 @@ namespace Mux.Cli.Commands
         public string? Loop { get; set; }
 
         /// <summary>
+        /// Runs in plan mode: read-only exploration that ends with the model presenting a plan through
+        /// <c>exit_plan</c>; the plan is printed as the result and nothing is executed. Set by <c>--plan</c>.
+        /// </summary>
+        [Description("Plan mode: explore read-only and print the model's plan as the result, without executing it.")]
+        [CommandOption("--plan")]
+        public bool Plan { get; set; }
+
+        /// <summary>
         /// The iteration cap for <c>--loop</c>. Defaults to the <c>loopMaxIterations</c> setting, which also caps it.
         /// Set by <c>--loop-max</c>.
         /// </summary>
@@ -353,6 +361,7 @@ namespace Mux.Cli.Commands
                 SessionId = sessionId,
                 MaxTokenBudget = runtime.MuxSettings.MaxTokenBudget,
                 SandboxPosture = runtime.SandboxPosture,
+                PlanMode = settings.Plan,
                 AllowedTools = runtime.AllowedTools,
                 DeniedTools = runtime.DeniedTools,
                 AdditionalDirectories = runtime.AdditionalDirectories,
@@ -451,6 +460,15 @@ namespace Mux.Cli.Commands
                     loopOptions.ExternalToolProviders ??= new List<IExternalToolProvider>();
                     loopOptions.ExternalToolProviders.Add(new BackgroundProcessToolProvider(processRegistry));
 
+                    // Persistent memory: the remember/forget/recall tools and the memory index in the system prompt.
+                    if (runtime.MuxSettings.MemoryEnabled)
+                    {
+                        Mux.Core.Memory.MemoryToolProvider memoryProvider = new Mux.Core.Memory.MemoryToolProvider(
+                            Mux.Core.Memory.MemoryStore.FromConfigDirectory(), runtime.MuxSettings.MemoryMaxBytes);
+                        loopOptions.ExternalToolProviders.Add(memoryProvider);
+                        loopOptions.SystemPrompt += memoryProvider.BuildPromptSection(runtime.WorkingDirectory);
+                    }
+
                     List<ConversationMessage> history = new List<ConversationMessage>(latestConversation);
 
                     if (jsonlInput)
@@ -488,7 +506,7 @@ namespace Mux.Cli.Commands
                             turnCount++;
                             loopOptions.ConversationHistory = history;
                             PrintTurnResult turn = await RunTurnAsync(
-                                ExpandSkillInvocation(turnPrompt, skillRuntime, runtime.WorkingDirectory), loopOptions, runtime, plan, outputSchemaJson, sessionId, settings.Verbose, cts.Token).ConfigureAwait(false);
+                                ExpandPrompt(turnPrompt, skillRuntime, runtime, cts.Token), loopOptions, runtime, plan, outputSchemaJson, sessionId, settings.Verbose, cts.Token).ConfigureAwait(false);
 
                             if (turn.ExitCode != 0)
                             {
@@ -513,7 +531,7 @@ namespace Mux.Cli.Commands
                         loopOptions.ExternalToolProviders ??= new List<IExternalToolProvider>();
                         loopOptions.ExternalToolProviders.Add(new LoopToolProvider(loopScheduler));
                         LoopDefinition created = loopScheduler.Create(
-                            ExpandSkillInvocation(prompt, skillRuntime, runtime.WorkingDirectory), loopInterval, settings.LoopMax);
+                            ExpandPrompt(prompt, skillRuntime, runtime, cts.Token), loopInterval, settings.LoopMax);
                         Console.Error.WriteLine(ConsoleMessageStyler.Notification(
                             "Loop " + created.Id + ": " + (created.IsSelfPaced ? "self-paced" : "every " + LoopCommand.FormatInterval(loopInterval!.Value)) + ", at most " + created.MaxIterations + " iterations."));
 
@@ -544,7 +562,7 @@ namespace Mux.Cli.Commands
                     {
                         loopOptions.ConversationHistory = history;
                         PrintTurnResult turn = await RunTurnAsync(
-                            ExpandSkillInvocation(prompt, skillRuntime, runtime.WorkingDirectory), loopOptions, runtime, plan, outputSchemaJson, sessionId, settings.Verbose, cts.Token).ConfigureAwait(false);
+                            ExpandPrompt(prompt, skillRuntime, runtime, cts.Token), loopOptions, runtime, plan, outputSchemaJson, sessionId, settings.Verbose, cts.Token).ConfigureAwait(false);
                         exitCode = turn.ExitCode;
                         latestConversation = turn.FinalConversation;
                         lastAssistantText = turn.AssistantText;
@@ -648,6 +666,7 @@ namespace Mux.Cli.Commands
             StringBuilder finalAssistantResponse = new StringBuilder();
             RunCompletedEvent? completedForSummary = null;
             List<ConversationMessage> finalConversation = new List<ConversationMessage>();
+            string resultText = string.Empty;
 
             using (AgentLoop agentLoop = new AgentLoop(loopOptions))
             {
@@ -749,7 +768,10 @@ namespace Mux.Cli.Commands
                                         ConsoleMessageStyler.Notification(ToolCallRenderer.FormatToolCallLine(summary)));
                                 }
                             }
-                            if (runtime.ApprovalPolicy == ApprovalPolicyEnum.Deny)
+                            // ask_user and exit_plan talk to the user and never need approval, so Deny does not refuse them.
+                            if (runtime.ApprovalPolicy == ApprovalPolicyEnum.Deny
+                                && !string.Equals(proposedEvent.ToolCall.Name, Mux.Core.Interaction.InteractionToolProvider.AskUserToolName, StringComparison.OrdinalIgnoreCase)
+                                && !string.Equals(proposedEvent.ToolCall.Name, Mux.Core.Interaction.InteractionToolProvider.ExitPlanToolName, StringComparison.OrdinalIgnoreCase))
                             {
                                 if (plan.Format == OutputFormatEnum.Text)
                                 {
@@ -807,10 +829,14 @@ namespace Mux.Cli.Commands
                     }
                 }
 
+                // Plan mode: the plan presented with exit_plan is the result (the streamed text is commentary).
+                string? planText = loopOptions.PlanMode ? agentLoop.Interaction.LastProposal?.ToText() : null;
+                resultText = planText ?? finalAssistantResponse.ToString();
+
                 bool schemaFailed = false;
                 if (outputSchemaJson != null && exitCode == 0)
                 {
-                    string? schemaViolation = OutputSchemaValidator.Validate(outputSchemaJson, finalAssistantResponse.ToString());
+                    string? schemaViolation = OutputSchemaValidator.Validate(outputSchemaJson, resultText);
                     if (schemaViolation != null)
                     {
                         EmitRuntimeError(
@@ -827,7 +853,13 @@ namespace Mux.Cli.Commands
                     // Buffered text withholds the answer until the run is done, then emits it in one write.
                     if (!plan.Streamed)
                     {
-                        Console.Write(finalAssistantResponse.ToString());
+                        Console.Write(resultText);
+                    }
+                    else if (planText != null)
+                    {
+                        Console.WriteLine();
+                        Console.WriteLine();
+                        Console.Write(planText);
                     }
 
                     Console.WriteLine();
@@ -843,7 +875,7 @@ namespace Mux.Cli.Commands
                 if (plan.Format == OutputFormatEnum.Json && !schemaFailed)
                 {
                     Console.WriteLine(StructuredOutputFormatter.FormatRunSummary(
-                        completedForSummary, finalAssistantResponse.ToString(), sessionId, plan.IncludeStats));
+                        completedForSummary, resultText, sessionId, plan.IncludeStats));
                 }
 
                 finalConversation = new List<ConversationMessage>(agentLoop.FinalConversation);
@@ -852,7 +884,7 @@ namespace Mux.Cli.Commands
             return new PrintTurnResult
             {
                 ExitCode = exitCode,
-                AssistantText = finalAssistantResponse.ToString(),
+                AssistantText = resultText,
                 FinalConversation = finalConversation
             };
         }
@@ -895,6 +927,27 @@ namespace Mux.Cli.Commands
             }
 
             return result;
+        }
+
+        // Resolves @path mentions on the prompt as typed (reporting what was attached on stderr), expands a skill
+        // invocation, and appends the attachment block to whatever text results, so a mention passed to a skill
+        // is attached rather than swallowed into the skill's arguments.
+        private static string ExpandPrompt(string prompt, SkillRuntime? skills, ResolvedRuntime runtime, CancellationToken cancellationToken)
+        {
+            string expanded = ExpandSkillInvocation(prompt, skills, runtime.WorkingDirectory);
+            if (string.IsNullOrEmpty(prompt) || prompt.IndexOf('@') < 0)
+            {
+                return expanded;
+            }
+
+            Mux.Core.Context.FileMentionResolver resolver = new Mux.Core.Context.FileMentionResolver(runtime.WorkingDirectory, runtime.MuxSettings.FileMentionMaxBytes);
+            Mux.Core.Context.FileMentionResult mentions = resolver.ResolveAsync(prompt, cancellationToken).GetAwaiter().GetResult();
+            foreach (string line in Mux.Core.Context.FileMentionResolver.Describe(mentions))
+            {
+                Console.Error.WriteLine(ConsoleMessageStyler.Notification(line));
+            }
+
+            return mentions.Block.Length == 0 ? expanded : expanded.TrimEnd() + "\n\n" + mentions.Block;
         }
 
         private static string ExpandSkillInvocation(string prompt, SkillRuntime? skills, string workingDirectory)

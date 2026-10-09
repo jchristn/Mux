@@ -132,7 +132,7 @@ also reachable by key and the menu (one catalog, three surfaces):
 `/endpoint` (`/model`), `/effort` (`/reasoning`), `/settings` (`/config`, `/preferences`, `/prefs`),
 `/help` (`/?`), `/clear`, `/sidebar`, `/save`, `/export` (`/share`), `/undo`, `/redo`, `/sessions`,
 `/label` (`/labels`), `/tag` (`/tags`), `/tasks`, `/usage` (`/stats`, `/spend`), `/theme`, `/mouse`,
-`/menu`, `/quit` (`/exit`), `/trust`, `/loop`, `/loops`, `/processes` (`/ps`). Any custom commands from `hooks.json` also appear here as `/<name>`.
+`/menu`, `/quit` (`/exit`), `/trust`, `/loop`, `/loops`, `/processes` (`/ps`), `/memory`, `/plan`. Any custom commands from `hooks.json` also appear here as `/<name>`.
 Anything else that names an enabled skill runs that skill: `/code-review main` submits the skill's
 instructions with `main` as its arguments (see [Skills](#skills)). Built-in commands win, then custom
 commands, then skills.
@@ -181,6 +181,29 @@ active endpoint for subsequent prompts. The same modal offers **+ Add endpoint�
 name, adapter type, base URL, and model) and **- Remove endpoint…** (with a confirmation) — both persist
 to `endpoints.json`. You can still select an endpoint at launch with `--endpoint <name>` or an ad-hoc
 `--base-url`/`--model`/`--adapter-type`, and inspect with `mux endpoint list` / `mux endpoint show`.
+
+### Mentioning files with @
+
+Type `@` in the composer to attach a file or folder to the prompt. Suggestions appear in the footer as you type
+(file names that start with what you typed rank first, then paths, then names and paths that contain it, then
+fuzzy matches); `Tab` or `Enter` accepts the highlighted one, the arrow keys move the highlight, and `Esc`
+dismisses the list for that mention. Accepting a folder keeps the mention open so its contents are offered next.
+Dependency and build folders (`node_modules`, `.git`, `bin`, `obj`, and similar) are never suggested.
+
+When the prompt is sent, each mention is resolved against the working directory:
+
+- `@src/app.ts` attaches the file with line numbers. A file larger than 64 KB is attached as a structural map with
+  line ranges (as `read_file` does), so the model can read the exact ranges it needs instead of losing the tail.
+- `@src/` attaches a listing of the folder (folders first, then files with their sizes).
+- `@"My Docs/notes.md"` quotes a path that contains spaces.
+- `user@example.com` is not a mention, and `@@` writes a literal `@`.
+
+The files reach the model in a `<mentioned-files>` block after your text; the transcript keeps the prompt as you
+typed it and a notice lists what was attached. A path outside the working directory, a missing path, or a binary
+file is left as typed and reported. The attached text is capped by `fileMentionMaxBytes` (default 256 KB): a large
+file falls back to its map to fit, and a mention that still does not fit is left out with a note. `0` turns
+attachments off. `mux print "summarize @notes.txt"` resolves mentions the same way (notices go to stderr), and so do
+the desktop app, the web dashboard, and VS Code, whose chats are resolved by the server.
 
 ### Queueing prompts
 
@@ -305,6 +328,35 @@ For loops inside a single turn, use the skills: `loop-until` (retry a command un
 `fix-until-green` (build and test, fix one failure at a time), `ci-watch` (GitHub Actions status, waiting, and
 failed-step logs), and `flaky-test-hunt` (run a test many times and report how often it fails).
 
+### Plan mode
+
+Plan mode lets the model explore before it changes anything. Press Shift+Tab to cycle the turn mode (normal
+approvals, auto-approve, plan; the footer shows the mode), type `/plan` to toggle plan mode, or `/plan <prompt>` to
+enter it and submit the prompt.
+
+In plan mode every turn uses the read-only sandbox posture: tools that write files, run processes, or otherwise
+change state are neither offered to the model nor run if it asks for them, and the system prompt tells the model to
+investigate and then present a plan. The model ends planning by calling the `exit_plan` tool with the plan in
+Markdown and an optional list of steps. The terminal shows the plan and asks:
+
+- **Approve and auto-accept edits**: leave plan mode in auto-approve and carry the plan out.
+- **Approve (ask before edits)**: leave plan mode with normal approvals and carry the plan out.
+- **Keep planning (give feedback)**: type what should change; the model gets the feedback in the same turn and
+  presents a revised plan.
+
+On approval the next turn starts with the plan as its prompt, and the plan's steps become the task list (the
+checklist and `/tasks`). `mux print --plan "<prompt>"` runs one plan-mode turn and prints the plan as the result
+(`result` in `--output-format json`) without carrying it out.
+
+### Questions from the model
+
+When a decision is genuinely yours, the model can ask with the `ask_user` tool: a question with 2 to 4 options, and
+optionally several choices at once. The terminal shows it as a list (Space checks options when several are
+allowed); the last entry, **Other**, lets you type your own answer, and cancelling the turn dismisses the question.
+`ask_user` and `exit_plan` never need tool approval, even under the `deny` policy. Where nobody can answer (`mux
+print`, the web dashboard), the tool tells the model to choose a sensible default, state the assumption, and
+continue.
+
 ### Usage analytics
 
 Every model call — interactive, `print`, subagent, or dashboard chat — is recorded to a local SQLite
@@ -339,6 +391,45 @@ sees or mutates the parent's history — and returns only its final answer, so d
 review, a scoped search, a mechanical change) keeps the primary agent's context clean. Each subagent can
 have its own system prompt, endpoint, tool allow-list, and iteration cap; the tool is offered only when
 at least one valid subagent is defined. A subagent cannot spawn further subagents.
+
+### Worktree isolation
+
+A subagent (or a job) can work in its own git worktree instead of the shared working tree, so its edits never
+collide with yours or with another run's. Set `"isolation": "worktree"` on a subagent in `subagents.json`, or let
+the model pass `isolation: "worktree"` to `spawn_subagent` for one call (`"none"` overrides a definition's
+setting).
+
+An isolated run gets `git worktree add` on a new branch, `mux/<kind>/<name>` (for example
+`mux/subagent/reviewer`; a taken name gets `-2`, `-3`, and so on), created from the current `HEAD` in a folder
+under the repository's git directory (`.git/mux-worktrees/`), so it never appears in your working tree. It
+starts in the same subdirectory you were in, and it does not take the shared write lease. When it ends:
+
+- If it changed nothing, the worktree and its branch are removed.
+- If it changed something, any uncommitted changes are committed onto its branch (with your git identity, or
+  `mux <mux@localhost>` when none is configured; commit hooks and signing are skipped for that automated commit),
+  and the worktree is kept. `spawn_subagent` returns the branch, worktree path, commits, and `git diff --stat`, so
+  you can review the work, `git merge` the branch, or discard it.
+
+The worktree always starts from the last commit: uncommitted changes in your working tree are **not** copied into
+it (the result reports `base_had_uncommitted_changes` when you had some), and they are never touched. mux never
+checks out, resets, stashes, or commits on your branch; it only creates and deletes `mux/` branches and worktrees
+it made. Isolation needs a git repository with at least one commit; otherwise `spawn_subagent` returns
+`isolation_unavailable` and nothing runs.
+
+Kept worktrees stay until you deal with them:
+
+```bash
+mux worktree list                         # mux worktrees with branch, state, and path
+mux worktree remove <name>                # refuses to drop uncommitted changes or unmerged commits
+mux worktree remove <name> --keep-branch  # remove the folder, keep the branch to merge later
+mux worktree remove <name> --force        # discard everything
+mux worktree prune                        # remove unchanged worktrees, forget ones whose folder is gone
+```
+
+`/worktrees` (with `list`, `prune`, and `remove <name> [--force] [--keep-branch]`) does the same in the terminal.
+Developers embedding `Mux.Core` can isolate jobs too: `JobManager.EnqueueAsync(..., IsolationModeEnum.Worktree, ...)`
+runs a job in a `mux/job/<id>` worktree and reports the result on `Job.WorktreeOutcome`, and
+`TaskOrchestrator.IsolateTasks` does it for every task of a plan.
 
 ### Plugins: hooks and custom commands
 
@@ -378,6 +469,32 @@ The built-in `run_process` tool executes commands using the host shell for the c
 - the shell invocation form
 
 This matters for command generation. For example, a Windows runtime should use `dir`/`type`/`copy` style commands, while a Unix runtime should use `ls`/`cat`/`cp`.
+
+### Memory
+
+mux keeps facts you want carried across sessions: the test command, a port, a preference, a decision. Each memory
+is a small Markdown file under `~/.mux/memory/` (the config directory's `memory` folder), in a folder per project
+(keyed by the repository root, or the working directory outside a repository) or in `global/` for facts that apply
+everywhere. Each folder has a `MEMORY.md` index. Edit or delete the files by hand if you like; files without the
+frontmatter are ignored.
+
+Every turn's system prompt lists the project's memories and then the global ones as `name: description`, newest
+first, within `memoryMaxBytes` (default 16384 bytes); older entries that do not fit are left out with a note. The
+model has three tools:
+
+| Tool | Kind | What it does |
+|---|---|---|
+| `remember` | mutating | Saves `name`, `description`, optional `content`, and `scope` (`project` or `global`). Saving an existing name updates it. |
+| `recall` | read-only | Reads one memory in full by `name`, searches by `query` (every word must match), or lists all. |
+| `forget` | mutating | Deletes a memory by `name` (optionally in one `scope`). |
+
+In the terminal and the desktop app, a prompt that starts with `#` saves the rest of the line as a project memory
+without a model call (`#global ...` saves a global one); a Markdown heading (`##`) is sent as a normal prompt.
+`/memory` lists memories, `/memory show <name>` and `/memory delete <name>` act on one, `/memory edit <name>` (terminal)
+opens the content in the editor, and `/memory clear [global]` asks for `--yes` before deleting a scope. Outside a
+session: `mux memory list [--query <words>] [--output-format json]`, `mux memory show <name>`, `mux memory add <text>
+[--name <name>] [--global]`, and `mux memory delete <name> [--global]`, each with `--cwd <dir>` to pick the project.
+Turn the feature off with `memoryEnabled: false`.
 
 ### Background processes
 
@@ -938,6 +1055,63 @@ Important:
 - interactive mode loads MCP servers from `mcp-servers.json` automatically; `mux print` loads them only when `--mcp-config` is supplied (see [Headless MCP](#headless-mcp---mcp-config)); `mux probe` never loads MCP
 - `--no-mcp` is interactive-only and, in `print`/`probe`, returns a structured configuration error rather than silently implying MCP support
 - an MCP tool result marked `isError: true` (the tool failed, or its arguments did not match the tool's input schema) is recorded as a failed tool call; the transcript shows the server's message as the failure reason, and the model still receives the full result so it can correct itself and retry
+
+## mux as an MCP Server (`mux mcp serve`)
+
+`mux mcp serve` turns mux into an MCP server, so Claude Code, Codex, an editor, or another mux can hand it a task.
+It speaks stdio by default, which is what MCP clients launch, and Streamable HTTP with `--http <port>`. The protocol
+comes from the Voltaic package mux already uses for its MCP client. Status lines go to stderr; stdout carries only
+the protocol.
+
+| Tool | What it does |
+|---|---|
+| `run` | Runs `prompt` as one headless agent turn, resolved like `mux print` (endpoint, system prompt, project instructions, skills, hooks, background processes), and returns `answer` plus `status`, `endpoint`, `model`, `iterations`, `tool_calls`, `errors`, `duration_ms`, and token counts. Optional `endpoint`, `working_directory`, `approval_policy` (`deny`, `auto-safe`, `auto`), and `max_turns`. |
+| `list_sessions` | Recent sessions from the shared session store, newest first (`limit`, default 20). |
+| `get_session` | One session's metadata and newest messages (`max_messages`, default 50; long messages are cut at 8000 characters). |
+| `list_endpoints` | Endpoint names, adapters, models, and base URLs with embedded credentials masked. API keys and headers are never returned. |
+| `list_skills` | The skills available in a working directory. |
+| `run_skill` | Runs one skill command deterministically. Registered only with `--allow-skills`. |
+
+The operator decides how much a caller may do. `--approval-policy deny|auto-safe|auto` (or `--yolo` for `auto`) is
+a ceiling, `deny` by default: a `run` call may ask for a stricter policy but never a looser one, and `ask` is refused
+because no person is attached. `auto` means the calling model can make mux edit files and run commands on this
+machine, so pass it deliberately. Runs are serialized (one at a time) so two turns never write the same tree at
+once; the read-only tools are never blocked. Progress notifications are sent after each tool call and step when the
+client supplies a `progressToken`, and cancelling the request cancels the turn.
+
+```bash
+mux mcp serve                                         # stdio, deny ceiling
+mux mcp serve --approval-policy auto-safe -e big      # default endpoint "big"
+mux mcp serve --allow-skills -w ~/src/app             # expose run_skill; default working directory
+mux mcp serve --http 8811 --api-key "$MUX_MCP_KEY"    # http://localhost:8811/mcp, bearer key required
+```
+
+Over HTTP the server binds `localhost` (loopback clients only) unless `--host` says otherwise; a non-loopback host
+without a key prints a warning. The key can also come from the `mcpServeApiKey` setting.
+
+Client configuration:
+
+```bash
+claude mcp add mux -- mux mcp serve --approval-policy auto-safe
+```
+
+```toml
+# ~/.codex/config.toml
+[mcp_servers.mux]
+command = "mux"
+args = ["mcp", "serve", "--approval-policy", "auto-safe"]
+```
+
+```json
+{
+  "servers": [
+    { "name": "mux-reviewer", "transport": "stdio", "command": "mux", "args": ["mcp", "serve", "--endpoint", "big-model"] }
+  ]
+}
+```
+
+The last block is a `mcp-servers.json` entry that lets one mux delegate work to another, for example one pinned to
+a larger model. See `MCP_SERVER_PLAN.md` for the design.
 
 ## Skills
 

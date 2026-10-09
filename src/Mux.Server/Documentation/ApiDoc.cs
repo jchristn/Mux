@@ -45,6 +45,9 @@ namespace Mux.Server.Documentation
         /// <summary>Large-file context blocks.</summary>
         public const string TagContext = "Context";
 
+        /// <summary>Persistent memory.</summary>
+        public const string TagMemory = "Memory";
+
         /// <summary>Subagent definitions.</summary>
         public const string TagSubagents = "Subagents";
 
@@ -156,7 +159,8 @@ namespace Mux.Server.Documentation
                 new OpenApiTag { Name = TagSettings, Description = "Read and update the editable server settings (secrets masked)." },
                 new OpenApiTag { Name = TagUsage, Description = "Query usage telemetry (summary, time series, breakdowns, events) and manage pricing." },
                 new OpenApiTag { Name = TagRuns, Description = "List active and recently-finished runs, inspect a run's state and task plan, and cancel a run." },
-                new OpenApiTag { Name = TagContext, Description = "Build a model-context block (map, summary, or truncation) from a large file." }
+                new OpenApiTag { Name = TagContext, Description = "Build a model-context block (map, summary, or truncation) from a large file." },
+                new OpenApiTag { Name = TagMemory, Description = "List, save, and delete the persistent memories the agent reads at the start of every turn." }
             };
 
             RegisterSchemas(settings.Schemas);
@@ -433,6 +437,54 @@ namespace Mux.Server.Documentation
             .WithResponse(400, BadRequest())
             .WithResponse(401, Unauthorized());
 
+        /// <summary>Metadata for <c>GET /v1.0/api/files/complete</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> FilesCompleteGet = m => Sec(Init(m, TagContext,
+            "Complete @ file mentions",
+            "Returns project paths that match `prefix` (the text typed after `@`), best first: exact path, file names that start with it, paths that start with it, names and paths that contain it, then fuzzy matches. Paths are relative to `workingDirectory` with forward slashes, and directories end with `/`. Dependency and build folders (`node_modules`, `.git`, `bin`, `obj`, and similar) are never offered. Query: `prefix` (optional; empty lists top-level entries), `workingDirectory` (optional; defaults to the server's current directory), `max` (1 to 100, default 20). Chat routes resolve `@path` mentions server-side, so a client only needs this for completion.",
+            operationId: "completeFileMentions"))
+            .WithResponse(200, Ok("FileCompletionDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        // --- Memory ---
+
+        /// <summary>Metadata for <c>GET /v1.0/api/memory</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> MemoryGet = m => Sec(Init(m, TagMemory,
+            "List or search memories",
+            "Returns the memories visible from `workingDirectory`: its project's memories, then the global ones, newest first within each. `query` keeps only memories whose name, description, or content contains every word; `name` returns just that memory (404 when there is none).",
+            operationId: "listMemories"))
+            .WithParameter(Query("workingDirectory", "Selects the project scope. Defaults to the server's current directory.", false, M.String()))
+            .WithParameter(Query("query", "Words that must all appear (case-insensitive).", false, M.String()))
+            .WithParameter(Query("name", "Return only this memory.", false, M.String()))
+            .WithResponse(200, Ok("MemoryListDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
+        /// <summary>Metadata for <c>POST /v1.0/api/memory</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> MemoryPost = m => Sec(Init(m, TagMemory,
+            "Save a memory",
+            "Creates a memory (201) or updates the one whose name slugs the same (200). `Scope` is `project` (default) or `global`; `WorkingDirectory` selects the project.",
+            operationId: "saveMemory"))
+            .WithRequestBody(Body("MemorySaveRequestDto", "The memory to save."))
+            .WithResponse(200, Ok("MemoryDto"))
+            .WithResponse(201, Ok("MemoryDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>DELETE /v1.0/api/memory</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> MemoryDelete = m => Sec(Init(m, TagMemory,
+            "Delete a memory",
+            "Deletes a memory by `name`. Without `scope`, the project scope is tried before the global one. Returns the deleted memory.",
+            operationId: "deleteMemory"))
+            .WithParameter(Query("name", "The memory's name.", true))
+            .WithParameter(Query("scope", "`project` or `global`.", false, M.String()))
+            .WithParameter(Query("workingDirectory", "Selects the project scope.", false, M.String()))
+            .WithResponse(200, Ok("MemoryDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
         // --- Subagents ---
 
         /// <summary>Metadata for <c>GET /v1.0/api/subagents</c>.</summary>
@@ -446,7 +498,7 @@ namespace Mux.Server.Documentation
         /// <summary>Metadata for <c>PUT /v1.0/api/subagents</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> SubagentsPut = m => Sec(Init(m, TagSubagents,
             "Replace subagents",
-            "Replaces the subagent set with the supplied list. `EndpointName` null inherits the active endpoint; `AllowedTools` limits the child to matching tool-name globs; `MaxIterations` null inherits the global cap.",
+            "Replaces the subagent set with the supplied list. `EndpointName` null inherits the active endpoint; `AllowedTools` limits the child to matching tool-name globs; `MaxIterations` null inherits the global cap; `Isolation` `worktree` runs the subagent in its own git worktree.",
             operationId: "putSubagents"))
             .WithRequestBody(BodyList("SubagentDto", "The complete desired subagent set."))
             .WithResponse(200, OkList("SubagentDto"))
@@ -1118,6 +1170,33 @@ namespace Mux.Server.Documentation
                 ["FromCache"] = Pbool("Whether a summary was served from the cache.")
             }, new Dictionary<string, object?> { ["Text"] = "Structural map (12 entries): …", ["Mode"] = "map", ["Inlined"] = false, ["OutlineEntryCount"] = 12, ["FromCache"] = false });
 
+            s["MemoryDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Name"] = Pstr("The memory's name (its slug)."),
+                ["Scope"] = Pstr("`project` or `global`."),
+                ["Description"] = Pstr("The one-line description shown in the prompt index."),
+                ["Content"] = Pstr("The full text."),
+                ["CreatedUtc"] = Pstr("When it was created (UTC)."),
+                ["UpdatedUtc"] = Pstr("When it was last changed (UTC).")
+            }, new Dictionary<string, object?> { ["Name"] = "test-command", ["Scope"] = "project", ["Description"] = "Run tests with dotnet test src/Mux.sln", ["Content"] = "Run tests with dotnet test src/Mux.sln", ["CreatedUtc"] = "2026-10-08T12:00:00Z", ["UpdatedUtc"] = "2026-10-08T12:00:00Z" });
+
+            s["MemoryListDto"] = Obj(new Dictionary<string, M>
+            {
+                ["WorkingDirectory"] = Pstr("The working directory the project scope was resolved for."),
+                ["ProjectKey"] = Pstr("The project scope's folder key."),
+                ["Enabled"] = Pbool("Whether memory is enabled in settings."),
+                ["Memories"] = Parr(Ref("MemoryDto"), "Project memories first, then global, newest first within each.")
+            }, new Dictionary<string, object?> { ["WorkingDirectory"] = "/src/app", ["ProjectKey"] = "app-1a2b3c4d5e6f", ["Enabled"] = true, ["Memories"] = new object[0] });
+
+            s["MemorySaveRequestDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Name"] = Pstr("The name (required)."),
+                ["Description"] = PstrNullable("One-line description. Defaults to the first line of Content."),
+                ["Content"] = PstrNullable("The full text. Defaults to Description."),
+                ["Scope"] = PstrNullable("`project` (default) or `global`."),
+                ["WorkingDirectory"] = PstrNullable("Selects the project scope. Defaults to the server's current directory.")
+            }, new Dictionary<string, object?> { ["Name"] = "test-command", ["Description"] = "Run tests with dotnet test src/Mux.sln", ["Content"] = null, ["Scope"] = "project", ["WorkingDirectory"] = "/src/app" });
+
             s["ProjectInstructionsDto"] = Obj(new Dictionary<string, M>
             {
                 ["WorkingDirectory"] = Pstr("The working directory the files were resolved for."),
@@ -1128,6 +1207,14 @@ namespace Mux.Server.Documentation
                 ["Truncated"] = Pbool("Whether the size cap dropped or cut a file."),
                 ["Text"] = Pstr("The combined text placed in the system prompt.")
             }, new Dictionary<string, object?> { ["WorkingDirectory"] = "/src/app", ["Enabled"] = true, ["Sources"] = new[] { "/src/app/AGENTS.md" }, ["DroppedSources"] = new string[0], ["TotalBytes"] = 812, ["Truncated"] = false, ["Text"] = "### AGENTS.md\nRun tests with dotnet test." });
+
+            s["FileCompletionDto"] = Obj(new Dictionary<string, M>
+            {
+                ["WorkingDirectory"] = Pstr("The working directory the paths are relative to."),
+                ["Prefix"] = Pstr("The text that was matched."),
+                ["Paths"] = Parr(Pstr("A relative path; directories end with `/`."), "Matching paths, best first."),
+                ["Mentions"] = Parr(Pstr("A mention, for example `@src/app.ts`."), "The same paths formatted as mentions (quoted when they contain spaces).")
+            }, new Dictionary<string, object?> { ["WorkingDirectory"] = "/src/app", ["Prefix"] = "app", ["Paths"] = new[] { "src/app.ts", "src/app.test.ts" }, ["Mentions"] = new[] { "@src/app.ts", "@src/app.test.ts" } });
 
             s["McpValidateRequestDto"] = Obj(new Dictionary<string, M>
             {
@@ -1170,7 +1257,8 @@ namespace Mux.Server.Documentation
                 ["SystemPrompt"] = Pstr("System prompt for the isolated child run."),
                 ["EndpointName"] = PstrNullable("Endpoint override, or null to inherit."),
                 ["AllowedTools"] = Parr(Pstr("A tool-name glob."), "Tool-name globs the child is limited to."),
-                ["MaxIterations"] = PintNullable("Iteration cap, or null to inherit.")
+                ["MaxIterations"] = PintNullable("Iteration cap, or null to inherit."),
+                ["Isolation"] = PstrNullable("Where the subagent works: null or none (shared tree) or worktree (its own git worktree on a mux/subagent/<name> branch).")
             }, new Dictionary<string, object?>
             {
                 ["Name"] = "researcher", ["Description"] = "Reads code and answers questions.",

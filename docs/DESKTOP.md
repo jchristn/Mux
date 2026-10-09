@@ -54,6 +54,12 @@ The desktop app runs the same agent loop as the TUI with the **auto-safe** appro
 
 Type `/<skill> args` to run any enabled skill by name; the composer sends the skill's instructions with your arguments filled in, and built-in commands such as `/skills` always win over a skill with the same name. Each turn also loads the project instruction files (`MUX.md`, `AGENTS.md`, or `CLAUDE.md`) for the conversation's working directory. `/instructions` lists the files that apply and any project skills waiting on a trust decision, and runs automatically after `/cwd`. `/trust all|playbooks|ignore|reset` records whether the project's checked-in skills with commands may load. See [USAGE.md](USAGE.md#project-skills-and-trust).
 
+Type `@path` in a message to attach a file (`@src/app.ts`), a folder listing (`@src/`), or a quoted path with spaces (`@"My Docs/notes.md"`). When you send, the files are resolved against the conversation's working directory and sent to the model after your text (a large file as a structural map); the bubble shows your message as typed and a notice lists what was attached or left out. The total is capped by `fileMentionMaxBytes`. See [USAGE.md](USAGE.md#mentioning-files-with-).
+
+Start a message with `#` to save the rest of the line as a memory for this project without a model call (`#global ...` for every project). `/memory` lists memories, `/memory show <name>` and `/memory delete <name>` act on one, and `/memory clear [global] --yes` clears a scope. See [USAGE.md](USAGE.md#memory).
+
+`/plan` toggles plan mode (`/plan <prompt>` enters it and sends the prompt, `/plan off` also resets approvals): turns explore read-only and end with a plan card offering **Approve and auto-accept edits**, **Approve**, or **Keep planning** with feedback; an approved plan is sent as the next turn. The composer placeholder shows the current mode. When the model asks a question with `ask_user`, a dialog shows the options (radio buttons, or check boxes when several are allowed) and an **Other** box for a typed answer; **Skip** dismisses it. See [USAGE.md](USAGE.md#plan-mode).
+
 `/processes` (alias `/ps`) lists the background processes the agent started with `process_start` (dev servers, watchers), `/processes output <id>` shows recent output, `/processes stop <id>` (or `all`) stops one, and `/processes clear` removes exited ones. Every tab shares one list, and closing the app stops them all. See [USAGE.md](USAGE.md#background-processes).
 
 ## Managers

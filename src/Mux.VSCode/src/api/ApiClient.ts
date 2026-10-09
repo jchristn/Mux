@@ -8,6 +8,7 @@
 import { ApiError } from './ApiError';
 import { drainBuffer } from './streaming';
 import {
+    FileCompletion,
     ChatStreamRequest,
     CheckpointActionResult,
     CheckpointStatus,
@@ -220,6 +221,23 @@ export class ApiClient {
      */
     public expandSkill(input: string, workingDirectory?: string, signal?: AbortSignal): Promise<SkillExpansion> {
         return this.sendJson<SkillExpansion>('POST', '/v1.0/api/skills/expand', { Input: input, WorkingDirectory: workingDirectory ?? null }, signal);
+    }
+
+    /**
+     * Completes an `@` file mention: project paths matching `prefix` (the text typed after `@`), best first. The
+     * chat routes resolve `@path` mentions server-side, so this is only needed to offer completions.
+     */
+    public completeFiles(prefix: string, workingDirectory?: string, max?: number, signal?: AbortSignal): Promise<FileCompletion> {
+        const query = new URLSearchParams({ prefix });
+        if (workingDirectory) {
+            query.set('workingDirectory', workingDirectory);
+        }
+
+        if (max !== undefined) {
+            query.set('max', String(max));
+        }
+
+        return this.getJson<FileCompletion>(`/v1.0/api/files/complete?${query.toString()}`, signal);
     }
 
     /** Enables or disables a skill by id. */

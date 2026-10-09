@@ -124,6 +124,12 @@ namespace Mux.Server.Models
 
         /// <summary>Conversation so far (including the new user turn).</summary>
         public List<ChatMessageDto> Messages { get; set; } = new List<ChatMessageDto>();
+
+        /// <summary>
+        /// When true the turn runs in plan mode: read-only tools only, ending with the model presenting a plan
+        /// through <c>exit_plan</c>, which is streamed as a <c>plan</c> event. Nothing is executed.
+        /// </summary>
+        public bool PlanMode { get; set; }
     }
 
     /// <summary>

@@ -6,10 +6,12 @@ namespace Mux.Core.Tools.Tools
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Enums;
     using Mux.Core.Models;
     using Mux.Core.Prompting;
     using Mux.Core.Subagents;
     using Mux.Core.Tools;
+    using Mux.Core.Worktrees;
 
     /// <summary>
     /// Delegates a self-contained sub-task to a named subagent that runs in an isolated conversation and
@@ -25,6 +27,7 @@ namespace Mux.Core.Tools.Tools
 
         private readonly SubagentRegistry _Registry;
         private readonly ISubagentExecutor _Executor;
+        private readonly WorktreeManager _Worktrees;
 
         #endregion
 
@@ -35,11 +38,13 @@ namespace Mux.Core.Tools.Tools
         /// </summary>
         /// <param name="registry">The registry of available subagents. Must not be null.</param>
         /// <param name="executor">The executor that runs a subagent. Must not be null.</param>
-        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
-        public SpawnSubagentTool(SubagentRegistry registry, ISubagentExecutor executor)
+        /// <param name="worktrees">Creates and cleans up isolated worktrees for <c>isolation: worktree</c>. Null uses a default manager.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="registry"/> or <paramref name="executor"/> is null.</exception>
+        public SpawnSubagentTool(SubagentRegistry registry, ISubagentExecutor executor, WorktreeManager? worktrees = null)
         {
             _Registry = registry ?? throw new ArgumentNullException(nameof(registry));
             _Executor = executor ?? throw new ArgumentNullException(nameof(executor));
+            _Worktrees = worktrees ?? new WorktreeManager();
         }
 
         #endregion
@@ -94,6 +99,12 @@ namespace Mux.Core.Tools.Tools
                 {
                     type = "string",
                     description = "The complete, self-contained task for the subagent. It does not see this conversation, so include all needed context."
+                },
+                isolation = new
+                {
+                    type = "string",
+                    @enum = new[] { "none", "worktree" },
+                    description = "Optional. 'worktree' runs the subagent in its own git worktree on a new branch so its edits cannot collide with yours; the result reports the branch and changes (kept only when it changed something). Defaults to the subagent's own setting, usually 'none'."
                 }
             },
             required = new[] { "subagent", "prompt" }
@@ -143,18 +154,59 @@ namespace Mux.Core.Tools.Tools
                 };
             }
 
+            string requestedIsolation = GetString(arguments, "isolation");
+            string isolationText = string.IsNullOrWhiteSpace(requestedIsolation) ? (definition.Isolation ?? string.Empty) : requestedIsolation;
+            if (!WorktreeManager.TryParseIsolation(isolationText, out IsolationModeEnum isolation))
+            {
+                return Error(toolCallId, "invalid_isolation", $"Unknown isolation '{isolationText}'. Use 'none' or 'worktree'.");
+            }
+
+            WorktreeLease? lease = null;
+            if (isolation == IsolationModeEnum.Worktree)
+            {
+                try
+                {
+                    lease = await _Worktrees.CreateAsync(workingDirectory, "subagent", definition.Name, cancellationToken).ConfigureAwait(false);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Error(toolCallId, "isolation_unavailable", ex.Message);
+                }
+            }
+
             SubagentResult result;
+            WorktreeOutcome? outcome = null;
             try
             {
-                result = await _Executor.ExecuteAsync(definition, prompt, workingDirectory, cancellationToken).ConfigureAwait(false);
+                result = await _Executor.ExecuteAsync(definition, prompt, lease?.WorkingDirectory ?? workingDirectory, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
+                if (lease != null)
+                {
+                    await _Worktrees.FinishAsync(lease, CancellationToken.None).ConfigureAwait(false);
+                }
+
                 throw;
             }
             catch (Exception ex)
             {
-                return Error(toolCallId, "subagent_failed", ex.Message);
+                if (lease != null)
+                {
+                    outcome = await _Worktrees.FinishAsync(lease, CancellationToken.None).ConfigureAwait(false);
+                }
+
+                return new ToolResult
+                {
+                    ToolCallId = toolCallId,
+                    Success = false,
+                    Content = JsonSerializer.Serialize(new { error = "subagent_failed", message = ex.Message, worktree = DescribeOutcome(outcome, lease) })
+                };
+            }
+
+            if (lease != null)
+            {
+                outcome = await _Worktrees.FinishAsync(lease, CancellationToken.None).ConfigureAwait(false);
             }
 
             if (result == null)
@@ -172,7 +224,8 @@ namespace Mux.Core.Tools.Tools
                     subagent = definition.Name,
                     iterations = result.Iterations,
                     result = result.FinalText,
-                    error = result.Error
+                    error = result.Error,
+                    worktree = DescribeOutcome(outcome, lease)
                 })
             };
         }
@@ -180,6 +233,31 @@ namespace Mux.Core.Tools.Tools
         #endregion
 
         #region Private-Methods
+
+        private static object? DescribeOutcome(WorktreeOutcome? outcome, WorktreeLease? lease)
+        {
+            if (outcome == null || lease == null)
+            {
+                return null;
+            }
+
+            return new
+            {
+                branch = outcome.Branch,
+                path = outcome.Path,
+                base_commit = outcome.BaseCommit,
+                changed = outcome.Changed,
+                kept = outcome.Changed && !outcome.Removed,
+                removed = outcome.Removed,
+                commits = outcome.Commits,
+                diff_stat = outcome.DiffStat,
+                base_had_uncommitted_changes = lease.BaseDirty,
+                warning = outcome.Warning,
+                next = outcome.Changed
+                    ? "The subagent's work is on branch " + outcome.Branch + " (worktree " + outcome.Path + "). Review it, then merge it (git merge " + outcome.Branch + ") or discard it (mux worktree remove " + outcome.Name + " --force)."
+                    : "The subagent changed nothing; its worktree and branch were removed."
+            };
+        }
 
         private static string GetString(JsonElement element, string propertyName)
         {

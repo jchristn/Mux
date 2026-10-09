@@ -126,7 +126,8 @@ namespace Mux.Server.Routes
                     SystemPrompt = s.SystemPrompt,
                     EndpointName = s.EndpointName,
                     AllowedTools = new List<string>(s.AllowedTools),
-                    MaxIterations = s.MaxIterations
+                    MaxIterations = s.MaxIterations,
+                    Isolation = s.Isolation
                 }).ToList();
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(new ListResponse<SubagentDto>(items)).ConfigureAwait(false);
@@ -147,12 +148,13 @@ namespace Mux.Server.Routes
                         SystemPrompt = dto.SystemPrompt ?? string.Empty,
                         EndpointName = string.IsNullOrWhiteSpace(dto.EndpointName) ? null : dto.EndpointName,
                         AllowedTools = dto.AllowedTools ?? new List<string>(),
-                        MaxIterations = dto.MaxIterations
+                        MaxIterations = dto.MaxIterations,
+                        Isolation = dto.Isolation
                     }).ToList();
 
                     SettingsLoader.SaveSubagents(merged);
                     req.Http.Response.StatusCode = 200;
-                    return await Task.FromResult<object>(new ListResponse<SubagentDto>(SettingsLoader.LoadSubagents().Select(s => new SubagentDto { Name = s.Name, Description = s.Description, SystemPrompt = s.SystemPrompt, EndpointName = s.EndpointName, AllowedTools = new List<string>(s.AllowedTools), MaxIterations = s.MaxIterations }).ToList())).ConfigureAwait(false);
+                    return await Task.FromResult<object>(new ListResponse<SubagentDto>(SettingsLoader.LoadSubagents().Select(s => new SubagentDto { Name = s.Name, Description = s.Description, SystemPrompt = s.SystemPrompt, EndpointName = s.EndpointName, AllowedTools = new List<string>(s.AllowedTools), MaxIterations = s.MaxIterations, Isolation = s.Isolation }).ToList())).ConfigureAwait(false);
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("SaveFailed", ex.Message); }
             }, Documentation.ApiDoc.SubagentsPut);

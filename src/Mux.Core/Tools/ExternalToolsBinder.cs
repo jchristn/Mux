@@ -71,6 +71,18 @@ namespace Mux.Core.Tools
             prompt += McpTemplateBinder.BuildMcpSection(mcpTools);
             prompt += skillSection;
 
+            // Additional providers may also describe themselves in the prompt (the memory index, for example).
+            if (additionalProviders != null)
+            {
+                foreach (IExternalToolProvider provider in additionalProviders)
+                {
+                    if (provider is IPromptSectionProvider sectionProvider)
+                    {
+                        prompt += sectionProvider.BuildPromptSection(template.WorkingDirectory);
+                    }
+                }
+            }
+
             template.SystemPrompt = prompt;
             template.CompactionSystemPrompt = baseCompaction;
             template.EffectiveToolCount = builtInToolCount + (hasMcp ? mcpTools!.Count : 0) + skillToolCount;

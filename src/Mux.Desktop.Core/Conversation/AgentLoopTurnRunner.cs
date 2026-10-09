@@ -98,6 +98,27 @@ namespace Mux.Desktop.Conversation
             set => _Processes = value;
         }
 
+        /// <summary>
+        /// Shows an <c>ask_user</c> question, or null so the tool tells the model no user is available.
+        /// </summary>
+        public Func<Mux.Core.Interaction.AskUserRequest, CancellationToken, System.Threading.Tasks.Task<Mux.Core.Interaction.AskUserResponse>>? AskUserHandler { get; set; }
+
+        /// <summary>
+        /// Shows a plan presented with <c>exit_plan</c> for approval, or null to record it without review.
+        /// </summary>
+        public Func<Mux.Core.Interaction.PlanProposal, CancellationToken, System.Threading.Tasks.Task<Mux.Core.Interaction.PlanReview>>? ReviewPlanHandler { get; set; }
+
+        /// <summary>
+        /// Whether the next turns run in plan mode (read-only, ending with <c>exit_plan</c>).
+        /// </summary>
+        public bool PlanMode { get; set; }
+
+        /// <summary>
+        /// Whether the next turns approve every tool call automatically (set after a plan is approved with
+        /// auto-accept). When false the desktop's auto-safe policy applies.
+        /// </summary>
+        public bool AutoApprove { get; set; }
+
         /// <summary>The session/thread id to tag usage telemetry with, so per-conversation stats can be queried.</summary>
         public string? SessionId
         {
@@ -238,7 +259,10 @@ namespace Mux.Desktop.Conversation
                 ConversationHistory = new List<ConversationMessage>(history),
                 SystemPrompt = resolved.SystemPrompt,
                 CompactionSystemPrompt = resolved.CompactionSystemPrompt,
-                ApprovalPolicy = ApprovalPolicyEnum.AutoSafe,
+                ApprovalPolicy = AutoApprove ? ApprovalPolicyEnum.AutoApprove : ApprovalPolicyEnum.AutoSafe,
+                PlanMode = PlanMode,
+                AskUserFunc = AskUserHandler,
+                ReviewPlanFunc = ReviewPlanHandler,
                 WorkingDirectory = _WorkingDirectory,
                 MuxSettings = settings,
                 MaxIterations = settings.GetEffectiveMaxAgentIterations(endpoint),
@@ -270,6 +294,16 @@ namespace Mux.Desktop.Conversation
                 {
                     options.ExternalToolProviders ??= new List<IExternalToolProvider>();
                     options.ExternalToolProviders.Add(new Mux.Core.Processes.BackgroundProcessToolProvider(_Processes));
+                }
+
+                // Persistent memory: the tools plus the memory index, read fresh each turn.
+                if (settings.MemoryEnabled)
+                {
+                    Mux.Core.Memory.MemoryToolProvider memoryProvider = new Mux.Core.Memory.MemoryToolProvider(
+                        Mux.Core.Memory.MemoryStore.FromConfigDirectory(), settings.MemoryMaxBytes);
+                    options.ExternalToolProviders ??= new List<IExternalToolProvider>();
+                    options.ExternalToolProviders.Add(memoryProvider);
+                    options.SystemPrompt += memoryProvider.BuildPromptSection(_WorkingDirectory);
                 }
             }
 

@@ -109,7 +109,7 @@ namespace Mux.Server.Routes
             {
                 if (!ApiAuth.Authorize(req.Http, _ApiKey)) return new ApiError("Unauthorized", "Authentication required.");
 
-                string? requested = req.Http.Request.Query.Elements["workingDirectory"];
+                string? requested = DecodeQuery(req.Http.Request.Query.Elements["workingDirectory"]);
                 string workingDirectory = string.IsNullOrWhiteSpace(requested) ? System.IO.Directory.GetCurrentDirectory() : requested!;
                 if (!System.IO.Directory.Exists(workingDirectory))
                 {
@@ -133,6 +133,59 @@ namespace Mux.Server.Routes
                     Text = instructions.Text
                 }).ConfigureAwait(false);
             }, Documentation.ApiDoc.ContextInstructionsGet);
+
+            // Completion for @path mentions: project paths matching ?prefix= (best first), relative to
+            // ?workingDirectory= (default: the server's cwd). Dependency and build folders are never offered.
+            app.Get("/v1.0/api/files/complete", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey)) return new ApiError("Unauthorized", "Authentication required.");
+
+                string? requested = DecodeQuery(req.Http.Request.Query.Elements["workingDirectory"]);
+                string workingDirectory = string.IsNullOrWhiteSpace(requested) ? System.IO.Directory.GetCurrentDirectory() : requested!;
+                if (!System.IO.Directory.Exists(workingDirectory))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiError("BadRequest", "workingDirectory does not exist: " + workingDirectory);
+                }
+
+                string prefix = DecodeQuery(req.Http.Request.Query.Elements["prefix"]) ?? string.Empty;
+                int max = 20;
+                string? maxText = req.Http.Request.Query.Elements["max"];
+                if (!string.IsNullOrWhiteSpace(maxText) && (!int.TryParse(maxText, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out max) || max < 1 || max > 100))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiError("BadRequest", "max must be a whole number from 1 to 100.");
+                }
+
+                FileMentionResolver resolver = new FileMentionResolver(workingDirectory);
+                List<string> paths = resolver.Complete(prefix.TrimStart('@'), max);
+                req.Http.Response.StatusCode = 200;
+                return await Task.FromResult<object>(new FileCompletionDto
+                {
+                    WorkingDirectory = resolver.WorkingDirectory,
+                    Prefix = prefix,
+                    Paths = paths,
+                    Mentions = paths.ConvertAll(FileMentionResolver.FormatMention)
+                }).ConfigureAwait(false);
+            }, Documentation.ApiDoc.FilesCompleteGet);
+        }
+
+        // Query values arrive percent-encoded; decode them (a '+' is a space in a query string).
+        private static string? DecodeQuery(string? value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return value;
+            }
+
+            try
+            {
+                return Uri.UnescapeDataString(value.Replace('+', ' '));
+            }
+            catch (UriFormatException)
+            {
+                return value;
+            }
         }
 
         private static async Task<string> RunSidecarAsync(EndpointConfig endpoint, bool ignoreCert, string systemPrompt, string userPrompt, CancellationToken token)

@@ -102,6 +102,42 @@ test('expandSkill sends a null working directory when none is given and reports 
     assert.equal(result.Matched, false);
 });
 
+test('completeFiles sends the prefix, working directory, and max as a query and returns the paths', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    globalThis.fetch = (async (input: unknown, init?: { method?: string }) => {
+        capturedUrl = String(input);
+        capturedMethod = init?.method ?? 'GET';
+        return new Response(JSON.stringify({ WorkingDirectory: '/work/repo', Prefix: 'app', Paths: ['src/app.ts', 'My Docs/'], Mentions: ['@src/app.ts', '@"My Docs/"'] }), { status: 200 });
+    }) as typeof fetch;
+
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
+    const result = await client.completeFiles('app', '/work/repo', 5);
+    const url = new URL(capturedUrl);
+    assert.equal(url.pathname, '/v1.0/api/files/complete');
+    assert.equal(url.searchParams.get('prefix'), 'app');
+    assert.equal(url.searchParams.get('workingDirectory'), '/work/repo');
+    assert.equal(url.searchParams.get('max'), '5');
+    assert.equal(capturedMethod, 'GET');
+    assert.deepEqual(result.Paths, ['src/app.ts', 'My Docs/']);
+    assert.equal(result.Mentions[1], '@"My Docs/"');
+});
+
+test('completeFiles omits optional parameters and rejects a server error', async () => {
+    let capturedUrl = '';
+    globalThis.fetch = (async (input: unknown) => {
+        capturedUrl = String(input);
+        return new Response('{"Error":"BadRequest"}', { status: 400 });
+    }) as typeof fetch;
+
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
+    await assert.rejects(() => client.completeFiles(''));
+    const url = new URL(capturedUrl);
+    assert.equal(url.searchParams.get('prefix'), '');
+    assert.equal(url.searchParams.has('workingDirectory'), false);
+    assert.equal(url.searchParams.has('max'), false);
+});
+
 test('expandSkill rejects when the server fails', async () => {
     globalThis.fetch = (async () => new Response('{"error":"BadRequest"}', { status: 400 })) as typeof fetch;
     const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });

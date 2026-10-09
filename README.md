@@ -78,6 +78,9 @@
 - Custom keybindings: rebind or unbind any command's key chord in `~/.mux/keybindings.json`
 - Undo/redo: in a git repository, mux snapshots the working tree before each turn so `/undo` and `/redo` roll a turn's file changes back and forward (git plumbing only — your branch, history, and stash are untouched)
 - Plugin system: out-of-process event hooks (`session-start`, `user-prompt-submit`, `session-end`, and the tool-level `pre-tool-use`, `post-tool-use`, and `stop`) and custom `/<name>` slash commands configured in `~/.mux/hooks.json`; inspect with `mux plugin list`. Tool hooks follow Claude Code's payload and exit-code contract (exit 2 blocks a call, appends feedback, or makes the model continue), take an optional tool-name `matcher`, and run on every surface
+- Interaction: `@path` mentions attach files to a prompt (with path completion in the terminal); persistent memory (`remember`, `recall`, `forget`, `#` quick-add, `/memory`, `mux memory`) carries facts across sessions per project and globally; plan mode (`/plan`, Shift+Tab, `mux print --plan`) explores read-only and then executes an approved plan; and the model can ask a multiple-choice question with `ask_user`
+- MCP server: `mux mcp serve` exposes mux to Claude Code, Codex, or any MCP client over stdio or Streamable HTTP (`--http <port>`, optional bearer key), with a `run` tool for headless turns plus read-only session, endpoint, and skill tools; built on Voltaic. See `MCP_SERVER_PLAN.md` and USAGE.md
+- Worktree isolation: subagents with `"isolation": "worktree"` run in their own git worktree on a `mux/...` branch without the shared write lease; unchanged worktrees are removed and changed ones are kept on their branch with a summary. `mux worktree list|prune|remove` and `/worktrees` manage them
 - Background processes: the model starts dev servers, watchers, and `docker compose up` with `process_start` (optionally waiting for a ready line), reads only new output with `process_output`, and stops them with `process_stop`; output is kept in a bounded buffer, the number of running processes is capped, and everything is killed when the session ends. `/processes` in the terminal and desktop lists, shows output, and stops them, and the sidebar shows each one. The `react-dev-server` skill starts a React dev server this way and reports its URL
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Local REST server & tray agent (`v0.9.0`, opt-in): `mux serve` starts a loopback-bound, token-guarded REST + WebSocket API (Watson 7) over mux's in-process services; a cross-platform Avalonia system-tray agent hosts it in the background with **About / Launch Mux / Exit**. Never auto-starts from a plain run. See `docs/REST_API.md`
@@ -254,6 +257,7 @@ The **desktop app** launches from the repo with `scripts\windows\run-desktop.bat
 | `--buffer` | `--no-stream` | print: hold `text` output and emit it once at the end instead of streaming |
 | `--loop <interval\|self>` |  | print: repeat the prompt every interval (`30s`, `5m`, `1h30m`) or self-paced (`self`) until the loop stops |
 | `--loop-max <n>` |  | print: iteration cap for `--loop` (default and maximum: `loopMaxIterations`) |
+| `--plan` |  | print: run in plan mode and print the plan instead of executing it |
 | `--no-mcp` |  | Interactive only: skip MCP server initialization |
 | `--ignore-cert-errors` | `--insecure` | Disable TLS certificate validation for mux-owned network requests |
 | `--verbose` | `-v` | Extra progress to stderr in text mode |
@@ -275,6 +279,9 @@ Every command is also reachable by key binding and the `F1` menu (one catalog, t
 /loop [interval] [--max N] <text> Repeat a prompt every interval, or self-paced when no interval is given
 /loops [cancel|pause|resume <id>] List loops, or cancel (also `all`), pause, or resume one
 /processes [output|stop <id>]      List background processes, show recent output, or stop one (also `all`)
+/plan [prompt]                    Toggle plan mode, or enter it and submit a prompt (Shift+Tab cycles modes)
+/memory [show|edit|delete <name>] List, view, edit, or delete memories (`# text` saves one)
+/worktrees                        List, prune, or remove isolated worktrees
 /save                             Save the current session
 /export, /share                   Export the session to HTML + Markdown (server-free)
 /undo, /redo                      Roll the working tree back/forward a turn (git repos)
