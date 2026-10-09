@@ -28,6 +28,7 @@ namespace Mux.Core.Tools
         /// <param name="mcpExecutor">The executor for MCP tool calls, or null.</param>
         /// <param name="skillRuntime">The skills runtime (an external tool provider), or null when skills are off.</param>
         /// <param name="builtInToolCount">The number of built-in tools, used to report the effective count.</param>
+        /// <param name="additionalProviders">Further tool providers registered after the skills runtime (for example the loop tool), or null.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="template"/> is null.</exception>
         public static void Apply(
             AgentLoopOptions template,
@@ -36,7 +37,8 @@ namespace Mux.Core.Tools
             IReadOnlyList<ToolDefinition>? mcpTools,
             Func<string, JsonElement, string, CancellationToken, Task<ToolResult>>? mcpExecutor,
             SkillRuntime? skillRuntime,
-            int builtInToolCount)
+            int builtInToolCount,
+            IReadOnlyList<IExternalToolProvider>? additionalProviders = null)
         {
             if (template == null) throw new ArgumentNullException(nameof(template));
 
@@ -55,6 +57,14 @@ namespace Mux.Core.Tools
             else
             {
                 template.ExternalToolProviders = null;
+            }
+
+            // Providers whose tools come and go per turn (the loop tool appears only during a self-paced
+            // iteration) are not counted in the effective tool count.
+            if (additionalProviders != null && additionalProviders.Count > 0)
+            {
+                template.ExternalToolProviders ??= new List<IExternalToolProvider>();
+                template.ExternalToolProviders.AddRange(additionalProviders);
             }
 
             string prompt = basePrompt ?? string.Empty;

@@ -59,6 +59,11 @@ namespace Mux.Core.Skills
         /// </summary>
         public string Code => _Code;
 
+        /// <summary>
+        /// The command's timeout in milliseconds, or zero for the loader default (two minutes).
+        /// </summary>
+        public int TimeoutMs { get; set; }
+
         #endregion
     }
 }

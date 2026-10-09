@@ -42,6 +42,7 @@
   "cmd.manage.setDefaultEndpoint": "Сделать по умолчанию",
   "cmd.manage.addMcp": "Добавить сервер MCP",
   "cmd.manage.editMcp": "Изменить сервер MCP",
+  "cmd.manage.validateMcp": "Проверить сервер MCP",
   "cmd.manage.deleteMcp": "Удалить сервер MCP",
   "cmd.manage.activatePrompt": "Сделать активным промптом",
   "cmd.manage.toggleSkill": "Переключить навык",

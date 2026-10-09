@@ -37,6 +37,8 @@ namespace Mux.Core.Models
         private string _SkillListingMode = "relevant";
         private bool _ProjectInstructionsEnabled = true;
         private int _ProjectInstructionsMaxBytes = 32768;
+        private int _LoopMaxIterations = Mux.Core.Jobs.LoopScheduler.DefaultMaxIterations;
+        private int _LoopMinIntervalSeconds = Mux.Core.Jobs.LoopScheduler.DefaultMinIntervalSeconds;
         private string _SkillProdPattern = DefaultSkillProdPattern;
         private bool _TaskPlanningEnabled = true;
         private bool _TaskParallelismEnabled = false;
@@ -390,6 +392,28 @@ namespace Mux.Core.Models
         {
             get => _ProjectInstructionsMaxBytes;
             set => _ProjectInstructionsMaxBytes = Math.Clamp(value, 0, 1048576);
+        }
+
+        /// <summary>
+        /// The iteration cap for a recurring prompt (<c>/loop</c>, <c>mux print --loop</c>) that does not ask for
+        /// one, and the most any loop may ask for. Clamped to 1..1000. Defaults to 50.
+        /// </summary>
+        [JsonPropertyName("loopMaxIterations")]
+        public int LoopMaxIterations
+        {
+            get => _LoopMaxIterations;
+            set => _LoopMaxIterations = Math.Clamp(value, 1, Mux.Core.Jobs.LoopScheduler.MaxIterationsLimit);
+        }
+
+        /// <summary>
+        /// The shortest interval a fixed loop may use, and the shortest delay the model may pass to
+        /// <c>schedule_next</c> in a self-paced loop, in seconds. Clamped to 1..3600. Defaults to 30.
+        /// </summary>
+        [JsonPropertyName("loopMinIntervalSeconds")]
+        public int LoopMinIntervalSeconds
+        {
+            get => _LoopMinIntervalSeconds;
+            set => _LoopMinIntervalSeconds = Math.Clamp(value, 1, Mux.Core.Jobs.LoopScheduler.MaxDelaySeconds);
         }
 
         /// <summary>

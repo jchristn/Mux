@@ -85,7 +85,7 @@ section reads the server's live configuration:
 - **Endpoints** — add, edit, delete, and set the default from a form (adapter, base URL, model, API key,
   token/context limits, per-endpoint tool auto-approval). The API key field is blank on edit and leaving it
   blank keeps the stored key.
-- **MCP Servers** — add, edit, and delete stdio or HTTP servers.
+- **MCP Servers**: add, edit, validate, and delete stdio or HTTP servers. **Validate MCP server** (right-click a server) connects through `mux serve` and reports the tool count, or on failure the one-line cause with a **Show details** button that opens the full diagnosis (URL, HTTP status, headers, response body, stdio stderr) in an editor tab.
 - **Prompts** — edit your prompt profiles (system, tools-disabled, and compaction prompts) and set which one
   is active, and browse the operational prompt catalog grouped by kind — edit or reset any entry. Subagent
   personas are listed read-through and deep-link to the subagent editor.

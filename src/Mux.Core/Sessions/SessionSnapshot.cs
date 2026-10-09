@@ -159,6 +159,13 @@ namespace Mux.Core.Sessions
             set => _Jobs = value ?? new List<PersistedJobSnapshot>();
         }
 
+        /// <summary>
+        /// The session's recurring prompts (<c>/loop</c>) that could still fire at snapshot time, or null when the
+        /// saving surface does not track loops. A null value keeps the stored loops; an empty list clears them.
+        /// Restored loops come back paused.
+        /// </summary>
+        public List<Mux.Core.Jobs.LoopDefinition>? Loops { get; set; }
+
         #endregion
     }
 }

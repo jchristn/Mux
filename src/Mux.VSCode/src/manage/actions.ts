@@ -4,6 +4,7 @@ import { EndpointDetail, EndpointHeader, McpServer, MuxServerSettings, PromptCat
 import { MuxServerLifecycle } from '../server/lifecycle';
 import { logError } from '../util/logger';
 import { FormField, FormPanel } from './FormPanel';
+import { formatMcpValidation } from './mcpValidation';
 import { ManageNode } from './ManageTree';
 
 /** Adapter types the endpoint form offers, matching the server's kebab-case values. */
@@ -242,6 +243,34 @@ export class ManageActions {
             await client.putMcpServers(next);
             void vscode.window.showInformationMessage(vscode.l10n.t('Saved MCP server "{0}".', edited.Name));
             this.refresh();
+        });
+    }
+
+    /** Validates the MCP server on a node and reports the outcome, with full failure details on request. */
+    public async validateMcpServer(node: ManageNode): Promise<void> {
+        const server = node.data as McpServer | undefined;
+        if (!server) {
+            return;
+        }
+
+        await this.withClient(async (client) => {
+            const result = await vscode.window.withProgress(
+                { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Validating MCP server "{0}"…', server.Name) },
+                () => client.validateMcpServer(server.Name),
+            );
+            if (result.Connected) {
+                void vscode.window.showInformationMessage(
+                    vscode.l10n.t('Connected to MCP server "{0}" ({1}): {2} tools.', result.Name, result.Method, String(result.ToolCount)),
+                );
+                return;
+            }
+
+            const showDetails = vscode.l10n.t('Show details');
+            const choice = await vscode.window.showErrorMessage(result.Error ?? vscode.l10n.t('The MCP server did not connect.'), showDetails);
+            if (choice === showDetails) {
+                const document = await vscode.workspace.openTextDocument({ content: formatMcpValidation(result), language: 'plaintext' });
+                await vscode.window.showTextDocument(document, { preview: true });
+            }
         });
     }
 
@@ -517,7 +546,7 @@ export class ManageActions {
             ].join('\n');
             const fields: FormField[] = [
                 { key: 'Name', label: vscode.l10n.t('Skill id (lowercase-hyphenated)'), type: 'text', value: '', required: true },
-                { key: 'Body', label: vscode.l10n.t('SKILL.md'), type: 'textarea', value: template },
+                { key: 'Body', label: vscode.l10n.t('SKILL.md'), type: 'textarea', value: template, copyable: true },
             ];
             const result = await FormPanel.show(vscode.l10n.t('Add skill'), fields);
             if (!result) {
@@ -540,7 +569,7 @@ export class ManageActions {
         await this.withClient(async (client) => {
             const body = await client.getSkillBody(skill.Name);
             const result = await FormPanel.show(vscode.l10n.t('Edit skill: {0}', skill.Name), [
-                { key: 'Body', label: vscode.l10n.t('SKILL.md'), type: 'textarea', value: body },
+                { key: 'Body', label: vscode.l10n.t('SKILL.md'), type: 'textarea', value: body, copyable: true },
             ]);
             if (!result) {
                 return;

@@ -6,6 +6,8 @@ import { checkContract } from '../../src/server/contract';
 import { formatList, formatRelativeTime, formatTokens } from '../../src/i18n/format';
 import { resolveLocale } from '../../src/i18n/locales';
 import { reviewFileInvocation } from '../../src/commands/skillInvocation';
+import { copyButtonHtml, escapeHtml } from '../../src/manage/formCopy';
+import { formatMcpValidation } from '../../src/manage/mcpValidation';
 
 test('ApiError derives a message from a JSON body', () => {
     const error = new ApiError(404, '{"error":"NotFound","message":"Unknown endpoint: nope"}');
@@ -68,4 +70,37 @@ test('reviewFileInvocation builds a code-review file invocation', () => {
 
 test('reviewFileInvocation normalizes backslashes and quotes paths with spaces', () => {
     assert.equal(reviewFileInvocation('src\\My Folder\\app.ts'), '/code-review file "src/My Folder/app.ts"');
+});
+
+test('copyButtonHtml targets the control and escapes the label', () => {
+    const html = copyButtonHtml('f_Body', 'SKILL.md <draft>');
+    assert.ok(html.includes('data-copy="f_Body"'));
+    assert.ok(html.includes('class="copy secondary"'));
+    assert.ok(html.includes('aria-label="Copy SKILL.md &lt;draft&gt; to the clipboard"'));
+    assert.ok(!html.includes('<draft>'));
+});
+
+test('escapeHtml escapes markup and quotes', () => {
+    assert.equal(escapeHtml('a<b>"c"&d'), 'a&lt;b&gt;&quot;c&quot;&amp;d');
+    assert.equal(escapeHtml(''), '');
+});
+
+test('formatMcpValidation shows the failure cause and every detail line', () => {
+    const text = formatMcpValidation({
+        Name: 'docs', Connected: false, Method: 'http', ToolCount: 0, Tools: [], ElapsedMs: 9,
+        Error: "Failed to connect to HTTP MCP server 'docs' at http://localhost:9: connection refused by localhost:9",
+        Details: 'Request: POST http://localhost:9/mcp\r\nHint: start the MCP server',
+    });
+    assert.ok(text.startsWith('MCP server "docs": Failed (http, 9 ms)'));
+    assert.ok(text.includes('connection refused by localhost:9'));
+    assert.ok(text.includes('\nRequest: POST http://localhost:9/mcp\n'));
+    assert.ok(text.includes('\nHint: start the MCP server\n'));
+    assert.ok(!text.includes('\r'));
+});
+
+test('formatMcpValidation lists the tools of a connected server', () => {
+    const text = formatMcpValidation({ Name: 'fs', Connected: true, Method: 'stdio', ToolCount: 2, Tools: ['fs.read', 'fs.write'], ElapsedMs: 40 });
+    assert.ok(text.includes('Connected (stdio, 40 ms)'));
+    assert.ok(text.includes('Tools (2):\n  fs.read\n  fs.write'));
+    assert.ok(!text.includes('Failed'));
 });

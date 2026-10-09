@@ -1,7 +1,9 @@
 namespace Mux.Cli.App
 {
     using System;
+    using System.Collections.Generic;
     using Mux.Core.Conversation;
+    using Mux.Core.Jobs;
     using TUIKit;
     using TUIKit.Content;
 
@@ -22,6 +24,7 @@ namespace Mux.Cli.App
         private readonly object _Sync = new object();
         private string _EffortLabel = string.Empty;
         private string _ThinkingLabel = string.Empty;
+        private List<string> _LoopLines = new List<string>();
 
         #endregion
 
@@ -44,6 +47,15 @@ namespace Mux.Cli.App
         {
             get => _ThinkingLabel;
             set => _ThinkingLabel = value ?? string.Empty;
+        }
+
+        /// <summary>
+        /// One line per active loop (see <see cref="FormatLoopLine"/>). Empty hides the LOOPS section.
+        /// </summary>
+        public List<string> LoopLines
+        {
+            get => _LoopLines;
+            set => _LoopLines = value ?? new List<string>();
         }
 
         #endregion
@@ -106,6 +118,16 @@ namespace Mux.Cli.App
                     _Pane.WriteLine(Text.From(Fit(Row("THINK", _ThinkingLabel))).Dim());
                 }
 
+                if (_LoopLines.Count > 0)
+                {
+                    _Pane.WriteLine(Text.From(string.Empty));
+                    _Pane.WriteLine(Text.From(Fit("LOOPS")).Bold());
+                    foreach (string line in _LoopLines)
+                    {
+                        _Pane.WriteLine(Text.From(Fit(line)).Dim());
+                    }
+                }
+
                 _Pane.WriteLine(Text.From(string.Empty));
                 _Pane.WriteLine(Text.From(Fit("THIS TURN")).Bold());
                 _Pane.WriteLine(Text.From(Fit(Row("TTFT", FormatMs(stats.LastTtftMs)))));
@@ -128,6 +150,30 @@ namespace Mux.Cli.App
                     _Pane.WriteLine(Text.From(Fit(Row("Cost", FormatUsd(stats.SessionCostUsd)))));
                 }
             }
+        }
+
+        /// <summary>
+        /// Formats one active loop for the sidebar: id, pacing, iterations, and when it fires next, for example
+        /// <c> L1 5m 3/50 in 4m12s</c>.
+        /// </summary>
+        /// <param name="loop">The loop. Must not be null.</param>
+        /// <param name="now">The current time (UTC).</param>
+        /// <returns>The line.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="loop"/> is null.</exception>
+        public static string FormatLoopLine(LoopDefinition loop, DateTime now)
+        {
+            if (loop is null) throw new ArgumentNullException(nameof(loop));
+
+            string pacing = loop.IsSelfPaced ? "self" : LoopCommand.FormatInterval(TimeSpan.FromSeconds(loop.IntervalSeconds!.Value));
+            string state = loop.Status switch
+            {
+                LoopStatusEnum.Running => "running",
+                LoopStatusEnum.Paused => "paused",
+                LoopStatusEnum.Scheduled => loop.NextFireUtc.HasValue && loop.NextFireUtc.Value > now ? "in " + LoopCommand.FormatInterval(loop.NextFireUtc.Value - now) : "due",
+                _ => "done"
+            };
+
+            return " " + loop.Id + " " + pacing + " " + loop.IterationCount + "/" + loop.MaxIterations + " " + state;
         }
 
         #endregion

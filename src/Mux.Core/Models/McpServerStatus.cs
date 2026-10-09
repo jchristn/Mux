@@ -42,6 +42,12 @@ namespace Mux.Core.Models
             set => _Connected = value;
         }
 
+        /// <summary>
+        /// Why the server is not connected: the last connect attempt's error, a one-line cause followed by the
+        /// diagnostic lines (HTTP status, headers, response body, stderr). Null when connected or not yet attempted.
+        /// </summary>
+        public string? Error { get; set; }
+
         #endregion
     }
 }

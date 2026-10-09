@@ -127,7 +127,7 @@ namespace Mux.Core.Tools
                 List<McpServerStatus> copy = new List<McpServerStatus>(_Status.Count);
                 foreach (McpServerStatus status in _Status)
                 {
-                    copy.Add(new McpServerStatus { Name = status.Name, ToolCount = status.ToolCount, Connected = status.Connected });
+                    copy.Add(new McpServerStatus { Name = status.Name, ToolCount = status.ToolCount, Connected = status.Connected, Error = status.Error });
                 }
 
                 return copy;
@@ -345,6 +345,12 @@ namespace Mux.Core.Tools
             }
         }
 
+        private static string FirstLine(string text)
+        {
+            int newline = text.IndexOfAny(new[] { '\r', '\n' });
+            return newline < 0 ? text : text.Substring(0, newline);
+        }
+
         // Emits a notice for each server whose connect outcome changed since it was last announced, and forgets
         // servers that are no longer configured so re-adding one announces again. No-op when no notice sink is
         // wired (for example, tests).
@@ -367,12 +373,15 @@ namespace Mux.Core.Tools
                     ? $"Connected successfully to MCP server {result.Name}: {result.ToolCount} tools"
                     : $"Unable to connect to MCP server {result.Name} using {result.Method}: {result.Error}";
 
-                if (_LastNotified.TryGetValue(result.Name, out string? previous) && string.Equals(previous, message, StringComparison.Ordinal))
+                // Compare on the first line only: the diagnostic details carry timings that change on every
+                // attempt, and the same failure must not be announced again on each refresh.
+                string key = FirstLine(message);
+                if (_LastNotified.TryGetValue(result.Name, out string? previous) && string.Equals(previous, key, StringComparison.Ordinal))
                 {
                     continue;
                 }
 
-                _LastNotified[result.Name] = message;
+                _LastNotified[result.Name] = key;
 
                 try
                 {
@@ -419,16 +428,24 @@ namespace Mux.Core.Tools
                 live[status.Name] = status;
             }
 
+            // The last connect attempt's error explains a server that is down.
+            Dictionary<string, string?> errors = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            foreach (McpConnectionResult connection in manager.GetConnectionResults())
+            {
+                errors[connection.Name] = connection.Connected ? null : connection.Error;
+            }
+
             List<McpServerStatus> result = new List<McpServerStatus>();
             foreach (McpServerConfig config in configs)
             {
+                errors.TryGetValue(config.Name, out string? error);
                 if (live.TryGetValue(config.Name, out McpServerStatus? status))
                 {
-                    result.Add(new McpServerStatus { Name = config.Name, Connected = status.Connected, ToolCount = status.ToolCount });
+                    result.Add(new McpServerStatus { Name = config.Name, Connected = status.Connected, ToolCount = status.ToolCount, Error = status.Connected ? null : error });
                 }
                 else
                 {
-                    result.Add(new McpServerStatus { Name = config.Name, Connected = false, ToolCount = 0 });
+                    result.Add(new McpServerStatus { Name = config.Name, Connected = false, ToolCount = 0, Error = error });
                 }
             }
 

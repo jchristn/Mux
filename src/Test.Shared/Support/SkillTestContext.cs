@@ -74,7 +74,26 @@ namespace Test.Shared.Support
         /// <param name="command">The command.</param>
         /// <param name="arguments">The arguments.</param>
         /// <returns>The result.</returns>
-        public async Task<SkillRunResult> Run(bool dryRun, Dictionary<string, string>? environment, string skill, string command, params string[] arguments)
+        public Task<SkillRunResult> Run(bool dryRun, Dictionary<string, string>? environment, string skill, string command, params string[] arguments)
+        {
+            return RunCoreAsync(Project, dryRun, environment, skill, command, arguments);
+        }
+
+        /// <summary>Runs a skill command in a folder under <see cref="Project"/>, optionally as a dry run.</summary>
+        /// <param name="subdirectory">The folder relative to <see cref="Project"/>; created when missing.</param>
+        /// <param name="dryRun">Whether to set MUX_SKILL_DRY_RUN.</param>
+        /// <param name="skill">The skill id.</param>
+        /// <param name="command">The command.</param>
+        /// <param name="arguments">The arguments.</param>
+        /// <returns>The result.</returns>
+        public Task<SkillRunResult> RunIn(string subdirectory, bool dryRun, string skill, string command, params string[] arguments)
+        {
+            string directory = Path.Combine(Project, subdirectory);
+            Directory.CreateDirectory(directory);
+            return RunCoreAsync(directory, dryRun, null, skill, command, arguments);
+        }
+
+        private async Task<SkillRunResult> RunCoreAsync(string workingDirectory, bool dryRun, Dictionary<string, string>? environment, string skill, string command, string[] arguments)
         {
             Skill loaded = new SkillLoader(Skills).Load(Path.Combine(Skills, skill));
             MuxAssert.IsTrue(loaded.IsValid, skill + " valid: " + string.Join("; ", loaded.Validation.Errors));
@@ -100,7 +119,7 @@ namespace Test.Shared.Support
                 foreach (KeyValuePair<string, string> pair in environment) env[pair.Key] = pair.Value;
             }
 
-            ToolResult result = await new SkillExecutor().ExecuteAsync("t", loaded, found!, new List<string>(arguments), Project, Token, env).ConfigureAwait(false);
+            ToolResult result = await new SkillExecutor().ExecuteAsync("t", loaded, found!, new List<string>(arguments), workingDirectory, Token, env).ConfigureAwait(false);
             using (JsonDocument document = JsonDocument.Parse(result.Content))
             {
                 JsonElement rootElement = document.RootElement;

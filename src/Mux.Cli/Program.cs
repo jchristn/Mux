@@ -551,6 +551,12 @@ CONFIG:
             // the next submitted turn.
             ToolRuntimeBinder toolBinder = new ToolRuntimeBinder(template, basePrompt, baseCompaction, builtInTools.Count);
 
+            // Recurring prompts (/loop). The schedule_next tool is composed onto every turn but only offered while
+            // a self-paced loop iteration is running.
+            Mux.Core.Jobs.LoopScheduler loopScheduler = new Mux.Core.Jobs.LoopScheduler(
+                runtime.MuxSettings.LoopMaxIterations, runtime.MuxSettings.LoopMinIntervalSeconds);
+            toolBinder.AdditionalProviders = new List<IExternalToolProvider> { new Mux.Core.Jobs.LoopToolProvider(loopScheduler) };
+
             mcpRuntime = new McpRuntime(
                 SettingsLoader.LoadMcpServers,
                 toolBinder.Rebind,
@@ -668,6 +674,7 @@ CONFIG:
                         template.CompactionStrategy = changed.CompactionStrategy;
                         template.CompactionPreserveTurns = changed.CompactionPreserveTurns;
                         template.IgnoreCertErrors = changed.IgnoreCertErrors;
+                        loopScheduler.Configure(changed.LoopMaxIterations, changed.LoopMinIntervalSeconds);
                     },
                     showSplash: string.IsNullOrWhiteSpace(settings.Prompt),
                     showBoundaries: runtime.MuxSettings.ShowBoundaryLines,
@@ -680,7 +687,8 @@ CONFIG:
                     usageQuery: usageTelemetry.CreateQueryService(
                         () => SettingsLoader.LoadPricing(),
                         new Mux.Core.Telemetry.SessionStoreMetadataIndex(sessionStore)),
-                    enableFirstRunWizard: true);
+                    enableFirstRunWizard: true,
+                    loopScheduler: loopScheduler);
 
                 // Expose the shell so MCP connection notices (raised on the runtime's background thread once
                 // Start() is called below) can be written into the transcript.

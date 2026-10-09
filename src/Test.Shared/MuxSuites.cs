@@ -94,6 +94,8 @@ namespace Test.Shared
                     // Mux.Desktop.Core logic suites (localization, formatters, thread/usage/conversation services).
                     DesktopLocalizationSuite.Create(),
                     DesktopFormattersSuite.Create(),
+                    DesktopTurnInfoSuite.Create(),
+                    DesktopEndpointSelectionSuite.Create(),
                     ThreadServiceSuite.Create(),
                     UsageWindowSuite.Create(),
                     UsageAnalyticsSuite.Create(),
@@ -213,6 +215,7 @@ namespace Test.Shared
                     // Skills: manager operations (create/enable/disable/remove/import) and the /skills surface.
                     SkillManagerSuite.Create(),
                     SkillManagementSuite.Create(),
+                    SkillEditorCopySuite.Create(),
 
                     // Skills: the mux skill CLI verb.
                     SkillCommandSuite.Create(),
@@ -233,10 +236,13 @@ namespace Test.Shared
 
                     // Phase 3 review and playbook skills against real git repositories.
                     ReviewSkillsSuite.Create(),
+                    LoopSkillsSuite.Create(),
+                    LoopSchedulerSuite.Create(),
 
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
                     McpRuntimeSuite.Create(),
+                    McpDiagnosticsSuite.Create(),
 
                     // Command-menu column alignment (F1 / /? menu).
                     CommandMenuFormatterSuite.Create(),

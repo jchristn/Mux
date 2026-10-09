@@ -42,6 +42,7 @@
   "cmd.manage.setDefaultEndpoint": "Tetapkan sebagai lalai",
   "cmd.manage.addMcp": "Tambah pelayan MCP",
   "cmd.manage.editMcp": "Edit pelayan MCP",
+  "cmd.manage.validateMcp": "Sahkan pelayan MCP",
   "cmd.manage.deleteMcp": "Padam pelayan MCP",
   "cmd.manage.activatePrompt": "Tetapkan sebagai prompt aktif",
   "cmd.manage.toggleSkill": "Togol kemahiran",

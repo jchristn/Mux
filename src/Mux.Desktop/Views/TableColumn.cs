@@ -23,8 +23,10 @@ namespace Mux.Desktop.Views
         /// <param name="badge">Optional projection to inline badge text; null or empty draws no badge.</param>
         /// <param name="foreground">Optional projection to a cell foreground brush; null uses the default text color.</param>
         /// <param name="tooltip">Optional descriptive tooltip for the column header.</param>
-        public TableColumn(string header, Func<TRow, string> text, GridLength width, Func<TRow, IComparable>? sortKey = null, Func<TRow, string?>? badge = null, Func<TRow, IBrush?>? foreground = null, string? tooltip = null)
+        /// <param name="cellTooltip">Optional projection to a per-cell tooltip; null or empty falls back to the cell text.</param>
+        public TableColumn(string header, Func<TRow, string> text, GridLength width, Func<TRow, IComparable>? sortKey = null, Func<TRow, string?>? badge = null, Func<TRow, IBrush?>? foreground = null, string? tooltip = null, Func<TRow, string?>? cellTooltip = null)
         {
+            CellTooltip = cellTooltip;
             Header = header ?? string.Empty;
             Text = text ?? throw new ArgumentNullException(nameof(text));
             Width = width;
@@ -51,6 +53,9 @@ namespace Mux.Desktop.Views
 
         /// <summary>Optional descriptive tooltip for the column header.</summary>
         public string? Tooltip { get; }
+
+        /// <summary>Optional projection to a per-cell tooltip; null or empty falls back to the cell text.</summary>
+        public Func<TRow, string?>? CellTooltip { get; }
 
         /// <summary>The column width.</summary>
         public GridLength Width { get; }

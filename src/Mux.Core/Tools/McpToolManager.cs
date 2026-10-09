@@ -335,7 +335,8 @@ namespace Mux.Core.Tools
                     Connected = kvp.Value.Connected,
                     ToolCount = kvp.Value.ToolCount,
                     Method = kvp.Value.Method,
-                    Error = kvp.Value.Error
+                    Error = kvp.Value.Error,
+                    Details = kvp.Value.Details
                 });
             }
 
@@ -493,7 +494,8 @@ namespace Mux.Core.Tools
                 Connected = false,
                 ToolCount = 0,
                 Method = MethodLabel(config.Transport),
-                Error = ex.Message
+                Error = ex.Message,
+                Details = ex is McpConnectionException connection && !string.IsNullOrWhiteSpace(connection.Details) ? connection.Details : null
             };
         }
 
@@ -539,13 +541,31 @@ namespace Mux.Core.Tools
             }
 
             McpClient client = new McpClient();
-            bool launched = await client.LaunchServerAsync(config.Command, config.Args.ToArray(), cancellationToken).ConfigureAwait(false);
-            if (!launched)
+            List<string> log = new List<string>();
+            EventHandler<string> capture = (object? sender, string message) => { lock (log) { log.Add(message ?? string.Empty); } };
+            client.Log += capture;
+            bool launched;
+            try
             {
+                launched = await client.LaunchServerAsync(config.Command, config.Args.ToArray(), cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                client.Log -= capture;
                 client.Dispose();
-                throw new InvalidOperationException($"Failed to launch MCP server '{config.Name}' with command: {config.Command}");
+                throw McpConnectionDiagnostics.DiagnoseStdio(config, SnapshotLog(log), ex);
             }
 
+            if (!launched)
+            {
+                // Give the stderr reader a moment to deliver the server's last words before reporting.
+                await Task.Delay(150, CancellationToken.None).ConfigureAwait(false);
+                client.Log -= capture;
+                client.Dispose();
+                throw McpConnectionDiagnostics.DiagnoseStdio(config, SnapshotLog(log), null);
+            }
+
+            client.Log -= capture;
             return new StdioMcpClientConnection(client);
         }
 
@@ -558,22 +578,56 @@ namespace Mux.Core.Tools
             }
 
             McpHttpClient client = new McpHttpClient();
-            ApplyAuthHeaders(client, config.Auth);
-            bool connected = await client.ConnectStreamableAsync(config.Url, NormalizeMcpPath(config.McpPath), cancellationToken).ConfigureAwait(false);
+            Dictionary<string, string> headers = BuildAuthHeaders(config.Auth);
+            foreach (KeyValuePair<string, string> header in headers)
+            {
+                client.SetRequestHeader(header.Key, header.Value);
+            }
+
+            List<string> log = new List<string>();
+            EventHandler<string> capture = (object? sender, string message) => { lock (log) { log.Add(message ?? string.Empty); } };
+            client.Log += capture;
+            string mcpPath = NormalizeMcpPath(config.McpPath);
+            bool connected;
+            try
+            {
+                connected = await client.ConnectStreamableAsync(config.Url, mcpPath, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                client.Log -= capture;
+            }
+
             if (!connected)
             {
                 client.Dispose();
-                throw new InvalidOperationException($"Failed to connect to HTTP MCP server '{config.Name}' at {config.Url}");
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // The client only reports failure; probe the server to say why (status, body, refused, DNS, TLS).
+                throw await McpConnectionDiagnostics.DiagnoseHttpAsync(
+                    config,
+                    McpConnectionDiagnostics.BuildRpcUrl(config.Url, mcpPath),
+                    headers,
+                    SnapshotLog(log),
+                    McpConnectionDiagnostics.DefaultProbeTimeout,
+                    cancellationToken).ConfigureAwait(false);
             }
 
             return new HttpMcpClientConnection(client);
         }
 
-        private static void ApplyAuthHeaders(McpHttpClient client, McpAuthConfig? auth)
+        /// <summary>
+        /// Builds the auth headers an HTTP MCP server's configuration calls for (bearer token or API key), with
+        /// environment variables expanded. Empty when the server has no auth or the value is blank.
+        /// </summary>
+        /// <param name="auth">The auth configuration, or null.</param>
+        /// <returns>Header names and values.</returns>
+        internal static Dictionary<string, string> BuildAuthHeaders(McpAuthConfig? auth)
         {
+            Dictionary<string, string> headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (auth == null)
             {
-                return;
+                return headers;
             }
 
             switch (auth.Type)
@@ -582,7 +636,7 @@ namespace Mux.Core.Tools
                     string token = SettingsLoader.ExpandEnvironmentVariables(auth.BearerToken);
                     if (!string.IsNullOrWhiteSpace(token))
                     {
-                        client.SetRequestHeader("Authorization", "Bearer " + token);
+                        headers["Authorization"] = "Bearer " + token;
                     }
 
                     break;
@@ -592,7 +646,7 @@ namespace Mux.Core.Tools
                     string value = SettingsLoader.ExpandEnvironmentVariables(auth.ApiKeyValue);
                     if (!string.IsNullOrWhiteSpace(value))
                     {
-                        client.SetRequestHeader(header, value);
+                        headers[header] = value;
                     }
 
                     break;
@@ -600,6 +654,16 @@ namespace Mux.Core.Tools
                 case McpAuthTypeEnum.None:
                 default:
                     break;
+            }
+
+            return headers;
+        }
+
+        private static List<string> SnapshotLog(List<string> log)
+        {
+            lock (log)
+            {
+                return new List<string>(log);
             }
         }
 

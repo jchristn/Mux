@@ -134,6 +134,8 @@ Infrastructure skills (Docker, Kubernetes, Helm, OpenStack, the cloud providers,
 
 Review skills (`code-review`, `security-review`, `simplify`, `test-gap-review`) use the helper's git section: `Assert-MuxGitRepo`, `Get-MuxDefaultBranch`, `Get-MuxChangeBase`, `Write-MuxLimited` (cuts output at `MUX_SKILL_DIFF_MAX_BYTES`, default 200000), `Write-MuxSecretFindings` (masked), and `Write-MuxManifestChanges`. Their commands gather facts; the body defines the finding format the model writes.
 
+Loop skills add `Invoke-MuxCaptured` (run a command and keep its output and exit code without printing it), `Write-MuxTail`, `Get-MuxBoundedInt`, `Split-MuxOptions`, `Get-MuxCheckPlan` (the detected build and test commands, optionally filtered), and `Invoke-MuxCheckStep`. A command that waits can raise its timeout with `timeoutMs:` in its frontmatter (the default is 120000); the default loop skills use 1800000.
+
 The helper is seeded into each skill folder and is yours to edit; mux never overwrites a skill folder that already exists.
 
 ## Cross-platform notes

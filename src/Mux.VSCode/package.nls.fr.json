@@ -42,6 +42,7 @@
   "cmd.manage.setDefaultEndpoint": "Définir par défaut",
   "cmd.manage.addMcp": "Ajouter un serveur MCP",
   "cmd.manage.editMcp": "Modifier le serveur MCP",
+  "cmd.manage.validateMcp": "Valider le serveur MCP",
   "cmd.manage.deleteMcp": "Supprimer le serveur MCP",
   "cmd.manage.activatePrompt": "Définir comme prompt actif",
   "cmd.manage.toggleSkill": "Activer/désactiver la compétence",

@@ -524,6 +524,17 @@ namespace Mux.Server.Documentation
             .WithResponse(401, Unauthorized())
             .WithResponse(404, NotFound());
 
+        /// <summary>Metadata for <c>POST /v1.0/api/mcp-servers/validate</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> McpValidate = m => Sec(Init(m, TagMcp,
+            "Validate an MCP server",
+            "Connects to a saved MCP server (`Name`) or an unsaved definition (`Server`; a blank `AuthSecret` reuses the saved server's secret), runs the MCP handshake, and lists its tools. Always returns 200 with `Connected`; on failure `Error` is a one-line cause (for example `connection refused`, `host not found`, `HTTP 401 Unauthorized`, or `command 'x' was not found on PATH`) and `Details` holds the diagnosis: the request URL, HTTP status, content type, `WWW-Authenticate`, the start of the response body, the MCP client's error, or a stdio server's resolved command and stderr. Auth secrets are never returned.",
+            operationId: "validateMcpServer"))
+            .WithRequestBody(Body("McpValidateRequestDto", "A saved server name or an unsaved server definition."))
+            .WithResponse(200, Ok("McpValidateResponseDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
         // --- Skills ---
 
         /// <summary>Metadata for <c>POST /v1.0/api/skills/expand</c>.</summary>
@@ -1117,6 +1128,25 @@ namespace Mux.Server.Documentation
                 ["Truncated"] = Pbool("Whether the size cap dropped or cut a file."),
                 ["Text"] = Pstr("The combined text placed in the system prompt.")
             }, new Dictionary<string, object?> { ["WorkingDirectory"] = "/src/app", ["Enabled"] = true, ["Sources"] = new[] { "/src/app/AGENTS.md" }, ["DroppedSources"] = new string[0], ["TotalBytes"] = 812, ["Truncated"] = false, ["Text"] = "### AGENTS.md\nRun tests with dotnet test." });
+
+            s["McpValidateRequestDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Name"] = PstrNullable("The name of a saved MCP server."),
+                ["Server"] = Ref("McpServerDto"),
+                ["TimeoutSeconds"] = Pint("How long to wait, 1 to 120 seconds (default 30).", "int32")
+            }, new Dictionary<string, object?> { ["Name"] = "docs", ["Server"] = null, ["TimeoutSeconds"] = 30 });
+
+            s["McpValidateResponseDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Name"] = Pstr("The server name."),
+                ["Connected"] = Pbool("Whether the connection and MCP handshake succeeded."),
+                ["Method"] = Pstr("The transport: `stdio` or `http`."),
+                ["ToolCount"] = Pint("The number of tools discovered.", "int32"),
+                ["Tools"] = Parr(Pstr("A tool name, prefixed with the server name."), "The discovered tool names."),
+                ["Error"] = PstrNullable("The one-line failure cause, or null on success."),
+                ["Details"] = PstrNullable("The diagnostic lines behind Error (URL, HTTP status, headers, response body, client error, stderr), or null."),
+                ["ElapsedMs"] = Pint("How long the attempt took, in milliseconds.", "int64")
+            }, new Dictionary<string, object?> { ["Name"] = "docs", ["Connected"] = false, ["Method"] = "http", ["ToolCount"] = 0, ["Tools"] = new string[0], ["Error"] = "Failed to connect to HTTP MCP server 'docs' at http://localhost:8080: HTTP 401 Unauthorized", ["Details"] = "Request: POST http://localhost:8080/mcp (JSON-RPC initialize)\nResponse: HTTP 401 Unauthorized in 4 ms\nBody: {\"error\":\"invalid token\"}", ["ElapsedMs"] = 41 });
 
             s["SkillExpandRequestDto"] = Obj(new Dictionary<string, M>
             {

@@ -49,6 +49,29 @@ namespace Test.Shared.Suites
                         }
                     }),
 
+                    Case("MultiLineNoticesSplit", "A multi-line notice (such as an MCP diagnosis) renders one transcript row per line", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = Wide();
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            app.PostNotice("Failed to connect: HTTP 401 Unauthorized\r\nContent-Type: application/json\nBody: {\"error\":\"bad token\"}");
+                            IReadOnlyList<string> transcript = app.TranscriptSnapshot();
+                            bool first = false;
+                            bool second = false;
+                            bool third = false;
+                            foreach (string line in transcript)
+                            {
+                                if (line.TrimEnd() == "Failed to connect: HTTP 401 Unauthorized") first = true;
+                                if (line.TrimEnd() == "Content-Type: application/json") second = true;
+                                if (line.TrimEnd() == "Body: {\"error\":\"bad token\"}") third = true;
+                            }
+
+                            MuxAssert.IsTrue(first && second && third, "each line is its own row: " + string.Join(" | ", transcript));
+                        }
+                    }),
+
                     Case("SidebarShowsModel", "The sidebar header shows the active model, not the endpoint name", async (CancellationToken ct) =>
                     {
                         HeadlessBackend backend = Wide();

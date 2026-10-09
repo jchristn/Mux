@@ -132,7 +132,7 @@ also reachable by key and the menu (one catalog, three surfaces):
 `/endpoint` (`/model`), `/effort` (`/reasoning`), `/settings` (`/config`, `/preferences`, `/prefs`),
 `/help` (`/?`), `/clear`, `/sidebar`, `/save`, `/export` (`/share`), `/undo`, `/redo`, `/sessions`,
 `/label` (`/labels`), `/tag` (`/tags`), `/tasks`, `/usage` (`/stats`, `/spend`), `/theme`, `/mouse`,
-`/menu`, `/quit` (`/exit`), `/trust`. Any custom commands from `hooks.json` also appear here as `/<name>`.
+`/menu`, `/quit` (`/exit`), `/trust`, `/loop`, `/loops`. Any custom commands from `hooks.json` also appear here as `/<name>`.
 Anything else that names an enabled skill runs that skill: `/code-review main` submits the skill's
 instructions with `main` as its arguments (see [Skills](#skills)). Built-in commands win, then custom
 commands, then skills.
@@ -266,6 +266,44 @@ the session and restored on resume.
 keys annotate the highlighted task: `c` complete, `i` in progress, `b` blocked, `k` skipped, `p` pending,
 `n` edit note. Those manual edits change the same plan the model works from, so they persist and update the
 sidebar. Turn the feature off with `taskPlanningEnabled: false` in `settings.json`.
+
+### Loops
+
+`/loop` repeats a prompt across turns. With an interval it is a fixed loop; without one it is self-paced:
+
+```text
+/loop 5m check the deploy and report anything new     # every 5 minutes
+/loop 1h30m --max 4 summarize new issues              # at most 4 iterations
+/loop keep fixing failing tests until they pass       # self-paced
+```
+
+Intervals combine `s`, `m`, `h`, and `d` (`90s`, `1h30m`). The first iteration starts as soon as the shell is
+idle; loop iterations never run while a turn is in flight or prompts are queued, so they never interleave with
+what you type. Each iteration is an ordinary turn: the same approvals, write lease, transcript, and hooks.
+
+In a self-paced loop the model ends each iteration by calling the `schedule_next` tool with `delay_seconds`
+(from `loopMinIntervalSeconds` up to 3600) and a one-line reason, or with `stop: true`. An iteration that does
+not call it stops the loop, so a model that never decides cannot run away. The tool is offered only while a
+self-paced iteration is running.
+
+Every loop has an iteration cap (`--max N`, default and maximum `loopMaxIterations`, 50 unless configured). A
+fixed loop's next fire time is measured from when the iteration started; if an iteration runs past one or more
+fire times, those are skipped rather than replayed in a burst. A turn you cancel (or one that fails) pauses its
+loop.
+
+`/loops` lists every loop with its pacing, iterations, and state; `/loops cancel <id>` (or `all`), `/loops pause
+<id>`, and `/loops resume <id>` manage them. The sidebar's LOOPS section shows each active loop and when it
+fires next. Active loops are saved with the session; resuming the session restores them paused, so nothing runs
+until you `/loops resume` it.
+
+Headless: `mux print --loop 5m "<prompt>"` (or `--loop self`) runs the loop in one process, one turn per
+iteration against the growing conversation, and exits when the loop completes, stops, or a turn fails (exit code
+of the failing turn). `--loop-max N` sets the cap. Progress lines go to stderr; each iteration's output goes to
+stdout in the chosen `--output-format`. `--loop` cannot be combined with `--input-format jsonl`.
+
+For loops inside a single turn, use the skills: `loop-until` (retry a command until it succeeds),
+`fix-until-green` (build and test, fix one failure at a time), `ci-watch` (GitHub Actions status, waiting, and
+failed-step logs), and `flaky-test-hunt` (run a test many times and report how often it fails).
 
 ### Usage analytics
 
@@ -946,6 +984,22 @@ added lines (values masked) and the audit command for each changed dependency ma
 `MUX_SKILL_DIFF_MAX_BYTES` (default 200000) are cut with a note. `git-bisect run` always resets the bisect and
 restores HEAD, even when the test command fails. The git-based skills are listed only inside a repository, and
 `pr-comments` only when `gh` is installed.
+
+### Loop skills
+
+```text
+/loop-until 10 6 curl -sf http://localhost:8080/health   # retry until it exits 0 (attempts, seconds apart)
+/fix-until-green 5                                        # check, fix the first failure, repeat (budget 5)
+/ci-watch                                                 # status, then watch [run-id], failed-logs [run-id]
+/flaky-test-hunt 20 ParserTests                           # run a test filter 20 times; or 20 -- <command>
+```
+
+`fix-until-green check` detects .NET, JavaScript (npm, pnpm, yarn, bun), Python, Go, Rust, Maven, Gradle, and
+CMake, runs the build and then the tests, and prints PASS or FAIL for each with the tail of the failing output.
+Its playbook forbids weakening or skipping tests to get green. `ci-watch` needs `gh` and is listed only in
+repositories with GitHub workflows; its commands accept `--from-file` with a saved `gh` JSON response or log for
+offline use. Commands that wait (`loop-until run`, `fix-until-green check`, `ci-watch watch`, `flaky-test-hunt
+run`) have a 30-minute timeout.
 
 ## Project Instructions (MUX.md, AGENTS.md, CLAUDE.md)
 

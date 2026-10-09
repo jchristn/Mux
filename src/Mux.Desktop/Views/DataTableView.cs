@@ -286,7 +286,12 @@ namespace Mux.Desktop.Views
                 Margin = new Thickness(0, 0, 10, 0)
             };
 
-            if (!string.IsNullOrEmpty(text))
+            string? cellTip = column.CellTooltip?.Invoke(row);
+            if (!string.IsNullOrEmpty(cellTip))
+            {
+                label.Tip(cellTip);
+            }
+            else if (!string.IsNullOrEmpty(text))
             {
                 label.Tip(text);
             }

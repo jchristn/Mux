@@ -119,6 +119,11 @@ namespace Mux.Core.Sessions
             set => _CompletedJobs = value ?? new List<PersistedJobSnapshot>();
         }
 
+        /// <summary>
+        /// The recurring prompts saved with the session. Never null. The resuming surface restores them paused.
+        /// </summary>
+        public List<Mux.Core.Jobs.LoopDefinition> Loops { get; set; } = new List<Mux.Core.Jobs.LoopDefinition>();
+
         #endregion
     }
 }

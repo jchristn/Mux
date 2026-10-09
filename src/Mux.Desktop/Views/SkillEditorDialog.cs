@@ -65,9 +65,16 @@ namespace Mux.Desktop.Views
         {
             DockPanel root = new DockPanel { Margin = new Thickness(20) };
 
-            TextBlock path = new TextBlock { Text = _Path, Foreground = theme.Muted, FontSize = 11, TextWrapping = TextWrapping.Wrap };
-            DockPanel.SetDock(path, Dock.Top);
-            root.Children.Add(path);
+            // Header: the file path, with a copy button that copies the editor's current text (unsaved edits
+            // included) so the whole SKILL.md can be pasted elsewhere.
+            DockPanel header = new DockPanel();
+            Button copy = CopyButton.Create(() => _Editor.Text ?? string.Empty, theme, this);
+            DockPanel.SetDock(copy, Dock.Right);
+            header.Children.Add(copy);
+            TextBlock path = new TextBlock { Text = _Path, Foreground = theme.Muted, FontSize = 11, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+            header.Children.Add(path);
+            DockPanel.SetDock(header, Dock.Top);
+            root.Children.Add(header);
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
             Button cancel = new Button { Content = Localizer.T("act.cancel") };

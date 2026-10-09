@@ -78,6 +78,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('mux.manage.setDefaultEndpoint', (node: ManageNode) => manageActions.setDefaultEndpoint(node)),
         vscode.commands.registerCommand('mux.manage.addMcp', () => manageActions.addMcpServer()),
         vscode.commands.registerCommand('mux.manage.editMcp', (node: ManageNode) => manageActions.editMcpServer(node)),
+        vscode.commands.registerCommand('mux.manage.validateMcp', (node: ManageNode) => manageActions.validateMcpServer(node)),
         vscode.commands.registerCommand('mux.manage.deleteMcp', (node: ManageNode) => manageActions.deleteMcpServer(node)),
         vscode.commands.registerCommand('mux.manage.activatePrompt', (node: ManageNode) => manageActions.activatePrompt(node)),
         vscode.commands.registerCommand('mux.manage.addPrompt', () => manageActions.addPrompt()),

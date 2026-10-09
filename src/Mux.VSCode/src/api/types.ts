@@ -152,6 +152,20 @@ export interface SkillExpansion {
     IsPlaybook: boolean;
 }
 
+/** The result of `POST /v1.0/api/mcp-servers/validate`. */
+export interface McpValidation {
+    Name: string;
+    Connected: boolean;
+    Method: string;
+    ToolCount: number;
+    Tools: string[];
+    /** One-line failure cause, or null on success. */
+    Error?: string | null;
+    /** Diagnostic lines behind Error: URL, HTTP status, headers, response body, client error, stderr. */
+    Details?: string | null;
+    ElapsedMs: number;
+}
+
 export interface SkillSummary {
     Name: string;
     Title: string;

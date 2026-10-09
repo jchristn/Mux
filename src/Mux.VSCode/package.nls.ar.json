@@ -42,6 +42,7 @@
   "cmd.manage.setDefaultEndpoint": "تعيين كافتراضي",
   "cmd.manage.addMcp": "إضافة خادم MCP",
   "cmd.manage.editMcp": "تعديل خادم MCP",
+  "cmd.manage.validateMcp": "التحقق من خادم MCP",
   "cmd.manage.deleteMcp": "حذف خادم MCP",
   "cmd.manage.activatePrompt": "تعيين كموجّه نشط",
   "cmd.manage.toggleSkill": "تبديل المهارة",

@@ -1,6 +1,6 @@
 # New Default Skills and OOBE Parity Plan
 
-_Status: Phases 1 through 3 done (2026-10-08); Phases 4 through 7 proposed. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
+_Status: Phases 1 through 4 done (2026-10-08); Phases 5 through 7 proposed. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
 
 mux ships 46 default skills, and nearly all of them assume a git repository, a .NET solution, or both. Someone who opens mux in a React app, a Django service, a Maven project, or a CMake tree gets git helpers and nothing that knows how their code builds or tests. That gap is the first thing a Claude Code or Codex user notices, and it is the reason for this plan. The second thing they notice is subtler: both of those harnesses read a project instruction file on startup, can review a diff on request, and let skills be invoked by name with arguments. mux has a strong engine (subagents, MCP, sandboxing, undo, compaction, sessions across four surfaces) but the out-of-box experience still feels like a toolkit rather than an agent that already knows the job.
 
@@ -19,7 +19,7 @@ The scorecard below lists everything that exists in Claude Code or Codex and is 
 | 7 | Invoke a skill by name with arguments (`/code-review main`, `$ARGUMENTS`) | yes | yes (custom prompts) | **done in Phase 1**: terminal, desktop, dashboard, and `mux print` | 7 | 9 | **16** | 1 |
 | 8 | Project-scoped skills (checked into the repo) and Claude-format skill import | yes (`.claude/skills`) | yes (`.agents/skills`) | **done in Phase 1**, with a per-project trust gate | 8 | 8 | **16** | 1 |
 | 9 | Security review of pending changes | yes (`/security-review`) | via `/review` | **done in Phase 3**: `security-review` | 9 | 7 | **16** | 3 |
-| 10 | Iterate-until-green loops (retry a check, fix-build-test cycle, CI watch) | via model | via model | none | 8 | 8 | **16** | 4 |
+| 10 | Iterate-until-green loops (retry a check, fix-build-test cycle, CI watch) | via model | via model | **done in Phase 4**: `loop-until`, `fix-until-green`, `ci-watch`, `flaky-test-hunt` | 8 | 8 | **16** | 4 |
 | 11 | Project detection (languages, package managers, build and test commands) | implicit | implicit | **done in Phase 2** | 9 | 7 | **16** | 2 |
 | 12 | Simplify / cleanup pass on changed code | yes (`/simplify`) | no | **done in Phase 3**: `simplify` | 9 | 6 | **15** | 3 |
 | 13 | PR review comments fetched for the agent to address | yes (`/pr-comments`) | no | **done in Phase 3**: `pr-comments` | 9 | 6 | **15** | 3 |
@@ -34,7 +34,7 @@ The scorecard below lists everything that exists in Claude Code or Codex and is 
 | 21a | Cloud provider skills (AWS, Azure, Google Cloud, DigitalOcean, Rackspace, Vercel, Alibaba, Huawei, IBM Cloud, Linode, Netlify, Cloudflare, fly.io) plus Terraform and Pulumi | via model + shell | via model + shell | **done in Phase 2** | 6 | 8 | **14** | 2 |
 | 21b | Go and Rust skills | via model + shell | via model + shell | **done in Phase 2** | 9 | 5 | **14** | 2 |
 | 22 | C++ skills (CMake, CTest, clang-format, clang-tidy, sanitizers) | via model + shell | via model + shell | **done in Phase 2** | 7 | 6 | **13** | 2 |
-| 23 | `/loop`: re-run a prompt on an interval or self-paced | yes | no | none | 6 | 7 | **13** | 4 |
+| 23 | `/loop`: re-run a prompt on an interval or self-paced | yes | no | **done in Phase 4**: `/loop`, `/loops`, `schedule_next`, `mux print --loop` | 6 | 7 | **13** | 4 |
 | 24 | Persistent memory (agent-written facts reused across sessions, `#` quick-add) | yes | partial | none | 6 | 7 | **13** | 6 |
 | 25 | Plan mode (read-only exploration, then an approved plan, then execution) | yes | partial (approval modes) | `--sandbox read-only` covers the read-only half | 6 | 7 | **13** | 6 |
 | 26 | Structured "ask the user" tool (multiple choice mid-turn) | yes | no | none | 6 | 6 | **12** | 6 |
@@ -374,7 +374,9 @@ These are the skills Claude Code and Codex users reach for by name. Each is a hy
 
 ---
 
-## Phase 4: Loops
+## Phase 4: Loops (done)
+
+**Status:** done. Four loop skills (library: 152) and the harness `/loop`. Deviations from the plan below: the scheduler is pure state plus an injectable clock (`TimeProvider`); the shell fires a due iteration through the same `RunTurn` path as a typed prompt (a `JobManager` job, so approvals, the write lease, transcripts, and prompt-submit hooks are identical), and only when no turn is running and nothing is queued. The `schedule_next` minimum delay is `loopMinIntervalSeconds` rather than a fixed 30. `mux print --loop` takes an interval or `self`, plus `--loop-max`. Extra types: `LoopCommand` (the `/loop` parser), `LoopDecision`, `LoopToolProvider`, and `LoopDriver` (the headless runner). A failed or cancelled iteration pauses its loop. `fix-until-green check` takes `all|build|test`; `ci-watch` commands accept `--from-file` for offline use and testing; `flaky-test-hunt run` also takes `-- <command>` for runners it does not detect. Default skill commands can now set `timeoutMs`, and the four waiting commands use 30 minutes. The full build has no errors or warnings, and the loop suites (64 cases) pass.
 
 "Loop" covers two different things, and both are in scope. The first is a skill-level loop: keep doing something until a condition holds, inside one turn. The second is a harness-level loop: re-submit a prompt on a schedule across many turns, which is what Claude Code's `/loop` does. The first is pure data and ships with this phase's skills. The second needs a scheduler in `Mux.Core/Jobs`.
 
@@ -382,21 +384,22 @@ These are the skills Claude Code and Codex users reach for by name. Each is a hy
 
 | Id | Mut. | Commands | Notes |
 |---|:---:|---|---|
-| `loop-until` | yes | `run` | `run <maxAttempts> <intervalSeconds> <command...>` re-runs a command until it exits 0 or attempts run out, printing each attempt's exit code and the last attempt's output. Bounded: `maxAttempts` max 100, interval max 600. Command timeout is the skill's `timeoutMs`, which this skill sets to 30 minutes. |
-| `fix-until-green` | yes | `check` | `check` runs the detected build and then the detected tests once and prints a compact pass or fail summary. Body: run `check`; if red, fix the first failure only, then run `check` again; stop after the iteration budget (default 5, `$ARGUMENTS` overrides) or when green; report what changed per iteration. Refuses to edit test assertions to make them pass unless the user said to. |
-| `ci-watch` | no | `status`, `watch`, `failed-logs` | `gh run list` for the current branch, `gh run watch` with a timeout, and the logs of failed jobs only, trimmed to the failing step. |
-| `flaky-test-hunt` | no | `run` | `run <count> <filter>` runs one test filter N times through the detected runner and reports pass and fail counts with the first failing output. |
+| `loop-until` (done) | yes | `run` | `run <maxAttempts> <intervalSeconds> <command...>` re-runs a command until it exits 0 or attempts run out, printing each attempt's exit code and the last attempt's output. Bounded: `maxAttempts` max 100, interval max 600. Command timeout is the skill's `timeoutMs`, which this skill sets to 30 minutes. |
+| `fix-until-green` (done) | yes | `check` | `check` runs the detected build and then the detected tests once and prints a compact pass or fail summary. Body: run `check`; if red, fix the first failure only, then run `check` again; stop after the iteration budget (default 5, `$ARGUMENTS` overrides) or when green; report what changed per iteration. Refuses to edit test assertions to make them pass unless the user said to. |
+| `ci-watch` (done) | no | `status`, `watch`, `failed-logs` | `gh run list` for the current branch, `gh run watch` with a timeout, and the logs of failed jobs only, trimmed to the failing step. |
+| `flaky-test-hunt` (done) | no | `run` | `run <count> <filter>` runs one test filter N times through the detected runner and reports pass and fail counts with the first failing output. |
 
 ### 4.2 `/loop` in the harness (row 23)
 
-- [ ] `src/Mux.Core/Jobs/LoopScheduler.cs`: owns recurring prompts for one session. Each loop has an id, prompt text, interval (fixed) or self-paced mode, an iteration cap, a stop condition, and a cancellation token linked to the session. Fires by enqueueing a normal job through `JobManager`, so the write lease, approvals, and transcripts all behave as they do for typed prompts.
-- [ ] `src/Mux.Core/Jobs/LoopDefinition.cs` and `src/Mux.Core/Jobs/LoopStatusEnum.cs`, one type per file.
-- [ ] Self-paced mode: the model ends a loop iteration by calling a new `schedule_next` tool with a delay in seconds (min 30, max 3600) and a one-line reason, or `stop: true`. Without a call, the loop stops. Prevents a runaway loop on a model that never stops.
-- [ ] Settings: `loopMaxIterations` (default 50, min 1, max 1000), `loopMinIntervalSeconds` (default 30).
-- [ ] TUI: `/loop 5m <prompt>`, `/loop <prompt>` (self-paced), `/loops` (list and cancel). Sidebar shows active loops with the next fire time.
-- [ ] `mux print --loop 5m` for headless use, which exits when the loop stops.
-- [ ] Persist active loops with the session so `/sessions` resume restores them paused, not running.
-- [ ] Tests: `LoopSchedulerSuite` with an injectable clock (fixed interval, self-paced, iteration cap, cancel mid-run, resume-paused, overlap prevention when an iteration outlasts the interval).
+- [x] `src/Mux.Core/Jobs/LoopScheduler.cs`: owns recurring prompts for one session. Each loop has an id, prompt text, interval (fixed) or self-paced mode, an iteration cap, a stop condition, and a cancellation token linked to the session. Fires by enqueueing a normal job through `JobManager`, so the write lease, approvals, and transcripts all behave as they do for typed prompts.
+- [x] `src/Mux.Core/Jobs/LoopDefinition.cs` and `src/Mux.Core/Jobs/LoopStatusEnum.cs`, one type per file.
+- [x] Self-paced mode: the model ends a loop iteration by calling a new `schedule_next` tool with a delay in seconds (min 30, max 3600) and a one-line reason, or `stop: true`. Without a call, the loop stops. Prevents a runaway loop on a model that never stops.
+- [x] Settings: `loopMaxIterations` (default 50, min 1, max 1000), `loopMinIntervalSeconds` (default 30).
+- [x] TUI: `/loop 5m <prompt>`, `/loop <prompt>` (self-paced), `/loops` (list and cancel). Sidebar shows active loops with the next fire time.
+- [x] `mux print --loop 5m` for headless use, which exits when the loop stops.
+- [x] Persist active loops with the session so `/sessions` resume restores them paused, not running.
+- [x] Tests: `LoopSchedulerSuite` with an injectable clock (fixed interval, self-paced, iteration cap, cancel mid-run, resume-paused, overlap prevention when an iteration outlasts the interval).
+- [x] Tests: `LoopSkillsSuite` runs the four skills for real (retries with a counter script, a flaky command, real `npm` scripts when Node is installed, saved `gh` responses) and in dry runs for detection across toolchains; `LoopSchedulerSuite` adds the parser, the `schedule_next` tool, the driver, settings, session save and resume, the sidebar line, the tool binder, the terminal `/loop` and `/loops` commands through a headless shell, and `mux print --loop` end to end against a mock model that calls `schedule_next`.
 
 ---
 
@@ -476,7 +479,7 @@ Backlog with no plan yet: output styles (row 31, mostly covered by prompt profil
 | `DefaultIacSkills` (Terraform, Pulumi) | 0 | 2 | 2 |
 | `DefaultReviewSkills` (done) | 0 | 5 | 5 |
 | `DefaultAgentPlaybookSkills` (done) | 0 | 4 | 4 |
-| `DefaultLoopSkills` | 0 | 4 | 4 |
+| `DefaultLoopSkills` (done) | 0 | 4 | 4 |
 | **Total** | **46** | **106** | **152** |
 
 Existing users receive the new defaults on their next startup through `SeedNewInto`; nothing they have edited or deleted is touched. With relevance gating on, a typical single-language repository lists about 45 skills (the ungated ones, its own family, and the cloud skills for CLIs actually installed) instead of 152.
@@ -488,8 +491,8 @@ Two existing defaults deserve a second look while this work is open. `new-tool` 
 ## Documentation
 
 - [~] `docs/SKILLS_AUTHORING.md`: playbook skills, hybrids, `appliesTo`, `userInvocable`, `argumentHint`, `$ARGUMENTS`, project scopes and the trust gate, and Claude-format compatibility are documented (Phase 1); the exit-code convention, `MUX_SKILL_DRY_RUN`, the production guard (Phase 2), and the review helpers with `MUX_SKILL_DIFF_MAX_BYTES` (Phase 3) are too.
-- [~] `docs/USAGE.md`: invoking skills by name, project skills and trust, the listing mode, and project instruction files are documented (Phase 1), and so are the review, debugging, and codebase skills (Phase 3). Still to come: `/loop` and `/loops`, `/processes`, `/plan`, `/memory`, `@` mentions.
-- [~] `docs/CONFIG.md`: the Phase 1 settings and files (`trusted-projects.json`, `MUX.md`) are documented. Later phases add theirs.
+- [~] `docs/USAGE.md`: invoking skills by name, project skills and trust, the listing mode, and project instruction files are documented (Phase 1), and so are the review, debugging, and codebase skills (Phase 3). Phase 4 added `/loop`, `/loops`, `mux print --loop`, and the loop skills. Still to come: `/processes`, `/plan`, `/memory`, `@` mentions.
+- [~] `docs/CONFIG.md`: the Phase 1 settings and files (`trusted-projects.json`, `MUX.md`), `skillProdPattern` (Phase 2), and `loopMaxIterations` and `loopMinIntervalSeconds` (Phase 4) are documented. Later phases add theirs.
 - [~] `docs/REST_API.md` and the Postman collection: `GET /v1.0/api/context/instructions` and `POST /v1.0/api/skills/expand` are documented, both in a new Postman **Context** folder and in the **Skills** folder, with a `workingDirectory` variable. Loop and process routes come later.
 - [~] `README.md`: project instruction files and slash invocation are in Highlights, and the two new flags are in the options table. The skills paragraph names the 148-skill library and its families (Phase 3).
 - [~] `CHANGELOG.md`: Phases 1 through 3 are recorded under `Unreleased`, and the VS Code extension's `CHANGELOG.md` records the review routing. No version number was changed.

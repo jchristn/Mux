@@ -107,3 +107,42 @@ test('expandSkill rejects when the server fails', async () => {
     const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
     await assert.rejects(() => client.expandSkill(''));
 });
+
+test('validateMcpServer posts the server name and returns the failure details', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    let capturedBody = '';
+    globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: string }) => {
+        capturedUrl = String(input);
+        capturedMethod = init?.method ?? 'GET';
+        capturedBody = init?.body ?? '';
+        return new Response(JSON.stringify({
+            Name: 'docs', Connected: false, Method: 'http', ToolCount: 0, Tools: [],
+            Error: "Failed to connect to HTTP MCP server 'docs' at http://localhost:9: HTTP 401 Unauthorized",
+            Details: 'Response: HTTP 401 Unauthorized in 3 ms\nBody: {"error":"invalid token"}', ElapsedMs: 12,
+        }), { status: 200 });
+    }) as typeof fetch;
+
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
+    const result = await client.validateMcpServer('docs');
+    assert.equal(capturedUrl, 'http://127.0.0.1:8710/v1.0/api/mcp-servers/validate');
+    assert.equal(capturedMethod, 'POST');
+    assert.deepEqual(JSON.parse(capturedBody), { Name: 'docs' });
+    assert.equal(result.Connected, false);
+    assert.ok(result.Error?.includes('HTTP 401'));
+    assert.ok(result.Details?.includes('invalid token'));
+});
+
+test('validateMcpServer returns the tools of a connected server', async () => {
+    globalThis.fetch = (async () => new Response(JSON.stringify({ Name: 'fs', Connected: true, Method: 'stdio', ToolCount: 2, Tools: ['fs.read', 'fs.write'], Error: null, Details: null, ElapsedMs: 80 }), { status: 200 })) as typeof fetch;
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
+    const result = await client.validateMcpServer('fs');
+    assert.equal(result.Connected, true);
+    assert.deepEqual(result.Tools, ['fs.read', 'fs.write']);
+});
+
+test('validateMcpServer rejects when the server is unknown', async () => {
+    globalThis.fetch = (async () => new Response('{"Error":"NotFound","Message":"No MCP server named \'nope\'."}', { status: 404 })) as typeof fetch;
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8710', apiKey: null });
+    await assert.rejects(() => client.validateMcpServer('nope'));
+});

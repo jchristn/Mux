@@ -114,6 +114,10 @@ namespace Mux.Cli.App
         private readonly MenuBar _MenuBar;
         private Job? _ActiveJob;
         private bool _TurnInFlight;
+        private readonly LoopScheduler? _Loops;
+        private Timer? _LoopTimer;
+        private string? _ActiveLoopId;
+        private int _LoopTickBusy;
         // Consumes the fabric: mirrors the current conversation so a run finishing on any other surface
         // reloads this transcript automatically. On by default.
         private Mux.Core.Runs.SessionMirrorClient? _Mirror;
@@ -185,6 +189,7 @@ namespace Mux.Cli.App
         /// <param name="workingDirectory">The working directory used for hooks, custom commands, and session export. Null uses the process current directory.</param>
         /// <param name="usageQuery">Optional usage-telemetry query service backing the <c>/usage</c> view. Null disables it (the command reports telemetry unavailable).</param>
         /// <param name="enableFirstRunWizard">When true, the first-run setup wizard is offered on launch if no endpoint is configured and setup has not been completed. Off by default so test harnesses driving the run loop are not interrupted; the production launcher opts in.</param>
+        /// <param name="loopScheduler">Optional scheduler for recurring prompts (<c>/loop</c>, <c>/loops</c>). Null disables loops.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
             ITerminalBackend backend,
@@ -208,9 +213,11 @@ namespace Mux.Cli.App
             Mux.Core.Plugins.PluginRegistry? pluginRegistry = null,
             string? workingDirectory = null,
             Mux.Core.Telemetry.UsageQueryService? usageQuery = null,
-            bool enableFirstRunWizard = false)
+            bool enableFirstRunWizard = false,
+            LoopScheduler? loopScheduler = null)
         {
             _EnableFirstRunWizard = enableFirstRunWizard;
+            _Loops = loopScheduler;
             _CheckpointManager = checkpointManager;
             _PluginRegistry = pluginRegistry;
             _UsageQuery = usageQuery;
@@ -302,6 +309,8 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.mcp", "MCP servers", null, OpenMcpModal, "Model", new[] { "mcp", "mcp-servers", "mcpservers", "servers" }));
             _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }));
             _Catalog.Add(new CommandDescriptor("mux.trust", "Project skill trust", null, () => HandleTrustArgument(string.Empty), "Model", new[] { "trust" }, HandleTrustArgument));
+            _Catalog.Add(new CommandDescriptor("mux.loop", "Repeat a prompt", null, () => HandleLoopArgument(string.Empty), "Session", new[] { "loop" }, HandleLoopArgument));
+            _Catalog.Add(new CommandDescriptor("mux.loops", "Loops", null, () => HandleLoopsArgument(string.Empty), "Session", new[] { "loops" }, HandleLoopsArgument));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.cwd", "Working directory", null, ShowWorkingDirectory, "Session", new[] { "cwd", "cd", "chdir" }, ChangeWorkingDirectory));
             _Catalog.Add(new CommandDescriptor("mux.label", "Labels", null, ShowSessionLabels, "Session", new[] { "label", "labels" }, HandleLabelArgument));
@@ -652,6 +661,12 @@ namespace Mux.Cli.App
 
                     // Mirror the current conversation so runs on other surfaces sync in automatically.
                     StartSessionMirror(_JobManager.SessionId);
+
+                    // Check once a second for due loop iterations (and keep the sidebar countdown current).
+                    if (_Loops != null)
+                    {
+                        _LoopTimer = new Timer(_ => OnLoopTick(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+                    }
 
                     // First run: with no usable endpoint and setup not yet completed, guide the user through
                     // defining an endpoint, checking connectivity, and sending a first prompt. Deferred until
@@ -1329,6 +1344,13 @@ namespace Mux.Cli.App
                 snapshot.ConversationHistory = new List<ConversationMessage>(_ConversationHistory);
             }
 
+            // Loops that can still fire persist with the session (null when this shell has no scheduler, which
+            // keeps whatever the store holds).
+            if (_Loops != null)
+            {
+                snapshot.Loops = _Loops.Snapshot();
+            }
+
             // Seed launch-time labels/tags (`mux --label ... --tag ...`) exactly once, on the first snapshot
             // written. Seeding only once means a later `/label rm` is not resurrected by the next turn's save.
             if (!_LaunchMetadataSeeded)
@@ -1459,6 +1481,16 @@ namespace Mux.Cli.App
                 ReplayConversationHistory(resume.ConversationHistory);
             }
 
+            // Loops come back paused: a resumed session never starts running prompts on its own.
+            if (_Loops != null)
+            {
+                int restored = _Loops.Restore(resume.Loops);
+                if (restored > 0)
+                {
+                    WriteNotice("↻ " + restored + (restored == 1 ? " loop was" : " loops were") + " restored paused. /loops lists them; /loops resume <id> starts one.");
+                }
+            }
+
             RefreshSidebar();
             RefreshFooter();
         }
@@ -1510,6 +1542,25 @@ namespace Mux.Cli.App
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Fires the earliest due loop iteration now if the shell is idle. The run loop does this once a second;
+        /// tests call it directly to drive loops deterministically.
+        /// </summary>
+        public void TickLoops()
+        {
+            OnLoopTick();
+        }
+
+        /// <summary>
+        /// The number of loops a session save would persist right now, or -1 when this shell has no loop scheduler.
+        /// </summary>
+        /// <returns>The loop count, or -1.</returns>
+        public int SnapshotLoops()
+        {
+            List<LoopDefinition>? loops = BuildSnapshot().Loops;
+            return loops == null ? -1 : loops.Count;
         }
 
         /// <summary>
@@ -1653,6 +1704,7 @@ namespace Mux.Cli.App
             }
 
             try { _StoreWatcher?.Dispose(); } catch (Exception) { }
+            try { _LoopTimer?.Dispose(); } catch (Exception) { }
             _App.KeyFilter = null;
             _App.Stop();
             _App.Dispose();
@@ -2060,8 +2112,12 @@ namespace Mux.Cli.App
             StopThinking();
 
             string? next;
+            string? loopId;
             lock (_Sync)
             {
+                loopId = _ActiveLoopId;
+                _ActiveLoopId = null;
+
                 // Record the exchange when the turn ran to completion — even if the model chose to answer
                 // with nothing (keep the user prompt so the next turn has context; the empty assistant reply
                 // preserves alternation). Only a cancelled/stopped turn, or one that ended with no answer AND
@@ -2102,6 +2158,7 @@ namespace Mux.Cli.App
             }
 
             WriteEmptyTurnNoticeIfNeeded(projector);
+            CompleteLoopIteration(loopId, projector);
 
             UpdateQueueStrip();
             RefreshSidebar();
@@ -3524,7 +3581,13 @@ namespace Mux.Cli.App
 
         private void WriteNotice(string text)
         {
-            _Conversation.WriteLine(Text.From(text).Dim());
+            // Multi-line notices (for example MCP connection diagnostics) are written one line at a time so each
+            // detail line renders on its own row.
+            string[] lines = (text ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            foreach (string line in lines)
+            {
+                _Conversation.WriteLine(Text.From(line).Dim());
+            }
         }
 
         /// <summary>
@@ -4394,7 +4457,8 @@ namespace Mux.Cli.App
             Edit,
             None,
             Add,
-            Remove
+            Remove,
+            Details
         }
 
         private void OpenMcpModal()
@@ -4431,7 +4495,8 @@ namespace Mux.Cli.App
                     else
                     {
                         glyph = "○";
-                        state = " · offline";
+                        string? cause = statusByName.TryGetValue(server.Name, out McpServerStatus? failed) ? FirstLine(failed.Error) : null;
+                        state = string.IsNullOrEmpty(cause) ? " · offline" : " · offline: " + Truncate(StripServerPrefix(cause!), 48);
                     }
                 }
 
@@ -4457,6 +4522,19 @@ namespace Mux.Cli.App
                 hotkeys['-'] = options.Count;
                 options.Add("- Remove MCP server…");
                 actions.Add(McpMenuAction.Remove);
+            }
+
+            bool anyErrors = false;
+            foreach (McpServerStatus status in statusByName.Values)
+            {
+                if (!status.Connected && !string.IsNullOrWhiteSpace(status.Error)) anyErrors = true;
+            }
+
+            if (anyErrors)
+            {
+                hotkeys['?'] = options.Count;
+                options.Add("? Show connection errors");
+                actions.Add(McpMenuAction.Details);
             }
 
             // Widen the modal by 25% over TUIKit's default select width (46) so server rows render with room.
@@ -4486,10 +4564,59 @@ namespace Mux.Cli.App
                 case McpMenuAction.Remove:
                     await RemoveMcpAsync(servers).ConfigureAwait(false);
                     break;
+                case McpMenuAction.Details:
+                    WriteMcpErrorDetails();
+                    break;
                 case McpMenuAction.None:
                 default:
                     break;
             }
+        }
+
+        // Writes the full connection diagnosis of every offline MCP server into the transcript.
+        private void WriteMcpErrorDetails()
+        {
+            if (_McpRuntime == null)
+            {
+                return;
+            }
+
+            bool any = false;
+            foreach (McpServerStatus status in _McpRuntime.GetStatus())
+            {
+                if (status.Connected || string.IsNullOrWhiteSpace(status.Error))
+                {
+                    continue;
+                }
+
+                any = true;
+                WriteNotice("⚠ MCP server " + status.Name + ":");
+                WriteNotice(status.Error!);
+            }
+
+            if (!any)
+            {
+                WriteNotice("No MCP connection errors.");
+            }
+        }
+
+        private static string? FirstLine(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            int newline = text.IndexOfAny(new[] { '\r', '\n' });
+            return newline < 0 ? text.Trim() : text.Substring(0, newline).Trim();
+        }
+
+        // "Failed to connect to HTTP MCP server 'x' at URL: connection refused" becomes "connection refused" for the
+        // compact menu row; the full text is one keypress away.
+        private static string StripServerPrefix(string firstLine)
+        {
+            int colon = firstLine.LastIndexOf(": ", StringComparison.Ordinal);
+            return colon >= 0 && colon + 2 < firstLine.Length ? firstLine.Substring(colon + 2) : firstLine;
         }
 
         private async Task AddMcpFormAsync()
@@ -4778,6 +4905,277 @@ namespace Mux.Cli.App
 
         // Slash-argument handler ("/trust [all|playbooks|ignore|reset]"): record a trust decision for the
         // project containing the working directory, or report the current one when called bare.
+        private void HandleLoopArgument(string argument)
+        {
+            if (_Loops == null)
+            {
+                WriteNotice("Loops are not available in this shell.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(argument))
+            {
+                WriteNotice(LoopCommand.Usage);
+                WriteLoopList();
+                return;
+            }
+
+            if (!LoopCommand.TryParse(argument, out LoopCommand? command, out string error) || command == null)
+            {
+                WriteNotice("⚠ " + error);
+                return;
+            }
+
+            LoopDefinition loop;
+            try
+            {
+                loop = _Loops.Create(command.Prompt, command.Interval, command.MaxIterations);
+            }
+            catch (ArgumentException ex)
+            {
+                WriteNotice("⚠ " + ex.Message.Split(" (Parameter")[0]);
+                return;
+            }
+
+            string pacing = loop.IsSelfPaced
+                ? "self-paced (the model schedules each next run with schedule_next, or stops)"
+                : "every " + LoopCommand.FormatInterval(TimeSpan.FromSeconds(loop.IntervalSeconds!.Value));
+            string capped = command.MaxIterations.HasValue && command.MaxIterations.Value > loop.MaxIterations
+                ? " (lowered to the loopMaxIterations setting)"
+                : string.Empty;
+            WriteNotice("✓ Loop " + loop.Id + " created: " + pacing + ", at most " + loop.MaxIterations + " iterations" + capped + ". It starts when the shell is idle. /loops lists loops; /loops cancel " + loop.Id + " stops it.");
+            AutoSave();
+            RefreshSidebar();
+            OnLoopTick();
+        }
+
+        private void HandleLoopsArgument(string argument)
+        {
+            if (_Loops == null)
+            {
+                WriteNotice("Loops are not available in this shell.");
+                return;
+            }
+
+            string[] parts = (argument ?? string.Empty).Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            string verb = parts.Length > 0 ? parts[0].ToLowerInvariant() : "list";
+            string target = parts.Length > 1 ? parts[1] : string.Empty;
+            if (verb == "list")
+            {
+                WriteLoopList();
+                return;
+            }
+
+            if (verb != "cancel" && verb != "stop" && verb != "pause" && verb != "resume")
+            {
+                WriteNotice("Usage: /loops [list | cancel <id|all> | pause <id> | resume <id>]");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                WriteNotice("⚠ Name a loop: /loops " + verb + " <id>" + (verb == "pause" || verb == "resume" ? string.Empty : " (or all)") + ".");
+                return;
+            }
+
+            bool changed;
+            string done;
+            if ((verb == "cancel" || verb == "stop") && string.Equals(target, "all", StringComparison.OrdinalIgnoreCase))
+            {
+                int count = _Loops.CancelAll();
+                changed = count > 0;
+                done = count == 1 ? "Stopped 1 loop." : "Stopped " + count + " loops.";
+            }
+            else
+            {
+                LoopDefinition? loop = _Loops.Get(target);
+                if (loop == null)
+                {
+                    WriteNotice("⚠ No loop has the id '" + target + "'. /loops lists them.");
+                    return;
+                }
+
+                switch (verb)
+                {
+                    case "pause":
+                        changed = _Loops.Pause(loop.Id);
+                        done = changed ? "Paused loop " + loop.Id + "." : "Loop " + loop.Id + " is " + loop.Status.ToString().ToLowerInvariant() + " and cannot be paused now.";
+                        break;
+                    case "resume":
+                        changed = _Loops.Resume(loop.Id);
+                        done = changed ? "Resumed loop " + loop.Id + "." : "Loop " + loop.Id + " is " + loop.Status.ToString().ToLowerInvariant() + ", not paused.";
+                        break;
+                    default:
+                        changed = _Loops.Cancel(loop.Id);
+                        done = changed
+                            ? "Stopped loop " + loop.Id + (loop.Status == LoopStatusEnum.Running ? "; the running iteration finishes first." : ".")
+                            : "Loop " + loop.Id + " has already ended.";
+                        break;
+                }
+            }
+
+            WriteNotice((changed ? "✓ " : "⚠ ") + done);
+            if (changed)
+            {
+                AutoSave();
+                RefreshSidebar();
+                OnLoopTick();
+            }
+        }
+
+        private void WriteLoopList()
+        {
+            if (_Loops == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<LoopDefinition> loops = _Loops.List();
+            if (loops.Count == 0)
+            {
+                WriteNotice("No loops. Start one with /loop 5m <prompt> (fixed interval) or /loop <prompt> (self-paced).");
+                return;
+            }
+
+            DateTime now = _Loops.UtcNow;
+            WriteNotice("Loops (id, pacing, iterations, state, prompt):");
+            foreach (LoopDefinition loop in loops)
+            {
+                string line = "  " + LoopScheduler.Describe(loop, now);
+                if (!string.IsNullOrEmpty(loop.StatusReason) && loop.Status != LoopStatusEnum.Scheduled && loop.Status != LoopStatusEnum.Running)
+                {
+                    line += "  (" + loop.StatusReason + ")";
+                }
+
+                WriteNotice(line);
+            }
+        }
+
+        private List<string> BuildLoopLines()
+        {
+            List<string> lines = new List<string>();
+            if (_Loops == null)
+            {
+                return lines;
+            }
+
+            DateTime now = _Loops.UtcNow;
+            foreach (LoopDefinition loop in _Loops.Snapshot())
+            {
+                lines.Add(SidebarView.FormatLoopLine(loop, now));
+            }
+
+            return lines;
+        }
+
+        // Fires the earliest due loop iteration when the shell is idle (no turn running, nothing queued, queue not
+        // paused for editing), so loop turns never interleave with typed prompts. Runs on a timer thread; the busy
+        // flag keeps ticks from overlapping.
+        private void OnLoopTick()
+        {
+            LoopScheduler? loops = _Loops;
+            if (loops == null || _Disposed || _Cts.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (Interlocked.Exchange(ref _LoopTickBusy, 1) == 1)
+            {
+                return;
+            }
+
+            try
+            {
+                LoopDefinition? started = null;
+                lock (_Sync)
+                {
+                    if (!_TurnInFlight && !_QueuePaused && _PendingPrompts.Count == 0)
+                    {
+                        foreach (LoopDefinition due in loops.GetDue())
+                        {
+                            started = loops.TryBegin(due.Id);
+                            if (started != null)
+                            {
+                                _TurnInFlight = true;
+                                _ActiveLoopId = started.Id;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (started == null)
+                {
+                    if (loops.HasLiveLoops())
+                    {
+                        RefreshSidebar();
+                    }
+
+                    return;
+                }
+
+                string prompt = loops.BuildIterationPrompt(started);
+                if (_PluginRegistry != null && _PluginRegistry.HooksFor(Mux.Core.Plugins.HookEventEnum.UserPromptSubmit).Count > 0 && !PassesPromptSubmitHooks(prompt))
+                {
+                    lock (_Sync)
+                    {
+                        _TurnInFlight = false;
+                        _ActiveLoopId = null;
+                    }
+
+                    loops.Complete(started.Id, failed: true);
+                    WriteNotice("⚠ Loop " + started.Id + " paused: a user-prompt-submit hook blocked its prompt.");
+                    RefreshSidebar();
+                    return;
+                }
+
+                WriteNotice("↻ Loop " + started.Id + ", iteration " + started.IterationCount + " of at most " + started.MaxIterations);
+                RunTurn(prompt);
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("⚠ Loop tick failed: " + ex.Message);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _LoopTickBusy, 0);
+            }
+        }
+
+        // Reports a finished loop iteration to the scheduler and tells the user what happens next. A turn that was
+        // cancelled, or that ended with neither an answer nor a completion, counts as failed and pauses the loop.
+        private void CompleteLoopIteration(string? loopId, AgentEventProjector projector)
+        {
+            if (_Loops == null || string.IsNullOrEmpty(loopId))
+            {
+                return;
+            }
+
+            bool failed = projector.WasCancelled || (projector.LastRunCompleted == null && string.IsNullOrEmpty(projector.CapturedAssistantText));
+            LoopDefinition? loop = _Loops.Complete(loopId, failed);
+            if (loop == null)
+            {
+                return;
+            }
+
+            switch (loop.Status)
+            {
+                case LoopStatusEnum.Scheduled:
+                    string wait = loop.NextFireUtc.HasValue ? LoopCommand.FormatInterval(loop.NextFireUtc.Value - _Loops.UtcNow) : "0s";
+                    WriteNotice("↻ Loop " + loop.Id + ": next iteration in " + wait + (loop.IsSelfPaced && !string.IsNullOrEmpty(loop.LastReason) ? " (" + loop.LastReason + ")" : string.Empty) + ".");
+                    break;
+                case LoopStatusEnum.Paused:
+                    WriteNotice("⏸ Loop " + loop.Id + " paused: " + loop.StatusReason + ".");
+                    break;
+                case LoopStatusEnum.Completed:
+                    WriteNotice("✓ Loop " + loop.Id + " finished: " + loop.StatusReason + ".");
+                    break;
+                default:
+                    WriteNotice("■ Loop " + loop.Id + " stopped: " + loop.StatusReason + ".");
+                    break;
+            }
+        }
+
         private void HandleTrustArgument(string argument)
         {
             if (_SkillRuntime == null)
@@ -5656,6 +6054,7 @@ namespace Mux.Cli.App
 
             _Sidebar.EffortLabel = effortLabel;
             _Sidebar.ThinkingLabel = thinkingLabel;
+            _Sidebar.LoopLines = BuildLoopLines();
             _Sidebar.Refresh(model, stats);
         }
 

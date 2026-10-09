@@ -1402,6 +1402,8 @@ namespace Mux.Core.Settings
                 SkillListingMode = settings.SkillListingMode,
                 ProjectInstructionsEnabled = settings.ProjectInstructionsEnabled,
                 ProjectInstructionsMaxBytes = settings.ProjectInstructionsMaxBytes,
+                LoopMaxIterations = settings.LoopMaxIterations,
+                LoopMinIntervalSeconds = settings.LoopMinIntervalSeconds,
                 SkillProdPattern = settings.SkillProdPattern,
                 TaskPlanningEnabled = settings.TaskPlanningEnabled,
                 TaskParallelismEnabled = settings.TaskParallelismEnabled,

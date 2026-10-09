@@ -42,6 +42,7 @@
   "cmd.manage.setDefaultEndpoint": "既定に設定",
   "cmd.manage.addMcp": "MCP サーバーを追加",
   "cmd.manage.editMcp": "MCP サーバーを編集",
+  "cmd.manage.validateMcp": "MCP サーバーを検証",
   "cmd.manage.deleteMcp": "MCP サーバーを削除",
   "cmd.manage.activatePrompt": "アクティブなプロンプトに設定",
   "cmd.manage.toggleSkill": "スキルを切り替え",

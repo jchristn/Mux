@@ -33,6 +33,7 @@
   "cmd.manage.setDefaultEndpoint": "⟦Set as default······⟧",
   "cmd.manage.addMcp": "⟦Add MCP server······⟧",
   "cmd.manage.editMcp": "⟦Edit MCP server······⟧",
+  "cmd.manage.validateMcp": "⟦Validate MCP server·········⟧",
   "cmd.manage.deleteMcp": "⟦Delete MCP server·······⟧",
   "cmd.manage.activatePrompt": "⟦Set as active prompt········⟧",
   "cmd.manage.addPrompt": "⟦Add prompt····⟧",

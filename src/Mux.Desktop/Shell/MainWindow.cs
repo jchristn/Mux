@@ -1712,7 +1712,7 @@ namespace Mux.Desktop.Shell
             _ModelPicker.Tip(L("main.modelPicker.tip"));
             _ModelPicker.ItemTemplate = new FuncDataTemplate<EndpointConfig>(
                 (item, scope) => new TextBlock { Text = item != null ? item.Name : string.Empty },
-                supportsRecycling: true);
+                supportsRecycling: false);
             _ModelPicker.SelectionChanged += OnModelSelected;
             right.Children.Add(_ModelPicker);
 
@@ -1721,7 +1721,7 @@ namespace Mux.Desktop.Shell
             languagePicker.ItemsSource = _Localization.SupportedLocales;
             languagePicker.ItemTemplate = new FuncDataTemplate<LocaleInfo>(
                 (item, scope) => new TextBlock { Text = item != null ? item.NativeName : string.Empty },
-                supportsRecycling: true);
+                supportsRecycling: false);
             languagePicker.SelectedItem = CurrentLocaleInfo();
             languagePicker.SelectionChanged += OnLocaleSelected;
             right.Children.Add(languagePicker);
@@ -1902,32 +1902,33 @@ namespace Mux.Desktop.Shell
 
         // ---- data loading ------------------------------------------------------------------------
 
+        // Reloads the endpoint list (after an endpoint is added, edited, or deleted) and keeps the endpoint in use
+        // selected when it still exists; otherwise falls back to the default endpoint, then the first one. Tabs
+        // pointing at an endpoint that no longer exists move to the selected one. The item template does not
+        // recycle its text block, so the closed picker always shows the selected endpoint's name.
         private void PopulateModelPicker()
         {
             try
             {
                 List<EndpointConfig> endpoints = SettingsLoader.LoadEndpoints();
+                string? currentName = _Runner.EndpointName;
+                EndpointConfig? preferred = EndpointSelection.Resolve(endpoints, currentName);
+
                 _ModelPicker.ItemsSource = endpoints;
-
-                EndpointConfig? preferred = null;
-                foreach (EndpointConfig endpoint in endpoints)
-                {
-                    if (endpoint.IsDefault)
-                    {
-                        preferred = endpoint;
-                        break;
-                    }
-                }
-
-                if (preferred == null && endpoints.Count > 0)
-                {
-                    preferred = endpoints[0];
-                }
-
                 _ModelPicker.SelectedItem = preferred;
-                if (preferred != null)
+                if (preferred == null)
                 {
-                    _Runner.EndpointName = preferred.Name;
+                    return;
+                }
+
+                _Runner.EndpointName = preferred.Name;
+                foreach (TabContext tab in _Tabs.Values)
+                {
+                    string? tabEndpoint = tab.Runner.EndpointName;
+                    if (!endpoints.Exists(e => string.Equals(e.Name, tabEndpoint, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        tab.Runner.EndpointName = preferred.Name;
+                    }
                 }
             }
             catch (Exception)
@@ -3122,27 +3123,47 @@ namespace Mux.Desktop.Shell
 
         private void AddTurnInfo(RunCompletedEvent completed)
         {
-            long total = _TurnStopwatch != null ? _TurnStopwatch.ElapsedMilliseconds : completed.DurationMs;
-            long ttft = _TurnTtftMs ?? 0;
-            long streaming = Math.Max(0, total - ttft);
-
-            string tip = string.Format(
-                L("main.turnInfo.tip"),
-                ttft,
-                streaming,
-                FormatMs(total),
-                completed.InputTokens,
-                completed.OutputTokens,
-                completed.TotalTokens);
-
-            TextBlock info = new TextBlock
+            TurnInfo turn = new TurnInfo
             {
-                Text = "ⓘ  " + FormatMs(total) + " · " + completed.TotalTokens + " tokens",
-                Foreground = _Theme.Muted,
-                FontSize = 11,
-                Margin = new Thickness(2, -4, 0, 0)
+                TotalMs = _TurnStopwatch != null ? _TurnStopwatch.ElapsedMilliseconds : completed.DurationMs,
+                TtftMs = _TurnTtftMs,
+                InputTokens = completed.InputTokens,
+                OutputTokens = completed.OutputTokens,
+                TotalTokens = completed.TotalTokens,
+                Steps = completed.IterationsCompleted,
+                ToolCalls = completed.ToolCallCount,
+                Errors = completed.ErrorCount,
+                ContextTokens = completed.FinalEstimatedTokens,
+                Status = completed.Status
             };
-            ToolTip.SetTip(info, tip);
+            string details = turn.BuildDetails(L("main.turnInfo.tip"), L("main.turnInfo.more"));
+
+            // A real button, not a bare TextBlock: a TextBlock is hit-testable only over its glyphs and has no click
+            // or keyboard behavior, so the details were reachable only by hovering precisely. The button opens a
+            // flyout with selectable (copyable) details on click, Enter, or Space, and keeps the hover tooltip.
+            SelectableTextBlock detailText = new SelectableTextBlock
+            {
+                Text = details,
+                Foreground = _Theme.Text,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 460
+            };
+            Button info = new Button
+            {
+                Content = new TextBlock { Text = turn.BuildSummary(), Foreground = _Theme.Muted, FontSize = 11 },
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(4, 1, 4, 1),
+                MinHeight = 0,
+                Margin = new Thickness(0, -4, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Cursor = new Cursor(StandardCursorType.Hand),
+                Focusable = true,
+                Flyout = new Flyout { Content = detailText, Placement = PlacementMode.BottomEdgeAlignedLeft }
+            };
+            ToolTip.SetTip(info, details);
+            Avalonia.Automation.AutomationProperties.SetName(info, turn.BuildSummary());
 
             _Transcript.Children.Add(info);
             ScrollTranscriptToEnd();

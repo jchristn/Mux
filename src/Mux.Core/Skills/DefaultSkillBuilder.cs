@@ -113,6 +113,10 @@ namespace Mux.Core.Skills
                     builder.Append("    description: ").Append(command.Description).Append('\n');
                     builder.Append("    block: ").Append(command.Name).Append('\n');
                     builder.Append("    interpreter: ").Append(command.Interpreter).Append('\n');
+                    if (command.TimeoutMs > 0)
+                    {
+                        builder.Append("    timeoutMs: ").Append(command.TimeoutMs.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append('\n');
+                    }
                 }
             }
 

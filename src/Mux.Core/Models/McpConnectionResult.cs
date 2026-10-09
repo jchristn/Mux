@@ -15,6 +15,7 @@ namespace Mux.Core.Models
         private bool _Connected = false;
         private string _Method = string.Empty;
         private string? _Error;
+        private string? _Details;
 
         #endregion
 
@@ -63,6 +64,17 @@ namespace Mux.Core.Models
         {
             get => _Error;
             set => _Error = value;
+        }
+
+        /// <summary>
+        /// The diagnostic lines behind <see cref="Error"/> (HTTP status, headers, response body, connection cause,
+        /// client log, server stderr), or null. <see cref="Error"/> already ends with these lines; this property
+        /// carries them separately for surfaces that show the summary and the details apart.
+        /// </summary>
+        public string? Details
+        {
+            get => _Details;
+            set => _Details = value;
         }
 
         #endregion

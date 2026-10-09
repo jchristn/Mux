@@ -13,6 +13,7 @@ namespace Mux.Cli.Commands
     using Mux.Cli.Rendering;
     using Mux.Core.Agent;
     using Mux.Core.Enums;
+    using Mux.Core.Jobs;
     using Mux.Core.Models;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
@@ -108,6 +109,23 @@ namespace Mux.Cli.Commands
         [CommandOption("--buffer")]
         public bool Buffer { get; set; }
 
+        /// <summary>
+        /// Repeats the prompt as a loop: an interval such as <c>5m</c> or <c>90s</c>, or <c>self</c> to let the model
+        /// pace each next iteration with <c>schedule_next</c>. The command exits when the loop stops. Set by
+        /// <c>--loop</c>.
+        /// </summary>
+        [Description("Repeat the prompt on an interval (for example 5m) or self-paced (self) until the loop stops.")]
+        [CommandOption("--loop")]
+        public string? Loop { get; set; }
+
+        /// <summary>
+        /// The iteration cap for <c>--loop</c>. Defaults to the <c>loopMaxIterations</c> setting, which also caps it.
+        /// Set by <c>--loop-max</c>.
+        /// </summary>
+        [Description("The most iterations --loop runs (default and maximum: the loopMaxIterations setting).")]
+        [CommandOption("--loop-max")]
+        public int? LoopMax { get; set; }
+
         #endregion
     }
 
@@ -159,6 +177,41 @@ namespace Mux.Cli.Commands
                     return 1;
             }
 
+            // --loop: parse the pacing up front so a typo fails before any model call.
+            bool loopRequested = !string.IsNullOrWhiteSpace(settings.Loop);
+            TimeSpan? loopInterval = null;
+            if (loopRequested)
+            {
+                if (jsonlInput)
+                {
+                    EmitBootstrapError(settings, "--loop cannot be combined with --input-format jsonl.");
+                    return 1;
+                }
+
+                string pacing = settings.Loop!.Trim();
+                if (!string.Equals(pacing, "self", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!LoopCommand.TryParseInterval(pacing, out TimeSpan parsedInterval))
+                    {
+                        EmitBootstrapError(settings, $"Invalid --loop '{settings.Loop}'. Use an interval such as 30s, 5m, or 1h30m, or 'self' for a self-paced loop.");
+                        return 1;
+                    }
+
+                    loopInterval = parsedInterval;
+                }
+
+                if (settings.LoopMax.HasValue && settings.LoopMax.Value < 1)
+                {
+                    EmitBootstrapError(settings, "--loop-max must be at least 1.");
+                    return 1;
+                }
+            }
+            else if (settings.LoopMax.HasValue)
+            {
+                EmitBootstrapError(settings, "--loop-max needs --loop.");
+                return 1;
+            }
+
             // In jsonl input mode the prompt stream is read from stdin (one record per line) inside the run
             // loop; the positional prompt is ignored. In text mode the single prompt comes from the argument
             // or stdin as before.
@@ -187,6 +240,17 @@ namespace Mux.Cli.Commands
             {
                 EmitBootstrapError(settings, ex.Message);
                 return 1;
+            }
+
+            LoopScheduler? loopScheduler = null;
+            if (loopRequested)
+            {
+                loopScheduler = new LoopScheduler(runtime.MuxSettings.LoopMaxIterations, runtime.MuxSettings.LoopMinIntervalSeconds);
+                if (loopInterval.HasValue && loopInterval.Value.TotalSeconds < loopScheduler.MinIntervalSeconds)
+                {
+                    EmitBootstrapError(settings, $"--loop interval must be at least {LoopCommand.FormatInterval(TimeSpan.FromSeconds(loopScheduler.MinIntervalSeconds))} (setting loopMinIntervalSeconds).");
+                    return 1;
+                }
             }
 
             string? outputLastMessagePath;
@@ -432,6 +496,40 @@ namespace Mux.Cli.Commands
                             EmitBootstrapError(settings, "No input records were provided on stdin for --input-format jsonl.");
                             exitCode = 1;
                         }
+                    }
+                    else if (loopScheduler != null)
+                    {
+                        // A loop: every iteration is one turn against the accumulating history. Iterations never
+                        // overlap; the driver waits for the next fire time and exits when the loop stops.
+                        loopOptions.ExternalToolProviders ??= new List<IExternalToolProvider>();
+                        loopOptions.ExternalToolProviders.Add(new LoopToolProvider(loopScheduler));
+                        LoopDefinition created = loopScheduler.Create(
+                            ExpandSkillInvocation(prompt, skillRuntime, runtime.WorkingDirectory), loopInterval, settings.LoopMax);
+                        Console.Error.WriteLine(ConsoleMessageStyler.Notification(
+                            "Loop " + created.Id + ": " + (created.IsSelfPaced ? "self-paced" : "every " + LoopCommand.FormatInterval(loopInterval!.Value)) + ", at most " + created.MaxIterations + " iterations."));
+
+                        LoopDriver driver = new LoopDriver(loopScheduler);
+                        await driver.RunAsync(async (LoopDefinition loop, string iterationPrompt, CancellationToken token) =>
+                        {
+                            Console.Error.WriteLine(ConsoleMessageStyler.Notification("Loop " + loop.Id + ", iteration " + loop.IterationCount + " of at most " + loop.MaxIterations + "."));
+                            loopOptions.ConversationHistory = history;
+                            PrintTurnResult iteration = await RunTurnAsync(
+                                iterationPrompt, loopOptions, runtime, plan, outputSchemaJson, sessionId, settings.Verbose, token).ConfigureAwait(false);
+                            exitCode = iteration.ExitCode;
+                            history = StripSystemMessages(iteration.FinalConversation);
+                            latestConversation = iteration.FinalConversation;
+                            lastAssistantText = iteration.AssistantText;
+                            return iteration.ExitCode == 0;
+                        }, cts.Token).ConfigureAwait(false);
+
+                        LoopDefinition? final = loopScheduler.Get(created.Id);
+                        if (final != null)
+                        {
+                            Console.Error.WriteLine(ConsoleMessageStyler.Notification(
+                                "Loop " + final.Id + " ended after " + final.IterationCount + " iteration(s): " + (final.StatusReason ?? final.Status.ToString().ToLowerInvariant()) + "."));
+                        }
+
+                        cts.Token.ThrowIfCancellationRequested();
                     }
                     else
                     {

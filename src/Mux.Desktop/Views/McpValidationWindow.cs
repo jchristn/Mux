@@ -89,7 +89,7 @@ namespace Mux.Desktop.Views
             if (error != null)
             {
                 _Body.Children.Add(Pill(Localizer.T("mcpVal.failed"), theme.Error, Brushes.White));
-                _Body.Children.Add(new TextBlock { Text = error, Foreground = theme.Text, TextWrapping = TextWrapping.Wrap });
+                AddErrorDetails(error, theme);
                 return;
             }
 
@@ -102,7 +102,7 @@ namespace Mux.Desktop.Views
                 _Body.Children.Add(new TextBlock { Text = Localizer.T("mcpVal.toolsDiscovered") + " " + result.ToolCount, Foreground = theme.Muted, FontSize = 12 });
                 if (!string.IsNullOrEmpty(result.Error))
                 {
-                    _Body.Children.Add(new TextBlock { Text = result.Error, Foreground = theme.Error, TextWrapping = TextWrapping.Wrap });
+                    AddErrorDetails(result.Error!, theme);
                 }
             }
 
@@ -119,6 +119,42 @@ namespace Mux.Desktop.Views
                     _Body.Children.Add(new TextBlock { Text = "• " + tool.Name, Foreground = theme.Text, FontSize = 12 });
                 }
             }
+        }
+
+        // Shows the failure summary in the error color, then the diagnostic lines (cause, HTTP status, headers,
+        // response body, client log, server stderr) in a monospace block the user can select and copy, plus a
+        // Copy button for pasting into an issue.
+        private void AddErrorDetails(string error, AppTheme theme)
+        {
+            string normalized = error.Replace("\r\n", "\n");
+            int newline = normalized.IndexOf('\n');
+            string summary = newline < 0 ? normalized : normalized.Substring(0, newline);
+            string details = newline < 0 ? string.Empty : normalized.Substring(newline + 1);
+
+            _Body.Children.Add(new SelectableTextBlock { Text = summary, Foreground = theme.Error, TextWrapping = TextWrapping.Wrap, FontWeight = FontWeight.SemiBold });
+            if (details.Length > 0)
+            {
+                _Body.Children.Add(new Border
+                {
+                    Background = theme.SurfaceAlt,
+                    BorderBrush = theme.Border,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(10, 8, 10, 8),
+                    Child = new SelectableTextBlock
+                    {
+                        Text = details,
+                        Foreground = theme.Text,
+                        FontFamily = new FontFamily("Menlo, Consolas, monospace"),
+                        FontSize = 12,
+                        TextWrapping = TextWrapping.Wrap
+                    }
+                });
+            }
+
+            Button copy = new Button { Content = Localizer.T("mcpVal.copy"), HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(10, 4, 10, 4) };
+            copy.Click += async (object? sender, Avalonia.Interactivity.RoutedEventArgs args) => await ClipboardHelper.CopyAsync(TopLevel.GetTopLevel(this), normalized);
+            _Body.Children.Add(copy);
         }
 
         private static Control Pill(string text, IBrush background, IBrush foreground)

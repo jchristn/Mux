@@ -93,7 +93,7 @@ namespace Mux.Core.Skills
             List<DefaultSkillCommandDef> withSetup = new List<DefaultSkillCommandDef>();
             foreach (DefaultSkillCommandDef command in commands)
             {
-                withSetup.Add(new DefaultSkillCommandDef(command.Name, command.Description, command.Interpreter, _Setup + command.Code));
+                withSetup.Add(new DefaultSkillCommandDef(command.Name, command.Description, command.Interpreter, _Setup + command.Code) { TimeoutMs = command.TimeoutMs });
             }
 
             return DefaultSkillHelpers.Attach(new DefaultSkillDef

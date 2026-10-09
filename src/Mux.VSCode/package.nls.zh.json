@@ -42,6 +42,7 @@
   "cmd.manage.setDefaultEndpoint": "设为默认",
   "cmd.manage.addMcp": "添加 MCP 服务器",
   "cmd.manage.editMcp": "编辑 MCP 服务器",
+  "cmd.manage.validateMcp": "验证 MCP 服务器",
   "cmd.manage.deleteMcp": "删除 MCP 服务器",
   "cmd.manage.activatePrompt": "设为活动提示词",
   "cmd.manage.toggleSkill": "切换技能",

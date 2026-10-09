@@ -25,6 +25,7 @@ namespace Mux.Desktop.Views
         private readonly List<McpServerConfig> _Servers;
         private readonly DataTableView<McpServerConfig> _Table;
         private readonly Dictionary<string, bool?> _Connectivity = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _Errors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Instantiate the MCP servers manager.
@@ -65,7 +66,7 @@ namespace Mux.Desktop.Views
         {
             return new List<TableColumn<McpServerConfig>>
             {
-                new TableColumn<McpServerConfig>("", StatusGlyph, new GridLength(28), null, null, StatusBrush, tooltip: Localizer.T("mcp.col.status.tip")),
+                new TableColumn<McpServerConfig>("", StatusGlyph, new GridLength(28), null, null, StatusBrush, tooltip: Localizer.T("mcp.col.status.tip"), cellTooltip: StatusTip),
                 new TableColumn<McpServerConfig>(Localizer.T("col.name"), s => s.Name, new GridLength(2, GridUnitType.Star), s => s.Name, tooltip: Localizer.T("mcp.col.name.tip")),
                 new TableColumn<McpServerConfig>(Localizer.T("mcp.transport"), s => s.Transport.ToString(), new GridLength(1, GridUnitType.Star), s => s.Transport.ToString(), tooltip: Localizer.T("mcp.col.transport.tip")),
                 new TableColumn<McpServerConfig>(Localizer.T("mcp.target"), DescribeTarget, new GridLength(3, GridUnitType.Star), DescribeTarget, tooltip: Localizer.T("mcp.col.target.tip")),
@@ -91,6 +92,13 @@ namespace Mux.Desktop.Views
             }
 
             return state.Value ? "✓" : "✗";
+        }
+
+        private string? StatusTip(McpServerConfig server)
+        {
+            // A failed server's tooltip carries the full diagnosis (cause, HTTP status, body, stderr); Validate
+            // shows the same text in a copyable window.
+            return _Errors.TryGetValue(server.Name, out string? error) ? error : null;
         }
 
         private IBrush StatusBrush(McpServerConfig server)
@@ -156,6 +164,7 @@ namespace Mux.Desktop.Views
             }
 
             Dictionary<string, bool> outcome = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, string> errors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             try
             {
                 using McpToolManager manager = new McpToolManager(new List<McpServerConfig>(_Servers));
@@ -164,6 +173,10 @@ namespace Mux.Desktop.Views
                 foreach (McpConnectionResult result in manager.GetConnectionResults())
                 {
                     outcome[result.Name] = result.Connected;
+                    if (!result.Connected && !string.IsNullOrEmpty(result.Error))
+                    {
+                        errors[result.Name] = result.Error!;
+                    }
                 }
             }
             catch (Exception)
@@ -174,6 +187,12 @@ namespace Mux.Desktop.Views
             Dictionary<string, bool> captured = outcome;
             Dispatcher.UIThread.Post(() =>
             {
+                _Errors.Clear();
+                foreach (KeyValuePair<string, string> pair in errors)
+                {
+                    _Errors[pair.Key] = pair.Value;
+                }
+
                 foreach (McpServerConfig server in _Servers)
                 {
                     _Connectivity[server.Name] = captured.TryGetValue(server.Name, out bool value) ? value : (bool?)false;

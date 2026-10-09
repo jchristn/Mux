@@ -31,7 +31,8 @@ namespace Mux.Core.Sessions
                 WorkingDirectory = snapshot.WorkingDirectory,
                 CompactionCount = snapshot.CompactionCount,
                 ConversationHistory = new List<ConversationMessage>(snapshot.ConversationHistory),
-                PromptHistory = new List<string>(snapshot.PromptHistory)
+                PromptHistory = new List<string>(snapshot.PromptHistory),
+                Loops = snapshot.Loops == null ? new List<Mux.Core.Jobs.LoopDefinition>() : snapshot.Loops.FindAll(l => l != null).ConvertAll(l => l.Clone())
             };
 
             foreach (PersistedJobSnapshot job in snapshot.Jobs)

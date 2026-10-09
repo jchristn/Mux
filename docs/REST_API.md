@@ -98,6 +98,7 @@ All paths are versioned under `/v1.0/api`.
 | PUT | `/v1.0/api/endpoints` | key | Replace the endpoint collection (`{ "items": [ … ] }`). A blank secret preserves the stored one. |
 | DELETE | `/v1.0/api/endpoints?name=<name>` | key | Delete an endpoint. |
 | GET/PUT/DELETE | `/v1.0/api/mcp-servers` | key | CRUD over MCP servers (auth secret masked/preserved). DELETE takes `?name=`. |
+| POST | `/v1.0/api/mcp-servers/validate` | key | Connect to a saved server (`{ "Name" }`) or an unsaved definition (`{ "Server": { … } }`; a blank `AuthSecret` reuses the saved secret), run the MCP handshake, and list its tools. Optional `TimeoutSeconds` (1 to 120, default 30). Always `200` with `{ "Name", "Connected", "Method", "ToolCount", "Tools", "Error", "Details", "ElapsedMs" }`. On failure `Error` is the one-line cause (`connection refused by host:port`, `host not found`, `TLS handshake … failed`, `no response … within N s`, `HTTP 401 Unauthorized`, `initialize returned JSON-RPC error …`, or `command 'x' was not found on PATH`), and `Details` is the diagnosis: the request URL, HTTP status, `Content-Type`, `Content-Length`, `WWW-Authenticate`, `Retry-After`, `Server`, whether an `Mcp-Session-Id` was issued, the start of the response body, the MCP client's error, and for stdio the resolved command path and the server's stderr. Auth secrets never appear. `404` for an unknown name, `400` for an empty or invalid body. |
 | GET/PUT | `/v1.0/api/prompts` | key | Prompt profiles (name, active, and all three prompt fields: `systemPrompt`, `toolsDisabledPrompt`, `compactionPrompt`). On PUT a blank field inherits the built-in default; a `null` (omitted) advanced field preserves the stored value. |
 | GET | `/v1.0/api/prompts/catalog` | key | The operational prompt catalog: every model-facing prompt grouped by kind, with its coded default, current effective value, required placeholders, `Overridden` flag, and whether it is `Editable`. Returns `{ "items": [ … ] }`. |
 | PUT | `/v1.0/api/prompts/catalog` | key | Set or clear one global-scoped override: `{ "key": "<catalog key>", "content": "<text>" }`. A blank/omitted `content` clears the override (restores the default). Rejects an unknown or profile-scoped key (`400`) and an override that drops a required placeholder (`400`). Returns the updated entry. |
@@ -192,7 +193,9 @@ inlined). It provides:
 - **Configuration** — full-width management tables with custom modal add/edit forms and icon row actions
   (no browser dialogs) for **Endpoints, MCP Servers, Prompts, Subagents, Hooks & custom commands, Keybindings,
   and Skills** (enable/disable/view/delete). Secrets are never shown; leave a secret blank to keep it. Backed
-  by the CRUD routes above.
+  by the CRUD routes above. An MCP server's row menu has **Validate**, which calls
+  `POST /v1.0/api/mcp-servers/validate` and shows the tools, or the failure cause and full diagnosis with a
+  **Copy details** button.
 - **Sessions** — browse saved sessions, export any to HTML/Markdown (client-side download), or delete.
 - **Settings** — a form-based editor over `settings.json` (agent, context, features, REST server) with masked
   secrets and per-group "restart required" hints. Backed by `GET`/`PUT /v1.0/api/settings`.

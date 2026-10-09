@@ -9,8 +9,8 @@ namespace Mux.Cli.App
     /// <summary>
     /// A near-full-screen modal that edits a skill's <c>SKILL.md</c> in place with a multi-line
     /// <see cref="TextEditor"/>. Ctrl+S completes with the edited text (the caller writes and re-validates it);
-    /// Escape cancels, completing with null. Enter inserts a newline; the usual editing keys move, insert, and
-    /// delete.
+    /// Escape cancels, completing with null. Ctrl+T copies the whole current text (unsaved edits included) to the
+    /// clipboard. Enter inserts a newline; the usual editing keys move, insert, and delete.
     /// </summary>
     public sealed class SkillEditorModal : Modal
     {
@@ -21,7 +21,9 @@ namespace Mux.Cli.App
 
         private readonly string _Title;
         private readonly TextEditor _Editor = new TextEditor { IsFocused = true, WordWrap = true };
+        private readonly Func<string, string> _Copy;
         private Rect _EditorRect;
+        private string _Status = string.Empty;
 
         #endregion
 
@@ -34,10 +36,37 @@ namespace Mux.Cli.App
         /// <param name="initialText">The initial file contents. Must not be null.</param>
         /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
         public SkillEditorModal(string title, string initialText)
+            : this(title, initialText, TerminalClipboard.Copy)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SkillEditorModal"/> class with a custom copy action.
+        /// </summary>
+        /// <param name="title">The box title (for example the skill name). Must not be null.</param>
+        /// <param name="initialText">The initial file contents. Must not be null.</param>
+        /// <param name="copy">Copies text to the clipboard and returns a status message. Must not be null.</param>
+        /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+        public SkillEditorModal(string title, string initialText, Func<string, string> copy)
         {
             _Title = title ?? throw new ArgumentNullException(nameof(title));
             _Editor.Text = initialText ?? throw new ArgumentNullException(nameof(initialText));
+            _Copy = copy ?? throw new ArgumentNullException(nameof(copy));
         }
+
+        #endregion
+
+        #region Public-Members
+
+        /// <summary>
+        /// The status line shown in place of the key hints after a copy, or empty. Cleared by the next key.
+        /// </summary>
+        public string Status => _Status;
+
+        /// <summary>
+        /// The key hints shown at the bottom of the box.
+        /// </summary>
+        public const string Hint = "Ctrl+S save · Ctrl+T copy · Esc cancel · Enter newline";
 
         #endregion
 
@@ -46,6 +75,15 @@ namespace Mux.Cli.App
         /// <inheritdoc/>
         public override bool HandleKey(KeyEvent key)
         {
+            _Status = string.Empty;
+            if (key.Code == KeyCode.Character
+                && (key.Modifiers & KeyModifiers.Ctrl) != 0
+                && char.ToLowerInvariant((char)key.Rune) == 't')
+            {
+                _Status = _Copy(_Editor.Text);
+                return true;
+            }
+
             if (key.Code == KeyCode.Escape)
             {
                 Close(null);
@@ -126,8 +164,8 @@ namespace Mux.Cli.App
             surface.DrawText(
                 contentX,
                 hintRow,
-                Trim("Ctrl+S save · Esc cancel · Enter newline", contentWidth),
-                CellStyle.Default.WithForeground(Color.FromPalette(8)));
+                Trim(_Status.Length > 0 ? _Status : Hint, contentWidth),
+                CellStyle.Default.WithForeground(Color.FromPalette((byte)(_Status.Length > 0 ? 2 : 8))));
         }
 
         #endregion

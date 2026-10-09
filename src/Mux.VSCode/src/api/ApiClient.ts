@@ -17,6 +17,7 @@ import {
     FileContextResponse,
     HealthResponse,
     McpServer,
+    McpValidation,
     MuxServerSettings,
     PromptCatalogEntry,
     PromptProfile,
@@ -138,6 +139,14 @@ export class ApiClient {
     /** Replaces the MCP server collection. */
     public async putMcpServers(items: McpServer[], signal?: AbortSignal): Promise<void> {
         await this.sendJson('PUT', '/v1.0/api/mcp-servers', { Items: items }, signal);
+    }
+
+    /**
+     * Connects to a saved MCP server, runs the handshake, and lists its tools. On failure the result carries a
+     * one-line `Error` and the diagnostic `Details` (HTTP status, response body, connection cause, stderr).
+     */
+    public validateMcpServer(name: string, signal?: AbortSignal): Promise<McpValidation> {
+        return this.sendJson<McpValidation>('POST', '/v1.0/api/mcp-servers/validate', { Name: name }, signal);
     }
 
     /** Deletes an MCP server by name. */

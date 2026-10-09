@@ -180,6 +180,13 @@ namespace Mux.Core.Sessions
             {
                 incoming.PromptHistory = existing.PromptHistory;
             }
+
+            // Loops are authored only by surfaces that run them. A surface that does not track loops saves null,
+            // which keeps the stored ones; an empty list from a surface that does means every loop ended.
+            if (incoming.Loops == null && existing.Loops != null)
+            {
+                incoming.Loops = existing.Loops;
+            }
         }
 
         #endregion

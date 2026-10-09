@@ -77,6 +77,18 @@ namespace Mux.Cli.Commands
                     case "--no-stream":
                         settings.Buffer = ReadBool(option, inlineValue, defaultValue: true);
                         return true;
+                    case "--loop":
+                        settings.Loop = ReadValue(option, inlineValue, values, ref index);
+                        return true;
+                    case "--loop-max":
+                        string loopMax = ReadValue(option, inlineValue, values, ref index);
+                        if (!int.TryParse(loopMax, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedLoopMax))
+                        {
+                            throw new InvalidOperationException($"--loop-max must be a whole number (got '{loopMax}').");
+                        }
+
+                        settings.LoopMax = parsedLoopMax;
+                        return true;
                     default:
                         return false;
                 }

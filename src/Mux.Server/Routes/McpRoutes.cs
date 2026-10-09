@@ -3,11 +3,14 @@ namespace Mux.Server.Routes
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Diagnostics;
     using System.Text.Json;
+    using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Enums;
     using Mux.Core.Models;
     using Mux.Core.Settings;
+    using Mux.Core.Tools;
     using Mux.Server.Models;
     using WatsonWebserver;
 
@@ -88,6 +91,111 @@ namespace Mux.Server.Routes
                 }
                 catch (Exception ex) { req.Http.Response.StatusCode = 500; return (object)new ApiError("DeleteFailed", "Failed to delete MCP server: " + ex.Message); }
             }, Documentation.ApiDoc.McpDelete);
+
+            app.Post("/v1.0/api/mcp-servers/validate", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();
+
+                McpValidateRequestDto? payload;
+                try { payload = JsonSerializer.Deserialize<McpValidateRequestDto>(req.Http.Request.DataAsString ?? string.Empty, _JsonOptions); }
+                catch (Exception) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", "Request body is not valid JSON."); }
+
+                if (payload == null || (payload.Server == null && string.IsNullOrWhiteSpace(payload.Name)))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiError("BadRequest", "Pass the 'Name' of a saved server or a 'Server' definition.");
+                }
+
+                List<McpServerConfig> saved = SettingsLoader.LoadMcpServers();
+                McpServerConfig? config;
+                if (payload.Server != null)
+                {
+                    if (string.IsNullOrWhiteSpace(payload.Server.Name)) { req.Http.Response.StatusCode = 400; return (object)new ApiError("BadRequest", "The server needs a name."); }
+                    McpServerConfig? prior = saved.FirstOrDefault(s => string.Equals(s.Name, payload.Server.Name.Trim(), StringComparison.OrdinalIgnoreCase));
+                    config = FromDto(payload.Server, prior);
+                }
+                else
+                {
+                    config = saved.FirstOrDefault(s => string.Equals(s.Name, payload.Name!.Trim(), StringComparison.OrdinalIgnoreCase));
+                    if (config == null) { req.Http.Response.StatusCode = 404; return (object)new ApiError("NotFound", "No MCP server named '" + payload.Name + "'."); }
+                }
+
+                int timeoutSeconds = Math.Clamp(payload.TimeoutSeconds ?? 30, 1, 120);
+                McpValidateResponseDto response = await ValidateAsync(config, TimeSpan.FromSeconds(timeoutSeconds), req.Http.Token).ConfigureAwait(false);
+                req.Http.Response.StatusCode = 200;
+                return (object)response;
+            }, Documentation.ApiDoc.McpValidate);
+        }
+
+        /// <summary>
+        /// Connects to one MCP server, lists its tools, and reports the outcome with full failure details.
+        /// </summary>
+        /// <param name="config">The server to validate.</param>
+        /// <param name="timeout">How long to wait.</param>
+        /// <param name="cancellationToken">Cancels the attempt.</param>
+        /// <returns>The validation result.</returns>
+        internal static async Task<McpValidateResponseDto> ValidateAsync(McpServerConfig config, TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            Stopwatch watch = Stopwatch.StartNew();
+            McpValidateResponseDto response = new McpValidateResponseDto
+            {
+                Name = config.Name,
+                Method = config.Transport == McpTransportTypeEnum.Http ? "http" : "stdio"
+            };
+
+            try
+            {
+                using (McpToolManager manager = new McpToolManager(new List<McpServerConfig> { config }))
+                using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                {
+                    cts.CancelAfter(timeout);
+                    await manager.InitializeAsync(cts.Token).ConfigureAwait(false);
+                    McpConnectionResult? result = manager.GetConnectionResults().FirstOrDefault();
+                    if (result != null)
+                    {
+                        response.Connected = result.Connected;
+                        response.Method = result.Method;
+                        response.ToolCount = result.ToolCount;
+                        SplitError(result.Error, result.Details, response);
+                    }
+                    else
+                    {
+                        response.Error = "No connection result was reported.";
+                    }
+
+                    response.Tools = manager.GetToolDefinitions().Select(t => t.Name).ToList();
+                }
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                response.Connected = false;
+                response.Error = "Validation of MCP server '" + config.Name + "' timed out after " + Math.Round(timeout.TotalSeconds) + " s.";
+                response.Details = config.Transport == McpTransportTypeEnum.Http
+                    ? "URL: " + McpConnectionDiagnostics.BuildRpcUrl(config.Url, config.McpPath) + "\nThe server accepted the connection but did not finish the MCP handshake in time."
+                    : "Command: " + config.Command + "\nThe process did not finish the MCP handshake in time.";
+            }
+            catch (Exception ex)
+            {
+                response.Connected = false;
+                SplitError(ex.Message, (ex as McpConnectionException)?.Details, response);
+            }
+
+            response.ElapsedMs = watch.ElapsedMilliseconds;
+            return response;
+        }
+
+        private static void SplitError(string? error, string? details, McpValidateResponseDto response)
+        {
+            if (string.IsNullOrEmpty(error))
+            {
+                return;
+            }
+
+            string normalized = error.Replace("\r\n", "\n");
+            int newline = normalized.IndexOf('\n');
+            response.Error = newline < 0 ? normalized : normalized.Substring(0, newline);
+            string rest = newline < 0 ? string.Empty : normalized.Substring(newline + 1);
+            response.Details = !string.IsNullOrWhiteSpace(details) ? details!.Replace("\r\n", "\n") : (rest.Length > 0 ? rest : null);
         }
 
         private object Unauthorized() => new ApiError("Unauthorized", "Authentication required.");

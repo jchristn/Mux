@@ -75,6 +75,7 @@ namespace Mux.Core.Skills
             definitions.AddRange(DefaultIacSkills.All());
             definitions.AddRange(DefaultReviewSkills.All());
             definitions.AddRange(DefaultAgentPlaybookSkills.All());
+            definitions.AddRange(DefaultLoopSkills.All());
             return definitions;
         }
 

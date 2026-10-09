@@ -27,7 +27,8 @@ function Test-MuxTool {
 
 function Exit-MuxNotApplicable {
     param([Parameter(Mandatory = $true)][string]$Message)
-    Write-Output "mux: $Message"
+    # Write-Host, not Write-Output: a helper called inside @(...) or an assignment would otherwise swallow the message.
+    Write-Host "mux: $Message"
     exit 2
 }
 
@@ -800,4 +801,215 @@ function Get-MuxArg {
     }
 
     return $Default
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+# Loops (loop-until, fix-until-green, ci-watch, flaky-test-hunt)
+# ---------------------------------------------------------------------------------------------------------------
+
+# Parses a whole number from Min to Max; exits 2 naming the argument when it is missing or out of range.
+function Get-MuxBoundedInt {
+    param([string]$Value, [int]$Min, [int]$Max, [string]$Name)
+    $parsed = 0
+    if (-not [int]::TryParse($Value, [ref]$parsed) -or $parsed -lt $Min -or $parsed -gt $Max) {
+        Exit-MuxNotApplicable ($Name + ' must be a whole number from ' + $Min + ' to ' + $Max + " (got '" + $Value + "').")
+    }
+
+    return $parsed
+}
+
+# Prints the last Count lines of the text, noting how many were left out.
+function Write-MuxTail {
+    param([string]$Text, [int]$Count = 60)
+    $lines = New-Object System.Collections.Generic.List[string]
+    foreach ($line in (($Text -replace "`r", '') -split "`n")) { $lines.Add($line) }
+    while ($lines.Count -gt 0 -and -not $lines[$lines.Count - 1].Trim()) { $lines.RemoveAt($lines.Count - 1) }
+    $start = 0
+    if ($lines.Count -gt $Count) {
+        Write-Output ('[mux: showing the last ' + $Count + ' of ' + $lines.Count + ' lines]')
+        $start = $lines.Count - $Count
+    }
+
+    for ($i = $start; $i -lt $lines.Count; $i++) { Write-Output $lines[$i] }
+}
+
+# Runs a command and captures its combined output without printing it. Leaves the output in
+# $script:MuxCapturedOutput and the exit code in $script:MuxCapturedExit. A missing tool exits 2 with the hint.
+function Invoke-MuxCaptured {
+    param([Parameter(Mandatory = $true)][string]$Tool, [string[]]$Arguments = @(), [string]$InstallHint = '')
+    if (-not (Test-MuxTool $Tool) -and -not (Test-Path -LiteralPath $Tool -PathType Leaf)) {
+        Exit-MuxNotApplicable ("'$Tool' was not found on PATH. $InstallHint".Trim())
+    }
+
+    $global:LASTEXITCODE = 0
+    try {
+        $script:MuxCapturedOutput = (& $Tool @Arguments 2>&1 | Out-String)
+        $script:MuxCapturedExit = $LASTEXITCODE
+    } catch {
+        $script:MuxCapturedOutput = $_.Exception.Message
+        $script:MuxCapturedExit = 1
+    }
+}
+
+# The command (@{ Tool; Arguments; Hint }) that runs a Python module inside the project's environment.
+function Get-MuxPythonModuleCommand {
+    param([string]$Dir, [string[]]$Arguments)
+    switch (Get-MuxPythonManager -Dir $Dir) {
+        'uv' { return @{ Tool = 'uv'; Arguments = @('run', 'python') + $Arguments; Hint = 'Install uv from https://docs.astral.sh/uv/.' } }
+        'poetry' { return @{ Tool = 'poetry'; Arguments = @('run', 'python') + $Arguments; Hint = 'Install Poetry from https://python-poetry.org.' } }
+        'pipenv' { return @{ Tool = 'pipenv'; Arguments = @('run', 'python') + $Arguments; Hint = 'Install pipenv: pip install --user pipenv.' } }
+        default {
+            $venv = Get-MuxVenvPython -Dir $Dir
+            $python = if ($venv) { $venv } else { Get-MuxSystemPython }
+            return @{ Tool = $python; Arguments = $Arguments; Hint = 'Install Python 3 from https://www.python.org.' }
+        }
+    }
+}
+
+# The project's build and test commands, detected in this order: .NET, JavaScript, Python, Go, Rust, Java, CMake.
+# Returns @{ Kind; Build; Test } where Build and Test are @{ Tool; Arguments; Hint } (Build is $null when the
+# toolchain has no separate build step). Filter, when given, narrows the tests to matching names. Exits 2 when no
+# supported project is found.
+function Get-MuxCheckPlan {
+    param([string]$Filter = '')
+    $hasFilter = [bool]$Filter
+
+    if (Find-MuxUp -Names @('*.sln', '*.slnx', '*.csproj', '*.fsproj')) {
+        $hint = 'Install the .NET SDK from https://dot.net.'
+        $test = @('test', '--nologo')
+        if ($hasFilter) { $test += @('--filter', $Filter) }
+        return @{ Kind = '.NET'; Build = @{ Tool = 'dotnet'; Arguments = @('build', '--nologo'); Hint = $hint }; Test = @{ Tool = 'dotnet'; Arguments = $test; Hint = $hint } }
+    }
+
+    $nodeDir = Find-MuxUp -Names @('package.json')
+    if ($nodeDir) {
+        $pkg = Get-MuxPackageJson -Dir $nodeDir
+        $manager = Get-MuxNodePackageManager -Dir $nodeDir
+        $hint = Get-MuxNodeInstallHint $manager
+        $build = $null
+        if (Test-MuxPackageScript $pkg 'build') { $build = @{ Tool = $manager; Arguments = @('run', 'build'); Hint = $hint } }
+        if (-not $hasFilter -and (Test-MuxPackageScript $pkg 'test')) {
+            $test = @{ Tool = $manager; Arguments = @('run', 'test'); Hint = $hint }
+        } else {
+            switch (Get-MuxJsTestRunner $pkg) {
+                'vitest' { $a = @('run'); if ($hasFilter) { $a += @('-t', $Filter) }; $c = Get-MuxPackageBinCommand -Manager $manager -Bin 'vitest' -Arguments $a }
+                'jest' { $a = @('--ci'); if ($hasFilter) { $a += @('-t', $Filter) }; $c = Get-MuxPackageBinCommand -Manager $manager -Bin 'jest' -Arguments $a }
+                'mocha' { $a = @(); if ($hasFilter) { $a += @('--grep', $Filter) }; $c = Get-MuxPackageBinCommand -Manager $manager -Bin 'mocha' -Arguments $a }
+                default { $a = @('--test'); if ($hasFilter) { $a += ('--test-name-pattern=' + $Filter) }; $c = @{ Tool = 'node'; Arguments = $a } }
+            }
+
+            $test = @{ Tool = $c.Tool; Arguments = $c.Arguments; Hint = $hint }
+        }
+
+        return @{ Kind = 'JavaScript (' + $manager + ')'; Build = $build; Test = $test }
+    }
+
+    $pyDir = Find-MuxUp -Names @('pyproject.toml', 'requirements*.txt', 'setup.py', 'setup.cfg', 'Pipfile', 'uv.lock', 'poetry.lock')
+    if ($pyDir) {
+        $a = @('-m', 'pytest', '-q')
+        if ($hasFilter) { $a += @('-k', $Filter) }
+        return @{ Kind = 'Python'; Build = $null; Test = (Get-MuxPythonModuleCommand -Dir $pyDir -Arguments $a) }
+    }
+
+    if (Find-MuxUp -Names @('go.mod')) {
+        $hint = 'Install Go from https://go.dev/dl/.'
+        $a = @('test', '-count=1')
+        if ($hasFilter) { $a += @('-run', $Filter) }
+        $a += './...'
+        return @{ Kind = 'Go'; Build = @{ Tool = 'go'; Arguments = @('build', './...'); Hint = $hint }; Test = @{ Tool = 'go'; Arguments = $a; Hint = $hint } }
+    }
+
+    if (Find-MuxUp -Names @('Cargo.toml')) {
+        $hint = 'Install Rust from https://rustup.rs.'
+        $a = @('test')
+        if ($hasFilter) { $a += $Filter }
+        return @{ Kind = 'Rust'; Build = @{ Tool = 'cargo'; Arguments = @('build'); Hint = $hint }; Test = @{ Tool = 'cargo'; Arguments = $a; Hint = $hint } }
+    }
+
+    $javaDir = Find-MuxUp -Names @('mvnw', 'gradlew', 'pom.xml', 'build.gradle', 'build.gradle.kts')
+    if ($javaDir) {
+        $java = Get-MuxJavaBuild -Dir $javaDir
+        if ($java.Kind -eq 'maven') {
+            $hint = 'Install Maven from https://maven.apache.org or add the Maven wrapper.'
+            $a = @('-B', 'test')
+            if ($hasFilter) { $a += ('-Dtest=' + $Filter) }
+            return @{ Kind = 'Java (Maven)'; Build = @{ Tool = $java.Tool; Arguments = @('-B', 'compile'); Hint = $hint }; Test = @{ Tool = $java.Tool; Arguments = $a; Hint = $hint } }
+        }
+
+        $hint = 'Install Gradle from https://gradle.org or add the Gradle wrapper.'
+        $a = @('--console=plain', 'test')
+        if ($hasFilter) { $a += @('--tests', $Filter) }
+        return @{ Kind = 'Java (Gradle)'; Build = @{ Tool = $java.Tool; Arguments = @('--console=plain', 'assemble'); Hint = $hint }; Test = @{ Tool = $java.Tool; Arguments = $a; Hint = $hint } }
+    }
+
+    $cmakeDir = Find-MuxUp -Names @('CMakeLists.txt')
+    if ($cmakeDir) {
+        $buildDir = Join-Path $cmakeDir 'build'
+        if (-not (Test-Path -LiteralPath $buildDir)) { Exit-MuxNotApplicable 'CMake project has no build directory yet; run cpp-configure first.' }
+        $hint = 'Install CMake from https://cmake.org.'
+        $a = @('--test-dir', $buildDir, '--output-on-failure')
+        if ($hasFilter) { $a += @('-R', $Filter) }
+        return @{ Kind = 'C/C++ (CMake)'; Build = @{ Tool = 'cmake'; Arguments = @('--build', $buildDir); Hint = $hint }; Test = @{ Tool = 'ctest'; Arguments = $a; Hint = $hint } }
+    }
+
+    Exit-MuxNotApplicable 'no supported project found (.NET, JavaScript, Python, Go, Rust, Java, or CMake).'
+}
+
+# Runs one check step and prints a one-line PASS or FAIL, plus the tail of the output on failure. Leaves the exit
+# code in $script:MuxStepExit. In a dry run the command is printed and the step counts as passed.
+function Invoke-MuxCheckStep {
+    param([string]$Name, $Step, [int]$TailLines = 80)
+    $line = Format-MuxCommand -Tool $Step.Tool -Arguments $Step.Arguments
+    $script:MuxStepExit = 0
+    if (Test-MuxDryRun) { Write-Output ('DRYRUN: ' + $line); return }
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    Invoke-MuxCaptured -Tool $Step.Tool -Arguments $Step.Arguments -InstallHint $Step.Hint
+    $script:MuxStepExit = $script:MuxCapturedExit
+    $seconds = [Math]::Round($watch.Elapsed.TotalSeconds, 1)
+    if ($script:MuxStepExit -eq 0) {
+        Write-Output ('== ' + $Name + ': PASS in ' + $seconds + 's  (' + $line + ')')
+    } else {
+        Write-Output ('== ' + $Name + ': FAIL with exit ' + $script:MuxStepExit + ' in ' + $seconds + 's  (' + $line + ')')
+        Write-MuxTail -Text $script:MuxCapturedOutput -Count $TailLines
+    }
+}
+
+# Reads a gh JSON result from --from-file (for offline use and tests) or by running gh. Returns the parsed object.
+function Get-MuxGhJson {
+    param([string]$FromFile, [string[]]$Arguments)
+    if ($FromFile) {
+        if (-not (Test-Path -LiteralPath $FromFile -PathType Leaf)) { Exit-MuxNotApplicable ($FromFile + ' does not exist.') }
+        $text = Get-Content -LiteralPath $FromFile -Raw
+    } else {
+        $hint = 'Install the GitHub CLI from https://cli.github.com and sign in with gh auth login.'
+        Invoke-MuxCaptured -Tool 'gh' -Arguments $Arguments -InstallHint $hint
+        if ($script:MuxCapturedExit -ne 0) { Write-Output $script:MuxCapturedOutput.TrimEnd(); exit 2 }
+        $text = $script:MuxCapturedOutput
+    }
+
+    try {
+        return ($text | ConvertFrom-Json -NoEnumerate)
+    } catch {
+        Exit-MuxNotApplicable ('the GitHub response is not valid JSON: ' + $_.Exception.Message)
+    }
+}
+
+# Splits "--name value" options out of the arguments. Returns @{ Options = hashtable; Rest = list }.
+function Split-MuxOptions {
+    param([object[]]$Arguments, [string[]]$Names)
+    $options = @{}
+    $rest = New-Object System.Collections.Generic.List[string]
+    $all = @($Arguments)
+    for ($i = 0; $i -lt $all.Count; $i++) {
+        $token = [string]$all[$i]
+        if ($Names -contains $token) {
+            if (($i + 1) -ge $all.Count) { Exit-MuxNotApplicable ($token + ' needs a value.') }
+            $options[$token] = [string]$all[$i + 1]
+            $i++
+        } else {
+            $rest.Add($token)
+        }
+    }
+
+    return @{ Options = $options; Rest = $rest }
 }

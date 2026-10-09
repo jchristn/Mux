@@ -224,6 +224,11 @@
         "category": "mux"
       },
       {
+        "command": "mux.manage.validateMcp",
+        "title": "%cmd.manage.validateMcp%",
+        "category": "mux"
+      },
+      {
         "command": "mux.manage.deleteMcp",
         "title": "%cmd.manage.deleteMcp%",
         "category": "mux"
@@ -415,6 +420,11 @@
           "command": "mux.manage.editMcp",
           "when": "view == mux.manage && viewItem == mcp",
           "group": "1@1"
+        },
+        {
+          "command": "mux.manage.validateMcp",
+          "when": "view == mux.manage && viewItem == mcp",
+          "group": "1@2"
         },
         {
           "command": "mux.manage.deleteMcp",

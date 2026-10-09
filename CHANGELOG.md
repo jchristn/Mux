@@ -70,6 +70,19 @@ All notable changes to mux are documented here.
   restoring HEAD), and `explain-codebase` (a bounded tree map with entry points). Large diffs are cut at
   `MUX_SKILL_DIFF_MAX_BYTES` (default 200000) with a note. Git-based skills are listed only inside a repository,
   and `pr-comments` only when `gh` is installed.
+- **Loops (Phase 4).** `/loop [interval] [--max N] <prompt>` re-runs a prompt across turns on a fixed interval
+  (`30s`, `5m`, `1h30m`) or, with no interval, self-paced: the model ends each iteration with the new
+  `schedule_next` tool (a delay, or `stop: true`), and an iteration that does not call it stops the loop. Every loop
+  has an iteration cap (new settings `loopMaxIterations`, default 50, and `loopMinIntervalSeconds`, default 30).
+  Iterations run as ordinary turns, only when the shell is idle, and never overlap; fire times missed while an
+  iteration ran are skipped, and a failed or cancelled iteration pauses its loop. `/loops` lists, cancels, pauses,
+  and resumes loops, the sidebar shows them with their next fire time, and active loops are saved with the session
+  and restored paused. `mux print --loop <interval|self>` and `--loop-max` run a loop headlessly and exit when it
+  stops. Four loop skills (library: 152): `loop-until` (retry a command until it exits 0), `fix-until-green` (detect
+  and run the build and tests, then fix one failure at a time, never weakening tests), `ci-watch` (GitHub Actions
+  status, waiting for a run, and failed-step logs), and `flaky-test-hunt` (run a test filter or command many times and
+  report the failure rate with the first failing output). Default skill commands can set `timeoutMs`; the waiting
+  commands use 30 minutes.
 - **Skills in `mux print`.** Headless runs now discover skills, list them in the system prompt, and expose
   `skill` and `run_skill`, matching the interactive shell.
 
@@ -85,8 +98,37 @@ All notable changes to mux are documented here.
   copies are untouched.
 - Switching prompt profiles in the terminal after `/cwd` now keeps the new working directory.
 
+### Fixed
+
+- Desktop: the endpoint picker now shows the endpoint you select, and adding, editing, or deleting endpoints keeps
+  the active endpoint selected, falling back to the default when it was deleted (the picker reused a stale label).
+- Desktop: the (i) under each chat turn is a real button again; click it or press Enter or Space to open selectable
+  details (time to first token, streaming, total, tokens, steps, tool calls, errors, context size, status).
+- Skill editors on the desktop, web dashboard, terminal (Ctrl+T), and VS Code have a copy-to-clipboard control
+  that copies the whole `SKILL.md`, unsaved edits included. The terminal uses the system clipboard command and falls
+  back to OSC 52.
+- MCP connection failures now say why on every surface: connection refused, host not found, TLS failure, timeout,
+  the HTTP status with `Content-Type`, `WWW-Authenticate`, `Retry-After`, `Server`, and the response body, a JSON-RPC
+  error, or a stdio command missing from PATH with its stderr. The first line is the cause and the details follow;
+  credentials are never shown. The desktop Validate window shows copyable details and the servers list shows the
+  error on hover; the terminal MCP manager shows the cause on each offline row and a "Show connection errors"
+  action, and multi-line notices render one row per line. New `POST /v1.0/api/mcp-servers/validate`, with Validate
+  actions in the web dashboard and the VS Code extension.
+- Web dashboard: the shared copy helper no longer hides the translation function, so copying without a button
+  shows the "copied" toast instead of throwing.
+- Skill helper: `Exit-MuxNotApplicable` writes its message with `Write-Host`, so the reason is shown even when the
+  failing helper ran inside `@(...)` or an assignment.
+
 ### Tests
 
+- `LoopScheduler` and `LoopSkills`: 64 cases. The scheduler runs on a manual clock (fixed interval, self-paced
+  decisions, iteration cap, cancel mid-run, pause and resume, restore paused, skipped fire times, no overlap), plus
+  the `/loop` parser, the `schedule_next` tool's validation, the headless driver, settings clamping, session save and
+  resume, the sidebar line, the terminal `/loop` and `/loops` commands in a headless shell, and `mux print --loop`
+  end to end against a mock model that calls `schedule_next`. The loop skills run for real (a retrying counter
+  script, a flaky command, real `npm` scripts when Node is installed, saved `gh` responses) and in dry runs for
+  toolchain detection, with negative cases for every argument check.
+- `Test.Automated` accepts `--suite <id>` (repeatable) to run only some suites.
 - `ReviewSkills`: 48 cases that run the Phase 3 skills against real throwaway git repositories (`GitFixture`):
   every `code-review` mode and its invalid-input errors, diff capping, masked secret findings (and no finding for
   removed lines or clean changes), manifest audit hints, `pr-comments` from JSON fixtures and dry runs,

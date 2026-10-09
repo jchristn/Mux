@@ -64,7 +64,7 @@ namespace Mux.Core.Skills
             {
                 bool needsPrelude = command.Interpreter == "pwsh" && !command.Code.StartsWith(Prelude, StringComparison.Ordinal);
                 commands.Add(needsPrelude
-                    ? new DefaultSkillCommandDef(command.Name, command.Description, command.Interpreter, Prelude + command.Code)
+                    ? new DefaultSkillCommandDef(command.Name, command.Description, command.Interpreter, Prelude + command.Code) { TimeoutMs = command.TimeoutMs }
                     : command);
             }
 

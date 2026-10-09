@@ -31,6 +31,7 @@ namespace Mux.Core.Tools
         private string _BaseCompaction;
         private McpRuntime? _McpRuntime;
         private SkillRuntime? _SkillRuntime;
+        private List<IExternalToolProvider> _AdditionalProviders = new List<IExternalToolProvider>();
 
         #endregion
 
@@ -76,6 +77,16 @@ namespace Mux.Core.Tools
             set { lock (_Sync) { _SkillRuntime = value; } }
         }
 
+        /// <summary>
+        /// Further tool providers composed after the skills runtime (for example the loop tool). Never null. Set
+        /// before the first <see cref="Rebind"/>, or call it after changing this list.
+        /// </summary>
+        public List<IExternalToolProvider> AdditionalProviders
+        {
+            get { lock (_Sync) { return _AdditionalProviders; } }
+            set { lock (_Sync) { _AdditionalProviders = value ?? new List<IExternalToolProvider>(); } }
+        }
+
         #endregion
 
         #region Public-Methods
@@ -118,7 +129,7 @@ namespace Mux.Core.Tools
             IReadOnlyList<ToolDefinition> mcpTools = _McpRuntime?.CurrentTools ?? new List<ToolDefinition>();
             Func<string, JsonElement, string, CancellationToken, Task<ToolResult>>? executor =
                 _McpRuntime != null ? _McpRuntime.ExecuteToolAsync : null;
-            ExternalToolsBinder.Apply(_Template, _BasePrompt, _BaseCompaction, mcpTools, executor, _SkillRuntime, _BuiltInToolCount);
+            ExternalToolsBinder.Apply(_Template, _BasePrompt, _BaseCompaction, mcpTools, executor, _SkillRuntime, _BuiltInToolCount, _AdditionalProviders);
         }
 
         #endregion

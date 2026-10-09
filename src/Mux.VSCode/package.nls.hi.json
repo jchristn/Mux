@@ -42,6 +42,7 @@
   "cmd.manage.setDefaultEndpoint": "डिफ़ॉल्ट के रूप में सेट करें",
   "cmd.manage.addMcp": "MCP सर्वर जोड़ें",
   "cmd.manage.editMcp": "MCP सर्वर संपादित करें",
+  "cmd.manage.validateMcp": "MCP सर्वर सत्यापित करें",
   "cmd.manage.deleteMcp": "MCP सर्वर हटाएँ",
   "cmd.manage.activatePrompt": "सक्रिय प्रॉम्प्ट के रूप में सेट करें",
   "cmd.manage.toggleSkill": "स्किल टॉगल करें",

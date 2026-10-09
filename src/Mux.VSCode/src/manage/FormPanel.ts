@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
+import { copyButtonHtml } from './formCopy';
 
 /**
  * One clause of a field's visibility rule: the field is shown only when the current value of the control named
@@ -39,6 +40,9 @@ export interface FormField {
 
     /** Optional visibility rule; when present the field is shown only while every clause matches. */
     showIf?: ShowIfClause[];
+
+    /** When true (text areas only), a copy button beside the label copies the field's current text. */
+    copyable?: boolean;
 }
 
 /**
@@ -66,8 +70,10 @@ export class FormPanel {
 
         return new Promise((resolve) => {
             let settled = false;
-            const sub = panel.webview.onDidReceiveMessage((message: { type: string; values?: Record<string, string | boolean> }) => {
-                if (message.type === 'submit') {
+            const sub = panel.webview.onDidReceiveMessage((message: { type: string; values?: Record<string, string | boolean>; text?: string }) => {
+                if (message.type === 'copy') {
+                    void vscode.env.clipboard.writeText(message.text ?? '');
+                } else if (message.type === 'submit') {
                     settled = true;
                     resolve(message.values ?? {});
                     panel.dispose();
@@ -120,6 +126,9 @@ export class FormPanel {
   button:hover { background: var(--vscode-button-hoverBackground); }
   button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
   .error { color: var(--vscode-errorForeground); margin-top: 10px; min-height: 18px; }
+  .labelrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  .labelrow label { margin-bottom: 0; }
+  button.copy { padding: 2px 10px; }
 </style>
 </head>
 <body>
@@ -162,6 +171,16 @@ ${controls}
     if (el) { el.addEventListener('change', applyVisibility); el.addEventListener('input', applyVisibility); }
   }
   applyVisibility();
+  // Copy buttons send the control's current text to the extension, which writes the system clipboard.
+  for (const button of document.querySelectorAll('button.copy')) {
+    button.addEventListener('click', () => {
+      const target = document.getElementById(button.getAttribute('data-copy'));
+      vscode.postMessage({ type: 'copy', text: target ? target.value : '' });
+      const original = button.textContent;
+      button.textContent = '✓ Copied';
+      setTimeout(() => { button.textContent = original; }, 1200);
+    });
+  }
   document.getElementById('cancel').addEventListener('click', () => vscode.postMessage({ type: 'cancel' }));
   document.getElementById('form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -203,6 +222,10 @@ ${controls}
                 break;
             case 'textarea':
                 control = `<textarea id="${id}">${FormPanel.escape(String(field.value ?? ''))}</textarea>`;
+                if (field.copyable) {
+                    return `<div class="field" id="${wrapId}"><div class="labelrow">${label}${copyButtonHtml(id, field.label)}</div>${control}${hint}</div>`;
+                }
+
                 break;
             case 'number':
                 control = `<input type="number" id="${id}" value="${FormPanel.escape(String(field.value ?? ''))}" />`;

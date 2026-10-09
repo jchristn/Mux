@@ -42,6 +42,7 @@
   "cmd.manage.setDefaultEndpoint": "Definir como padrão",
   "cmd.manage.addMcp": "Adicionar servidor MCP",
   "cmd.manage.editMcp": "Editar servidor MCP",
+  "cmd.manage.validateMcp": "Validar servidor MCP",
   "cmd.manage.deleteMcp": "Excluir servidor MCP",
   "cmd.manage.activatePrompt": "Definir como prompt ativo",
   "cmd.manage.toggleSkill": "Alternar habilidade",
