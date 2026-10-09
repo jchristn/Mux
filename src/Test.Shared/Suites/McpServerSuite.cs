@@ -217,11 +217,11 @@ namespace Test.Shared.Suites
             }));
             Add("HttpSessionTools", "list_sessions and get_session read the store; unknown and unsafe ids are errors", (CancellationToken ct) => WithServerAsync(new MuxMcpServerOptions(), null, async (McpServerFixture f) =>
             {
-                SessionSnapshot older = new SessionSnapshot { Id = "s-old", Title = "Older", EndpointName = "e1", Model = "m1" };
+                SessionSnapshot older = new SessionSnapshot { Id = "s-old", Title = "Older", EndpointName = "e1", Model = "m1", UpdatedUtc = DateTime.UtcNow.AddHours(-1) };
                 older.ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.User, Content = "first question" });
                 await f.Sessions.SaveAsync(older, ct).ConfigureAwait(false);
                 await Task.Delay(20, ct).ConfigureAwait(false);
-                SessionSnapshot newer = new SessionSnapshot { Id = "s-new", Title = "Newer", EndpointName = "e2", Model = "m2" };
+                SessionSnapshot newer = new SessionSnapshot { Id = "s-new", Title = "Newer", EndpointName = "e2", Model = "m2", UpdatedUtc = DateTime.UtcNow };
                 for (int i = 0; i < 5; i++) newer.ConversationHistory.Add(new ConversationMessage { Role = i % 2 == 0 ? RoleEnum.User : RoleEnum.Assistant, Content = "msg " + i + (i == 4 ? new string('x', 9000) : string.Empty) });
                 await f.Sessions.SaveAsync(newer, ct).ConfigureAwait(false);
                 using (McpHttpClient client = (await f.Server.ConnectAsync(null, ct).ConfigureAwait(false))!)

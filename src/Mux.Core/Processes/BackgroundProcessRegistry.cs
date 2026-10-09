@@ -140,9 +140,10 @@ namespace Mux.Core.Processes
                 };
                 if (_IsWindows)
                 {
+                    // cmd.exe does its own parsing and does not understand the \" escaping ArgumentList applies, so
+                    // the command goes through verbatim, as run_process passes it.
                     startInfo.FileName = "cmd.exe";
-                    startInfo.ArgumentList.Add("/c");
-                    startInfo.ArgumentList.Add(command);
+                    startInfo.Arguments = "/c " + command;
                 }
                 else
                 {

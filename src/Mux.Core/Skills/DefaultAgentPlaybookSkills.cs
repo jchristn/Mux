@@ -93,7 +93,7 @@ try {
     $code = $LASTEXITCODE
     Write-Output $output.TrimEnd()
     $badCommit = & git rev-parse --verify --quiet refs/bisect/bad 2>$null
-    if ($code -eq 0 -and $output -match 'is the first bad commit' -and $badCommit) {
+    if ($code -eq 0 -and $output -match ""is the first '?bad'? commit"" -and $badCommit) {
         $found = $true
         Write-Output ''
         Write-Output '== First bad commit'

@@ -376,13 +376,43 @@ namespace Mux.Core.Skills
             {
                 char first = trimmed[0];
                 char last = trimmed[trimmed.Length - 1];
-                if ((first == '"' && last == '"') || (first == '\'' && last == '\''))
+                if (first == '"' && last == '"')
+                {
+                    return UnescapeDoubleQuoted(trimmed.Substring(1, trimmed.Length - 2));
+                }
+
+                if (first == '\'' && last == '\'')
                 {
                     return trimmed.Substring(1, trimmed.Length - 2);
                 }
             }
 
             return trimmed;
+        }
+
+        // YAML double-quoted scalars escape backslashes and quotes (mux writes Windows paths that way). Only those
+        // two escapes are undone; any other backslash sequence is kept as written.
+        private static string UnescapeDoubleQuoted(string value)
+        {
+            if (value.IndexOf('\\') < 0)
+            {
+                return value;
+            }
+
+            System.Text.StringBuilder builder = new System.Text.StringBuilder(value.Length);
+            for (int i = 0; i < value.Length; i++)
+            {
+                if (value[i] == '\\' && i + 1 < value.Length && (value[i + 1] == '\\' || value[i + 1] == '"'))
+                {
+                    builder.Append(value[i + 1]);
+                    i++;
+                    continue;
+                }
+
+                builder.Append(value[i]);
+            }
+
+            return builder.ToString();
         }
 
         private static bool ParseBool(string value, bool fallback)

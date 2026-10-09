@@ -59,6 +59,19 @@ namespace Test.Shared.Suites
                             return Task.CompletedTask;
                         })),
 
+                    Case("DoubleQuotedValuesUnescape", "Double-quoted frontmatter values undo YAML's backslash and quote escapes, and only those", (CancellationToken ct) =>
+                        WithSkillsDirAsync((root) =>
+                        {
+                            Directory.CreateDirectory(Path.Combine(root, "quoted"));
+                            File.WriteAllText(Path.Combine(root, "quoted", "SKILL.md"), "---\nname: quoted\ndescription: Says \"hi\".\nsource: \"C:\\\\Users\\\\me\\\\repo.git@abc#tools/x\"\nlicense: 'C:\\\\kept'\nargumentHint: \"\\d+ \\\"q\\\"\"\n---\n\nBody.\n");
+                            Skill skill = new SkillLoader(root).Load(Path.Combine(root, "quoted"));
+                            MuxAssert.IsTrue(skill.IsValid, string.Join("; ", skill.Validation.Errors));
+                            MuxAssert.AreEqual("C:\\Users\\me\\repo.git@abc#tools/x", skill.Manifest.Source, "escaped backslashes undone");
+                            MuxAssert.AreEqual("C:\\\\kept", skill.Manifest.License, "single-quoted values are literal");
+                            MuxAssert.AreEqual("\\d+ \"q\"", skill.Manifest.ArgumentHint, "an escaped quote is undone; any other escape is kept as written");
+                            return Task.CompletedTask;
+                        })),
+
                     Case("NameMismatchIsInvalid", "A name that does not match the folder is rejected", (CancellationToken ct) =>
                         WithSkillsDirAsync((root) =>
                         {

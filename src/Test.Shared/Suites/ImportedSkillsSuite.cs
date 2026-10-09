@@ -503,7 +503,7 @@ namespace Test.Shared.Suites
                 List<SkillImportReport> reports = new SkillImporter().Import(repoDir, skills, null, false, false, false, ct);
                 MuxAssert.AreEqual("imported", reports[0].Status, "imported: " + string.Join(";", reports[0].Errors));
                 string md = File.ReadAllText(Path.Combine(skills, "lint-helper", "SKILL.md"));
-                MuxAssert.Contains("source: \"" + repoDir, md, "source recorded");
+                MuxAssert.IsTrue(new SkillLoader(skills).Load(Path.Combine(skills, "lint-helper")).Manifest.Source.StartsWith(repoDir + "@", StringComparison.Ordinal), "source recorded and read back unescaped: " + md);
                 MuxAssert.Contains("@" + commit, md, "commit recorded");
                 MuxAssert.Contains("#tools/lint-helper", md, "path recorded");
                 MuxAssert.Throws<InvalidOperationException>(() => new SkillImporter().Import(Path.Combine(dir, "nope.git"), skills, null, false, false, false, ct), "a failed clone is reported");

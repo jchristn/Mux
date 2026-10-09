@@ -34,6 +34,11 @@ namespace Mux.Core.Skills
         /// </summary>
         public System.Collections.Concurrent.ConcurrentDictionary<string, string> DefaultEnvironment => _DefaultEnvironment;
 
+        /// <summary>
+        /// Variables set on every skill process (unless already set) so Python reads and writes UTF-8.
+        /// </summary>
+        public static readonly IReadOnlyList<string> PythonUtf8Variables = new[] { "PYTHONUTF8", "PYTHONIOENCODING" };
+
         #endregion
 
         #region Public-Methods
@@ -90,6 +95,16 @@ namespace Mux.Core.Skills
                     startInfo.Environment[variable] = skill.DirectoryPath;
                 }
                 startInfo.Environment["MUX_SKILL_COMMAND"] = command.Name;
+                // Python writes to a redirected pipe in the system code page on Windows (cp1252), so a script that
+                // prints a character outside it (an arrow in --help text) crashes. Default to UTF-8 unless the user
+                // chose an encoding.
+                foreach (string variable in PythonUtf8Variables)
+                {
+                    if (!startInfo.Environment.ContainsKey(variable) || string.IsNullOrEmpty(startInfo.Environment[variable]))
+                    {
+                        startInfo.Environment[variable] = variable == "PYTHONUTF8" ? "1" : "utf-8";
+                    }
+                }
                 foreach (KeyValuePair<string, string> variable in DefaultEnvironment)
                 {
                     startInfo.Environment[variable.Key] = variable.Value;

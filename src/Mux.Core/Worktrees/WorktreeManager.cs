@@ -117,7 +117,7 @@ namespace Mux.Core.Worktrees
                 throw new InvalidOperationException("git worktree add failed: " + FirstLine(added.StdErr, added.StdOut));
             }
 
-            string isolated = string.IsNullOrEmpty(prefix) ? path : Path.Combine(path, prefix.TrimEnd('/', '\\'));
+            string isolated = string.IsNullOrEmpty(prefix) ? path : Path.Combine(path, prefix.TrimEnd('/', '\\').Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(isolated);
             WorktreeLease lease = new WorktreeLease
             {

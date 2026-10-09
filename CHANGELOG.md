@@ -186,6 +186,18 @@ All notable changes to mux are documented here.
 
 ### Fixed
 
+- **Windows background processes.** `process_start` passed the command to `cmd.exe` with C-runtime quoting,
+  which `cmd /c` does not understand, so commands containing quotes ran mangled. The command now goes through
+  verbatim, as `run_process` passes it.
+- **Python skill scripts on Windows.** Skill processes default to UTF-8 for Python (`PYTHONUTF8`,
+  `PYTHONIOENCODING`, unless already set), so a script that prints a character outside the console code page
+  (an arrow in its `--help` text) no longer crashes with `UnicodeEncodeError`.
+- **Skill `source` paths on Windows.** Double-quoted frontmatter values now undo YAML's `\\` and `\"` escapes, so
+  an imported skill's `source` reads back as `C:\Users\...` instead of with doubled backslashes.
+- **Worktree isolation from a subdirectory on Windows** mapped the run into `src/lib` with a forward slash; the
+  path now uses the platform separator.
+- **`git-bisect run`** recognizes the `is the first 'bad' commit` wording that newer git versions print, instead
+  of reporting that no commit was found.
 - Desktop: the endpoint picker now shows the endpoint you select, and adding, editing, or deleting endpoints keeps
   the active endpoint selected, falling back to the default when it was deleted (the picker reused a stale label).
 - Desktop: the (i) under each chat turn is a real button again; click it or press Enter or Space to open selectable
