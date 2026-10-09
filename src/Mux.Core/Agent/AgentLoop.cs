@@ -35,6 +35,8 @@ namespace Mux.Core.Agent
         private LlmClient _LlmClient;
         private BuiltInToolRegistry _ToolRegistry;
         private IApprovalRouter _ApprovalRouter;
+        private readonly Mux.Core.Plugins.HookRunner _HookRunner = new Mux.Core.Plugins.HookRunner();
+        private const int MaxStopHookReentries = 3;
         private IUsageRecorder _UsageRecorder;
         private bool _Disposed = false;
         private List<ConversationMessage> _FinalConversation = new List<ConversationMessage>();
@@ -191,6 +193,7 @@ namespace Mux.Core.Agent
             int iterationCount = 0;
             int toolCallCount = 0;
             int errorCount = 0;
+            int stopHookReentries = 0;
             int assistantTextChars = 0;
             bool maxIterationsReached = false;
             bool budgetExceeded = false;
@@ -349,7 +352,74 @@ namespace Mux.Core.Agent
                 // 3c/3d. Check for tool calls
                 if (proposedToolCalls.Count == 0)
                 {
-                    break;
+                    // Stop hooks run when the model finishes cleanly. A hook that exits 2 asks the model to keep
+                    // going with the hook's stderr as a new user message, at most MaxStopHookReentries times per run.
+                    IReadOnlyList<Mux.Core.Plugins.HookDefinition> stopHooks = streamErrorCode == null && _Options.Hooks != null
+                        ? _Options.Hooks.HooksFor(Mux.Core.Plugins.HookEventEnum.Stop)
+                        : new List<Mux.Core.Plugins.HookDefinition>();
+                    if (stopHooks.Count == 0)
+                    {
+                        break;
+                    }
+
+                    IReadOnlyList<Mux.Core.Plugins.HookRunResult> stopResults = await _HookRunner.RunHooksAsync(
+                        stopHooks,
+                        Mux.Core.Plugins.HookEventEnum.Stop,
+                        Mux.Core.Plugins.ToolHookPayload.ForStop(_Options.SessionId, _Options.WorkingDirectory, stopHookReentries > 0, assistantText),
+                        _Options.WorkingDirectory,
+                        cancellationToken).ConfigureAwait(false);
+
+                    string? continueMessage = null;
+                    string continueHook = string.Empty;
+                    foreach (Mux.Core.Plugins.HookRunResult stopResult in stopResults)
+                    {
+                        if (IsHookFeedback(stopResult))
+                        {
+                            if (continueMessage == null)
+                            {
+                                continueMessage = FirstNonEmpty(stopResult.StdErr, stopResult.StdOut, "A stop hook asked you to continue.");
+                                continueHook = stopResult.HookName;
+                            }
+                        }
+                        else if (IsHookWarning(stopResult))
+                        {
+                            yield return HookWarning("stop", stopResult, string.Empty, string.Empty);
+                        }
+                    }
+
+                    if (continueMessage == null)
+                    {
+                        break;
+                    }
+
+                    if (stopHookReentries >= MaxStopHookReentries)
+                    {
+                        yield return new HookEvent
+                        {
+                            HookEventName = "stop",
+                            HookName = continueHook,
+                            Outcome = HookEvent.OutcomeWarning,
+                            ExitCode = 2,
+                            Message = "A stop hook asked to continue again, but the limit of " + MaxStopHookReentries + " continuations per run was reached."
+                        };
+                        break;
+                    }
+
+                    stopHookReentries++;
+                    yield return new HookEvent
+                    {
+                        HookEventName = "stop",
+                        HookName = continueHook,
+                        Outcome = HookEvent.OutcomeContinued,
+                        ExitCode = 2,
+                        Message = continueMessage
+                    };
+                    conversation.Add(new ConversationMessage
+                    {
+                        Role = RoleEnum.User,
+                        Content = "A stop hook asked to continue: " + continueMessage
+                    });
+                    continue;
                 }
 
                 // 3e. Process each tool call
@@ -473,6 +543,78 @@ namespace Mux.Core.Agent
                     // Approved
                     yield return new ToolCallApprovedEvent { ToolCallId = toolCall.Id };
 
+                    // pre-tool-use hooks run after approval and before execution. Exit 2 blocks the call and its
+                    // stderr becomes the tool result; any other failure is a warning and the call goes ahead.
+                    string? hookBlockMessage = null;
+                    string hookBlockName = string.Empty;
+                    IReadOnlyList<Mux.Core.Plugins.HookDefinition> preHooks = _Options.Hooks != null
+                        ? _Options.Hooks.HooksFor(Mux.Core.Plugins.HookEventEnum.PreToolUse, toolCall.Name)
+                        : new List<Mux.Core.Plugins.HookDefinition>();
+                    if (preHooks.Count > 0)
+                    {
+                        IReadOnlyList<Mux.Core.Plugins.HookRunResult> preResults = await _HookRunner.RunHooksAsync(
+                            preHooks,
+                            Mux.Core.Plugins.HookEventEnum.PreToolUse,
+                            Mux.Core.Plugins.ToolHookPayload.ForTool("PreToolUse", _Options.SessionId, _Options.WorkingDirectory, toolCall.Name, toolCall.Id, toolCall.Arguments, null, null),
+                            _Options.WorkingDirectory,
+                            cancellationToken).ConfigureAwait(false);
+                        foreach (Mux.Core.Plugins.HookRunResult preResult in preResults)
+                        {
+                            if (IsHookFeedback(preResult))
+                            {
+                                hookBlockMessage = FirstNonEmpty(preResult.StdErr, preResult.StdOut, "A pre-tool-use hook blocked this call.");
+                                hookBlockName = preResult.HookName;
+                                break;
+                            }
+
+                            if (IsHookWarning(preResult))
+                            {
+                                yield return HookWarning("pre-tool-use", preResult, toolCall.Name, toolCall.Id);
+                            }
+                        }
+                    }
+
+                    if (hookBlockMessage != null)
+                    {
+                        errorCount++;
+                        yield return new HookEvent
+                        {
+                            HookEventName = "pre-tool-use",
+                            HookName = hookBlockName,
+                            Outcome = HookEvent.OutcomeBlocked,
+                            ExitCode = 2,
+                            ToolName = toolCall.Name,
+                            ToolCallId = toolCall.Id,
+                            Message = hookBlockMessage
+                        };
+                        yield return new ErrorEvent
+                        {
+                            Code = "tool_call_blocked_by_hook",
+                            Message = $"Tool call '{toolCall.Name}' (id: {toolCall.Id}) was blocked by hook '{hookBlockName}': {hookBlockMessage}"
+                        };
+
+                        ToolResult blockedResult = new ToolResult
+                        {
+                            ToolCallId = toolCall.Id,
+                            Success = false,
+                            Content = JsonSerializer.Serialize(new { error = "tool_call_blocked_by_hook", hook = hookBlockName, message = hookBlockMessage })
+                        };
+                        yield return new ToolCallCompletedEvent
+                        {
+                            ToolCallId = toolCall.Id,
+                            ToolName = toolCall.Name,
+                            Result = blockedResult,
+                            ElapsedMs = 0
+                        };
+                        conversation.Add(new ConversationMessage
+                        {
+                            Role = RoleEnum.Tool,
+                            ToolCallId = toolCall.Id,
+                            Content = blockedResult.Content
+                        });
+                        continue;
+                    }
+
                     // Execute the tool
                     ToolResult result;
                     int taskPlanVersionBefore = _Options.TaskPlan?.Version ?? 0;
@@ -513,6 +655,52 @@ namespace Mux.Core.Agent
                     MuxTelemetry.Stop(toolActivity);
                     MuxTelemetry.RecordToolCall(toolKind, ToolLabelOf(toolCall.Name), toolOutcome, toolStopwatch.Elapsed.TotalSeconds);
                     MuxTelemetry.RecordAgentStage(MuxTelemetryNames.StageTool, toolOutcome, toolStopwatch.Elapsed.TotalSeconds);
+
+                    // post-tool-use hooks see the result; their stdout (exit 0) or stderr (exit 2) is appended to the
+                    // result the model reads and the completed event carries.
+                    IReadOnlyList<Mux.Core.Plugins.HookDefinition> postHooks = _Options.Hooks != null
+                        ? _Options.Hooks.HooksFor(Mux.Core.Plugins.HookEventEnum.PostToolUse, toolCall.Name)
+                        : new List<Mux.Core.Plugins.HookDefinition>();
+                    if (postHooks.Count > 0)
+                    {
+                        IReadOnlyList<Mux.Core.Plugins.HookRunResult> postResults = await _HookRunner.RunHooksAsync(
+                            postHooks,
+                            Mux.Core.Plugins.HookEventEnum.PostToolUse,
+                            Mux.Core.Plugins.ToolHookPayload.ForTool("PostToolUse", _Options.SessionId, _Options.WorkingDirectory, toolCall.Name, toolCall.Id, toolCall.Arguments, result.Success, result.Content),
+                            _Options.WorkingDirectory,
+                            cancellationToken).ConfigureAwait(false);
+                        foreach (Mux.Core.Plugins.HookRunResult postResult in postResults)
+                        {
+                            string? appended = null;
+                            if (IsHookFeedback(postResult))
+                            {
+                                appended = FirstNonEmpty(postResult.StdErr, postResult.StdOut, string.Empty);
+                            }
+                            else if (postResult.Started && !postResult.TimedOut && postResult.ExitCode == 0)
+                            {
+                                appended = postResult.StdOut;
+                            }
+                            else
+                            {
+                                yield return HookWarning("post-tool-use", postResult, toolCall.Name, toolCall.Id);
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(appended))
+                            {
+                                result.Content = (result.Content ?? string.Empty) + "\n\n[hook " + postResult.HookName + "] " + appended.Trim();
+                                yield return new HookEvent
+                                {
+                                    HookEventName = "post-tool-use",
+                                    HookName = postResult.HookName,
+                                    Outcome = HookEvent.OutcomeAppended,
+                                    ExitCode = postResult.ExitCode,
+                                    ToolName = toolCall.Name,
+                                    ToolCallId = toolCall.Id,
+                                    Message = appended.Trim()
+                                };
+                            }
+                        }
+                    }
 
                     yield return new ToolCallCompletedEvent
                     {
@@ -1460,6 +1648,42 @@ namespace Mux.Core.Agent
         private static string ProviderName(EndpointConfig endpoint)
         {
             return endpoint.AdapterType.ToString().ToLowerInvariant();
+        }
+
+        // A hook "speaks" to the model by exiting 2 (block, feedback, or continue). Start failures and timeouts never
+        // count, so a broken hook can never block work.
+        private static bool IsHookFeedback(Mux.Core.Plugins.HookRunResult result)
+        {
+            return result.Started && !result.TimedOut && result.ExitCode == 2;
+        }
+
+        private static bool IsHookWarning(Mux.Core.Plugins.HookRunResult result)
+        {
+            return !result.Started || result.TimedOut || (result.ExitCode != 0 && result.ExitCode != 2);
+        }
+
+        private static HookEvent HookWarning(string hookEventName, Mux.Core.Plugins.HookRunResult result, string toolName, string toolCallId)
+        {
+            string reason = !result.Started
+                ? "could not start: " + result.StdErr
+                : (result.TimedOut ? "timed out and was stopped" : "exited with code " + result.ExitCode + (string.IsNullOrWhiteSpace(result.StdErr) ? string.Empty : ": " + result.StdErr));
+            return new HookEvent
+            {
+                HookEventName = hookEventName,
+                HookName = result.HookName,
+                Outcome = HookEvent.OutcomeWarning,
+                ExitCode = result.ExitCode,
+                ToolName = toolName,
+                ToolCallId = toolCallId,
+                Message = "Hook '" + result.HookName + "' " + reason + "; continuing."
+            };
+        }
+
+        private static string FirstNonEmpty(string? first, string? second, string fallback)
+        {
+            if (!string.IsNullOrWhiteSpace(first)) return first!.Trim();
+            if (!string.IsNullOrWhiteSpace(second)) return second!.Trim();
+            return fallback;
         }
 
         private static ApprovalDecision MapPromptResponseToDecision(string response)

@@ -54,6 +54,8 @@ The desktop app runs the same agent loop as the TUI with the **auto-safe** appro
 
 Type `/<skill> args` to run any enabled skill by name; the composer sends the skill's instructions with your arguments filled in, and built-in commands such as `/skills` always win over a skill with the same name. Each turn also loads the project instruction files (`MUX.md`, `AGENTS.md`, or `CLAUDE.md`) for the conversation's working directory. `/instructions` lists the files that apply and any project skills waiting on a trust decision, and runs automatically after `/cwd`. `/trust all|playbooks|ignore|reset` records whether the project's checked-in skills with commands may load. See [USAGE.md](USAGE.md#project-skills-and-trust).
 
+`/processes` (alias `/ps`) lists the background processes the agent started with `process_start` (dev servers, watchers), `/processes output <id>` shows recent output, `/processes stop <id>` (or `all`) stops one, and `/processes clear` removes exited ones. Every tab shares one list, and closing the app stops them all. See [USAGE.md](USAGE.md#background-processes).
+
 ## Managers
 
 Everything you can configure in the TUI is available here as a window, each backed by the same `Mux.Core` stores:

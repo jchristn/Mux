@@ -335,6 +335,12 @@ namespace Mux.Core.Agent
         }
 
         /// <summary>
+        /// The plugin registry whose <c>pre-tool-use</c>, <c>post-tool-use</c>, and <c>stop</c> hooks run inside the
+        /// agent loop. Nullable; when null, or when no tool or stop hooks are configured, no hook process is started.
+        /// </summary>
+        public Mux.Core.Plugins.PluginRegistry? Hooks { get; set; }
+
+        /// <summary>
         /// A callback that prompts the user for interactive approval of a tool call and returns their response. Nullable.
         /// </summary>
         public Func<ToolCall, Task<string>>? PromptUserFunc

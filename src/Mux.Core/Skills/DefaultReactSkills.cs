@@ -24,6 +24,16 @@ $hasTestingLibrary = Test-MuxPackageDependency $pkg '@testing-library/react'
 $srcRoot = if (Test-Path -LiteralPath (Join-Path $dir 'src')) { 'src' } else { '.' }
 ";
 
+        private const string DevServerBody = @"Procedure:
+
+1. Run `detect`. It prints the dev command, the directory to run it in, the framework, the expected URL, and a ready pattern.
+2. Check `process_list` first; if a dev server for this project is already running, reuse it instead of starting another.
+3. Start it in the background with `process_start`: `command` = the dev command, `working_directory` = the printed directory, `name` = `web`, `wait_for` = the ready pattern, `timeout_ms` = 120000.
+4. If the result says `ready`, report the URL from `match` (or the first http:// URL in the output). Say that it keeps running in the background and that `/processes` lists it.
+5. If it exited or timed out, read the output (`process_output`) and diagnose: a port already in use (offer to stop the other process or use another port), a missing dependency (suggest `js-install`), or a compile error (show the file and line).
+6. Stop it with `process_stop` when the user is done, or before starting it again with different settings. Never start a second copy on the same port.
+";
+
         #endregion
 
         #region Public-Methods
@@ -166,6 +176,31 @@ $findings = @(& $command.Tool @($command.Arguments) 2>&1 | Where-Object { $_ -ma
 if ($findings.Count -eq 0) { Write-Output 'No react-hooks or jsx-a11y findings.'; exit 0 }
 $findings | ForEach-Object { Write-Output $_ }
 exit 1
+")),
+
+                Skill("react-dev-server", "Start the React dev server", "Detects the dev script, framework, port, and ready line, so the dev server can be started in the background and its URL reported.", false,
+                    "The user wants to run the app locally, see a change in the browser, or test against the running dev server.",
+                    string.Empty,
+                    DevServerBody,
+                    Command("detect", "Print the dev command, working directory, framework, expected URL, and the ready-line pattern.", @"$script = ''
+foreach ($candidate in @('dev', 'start', 'serve')) { if (Test-MuxPackageScript $pkg $candidate) { $script = $candidate; break } }
+if (-not $script) { Exit-MuxNotApplicable 'package.json has no dev, start, or serve script.' }
+$scriptText = [string]$pkg['scripts'][$script]
+$framework = 'unknown'
+$port = 0
+foreach ($pair in @(@('next', 'Next.js', 3000), @('vite', 'Vite', 5173), @('react-scripts', 'Create React App', 3000), @('astro', 'Astro', 4321), @('gatsby', 'Gatsby', 8000), @('parcel', 'Parcel', 1234), @('webpack-dev-server', 'webpack-dev-server', 8080))) {
+    if ((Test-MuxPackageDependency $pkg $pair[0]) -or $scriptText -match ('(^|\s|/)' + [regex]::Escape($pair[0]) + '(\s|$)')) { $framework = $pair[1]; $port = [int]$pair[2]; break }
+}
+if ($scriptText -match '(--port|-p)[ =](\d+)') { $port = [int]$Matches[2] }
+elseif ($scriptText -match 'PORT=(\d+)') { $port = [int]$Matches[1] }
+$command = if ($pm -eq 'npm') { 'npm run ' + $script } else { $pm + ' run ' + $script }
+Write-Output ('Dev command: ' + $command)
+Write-Output ('Working directory: ' + $dir)
+Write-Output ('Script: ' + $script + ' = ' + $scriptText)
+Write-Output ('Framework: ' + $framework)
+if ($port -gt 0) { Write-Output ('Expected URL: http://localhost:' + $port) } else { Write-Output 'Expected URL: unknown (read it from the output)' }
+Write-Output 'Ready pattern: https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1?\])(:\d+)?\S*'
+Write-Output 'Failure pattern: (EADDRINUSE|address already in use|Port \d+ is in use|Failed to compile|ERR!|error)'
 ")),
 
                 Skill("react-upgrade-check", "Check React versions and peer conflicts", "Reports the declared React-related versions and what the package manager actually installed.", false,

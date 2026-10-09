@@ -42,6 +42,29 @@ namespace Mux.Core.Plugins
         {
             if (registry is null) throw new ArgumentNullException(nameof(registry));
 
+            return await RunHooksAsync(registry.HooksFor(hookEvent), hookEvent, payloadJson, workingDirectory, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Runs an explicit list of hooks (for example the tool hooks whose matcher selected a tool) for
+        /// <paramref name="hookEvent"/> and returns their results.
+        /// </summary>
+        /// <param name="hooks">The hooks to run, in order. Must not be null.</param>
+        /// <param name="hookEvent">The event that fired.</param>
+        /// <param name="payloadJson">A JSON payload delivered to each hook on stdin. Null sends nothing.</param>
+        /// <param name="workingDirectory">The working directory for the hook processes.</param>
+        /// <param name="cancellationToken">A token to cancel the run.</param>
+        /// <returns>One <see cref="HookRunResult"/> per hook, in order.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="hooks"/> is null.</exception>
+        public async Task<IReadOnlyList<HookRunResult>> RunHooksAsync(
+            IReadOnlyList<HookDefinition> hooks,
+            HookEventEnum hookEvent,
+            string? payloadJson,
+            string workingDirectory,
+            CancellationToken cancellationToken)
+        {
+            if (hooks is null) throw new ArgumentNullException(nameof(hooks));
+
             List<HookRunResult> results = new List<HookRunResult>();
             bool vetoable = IsVetoable(hookEvent);
 
@@ -50,7 +73,7 @@ namespace Mux.Core.Plugins
 
             try
             {
-                foreach (HookDefinition hook in registry.HooksFor(hookEvent))
+                foreach (HookDefinition hook in hooks)
                 {
                     activity ??= StartHookActivity(eventName);
                     long startTimestamp = Stopwatch.GetTimestamp();

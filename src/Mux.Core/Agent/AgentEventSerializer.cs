@@ -209,6 +209,16 @@ namespace Mux.Core.Agent
                     }
                     break;
 
+                case HookEvent hookEvent:
+                    payload["hookEvent"] = hookEvent.HookEventName;
+                    payload["hookName"] = hookEvent.HookName;
+                    payload["outcome"] = hookEvent.Outcome;
+                    payload["exitCode"] = hookEvent.ExitCode;
+                    AddIfNotEmpty(payload, "toolName", hookEvent.ToolName);
+                    AddIfNotEmpty(payload, "toolCallId", hookEvent.ToolCallId);
+                    AddIfNotEmpty(payload, "message", Redact(hookEvent.Message));
+                    break;
+
                 case TaskPlanUpdatedEvent taskPlanEvent:
                     payload["changeKind"] = GetTaskChangeKindName(taskPlanEvent.ChangeKind);
                     payload["changedTaskId"] = taskPlanEvent.ChangedTaskId;
@@ -438,6 +448,7 @@ namespace Mux.Core.Agent
                 AgentEventTypeEnum.ContextCompacted => "context_compacted",
                 AgentEventTypeEnum.RunCompleted => "run_completed",
                 AgentEventTypeEnum.TaskPlanUpdated => "task_plan_updated",
+                AgentEventTypeEnum.Hook => "hook",
                 _ => eventType.ToString()
             };
         }

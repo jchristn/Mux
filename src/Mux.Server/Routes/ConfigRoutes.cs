@@ -189,6 +189,7 @@ namespace Mux.Server.Routes
                             {
                                 Name = h.Name ?? string.Empty,
                                 Event = ev,
+                                Matcher = h.Matcher ?? string.Empty,
                                 Command = h.Command ?? string.Empty,
                                 Args = h.Args ?? new List<string>(),
                                 Blocking = h.Blocking,
@@ -221,6 +222,7 @@ namespace Mux.Server.Routes
                 {
                     Name = h.Name,
                     Event = HookEventEnumConverter.ToWireName(h.Event),
+                    Matcher = h.Matcher,
                     Command = h.Command,
                     Args = new List<string>(h.Args),
                     Blocking = h.Blocking,

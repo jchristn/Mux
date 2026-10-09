@@ -1,6 +1,6 @@
 # New Default Skills and OOBE Parity Plan
 
-_Status: Phases 1 through 4 done (2026-10-08); Phases 5 through 7 proposed. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
+_Status: Phases 1 through 5 done (2026-10-08); Phases 6 and 7 proposed. Check boxes as work lands. `[ ]` = todo, `[x]` = done, `[~]` = in progress._
 
 mux ships 46 default skills, and nearly all of them assume a git repository, a .NET solution, or both. Someone who opens mux in a React app, a Django service, a Maven project, or a CMake tree gets git helpers and nothing that knows how their code builds or tests. That gap is the first thing a Claude Code or Codex user notices, and it is the reason for this plan. The second thing they notice is subtler: both of those harnesses read a project instruction file on startup, can review a diff on request, and let skills be invoked by name with arguments. mux has a strong engine (subagents, MCP, sandboxing, undo, compaction, sessions across four surfaces) but the out-of-box experience still feels like a toolkit rather than an agent that already knows the job.
 
@@ -26,8 +26,8 @@ The scorecard below lists everything that exists in Claude Code or Codex and is 
 | 14 | React skills | via model + shell | via model + shell | **done in Phase 2** | 8 | 7 | **15** | 2 |
 | 15 | Java skills (Maven and Gradle) | via model + shell | via model + shell | **done in Phase 2** | 8 | 7 | **15** | 2 |
 | 16 | Relevance-gated skill listing so 100+ skills do not flood a small context window | progressive disclosure | progressive disclosure | **done in Phase 1**: `appliesTo` globs and `skillListingMode` | 7 | 7 | **14** | 1 |
-| 17 | Tool-level hooks (`pre-tool-use`, `post-tool-use`, `stop`) | yes | partial (`notify`) | `session-start`, `user-prompt-submit`, `session-end` only | 6 | 8 | **14** | 5 |
-| 18 | Background processes (start a dev server, read its output later, stop it) | yes | partial | `run_process` is foreground with a timeout | 5 | 9 | **14** | 5 |
+| 17 | Tool-level hooks (`pre-tool-use`, `post-tool-use`, `stop`) | yes | partial (`notify`) | **done in Phase 5**: `pre-tool-use`, `post-tool-use`, `stop` with matchers, on every surface | 6 | 8 | **14** | 5 |
+| 18 | Background processes (start a dev server, read its output later, stop it) | yes | partial | **done in Phase 5**: `process_start`, `process_output`, `process_list`, `process_stop`, `/processes` | 5 | 9 | **14** | 5 |
 | 19 | `@file` mentions in the composer | yes | yes | none | 7 | 7 | **14** | 6 |
 | 20 | Debugging playbook and `git bisect` driver | via model | via model | **done in Phase 3**: `debug` and `git-bisect` | 9 | 5 | **14** | 3 |
 | 21 | Containers and orchestration skills (Docker, Docker Compose, Kubernetes, Minikube, Helm, OpenStack) | via model + shell | via model + shell | **done in Phase 2** | 8 | 8 | **16** | 2 |
@@ -403,27 +403,43 @@ These are the skills Claude Code and Codex users reach for by name. Each is a hy
 
 ---
 
-## Phase 5: Hooks and background processes
+## Phase 5: Hooks and background processes (done)
+
+**Status:** done. Deviations from the tasks below:
+- **Hooks (5.1):**
+  - A new `HookEvent` agent event (jsonl `hook`) reports hook outcomes and warnings; no existing event fit.
+  - `matcher` also accepts `|` alternatives.
+  - Hook processes start only when a matching hook exists.
+  - A timed-out or unstartable hook never blocks or continues.
+  - Wiring goes through `AgentLoopOptions.Hooks` on all four surfaces (terminal, `mux print`, desktop, server).
+  - Tests live in a new `ToolHooksSuite` rather than `PluginSuite`.
+- **Background processes (5.2):**
+  - The tools are an `IExternalToolProvider` (`Mux.Core/Processes/BackgroundProcessToolProvider.cs`) over a per-session `BackgroundProcessRegistry`, not a built-in tool, because built-in tools are stateless.
+  - `process_start` can wait for a ready line in the same call.
+  - Output is ANSI-stripped and limited by `backgroundProcessOutputBytes`.
+  - The desktop app gets a `/processes` command shared by all tabs instead of a separate panel.
+  - The REST server owns one registry for its web chats.
+  - `mux print` kills its processes when the run ends.
 
 ### 5.1 Tool-level hooks (row 17)
 
-- [ ] Add `PreToolUse`, `PostToolUse`, and `Stop` to `HookEventEnum`, with wire names `pre-tool-use`, `post-tool-use`, `stop`. Move `HookEventEnumConverter` into its own file while touching it (the current file holds two classes, which `CODE_STYLE.md` disallows).
-- [ ] `HookDefinition` gains an optional `matcher` (tool-name glob, same syntax as `--allow-tools`).
-- [ ] `pre-tool-use` hooks receive the tool name and arguments as JSON on stdin. Exit 0 continues; exit 2 blocks the call and returns the hook's stderr to the model as the tool result; any other nonzero logs a warning and continues. This matches Claude Code's contract, so hooks written for it port with only a config change.
-- [ ] `post-tool-use` receives the result too and can append text to the tool result via stdout. `stop` fires when a run completes and can request one more turn via exit 2 (bounded to 3 per run).
-- [ ] Wire through `AgentLoop` at the existing `ToolCallProposedEvent` and `ToolCallCompletedEvent` points, after approval for `pre-tool-use`.
-- [ ] Tests in `PluginSuite`: matcher, block, append, stop re-entry bound, hook timeout.
+- [x] Add `PreToolUse`, `PostToolUse`, and `Stop` to `HookEventEnum`, with wire names `pre-tool-use`, `post-tool-use`, `stop`. Move `HookEventEnumConverter` into its own file while touching it (the current file holds two classes, which `CODE_STYLE.md` disallows).
+- [x] `HookDefinition` gains an optional `matcher` (tool-name glob, same syntax as `--allow-tools`).
+- [x] `pre-tool-use` hooks receive the tool name and arguments as JSON on stdin. Exit 0 continues; exit 2 blocks the call and returns the hook's stderr to the model as the tool result; any other nonzero logs a warning and continues. This matches Claude Code's contract, so hooks written for it port with only a config change.
+- [x] `post-tool-use` receives the result too and can append text to the tool result via stdout. `stop` fires when a run completes and can request one more turn via exit 2 (bounded to 3 per run).
+- [x] Wire through `AgentLoop` at the existing `ToolCallProposedEvent` and `ToolCallCompletedEvent` points, after approval for `pre-tool-use`.
+- [x] Tests in `PluginSuite`: matcher, block, append, stop re-entry bound, hook timeout.
 
 ### 5.2 Background processes (row 18)
 
 React dev servers, `docker compose up`, and watch-mode test runners do not fit a foreground tool with a timeout.
 
-- [ ] `src/Mux.Core/Tools/Tools/BackgroundProcessTool.cs` exposing `process_start` (returns an id), `process_output` (new output since last read, with an optional regex wait and timeout), `process_list`, and `process_stop`.
-- [ ] `src/Mux.Core/Tools/BackgroundProcessRegistry.cs`: per-session ownership, ring-buffered output (configurable, default 1 MB per process), kill on session end, max concurrent processes setting (default 8).
-- [ ] Mutation classification: `process_start` and `process_stop` are mutating and take the approval path; `process_output` and `process_list` are read-only.
-- [ ] Sidebar and `/processes` in the TUI; a processes panel in desktop.
-- [ ] Add a `react-dev-server` playbook to `DefaultReactSkills` once this lands: start the detected dev script, wait for the "ready" line, report the URL.
-- [ ] Tests: start, read, regex wait, stop, session-end cleanup, output cap.
+- [x] `src/Mux.Core/Tools/Tools/BackgroundProcessTool.cs` exposing `process_start` (returns an id), `process_output` (new output since last read, with an optional regex wait and timeout), `process_list`, and `process_stop`.
+- [x] `src/Mux.Core/Tools/BackgroundProcessRegistry.cs`: per-session ownership, ring-buffered output (configurable, default 1 MB per process), kill on session end, max concurrent processes setting (default 8).
+- [x] Mutation classification: `process_start` and `process_stop` are mutating and take the approval path; `process_output` and `process_list` are read-only.
+- [x] Sidebar and `/processes` in the TUI; a processes panel in desktop.
+- [x] Add a `react-dev-server` playbook to `DefaultReactSkills` once this lands: start the detected dev script, wait for the "ready" line, report the URL.
+- [x] Tests: start, read, regex wait, stop, session-end cleanup, output cap. `BackgroundProcessSuite` (20 cases) runs real processes: pattern waits, timeouts, exit codes, the output cap, the concurrency limit, dispose killing every tree, ANSI stripping, the four tools and their errors, settings, the sidebar line, `/processes` in a headless terminal, `mux print` killing its processes at exit, and `react-dev-server` detection for Vite, Next.js (pnpm), and Create React App plus its refusals. `ToolHooksSuite` (13 cases) runs real hook processes against a mock model.
 
 ---
 
@@ -461,7 +477,7 @@ Backlog with no plan yet: output styles (row 31, mostly covered by prompt profil
 | `DefaultProjectSkills` | 0 | 1 | 1 |
 | `DefaultJavaScriptSkills` | 0 | 8 | 8 |
 | `DefaultPythonSkills` | 0 | 7 | 7 |
-| `DefaultReactSkills` | 0 | 6 (+1 in Phase 5) | 7 |
+| `DefaultReactSkills` (done) | 0 | 6 (+1 in Phase 5) | 7 |
 | `DefaultJavaSkills` | 0 | 6 | 6 |
 | `DefaultCppSkills` | 0 | 6 | 6 |
 | `DefaultGoSkills` | 0 | 4 | 4 |
@@ -491,8 +507,8 @@ Two existing defaults deserve a second look while this work is open. `new-tool` 
 ## Documentation
 
 - [~] `docs/SKILLS_AUTHORING.md`: playbook skills, hybrids, `appliesTo`, `userInvocable`, `argumentHint`, `$ARGUMENTS`, project scopes and the trust gate, and Claude-format compatibility are documented (Phase 1); the exit-code convention, `MUX_SKILL_DRY_RUN`, the production guard (Phase 2), and the review helpers with `MUX_SKILL_DIFF_MAX_BYTES` (Phase 3) are too.
-- [~] `docs/USAGE.md`: invoking skills by name, project skills and trust, the listing mode, and project instruction files are documented (Phase 1), and so are the review, debugging, and codebase skills (Phase 3). Phase 4 added `/loop`, `/loops`, `mux print --loop`, and the loop skills. Still to come: `/processes`, `/plan`, `/memory`, `@` mentions.
-- [~] `docs/CONFIG.md`: the Phase 1 settings and files (`trusted-projects.json`, `MUX.md`), `skillProdPattern` (Phase 2), and `loopMaxIterations` and `loopMinIntervalSeconds` (Phase 4) are documented. Later phases add theirs.
+- [~] `docs/USAGE.md`: invoking skills by name, project skills and trust, the listing mode, and project instruction files are documented (Phase 1), and so are the review, debugging, and codebase skills (Phase 3). Phase 4 added `/loop`, `/loops`, `mux print --loop`, and the loop skills; Phase 5 added tool hooks and background processes. Still to come: `/plan`, `/memory`, `@` mentions.
+- [~] `docs/CONFIG.md`: the Phase 1 settings and files (`trusted-projects.json`, `MUX.md`), `skillProdPattern` (Phase 2), and `loopMaxIterations` and `loopMinIntervalSeconds` (Phase 4), and the hook events and `backgroundProcess*` settings (Phase 5) are documented. Later phases add theirs.
 - [~] `docs/REST_API.md` and the Postman collection: `GET /v1.0/api/context/instructions` and `POST /v1.0/api/skills/expand` are documented, both in a new Postman **Context** folder and in the **Skills** folder, with a `workingDirectory` variable. Loop and process routes come later.
 - [~] `README.md`: project instruction files and slash invocation are in Highlights, and the two new flags are in the options table. The skills paragraph names the 148-skill library and its families (Phase 3).
 - [~] `CHANGELOG.md`: Phases 1 through 3 are recorded under `Unreleased`, and the VS Code extension's `CHANGELOG.md` records the review routing. No version number was changed.

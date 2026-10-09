@@ -42,6 +42,7 @@ namespace Mux.Server
         private System.Threading.Timer? _SummaryCacheTimer;
         private readonly bool _AllowInteractiveTools;
         private readonly CheckpointRegistry _Checkpoints = new CheckpointRegistry();
+        private readonly Mux.Core.Processes.BackgroundProcessRegistry _Processes = CreateProcessRegistry();
         private readonly RunRegistry _Runs;
         private readonly bool _OwnsRuns;
         private SessionStoreWatcher? _StoreWatcher;
@@ -207,7 +208,16 @@ namespace Mux.Server
             try { _App?.Dispose(); } catch (Exception) { }
             if (_OwnsRuns) { try { _Runs.Dispose(); } catch (Exception) { } }
             try { _TokenSource.Dispose(); } catch (Exception) { }
+            try { _Processes.Dispose(); } catch (Exception) { }
             _Disposed = true;
+        }
+
+        // Background processes started by web chats belong to this server; disposing it kills them all.
+        private static Mux.Core.Processes.BackgroundProcessRegistry CreateProcessRegistry()
+        {
+            MuxSettings settings;
+            try { settings = Mux.Core.Settings.SettingsLoader.LoadSettings(); } catch (Exception) { settings = new MuxSettings(); }
+            return new Mux.Core.Processes.BackgroundProcessRegistry(settings.BackgroundProcessMaxConcurrent, settings.BackgroundProcessOutputBytes);
         }
 
         #endregion
@@ -286,7 +296,7 @@ namespace Mux.Server
             new HealthRoutes(_Version, _StartUtc).Register(app);
             new EndpointRoutes(apiKey, _EndpointsProvider).Register(app);
             new SessionRoutes(apiKey, _SessionStore, _Runs).Register(app);
-            new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder, _SessionStore, _AllowInteractiveTools, _Checkpoints, _Runs).Register(app);
+            new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder, _SessionStore, _AllowInteractiveTools, _Checkpoints, _Runs, _Processes).Register(app);
             new CheckpointRoutes(apiKey, _Checkpoints).Register(app);
             new SettingsRoutes(apiKey).Register(app);
             new McpRoutes(apiKey).Register(app);

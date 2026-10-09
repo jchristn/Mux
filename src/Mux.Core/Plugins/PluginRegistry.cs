@@ -111,6 +111,45 @@ namespace Mux.Core.Plugins
         }
 
         /// <summary>
+        /// Loads <c>hooks.json</c> from the config directory for an agent loop's tool and stop hooks. Returns null
+        /// when no hooks are configured or the file cannot be read, so a broken file never fails a run.
+        /// </summary>
+        /// <returns>The registry, or null.</returns>
+        public static PluginRegistry? LoadHooksOrNull()
+        {
+            try
+            {
+                PluginRegistry registry = new PluginRegistry(Mux.Core.Settings.SettingsLoader.LoadPluginConfig());
+                return registry.Hooks.Count == 0 ? null : registry;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Returns the hooks registered for a tool event whose <see cref="HookDefinition.Matcher"/> matches the tool
+        /// name, in configuration order.
+        /// </summary>
+        /// <param name="hookEvent">The event to filter by.</param>
+        /// <param name="toolName">The tool name to match.</param>
+        /// <returns>The matching hooks (possibly empty).</returns>
+        public IReadOnlyList<HookDefinition> HooksFor(HookEventEnum hookEvent, string? toolName)
+        {
+            List<HookDefinition> matches = new List<HookDefinition>();
+            foreach (HookDefinition hook in _Hooks)
+            {
+                if (hook.Event == hookEvent && Mux.Core.Agent.ToolGovernance.MatchesToolPattern(toolName, hook.Matcher))
+                {
+                    matches.Add(hook);
+                }
+            }
+
+            return matches;
+        }
+
+        /// <summary>
         /// Finds a custom command by name (case-insensitive), or returns null when none is registered.
         /// </summary>
         /// <param name="name">The command name (with or without a leading slash).</param>

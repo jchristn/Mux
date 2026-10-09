@@ -25,6 +25,7 @@ namespace Mux.Cli.App
         private string _EffortLabel = string.Empty;
         private string _ThinkingLabel = string.Empty;
         private List<string> _LoopLines = new List<string>();
+        private List<string> _ProcessLines = new List<string>();
 
         #endregion
 
@@ -56,6 +57,15 @@ namespace Mux.Cli.App
         {
             get => _LoopLines;
             set => _LoopLines = value ?? new List<string>();
+        }
+
+        /// <summary>
+        /// One line per background process (see <see cref="FormatProcessLine"/>). Empty hides the PROCESSES section.
+        /// </summary>
+        public List<string> ProcessLines
+        {
+            get => _ProcessLines;
+            set => _ProcessLines = value ?? new List<string>();
         }
 
         #endregion
@@ -128,6 +138,16 @@ namespace Mux.Cli.App
                     }
                 }
 
+                if (_ProcessLines.Count > 0)
+                {
+                    _Pane.WriteLine(Text.From(string.Empty));
+                    _Pane.WriteLine(Text.From(Fit("PROCESSES")).Bold());
+                    foreach (string line in _ProcessLines)
+                    {
+                        _Pane.WriteLine(Text.From(Fit(line)).Dim());
+                    }
+                }
+
                 _Pane.WriteLine(Text.From(string.Empty));
                 _Pane.WriteLine(Text.From(Fit("THIS TURN")).Bold());
                 _Pane.WriteLine(Text.From(Fit(Row("TTFT", FormatMs(stats.LastTtftMs)))));
@@ -174,6 +194,27 @@ namespace Mux.Cli.App
             };
 
             return " " + loop.Id + " " + pacing + " " + loop.IterationCount + "/" + loop.MaxIterations + " " + state;
+        }
+
+        /// <summary>
+        /// Formats one background process for the sidebar: a state glyph, the id, and the name or command, for example
+        /// <c> ● p1 npm run dev</c> while running, <c> ○ p2 exit 1 pytest</c> after it exits.
+        /// </summary>
+        /// <param name="info">The process. Must not be null.</param>
+        /// <returns>The line.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="info"/> is null.</exception>
+        public static string FormatProcessLine(Mux.Core.Processes.BackgroundProcessInfo info)
+        {
+            if (info is null) throw new ArgumentNullException(nameof(info));
+
+            string label = string.IsNullOrWhiteSpace(info.Name) ? info.Command : info.Name;
+            if (info.Running)
+            {
+                return " ● " + info.Id + " " + label;
+            }
+
+            string state = info.StoppedByUser ? "stopped" : "exit " + (info.ExitCode.HasValue ? info.ExitCode.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "?");
+            return " ○ " + info.Id + " " + state + " " + label;
         }
 
         #endregion

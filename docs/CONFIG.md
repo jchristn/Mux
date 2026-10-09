@@ -277,6 +277,8 @@ Example:
   "skillProdPattern": "prod|production|live",
   "loopMaxIterations": 50,
   "loopMinIntervalSeconds": 30,
+  "backgroundProcessMaxConcurrent": 8,
+  "backgroundProcessOutputBytes": 1048576,
   "taskPlanningEnabled": true,
   "taskParallelismEnabled": false,
   "setupCompleted": false,
@@ -316,6 +318,8 @@ Fields:
 | `skillProdPattern` | string | case-insensitive regular expression that marks a deployment target (Kubernetes context, cloud profile, subscription, or project, Terraform workspace, Pulumi stack) as production; infrastructure skills refuse to change a matching target (exit 3) unless the command repeats the exact name with `--confirm <name>`; blank or invalid patterns fall back to the default `prod|production|live` |
 | `loopMaxIterations` | int | iteration cap for a `/loop` or `mux print --loop` that does not ask for one, and the most any loop may ask for; clamped to `1-1000`; default `50` |
 | `loopMinIntervalSeconds` | int | shortest fixed-loop interval and shortest `schedule_next` delay, in seconds; clamped to `1-3600`; default `30` |
+| `backgroundProcessMaxConcurrent` | int | most background processes (`process_start`) running at once per session; clamped to `1-64`; default `8` |
+| `backgroundProcessOutputBytes` | int | output kept per background process; older output is dropped first; clamped to `16384-16777216`; default `1048576` |
 | `projectInstructionsMaxBytes` | int | cap on the combined size of the instruction files, in UTF-8 bytes; the files farthest from the working directory are dropped first, and a single oversized file is cut short; clamped to `0-1048576`, `0` disables loading; default `32768` |
 | `maxConcurrency` | int | maximum number of interactive jobs allowed to run at once; clamped to `1-32`, default `3` |
 | `taskPlanningEnabled` | bool | offer the `plan_tasks`/`update_task` tools and teach the model to decompose large requests into a tracked task plan; default `true` |
@@ -682,6 +686,28 @@ arguments are passed verbatim with no interpolation.
       "args": ["/home/me/.mux/guard.py"],
       "blocking": true,
       "timeoutMs": 5000
+    },
+    {
+      "name": "no-env-writes",
+      "event": "pre-tool-use",
+      "matcher": "write_file|edit_file|multi_edit",
+      "command": "python3",
+      "args": ["/home/me/.mux/guard_writes.py"],
+      "timeoutMs": 5000
+    },
+    {
+      "name": "format-after-edit",
+      "event": "post-tool-use",
+      "matcher": "write_file|edit_file",
+      "command": "pwsh",
+      "args": ["-NoProfile", "-File", "/home/me/.mux/format.ps1"]
+    },
+    {
+      "name": "tests-must-pass",
+      "event": "stop",
+      "command": "bash",
+      "args": ["/home/me/.mux/check_tests.sh"],
+      "timeoutMs": 120000
     }
   ],
   "commands": [
@@ -697,11 +723,34 @@ arguments are passed verbatim with no interpolation.
 | `session-start` | Once when the interactive shell starts | No |
 | `user-prompt-submit` | When a prompt is submitted, before the turn runs | Yes |
 | `session-end` | Once on a clean exit | No |
+| `pre-tool-use` | After a tool call is approved, before it runs (every surface) | Exit 2 blocks the call |
+| `post-tool-use` | After a tool call runs (every surface) | No; output is added to the result |
+| `stop` | When the model finishes a run (every surface) | Exit 2 makes the model continue (at most 3 times per run) |
 
 The event payload is delivered to the hook as a JSON document on **stdin**; the hook's **stdout** is
 surfaced into the transcript. For a vetoable event, a hook with `"blocking": true` that exits non-zero
 **blocks** the action (the prompt is refused). A hook whose command cannot start is treated as absent, so
 a typo never wedges the session. `timeoutMs` is clamped to `100-600000` (default 15000).
+
+**Tool hooks** (`pre-tool-use`, `post-tool-use`) and **stop hooks** run inside the agent loop, so they apply in the
+terminal, `mux print`, the desktop app, and the web dashboard. They follow Claude Code's contract, so hooks written
+for it port by changing only the configuration:
+
+- `matcher` selects tools with the same glob syntax as `--allow-tools` (`*`, `?`, case-insensitive, whole name),
+  with `|` between alternatives (`write_file|edit_file`). Empty matches every tool; it is ignored for other events.
+- The stdin payload carries `hook_event_name` (`PreToolUse`, `PostToolUse`, or `Stop`), `session_id`, and `cwd`.
+  Tool hooks also get `tool_name`, `tool_call_id`, and `tool_input` (the arguments as a JSON object);
+  `post-tool-use` adds `tool_response` (`success`, `content`). Stop hooks get `stop_hook_active` (true after a stop
+  hook already made the model continue in this run) and `last_assistant_message`.
+- Exit codes: 0 continues. **2** speaks to the model: `pre-tool-use` blocks the call (the tool does not run and the
+  hook's stderr is returned as the tool result), `post-tool-use` appends its stderr to the result, and `stop` sends
+  its stderr back as a new user message so the model keeps working. Any other exit code, a timeout, or a command
+  that cannot start is reported as a warning and the run goes on; a broken hook never blocks work.
+- For `post-tool-use`, stdout from an exit-0 hook is appended to the tool result as `[hook <name>] <text>`.
+- `blocking` does not apply to these events; the exit code decides.
+- Each outcome is reported as a `hook` event in `--output-format jsonl` (`hookEvent`, `hookName`, `outcome`
+  of `blocked`, `appended`, `continued`, or `warning`, `exitCode`, `toolName`, `toolCallId`, `message`), and a
+  blocked call also produces an `error` event with code `tool_call_blocked_by_hook`.
 
 **Custom commands** register as `/<name>` on the interactive command surface. Invoking one runs the
 command out-of-process in the working directory and posts its output into the transcript. `timeoutMs`

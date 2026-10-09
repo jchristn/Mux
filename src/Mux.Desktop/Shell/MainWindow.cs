@@ -50,6 +50,7 @@ namespace Mux.Desktop.Shell
         private readonly SessionStore _Store;
         private readonly IUsageRecorder _UsageRecorder;
         private McpRuntime? _Mcp;
+        private Mux.Core.Processes.BackgroundProcessRegistry? _Processes;
         private SkillRuntime? _Skills;
         private readonly string _ConfigDirectory;
         private readonly UsageQueryService? _UsageQuery;
@@ -245,6 +246,7 @@ namespace Mux.Desktop.Shell
             AgentLoopTurnRunner runner = new AgentLoopTurnRunner(_ConfigDirectory, ApproveToolAsync, _UsageRecorder);
             runner.Mcp = _Mcp;
             runner.Skills = _Skills;
+            runner.Processes = EnsureProcessRegistry();
             // The runner publishes every turn to the hub itself (best-effort) so desktop runs are mirrorable
             // live on any surface; no per-runner wiring is needed here.
             return runner;
@@ -312,6 +314,20 @@ namespace Mux.Desktop.Shell
             try { _StoreWatcher?.Dispose(); } catch (Exception) { }
             try { _Mcp?.Dispose(); } catch (Exception) { }
             try { _Skills?.Dispose(); } catch (Exception) { }
+            try { _Processes?.Dispose(); } catch (Exception) { }
+        }
+
+        // One registry for the whole app: background processes started from any tab are listed and stopped
+        // together, and closing the window kills them all.
+        private Mux.Core.Processes.BackgroundProcessRegistry EnsureProcessRegistry()
+        {
+            if (_Processes == null)
+            {
+                MuxSettings settings = SettingsLoader.LoadSettings();
+                _Processes = new Mux.Core.Processes.BackgroundProcessRegistry(settings.BackgroundProcessMaxConcurrent, settings.BackgroundProcessOutputBytes);
+            }
+
+            return _Processes;
         }
 
         private void OnGlobalKeyDown(object? sender, KeyEventArgs e)
@@ -2777,6 +2793,10 @@ namespace Mux.Desktop.Shell
                 case "/instructions":
                     ShowProjectInstructions();
                     break;
+                case "/processes":
+                case "/ps":
+                    _ = HandleProcessesSlashAsync(argument);
+                    break;
                 default:
                     if (TryInvokeSkill(trimmedInput))
                     {
@@ -2844,6 +2864,77 @@ namespace Mux.Desktop.Shell
             catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException || ex is System.IO.IOException || ex is UnauthorizedAccessException)
             {
                 AddNotice("Could not record trust: " + ex.Message, isError: true);
+            }
+        }
+
+        // "/processes [list|output <id>|stop <id|all>|clear]": the background processes the model started.
+        private async System.Threading.Tasks.Task HandleProcessesSlashAsync(string argument)
+        {
+            Mux.Core.Processes.BackgroundProcessRegistry registry = EnsureProcessRegistry();
+            string[] parts = (argument ?? string.Empty).Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            string verb = parts.Length > 0 ? parts[0].ToLowerInvariant() : "list";
+            string target = parts.Length > 1 ? parts[1] : string.Empty;
+            if (verb == "list")
+            {
+                IReadOnlyList<Mux.Core.Processes.BackgroundProcessInfo> processes = registry.List();
+                if (processes.Count == 0)
+                {
+                    AddNotice("No background processes. The model starts them with process_start (dev servers, watchers, docker compose up).", isError: false);
+                    return;
+                }
+
+                System.Text.StringBuilder text = new System.Text.StringBuilder("Background processes:");
+                foreach (Mux.Core.Processes.BackgroundProcessInfo info in processes)
+                {
+                    string state = info.Running ? "running" : (info.StoppedByUser ? "stopped" : "exited " + (info.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"));
+                    text.Append('\n').Append(info.Id).Append("  ").Append(state).Append("  pid ").Append(info.ProcessId).Append("  ").Append(info.Command);
+                }
+
+                text.Append("\n/processes output <id> shows recent output; /processes stop <id|all> stops; /processes clear removes exited ones.");
+                AddNotice(text.ToString(), isError: false);
+                return;
+            }
+
+            if (verb == "clear")
+            {
+                AddNotice("Cleared " + registry.RemoveExited() + " exited process(es).", isError: false);
+                return;
+            }
+
+            if ((verb != "stop" && verb != "output") || string.IsNullOrWhiteSpace(target))
+            {
+                AddNotice("Usage: /processes [list | output <id> | stop <id|all> | clear]", isError: true);
+                return;
+            }
+
+            if (verb == "stop" && string.Equals(target, "all", StringComparison.OrdinalIgnoreCase))
+            {
+                AddNotice("Stopped " + registry.StopAll() + " process(es).", isError: false);
+                return;
+            }
+
+            Mux.Core.Processes.BackgroundProcessInfo? found = registry.Get(target);
+            if (found == null)
+            {
+                AddNotice("No background process has the id '" + target + "'.", isError: true);
+                return;
+            }
+
+            if (verb == "output")
+            {
+                string tail = registry.Tail(found.Id, 4000) ?? string.Empty;
+                AddNotice(found.Id + " " + found.Command + "\n" + (string.IsNullOrWhiteSpace(tail) ? "(no output yet)" : tail.TrimEnd()), isError: false);
+                return;
+            }
+
+            try
+            {
+                Mux.Core.Processes.BackgroundProcessOutput output = await registry.StopAsync(found.Id, CancellationToken.None);
+                AddNotice("Stopped " + found.Id + (output.ExitCode.HasValue ? " (exit " + output.ExitCode.Value + ")" : string.Empty) + ".", isError: false);
+            }
+            catch (Exception ex)
+            {
+                AddNotice("Could not stop " + found.Id + ": " + ex.Message, isError: true);
             }
         }
 
@@ -2955,6 +3046,7 @@ namespace Mux.Desktop.Shell
             card.Children.Add(CommandRow("/effort", L("main.help.effort")));
             card.Children.Add(CommandRow("/cwd <path>", "Show or change the working directory"));
             card.Children.Add(CommandRow("/instructions", "List the project instruction files the agent loads"));
+            card.Children.Add(CommandRow("/processes", "List, inspect, or stop background processes the agent started"));
             card.Children.Add(CommandRow("/trust <level>", "Trust this project's skills: all, playbooks, ignore, reset"));
             card.Children.Add(CommandRow("/<skill> <args>", "Run a skill by name"));
             card.Children.Add(CommandRow("/label <text>", L("main.help.labels")));

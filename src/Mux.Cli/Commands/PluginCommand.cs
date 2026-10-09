@@ -49,6 +49,7 @@ namespace Mux.Cli.Commands
                     {
                         name = hook.Name,
                         @event = HookEventEnumConverter.ToWireName(hook.Event),
+                        matcher = hook.Matcher,
                         command = hook.Command,
                         args = hook.Args,
                         blocking = hook.Blocking,
@@ -90,7 +91,8 @@ namespace Mux.Cli.Commands
                 {
                     string label = string.IsNullOrWhiteSpace(hook.Name) ? hook.Command : hook.Name;
                     string blocking = hook.Blocking ? " [blocking]" : string.Empty;
-                    Console.WriteLine($"  {HookEventEnumConverter.ToWireName(hook.Event)}\t{label}{blocking} — {hook.Command} {string.Join(' ', hook.Args)}");
+                    string matcher = string.IsNullOrWhiteSpace(hook.Matcher) ? string.Empty : " [matcher: " + hook.Matcher + "]";
+                    Console.WriteLine($"  {HookEventEnumConverter.ToWireName(hook.Event)}\t{label}{blocking}{matcher}: {hook.Command} {string.Join(' ', hook.Args)}");
                 }
             }
 

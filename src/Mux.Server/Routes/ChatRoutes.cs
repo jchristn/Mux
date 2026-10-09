@@ -40,6 +40,7 @@ namespace Mux.Server.Routes
         private readonly bool _AllowInteractiveTools;
         private readonly CheckpointRegistry? _Checkpoints;
         private readonly RunRegistry _Runs;
+        private readonly Mux.Core.Processes.BackgroundProcessRegistry? _Processes;
 
         // Server-lifetime tool runtimes, created lazily on the first chat so MCP servers are connected once
         // and reused across requests. Not disposed — they live for the server process.
@@ -58,6 +59,7 @@ namespace Mux.Server.Routes
         /// <param name="allowInteractiveTools">When true, mutating tools proposed during a web chat prompt the browser for approval instead of being auto-denied. Defaults to false (read-only web chat).</param>
         /// <param name="checkpoints">Optional checkpoint registry so each run records a pre-turn git snapshot for undo/redo. Null disables checkpointing.</param>
         /// <param name="runs">The run registry tracking each streamed run so it can be inspected, canceled, and mirrored over the WebSocket bridge.</param>
+        /// <param name="processes">Optional server-wide background process registry exposed through <c>process_start</c> and its sibling tools. Null leaves the tools out.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpointsProvider"/> or <paramref name="runs"/> is null.</exception>
         public ChatRoutes(
             string? apiKey,
@@ -66,8 +68,10 @@ namespace Mux.Server.Routes
             SessionStore? sessionStore,
             bool allowInteractiveTools,
             CheckpointRegistry? checkpoints,
-            RunRegistry runs)
+            RunRegistry runs,
+            Mux.Core.Processes.BackgroundProcessRegistry? processes = null)
         {
+            _Processes = processes;
             _ApiKey = apiKey;
             _EndpointsProvider = endpointsProvider ?? throw new ArgumentNullException(nameof(endpointsProvider));
             _UsageRecorder = usageRecorder;
@@ -473,7 +477,8 @@ namespace Mux.Server.Routes
                     ConfigDirectory = SettingsLoader.GetConfigDirectory(),
                     CommandName = "dashboard",
                     SessionId = sessionId,
-                    UsageRecorder = _UsageRecorder
+                    UsageRecorder = _UsageRecorder,
+                    Hooks = Mux.Core.Plugins.PluginRegistry.LoadHooksOrNull()
                 };
 
                 if (toolsEnabled)
@@ -482,6 +487,11 @@ namespace Mux.Server.Routes
                     Func<string, System.Text.Json.JsonElement, string, System.Threading.CancellationToken, System.Threading.Tasks.Task<ToolResult>>? executor =
                         _Mcp != null ? _Mcp.ExecuteToolAsync : null;
                     ExternalToolsBinder.Apply(options, resolved.SystemPrompt, resolved.CompactionSystemPrompt, mcpTools, executor, _Skills, builtInTools.Count);
+                    if (_Processes != null)
+                    {
+                        options.ExternalToolProviders ??= new List<IExternalToolProvider>();
+                        options.ExternalToolProviders.Add(new Mux.Core.Processes.BackgroundProcessToolProvider(_Processes));
+                    }
                 }
 
                 // Snapshot the working tree before the turn so an editor can undo the turn's file changes,

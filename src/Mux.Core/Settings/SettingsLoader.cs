@@ -1404,6 +1404,8 @@ namespace Mux.Core.Settings
                 ProjectInstructionsMaxBytes = settings.ProjectInstructionsMaxBytes,
                 LoopMaxIterations = settings.LoopMaxIterations,
                 LoopMinIntervalSeconds = settings.LoopMinIntervalSeconds,
+                BackgroundProcessMaxConcurrent = settings.BackgroundProcessMaxConcurrent,
+                BackgroundProcessOutputBytes = settings.BackgroundProcessOutputBytes,
                 SkillProdPattern = settings.SkillProdPattern,
                 TaskPlanningEnabled = settings.TaskPlanningEnabled,
                 TaskParallelismEnabled = settings.TaskParallelismEnabled,

@@ -132,7 +132,7 @@ also reachable by key and the menu (one catalog, three surfaces):
 `/endpoint` (`/model`), `/effort` (`/reasoning`), `/settings` (`/config`, `/preferences`, `/prefs`),
 `/help` (`/?`), `/clear`, `/sidebar`, `/save`, `/export` (`/share`), `/undo`, `/redo`, `/sessions`,
 `/label` (`/labels`), `/tag` (`/tags`), `/tasks`, `/usage` (`/stats`, `/spend`), `/theme`, `/mouse`,
-`/menu`, `/quit` (`/exit`), `/trust`, `/loop`, `/loops`. Any custom commands from `hooks.json` also appear here as `/<name>`.
+`/menu`, `/quit` (`/exit`), `/trust`, `/loop`, `/loops`, `/processes` (`/ps`). Any custom commands from `hooks.json` also appear here as `/<name>`.
 Anything else that names an enabled skill runs that skill: `/code-review main` submits the skill's
 instructions with `main` as its arguments (see [Skills](#skills)). Built-in commands win, then custom
 commands, then skills.
@@ -346,7 +346,22 @@ The plugin system extends mux with out-of-process **event hooks** and **custom s
 configured in `~/.mux/hooks.json` (see [CONFIG.md](CONFIG.md#hooksjson-plugin-system-hooks--custom-commands)).
 Hooks run on `session-start`, `user-prompt-submit` (which a blocking hook can veto to refuse a prompt),
 and `session-end`; the event payload arrives on the hook's stdin and its stdout is surfaced into the
-transcript. Custom commands register as `/<name>` and run an external command, posting its output. Both
+transcript.
+
+Tool-level hooks run inside every agent turn on every surface (terminal, `mux print`, desktop, and the web
+dashboard), with Claude Code's contract:
+
+- `pre-tool-use` runs after a tool call is approved and before it runs. Exit 2 blocks the call; the hook's stderr
+  becomes the tool result the model reads.
+- `post-tool-use` runs after the call. Its stdout (exit 0) or stderr (exit 2) is appended to the tool result.
+- `stop` runs when the model finishes. Exit 2 sends the hook's stderr back as a new message and the model keeps
+  going, at most three times per run.
+
+A `matcher` (glob, `|` between alternatives) limits tool hooks to some tools, for example
+`"matcher": "write_file|edit_file"`. The payload on stdin has `hook_event_name`, `session_id`, `cwd`, `tool_name`,
+`tool_input`, and (after the call) `tool_response`. Any other exit code, a timeout, or a missing command is a
+warning and the turn continues. Outcomes appear as `hook` events in `jsonl` output. See
+[CONFIG.md](CONFIG.md#hooksjson-plugin-system-hooks--custom-commands) for the full schema. Custom commands register as `/<name>` and run an external command, posting its output. Both
 run as a literal argument vector — never through a shell. Inspect what is configured with
 `mux plugin list` (add `--output-format json` for machine-readable output).
 
@@ -363,6 +378,31 @@ The built-in `run_process` tool executes commands using the host shell for the c
 - the shell invocation form
 
 This matters for command generation. For example, a Windows runtime should use `dir`/`type`/`copy` style commands, while a Unix runtime should use `ls`/`cat`/`cp`.
+
+### Background processes
+
+Commands that keep running (a dev server, `docker compose up`, a watch-mode test runner) do not fit
+`run_process`, which waits for the command to finish. The model uses four tools for them instead:
+
+| Tool | Kind | What it does |
+|---|---|---|
+| `process_start` | mutating | Starts `command` through the same shell as `run_process` and returns an id (`p1`, `p2`, ...) at once. With `wait_for` (a regular expression) and `timeout_ms` (default 30000, at most 300000) it first waits for a ready line, such as `Local:\s+(\S+)`. Optional `working_directory` and `name`. |
+| `process_output` | read-only | Returns only the output produced since the previous read, with `running` and `exit_code`. With `wait_for` it waits until that pattern appears, the process exits, or the timeout passes (`matched`, `timed_out`). |
+| `process_list` | read-only | Lists every process with its id, command, pid, state, and unread output. |
+| `process_stop` | mutating | Stops a process and its children and returns its last output. `id: "all"` stops every one. |
+
+stdout and stderr are interleaved by line, ANSI color codes are removed, and each process keeps its newest
+`backgroundProcessOutputBytes` of output (default 1 MB); a read reports how much was dropped. At most
+`backgroundProcessMaxConcurrent` processes (default 8) run at once. Processes belong to the session: closing the
+terminal, ending a `mux print` run, closing the desktop app, or stopping `mux serve` kills every process tree.
+`process_start` and `process_stop` go through the approval policy like `run_process`; the read-only posture hides
+them.
+
+`/processes` (alias `/ps`) in the terminal and the desktop app lists the processes; `/processes output <id>` shows
+recent output without consuming it, `/processes stop <id>` (or `all`) stops one, and `/processes clear` removes
+exited ones. The terminal sidebar's PROCESSES section shows each process with `●` while it runs and `○` after it
+exits. The `react-dev-server` skill detects the dev script, framework, port, and ready line and starts the server
+this way.
 
 ## Web Search And Retrieval
 
@@ -496,6 +536,7 @@ Current event types:
 - `error`
 - `run_completed`
 - `task_plan_updated`
+- `hook` (a `pre-tool-use`, `post-tool-use`, or `stop` hook blocked a call, added to a result, made the model continue, or failed)
 
 A `task_plan_updated` event carries `changeKind` (`plan_created`, `plan_replaced`, `task_status_changed`,
 `task_note_updated`, or `plan_cleared`), an optional `changedTaskId`, `totalCount`/`completedCount`, and a

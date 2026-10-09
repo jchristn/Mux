@@ -162,6 +162,29 @@ namespace Mux.Core.Agent
             }
         }
 
+        /// <summary>
+        /// Tests a tool name against one matcher pattern with the same glob syntax as <c>--allow-tools</c>
+        /// (<c>*</c> and <c>?</c>, whole-name, case-insensitive). Alternatives may be separated with <c>|</c>
+        /// (for example <c>write_file|edit_file</c>). A null, empty, or <c>*</c> pattern matches every tool.
+        /// </summary>
+        /// <param name="toolName">The tool name. Null or empty never matches a non-empty pattern.</param>
+        /// <param name="pattern">The matcher pattern.</param>
+        /// <returns><c>true</c> when the tool name matches.</returns>
+        public static bool MatchesToolPattern(string? toolName, string? pattern)
+        {
+            if (string.IsNullOrWhiteSpace(pattern))
+            {
+                return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(toolName))
+            {
+                return false;
+            }
+
+            return MatchesAny(toolName!, pattern!.Split('|'));
+        }
+
         private static bool MatchesAny(string toolName, IReadOnlyList<string> patterns)
         {
             foreach (string pattern in patterns)

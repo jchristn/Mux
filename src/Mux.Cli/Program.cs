@@ -555,7 +555,15 @@ CONFIG:
             // a self-paced loop iteration is running.
             Mux.Core.Jobs.LoopScheduler loopScheduler = new Mux.Core.Jobs.LoopScheduler(
                 runtime.MuxSettings.LoopMaxIterations, runtime.MuxSettings.LoopMinIntervalSeconds);
-            toolBinder.AdditionalProviders = new List<IExternalToolProvider> { new Mux.Core.Jobs.LoopToolProvider(loopScheduler) };
+            // Background processes (process_start and friends) belong to this shell; disposing the registry when the
+            // shell exits kills every process tree it started.
+            using Mux.Core.Processes.BackgroundProcessRegistry processRegistry = new Mux.Core.Processes.BackgroundProcessRegistry(
+                runtime.MuxSettings.BackgroundProcessMaxConcurrent, runtime.MuxSettings.BackgroundProcessOutputBytes);
+            toolBinder.AdditionalProviders = new List<IExternalToolProvider>
+            {
+                new Mux.Core.Jobs.LoopToolProvider(loopScheduler),
+                new Mux.Core.Processes.BackgroundProcessToolProvider(processRegistry)
+            };
 
             mcpRuntime = new McpRuntime(
                 SettingsLoader.LoadMcpServers,
@@ -607,6 +615,9 @@ CONFIG:
                 // submission on user-prompt-submit hooks.
                 Mux.Core.Plugins.PluginRegistry pluginRegistry =
                     new Mux.Core.Plugins.PluginRegistry(SettingsLoader.LoadPluginConfig());
+
+                // pre-tool-use, post-tool-use, and stop hooks run inside each turn's agent loop.
+                template.Hooks = pluginRegistry;
 
                 // Baseline bind (wires the executor and leaves the prompt at its MCP-free base until the
                 // first MCP discovery completes).
@@ -675,6 +686,7 @@ CONFIG:
                         template.CompactionPreserveTurns = changed.CompactionPreserveTurns;
                         template.IgnoreCertErrors = changed.IgnoreCertErrors;
                         loopScheduler.Configure(changed.LoopMaxIterations, changed.LoopMinIntervalSeconds);
+                        processRegistry.Configure(changed.BackgroundProcessMaxConcurrent, changed.BackgroundProcessOutputBytes);
                     },
                     showSplash: string.IsNullOrWhiteSpace(settings.Prompt),
                     showBoundaries: runtime.MuxSettings.ShowBoundaryLines,
@@ -688,7 +700,8 @@ CONFIG:
                         () => SettingsLoader.LoadPricing(),
                         new Mux.Core.Telemetry.SessionStoreMetadataIndex(sessionStore)),
                     enableFirstRunWizard: true,
-                    loopScheduler: loopScheduler);
+                    loopScheduler: loopScheduler,
+                    processRegistry: processRegistry);
 
                 // Expose the shell so MCP connection notices (raised on the runtime's background thread once
                 // Start() is called below) can be written into the transcript.

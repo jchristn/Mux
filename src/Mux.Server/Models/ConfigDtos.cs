@@ -295,8 +295,11 @@ namespace Mux.Server.Models
         /// <summary>Optional name.</summary>
         public string Name { get; set; } = string.Empty;
 
-        /// <summary>Lifecycle event (session-start, user-prompt-submit, session-end).</summary>
+        /// <summary>Lifecycle event (session-start, user-prompt-submit, session-end, pre-tool-use, post-tool-use, stop).</summary>
         public string Event { get; set; } = "session-start";
+
+        /// <summary>Tool-name glob for pre-tool-use and post-tool-use hooks (alternatives separated by |); empty matches every tool.</summary>
+        public string Matcher { get; set; } = string.Empty;
 
         /// <summary>Executable to run.</summary>
         public string Command { get; set; } = string.Empty;

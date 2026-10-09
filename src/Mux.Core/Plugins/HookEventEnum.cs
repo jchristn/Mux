@@ -1,13 +1,10 @@
 namespace Mux.Core.Plugins
 {
-    using System;
-    using System.Text.Json;
     using System.Text.Json.Serialization;
 
     /// <summary>
     /// The lifecycle events that out-of-process hooks can subscribe to. Kept deliberately small and
-    /// well-defined: each event names a concrete moment in an interactive session at which mux runs the
-    /// matching hooks.
+    /// well-defined: each event names a concrete moment in a session at which mux runs the matching hooks.
     /// </summary>
     [JsonConverter(typeof(HookEventEnumConverter))]
     public enum HookEventEnum
@@ -26,80 +23,24 @@ namespace Mux.Core.Plugins
         /// <summary>
         /// Fired once when an interactive session ends.
         /// </summary>
-        SessionEnd
-    }
-
-    /// <summary>
-    /// A JSON converter for <see cref="HookEventEnum"/> that reads and writes kebab-case names
-    /// (<c>session-start</c>, <c>user-prompt-submit</c>, <c>session-end</c>) and also accepts the enum
-    /// member name, snake_case, and lowercase.
-    /// </summary>
-    public sealed class HookEventEnumConverter : JsonConverter<HookEventEnum>
-    {
-        /// <inheritdoc />
-        public override HookEventEnum Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            string? value = reader.GetString();
-            if (!TryParse(value, out HookEventEnum result))
-            {
-                throw new JsonException($"Unknown hook event: '{value}'. Expected: session-start, user-prompt-submit, session-end.");
-            }
-
-            return result;
-        }
+        SessionEnd,
 
         /// <summary>
-        /// Parses a hook-event string accepting kebab-case, snake_case, the enum member name, and lowercase.
+        /// Fired after a tool call is approved and before it runs. Exit 2 blocks the call and returns the hook's
+        /// stderr to the model as the tool result; any other non-zero exit is logged and the call continues.
         /// </summary>
-        /// <param name="value">The hook-event string.</param>
-        /// <param name="result">The parsed value when the method returns true.</param>
-        /// <returns>True when the value was recognized; otherwise false.</returns>
-        public static bool TryParse(string? value, out HookEventEnum result)
-        {
-            result = HookEventEnum.SessionStart;
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return false;
-            }
-
-            string normalized = value.Replace("-", string.Empty).Replace("_", string.Empty).ToLowerInvariant();
-            switch (normalized)
-            {
-                case "sessionstart":
-                    result = HookEventEnum.SessionStart;
-                    return true;
-                case "userpromptsubmit":
-                case "promptsubmit":
-                    result = HookEventEnum.UserPromptSubmit;
-                    return true;
-                case "sessionend":
-                    result = HookEventEnum.SessionEnd;
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
-        /// <inheritdoc />
-        public override void Write(Utf8JsonWriter writer, HookEventEnum value, JsonSerializerOptions options)
-        {
-            writer.WriteStringValue(ToWireName(value));
-        }
+        PreToolUse,
 
         /// <summary>
-        /// Returns the canonical kebab-case wire name for a hook event.
+        /// Fired after a tool call runs. Standard output (exit 0) or standard error (exit 2) is appended to the
+        /// tool result the model sees.
         /// </summary>
-        /// <param name="value">The hook event.</param>
-        /// <returns>The kebab-case name.</returns>
-        public static string ToWireName(HookEventEnum value)
-        {
-            return value switch
-            {
-                HookEventEnum.SessionStart => "session-start",
-                HookEventEnum.UserPromptSubmit => "user-prompt-submit",
-                HookEventEnum.SessionEnd => "session-end",
-                _ => value.ToString()
-            };
-        }
+        PostToolUse,
+
+        /// <summary>
+        /// Fired when the model finishes a run. Exit 2 asks the model to continue with the hook's stderr as a new
+        /// user message, at most three times per run.
+        /// </summary>
+        Stop
     }
 }

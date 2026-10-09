@@ -39,6 +39,8 @@ namespace Mux.Core.Models
         private int _ProjectInstructionsMaxBytes = 32768;
         private int _LoopMaxIterations = Mux.Core.Jobs.LoopScheduler.DefaultMaxIterations;
         private int _LoopMinIntervalSeconds = Mux.Core.Jobs.LoopScheduler.DefaultMinIntervalSeconds;
+        private int _BackgroundProcessMaxConcurrent = Mux.Core.Processes.BackgroundProcessRegistry.DefaultMaxConcurrent;
+        private int _BackgroundProcessOutputBytes = Mux.Core.Processes.BackgroundProcessRegistry.DefaultOutputCapacity;
         private string _SkillProdPattern = DefaultSkillProdPattern;
         private bool _TaskPlanningEnabled = true;
         private bool _TaskParallelismEnabled = false;
@@ -414,6 +416,28 @@ namespace Mux.Core.Models
         {
             get => _LoopMinIntervalSeconds;
             set => _LoopMinIntervalSeconds = Math.Clamp(value, 1, Mux.Core.Jobs.LoopScheduler.MaxDelaySeconds);
+        }
+
+        /// <summary>
+        /// The most background processes (<c>process_start</c>) a session may run at once. Clamped to 1..64. Defaults
+        /// to 8.
+        /// </summary>
+        [JsonPropertyName("backgroundProcessMaxConcurrent")]
+        public int BackgroundProcessMaxConcurrent
+        {
+            get => _BackgroundProcessMaxConcurrent;
+            set => _BackgroundProcessMaxConcurrent = Math.Clamp(value, 1, Mux.Core.Processes.BackgroundProcessRegistry.MaxConcurrentLimit);
+        }
+
+        /// <summary>
+        /// The output kept per background process, newest first; older output is dropped. Clamped to 16384..16777216.
+        /// Defaults to 1048576 (1 MB).
+        /// </summary>
+        [JsonPropertyName("backgroundProcessOutputBytes")]
+        public int BackgroundProcessOutputBytes
+        {
+            get => _BackgroundProcessOutputBytes;
+            set => _BackgroundProcessOutputBytes = Math.Clamp(value, Mux.Core.Processes.BackgroundProcessRegistry.MinOutputCapacity, Mux.Core.Processes.BackgroundProcessRegistry.MaxOutputCapacity);
         }
 
         /// <summary>

@@ -14,6 +14,7 @@ namespace Mux.Cli.Commands
     using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
+    using Mux.Core.Processes;
     using Mux.Core.Models;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
@@ -374,6 +375,7 @@ namespace Mux.Cli.Commands
                 EffectiveToolCount = runtime.Capabilities.EffectiveToolCount,
                 Verbose = settings.Verbose,
                 TaskPlan = runtime.MuxSettings.TaskPlanningEnabled ? new Mux.Core.Tasks.TaskPlan() : null,
+                Hooks = Mux.Core.Plugins.PluginRegistry.LoadHooksOrNull(),
                 OnRetry = (int attempt, int maxRetries, string message) =>
                     Console.Error.WriteLine(ConsoleMessageStyler.Notification($"Retry {attempt}/{maxRetries}: {message}"))
             };
@@ -397,6 +399,7 @@ namespace Mux.Cli.Commands
 
             McpRuntime? mcpRuntime = null;
             SkillRuntime? skillRuntime = null;
+            BackgroundProcessRegistry? processRegistry = null;
 
             using (CancellationTokenSource cts = new CancellationTokenSource())
             {
@@ -441,6 +444,12 @@ namespace Mux.Cli.Commands
                         loopOptions.SystemPrompt += skillRuntime.BuildPromptSection(runtime.WorkingDirectory);
                         loopOptions.EffectiveToolCount += skillRuntime.GetToolDefinitions().Count;
                     }
+
+                    // Background processes started with process_start live only as long as this command; the finally
+                    // block below kills any that are still running.
+                    processRegistry = new BackgroundProcessRegistry(runtime.MuxSettings.BackgroundProcessMaxConcurrent, runtime.MuxSettings.BackgroundProcessOutputBytes);
+                    loopOptions.ExternalToolProviders ??= new List<IExternalToolProvider>();
+                    loopOptions.ExternalToolProviders.Add(new BackgroundProcessToolProvider(processRegistry));
 
                     List<ConversationMessage> history = new List<ConversationMessage>(latestConversation);
 
@@ -586,6 +595,7 @@ namespace Mux.Cli.Commands
                 {
                     mcpRuntime?.Dispose();
                     skillRuntime?.Dispose();
+                    processRegistry?.Dispose();
 
                     // Flush and close usage telemetry so the one-shot run's events are written before exit.
                     usageTelemetry.Dispose();

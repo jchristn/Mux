@@ -83,6 +83,22 @@ All notable changes to mux are documented here.
   status, waiting for a run, and failed-step logs), and `flaky-test-hunt` (run a test filter or command many times and
   report the failure rate with the first failing output). Default skill commands can set `timeoutMs`; the waiting
   commands use 30 minutes.
+- **Tool-level hooks (Phase 5).** `pre-tool-use` runs after approval and before the tool (exit 2 blocks the call
+  and returns the hook's stderr to the model), `post-tool-use` appends its stdout (or exit-2 stderr) to the tool
+  result, and `stop` can make the model continue with exit 2 (at most 3 times per run). Payloads and exit codes
+  follow Claude Code's contract (`hook_event_name`, `tool_name`, `tool_input`, `tool_response`, `stop_hook_active`),
+  so hooks port by changing only the config. Hooks take an optional `matcher` (an `--allow-tools` glob with `|`
+  alternatives), run on every surface, and treat other exit codes, timeouts, and missing commands as warnings. New
+  jsonl event `hook` and error code `tool_call_blocked_by_hook`; `mux plugin list` and the hooks REST config show
+  the matcher.
+- **Background processes (Phase 5).** New tools `process_start` (returns an id at once, optionally waiting for a
+  ready line), `process_output` (only new output since the last read, with an optional pattern wait),
+  `process_list`, and `process_stop` (also `all`). Start and stop take the approval path; output is ANSI-stripped and
+  bounded per process (new setting `backgroundProcessOutputBytes`, default 1 MB), at most
+  `backgroundProcessMaxConcurrent` (default 8) run at once, and every process tree is killed when the terminal, a
+  `mux print` run, the desktop app, or `mux serve` ends. `/processes` (alias `/ps`) in the terminal and desktop lists
+  processes, shows output, stops, and clears them, and the terminal sidebar shows each one. New skill
+  `react-dev-server` detects the dev script, framework, port, and ready line (library: 153).
 - **Skills in `mux print`.** Headless runs now discover skills, list them in the system prompt, and expose
   `skill` and `run_skill`, matching the interactive shell.
 
@@ -121,6 +137,10 @@ All notable changes to mux are documented here.
 
 ### Tests
 
+- `BackgroundProcesses` (20 cases) runs real processes through the registry, the four tools, `/processes` in a
+  headless terminal, and `mux print` (asserting the process is killed at exit), plus `react-dev-server` detection.
+  `ToolHooks` (13 cases) runs real hook processes against a mock model: blocking, warnings, timeouts, payload fields,
+  post-tool appends, the stop re-entry limit, matchers, and the no-hooks path.
 - `LoopScheduler` and `LoopSkills`: 64 cases. The scheduler runs on a manual clock (fixed interval, self-paced
   decisions, iteration cap, cancel mid-run, pause and resume, restore paused, skipped fire times, no overlap), plus
   the `/loop` parser, the `schedule_next` tool's validation, the headless driver, settings clamping, session save and

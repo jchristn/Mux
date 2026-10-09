@@ -15,6 +15,7 @@ namespace Mux.Core.Plugins
         #region Private-Members
 
         private string _Command = string.Empty;
+        private string _Matcher = string.Empty;
         private List<string> _Args = new List<string>();
         private int _TimeoutMs = 15000;
 
@@ -33,6 +34,19 @@ namespace Mux.Core.Plugins
         /// </summary>
         [JsonPropertyName("event")]
         public HookEventEnum Event { get; set; } = HookEventEnum.SessionStart;
+
+        /// <summary>
+        /// For tool events (<see cref="HookEventEnum.PreToolUse"/>, <see cref="HookEventEnum.PostToolUse"/>), the tool
+        /// names this hook applies to: a glob with the same syntax as <c>--allow-tools</c> (<c>*</c>, <c>?</c>,
+        /// case-insensitive, whole name), with <c>|</c> between alternatives. Empty matches every tool. Ignored for
+        /// other events. Never null.
+        /// </summary>
+        [JsonPropertyName("matcher")]
+        public string Matcher
+        {
+            get => _Matcher;
+            set => _Matcher = value ?? string.Empty;
+        }
 
         /// <summary>
         /// The executable to run (resolved against PATH). Never null; an empty command makes the hook invalid.

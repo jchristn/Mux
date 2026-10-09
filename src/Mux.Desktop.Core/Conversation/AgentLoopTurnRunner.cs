@@ -39,6 +39,7 @@ namespace Mux.Desktop.Conversation
         private string _WorkingDirectory = Directory.GetCurrentDirectory();
         private McpRuntime? _Mcp;
         private SkillRuntime? _Skills;
+        private Mux.Core.Processes.BackgroundProcessRegistry? _Processes;
 
         /// <summary>
         /// Instantiate the runner.
@@ -85,6 +86,16 @@ namespace Mux.Desktop.Conversation
         {
             get => _Skills;
             set => _Skills = value;
+        }
+
+        /// <summary>
+        /// The app-wide background process registry exposed to the model through <c>process_start</c> and its sibling
+        /// tools, or null to leave them out. Owned and disposed by the host.
+        /// </summary>
+        public Mux.Core.Processes.BackgroundProcessRegistry? Processes
+        {
+            get => _Processes;
+            set => _Processes = value;
         }
 
         /// <summary>The session/thread id to tag usage telemetry with, so per-conversation stats can be queried.</summary>
@@ -235,7 +246,8 @@ namespace Mux.Desktop.Conversation
                 CommandName = "desktop",
                 SessionId = _SessionId ?? string.Empty,
                 PromptUserFunc = _ApprovalHandler,
-                UsageRecorder = _UsageRecorder
+                UsageRecorder = _UsageRecorder,
+                Hooks = Mux.Core.Plugins.PluginRegistry.LoadHooksOrNull()
             };
 
             // Compose the live MCP tools + skills runtime onto the options so the desktop model can call them,
@@ -253,6 +265,12 @@ namespace Mux.Desktop.Conversation
                     executor,
                     _Skills,
                     builtInTools.Count);
+
+                if (_Processes != null)
+                {
+                    options.ExternalToolProviders ??= new List<IExternalToolProvider>();
+                    options.ExternalToolProviders.Add(new Mux.Core.Processes.BackgroundProcessToolProvider(_Processes));
+                }
             }
 
             // Publish this run to the hub so any surface can mirror it live (keyed by session id). Best-effort:

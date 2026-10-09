@@ -79,6 +79,12 @@ namespace Mux.Core.Enums
         /// A job's task plan was created, replaced, cleared, or had a task advanced.
         /// </summary>
         [EnumMember(Value = "task_plan_updated")]
-        TaskPlanUpdated
+        TaskPlanUpdated,
+
+        /// <summary>
+        /// A tool or stop hook blocked a call, added feedback, asked the model to continue, or failed (a warning).
+        /// </summary>
+        [EnumMember(Value = "hook")]
+        Hook
     }
 }

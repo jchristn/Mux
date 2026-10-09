@@ -263,7 +263,7 @@ The server sends a first text frame:
 The bridge replays the events the run has already emitted, then live-tails the rest, framing each as the
 **canonical event envelope** — byte-for-byte the same `eventType` shape that `mux print --output-format jsonl`
 emits (`run_started`, `assistant_text`, `assistant_thinking`, `tool_call_proposed`, `tool_call_completed`,
-`context_compacted`, `task_plan_updated`, `error`, `run_completed`). A run-scoped subscription closes the
+`context_compacted`, `task_plan_updated`, `hook`, `error`, `run_completed`). A run-scoped subscription closes the
 socket when the run reaches a terminal state. A subscribe frame for an unknown **run** id returns an `error`
 frame with code `not_found`.
 

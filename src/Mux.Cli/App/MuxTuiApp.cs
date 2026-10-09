@@ -115,6 +115,7 @@ namespace Mux.Cli.App
         private Job? _ActiveJob;
         private bool _TurnInFlight;
         private readonly LoopScheduler? _Loops;
+        private readonly Mux.Core.Processes.BackgroundProcessRegistry? _Processes;
         private Timer? _LoopTimer;
         private string? _ActiveLoopId;
         private int _LoopTickBusy;
@@ -190,6 +191,7 @@ namespace Mux.Cli.App
         /// <param name="usageQuery">Optional usage-telemetry query service backing the <c>/usage</c> view. Null disables it (the command reports telemetry unavailable).</param>
         /// <param name="enableFirstRunWizard">When true, the first-run setup wizard is offered on launch if no endpoint is configured and setup has not been completed. Off by default so test harnesses driving the run loop are not interrupted; the production launcher opts in.</param>
         /// <param name="loopScheduler">Optional scheduler for recurring prompts (<c>/loop</c>, <c>/loops</c>). Null disables loops.</param>
+        /// <param name="processRegistry">Optional registry of background processes started by the model (<c>/processes</c>). Null hides the command. The caller owns and disposes it.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="backend"/> or <paramref name="jobManager"/> is null.</exception>
         public MuxTuiApp(
             ITerminalBackend backend,
@@ -214,10 +216,17 @@ namespace Mux.Cli.App
             string? workingDirectory = null,
             Mux.Core.Telemetry.UsageQueryService? usageQuery = null,
             bool enableFirstRunWizard = false,
-            LoopScheduler? loopScheduler = null)
+            LoopScheduler? loopScheduler = null,
+            Mux.Core.Processes.BackgroundProcessRegistry? processRegistry = null)
         {
             _EnableFirstRunWizard = enableFirstRunWizard;
             _Loops = loopScheduler;
+            _Processes = processRegistry;
+            if (_Processes != null)
+            {
+                _Processes.Changed += (object? sender, EventArgs e) => RefreshSidebar();
+            }
+
             _CheckpointManager = checkpointManager;
             _PluginRegistry = pluginRegistry;
             _UsageQuery = usageQuery;
@@ -310,6 +319,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.skills", "Skills", null, OpenSkillsModal, "Model", new[] { "skills", "skill" }));
             _Catalog.Add(new CommandDescriptor("mux.trust", "Project skill trust", null, () => HandleTrustArgument(string.Empty), "Model", new[] { "trust" }, HandleTrustArgument));
             _Catalog.Add(new CommandDescriptor("mux.loop", "Repeat a prompt", null, () => HandleLoopArgument(string.Empty), "Session", new[] { "loop" }, HandleLoopArgument));
+            _Catalog.Add(new CommandDescriptor("mux.processes", "Background processes", null, () => HandleProcessesArgument(string.Empty), "Session", new[] { "processes", "ps", "procs" }, HandleProcessesArgument));
             _Catalog.Add(new CommandDescriptor("mux.loops", "Loops", null, () => HandleLoopsArgument(string.Empty), "Session", new[] { "loops" }, HandleLoopsArgument));
             _Catalog.Add(new CommandDescriptor("mux.sessions", "Sessions", null, OpenSessionBrowser, "Session", new[] { "sessions" }));
             _Catalog.Add(new CommandDescriptor("mux.cwd", "Working directory", null, ShowWorkingDirectory, "Session", new[] { "cwd", "cd", "chdir" }, ChangeWorkingDirectory));
@@ -5051,6 +5061,124 @@ namespace Mux.Cli.App
             }
         }
 
+        private void HandleProcessesArgument(string argument)
+        {
+            if (_Processes == null)
+            {
+                WriteNotice("Background processes are not available in this shell.");
+                return;
+            }
+
+            string[] parts = (argument ?? string.Empty).Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            string verb = parts.Length > 0 ? parts[0].ToLowerInvariant() : "list";
+            string target = parts.Length > 1 ? parts[1] : string.Empty;
+            switch (verb)
+            {
+                case "list":
+                    WriteProcessList();
+                    return;
+                case "clear":
+                    int removed = _Processes.RemoveExited();
+                    WriteNotice(removed == 0 ? "No exited processes to clear." : "✓ Cleared " + removed + (removed == 1 ? " exited process." : " exited processes."));
+                    return;
+                case "stop":
+                case "kill":
+                case "output":
+                case "tail":
+                    break;
+                default:
+                    WriteNotice("Usage: /processes [list | output <id> | stop <id|all> | clear]");
+                    return;
+            }
+
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                WriteNotice("⚠ Name a process: /processes " + verb + " <id>" + (verb == "stop" || verb == "kill" ? " (or all)" : string.Empty) + ".");
+                return;
+            }
+
+            if ((verb == "stop" || verb == "kill") && string.Equals(target, "all", StringComparison.OrdinalIgnoreCase))
+            {
+                int stopped = _Processes.StopAll();
+                WriteNotice(stopped == 0 ? "No running processes." : "✓ Stopped " + stopped + (stopped == 1 ? " process." : " processes."));
+                return;
+            }
+
+            Mux.Core.Processes.BackgroundProcessInfo? info = _Processes.Get(target);
+            if (info == null)
+            {
+                WriteNotice("⚠ No background process has the id '" + target + "'. /processes lists them.");
+                return;
+            }
+
+            if (verb == "output" || verb == "tail")
+            {
+                string tail = _Processes.Tail(info.Id, 4000) ?? string.Empty;
+                WriteNotice("── " + info.Id + " " + info.Command + " (last output) ──");
+                WriteNotice(string.IsNullOrWhiteSpace(tail) ? "(no output yet)" : tail.TrimEnd());
+                return;
+            }
+
+            if (!info.Running)
+            {
+                WriteNotice("Process " + info.Id + " already exited" + (info.ExitCode.HasValue ? " with code " + info.ExitCode.Value : string.Empty) + ".");
+                return;
+            }
+
+            _ = StopProcessAsync(info.Id);
+        }
+
+        private async Task StopProcessAsync(string id)
+        {
+            try
+            {
+                Mux.Core.Processes.BackgroundProcessOutput output = await _Processes!.StopAsync(id, _Cts.Token).ConfigureAwait(false);
+                WriteNotice("✓ Stopped " + id + (output.ExitCode.HasValue ? " (exit " + output.ExitCode.Value + ")" : string.Empty) + ".");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("⚠ Could not stop " + id + ": " + ex.Message);
+            }
+        }
+
+        private void WriteProcessList()
+        {
+            IReadOnlyList<Mux.Core.Processes.BackgroundProcessInfo> processes = _Processes!.List();
+            if (processes.Count == 0)
+            {
+                WriteNotice("No background processes. The model starts them with process_start (dev servers, watchers, docker compose up).");
+                return;
+            }
+
+            WriteNotice("Background processes (id, state, pid, command):");
+            foreach (Mux.Core.Processes.BackgroundProcessInfo info in processes)
+            {
+                string state = info.Running
+                    ? "running"
+                    : (info.StoppedByUser ? "stopped" : "exited " + (info.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"));
+                string label = string.IsNullOrEmpty(info.Name) ? string.Empty : " [" + info.Name + "]";
+                WriteNotice("  " + info.Id + "  " + state + "  pid " + info.ProcessId + "  " + Truncate(info.Command, 70) + label);
+            }
+
+            WriteNotice("/processes output <id> shows recent output; /processes stop <id|all> stops; /processes clear removes exited ones.");
+        }
+
+        private List<string> BuildProcessLines()
+        {
+            List<string> lines = new List<string>();
+            if (_Processes == null)
+            {
+                return lines;
+            }
+
+            foreach (Mux.Core.Processes.BackgroundProcessInfo info in _Processes.List())
+            {
+                lines.Add(SidebarView.FormatProcessLine(info));
+            }
+
+            return lines;
+        }
+
         private List<string> BuildLoopLines()
         {
             List<string> lines = new List<string>();
@@ -6055,6 +6183,7 @@ namespace Mux.Cli.App
             _Sidebar.EffortLabel = effortLabel;
             _Sidebar.ThinkingLabel = thinkingLabel;
             _Sidebar.LoopLines = BuildLoopLines();
+            _Sidebar.ProcessLines = BuildProcessLines();
             _Sidebar.Refresh(model, stats);
         }
 

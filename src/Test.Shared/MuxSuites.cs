@@ -238,6 +238,7 @@ namespace Test.Shared
                     ReviewSkillsSuite.Create(),
                     LoopSkillsSuite.Create(),
                     LoopSchedulerSuite.Create(),
+                    BackgroundProcessSuite.Create(),
 
                     // MCP runtime wiring: template binding (tools + prompt) and lifecycle.
                     McpTemplateBinderSuite.Create(),
@@ -276,6 +277,7 @@ namespace Test.Shared
 
                     // Plugin system: event hooks, custom commands, and hooks.json persistence.
                     PluginSuite.Create(),
+                    ToolHooksSuite.Create(),
 
                     // Usage telemetry: SQLite store schema, inserts, retention, and concurrent writers.
                     UsageStoreSuite.Create(),
