@@ -170,7 +170,7 @@ editor sets the **global** defaults — a per-model iteration override lives in 
 (the **Max agent iterations (blank = global)** field) and wins over the global value for that endpoint.
 
 `/help` (`/?`) opens the keybinding/command reference in a modal; `F1` opens the command menu (the same
-catalog as a pick-and-run list). On startup mux shows a splash box — pass `--prompt "<text>"` (or a bare
+catalog as a pick-and-run list). On startup mux shows a splash box that closes by itself after about 2.5 seconds (any key closes it sooner). Pass `--prompt "<text>"` (or a bare
 positional prompt) to skip the splash and submit that prompt as the first turn before dropping into the
 usual interactive shell. Quitting (`Ctrl+Q` / `/quit`) asks for confirmation.
 

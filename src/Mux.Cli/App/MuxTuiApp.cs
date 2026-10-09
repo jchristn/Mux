@@ -68,6 +68,7 @@ namespace Mux.Cli.App
         private readonly SessionStore? _Store;
         private readonly bool _EnableFirstRunWizard;
         private readonly MuxBoxModal? _SplashModal;
+        private readonly TimeSpan _SplashDuration;
         private readonly Mux.Core.Telemetry.UsageQueryService? _UsageQuery;
         private List<string>? _UsageFilterLabels;
         private List<Mux.Core.Sessions.SessionTag>? _UsageFilterTags;
@@ -202,6 +203,7 @@ namespace Mux.Cli.App
         /// <param name="workingDirectory">The working directory used for hooks, custom commands, and session export. Null uses the process current directory.</param>
         /// <param name="usageQuery">Optional usage-telemetry query service backing the <c>/usage</c> view. Null disables it (the command reports telemetry unavailable).</param>
         /// <param name="enableFirstRunWizard">When true, the first-run setup wizard is offered on launch if no endpoint is configured and setup has not been completed. Off by default so test harnesses driving the run loop are not interrupted; the production launcher opts in.</param>
+        /// <param name="splashDuration">How long the startup splash stays up before it closes by itself; any key closes it sooner. Defaults to 2.5 seconds.</param>
         /// <param name="loopScheduler">Optional scheduler for recurring prompts (<c>/loop</c>, <c>/loops</c>). Null disables loops.</param>
         /// <param name="memoryStore">Optional persistent memory store enabling <c>#</c> quick-add and <c>/memory</c>. Null disables both.</param>
         /// <param name="processRegistry">Optional registry of background processes started by the model (<c>/processes</c>). Null hides the command. The caller owns and disposes it.</param>
@@ -230,6 +232,7 @@ namespace Mux.Cli.App
             Mux.Core.Telemetry.UsageQueryService? usageQuery = null,
             bool enableFirstRunWizard = false,
             LoopScheduler? loopScheduler = null,
+            TimeSpan? splashDuration = null,
             Mux.Core.Processes.BackgroundProcessRegistry? processRegistry = null,
             Mux.Core.Memory.MemoryStore? memoryStore = null)
         {
@@ -415,6 +418,7 @@ namespace Mux.Cli.App
             if (showSplash)
             {
                 MuxBoxModal splash = new MuxBoxModal("mux", MuxBanner.SplashLines(Defaults.ProductVersion), "press any key to start", centered: true);
+                _SplashDuration = splashDuration ?? TimeSpan.FromSeconds(2.5);
                 _SplashModal = splash;
                 _App.Modals.Push(splash);
             }
@@ -690,6 +694,24 @@ namespace Mux.Cli.App
 
                     // Mirror the current conversation so runs on other surfaces sync in automatically.
                     StartSessionMirror(_JobManager.SessionId);
+
+                    // The splash closes by itself after a short moment; any key still closes it sooner.
+                    if (_SplashModal != null)
+                    {
+                        MuxBoxModal splash = _SplashModal;
+                        _ = Task.Delay(_SplashDuration, loopCts.Token).ContinueWith(
+                            (Task delay) =>
+                            {
+                                if (delay.IsCanceled) return;
+                                _App.Post(() =>
+                                {
+                                    // TUIKit only prunes closed modals after input, so remove it here.
+                                    splash.Dismiss();
+                                    _App.Modals.RemoveClosed();
+                                });
+                            },
+                            TaskScheduler.Default);
+                    }
 
                     // Check once a second for due loop iterations (and keep the sidebar countdown current).
                     if (_Loops != null)

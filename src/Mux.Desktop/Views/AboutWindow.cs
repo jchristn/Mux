@@ -3,6 +3,7 @@ namespace Mux.Desktop.Views
     using System;
     using System.Runtime.InteropServices;
     using Avalonia;
+    using Avalonia.Threading;
     using Avalonia.Controls;
     using Avalonia.Input;
     using Avalonia.Layout;
@@ -29,8 +30,9 @@ namespace Mux.Desktop.Views
         /// Instantiate the About window.
         /// </summary>
         /// <param name="localization">The localization service supplying UI strings. Required.</param>
+        /// <param name="autoClose">When set, the window closes by itself after this long (the startup splash); a click closes it sooner. Null keeps it open until the user closes it.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="localization"/> is null.</exception>
-        public AboutWindow(ILocalizationService localization)
+        public AboutWindow(ILocalizationService localization, TimeSpan? autoClose = null)
         {
             ArgumentNullException.ThrowIfNull(localization);
 
@@ -39,7 +41,7 @@ namespace Mux.Desktop.Views
             Title = localization.Get(StringKeys.AboutHelp);
             Icon = IconResources.LoadWindowIcon();
             Width = 560;
-            Height = 620;
+            Height = 465;
             CanResize = false;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = theme.Surface;
@@ -48,7 +50,7 @@ namespace Mux.Desktop.Views
 
             StackPanel panel = new StackPanel
             {
-                Margin = new Thickness(28),
+                Margin = new Thickness(28, 14),
                 Spacing = 10,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
@@ -122,6 +124,24 @@ namespace Mux.Desktop.Views
             });
 
             Content = panel;
+
+            if (autoClose.HasValue)
+            {
+                // As a startup splash: no taskbar entry, close after the delay, and close at once on a click.
+                ShowInTaskbar = false;
+                DispatcherTimer timer = new DispatcherTimer { Interval = autoClose.Value };
+                timer.Tick += (object? sender, EventArgs args) =>
+                {
+                    timer.Stop();
+                    Close();
+                };
+                PointerPressed += (object? sender, Avalonia.Input.PointerPressedEventArgs args) =>
+                {
+                    timer.Stop();
+                    Close();
+                };
+                Opened += (object? sender, EventArgs args) => timer.Start();
+            }
         }
 
         private static Control DiagnosticRow(string label, string value, string tip, AppTheme theme)

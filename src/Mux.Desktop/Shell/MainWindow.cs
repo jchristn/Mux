@@ -488,10 +488,31 @@ namespace Mux.Desktop.Shell
             // Land the caret in the composer immediately so the user can start typing without clicking in.
             Dispatcher.UIThread.Post(() => _Composer?.Focus(), DispatcherPriority.Input);
 
-            // Offer the first-run setup wizard once the shell is visible, when there is no usable endpoint and
-            // setup has not been completed or dismissed (shared cross-surface trigger). Deferred so the modal
-            // has this window as its owner.
-            Dispatcher.UIThread.Post(() => _ = MaybeRunSetupWizardAsync(), DispatcherPriority.Background);
+            // Show the About view as a brief startup splash; it closes by itself after 2.5 seconds (or on a click).
+            // The first-run setup wizard (offered when there is no usable endpoint and setup has not been completed
+            // or dismissed) waits for the splash so the two never stack. Deferred so both have this window as owner.
+            Dispatcher.UIThread.Post(ShowStartupSplash, DispatcherPriority.Background);
+        }
+
+        private void ShowStartupSplash()
+        {
+            AboutWindow splash;
+            try
+            {
+                splash = new AboutWindow(_Localization, TimeSpan.FromSeconds(2.5));
+            }
+            catch (Exception)
+            {
+                _ = MaybeRunSetupWizardAsync();
+                return;
+            }
+
+            splash.Closed += (object? sender, EventArgs args) =>
+            {
+                _Composer?.Focus();
+                _ = MaybeRunSetupWizardAsync();
+            };
+            splash.Show(this);
         }
 
         // Shows the first-run setup wizard automatically when SetupState says it is needed. Runs at most once

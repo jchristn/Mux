@@ -247,7 +247,7 @@ namespace Test.Shared.Suites
 
                             HeadlessBackend backend = new HeadlessBackend(80, 24);
                             await using (JobManager manager = NewManager(EchoRunner))
-                            using (MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove, showSplash: true, enableFirstRunWizard: true))
+                            using (MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove, showSplash: true, enableFirstRunWizard: true, splashDuration: TimeSpan.FromMinutes(5)))
                             using (CancellationTokenSource runCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
                             {
                                 Task run = app.RunAsync(runCts.Token);
@@ -270,6 +270,71 @@ namespace Test.Shared.Suites
                         {
                             Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", originalEnv);
                             try { Directory.Delete(dir, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "SplashClosesByItself", "The startup splash closes by itself after its duration with no key pressed", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove, showSplash: true, splashDuration: TimeSpan.FromMilliseconds(300)))
+                        using (CancellationTokenSource runCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                        {
+                            MuxAssert.AreEqual(1, app.ModalCount, "the splash is up at startup");
+                            System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+                            Task run = app.RunAsync(runCts.Token);
+                            await WaitUntilAsync(() => app.ModalCount == 0, ct).ConfigureAwait(false);
+                            MuxAssert.AreEqual(0, app.ModalCount, "the splash closed with no input");
+                            MuxAssert.IsTrue(watch.ElapsedMilliseconds >= 250, "it stayed up for its duration first (" + watch.ElapsedMilliseconds + " ms)");
+                            runCts.Cancel();
+                            try { await run.ConfigureAwait(false); } catch (OperationCanceledException) { }
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "SplashTimeoutLeadsToWizard", "On first run the splash closes by itself and the setup wizard renders in its place with no key pressed", async (CancellationToken ct) =>
+                    {
+                        string? originalEnv = Environment.GetEnvironmentVariable("MUX_CONFIG_DIR");
+                        string dir = Path.Combine(Path.GetTempPath(), "mux-splashwiz-" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(dir);
+                        Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", dir);
+                        try
+                        {
+                            SettingsLoader.EnsureConfigDirectory();
+                            HeadlessBackend backend = new HeadlessBackend(80, 24);
+                            await using (JobManager manager = NewManager(EchoRunner))
+                            using (MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove, showSplash: true, enableFirstRunWizard: true, splashDuration: TimeSpan.FromMilliseconds(300)))
+                            using (CancellationTokenSource runCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                            {
+                                Task run = app.RunAsync(runCts.Token);
+                                await WaitUntilAsync(() => backend.PeekOutput().Contains("Set up now", StringComparison.Ordinal), ct).ConfigureAwait(false);
+                                MuxAssert.AreEqual(1, app.ModalCount, "the wizard replaced the splash rather than stacking on it");
+                                runCts.Cancel();
+                                try { await run.ConfigureAwait(false); } catch (OperationCanceledException) { }
+                            }
+                        }
+                        finally
+                        {
+                            Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", originalEnv);
+                            try { Directory.Delete(dir, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "SplashKeyStillClosesEarly", "A key closes the splash before its timer, and the timer firing later does nothing", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = new MuxTuiApp(backend, manager, "demo", ApprovalPolicyEnum.AutoApprove, showSplash: true, splashDuration: TimeSpan.FromMilliseconds(400)))
+                        using (CancellationTokenSource runCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                        {
+                            Task run = app.RunAsync(runCts.Token);
+                            backend.FeedInput(" ");
+                            await WaitUntilAsync(() => app.ModalCount == 0, ct).ConfigureAwait(false);
+                            backend.FeedInput("/mcp\r");
+                            await WaitUntilAsync(() => app.ModalCount == 1, ct).ConfigureAwait(false);
+                            await Task.Delay(700, ct).ConfigureAwait(false);
+                            MuxAssert.AreEqual(1, app.ModalCount, "the expired splash timer did not close the next modal");
+                            runCts.Cancel();
+                            try { await run.ConfigureAwait(false); } catch (OperationCanceledException) { }
                         }
                     }),
 

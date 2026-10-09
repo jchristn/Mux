@@ -47,6 +47,18 @@ namespace Mux.Cli.App
 
         #region Public-Methods
 
+        /// <summary>
+        /// Closes the box if it is still open, as a keypress would (for example when a timed splash expires). Call it
+        /// on the UI loop thread.
+        /// </summary>
+        public void Dismiss()
+        {
+            if (!Completion.IsCompleted)
+            {
+                Close(0);
+            }
+        }
+
         /// <inheritdoc/>
         public override bool HandleKey(KeyEvent key)
         {

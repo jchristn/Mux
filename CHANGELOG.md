@@ -167,6 +167,11 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- **Startup splashes close by themselves.** The terminal splash closes after about 2.5 seconds (any key still
+  closes it sooner; the first-run wizard follows it either way). The desktop shows the About window as a
+  splash for about 2.5 seconds at launch (a click closes it sooner). The About window is 25% shorter (less top
+  and bottom padding, same fonts and spacing), and no longer has the "Getting started" section or the
+  "Diagnostics" heading.
 - Relevance gating (`appliesTo`) now also applies when `projectSkillsEnabled` is false, and the listing prints the
   "more skills are installed" footer even when every skill is hidden.
 - **Repository scripts moved under `scripts/`.** Windows `.bat` scripts now live in `scripts/windows/`, and the
