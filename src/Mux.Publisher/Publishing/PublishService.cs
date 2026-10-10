@@ -162,7 +162,7 @@ namespace Mux.Publisher.Publishing
                 published.Bundled.Add(new BundledBinary
                 {
                     Role = bundled.Role,
-                    FileName = ProjectExecutableName(bundled.Csproj, rid)
+                    FileName = NormalizeBundledExecutable(outputDir, bundled.Csproj, rid)
                 });
             }
 
@@ -170,9 +170,35 @@ namespace Mux.Publisher.Publishing
         }
 
         /// <summary>
-        /// Derives the published executable file name for a bundled project from its csproj name and the
-        /// target runtime (Windows adds <c>.exe</c>). The CLI project builds as <c>mux</c>, matching its
-        /// assembly name; every other project publishes under its project name.
+        /// Renames a bundled project's published executable to the name installers expect
+        /// (<see cref="ProjectExecutableName"/>). <c>dotnet publish</c> names the app host after the project
+        /// (<c>Mux.Cli</c>), but the CLI ships as <c>mux</c>. Bundled projects publish single-file, so the app
+        /// host carries the application and can be renamed. Does nothing when the file already has the expected
+        /// name or the published host is missing.
+        /// </summary>
+        /// <param name="outputDir">The publish output directory.</param>
+        /// <param name="csproj">The bundled project path.</param>
+        /// <param name="rid">The runtime identifier.</param>
+        /// <returns>The executable file name installers should use.</returns>
+        public static string NormalizeBundledExecutable(string outputDir, string csproj, string rid)
+        {
+            string expected = ProjectExecutableName(csproj, rid);
+            bool isWindows = ChannelHelpers.OsForRid(rid) == TargetOs.Windows;
+            string published = Path.GetFileNameWithoutExtension(csproj) + (isWindows ? ".exe" : string.Empty);
+            string from = Path.Combine(outputDir, published);
+            string to = Path.Combine(outputDir, expected);
+            if (!string.Equals(published, expected, StringComparison.Ordinal) && File.Exists(from))
+            {
+                File.Move(from, to, true);
+            }
+
+            return expected;
+        }
+
+        /// <summary>
+        /// Derives the executable file name installers use for a bundled project from its csproj name and the
+        /// target runtime (Windows adds <c>.exe</c>). The CLI ships as <c>mux</c> (its tool command name, applied
+        /// by <see cref="NormalizeBundledExecutable"/> after publishing); every other project keeps its project name.
         /// </summary>
         /// <param name="csproj">The project path (relative or absolute).</param>
         /// <param name="rid">The runtime identifier.</param>
@@ -180,7 +206,7 @@ namespace Mux.Publisher.Publishing
         public static string ProjectExecutableName(string csproj, string rid)
         {
             string stem = Path.GetFileNameWithoutExtension(csproj);
-            // Mux.Cli publishes as `mux` (its assembly name), not `Mux.Cli`.
+            // Mux.Cli ships as `mux` (its tool command name); NormalizeBundledExecutable renames the published host.
             if (string.Equals(stem, "Mux.Cli", StringComparison.OrdinalIgnoreCase)) stem = "mux";
             bool isWindows = ChannelHelpers.OsForRid(rid) == TargetOs.Windows;
             return isWindows ? stem + ".exe" : stem;

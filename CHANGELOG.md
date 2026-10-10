@@ -266,6 +266,10 @@ All notable changes to mux are documented here.
 
 ### Fixed
 
+- **Release packaging.** The desktop installers bundle the CLI as `mux`, but `dotnet publish` names it
+  `Mux.Cli`, so the AppImage, deb/rpm, and dmg channels failed to find it. The publisher now renames the
+  bundled host after publishing. The release workflow triggers only on version tags (`v1.2.0`), no longer on
+  the VS Code extension's `vscode-v*` tags.
 - `sql-mysql` (and every SQL skill) refuses `SELECT ... INTO OUTFILE` and `INTO DUMPFILE`, which write a file on
   the database server even inside a read-only transaction.
 - Python bytecode no longer ships: seven committed `.pyc` files are gone, `__pycache__` is ignored and excluded

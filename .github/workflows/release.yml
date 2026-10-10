@@ -8,7 +8,8 @@ name: release
 on:
   push:
     tags:
-      - 'v*'
+      # Version tags only (v1.2.0); 'v*' would also match the VS Code extension's vscode-v* tags.
+      - 'v[0-9]*'
   workflow_dispatch:
     inputs:
       version:

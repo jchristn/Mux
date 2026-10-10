@@ -2,6 +2,7 @@ namespace Test.Shared.Suites
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Publisher.Channels;
@@ -225,11 +226,41 @@ namespace Test.Shared.Suites
 
                     Case("BundledExecutableNamesResolve", "bundled project executable names map correctly per OS", () =>
                     {
-                        // The CLI publishes as `mux` (its assembly name); Windows adds .exe.
+                        // The CLI ships as `mux` (its tool command name); Windows adds .exe.
                         MuxAssert.AreEqual("mux.exe", PublishService.ProjectExecutableName("src/Mux.Cli/Mux.Cli.csproj", "win-x64"), "cli on windows");
                         MuxAssert.AreEqual("mux", PublishService.ProjectExecutableName("src/Mux.Cli/Mux.Cli.csproj", "linux-x64"), "cli on linux");
                         MuxAssert.AreEqual("Mux.Agent.exe", PublishService.ProjectExecutableName("src/Mux.Agent/Mux.Agent.csproj", "win-x64"), "agent on windows");
                         MuxAssert.AreEqual("Mux.Agent", PublishService.ProjectExecutableName("src/Mux.Agent/Mux.Agent.csproj", "osx-arm64"), "agent on macOS");
+                    }),
+
+                    Case("BundledCliHostIsRenamed", "the published Mux.Cli host is renamed to mux (mux.exe on Windows) so installers find it; other bundles keep their names", () =>
+                    {
+                        string dir = Path.Combine(Path.GetTempPath(), "mux-bundle-" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(dir);
+                        try
+                        {
+                            File.WriteAllText(Path.Combine(dir, "Mux.Cli"), "cli");
+                            File.WriteAllText(Path.Combine(dir, "Mux.Agent"), "agent");
+                            MuxAssert.AreEqual("mux", PublishService.NormalizeBundledExecutable(dir, "src/Mux.Cli/Mux.Cli.csproj", "linux-x64"), "linux name");
+                            MuxAssert.IsTrue(File.Exists(Path.Combine(dir, "mux")) && !File.Exists(Path.Combine(dir, "Mux.Cli")), "renamed on Linux");
+                            MuxAssert.AreEqual("cli", File.ReadAllText(Path.Combine(dir, "mux")), "same file");
+                            MuxAssert.AreEqual("Mux.Agent", PublishService.NormalizeBundledExecutable(dir, "src/Mux.Agent/Mux.Agent.csproj", "linux-x64"), "agent name");
+                            MuxAssert.IsTrue(File.Exists(Path.Combine(dir, "Mux.Agent")), "agent left alone");
+                            MuxAssert.AreEqual("mux", PublishService.NormalizeBundledExecutable(dir, "src/Mux.Cli/Mux.Cli.csproj", "osx-arm64"), "already renamed is a no-op");
+                            MuxAssert.IsTrue(File.Exists(Path.Combine(dir, "mux")), "still there");
+
+                            File.WriteAllText(Path.Combine(dir, "Mux.Cli.exe"), "win");
+                            MuxAssert.AreEqual("mux.exe", PublishService.NormalizeBundledExecutable(dir, "src/Mux.Cli/Mux.Cli.csproj", "win-x64"), "windows name");
+                            MuxAssert.IsTrue(File.Exists(Path.Combine(dir, "mux.exe")) && !File.Exists(Path.Combine(dir, "Mux.Cli.exe")), "renamed on Windows");
+
+                            string empty = Path.Combine(dir, "empty");
+                            Directory.CreateDirectory(empty);
+                            MuxAssert.AreEqual("mux", PublishService.NormalizeBundledExecutable(empty, "src/Mux.Cli/Mux.Cli.csproj", "linux-arm64"), "missing host does not throw");
+                        }
+                        finally
+                        {
+                            try { Directory.Delete(dir, true); } catch (Exception) { }
+                        }
                     })
                 });
         }
