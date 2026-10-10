@@ -16,7 +16,7 @@ namespace Mux.Core.Prompting
     /// The persona, tools-disabled, compaction-system, and task-planning defaults intentionally source their
     /// text from <see cref="Defaults"/>, whose named constants remain their single home and are already
     /// referenced across the codebase; the catalog surfaces them for editing without relocating the literal.
-    /// The previously duplicated literals — the synthetic-summary marker and the compaction user framing — now
+    /// The previously duplicated literals (the synthetic-summary marker and the compaction user framing) now
     /// live here as their single home so both former call sites (<c>ConversationCompactor</c> and
     /// <c>AgentLoop</c>) resolve to one entry.
     /// </remarks>
@@ -142,7 +142,10 @@ namespace Mux.Core.Prompting
                 "Skills section lead-in",
                 "Introduces the list of available skills in the system prompt.",
                 null,
-                "The following skills are available. Call the `skill` tool with a skill's name to read its instructions, then `run_skill` to execute one of its commands:"));
+                "Skills are tested procedures for common tasks in projects like this one. When the user's request matches a skill below, use it: " +
+                "call the `skill` tool with the skill's name to read its instructions and commands, then call `run_skill` to run the command that fits. " +
+                "Prefer a matching skill over answering from memory or improvising shell commands, and act on the request with a tool call instead of only " +
+                "describing what you would do. When no skill fits, use your other tools.\n\nAvailable skills:"));
 
             list.Add(new PromptDefinition(
                 "section.skills.more", PromptKind.ToolSection, PromptScope.Global,
@@ -207,17 +210,17 @@ namespace Mux.Core.Prompting
 
             list.Add(new PromptDefinition(
                 "file.summary.map", PromptKind.FileContext, PromptScope.Global,
-                "File summary — map step",
+                "File summary: map step",
                 "The system prompt for summarizing one chunk of a large file during the map step.",
                 null,
-                "You are condensing one chunk of a large file for a coding agent. In a few dense lines, note the key declarations, types, functions, and responsibilities this chunk contains, each with its line range. Preserve line numbers exactly as shown. Output plain text only — no preamble."));
+                "You are condensing one chunk of a large file for a coding agent. In a few dense lines, note the key declarations, types, functions, and responsibilities this chunk contains, each with its line range. Preserve line numbers exactly as shown. Output plain text only, with no preamble."));
 
             list.Add(new PromptDefinition(
                 "file.summary.reduce", PromptKind.FileContext, PromptScope.Global,
-                "File summary — reduce step",
+                "File summary: reduce step",
                 "The system prompt for merging per-chunk notes into a final navigable file summary.",
                 null,
-                "You are merging per-chunk notes into one concise, navigable summary of a file for a coding agent. Produce a dense outline of what the file contains and where, keeping line-range pointers (for example \"auth handling — lines 400-508\") so the agent can read exact ranges with read_file. Output plain text only — no preamble."));
+                "You are merging per-chunk notes into one concise, navigable summary of a file for a coding agent. Produce a dense outline of what the file contains and where, keeping line-range pointers (for example \"auth handling, lines 400-508\") so the agent can read exact ranges with read_file. Output plain text only, with no preamble."));
 
             // --- Diagnostics (global). ---
             list.Add(new PromptDefinition(

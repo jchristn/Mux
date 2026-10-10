@@ -230,6 +230,12 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- **The skills section of the system prompt tells the model when to use a skill.** It now says skills are tested
+  procedures, to prefer a matching skill over answering from memory or improvising shell commands, and to act
+  with a tool call rather than describe the steps. On 60 evaluation prompts against local models, the share
+  where the model used an expected skill rose from 85% to 88% for gpt-oss:20b, 73% to 83% for qwen3:8b, 45% to
+  48% for qwen3-coder:30b, and 8% to 17% for qwen2.5:7b. The default system prompt and the file-summary prompts
+  no longer contain em-dashes.
 - **Faster CI.** Every push runs the console runner as a parallel matrix of Linux and Windows by `net8.0` and
   `net10.0`, cancels superseded runs, caches NuGet packages, and checks that BUILTIN_SKILLS.md is current. The
   xUnit and NUnit adapters, which run the same suites, now run weekly and on demand, and the Docker
