@@ -64,7 +64,7 @@ namespace Mux.Publisher.Channels.Drivers
                     "-c",
                     "cd " + Quote(repoDir + "/dists/" + suite) + " && gpg --default-key \"$" + linux!.VaultRef + "_KEYID\" -abs -o Release.gpg Release && gpg --default-key \"$" + linux.VaultRef + "_KEYID\" --clearsign -o InRelease Release"
                 })
-                { Description = "GPG-sign the apt Release metadata" });
+                { Description = "GPG-sign the apt Release metadata", RequiresSecret = linux.VaultRef + "_KEYID" });
             }
             else
             {

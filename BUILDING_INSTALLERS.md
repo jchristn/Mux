@@ -40,7 +40,7 @@ Version defaults to `<Version>` in `src/Mux.Cli/Mux.Cli.csproj`; pass one explic
 The interactive installers show the project's MIT license (from `LICENSE.md`) and require the user to
 accept it before continuing: the Inno `.exe` renders a license page (Next stays disabled until "I accept the
 agreement" is selected), the WiX `.msi` shows the WixUI license dialog (Install disabled until accepted), and
-the macOS `.dmg` carries a Software License Agreement that gates mounting behind an Agree/Disagree prompt.
+the macOS `.dmg` tries to attach a Software License Agreement that gates mounting behind an Agree/Disagree prompt. Apple has deprecated `hdiutil udifrez`, which does this, and it fails on current macOS (including the release runners), so the step is best-effort: the `.dmg` still ships, without the prompt, and the license is always included in the app bundle as `Contents/Resources/LICENSE.txt`.
 Package-manager channels (winget, Chocolatey, Scoop, Homebrew, apt/yum, NuGet) instead record the `MIT` SPDX
 id as metadata — those tools have no interactive acceptance step.
 

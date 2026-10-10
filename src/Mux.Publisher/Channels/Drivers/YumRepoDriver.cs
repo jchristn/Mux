@@ -45,7 +45,7 @@ namespace Mux.Publisher.Channels.Drivers
                     "-c",
                     "for f in " + Quote(repoDir) + "/*.rpm; do rpm --define \"_gpg_name $" + linux!.VaultRef + "_KEYID\" --addsign \"$f\"; done"
                 })
-                { Description = "GPG-sign each RPM", ContinueOnError = true });
+                { Description = "GPG-sign each RPM", ContinueOnError = true, RequiresSecret = linux.VaultRef + "_KEYID" });
             }
 
             plan.AddCommand(new ShellCommand("createrepo_c", new List<string> { repoDir }) { Description = "Generate yum repo metadata" });
@@ -57,7 +57,7 @@ namespace Mux.Publisher.Channels.Drivers
                     "-c",
                     "gpg --default-key \"$" + linux!.VaultRef + "_KEYID\" --detach-sign --armor " + Quote(repoDir + "/repodata/repomd.xml")
                 })
-                { Description = "GPG-sign repomd.xml" });
+                { Description = "GPG-sign repomd.xml", RequiresSecret = linux.VaultRef + "_KEYID" });
             }
             else
             {

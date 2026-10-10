@@ -35,12 +35,13 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   request, naming the variable (`Endpoint 'x': apiKey references environment variable X, which is not set.`).
   `mux print --output-format jsonl` reports it as an `error` event with code `config_unresolved_env`, and
   `probe` uses the same code. The check covers `apiKey`, header values, `apiVersion`, `project`, and `region`.
-- **Release packaging.** Publishing steps that need a secret (NuGet, Chocolatey, and winget pushes) are skipped
-  with a note when the secret is not set, instead of failing the release before anything is uploaded. A missing
-  optional tool (`wingetcreate`) no longer stops the Windows job. The CLI's own archives now contain `mux`
-  rather than `Mux.Cli`, which the Homebrew formula and Scoop manifest expect. Desktop archives are named
-  `mux-desktop-<version>-<rid>`, so they no longer overwrite the CLI archive of the same runtime and invalidate
-  the formula's checksum.
+- **Release packaging.** Steps that need a secret (the NuGet, Chocolatey, and winget pushes, and GPG signing of
+  the apt and yum metadata) are skipped with a note when the secret is not set, instead of failing the release
+  before anything is uploaded. A missing optional tool (`wingetcreate`) no longer stops the Windows job. Attaching
+  the license agreement to the `.dmg` is best-effort, because Apple's `hdiutil udifrez` fails on current macOS;
+  the license now also ships inside the app bundle. The CLI's own archives contain `mux` rather than `Mux.Cli`,
+  which the Homebrew formula and Scoop manifest expect. Desktop archives are named `mux-desktop-<version>-<rid>`,
+  so they no longer overwrite the CLI archive of the same runtime and invalidate the formula's checksum.
 
 ## 1.2.0
 

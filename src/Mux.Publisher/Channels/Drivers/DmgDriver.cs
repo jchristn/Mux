@@ -103,15 +103,21 @@ namespace Mux.Publisher.Channels.Drivers
                 // 4b. Attach a Software License Agreement so the volume shows an Agree/Disagree prompt and will
                 //     not mount until the user accepts. Done before notarize/staple so the ticket covers the
                 //     final artifact. The resource plist carries a default-English LPic/STR# plus the license
-                //     as a TEXT resource.
+                //     as a TEXT resource. Apple deprecated `hdiutil udifrez` and it fails on current macOS
+                //     (including the release runners), so the step is best-effort: the .dmg still ships, and the
+                //     license travels inside the app bundle as Contents/Resources/LICENSE.txt either way.
                 string slaName = "dmg/" + rid + "/sla.plist";
-                plan.AddFile(slaName, Mux.Publisher.Publishing.LicenseAssets.DmgSlaResourcesPlist(
-                    Mux.Publisher.Publishing.LicenseAssets.ReadLicenseText(context.RepoRoot)));
+                string licenseText = Mux.Publisher.Publishing.LicenseAssets.ReadLicenseText(context.RepoRoot);
+                plan.AddFile(slaName, Mux.Publisher.Publishing.LicenseAssets.DmgSlaResourcesPlist(licenseText));
+                plan.AddFile(appDir + "/Contents/Resources/LICENSE.txt", licenseText);
                 plan.AddCommand(new ShellCommand("hdiutil", new List<string>
                 {
                     "udifrez", "-xml", System.IO.Path.Combine(context.StagingRoot, slaName), "-quiet", dmgOut
                 })
-                { Description = "Attach the license agreement (SLA) to the .dmg for " + rid });
+                {
+                    Description = "Attach the license agreement (SLA) to the .dmg for " + rid,
+                    ContinueOnError = true
+                });
 
                 // 5. Notarize + staple.
                 if (canSign && mac!.Notarize)

@@ -118,6 +118,9 @@ namespace Test.Shared.Suites
                         MuxAssert.IsTrue(HasCommand(plan, "hdiutil"), "builds dmg");
                         // The disk image must gate mounting behind a license agreement (SLA).
                         MuxAssert.IsTrue(HasCommandWithArg(plan, "hdiutil", "udifrez"), "attaches the SLA with udifrez");
+                        // udifrez is deprecated and fails on current macOS, so it must not stop the release.
+                        MuxAssert.IsTrue(plan.Commands.Find(c => c.Arguments.Contains("udifrez"))!.ContinueOnError, "SLA step is best-effort");
+                        MuxAssert.Contains("Permission is hereby granted", Find(plan, "Contents/Resources/LICENSE.txt").Content, "license ships in the app bundle");
                         GeneratedFile sla = Find(plan, "sla.plist");
                         MuxAssert.Contains("LPic", sla.Content, "SLA carries the language map");
                         MuxAssert.Contains("STR#", sla.Content, "SLA carries the button labels");
@@ -296,6 +299,13 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual("CHOCO_API_KEY", choco.Commands.Find(c => c.Arguments.Contains("push"))!.RequiresSecret, "choco push");
                         ChannelPlan winget = new WingetDriver().Plan(Ctx(ArtifactKind.Gui, winCfg, "win-x64"), winCfg);
                         MuxAssert.AreEqual("WINGET_TOKEN", winget.Commands.Find(c => c.Executable == "wingetcreate")!.RequiresSecret, "winget submit");
+
+                        ChannelConfig linuxCfg = Cfg("desktop", "linux-x64");
+                        ChannelPlan apt = new AptRepoDriver().Plan(Ctx(ArtifactKind.Gui, linuxCfg, "linux-x64"), linuxCfg);
+                        MuxAssert.AreEqual("GPG_SIGNING_KEYID", apt.Commands.Find(c => c.Description.Contains("GPG-sign"))!.RequiresSecret, "apt signing");
+                        ChannelPlan yum = new YumRepoDriver().Plan(Ctx(ArtifactKind.Gui, linuxCfg, "linux-x64"), linuxCfg);
+                        MuxAssert.IsTrue(yum.Commands.FindAll(c => c.Description.Contains("GPG-sign")).TrueForAll(c => c.RequiresSecret == "GPG_SIGNING_KEYID"), "yum signing");
+                        MuxAssert.IsTrue(yum.Commands.Exists(c => c.Description.Contains("GPG-sign")), "yum has signing steps");
                     }),
 
                     new TestCaseDescriptor("PublisherDrivers", "UnsetSecretSkipsPush", "a push whose secret is unset is skipped and the channel still succeeds", async (CancellationToken ct) =>
