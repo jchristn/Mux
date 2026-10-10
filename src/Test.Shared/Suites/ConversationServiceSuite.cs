@@ -75,6 +75,66 @@ namespace Test.Shared.Suites
                         MuxAssert.IsFalse(service.IsBusy, "idle after cancel");
                     }),
 
+                    new TestCaseDescriptor("ConversationService", "StopHaltsStalledStream", "Cancelling a turn whose model stream has stalled mid-response ends it promptly (the desktop Stop button)", async (CancellationToken ct) =>
+                    {
+                        // A server that sends response headers and one text chunk, then never sends more or closes.
+                        System.Net.Sockets.TcpListener listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+                        listener.Start();
+                        int port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+                        using CancellationTokenSource serverStop = new CancellationTokenSource();
+                        Task server = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                using System.Net.Sockets.TcpClient client = await listener.AcceptTcpClientAsync(serverStop.Token).ConfigureAwait(false);
+                                System.Net.Sockets.NetworkStream stream = client.GetStream();
+                                byte[] buffer = new byte[65536];
+                                await stream.ReadAsync(buffer, 0, buffer.Length, serverStop.Token).ConfigureAwait(false);
+                                string head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n";
+                                string data = "data: {\"choices\":[{\"delta\":{\"content\":\"partial \"}}]}\n\n";
+                                string chunk = data.Length.ToString("X") + "\r\n" + data + "\r\n";
+                                byte[] bytes = System.Text.Encoding.ASCII.GetBytes(head + chunk);
+                                await stream.WriteAsync(bytes, 0, bytes.Length, serverStop.Token).ConfigureAwait(false);
+                                await Task.Delay(Timeout.Infinite, serverStop.Token).ConfigureAwait(false);
+                            }
+                            catch (Exception)
+                            {
+                            }
+                        });
+
+                        try
+                        {
+                            EndpointConfig endpoint = AgentTestHarness.BuildMockEndpoint("http://127.0.0.1:" + port);
+                            ConversationService service = new ConversationService(new LoopTurnRunner(endpoint), null);
+                            using CancellationTokenSource stop = new CancellationTokenSource();
+                            bool sawText = false;
+                            service.Event += (object? sender, AgentEvent e) =>
+                            {
+                                if (e is AssistantTextEvent && !sawText)
+                                {
+                                    sawText = true;
+                                    stop.CancelAfter(200);
+                                }
+                            };
+
+                            System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+                            Task<TurnProjection> turn = service.RunTurnAsync("stall please", stop.Token);
+                            Task finished = await Task.WhenAny(turn, Task.Delay(TimeSpan.FromSeconds(15), ct)).ConfigureAwait(false);
+                            MuxAssert.IsTrue(ReferenceEquals(finished, turn), "the turn ended after Stop instead of hanging (" + watch.ElapsedMilliseconds + "ms)");
+                            TurnProjection projection = await turn.ConfigureAwait(false);
+                            MuxAssert.IsTrue(sawText, "the partial text streamed before Stop");
+                            MuxAssert.IsTrue(projection.WasCancelled, "cancelled flag");
+                            MuxAssert.IsFalse(service.IsBusy, "idle after Stop");
+                            MuxAssert.AreEqual(0, service.History.Count, "the stopped turn leaves no history");
+                        }
+                        finally
+                        {
+                            serverStop.Cancel();
+                            listener.Stop();
+                            try { await server.ConfigureAwait(false); } catch (Exception) { }
+                        }
+                    }),
+
                     new TestCaseDescriptor("ConversationService", "CompletedEmptyTurnIsKept", "A completed turn with no answer keeps the user prompt (empty assistant) for context", async (CancellationToken ct) =>
                     {
                         // The model ran to completion (a RunCompletedEvent) but produced no answer text — for
@@ -143,6 +203,33 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual("ok", service.History[3].Content, "new assistant appended");
                     })
                 });
+        }
+
+        // Runs each turn through a real AgentLoop against the given endpoint.
+        private sealed class LoopTurnRunner : ITurnRunner
+        {
+            private readonly EndpointConfig _Endpoint;
+
+            public LoopTurnRunner(EndpointConfig endpoint)
+            {
+                _Endpoint = endpoint;
+            }
+
+            public async IAsyncEnumerable<AgentEvent> RunAsync(string prompt, IReadOnlyList<ConversationMessage> history, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
+            {
+                AgentLoopOptions options = new AgentLoopOptions(_Endpoint)
+                {
+                    ApprovalPolicy = ApprovalPolicyEnum.AutoApprove,
+                    MaxIterations = 3,
+                    WorkingDirectory = System.IO.Path.GetTempPath()
+                };
+
+                using AgentLoop loop = new AgentLoop(options);
+                await foreach (AgentEvent agentEvent in loop.RunAsync(prompt, token).ConfigureAwait(false))
+                {
+                    yield return agentEvent;
+                }
+            }
         }
     }
 }

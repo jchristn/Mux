@@ -68,10 +68,14 @@ namespace Mux.Desktop.Shell
         internal bool TitleSummarized { get; set; }
         internal DateTime CreatedUtc { get; set; }
 
-        /// <summary>Whether a turn is currently in flight for this tab.</summary>
+        /// <summary>
+        /// Whether a turn is currently in flight for this tab: from the moment it is sent (its
+        /// <see cref="TurnCts"/> exists while the checkpoint and @ mentions are prepared, before the
+        /// conversation itself is busy) until it finishes.
+        /// </summary>
         internal bool IsBusy
         {
-            get => Conversation != null && Conversation.IsBusy;
+            get => TurnCts != null || (Conversation != null && Conversation.IsBusy);
         }
     }
 }

@@ -2,6 +2,16 @@
 
 All notable changes to mux are documented here.
 
+## Unreleased
+
+### Fixed
+
+- **The desktop app's Stop button now appears while the model is responding.** Send was meant to turn into a red
+  Stop for the whole turn, but it only checked whether the conversation was busy, which becomes true after the
+  turn starts, and nothing refreshed it afterwards, so it kept saying Send. It now shows Stop from the moment
+  you send until the turn ends, including while the checkpoint and `@` mentions are prepared, and clicking it
+  cancels the turn. Esc in the message box also stops a running turn.
+
 ## 1.3.0
 
 Fixes for tools that run `mux print` headless, found while integrating mux into Garrison.

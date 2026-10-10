@@ -1146,7 +1146,7 @@ namespace Mux.Desktop.Shell
                 return;
             }
 
-            if (_Conversation != null && _Conversation.IsBusy)
+            if (_Active != null && _Active.IsBusy)
             {
                 return;
             }
@@ -1180,7 +1180,7 @@ namespace Mux.Desktop.Shell
                 return;
             }
 
-            if (_Conversation != null && _Conversation.IsBusy)
+            if (_Active != null && _Active.IsBusy)
             {
                 return;
             }
@@ -2090,7 +2090,11 @@ namespace Mux.Desktop.Shell
             bool ctrl = (e.KeyModifiers & KeyModifiers.Control) != 0;
             bool shift = (e.KeyModifiers & KeyModifiers.Shift) != 0;
 
-            if (e.Key == Key.Enter)
+            if (e.Key == Key.Escape && StopActiveTurn())
+            {
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter)
             {
                 if (ctrl || shift)
                 {
@@ -2186,13 +2190,26 @@ namespace Mux.Desktop.Shell
 
         private void OnSend(object? sender, RoutedEventArgs e)
         {
-            if (_Conversation != null && _Conversation.IsBusy)
+            if (StopActiveTurn())
             {
-                _TurnCts?.Cancel();
                 return;
             }
 
             _ = SendAsync();
+        }
+
+        // Cancel the active tab's in-flight turn (the Stop button and Esc in the composer). Returns false when
+        // the active tab has no turn running.
+        private bool StopActiveTurn()
+        {
+            if (_Active == null || !_Active.IsBusy)
+            {
+                return false;
+            }
+
+            try { _Active.TurnCts?.Cancel(); }
+            catch (ObjectDisposedException) { }
+            return true;
         }
 
         // ---- conversation flow -------------------------------------------------------------------
@@ -2651,7 +2668,11 @@ namespace Mux.Desktop.Shell
                         WithContext(context, () => AddNotice(string.Join("\n", lines), isError: problems));
                     }
                 }
-                catch (Exception ex) when (!(ex is OperationCanceledException))
+                catch (OperationCanceledException)
+                {
+                    // Stopped while the mentions were being read; handled below.
+                }
+                catch (Exception ex)
                 {
                     WithContext(context, () => AddNotice("Could not attach @ mentions: " + ex.Message, isError: true));
                 }
@@ -2661,10 +2682,19 @@ namespace Mux.Desktop.Shell
             context.Runner.AutoApprove = _AutoApprove;
             try
             {
-                TurnProjection projection = await conversation.RunTurnAsync(submitted, context.TurnCts!.Token);
-                if (projection.WasCancelled)
+                // Stop can be pressed before the model is called (while the checkpoint and mentions are prepared);
+                // the turn then never starts, and the finally below still returns the tab to idle.
+                if (context.TurnCts!.IsCancellationRequested)
                 {
                     WithContext(context, () => AddNotice(L("main.stopped"), isError: false));
+                }
+                else
+                {
+                    TurnProjection projection = await conversation.RunTurnAsync(submitted, context.TurnCts!.Token);
+                    if (projection.WasCancelled)
+                    {
+                        WithContext(context, () => AddNotice(L("main.stopped"), isError: false));
+                    }
                 }
             }
             catch (Exception ex)
@@ -2678,9 +2708,9 @@ namespace Mux.Desktop.Shell
                     StopPendingIndicator();
                     FinalizeAssistantBubble();
                 });
-                SetTabBusy(context, false);
                 context.TurnCts?.Dispose();
                 context.TurnCts = null;
+                SetTabBusy(context, false);
                 await PersistCurrentAsync(context);
                 await LoadThreadsAsync();
             }
