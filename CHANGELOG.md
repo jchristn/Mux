@@ -2,7 +2,7 @@
 
 All notable changes to mux are documented here.
 
-## Unreleased
+## 1.3.1
 
 ### Fixed
 
