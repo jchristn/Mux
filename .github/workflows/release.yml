@@ -1,15 +1,12 @@
 name: release
 
-# One tagged build (or manual dispatch) fans out to windows/macos/ubuntu runners. Each runner builds
-# the self-contained artifacts it owns, invokes Mux.Publisher for the channels the manifest assigns to
-# its OS, signs natively, and uploads to the GitHub Release. The version is supplied here and never
-# stored in publisher.json.
+# Releases are manual: run this workflow from the Actions tab (or `gh workflow run release.yml -f
+# version=1.2.0`); pushes and tags never start it. It fans out to windows/macos/ubuntu runners. Each runner
+# builds the self-contained artifacts it owns, invokes Mux.Publisher for the channels the manifest assigns
+# to its OS, signs natively, and uploads to the v<version> GitHub Release. The version is supplied here and
+# never stored in publisher.json.
 
 on:
-  push:
-    tags:
-      # Version tags only (v1.2.0); 'v*' would also match the VS Code extension's vscode-v* tags.
-      - 'v[0-9]*'
   workflow_dispatch:
     inputs:
       version:
@@ -28,12 +25,7 @@ jobs:
       - id: resolve
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            tag="${GITHUB_REF_NAME}"
-            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
 
   package:
     needs: version

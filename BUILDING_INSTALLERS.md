@@ -3,7 +3,7 @@
 mux installers are built by `Mux.Publisher` (reads `publisher.json`) and wrapped by the
 `build-installers.{sh,bat}` scripts. **Native installer formats are OS-locked** — a `.dmg` builds only on
 macOS, `.deb`/`.rpm`/AppImage only on Linux, the `.exe` installer only on Windows — so one machine builds
-its own OS's installers. To build all three at once, push a `v<version>` tag and let CI do it.
+its own OS's installers. To build all three at once, run the release workflow by hand (see below).
 
 ### What the desktop installers contain
 
@@ -71,10 +71,13 @@ Produces an **unsigned** `.dmg`. First launch: right-click the app → **Open** 
 Produces `.deb`, `.rpm`, `.AppImage`, the NuGet tool package, and GPG-signed apt/yum repo trees (needs the
 free `GPG_SIGNING_KEYID`; metadata is unsigned without it).
 
-## All three at once (CI)
+## All three at once (CI, manual)
+
+Releases never run on push or on tags. Start one by hand from **Actions → release → Run workflow** with the
+version (no leading `v`), or from the command line:
 
 ```bash
-git tag v0.10.0 && git push origin v0.10.0
+gh workflow run release.yml -f version=0.10.0
 ```
 The `.github/workflows/release.yml` matrix builds windows/macOS/Linux and uploads every installer to the
 GitHub Release. No local packagers needed; installers build without secrets (unsigned). Secrets only gate

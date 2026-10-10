@@ -131,18 +131,20 @@ Marketplace.
 
 ## Part 6 — Automated publishing from CI (optional)
 
-The repository ships `.github/workflows/vscode-extension.yml`, which builds, checks, packages, and — on a tag
-matching `vscode-v*` — publishes to **both** marketplaces and attaches a checksummed `.vsix` to a GitHub
+The repository ships `.github/workflows/vscode-extension.yml`, which builds, checks, and packages the extension
+on every relevant push. Publishing is manual: when you run the workflow by hand with **publish** checked, it
+publishes to **both** marketplaces and attaches a checksummed `.vsix` to the `vscode-v<version>` GitHub
 Release. Once the accounts above exist, this replaces the manual commands.
 
 1. In the GitHub repo, go to **Settings → Secrets and variables → Actions → New repository secret** and add
    two: `VSCE_PAT` (Part 1) and `OVSX_PAT` (Part 5).
-2. Tag and push a release:
+2. Start a publish from **Actions → vscode-extension → Run workflow** with **publish** checked, or:
    ```
-   git tag vscode-v0.1.0
-   git push origin vscode-v0.1.0
+   gh workflow run vscode-extension.yml -f publish=true
    ```
-3. Watch **Actions → vscode-extension**. The `publish` job runs only on that tag.
+   The version comes from `src/Mux.VSCode/package.json`.
+3. Watch **Actions → vscode-extension**. The `publish` job runs only for a manual run with publish checked;
+   pushes and tags never publish.
 
 Note: the workflow publishes to both marketplaces, so the Open VSX step fails if `OVSX_PAT` is not set. If you
 want the VS Code Marketplace only, either set `OVSX_PAT` anyway or remove/guard the Open VSX step in the
@@ -153,6 +155,6 @@ workflow.
 Once the accounts and publisher exist, shipping a new version is short:
 
 1. Make your changes and bump `"version"` in `src/Mux.VSCode/package.json` (for example `0.1.0` → `0.1.1`).
-2. Manual: `vsce publish` (and `ovsx publish -p <OVSX_PAT>` if you use Open VSX). Or CI: push a new
-   `vscode-v0.1.1` tag.
+2. Manual: `vsce publish` (and `ovsx publish -p <OVSX_PAT>` if you use Open VSX). Or CI: run the
+   vscode-extension workflow by hand with **publish** checked.
 3. Updates appear on the Marketplace within a few minutes; installed copies update automatically.
