@@ -21,6 +21,7 @@
   },
   "channels": {
     "nuget":         { "enabled": true, "artifact": "cli", "os": "linux", "options": { "vaultRef": "NUGET_API_KEY" } },
+    "cli-archive":   { "enabled": true, "driver": "archive", "artifact": "cli", "os": "linux", "runtimes": [ "linux-x64", "linux-arm64" ] },
     "scoop":         { "enabled": true, "artifact": "cli", "os": "windows", "runtimes": [ "win-x64" ], "options": { "bucket": "jchristn/scoop-bucket" } },
     "homebrew":      { "enabled": true, "artifact": "cli", "os": "macos", "runtimes": [ "osx-x64", "osx-arm64" ], "options": { "tap": "jchristn/homebrew-tap" } },
     "homebrew-cask": { "enabled": true, "driver": "homebrew", "artifact": "desktop", "os": "macos", "runtimes": [ "osx-x64", "osx-arm64" ], "options": { "tap": "jchristn/homebrew-tap" } },

@@ -24,6 +24,8 @@ namespace Mux.Core.Agent
         private int _InputTokens = 0;
         private int _OutputTokens = 0;
         private int _TotalTokens = 0;
+        private int _CachedTokens = 0;
+        private int _ReasoningTokens = 0;
 
         #endregion
 
@@ -61,7 +63,7 @@ namespace Mux.Core.Agent
         }
 
         /// <summary>
-        /// Final run status such as completed, completed_with_errors, max_iterations_reached, or
+        /// Final run status: completed, completed_with_errors, failed, max_iterations_reached, or
         /// budget_exceeded.
         /// </summary>
         public string Status
@@ -159,6 +161,31 @@ namespace Mux.Core.Agent
             get => _TotalTokens;
             set => _TotalTokens = value;
         }
+
+        /// <summary>
+        /// Provider-reported cached (cache-read) input tokens across the run, a subset of
+        /// <see cref="InputTokens"/> (0 when the provider reported none).
+        /// </summary>
+        public int CachedTokens
+        {
+            get => _CachedTokens;
+            set => _CachedTokens = value;
+        }
+
+        /// <summary>
+        /// Provider-reported reasoning/thinking tokens across the run (0 when the provider reported none).
+        /// </summary>
+        public int ReasoningTokens
+        {
+            get => _ReasoningTokens;
+            set => _ReasoningTokens = value;
+        }
+
+        /// <summary>
+        /// The run's cost in US dollars from the pricing table, or null when no pricing was supplied or the
+        /// model has no rate.
+        /// </summary>
+        public double? CostUsd { get; set; }
 
         /// <summary>
         /// A tally of the job's task plan by status at run end, or null when the job had no task plan.

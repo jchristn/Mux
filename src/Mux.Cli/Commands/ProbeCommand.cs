@@ -63,6 +63,7 @@ namespace Mux.Cli.Commands
             try
             {
                 runtime = CommandRuntimeResolver.ResolveRuntime(settings, "probe", supportsMcp: false, allowAskApproval: false);
+                Mux.Core.Settings.SettingsLoader.ValidateEnvironmentReferences(runtime.Endpoint);
                 if (runtime.MuxSettings.IgnoreCertErrors)
                 {
                     Console.Error.WriteLine(ConsoleMessageStyler.Notification(
@@ -233,6 +234,11 @@ namespace Mux.Cli.Commands
 
         private static ProbeFailureInfo ClassifyProbeFailure(Exception ex)
         {
+            if (ex is Mux.Core.Settings.UnresolvedEnvironmentReferenceException)
+            {
+                return new ProbeFailureInfo(Mux.Core.Settings.UnresolvedEnvironmentReferenceException.ErrorCode, "configuration");
+            }
+
             if (ex is TimeoutException
                 || ex is TaskCanceledException
                 || ex.Message.Contains("timed out", StringComparison.OrdinalIgnoreCase))

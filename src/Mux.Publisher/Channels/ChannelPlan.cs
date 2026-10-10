@@ -120,6 +120,14 @@ namespace Mux.Publisher.Channels
         public bool ContinueOnError { get; set; }
 
         /// <summary>
+        /// The environment variable holding the secret this command needs (for example a push API key), or
+        /// null when it needs none. When the variable is unset at execution time the command is skipped with
+        /// a note instead of failing, so a release without publishing secrets still builds and uploads its
+        /// artifacts.
+        /// </summary>
+        public string? RequiresSecret { get; set; }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ShellCommand"/> class.
         /// </summary>
         /// <param name="executable">The executable to invoke.</param>

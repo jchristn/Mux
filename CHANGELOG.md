@@ -2,6 +2,46 @@
 
 All notable changes to mux are documented here.
 
+## 1.3.0
+
+Fixes for tools that run `mux print` headless, found while integrating mux into Garrison.
+
+### Added
+
+- **`run_completed.usage` reports cached and reasoning tokens and the cost.** The usage object (in the `jsonl`
+  event and the `json` summary) gains `cachedTokens` and `reasoningTokens`, and `costUsd` when the model has a
+  rate in `pricing.json`. The `--stats` text footer shows them too.
+- **`run_started.contextWindowSource`** says where `contextWindow` came from: `endpoint` (set in
+  `endpoints.json`), `cli`, or `default` (the built-in 32768).
+- **`--context-window <int>`** overrides the endpoint's context window for one run (1024 to 1048576).
+- **`run_started.mcp.enabled`** replaces `mcp.supported`, which read like "this build cannot do MCP" when it
+  meant "MCP is not turned on for this run". `supported` stays as an alias for one release.
+- **A plain CLI archive for Linux.** Releases now include `mux-<version>-linux-x64.tar.gz` and
+  `mux-<version>-linux-arm64.tar.gz` (self-contained, the binary is `mux`) next to the existing macOS and
+  Windows CLI archives, so an image can pin a version with one download.
+
+### Changed
+
+- **A run that ends on a model error now has status `failed`.** A rejected API key, a timeout, a dropped stream,
+  or a context limit that compaction cannot get under used to end as `completed_with_errors`, which read as
+  success to callers that check the final event. `completed_with_errors` now means the model answered but
+  something failed along the way, such as a denied tool call. Exit codes are unchanged. docs/USAGE.md lists each
+  status with its exit code. `mux serve` reports these runs as `failed` too (they mapped to `completed`), and
+  the `outcome` label on run telemetry uses the new status.
+
+### Fixed
+
+- **An unset `${VAR}` in an endpoint's API key was sent to the provider as the key.** mux now fails before any
+  request, naming the variable (`Endpoint 'x': apiKey references environment variable X, which is not set.`).
+  `mux print --output-format jsonl` reports it as an `error` event with code `config_unresolved_env`, and
+  `probe` uses the same code. The check covers `apiKey`, header values, `apiVersion`, `project`, and `region`.
+- **Release packaging.** Publishing steps that need a secret (NuGet, Chocolatey, and winget pushes) are skipped
+  with a note when the secret is not set, instead of failing the release before anything is uploaded. A missing
+  optional tool (`wingetcreate`) no longer stops the Windows job. The CLI's own archives now contain `mux`
+  rather than `Mux.Cli`, which the Homebrew formula and Scoop manifest expect. Desktop archives are named
+  `mux-desktop-<version>-<rid>`, so they no longer overwrite the CLI archive of the same runtime and invalidate
+  the formula's checksum.
+
 ## 1.2.0
 
 ### Added

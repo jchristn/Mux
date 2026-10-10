@@ -149,6 +149,27 @@ namespace Test.Shared
         }
 
         /// <summary>
+        /// Registers an HTTP error response (for example a 401) to return when the request body contains the
+        /// specified prompt text.
+        /// </summary>
+        /// <param name="promptContains">A substring to match against the request body.</param>
+        /// <param name="statusCode">The HTTP status code to return.</param>
+        /// <param name="responseJson">The JSON response body to return.</param>
+        public void RegisterStatusResponse(string promptContains, int statusCode, string responseJson)
+        {
+            lock (_Lock)
+            {
+                _Routes.Add(new MockRoute
+                {
+                    PromptContains = promptContains,
+                    RouteType = MockRouteType.Status,
+                    StatusCode = statusCode,
+                    ResponseJson = responseJson
+                });
+            }
+        }
+
+        /// <summary>
         /// Starts the mock HTTP server and begins listening for requests.
         /// </summary>
         public void Start()
@@ -340,6 +361,15 @@ namespace Test.Shared
                 case MockRouteType.Streaming:
                     await WriteStreamingResponse(context, matchedRoute.SseChunks!).ConfigureAwait(false);
                     break;
+
+                case MockRouteType.Status:
+                    byte[] statusBytes = Encoding.UTF8.GetBytes(matchedRoute.ResponseJson ?? "{}");
+                    context.Response.StatusCode = matchedRoute.StatusCode;
+                    context.Response.ContentType = "application/json";
+                    context.Response.ContentLength64 = statusBytes.Length;
+                    await context.Response.OutputStream.WriteAsync(statusBytes, 0, statusBytes.Length).ConfigureAwait(false);
+                    context.Response.Close();
+                    break;
             }
         }
 
@@ -401,7 +431,8 @@ namespace Test.Shared
         {
             Standard,
             ToolCall,
-            Streaming
+            Streaming,
+            Status
         }
 
         private class MockRoute
@@ -412,6 +443,7 @@ namespace Test.Shared
             public string? FollowUpJson { get; set; }
             public bool ToolCallReturned { get; set; } = false;
             public List<string>? SseChunks { get; set; }
+            public int StatusCode { get; set; } = 200;
         }
 
         #endregion

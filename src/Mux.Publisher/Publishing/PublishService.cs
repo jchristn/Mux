@@ -131,6 +131,9 @@ namespace Mux.Publisher.Publishing
                 throw new InvalidOperationException("dotnet publish failed (" + rid + "): exit " + result.ExitCode + Environment.NewLine + result.StandardError);
             }
 
+            // The CLI ships as `mux` in its own archives too (Homebrew, Scoop, and the plain archive all expect it).
+            NormalizeBundledExecutable(outputDir, artifact.Csproj, rid);
+
             string primary = ResolvePrimaryBinary(outputDir, rid);
             PublishedArtifact published = new PublishedArtifact
             {

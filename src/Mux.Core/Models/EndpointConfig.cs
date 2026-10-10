@@ -20,6 +20,16 @@ namespace Mux.Core.Models
         private int _MaxTokens = 8192;
         private double _Temperature = 0.1;
         private int _ContextWindow = 32768;
+        private string _ContextWindowSource = ContextWindowSourceDefault;
+
+        /// <summary><see cref="ContextWindowSource"/> value when the endpoint configuration sets the context window.</summary>
+        public const string ContextWindowSourceEndpoint = "endpoint";
+
+        /// <summary><see cref="ContextWindowSource"/> value when a CLI override sets the context window.</summary>
+        public const string ContextWindowSourceCli = "cli";
+
+        /// <summary><see cref="ContextWindowSource"/> value when the built-in default applies.</summary>
+        public const string ContextWindowSourceDefault = "default";
         private int _TimeoutMs = 120000;
         private Dictionary<string, string> _Headers = new Dictionary<string, string>();
         private bool _AutoApproveTools = false;
@@ -129,7 +139,24 @@ namespace Mux.Core.Models
         public int ContextWindow
         {
             get => _ContextWindow;
-            set => _ContextWindow = Math.Clamp(value, 1024, 1048576);
+            set
+            {
+                _ContextWindow = Math.Clamp(value, 1024, 1048576);
+                _ContextWindowSource = ContextWindowSourceEndpoint;
+            }
+        }
+
+        /// <summary>
+        /// Where <see cref="ContextWindow"/> came from: <c>endpoint</c> when the endpoint configuration sets
+        /// it, <c>cli</c> when a <c>--context-window</c> override set it, or <c>default</c> when neither did
+        /// and the built-in 32768 applies. Setting <see cref="ContextWindow"/> marks it <c>endpoint</c>.
+        /// Not persisted.
+        /// </summary>
+        [JsonIgnore]
+        public string ContextWindowSource
+        {
+            get => _ContextWindowSource;
+            set => _ContextWindowSource = string.IsNullOrWhiteSpace(value) ? ContextWindowSourceDefault : value;
         }
 
         /// <summary>

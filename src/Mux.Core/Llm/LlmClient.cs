@@ -200,6 +200,9 @@ namespace Mux.Core.Llm
             List<ToolDefinition> tools,
             CancellationToken cancellationToken)
         {
+            // Never send an unexpanded ${VAR} as a credential: fail naming the unset variable instead.
+            SettingsLoader.ValidateEnvironmentReferences(_Endpoint);
+
             Pp.ToolChatRequest request = BuildRequest(messages, tools);
 
             Pp.ToolChatResponse response;
@@ -510,6 +513,27 @@ namespace Mux.Core.Llm
             List<ToolDefinition> tools,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            // Never send an unexpanded ${VAR} as a credential: report the unset variable instead.
+            UnresolvedEnvironmentReferenceException? unresolved = null;
+            try
+            {
+                SettingsLoader.ValidateEnvironmentReferences(_Endpoint);
+            }
+            catch (UnresolvedEnvironmentReferenceException ex)
+            {
+                unresolved = ex;
+            }
+
+            if (unresolved != null)
+            {
+                yield return new ErrorEvent
+                {
+                    Code = UnresolvedEnvironmentReferenceException.ErrorCode,
+                    Message = unresolved.Message
+                };
+                yield break;
+            }
+
             Pp.ToolChatRequest request = BuildRequest(messages, tools);
 
             Pp.ToolChatStreamingResponse? response = null;

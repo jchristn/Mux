@@ -14,6 +14,7 @@ namespace Mux.Publisher.Channels
         private static readonly Dictionary<string, Func<IChannelDriver>> Factories =
             new Dictionary<string, Func<IChannelDriver>>(StringComparer.OrdinalIgnoreCase)
             {
+                ["archive"] = () => new ArchiveDriver(),
                 ["nuget"] = () => new NuGetDriver(),
                 ["scoop"] = () => new ScoopDriver(),
                 ["homebrew"] = () => new HomebrewDriver(),

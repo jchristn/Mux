@@ -1185,6 +1185,71 @@ namespace Mux.Core.Settings
             return expanded;
         }
 
+        /// <summary>
+        /// Lists the environment variables referenced by <c>${VAR}</c>, <c>%VAR%</c>, or <c>$env:VAR</c> in a
+        /// value that are not set, so the value would keep the literal reference after expansion. Bare
+        /// <c>$VAR</c> is not reported because a literal secret may legitimately contain a <c>$</c>.
+        /// </summary>
+        /// <param name="value">The value as written in configuration (before or after expansion).</param>
+        /// <returns>The distinct unset variable names in order of appearance; empty when none.</returns>
+        public static List<string> FindUnresolvedEnvironmentReferences(string? value)
+        {
+            List<string> missing = new List<string>();
+            if (string.IsNullOrEmpty(value))
+            {
+                return missing;
+            }
+
+            foreach (Match match in Regex.Matches(value, @"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|%([A-Za-z_][A-Za-z0-9_]*)%|\$env:([A-Za-z_][A-Za-z0-9_]*)", RegexOptions.IgnoreCase))
+            {
+                string varName = match.Groups[1].Success
+                    ? match.Groups[1].Value
+                    : (match.Groups[2].Success ? match.Groups[2].Value : match.Groups[3].Value);
+                if (Environment.GetEnvironmentVariable(varName) == null
+                    && !missing.Contains(varName, StringComparer.Ordinal))
+                {
+                    missing.Add(varName);
+                }
+            }
+
+            return missing;
+        }
+
+        /// <summary>
+        /// Checks that every endpoint value sent to the provider (the API key, header values, API version,
+        /// project, and region) resolves fully, so an unset variable is reported by name instead of being
+        /// sent as a literal <c>${VAR}</c> credential.
+        /// </summary>
+        /// <param name="endpoint">The endpoint to check.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is null.</exception>
+        /// <exception cref="UnresolvedEnvironmentReferenceException">Thrown for the first value that references an unset variable.</exception>
+        public static void ValidateEnvironmentReferences(EndpointConfig endpoint)
+        {
+            if (endpoint == null) throw new ArgumentNullException(nameof(endpoint));
+
+            ThrowIfUnresolved(endpoint, "apiKey", endpoint.ApiKey);
+            if (endpoint.Headers != null)
+            {
+                foreach (KeyValuePair<string, string> header in endpoint.Headers)
+                {
+                    ThrowIfUnresolved(endpoint, "headers." + header.Key, header.Value);
+                }
+            }
+
+            ThrowIfUnresolved(endpoint, "apiVersion", endpoint.ApiVersion);
+            ThrowIfUnresolved(endpoint, "project", endpoint.Project);
+            ThrowIfUnresolved(endpoint, "region", endpoint.Region);
+        }
+
+        private static void ThrowIfUnresolved(EndpointConfig endpoint, string fieldName, string? value)
+        {
+            List<string> missing = FindUnresolvedEnvironmentReferences(value);
+            if (missing.Count > 0)
+            {
+                throw new UnresolvedEnvironmentReferenceException(endpoint.Name, fieldName, missing);
+            }
+        }
+
         private static string? NormalizeConfigDirectory(string? configDirectory)
         {
             if (string.IsNullOrWhiteSpace(configDirectory))
@@ -1651,6 +1716,7 @@ namespace Mux.Core.Settings
                 MaxTokens = source.MaxTokens,
                 Temperature = source.Temperature,
                 ContextWindow = source.ContextWindow,
+                ContextWindowSource = source.ContextWindowSource,
                 TimeoutMs = source.TimeoutMs,
                 Headers = new Dictionary<string, string>(source.Headers ?? new Dictionary<string, string>()),
                 AutoApproveTools = source.AutoApproveTools,

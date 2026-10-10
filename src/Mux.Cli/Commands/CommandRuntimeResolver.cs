@@ -80,6 +80,18 @@ namespace Mux.Cli.Commands
 
             ApplyReasoningOverride(endpoint, settings);
 
+            if (settings.ContextWindow.HasValue)
+            {
+                if (settings.ContextWindow.Value < 1024 || settings.ContextWindow.Value > 1048576)
+                {
+                    throw new InvalidOperationException(
+                        $"--context-window must be between 1024 and 1048576 (got {settings.ContextWindow.Value}).");
+                }
+
+                endpoint.ContextWindow = settings.ContextWindow.Value;
+                endpoint.ContextWindowSource = EndpointConfig.ContextWindowSourceCli;
+            }
+
             if (settings.ShowThinking)
             {
                 endpoint.ShowThinking = true;
@@ -319,6 +331,7 @@ namespace Mux.Cli.Commands
             if (!string.IsNullOrWhiteSpace(settings.AdapterType)) overrides.Add("adapterType");
             if (settings.Temperature.HasValue) overrides.Add("temperature");
             if (settings.MaxTokens.HasValue) overrides.Add("maxTokens");
+            if (settings.ContextWindow.HasValue) overrides.Add("contextWindow");
             if (HasReasoningOverride(settings)) overrides.Add("reasoningEffort");
             if (settings.ShowThinking) overrides.Add("showThinking");
             if (!string.IsNullOrWhiteSpace(settings.WorkingDirectory)) overrides.Add("workingDirectory");

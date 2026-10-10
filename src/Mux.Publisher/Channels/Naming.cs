@@ -1,6 +1,7 @@
 namespace Mux.Publisher.Channels
 {
     using System;
+    using Mux.Publisher.Manifest;
 
     /// <summary>
     /// Central, deterministic asset naming so every channel and the CI workflow agree on file names
@@ -32,6 +33,23 @@ namespace Mux.Publisher.Channels
         {
             string extension = ChannelHelpers.OsForRid(rid) == TargetOs.Windows ? ".zip" : ".tar.gz";
             return Stem(project, version, rid) + extension;
+        }
+
+        /// <summary>
+        /// The archive file name for one artifact's self-contained publish. A GUI artifact carries its id
+        /// (<c>mux-desktop-1.2.1-linux-x64.tar.gz</c>) so it never overwrites the CLI archive
+        /// (<c>mux-1.2.1-linux-x64.tar.gz</c>) that package-manager manifests point at.
+        /// </summary>
+        /// <param name="project">The project name.</param>
+        /// <param name="artifact">The artifact being archived.</param>
+        /// <param name="version">The release version.</param>
+        /// <param name="rid">The runtime identifier.</param>
+        /// <returns>The archive file name.</returns>
+        public static string ArtifactArchive(string project, ArtifactInfo artifact, string version, string rid)
+        {
+            if (artifact == null) throw new System.ArgumentNullException(nameof(artifact));
+            string stem = artifact.Kind == ArtifactKind.Gui ? project + "-" + artifact.Id : project;
+            return Archive(stem, version, rid);
         }
 
         /// <summary>The Windows Inno installer file name (<c>&lt;project&gt;-&lt;version&gt;-&lt;rid&gt;-setup.exe</c>).</summary>

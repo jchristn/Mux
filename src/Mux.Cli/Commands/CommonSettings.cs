@@ -60,6 +60,13 @@ namespace Mux.Cli.Commands
         public int? MaxTokens { get; set; }
 
         /// <summary>
+        /// Override the endpoint's context window size in tokens (1024-1048576).
+        /// </summary>
+        [Description("Context window size in tokens (1024 - 1048576).")]
+        [CommandOption("--context-window")]
+        public int? ContextWindow { get; set; }
+
+        /// <summary>
         /// Override the reasoning effort level: off, minimal, low, medium, or high. "off" disables the
         /// reasoning field even when the endpoint sets a level.
         /// </summary>

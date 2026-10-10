@@ -142,7 +142,7 @@ namespace Mux.Publisher
                 _log.WriteLine("Publishing " + artifact.Id + " (" + rid + ", " + tfm + ") ...");
                 PublishedArtifact published = await _publishService.PublishAsync(artifact, tfm, rid, options.RepoRoot, publishDir, options.Version, ct).ConfigureAwait(false);
 
-                string archiveName = Naming.Archive(manifest.Project.Name, options.Version, rid);
+                string archiveName = Naming.ArtifactArchive(manifest.Project.Name, artifact, options.Version, rid);
                 string archivePath = Path.Combine(options.OutputRoot, ArchiveSubdir(rid), archiveName);
                 Directory.CreateDirectory(Path.GetDirectoryName(archivePath)!);
                 ArchiveService.Create(publishDir, rid, archivePath);
@@ -236,6 +236,13 @@ namespace Mux.Publisher
 
             foreach (ShellCommand command in plan.Commands)
             {
+                if (!string.IsNullOrEmpty(command.RequiresSecret)
+                    && string.IsNullOrEmpty(Environment.GetEnvironmentVariable(command.RequiresSecret)))
+                {
+                    _log.WriteLine("  skipped (secret " + command.RequiresSecret + " is not set): " + command.Description);
+                    continue;
+                }
+
                 _log.WriteLine("  $ " + command.ToDisplayString());
                 string workDir = command.WorkingDirectory ?? stagingRoot;
 
@@ -244,7 +251,18 @@ namespace Mux.Publisher
                 List<string> resolved = new List<string>(command.Arguments.Count);
                 foreach (string argument in command.Arguments) resolved.Add(ExpandEnvironment(argument));
 
-                ProcessResult result = await _runner.RunAsync(command.Executable, resolved, workDir, ct).ConfigureAwait(false);
+                ProcessResult result;
+                try
+                {
+                    result = await _runner.RunAsync(command.Executable, resolved, workDir, ct).ConfigureAwait(false);
+                }
+                catch (System.ComponentModel.Win32Exception ex) when (command.ContinueOnError)
+                {
+                    // The executable is not installed. A continue-on-error step is optional, so note it and move on.
+                    _log.WriteLine("    (could not start " + command.Executable + ": " + ex.Message + "; continuing: " + command.Description + ")");
+                    continue;
+                }
+
                 if (result.ExitCode != 0 && !command.ContinueOnError)
                 {
                     throw new InvalidOperationException(

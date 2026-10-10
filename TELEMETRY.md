@@ -163,8 +163,9 @@ Every label is bounded: ids, prompts, paths, URLs, and model or endpoint names g
 | `mux.subagent.runs` (`mux_subagent_runs_total`) | counter | `{run}` | `outcome` | Subagent delegations. |
 | `mux.subagent.duration` (`mux_subagent_duration_seconds`) | histogram | s | `outcome` | Subagent run duration. |
 
-`outcome` on runs is the run status: `completed`, `completed_with_errors`, `max_iterations_reached`, `budget_exceeded`,
-or `cancelled`, `failed` (unhandled exception), `abandoned` (the consumer stopped reading). `call_kind`: `primary`,
+`outcome` on runs is the run status: `completed`, `completed_with_errors`, `failed` (the run ended on a model or
+context error, or an unhandled exception), `max_iterations_reached`, `budget_exceeded`, or `cancelled`, `abandoned`
+(the consumer stopped reading). `call_kind`: `primary`,
 `compaction`, `subagent`, `chat`.
 
 ### LLM providers

@@ -244,6 +244,12 @@ namespace Mux.Cli.Commands
             try
             {
                 runtime = CommandRuntimeResolver.ResolveRuntime(settings, "print", supportsMcp: mcpConfigSupplied, allowAskApproval: false);
+                SettingsLoader.ValidateEnvironmentReferences(runtime.Endpoint);
+            }
+            catch (UnresolvedEnvironmentReferenceException ex)
+            {
+                EmitBootstrapError(settings, UnresolvedEnvironmentReferenceException.ErrorCode, ex.Message);
+                return 1;
             }
             catch (Exception ex)
             {
@@ -355,6 +361,7 @@ namespace Mux.Cli.Commands
                 MuxSettings = runtime.MuxSettings,
                 IgnoreCertErrors = runtime.MuxSettings.IgnoreCertErrors,
                 UsageRecorder = usageTelemetry.Recorder,
+                Pricing = SettingsLoader.LoadPricing(),
                 SystemPrompt = effectiveSystemPrompt,
                 ApprovalPolicy = runtime.ApprovalPolicy,
                 WorkingDirectory = runtime.WorkingDirectory,
@@ -1164,11 +1171,16 @@ namespace Mux.Cli.Commands
 
         private static void EmitBootstrapError(PrintSettings settings, string message)
         {
+            EmitBootstrapError(settings, ClassifyBootstrapErrorCode(message), message);
+        }
+
+        private static void EmitBootstrapError(PrintSettings settings, string code, string message)
+        {
             OutputFormatEnum format = string.Equals(settings.OutputFormat, "jsonl", StringComparison.OrdinalIgnoreCase)
                 ? OutputFormatEnum.Jsonl
                 : OutputFormatEnum.Text;
 
-            ErrorEvent errorEvent = StructuredOutputFormatter.CreateErrorEvent(ClassifyBootstrapErrorCode(message), message);
+            ErrorEvent errorEvent = StructuredOutputFormatter.CreateErrorEvent(code, message);
             errorEvent.CommandName = "print";
             errorEvent.FailureCategory = "configuration";
 
@@ -1306,6 +1318,7 @@ namespace Mux.Cli.Commands
                 "unsupported_option" => "configuration",
                 "invalid_argument" => "configuration",
                 "config_error" => "configuration",
+                "config_unresolved_env" => "configuration",
                 "cancelled" => "cancellation",
                 "tool_call_denied" => "approval",
                 "approval_error" => "approval",

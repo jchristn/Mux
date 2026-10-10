@@ -139,6 +139,7 @@ OPTIONS:
         --adapter-type <type>            Adapter: ollama, openai, vllm, openai-compatible
         --temperature <float>            Override temperature (0.0 - 2.0)
         --max-tokens <int>               Override max output tokens
+        --context-window <int>           Override the context window size in tokens
         --max-turns <int>                Override max agent loop iterations (1-100)
         --max-token-budget <int>         Stop with budget_exceeded when estimated context tokens exceed this
         --compaction-strategy <mode>     summary or trim

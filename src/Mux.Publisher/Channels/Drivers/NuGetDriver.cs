@@ -51,7 +51,8 @@ namespace Mux.Publisher.Channels.Drivers
             })
             {
                 Description = "Push the package to NuGet",
-                WorkingDirectory = context.RepoRoot
+                WorkingDirectory = context.RepoRoot,
+                RequiresSecret = vaultRef
             });
 
             plan.AddNote("nuget: requires secret '" + vaultRef + "'. Users install via: dotnet tool install -g " + PackageId(context));

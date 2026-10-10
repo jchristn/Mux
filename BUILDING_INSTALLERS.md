@@ -82,6 +82,18 @@ gh workflow run release.yml -f version=0.10.0
 The `.github/workflows/release.yml` matrix builds windows/macOS/Linux and uploads every installer to the
 GitHub Release. No local packagers needed; installers build without secrets (unsigned). Secrets only gate
 the *publish* steps (NuGet push, winget PR, Chocolatey push, GPG repo signing) — see the workflow's `env`.
+A push step whose secret is not set is skipped with a note, so a release without any secrets still builds
+and uploads every installer and archive.
+
+### Release assets
+
+| Asset | Built by | Contents |
+|---|---|---|
+| `mux-<v>-<rid>.tar.gz` / `.zip` | `cli-archive` (Linux), `homebrew` (macOS), `scoop` (Windows) | The self-contained CLI, a single `mux` binary. Pin these from scripts and container images. |
+| `mux-desktop-<v>-<rid>.tar.gz` / `.zip` | the desktop channels | The self-contained desktop payload (app, tray agent, and CLI). |
+| installers (`.exe`, `.dmg`, `.deb`, `.rpm`, `.AppImage`) | `inno`, `dmg`, `debrpm`, `appimage` | The desktop app with the CLI on `PATH`. |
+| `Mux.Cli.<v>.nupkg` | `nuget` | The .NET tool (`dotnet tool install -g Mux.Cli`; needs the .NET runtime). |
+| `SHA256SUMS-<os>.txt` | the workflow | Checksums for each runner's assets. |
 
 ## Manual (single channel)
 

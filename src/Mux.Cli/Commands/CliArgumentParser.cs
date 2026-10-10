@@ -303,6 +303,9 @@ namespace Mux.Cli.Commands
                     case "--max-tokens":
                         settings.MaxTokens = int.Parse(ReadValue(option, inlineValue, args, ref i), CultureInfo.InvariantCulture);
                         break;
+                    case "--context-window":
+                        settings.ContextWindow = int.Parse(ReadValue(option, inlineValue, args, ref i), CultureInfo.InvariantCulture);
+                        break;
                     case "--effort":
                         settings.Effort = ReadEffort(option, ReadValue(option, inlineValue, args, ref i));
                         break;

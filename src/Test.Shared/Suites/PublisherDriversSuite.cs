@@ -261,6 +261,79 @@ namespace Test.Shared.Suites
                         {
                             try { Directory.Delete(dir, true); } catch (Exception) { }
                         }
+                    }),
+
+                    Case("ArtifactArchiveSeparatesDesktopFromCli", "the CLI archive keeps the plain name and the desktop archive carries its artifact id, so neither overwrites the other", () =>
+                    {
+                        ArtifactInfo cli = new ArtifactInfo { Id = "cli", Csproj = "src/Mux.Cli/Mux.Cli.csproj", Kind = ArtifactKind.DotnetTool };
+                        ArtifactInfo desktop = new ArtifactInfo { Id = "desktop", Csproj = "src/Mux.Desktop/Mux.Desktop.csproj", Kind = ArtifactKind.Gui };
+                        MuxAssert.AreEqual("mux-1.2.3-linux-x64.tar.gz", Naming.ArtifactArchive("mux", cli, Version, "linux-x64"), "cli linux");
+                        MuxAssert.AreEqual("mux-1.2.3-win-x64.zip", Naming.ArtifactArchive("mux", cli, Version, "win-x64"), "cli windows");
+                        MuxAssert.AreEqual("mux-desktop-1.2.3-osx-arm64.tar.gz", Naming.ArtifactArchive("mux", desktop, Version, "osx-arm64"), "desktop macOS");
+                    }),
+
+                    Case("ArchiveDriverListsReleaseAssets", "the archive channel runs no commands and names each runtime's release asset", () =>
+                    {
+                        ChannelConfig cfg = Cfg("cli", "linux-x64", "linux-arm64");
+                        PublisherContext ctx = Ctx(ArtifactKind.DotnetTool, cfg, "linux-x64", "linux-arm64");
+                        ChannelPlan plan = new ArchiveDriver().Plan(ctx, cfg);
+                        MuxAssert.AreEqual(0, plan.Commands.Count, "no commands");
+                        string notes = string.Join("\n", plan.Notes);
+                        MuxAssert.Contains("releases/download/v1.2.3/mux-1.2.3-linux-x64.tar.gz", notes, "x64 asset");
+                        MuxAssert.Contains("mux-1.2.3-linux-arm64.tar.gz", notes, "arm64 asset");
+                        MuxAssert.IsTrue(DriverRegistry.IsKnown("archive"), "registered");
+                    }),
+
+                    Case("PushStepsDeclareTheirSecrets", "NuGet, Chocolatey, and winget pushes declare the secret they need", () =>
+                    {
+                        ChannelConfig nugetCfg = Cfg("cli", "linux-x64");
+                        ChannelPlan nuget = new NuGetDriver().Plan(Ctx(ArtifactKind.DotnetTool, nugetCfg, "linux-x64"), nugetCfg);
+                        MuxAssert.AreEqual("NUGET_API_KEY", nuget.Commands.Find(c => c.Arguments.Contains("push"))!.RequiresSecret, "nuget push");
+                        MuxAssert.IsNull(nuget.Commands.Find(c => c.Arguments.Contains("pack"))!.RequiresSecret, "nuget pack needs none");
+
+                        ChannelConfig winCfg = Cfg("desktop", "win-x64");
+                        ChannelPlan choco = new ChocolateyDriver().Plan(Ctx(ArtifactKind.Gui, winCfg, "win-x64"), winCfg);
+                        MuxAssert.AreEqual("CHOCO_API_KEY", choco.Commands.Find(c => c.Arguments.Contains("push"))!.RequiresSecret, "choco push");
+                        ChannelPlan winget = new WingetDriver().Plan(Ctx(ArtifactKind.Gui, winCfg, "win-x64"), winCfg);
+                        MuxAssert.AreEqual("WINGET_TOKEN", winget.Commands.Find(c => c.Executable == "wingetcreate")!.RequiresSecret, "winget submit");
+                    }),
+
+                    new TestCaseDescriptor("PublisherDrivers", "UnsetSecretSkipsPush", "a push whose secret is unset is skipped and the channel still succeeds", async (CancellationToken ct) =>
+                    {
+                        string secret = "MUX_TEST_PUSH_KEY_" + Guid.NewGuid().ToString("N").Substring(0, 8).ToUpperInvariant();
+                        RecordingRunner runner = new RecordingRunner();
+                        await RunTempChannelAsync(runner, "nuget", "{ \"enabled\": true, \"artifact\": \"cli\", \"os\": \"linux\", \"options\": { \"vaultRef\": \"" + secret + "\" } }", ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(1, runner.Calls.Count, "only pack ran: " + string.Join(" | ", runner.Calls));
+                        MuxAssert.Contains("pack", runner.Calls[0], "pack");
+
+                        Environment.SetEnvironmentVariable(secret, "key");
+                        try
+                        {
+                            RecordingRunner withKey = new RecordingRunner();
+                            await RunTempChannelAsync(withKey, "nuget", "{ \"enabled\": true, \"artifact\": \"cli\", \"os\": \"linux\", \"options\": { \"vaultRef\": \"" + secret + "\" } }", ct).ConfigureAwait(false);
+                            MuxAssert.AreEqual(2, withKey.Calls.Count, "pack and push ran");
+                            MuxAssert.Contains("push", withKey.Calls[1], "push");
+                        }
+                        finally
+                        {
+                            Environment.SetEnvironmentVariable(secret, null);
+                        }
+                    }),
+
+                    new TestCaseDescriptor("PublisherDrivers", "MissingOptionalToolContinues", "a continue-on-error step whose executable is not installed is noted and the channel still succeeds", async (CancellationToken ct) =>
+                    {
+                        string secret = "MUX_TEST_WINGET_" + Guid.NewGuid().ToString("N").Substring(0, 8).ToUpperInvariant();
+                        Environment.SetEnvironmentVariable(secret, "token");
+                        try
+                        {
+                            RecordingRunner runner = new RecordingRunner { MissingExecutable = "wingetcreate" };
+                            string log = await RunTempChannelAsync(runner, "winget", "{ \"enabled\": true, \"artifact\": \"desktop\", \"runtimes\": [ \"win-x64\" ], \"options\": { \"vaultRef\": \"" + secret + "\" } }", ct).ConfigureAwait(false);
+                            MuxAssert.Contains("could not start wingetcreate", log, "noted");
+                        }
+                        finally
+                        {
+                            Environment.SetEnvironmentVariable(secret, null);
+                        }
                     })
                 });
         }
@@ -274,6 +347,55 @@ namespace Test.Shared.Suites
                 body();
                 return Task.CompletedTask;
             });
+        }
+
+        private static async Task<string> RunTempChannelAsync(RecordingRunner runner, string channel, string channelJson, CancellationToken ct)
+        {
+            string repo = Path.Combine(Path.GetTempPath(), "mux-pubrun-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(repo);
+            try
+            {
+                string manifest = "{ \"schemaVersion\": 1, \"project\": { \"name\": \"mux\", \"repo\": \"jchristn/mux\", \"homepage\": \"https://example.com\", \"description\": \"d\", \"license\": \"MIT\" },"
+                    + " \"build\": { \"artifacts\": [ { \"id\": \"cli\", \"csproj\": \"src/Mux.Cli/Mux.Cli.csproj\", \"kind\": \"DotnetTool\" }, { \"id\": \"desktop\", \"csproj\": \"src/Mux.Desktop/Mux.Desktop.csproj\", \"kind\": \"Gui\" } ],"
+                    + " \"frameworks\": [ \"net10.0\" ], \"runtimes\": [ \"linux-x64\", \"win-x64\" ] },"
+                    + " \"channels\": { \"" + channel + "\": " + channelJson + " } }";
+                File.WriteAllText(Path.Combine(repo, "publisher.json"), manifest);
+
+                StringWriter log = new StringWriter();
+                Mux.Publisher.Orchestrator orchestrator = new Mux.Publisher.Orchestrator(runner, log);
+                await orchestrator.RunChannelAsync(new Mux.Publisher.RunOptions
+                {
+                    Channel = channel,
+                    Version = Version,
+                    RepoRoot = repo,
+                    OutputRoot = Path.Combine(repo, "out"),
+                    StagingRoot = Path.Combine(repo, "staging"),
+                    Force = true
+                }, ct).ConfigureAwait(false);
+                return log.ToString();
+            }
+            finally
+            {
+                try { Directory.Delete(repo, true); } catch (Exception) { }
+            }
+        }
+
+        private sealed class RecordingRunner : IProcessRunner
+        {
+            public List<string> Calls { get; } = new List<string>();
+
+            public string? MissingExecutable { get; set; }
+
+            public Task<ProcessResult> RunAsync(string executable, IReadOnlyList<string> arguments, string? workingDirectory, CancellationToken ct)
+            {
+                if (string.Equals(executable, MissingExecutable, StringComparison.Ordinal))
+                {
+                    throw new System.ComponentModel.Win32Exception(2, "The system cannot find the file specified.");
+                }
+
+                Calls.Add(executable + " " + string.Join(" ", arguments));
+                return Task.FromResult(new ProcessResult { ExitCode = 0 });
+            }
         }
 
         private static string InstallerHash() => "1111111111111111111111111111111111111111111111111111111111111111";

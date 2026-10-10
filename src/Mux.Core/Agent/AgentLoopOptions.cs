@@ -66,6 +66,7 @@ namespace Mux.Core.Agent
         private ISubagentExecutor? _SubagentExecutor = null;
         private IUsageRecorder? _UsageRecorder = null;
         private UsageCallKindEnum _UsageCallKind = UsageCallKindEnum.Primary;
+        private PricingTable? _Pricing = null;
 
         #endregion
 
@@ -560,6 +561,16 @@ namespace Mux.Core.Agent
         {
             get => _UsageCallKind;
             set => _UsageCallKind = value;
+        }
+
+        /// <summary>
+        /// The pricing table used to report the run's cost on <see cref="RunCompletedEvent.CostUsd"/>. Null
+        /// (the default) leaves the cost unreported.
+        /// </summary>
+        public PricingTable? Pricing
+        {
+            get => _Pricing;
+            set => _Pricing = value;
         }
 
         #endregion

@@ -32,6 +32,7 @@ namespace Mux.Core.Agent
         private int _BuiltInToolCount = 0;
         private int _EffectiveToolCount = 0;
         private int _ContextWindow = 0;
+        private string _ContextWindowSource = string.Empty;
         private int _ReservedOutputTokens = 0;
         private int _UsableInputLimit = 0;
         private int _WarningThresholdTokens = 0;
@@ -237,6 +238,15 @@ namespace Mux.Core.Agent
         {
             get => _ContextWindow;
             set => _ContextWindow = value;
+        }
+
+        /// <summary>
+        /// Where <see cref="ContextWindow"/> came from: <c>endpoint</c>, <c>cli</c>, or <c>default</c>.
+        /// </summary>
+        public string ContextWindowSource
+        {
+            get => _ContextWindowSource;
+            set => _ContextWindowSource = value ?? string.Empty;
         }
 
         /// <summary>

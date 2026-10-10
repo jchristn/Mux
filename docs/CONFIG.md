@@ -101,7 +101,7 @@ Fields:
 | `isDefault` | bool | preferred default endpoint |
 | `maxTokens` | int | max output tokens |
 | `temperature` | number | sampling temperature |
-| `contextWindow` | int | model context window |
+| `contextWindow` | int | model context window in tokens. When omitted, mux uses 32768 and `run_started.contextWindowSource` reports `default`; set it to the window your server actually serves (for Ollama, the `num_ctx` it runs with, not the model's trained maximum). `--context-window` overrides it for one run |
 | `timeoutMs` | int | HTTP timeout |
 | `headers` | object | auth or custom headers; values may be stored directly or sourced from environment-variable references |
 | `autoApproveTools` | bool | auto-approve tool calls whenever this endpoint is active unless CLI approval flags override it |
@@ -109,7 +109,7 @@ Fields:
 | `quirks` | object or null | backend behavior flags |
 | `reasoningEffort` | object or null | optional reasoning effort. Omit (or `null`) to send no reasoning field. A `level` (`minimal`, `low`, `medium`, `high`) drives provider defaults; optional `openAiValue`, `geminiThinkingBudget` (`-1`..`32768`), and `ollamaThink` (`low`/`medium`/`high`/`true`/`false`) override individual per-provider values |
 | `showThinking` | bool | whether the model's reasoning ("thinking") is captured and displayed when this endpoint is active. Defaults to false; toggle live with `/thinking` or override a headless run with `--show-thinking` |
-| `apiKey` | string or null | API key. For the OpenAI family (`ollama`/`openai`/`openai-compatible`/`vllm`) it is placed per `authPlacement` (below). For `anthropic` (`x-api-key`), `gemini` (URL key), and `azure-openai` (`api-key` header) it is passed to the provider's client. Literal value or a `${VAR}` reference. Ignored by `vertex`/`bedrock` (environment credentials) |
+| `apiKey` | string or null | API key. For the OpenAI family (`ollama`/`openai`/`openai-compatible`/`vllm`) it is placed per `authPlacement` (below). For `anthropic` (`x-api-key`), `gemini` (URL key), and `azure-openai` (`api-key` header) it is passed to the provider's client. Literal value or a `${VAR}` reference. A reference to an unset variable fails the run before any request (`config_unresolved_env`), naming the variable. Ignored by `vertex`/`bedrock` (environment credentials) |
 | `authPlacement` | string | how `apiKey` is presented for the OpenAI family: `bearer` (default — `Authorization: Bearer <key>`), `header` (a custom header named by `authParameterName`), or `query` (a query-string parameter named by `authParameterName`). Use `header`/`query` for services that don't accept bearer tokens. Ignored by the native adapters, which carry a fixed scheme |
 | `authParameterName` | string or null | the header name (`header` placement) or query-string parameter name (`query` placement) that carries `apiKey`, e.g. `x-api-key` or `key`. Ignored when `authPlacement` is `bearer` |
 | `region` | string or null | cloud region for `vertex` (e.g. `us-central1`) and `bedrock` (e.g. `us-east-1`). Literal or `${VAR}` |
@@ -478,6 +478,7 @@ Common CLI overrides:
 - `--adapter-type`
 - `--temperature`
 - `--max-tokens`
+- `--context-window`
 - `--compaction-strategy`
 - `--ignore-cert-errors`
 - `--insecure`

@@ -42,6 +42,7 @@ namespace Test.Shared
                     Phase4FeaturesSuite.Create(),
                     InputFormatSuite.Create(),
                     CliContractSuite.Create(),
+                    RunOutcomeSuite.Create(),
                     ApprovalPolicySuite.Create(),
                     MultiEditSuite.Create(),
                     EndpointSwitchingSuite.Create(),

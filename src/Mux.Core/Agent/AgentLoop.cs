@@ -219,6 +219,7 @@ namespace Mux.Core.Agent
             int assistantTextChars = 0;
             bool maxIterationsReached = false;
             bool budgetExceeded = false;
+            bool endedOnError = false;
             int compactionCount = 0;
 
             // 1. Build conversation
@@ -250,6 +251,7 @@ namespace Mux.Core.Agent
                 BuiltInToolCount = _Options.BuiltInToolCount,
                 EffectiveToolCount = _Options.EffectiveToolCount,
                 ContextWindow = initialSnapshot.ContextWindowSize,
+                ContextWindowSource = _Options.Endpoint.ContextWindowSource,
                 ReservedOutputTokens = initialSnapshot.ReservedOutputTokens,
                 UsableInputLimit = initialSnapshot.UsableInputLimit,
                 WarningThresholdTokens = initialSnapshot.WarningThresholdTokens,
@@ -311,6 +313,7 @@ namespace Mux.Core.Agent
 
                 if (shouldAbortBeforeModelCall)
                 {
+                    endedOnError = true;
                     break;
                 }
 
@@ -374,6 +377,13 @@ namespace Mux.Core.Agent
                 // 3c/3d. Check for tool calls
                 if (proposedToolCalls.Count == 0)
                 {
+                    // A model call that failed with nothing left to run ends the run without an answer.
+                    if (streamErrorCode != null)
+                    {
+                        endedOnError = true;
+                        break;
+                    }
+
                     // Stop hooks run when the model finishes cleanly. A hook that exits 2 asks the model to keep
                     // going with the hook's stderr as a new user message, at most MaxStopHookReentries times per run.
                     IReadOnlyList<Mux.Core.Plugins.HookDefinition> stopHooks = streamErrorCode == null && _Options.Hooks != null
@@ -785,11 +795,7 @@ namespace Mux.Core.Agent
             {
                 RunId = runId,
                 SessionId = _Options.SessionId,
-                Status = budgetExceeded
-                    ? "budget_exceeded"
-                    : (maxIterationsReached
-                        ? "max_iterations_reached"
-                        : (errorCount > 0 ? "completed_with_errors" : "completed")),
+                Status = ResolveRunStatus(budgetExceeded, maxIterationsReached, endedOnError, errorCount),
                 IterationsCompleted = iterationCount,
                 ToolCallCount = toolCallCount,
                 ErrorCount = errorCount,
@@ -800,10 +806,42 @@ namespace Mux.Core.Agent
                 InputTokens = _LlmClient.CumulativeUsage.InputTokens,
                 OutputTokens = _LlmClient.CumulativeUsage.OutputTokens,
                 TotalTokens = _LlmClient.CumulativeUsage.TotalTokens,
+                CachedTokens = _LlmClient.CumulativeUsage.CachedTokens,
+                ReasoningTokens = _LlmClient.CumulativeUsage.ReasoningTokens,
+                CostUsd = ComputeRunCost(_LlmClient.CumulativeUsage),
                 TaskSummary = _Options.TaskPlan != null && !_Options.TaskPlan.IsEmpty
                     ? Mux.Core.Tasks.TaskPlanSummary.FromTasks(_Options.TaskPlan.Snapshot())
                     : null
             };
+        }
+
+        // Prices the run's cumulative usage, or null when no pricing table was supplied or the model is unpriced.
+        private double? ComputeRunCost(LlmUsage usage)
+        {
+            if (_Options.Pricing == null || !_Options.Pricing.TryGetPricing(_Options.Endpoint.Model, out _))
+            {
+                return null;
+            }
+
+            return _Options.Pricing.ComputeCostUsd(_Options.Endpoint.Model, usage.InputTokens, usage.CachedTokens, usage.OutputTokens);
+        }
+
+        /// <summary>
+        /// Picks the final run status. <c>failed</c> means the run ended on an error before the model gave an
+        /// answer (a failed model call or a context limit it could not compact under); <c>completed_with_errors</c>
+        /// means the model answered but something along the way failed (a denied or blocked tool call, for example).
+        /// </summary>
+        /// <param name="budgetExceeded">True when the token budget stopped the run.</param>
+        /// <param name="maxIterationsReached">True when the iteration limit stopped the run.</param>
+        /// <param name="endedOnError">True when the run ended on a model or context error.</param>
+        /// <param name="errorCount">Total error events emitted during the run.</param>
+        /// <returns>The run status string.</returns>
+        private static string ResolveRunStatus(bool budgetExceeded, bool maxIterationsReached, bool endedOnError, int errorCount)
+        {
+            if (budgetExceeded) return "budget_exceeded";
+            if (maxIterationsReached) return "max_iterations_reached";
+            if (endedOnError) return "failed";
+            return errorCount > 0 ? "completed_with_errors" : "completed";
         }
 
         /// <summary>

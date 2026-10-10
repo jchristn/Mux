@@ -233,7 +233,7 @@ namespace Test.Shared.Suites
             MuxAssert.IsTrue(capture.Any(MuxTelemetryNames.LlmRequests, "outcome=llm_connection_error"), "failed llm request counted");
             MuxAssert.IsTrue(capture.Any(MuxTelemetryNames.LlmRetries, "gen_ai.operation.name=chat_stream"), "retries counted");
             MuxAssert.IsTrue(capture.Any(MuxTelemetryNames.AgentErrors, "error.type=llm_connection_error"), "agent error counter");
-            MuxAssert.IsTrue(capture.Any(MuxTelemetryNames.AgentRuns, "outcome=completed_with_errors"), "run outcome");
+            MuxAssert.IsTrue(capture.Any(MuxTelemetryNames.AgentRuns, "outcome=failed"), "run outcome is failed when the model never answers");
             MuxAssert.IsTrue(capture.Any(MuxTelemetryNames.AgentStageDuration, "stage=llm", "outcome=llm_connection_error"), "llm stage failure");
         }
 

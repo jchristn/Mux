@@ -100,6 +100,7 @@ namespace Mux.Core.Agent
                     payload["builtInToolCount"] = startedEvent.BuiltInToolCount;
                     payload["effectiveToolCount"] = startedEvent.EffectiveToolCount;
                     payload["contextWindow"] = startedEvent.ContextWindow;
+                    payload["contextWindowSource"] = startedEvent.ContextWindowSource;
                     payload["reservedOutputTokens"] = startedEvent.ReservedOutputTokens;
                     payload["usableInputLimit"] = startedEvent.UsableInputLimit;
                     payload["warningThresholdTokens"] = startedEvent.WarningThresholdTokens;
@@ -111,6 +112,8 @@ namespace Mux.Core.Agent
                     payload["showThinking"] = startedEvent.ShowThinking;
                     payload["mcp"] = new Dictionary<string, object?>
                     {
+                        ["enabled"] = startedEvent.McpSupported,
+                        // Deprecated alias of "enabled", kept for one release.
                         ["supported"] = startedEvent.McpSupported,
                         ["configured"] = startedEvent.McpConfigured,
                         ["serverCount"] = startedEvent.McpServerCount
@@ -256,16 +259,26 @@ namespace Mux.Core.Agent
         /// Builds the token-usage sub-object for a run summary. Zero-fills when the event is null.
         /// </summary>
         /// <param name="completed">The terminal run-completed event, or null.</param>
-        /// <returns>A dictionary of input/output/total/estimated token counts.</returns>
+        /// <returns>A dictionary of input/output/cached/reasoning/total/estimated token counts, plus
+        /// <c>costUsd</c> when the run's model has a price.</returns>
         public static Dictionary<string, object?> FormatUsage(RunCompletedEvent? completed)
         {
-            return new Dictionary<string, object?>
+            Dictionary<string, object?> usage = new Dictionary<string, object?>
             {
                 ["inputTokens"] = completed?.InputTokens ?? 0,
                 ["outputTokens"] = completed?.OutputTokens ?? 0,
+                ["cachedTokens"] = completed?.CachedTokens ?? 0,
+                ["reasoningTokens"] = completed?.ReasoningTokens ?? 0,
                 ["totalTokens"] = completed?.TotalTokens ?? 0,
                 ["estimatedTokens"] = completed?.FinalEstimatedTokens ?? 0
             };
+
+            if (completed?.CostUsd != null)
+            {
+                usage["costUsd"] = Math.Round(completed.CostUsd.Value, 6);
+            }
+
+            return usage;
         }
 
         /// <summary>
@@ -461,6 +474,7 @@ namespace Mux.Core.Agent
                 "unsupported_option" => "configuration",
                 "invalid_argument" => "configuration",
                 "config_error" => "configuration",
+                "config_unresolved_env" => "configuration",
                 "cancelled" => "cancellation",
                 "tool_call_denied" => "approval",
                 "approval_error" => "approval",

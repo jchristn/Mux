@@ -114,17 +114,26 @@ namespace Mux.Cli.Commands
                 return "mux: no run statistics available.";
             }
 
-            return string.Format(
+            string footer = string.Format(
                 System.Globalization.CultureInfo.InvariantCulture,
-                "mux: tokens input={0} output={1} total={2} (est {3}) | duration={4}ms | turns={5} | tools={6} | errors={7}",
+                "mux: tokens input={0} output={1} cached={2} reasoning={3} total={4} (est {5}) | duration={6}ms | turns={7} | tools={8} | errors={9}",
                 completed.InputTokens,
                 completed.OutputTokens,
+                completed.CachedTokens,
+                completed.ReasoningTokens,
                 completed.TotalTokens,
                 completed.FinalEstimatedTokens,
                 completed.DurationMs,
                 completed.IterationsCompleted,
                 completed.ToolCallCount,
                 completed.ErrorCount);
+
+            if (completed.CostUsd.HasValue)
+            {
+                footer += string.Format(System.Globalization.CultureInfo.InvariantCulture, " | cost=${0:0.######}", completed.CostUsd.Value);
+            }
+
+            return footer;
         }
 
         /// <summary>

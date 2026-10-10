@@ -55,7 +55,8 @@ namespace Mux.Publisher.Channels.Drivers
             {
                 Description = "Push to the Chocolatey community feed",
                 WorkingDirectory = context.StagingRoot,
-                ContinueOnError = true
+                ContinueOnError = true,
+                RequiresSecret = key
             });
 
             plan.AddNote("chocolatey: pushed — PENDING community moderation. Not installable via 'choco install' until approved.");

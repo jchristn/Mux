@@ -53,7 +53,8 @@ namespace Mux.Publisher.Channels.Drivers
             })
             {
                 Description = "Submit the winget manifests as a PR",
-                ContinueOnError = true
+                ContinueOnError = true,
+                RequiresSecret = token
             });
 
             plan.AddNote("winget: submitted a PR to microsoft/winget-pkgs — PENDING review/merge. Not live until merged.");

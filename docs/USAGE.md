@@ -616,6 +616,7 @@ Depending on the event, additional fields may include:
 - `durationMs`
 - `maxIterations`
 - `contextWindow`
+- `contextWindowSource`
 - `reservedOutputTokens`
 - `usableInputLimit`
 - `warningThresholdTokens`
@@ -637,7 +638,7 @@ Depending on the event, additional fields may include:
 - `reason`
 - `finalEstimatedTokens`
 - `compactionCount`
-- `usage` (on `run_completed`: `inputTokens`, `outputTokens`, `totalTokens`, `estimatedTokens`)
+- `usage` (on `run_completed`: `inputTokens`, `outputTokens`, `cachedTokens`, `reasoningTokens`, `totalTokens`, `estimatedTokens`, and `costUsd` when the model has a rate in `pricing.json`)
 - `builtInToolCount`
 - `effectiveToolCount`
 - `ignoreCertErrors`
@@ -674,21 +675,40 @@ Example JSONL lines:
 ```json
 {"contractVersion":2,"eventType":"run_started","timestampUtc":"2026-03-31T20:00:00Z","runId":"...","endpointName":"ollama-local","model":"qwen2.5-coder:7b","maxIterations":50}
 {"contractVersion":2,"eventType":"assistant_text","timestampUtc":"2026-03-31T20:00:01Z","text":"Here is the summary..."}
-{"contractVersion":2,"eventType":"run_completed","timestampUtc":"2026-03-31T20:00:02Z","runId":"...","status":"completed","durationMs":1042,"usage":{"inputTokens":1234,"outputTokens":567,"totalTokens":1801,"estimatedTokens":1750}}
+{"contractVersion":2,"eventType":"run_completed","timestampUtc":"2026-03-31T20:00:02Z","runId":"...","status":"completed","durationMs":1042,"usage":{"inputTokens":1234,"outputTokens":567,"cachedTokens":512,"reasoningTokens":0,"totalTokens":1801,"estimatedTokens":1750,"costUsd":0.008237}}
 ```
 
 Notes:
 - machine-readable output is on `stdout`
 - secret-like values in structured payloads are redacted on a best-effort basis
 - default text mode is unchanged
-- `run_started.mcp.supported` is `false` in `print` unless `--mcp-config` is supplied; with it, `mcp.configured`/`mcp.serverCount` reflect the loaded servers
+- `run_started.mcp.enabled` says whether MCP is turned on for this run: `false` in `print` unless `--mcp-config` is supplied; with it, `mcp.configured`/`mcp.serverCount` reflect the loaded servers. `mcp.supported` is a deprecated alias of `enabled` and will be removed in a later release
 - `run_started` and `run_completed` carry `sessionId` (empty when the run is not associated with a persisted session)
-- `run_completed.status` is `completed`, `completed_with_errors`, `max_iterations_reached`, or `budget_exceeded`; the matching `error` event code `budget_exceeded` is classified as `runtime`
-- `run_started` now includes `maxIterations`, context-budget metadata, and `ignoreCertErrors`, and `run_completed` includes `finalEstimatedTokens`, `compactionCount`, and a `usage` object (`inputTokens`/`outputTokens`/`totalTokens`/`estimatedTokens`)
+- `run_completed.status` is one of the values in [Run statuses](#run-statuses); the matching `error` event code `budget_exceeded` is classified as `runtime`
+- `run_started.contextWindowSource` says where `contextWindow` came from: `endpoint` (set in `endpoints.json`), `cli` (`--context-window`), or `default` (neither, so the built-in 32768 applies)
+- an endpoint value (`apiKey`, a header, `apiVersion`, `project`, `region`) that references an unset environment variable fails before any request with an `error` event of code `config_unresolved_env` (category `configuration`) naming the variable; the literal `${VAR}` is never sent
+- `run_started` now includes `maxIterations`, context-budget metadata, and `ignoreCertErrors`, and `run_completed` includes `finalEstimatedTokens`, `compactionCount`, and a `usage` object (`inputTokens`/`outputTokens`/`cachedTokens`/`reasoningTokens`/`totalTokens`/`estimatedTokens`, plus `costUsd` when the model is priced)
 - `--no-stats` omits the run-metrics fields and the `usage` object from `run_completed` (and from the `json` summary); `--stats` forces them on. Structured output includes them by default
 - `context_status` and `context_compacted` are additive event types; consumers should ignore unknown event types in a known contract version
 - `error` events retain `code` for backward compatibility and also expose `errorCode` plus `failureCategory`
 - `contractVersion` is shared across `print` JSONL events and `probe` JSON payloads
+
+## Run statuses
+
+`run_completed.status` (and `status` in the `json` summary) is one of:
+
+| Status | Meaning | `mux print` exit code |
+|---|---|---|
+| `completed` | The model answered and nothing failed. | `0` |
+| `completed_with_errors` | The model answered, but something along the way failed, for example a denied or hook-blocked tool call. | `1`, or `2` when a tool call was denied |
+| `failed` | The run ended on an error before the model answered: a failed model request (an authentication error, a timeout, a dropped stream) or a context limit that compaction could not get under. | `1` |
+| `max_iterations_reached` | The iteration limit stopped the run while tool calls were still pending. | `1` |
+| `budget_exceeded` | `--max-token-budget` stopped the run. | `1` |
+
+The exit code is the primary signal: any non-zero exit means the run did not produce a result you should
+trust, whatever the status says. Errors that stop `mux print` before the run starts (bad flags, an unknown
+endpoint, `config_unresolved_env`) emit only an `error` event, with no `run_started` or `run_completed`, and
+exit `1`.
 
 ## Exit Codes
 
@@ -753,7 +773,7 @@ mux print --yolo --mcp-config '{"servers":[{"name":"ctx","transport":"stdio","co
 
 By default the `--mcp-config` servers are merged with the config directory's `mcp-servers.json`; add
 `--strict-mcp-config` to use only the servers from the flag. The active MCP state is reported on
-`run_started` under `mcp` (`supported`/`configured`/`serverCount`). `--no-mcp` remains interactive-only.
+`run_started` under `mcp` (`enabled`/`configured`/`serverCount`; `supported` is a deprecated alias of `enabled`). `--no-mcp` remains interactive-only.
 
 ## Tool Governance and Sandbox
 
