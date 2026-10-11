@@ -202,6 +202,14 @@ namespace Mux.Cli.Commands
         public bool NoProjectInstructions { get; set; }
 
         /// <summary>
+        /// When true, a model that degenerates into repetition is not stopped for this run (overrides the
+        /// <c>repetitionGuardEnabled</c> setting).
+        /// </summary>
+        [Description("Do not stop a model that degenerates into repetition.")]
+        [CommandOption("--no-repetition-guard")]
+        public bool NoRepetitionGuard { get; set; }
+
+        /// <summary>
         /// When true, project skills with runnable commands load for this run as if the project were trusted,
         /// without recording a trust decision.
         /// </summary>

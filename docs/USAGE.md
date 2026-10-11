@@ -701,7 +701,7 @@ Notes:
 |---|---|---|
 | `completed` | The model answered and nothing failed. | `0` |
 | `completed_with_errors` | The model answered, but something along the way failed, for example a denied or hook-blocked tool call. | `1`, or `2` when a tool call was denied |
-| `failed` | The run ended on an error before the model answered: a failed model request (an authentication error, a timeout, a dropped stream) or a context limit that compaction could not get under. | `1` |
+| `failed` | The run ended on an error before the model answered: a failed model request (an authentication error, a timeout, a dropped stream), a context limit that compaction could not get under, or a model stuck repeating itself (`degenerate_output`, see below). | `1` |
 | `max_iterations_reached` | The iteration limit stopped the run while tool calls were still pending. | `1` |
 | `budget_exceeded` | `--max-token-budget` stopped the run. | `1` |
 
@@ -709,6 +709,13 @@ The exit code is the primary signal: any non-zero exit means the run did not pro
 trust, whatever the status says. Errors that stop `mux print` before the run starts (bad flags, an unknown
 endpoint, `config_unresolved_env`) emit only an `error` event, with no `run_started` or `run_completed`, and
 exit `1`.
+
+**Repetition guard.** Some models fall into a loop and stream the same few characters (`"* \n* \n..."`) or the same
+sentence until they hit the token limit. mux stops the stream when the last 2,000 characters of the answer
+repeat one unit of up to 64 characters, or when the last 1,000 characters contain no letters or digits, and
+ends the run `failed` with an `error` event of code `degenerate_output` (category `backend`). The guard is on
+by default everywhere; turn it off with `"repetitionGuardEnabled": false` in `settings.json` or for one run with
+`--no-repetition-guard`.
 
 ## Exit Codes
 
@@ -843,7 +850,11 @@ connect once and are shared across every turn.
 | `--no-session-persistence` | Read the resumed session but do not write the run back to disk |
 
 The run's session id is surfaced on `run_started` and `run_completed` (and in the `json` summary), so an
-orchestrator can capture it from one run and feed it to the next:
+orchestrator can capture it from one run and feed it to the next. `run_completed.resumable` (and `resumable` in
+the `json` summary) says whether this run was saved so a later `--resume` can continue it. It is `false` for a
+plain `mux print`, which has an empty `sessionId` and cannot be resumed, and for `--no-session-persistence`. If
+you might need to resume a run (for example to ask the model to fix output that failed validation), start it
+with `--session-id <id>`:
 
 ```bash
 sid=$(mux print --output-format json --session-id build-42 --yolo "start the migration" | jq -r '.sessionId')
@@ -860,6 +871,24 @@ system prompt).
 > but two processes writing the **same** session id concurrently (for example `mux print --resume X` while
 > the interactive shell has session `X` open) is last-writer-wins. Use distinct session ids, or
 > `--fork-session`, when running print against a session that may be open elsewhere.
+
+## Interactive Features in Print Mode
+
+`mux print` runs the same agent as the interactive shell, so these features apply to headless runs too. For
+automation you may want some of them off; set them in the `settings.json` of the config directory the run
+uses (`--config-dir` or `MUX_CONFIG_DIR`):
+
+| Feature | In print mode | Turn off |
+|---|---|---|
+| Persistent memory (`remember`, `recall`, `forget`, and the memory index in the system prompt) | on | `"memoryEnabled": false` |
+| Skills (`skill`, `run_skill`, and the skills list in the system prompt) | on | `"skillsEnabled": false` (`"projectSkillsEnabled": false` for the project's own skills only) |
+| Project instructions (`MUX.md`, `AGENTS.md`, `CLAUDE.md`) | on | `"projectInstructionsEnabled": false`, or `--no-project-instructions` for one run |
+| Task planning (`plan_tasks`, `update_task`) | on | `"taskPlanningEnabled": false` |
+| Tool and stop hooks from `hooks.json` | on when configured | remove them from `hooks.json` |
+| Background processes (`process_start`); they end with the command | on | not configurable; deny the tools with `--deny-tools` |
+| Repetition guard | on | `"repetitionGuardEnabled": false`, or `--no-repetition-guard` for one run |
+| MCP servers | off | on only with `--mcp-config` |
+| Sessions | off | on only with a session flag (see [Print Sessions](#print-sessions-headless-resume)) |
 
 ## Config Isolation
 

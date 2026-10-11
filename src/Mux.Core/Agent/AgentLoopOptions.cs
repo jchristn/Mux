@@ -573,6 +573,13 @@ namespace Mux.Core.Agent
             set => _Pricing = value;
         }
 
+        /// <summary>
+        /// Whether this run is saved to a session that a later run can resume, reported on
+        /// <see cref="RunCompletedEvent.Resumable"/>. Null (the default) when the caller does not say, and the
+        /// field is then left out of the run summary.
+        /// </summary>
+        public bool? SessionResumable { get; set; }
+
         #endregion
     }
 }

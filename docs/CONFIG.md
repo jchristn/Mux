@@ -282,6 +282,7 @@ Example:
   "backgroundProcessOutputBytes": 1048576,
   "mcpServeApiKey": null,
   "memoryEnabled": true,
+  "repetitionGuardEnabled": true,
   "memoryMaxBytes": 16384,
   "taskPlanningEnabled": true,
   "taskParallelismEnabled": false,
@@ -326,6 +327,7 @@ Fields:
 | `backgroundProcessOutputBytes` | int | output kept per background process; older output is dropped first; clamped to `16384-16777216`; default `1048576` |
 | `mcpServeApiKey` | string | bearer key HTTP clients of `mux mcp serve --http` must send when `--api-key` is not given; null or empty requires none; ignored over stdio; default `null` |
 | `memoryEnabled` | bool | persistent memory: the `remember`, `recall`, and `forget` tools, the memory index in the system prompt, `#` quick-add, and `/memory`; default `true` |
+| `repetitionGuardEnabled` | bool | stop a model stuck repeating itself (the last 2,000 characters repeat a unit of up to 64 characters, or the last 1,000 have no letters or digits) and end the run `failed` with `degenerate_output`; default `true`; `--no-repetition-guard` turns it off for one run |
 | `memoryMaxBytes` | int | UTF-8 bytes the memory index may add to the system prompt; the oldest entries are left out first; `0` omits the index (the tools still work); clamped to `0-262144`; default `16384` |
 | `fileMentionMaxBytes` | int | most text, in UTF-8 bytes, that `@path` mentions in one prompt may attach; a large file falls back to its structural map to fit, and a mention that still does not fit is left out with a note; clamped to `0-16777216`, `0` turns attachments off; default `262144` |
 | `projectInstructionsMaxBytes` | int | cap on the combined size of the instruction files, in UTF-8 bytes; the files farthest from the working directory are dropped first, and a single oversized file is cut short; clamped to `0-1048576`, `0` disables loading; default `32768` |

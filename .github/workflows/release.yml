@@ -5,6 +5,10 @@ name: release
 # builds the self-contained artifacts it owns, invokes Mux.Publisher for the channels the manifest assigns
 # to its OS, signs natively, and uploads to the v<version> GitHub Release. The version is supplied here and
 # never stored in publisher.json.
+#
+# With publish off (release-check.yml calls it that way) every channel still runs with the real packaging
+# tools, but no secret reaches the runners, so every push and signing step skips itself, and nothing is
+# uploaded or tagged. That catches packaging failures before a real release does.
 
 on:
   workflow_dispatch:
@@ -12,6 +16,18 @@ on:
       version:
         description: 'Release version, e.g. 0.10.0 (no leading v)'
         required: true
+      publish:
+        description: 'Upload to the GitHub Release and push to package managers (off: package only)'
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+      publish:
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -25,7 +41,7 @@ jobs:
       - id: resolve
         shell: bash
         run: |
-          echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
 
   package:
     needs: version
@@ -42,12 +58,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       MUX_RELEASE_VERSION: ${{ needs.version.outputs.version }}
-      # Channel tokens (passed straight through; the drivers reference these names).
-      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
-      CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+      # Channel tokens (passed straight through; the drivers reference these names). Empty when publish is
+      # off, so the push and signing steps that need them are skipped.
+      NUGET_API_KEY: ${{ inputs.publish && secrets.NUGET_API_KEY || '' }}
+      WINGET_TOKEN: ${{ inputs.publish && secrets.WINGET_TOKEN || '' }}
+      CHOCO_API_KEY: ${{ inputs.publish && secrets.CHOCO_API_KEY || '' }}
       # Linux repo-metadata GPG key id (free, self-generated; read by the apt/yum drivers).
-      GPG_SIGNING_KEYID: ${{ secrets.GPG_KEYID }}
+      GPG_SIGNING_KEYID: ${{ inputs.publish && secrets.GPG_KEYID || '' }}
       # NOTE: no Windows Authenticode or Apple Developer certificate is configured, so publisher.json
       # omits those signing entries. Windows installers ship unsigned (SmartScreen warns) and the macOS
       # .dmg ships unsigned (users right-click -> Open on first launch). To enable later, restore the
@@ -75,7 +92,7 @@ jobs:
           sudo chmod +x /usr/local/bin/appimagetool || true
 
       - name: Import GPG signing key (Linux)
-        if: matrix.job == 'linux'
+        if: matrix.job == 'linux' && inputs.publish
         shell: bash
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
@@ -145,6 +162,7 @@ jobs:
           cat "SHA256SUMS-${{ matrix.job }}.txt" || true
 
       - name: Upload artifacts to the release
+        if: inputs.publish
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.version.outputs.version }}
@@ -159,6 +177,7 @@ jobs:
   # A single line the maintainer sees: which surfaces end at an external review gate and are not yet live.
   report:
     needs: [ version, package ]
+    if: inputs.publish
     runs-on: ubuntu-latest
     steps:
       - shell: bash

@@ -1,0 +1,48 @@
+name: release-check
+
+# Runs the release packaging on all three runners without publishing: every channel builds with the real
+# tools (hdiutil, appimagetool, fpm, gpg, Inno Setup, ...), but no secrets are passed and nothing is
+# uploaded or tagged. It runs when the packaging code or manifest changes, weekly (runner images change
+# underneath the release), and on demand, so a broken channel shows up here rather than in a release.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/Mux.Publisher/**'
+      - 'publisher.json'
+      - 'assets/**'
+      - 'LICENSE.md'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/release-check.yml'
+  schedule:
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: release-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        shell: bash
+        run: |
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/Mux.Cli/Mux.Cli.csproj | head -1)
+          echo "Packaging version $version (not published)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  package:
+    needs: version
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      publish: false

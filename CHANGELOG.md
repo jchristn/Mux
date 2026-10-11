@@ -2,6 +2,24 @@
 
 All notable changes to mux are documented here.
 
+## 1.4.0
+
+### Added
+
+- **Repetition guard.** A model stuck in a loop (streaming `"* \n* \n..."` or the same sentence until the token
+  limit) is now stopped: when the last 2,000 characters of the answer repeat one unit of up to 64 characters, or
+  the last 1,000 contain no letters or digits, mux stops the stream and ends the run `failed` with error code
+  `degenerate_output`. On by default on every surface; `"repetitionGuardEnabled": false` in `settings.json` or
+  `--no-repetition-guard` turns it off.
+- **`run_completed.resumable`** (also in the `json` summary) says whether the run was saved to a session that
+  `--resume` can continue. A plain `mux print` reports `false`; start a run with `--session-id` to make it
+  resumable. docs/USAGE.md now says this next to the print-session flags, and lists which interactive features
+  (memory, skills, project instructions, task planning, hooks) also apply to `mux print` and how to turn each off.
+- **`release-check` workflow.** Runs the full release packaging on Windows, macOS, and Linux without publishing
+  (no secrets, no upload, no tag) when the publisher, `publisher.json`, `assets/`, `LICENSE.md`, or the release
+  workflows change, weekly, and on demand, so packaging failures show up before a release. The release workflow
+  gains a `publish` input (on by default) and can be called from other workflows.
+
 ## 1.3.2
 
 ### Changed

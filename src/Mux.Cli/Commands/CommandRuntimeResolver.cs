@@ -339,6 +339,7 @@ namespace Mux.Cli.Commands
             if (!string.IsNullOrWhiteSpace(settings.AppendSystemPrompt)) overrides.Add("appendSystemPrompt");
             if (settings.MaxTurns.HasValue) overrides.Add("maxTurns");
             if (settings.MaxTokenBudget.HasValue) overrides.Add("maxTokenBudget");
+            if (settings.NoRepetitionGuard) overrides.Add("repetitionGuard");
             if (!string.IsNullOrWhiteSpace(settings.AllowTools)) overrides.Add("allowTools");
             if (!string.IsNullOrWhiteSpace(settings.DenyTools)) overrides.Add("denyTools");
             if (settings.AddDir != null && settings.AddDir.Count > 0) overrides.Add("addDir");
@@ -440,6 +441,11 @@ namespace Mux.Cli.Commands
             if (settings.MaxTokenBudget.HasValue)
             {
                 muxSettings.MaxTokenBudget = settings.MaxTokenBudget.Value;
+            }
+
+            if (settings.NoRepetitionGuard)
+            {
+                muxSettings.RepetitionGuardEnabled = false;
             }
         }
     }

@@ -9,7 +9,7 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.2-blue.svg" alt="v1.3.2"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.4.0-blue.svg" alt="v1.4.0"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-yellow.svg" alt="beta"></a>
 </p>
 
@@ -129,7 +129,7 @@ To pin a released version without building, download the self-contained CLI arch
 .NET runtime:
 
 ```bash
-curl -fsSL https://github.com/jchristn/mux/releases/download/v1.3.2/mux-1.3.2-linux-x64.tar.gz | tar xz -C /usr/local/bin mux
+curl -fsSL https://github.com/jchristn/mux/releases/download/v1.4.0/mux-1.4.0-linux-x64.tar.gz | tar xz -C /usr/local/bin mux
 ```
 
 Archives are `mux-<version>-<rid>.tar.gz` for `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64`, and
@@ -247,6 +247,7 @@ The **desktop app** launches from the repo with `scripts\windows\run-desktop.bat
 | `--system-prompt <path>` |  | Override system prompt file |
 | `--append-system-prompt <text>` |  | Append text to the resolved system prompt |
 | `--no-project-instructions` |  | Do not load `MUX.md` / `AGENTS.md` / `CLAUDE.md` project instruction files for this run |
+| `--no-repetition-guard` |  | Do not stop a model that degenerates into repetition (the guard ends such runs `failed` with `degenerate_output`) |
 | `--trust-project-skills` |  | Load the project's checked-in skills that carry commands for this run, without recording a trust decision |
 | `--sandbox <posture>` |  | Confinement posture: `none` (default), `read-only`, or `workspace-write` |
 | `--allow-tools <globs>` |  | Comma-separated tool-name globs; only matching tools are allowed |
@@ -566,7 +567,7 @@ In `jsonl` mode:
 - `run_started` includes `ignoreCertErrors` so consumers can detect whether certificate validation was disabled for mux-owned network requests
 - `run_started` includes `reasoningEffort` (the effective level and any per-provider overrides, or `null` when off); `cliOverridesApplied` lists `reasoningEffort` when a `--effort*` flag drove the value
 - `run_started` includes `showThinking`; when thinking is enabled, the model's reasoning streams as `assistant_thinking` events, and `cliOverridesApplied` lists `showThinking` when `--show-thinking` drove it
-- `run_completed` also includes `finalEstimatedTokens`, `compactionCount`, and a `usage` object (see above). Its `status` is `completed`, `completed_with_errors` (the model answered but something failed along the way), `failed` (the run ended on an error before the model answered, such as a rejected API key), `max_iterations_reached`, or `budget_exceeded`; see [docs/USAGE.md](docs/USAGE.md#run-statuses) for the exit code of each
+- `run_completed` also includes `finalEstimatedTokens`, `compactionCount`, and a `usage` object (see above). Its `status` is `completed`, `completed_with_errors` (the model answered but something failed along the way), `failed` (the run ended on an error before the model answered, such as a rejected API key or a model stuck repeating itself), `max_iterations_reached`, or `budget_exceeded`; see [docs/USAGE.md](docs/USAGE.md#run-statuses) for the exit code of each. `resumable` says whether a later `--resume` can continue the run (only runs started with a session flag can)
 - `--no-stats` drops the run-metrics block and the `usage` object from `run_completed` (and from the `json` summary), leaving identity/status fields; `--stats` forces stats on. Structured output includes stats by default, so this only matters when you opt out
 - `error` events keep `code` and also expose `errorCode`, `failureCategory`, and resolved runtime metadata when known (including `budget_exceeded`, classified as `runtime`)
 

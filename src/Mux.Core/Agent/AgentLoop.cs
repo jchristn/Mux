@@ -79,6 +79,11 @@ namespace Mux.Core.Agent
         #region Public-Members
 
         /// <summary>
+        /// Error code reported when the repetition guard stops a model stuck repeating itself.
+        /// </summary>
+        public const string DegenerateOutputCode = "degenerate_output";
+
+        /// <summary>
         /// The full conversation (system, user, assistant, and tool messages) as it stood when the most
         /// recent <see cref="RunAsync"/> enumeration completed. Empty until a run finishes. Callers that
         /// persist a resumable session read this after enumerating the event stream so the saved history
@@ -321,6 +326,9 @@ namespace Mux.Core.Agent
                 StringBuilder assistantTextBuilder = new StringBuilder();
                 List<ToolCall> proposedToolCalls = new List<ToolCall>();
                 string? streamErrorCode = null;
+                bool repetitionGuard = _Options.MuxSettings?.RepetitionGuardEnabled ?? true;
+                int nextRepetitionCheck = RepetitionDetector.SymbolWindow;
+                ErrorEvent? degenerateError = null;
                 long llmStageStart = Stopwatch.GetTimestamp();
 
                 await foreach (AgentEvent streamEvent in _LlmClient
@@ -333,6 +341,22 @@ namespace Mux.Core.Agent
                         assistantTextBuilder.Append(textEvent.Text);
                         assistantTextChars += textEvent.Text.Length;
                         yield return streamEvent;
+
+                        // Stop a model stuck repeating itself instead of letting it run to the token limit. Checked
+                        // every 256 characters once there is enough text to judge.
+                        if (repetitionGuard && assistantTextBuilder.Length >= nextRepetitionCheck)
+                        {
+                            nextRepetitionCheck = assistantTextBuilder.Length + 256;
+                            if (RepetitionDetector.IsDegenerate(assistantTextBuilder, out string repetition))
+                            {
+                                degenerateError = new ErrorEvent
+                                {
+                                    Code = DegenerateOutputCode,
+                                    Message = "The model's output degenerated into repetition (" + repetition + "), so the response was stopped."
+                                };
+                                break;
+                            }
+                        }
                     }
                     else if (streamEvent is ToolCallProposedEvent proposedEvent)
                     {
@@ -349,6 +373,15 @@ namespace Mux.Core.Agent
                         }
                         yield return streamEvent;
                     }
+                }
+
+                if (degenerateError != null)
+                {
+                    // End the run here: a looping model's pending tool calls are not trusted.
+                    proposedToolCalls.Clear();
+                    errorCount++;
+                    streamErrorCode = degenerateError.Code;
+                    yield return degenerateError;
                 }
 
                 MuxTelemetry.RecordAgentStage(
@@ -809,6 +842,7 @@ namespace Mux.Core.Agent
                 CachedTokens = _LlmClient.CumulativeUsage.CachedTokens,
                 ReasoningTokens = _LlmClient.CumulativeUsage.ReasoningTokens,
                 CostUsd = ComputeRunCost(_LlmClient.CumulativeUsage),
+                Resumable = _Options.SessionResumable,
                 TaskSummary = _Options.TaskPlan != null && !_Options.TaskPlan.IsEmpty
                     ? Mux.Core.Tasks.TaskPlanSummary.FromTasks(_Options.TaskPlan.Snapshot())
                     : null

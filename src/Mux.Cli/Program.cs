@@ -162,6 +162,7 @@ OPTIONS:
         --system-prompt <path>           Path to system prompt file
         --append-system-prompt <text>    Append text to the resolved system prompt
         --no-project-instructions        Do not load MUX.md / AGENTS.md / CLAUDE.md into the system prompt
+        --no-repetition-guard            Do not stop a model that degenerates into repetition
         --trust-project-skills           Load the project's checked-in skills with commands for this run
         --output-schema <path>           print: constrain the final response to a JSON Schema file
         --output-last-message <path>     Write only the final assistant response text to a file

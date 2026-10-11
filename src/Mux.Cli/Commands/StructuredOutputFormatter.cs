@@ -81,6 +81,11 @@ namespace Mux.Cli.Commands
                 ["status"] = completed?.Status ?? "unknown"
             };
 
+            if (completed?.Resumable != null)
+            {
+                payload["resumable"] = completed.Resumable.Value;
+            }
+
             if (includeStats)
             {
                 payload["iterationsCompleted"] = completed?.IterationsCompleted ?? 0;

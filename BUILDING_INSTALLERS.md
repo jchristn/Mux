@@ -85,6 +85,12 @@ the *publish* steps (NuGet push, winget PR, Chocolatey push, GPG repo signing) â
 A push step whose secret is not set is skipped with a note, so a release without any secrets still builds
 and uploads every installer and archive.
 
+To package without publishing, untick **publish** when running the workflow (or pass `-f publish=false`):
+every channel runs with the real tools, but no secret reaches the runners and nothing is uploaded or tagged.
+The `release-check` workflow does exactly this on every push to `main` that touches `src/Mux.Publisher/`,
+`publisher.json`, `assets/`, `LICENSE.md`, or the release workflows, weekly, and on demand, so a broken channel
+fails there instead of in a release.
+
 ### Release assets
 
 | Asset | Built by | Contents |

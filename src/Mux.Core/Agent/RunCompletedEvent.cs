@@ -188,6 +188,12 @@ namespace Mux.Core.Agent
         public double? CostUsd { get; set; }
 
         /// <summary>
+        /// Whether this run was saved to a session that <c>--resume</c> can continue, or null when the surface
+        /// that ran it does not report this.
+        /// </summary>
+        public bool? Resumable { get; set; }
+
+        /// <summary>
         /// A tally of the job's task plan by status at run end, or null when the job had no task plan.
         /// </summary>
         public TaskPlanSummary? TaskSummary { get; set; }

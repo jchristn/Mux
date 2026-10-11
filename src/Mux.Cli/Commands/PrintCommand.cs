@@ -362,6 +362,8 @@ namespace Mux.Cli.Commands
                 IgnoreCertErrors = runtime.MuxSettings.IgnoreCertErrors,
                 UsageRecorder = usageTelemetry.Recorder,
                 Pricing = SettingsLoader.LoadPricing(),
+                // Resumable only when the run is written to a session (a session flag without --no-session-persistence).
+                SessionResumable = persistSession,
                 SystemPrompt = effectiveSystemPrompt,
                 ApprovalPolicy = runtime.ApprovalPolicy,
                 WorkingDirectory = runtime.WorkingDirectory,
@@ -1328,6 +1330,7 @@ namespace Mux.Cli.Commands
                 "llm_error" => "backend",
                 "llm_stream_error" => "backend",
                 "context_limit_exceeded" => "runtime",
+                "degenerate_output" => "backend",
                 "max_iterations_reached" => "runtime",
                 "budget_exceeded" => "runtime",
                 "schema_validation_failed" => "validation",

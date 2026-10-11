@@ -365,6 +365,9 @@ namespace Mux.Cli.Commands
                     case "--no-project-instructions":
                         settings.NoProjectInstructions = ReadBool(option, inlineValue, defaultValue: true);
                         break;
+                    case "--no-repetition-guard":
+                        settings.NoRepetitionGuard = ReadBool(option, inlineValue, defaultValue: true);
+                        break;
                     case "--trust-project-skills":
                         settings.TrustProjectSkills = ReadBool(option, inlineValue, defaultValue: true);
                         break;

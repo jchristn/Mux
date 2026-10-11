@@ -195,6 +195,10 @@ namespace Mux.Core.Agent
                     payload["runId"] = runCompletedEvent.RunId;
                     payload["sessionId"] = runCompletedEvent.SessionId;
                     payload["status"] = runCompletedEvent.Status;
+                    if (runCompletedEvent.Resumable.HasValue)
+                    {
+                        payload["resumable"] = runCompletedEvent.Resumable.Value;
+                    }
                     if (includeStats)
                     {
                         payload["iterationsCompleted"] = runCompletedEvent.IterationsCompleted;
@@ -483,6 +487,7 @@ namespace Mux.Core.Agent
                 "llm_error" => "backend",
                 "llm_stream_error" => "backend",
                 "context_limit_exceeded" => "runtime",
+                "degenerate_output" => "backend",
                 "max_iterations_reached" => "runtime",
                 "budget_exceeded" => "runtime",
                 "schema_validation_failed" => "validation",

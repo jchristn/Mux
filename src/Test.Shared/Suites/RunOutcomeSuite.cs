@@ -300,6 +300,144 @@ namespace Test.Shared.Suites
                 })
             };
 
+            // --- repetition guard ---
+            cases.Add(new TestCaseDescriptor(Suite, "DetectorFlagsRepeatedUnits", "A tail that repeats one short unit, or has no letters or digits, is degenerate", (CancellationToken ct) =>
+            {
+                MuxAssert.IsTrue(RepetitionDetector.IsDegenerate(new System.Text.StringBuilder(Repeat("* \n", 700)), out string starReason), "star loop");
+                MuxAssert.Contains("no letters or digits", starReason, "star loop reason");
+                MuxAssert.IsTrue(RepetitionDetector.IsDegenerate(new System.Text.StringBuilder("Intro text. " + Repeat("I will print it again. ", 100)), out string sentenceReason), "sentence loop");
+                MuxAssert.Contains("23-character unit", sentenceReason, "sentence loop reason");
+                MuxAssert.IsTrue(RepetitionDetector.IsDegenerate(new System.Text.StringBuilder(Repeat("*  \n* \n*   \n- ", 120)), out _), "irregular symbols with no letters");
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(new TestCaseDescriptor(Suite, "DetectorLeavesNormalTextAlone", "Ordinary long prose, code, and short repeats are not degenerate", (CancellationToken ct) =>
+            {
+                System.Text.StringBuilder prose = new System.Text.StringBuilder();
+                for (int i = 0; i < 200; i++)
+                {
+                    prose.Append("Line ").Append(i).Append(": the quick brown fox jumps over dog number ").Append(i * 7).Append(".\n");
+                }
+                MuxAssert.IsFalse(RepetitionDetector.IsDegenerate(prose, out _), "numbered prose");
+
+                System.Text.StringBuilder code = new System.Text.StringBuilder();
+                for (int i = 0; i < 120; i++)
+                {
+                    code.Append("    if (value").Append(i).Append(" > 0) { total += value").Append(i).Append("; }\n");
+                }
+                MuxAssert.IsFalse(RepetitionDetector.IsDegenerate(code, out _), "repetitive but varying code");
+                MuxAssert.IsFalse(RepetitionDetector.IsDegenerate(new System.Text.StringBuilder(Repeat("-", 80) + "\nA heading\n" + Repeat("-", 80)), out _), "short rules");
+                MuxAssert.IsFalse(RepetitionDetector.IsDegenerate(new System.Text.StringBuilder(Repeat("ab", 300)), out _), "under the window");
+                return Task.CompletedTask;
+            }));
+
+            cases.Add(new TestCaseDescriptor(Suite, "GuardStopsLoopingModel", "A model streaming a repetition loop is stopped and the run fails with degenerate_output", async (CancellationToken ct) =>
+            {
+                List<string> chunks = new List<string> { TextChunk("Here are my instructions.\n") };
+                for (int i = 0; i < 2000; i++)
+                {
+                    chunks.Add(TextChunk(i % 2 == 0 ? "*" : " \n"));
+                }
+
+                using MockHttpServer server = new MockHttpServer();
+                server.RegisterStreamingResponse("loop run", chunks);
+                server.Start();
+
+                List<AgentEvent> events = await AgentTestHarness.CollectEventsAsync(Options(AgentTestHarness.BuildMockEndpoint(server.BaseUrl)), "loop run", ct).ConfigureAwait(false);
+                ErrorEvent error = events.OfType<ErrorEvent>().Single();
+                MuxAssert.AreEqual("degenerate_output", error.Code, "error code");
+                MuxAssert.Contains("repetition", error.Message, "message");
+                MuxAssert.IsTrue(AgentTestHarness.CombineAssistantText(events).Length < 1500, "stopped early, not at the end of the stream");
+                MuxAssert.AreEqual("failed", events.OfType<RunCompletedEvent>().Single().Status, "status");
+            }));
+
+            cases.Add(new TestCaseDescriptor(Suite, "GuardCanBeTurnedOff", "With repetitionGuardEnabled false the same stream runs to the end and completes", async (CancellationToken ct) =>
+            {
+                List<string> chunks = new List<string>();
+                for (int i = 0; i < 2000; i++)
+                {
+                    chunks.Add(TextChunk(i % 2 == 0 ? "*" : " \n"));
+                }
+
+                using MockHttpServer server = new MockHttpServer();
+                server.RegisterStreamingResponse("unguarded run", chunks);
+                server.Start();
+
+                AgentLoopOptions options = Options(AgentTestHarness.BuildMockEndpoint(server.BaseUrl));
+                options.MuxSettings = new MuxSettings { RepetitionGuardEnabled = false };
+                List<AgentEvent> events = await AgentTestHarness.CollectEventsAsync(options, "unguarded run", ct).ConfigureAwait(false);
+                MuxAssert.AreEqual(0, events.OfType<ErrorEvent>().Count(), "no error");
+                MuxAssert.AreEqual(3000, AgentTestHarness.CombineAssistantText(events).Length, "whole stream");
+                MuxAssert.AreEqual("completed", events.OfType<RunCompletedEvent>().Single().Status, "status");
+            }));
+
+            cases.Add(new TestCaseDescriptor(Suite, "NoRepetitionGuardFlag", "--no-repetition-guard turns the guard off for a print run and is listed in cliOverridesApplied", (CancellationToken ct) =>
+            {
+                List<string> chunks = new List<string>();
+                for (int i = 0; i < 2000; i++)
+                {
+                    chunks.Add(TextChunk(i % 2 == 0 ? "*" : " \n"));
+                }
+
+                using MockHttpServer server = new MockHttpServer();
+                server.RegisterStreamingResponse("flag run", chunks);
+                server.Start();
+                string configDir = CreateConfigDirectory(server.BaseUrl, apiKey: null, contextWindow: null);
+                try
+                {
+                    CliInvocationResult guarded = InvokeCli(new[] { "print", "--config-dir", configDir, "--output-format", "jsonl", "--yolo", "flag run" });
+                    MuxAssert.AreEqual(1, guarded.ExitCode, "guarded exit code");
+                    MuxAssert.Contains("\"degenerate_output\"", guarded.StdOut, "guarded error code");
+
+                    CliInvocationResult unguarded = InvokeCli(new[] { "print", "--config-dir", configDir, "--output-format", "jsonl", "--yolo", "--no-repetition-guard", "flag run" });
+                    MuxAssert.AreEqual(0, unguarded.ExitCode, "unguarded exit code");
+                    string[] lines = Lines(unguarded.StdOut);
+                    using JsonDocument started = JsonDocument.Parse(lines[0]);
+                    MuxAssert.IsTrue(started.RootElement.GetProperty("cliOverridesApplied").EnumerateArray().Any((JsonElement e) => e.GetString() == "repetitionGuard"), "override listed");
+                    using JsonDocument completed = JsonDocument.Parse(lines[^1]);
+                    MuxAssert.AreEqual("completed", completed.RootElement.GetProperty("status").GetString(), "status");
+                }
+                finally
+                {
+                    DeleteDirectory(configDir);
+                }
+                return Task.CompletedTask;
+            }));
+
+            // --- resumable ---
+            cases.Add(new TestCaseDescriptor(Suite, "ResumableReportsSessionPersistence", "run_completed.resumable is false without a session flag and true with --session-id", (CancellationToken ct) =>
+            {
+                using MockHttpServer server = new MockHttpServer();
+                server.RegisterStreamingResponse("resumable run", new List<string> { AgentTestHarness.BuildTextSseChunk("ok") });
+                server.Start();
+                string configDir = CreateConfigDirectory(server.BaseUrl, apiKey: null, contextWindow: null);
+                try
+                {
+                    CliInvocationResult plain = InvokeCli(new[] { "print", "--config-dir", configDir, "--output-format", "jsonl", "--yolo", "resumable run" });
+                    using (JsonDocument completed = JsonDocument.Parse(Lines(plain.StdOut)[^1]))
+                    {
+                        MuxAssert.IsFalse(completed.RootElement.GetProperty("resumable").GetBoolean(), "plain run is not resumable");
+                        MuxAssert.AreEqual(string.Empty, completed.RootElement.GetProperty("sessionId").GetString(), "no session id");
+                    }
+
+                    CliInvocationResult saved = InvokeCli(new[] { "print", "--config-dir", configDir, "--output-format", "json", "--yolo", "--session-id", "outcome-resume-1", "resumable run" });
+                    MuxAssert.AreEqual(0, saved.ExitCode, "exit code: " + saved.StdErr);
+                    using (JsonDocument summary = JsonDocument.Parse(Lines(saved.StdOut)[^1]))
+                    {
+                        MuxAssert.IsTrue(summary.RootElement.GetProperty("resumable").GetBoolean(), "session run is resumable");
+                        MuxAssert.AreEqual("outcome-resume-1", summary.RootElement.GetProperty("sessionId").GetString(), "session id");
+                    }
+
+                    MuxAssert.IsFalse(new RunCompletedEvent { RunId = "r" }.Resumable.HasValue, "unset by default");
+                    MuxAssert.IsFalse(JsonDocument.Parse(AgentEventSerializer.ToEnvelopeLine(new RunCompletedEvent { RunId = "r" })).RootElement.TryGetProperty("resumable", out _), "left out when unknown");
+                }
+                finally
+                {
+                    DeleteDirectory(configDir);
+                }
+                return Task.CompletedTask;
+            }));
+
             return new TestSuiteDescriptor(Suite, "Headless run outcome, usage, and run_started contract", cases);
         }
 
@@ -387,6 +525,16 @@ namespace Test.Shared.Suites
         {
             string arguments = JsonSerializer.Serialize(argumentsJson);
             return "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_" + tool + "\",\"function\":{\"name\":\"" + tool + "\",\"arguments\":" + arguments + "}}]},\"finish_reason\":\"tool_calls\"}]}";
+        }
+
+        private static string Repeat(string unit, int count)
+        {
+            return string.Concat(Enumerable.Repeat(unit, count));
+        }
+
+        private static string TextChunk(string text)
+        {
+            return "{\"choices\":[{\"delta\":{\"content\":" + JsonSerializer.Serialize(text) + "}}]}";
         }
 
         private static string UniqueName(string prefix)

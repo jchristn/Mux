@@ -43,6 +43,7 @@ namespace Mux.Core.Models
         private int _BackgroundProcessMaxConcurrent = Mux.Core.Processes.BackgroundProcessRegistry.DefaultMaxConcurrent;
         private int _BackgroundProcessOutputBytes = Mux.Core.Processes.BackgroundProcessRegistry.DefaultOutputCapacity;
         private bool _MemoryEnabled = true;
+        private bool _RepetitionGuardEnabled = true;
         private int _MemoryMaxBytes = DefaultMemoryMaxBytes;
         private string _SkillProdPattern = DefaultSkillProdPattern;
         private bool _TaskPlanningEnabled = true;
@@ -452,6 +453,19 @@ namespace Mux.Core.Models
         {
             get => _MemoryEnabled;
             set => _MemoryEnabled = value;
+        }
+
+        /// <summary>
+        /// Whether the agent loop stops a model that is stuck repeating itself: when the tail of the streamed answer
+        /// is one short unit repeated many times, or a long run with no letters or digits (see
+        /// <see cref="Mux.Core.Agent.RepetitionDetector"/>), the stream is stopped and the run ends <c>failed</c>
+        /// with error code <c>degenerate_output</c>. Defaults to true.
+        /// </summary>
+        [JsonPropertyName("repetitionGuardEnabled")]
+        public bool RepetitionGuardEnabled
+        {
+            get => _RepetitionGuardEnabled;
+            set => _RepetitionGuardEnabled = value;
         }
 
         /// <summary>
