@@ -4,7 +4,7 @@ Garrison (https://github.com/jchristn/Garrison) runs Mux headless (`mux --print 
 
 Source references are to commit `f4d4ea4` (before the fixes). Status values: **Open** (not fixed in Mux), **Fixed** (fixed in Mux, with the commit).
 
-Last updated: 2026-10-10 (second pass after reviewing 60fd88a).
+Last updated: 2026-10-10 (third pass: item 8 from a looping gpt-oss run; items 7 and 8 fixed in Mux 1.4.0).
 
 ---
 
@@ -76,7 +76,7 @@ Last updated: 2026-10-10 (second pass after reviewing 60fd88a).
 
 ## 7. Print mode keeps no session unless a session flag is given, and says so only by leaving `sessionId` empty
 
-**Status:** Open. **Severity:** polish (documentation and ergonomics).
+**Status:** Fixed in `e4c96ac` (release 1.4.0). `run_completed.resumable` (and `resumable` in the `json` summary) is `false` for a plain `mux print` and for `--no-session-persistence`, `true` when the run is saved to a session; it is left out on surfaces that do not report it. docs/USAGE.md (Print Sessions) explains that only runs started with a session flag can be resumed and recommends `--session-id` when a resume may be needed. **Severity:** polish (documentation and ergonomics).
 
 **What happened.** Garrison repairs invalid structured output by resuming the harness session with `--resume <id>`. For Mux, the resume never happened: without a session flag, `mux --print` keeps no session and reports an empty `sessionId`, so there was nothing to resume. Garrison now passes `--session-id <run id>` on the first run when it may need to resume, and resume then works (verified with `homedns-gpt-oss-20b`).
 
@@ -84,11 +84,23 @@ Last updated: 2026-10-10 (second pass after reviewing 60fd88a).
 
 **Suggested fix.** Document in docs/USAGE.md, next to the JSONL contract, that print runs are not resumable unless started with `--session-id` (or another session flag), and that an empty `sessionId` means "not resumable". Optionally add `"resumable": true|false` to `run_completed` so callers do not have to infer it.
 
+## 8. A model stuck in a repetition loop runs until the caller stops it
+
+**Status:** Fixed in `e4c96ac` (release 1.4.0). A repetition guard stops the stream when the last 2,000 characters of the answer repeat one unit of up to 64 characters, or the last 1,000 characters contain no letters or digits, and ends the run `failed` with error code `degenerate_output` (category `backend`, exit 1); pending tool calls from that turn are dropped. On by default on every surface (not only print); `"repetitionGuardEnabled": false` or `--no-repetition-guard` turns it off. The related note is addressed too: docs/USAGE.md (Interactive Features in Print Mode) lists memory, skills, project instructions, task planning, hooks, and the guard, with how to turn each off. **Severity:** medium for headless callers.
+
+**What happened.** Asked to print its instructions, `gpt-oss:20b` (Ollama adapter, Mux 1.3.0, `--print --output-format jsonl`) printed them and then streamed `"*"` and `" \n"` deltas alternately for about 50 seconds (over 2,000 `assistant_text` events, 8 KB of `* ` lines) until the caller cancelled it. The model never ended its turn, and Mux had nothing that noticed. The only bounds were `maxTokens` (8192 by default, minutes away at that speed) and the caller's own timeout.
+
+**Suggested fix.** An optional degenerate-output guard in the agent loop: when the tail of the current assistant turn is a short unit repeated many times (for example the last 2,000 characters are a unit of 1 to 64 characters repeated at least 30 times, or only whitespace and punctuation for 1,000 characters), stop the stream, end the run with status `failed` and an error code such as `degenerate_output`, and exit non-zero. Expose it as a setting (on by default for print mode) and a flag. Garrison now does this on its side (Garrison task P3.15), but every headless caller would otherwise need its own.
+
+**Related, not a bug.** Mux's persistent memory (`memoryEnabled`, default `true`) adds the `remember`, `recall`, and `forget` tools and a `## Memory` section to the system prompt in print mode too. For headless and automated use that is usually unwanted. Garrison now writes `"memoryEnabled": false`; Mux could document in docs/USAGE.md which interactive features apply to `--print` and how to turn them off together.
+
 ## Review of 60fd88a (Mux 1.3.0)
 
 Reviewed from Garrison on 2026-10-10. Items 1 to 6 behave as described and Garrison now relies on them: the worker image builds Mux at `60fd88a`, the parser reads `failed`, `cachedTokens`, `reasoningTokens`, `costUsd`, `contextWindowSource`, and `mcp.enabled` (falling back to `supported`), and maps `config_unresolved_env` and model 401s to Garrison's `NotCredentialed` outcome. Verified on K3S (k3d), minikube, and Docker with real runs.
 
 One packaging note for item 6: the `v1.3.0` GitHub release is still a draft, so its archives cannot be downloaded yet; Garrison keeps building Mux from source until the release is published.
+
+> Reply from Mux (2026-10-10): `v1.3.0` is not a draft. It was published at 18:23 UTC, and its assets download without authentication (for example `https://github.com/jchristn/mux/releases/download/v1.3.0/mux-1.3.0-linux-x64.tar.gz` returns 200). The first 1.3.0 release run uploaded only the Windows files; the second, about 30 minutes later, uploaded the rest, so a check during that window would have found the Linux archive missing. `v1.3.1`, `v1.3.2`, and `v1.4.0` are published the same way. Pin `v1.4.0` (or later) to get items 7 and 8.
 
 Not an issue: when output does not match `--output-schema`, Mux exits non-zero with error code `schema_validation_failed` (category `validation`). That is distinguishable from a model failure, and Garrison now validates and repairs the output itself in that case.
 
