@@ -5,7 +5,7 @@
 #   ./scripts/macos/publish-desktop.sh [RID] [TFM]
 #
 # RID  defaults to a guess from the host OS/arch (linux-x64, osx-arm64, win-x64, ...).
-# TFM  defaults to net10.0 (pass net8.0 for the LTS build).
+# TFM  defaults to MUX_TFM, then net10.0 with a .NET 10 SDK, otherwise net8.0.
 #
 # Output lands in dist/desktop/<RID>/. The build is self-contained: the target
 # machine does NOT need the .NET runtime installed. Artifacts are UNSIGNED — see
@@ -35,7 +35,14 @@ guess_rid() {
 }
 
 RID="${1:-$(guess_rid)}"
-TFM="${2:-net10.0}"
+# Preserve the existing [RID] [TFM] syntax, and allow a leading framework.
+if [ "$#" -gt 0 ] && [ "$1" = "$RID" ]; then
+  case "$1" in net*|--framework|-f|-h|--help) RID="$(guess_rid)" ;; *) shift ;; esac
+fi
+. "$SCRIPT_DIR/../common/framework.sh"
+resolve_framework "$@"
+shift "$FRAMEWORK_ARGS"
+[ "$#" -eq 0 ] || { echo "Unexpected argument: $1" >&2; exit 1; }
 OUT="$REPO_ROOT/dist/desktop/$RID"
 
 echo "Publishing mux Desktop"
@@ -48,6 +55,7 @@ echo
 dotnet publish "$PROJECT" \
   -c Release \
   -f "$TFM" \
+  -p:TargetFrameworks="$TFM" \
   -r "$RID" \
   --self-contained true \
   -p:PublishSingleFile=true \

@@ -8,14 +8,21 @@ REM layout) first, then the dev build output.
 set "SCRIPT_DIR=%~dp0"
 for %%i in ("%SCRIPT_DIR%..\..") do set "REPO_ROOT=%%~fi"
 
-set "AGENT_EXE=%REPO_ROOT%\dist\Mux.Agent.exe"
-if not exist "%AGENT_EXE%" set "AGENT_EXE=%REPO_ROOT%\src\Mux.Agent\bin\Release\net10.0\Mux.Agent.exe"
-if not exist "%AGENT_EXE%" set "AGENT_EXE=%REPO_ROOT%\src\Mux.Agent\bin\Release\net8.0\Mux.Agent.exe"
-if not exist "%AGENT_EXE%" set "AGENT_EXE=%REPO_ROOT%\src\Mux.Agent\bin\Debug\net10.0\Mux.Agent.exe"
+call "%~dp0resolve-framework.bat" %1 %2
+if errorlevel 2 exit /b 0
+if errorlevel 1 exit /b 1
+for /l %%i in (1,1,%FRAMEWORK_ARGS%) do shift
+if not "%~1"=="" (
+    echo Unexpected argument: %1. 1>&2
+    exit /b 1
+)
+set "AGENT_EXE=%REPO_ROOT%\src\Mux.Agent\bin\Release\%TFM%\Mux.Agent.exe"
+if not exist "%AGENT_EXE%" set "AGENT_EXE=%REPO_ROOT%\src\Mux.Agent\bin\Debug\%TFM%\Mux.Agent.exe"
+if "%FRAMEWORK_ARGS%"=="0" if not defined MUX_TFM if exist "%REPO_ROOT%\dist\Mux.Agent.exe" set "AGENT_EXE=%REPO_ROOT%\dist\Mux.Agent.exe"
 
 if not exist "%AGENT_EXE%" (
     echo Mux.Agent.exe not found. Build it first, for example:
-    echo   dotnet build src\Mux.Agent\Mux.Agent.csproj -c Release
+    echo   dotnet build src\Mux.Agent\Mux.Agent.csproj -c Release -f %TFM% -p:TargetFrameworks=%TFM%
     exit /b 1
 )
 

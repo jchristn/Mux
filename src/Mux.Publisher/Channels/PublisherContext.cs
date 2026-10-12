@@ -15,6 +15,9 @@ namespace Mux.Publisher.Channels
         /// <summary>The parsed manifest.</summary>
         public PublisherManifest Manifest { get; }
 
+        /// <summary>Optional framework override for framework-dependent packs.</summary>
+        public string? Framework { get; set; }
+
         /// <summary>The release version supplied at build time (never from the manifest).</summary>
         public string Version { get; }
 

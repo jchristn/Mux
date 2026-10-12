@@ -4,17 +4,21 @@ setlocal enabledelayedexpansion
 rem publish-nuget.bat - pack and publish the mux NuGet libraries (and their .snupkg symbol
 rem packages) to nuget.org.
 rem
-rem Usage:  scripts\windows\publish-nuget.bat ^<nuget-api-key^>
+rem Usage:  scripts\windows\publish-nuget.bat ^<nuget-api-key^> [net8.0^|net10.0]
 rem
 rem Each project is packed fresh in Release so the current version in its .csproj is what
 rem gets published. Pushing a .nupkg also uploads the matching .snupkg symbol package.
 
 if "%~1"=="" (
-  echo Usage: scripts\windows\publish-nuget.bat ^<nuget-api-key^>
+  echo Usage: scripts\windows\publish-nuget.bat ^<nuget-api-key^> [net8.0^|net10.0]
   exit /b 1
 )
 
 set "APIKEY=%~1"
+shift
+call "%~dp0resolve-framework.bat" %1 %2
+if errorlevel 2 exit /b 0
+if errorlevel 1 exit /b 1
 set "SOURCE=https://api.nuget.org/v3/index.json"
 set "CONFIG=Release"
 for %%i in ("%~dp0..\..") do set "ROOT=%%~fi\"
@@ -32,7 +36,7 @@ echo.
 echo === Packing ===
 for %%P in (%PROJECTS%) do (
   echo Packing %%P ...
-  dotnet pack "%ROOT%src\%%P\%%P.csproj" -c %CONFIG% -o "%OUTDIR%" --nologo
+  dotnet pack "%ROOT%src\%%P\%%P.csproj" -c %CONFIG% -p:TargetFrameworks=%TFM% -o "%OUTDIR%" --nologo
   if errorlevel 1 (
     echo ERROR: pack failed for %%P
     exit /b 1

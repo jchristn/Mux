@@ -6,7 +6,7 @@ REM scoop). Run scripts/macos or scripts/linux build-installers.sh on macOS and 
 REM tag to build all three via GitHub Actions (.github\workflows\release.yml).
 REM
 REM Usage:
-REM   scripts\windows\build-installers.bat [VERSION] [--dry-run]
+REM   scripts\windows\build-installers.bat [VERSION] [--framework net8.0^|net10.0] [--dry-run]
 REM
 REM VERSION   defaults to the ^<Version^> in src\Mux.Cli\Mux.Cli.csproj.
 REM --dry-run prints the plan without building or needing the packagers.
@@ -17,8 +17,17 @@ if "%REPO_ROOT:~-1%"=="\" set "REPO_ROOT=%REPO_ROOT:~0,-1%"
 REM --- Parse arguments -------------------------------------------------------
 set "VERSION="
 set "DRYRUN="
+set "FRAMEWORK_SELECTION=%MUX_TFM%"
 :parse
 if "%~1"=="" goto parsed
+if /i "%~1"=="--framework" goto framework_arg
+if /i "%~1"=="-f" goto framework_arg
+set "FIRST=%~1"
+if /i "%FIRST:~0,3%"=="net" (
+  set "FRAMEWORK_SELECTION=%~1"
+  shift
+  goto parse
+)
 if /i "%~1"=="--dry-run" (
   set "DRYRUN=--dry-run"
 ) else if /i "%~1"=="-h" (
@@ -30,7 +39,22 @@ if /i "%~1"=="--dry-run" (
 )
 shift
 goto parse
+:framework_arg
+if "%~2"=="" (
+  echo Missing framework value after %~1. 1>&2
+  exit /b 1
+)
+set "FRAMEWORK_SELECTION=%~2"
+shift
+shift
+goto parse
 :parsed
+if defined FRAMEWORK_SELECTION (
+  call "%~dp0resolve-framework.bat" --framework "%FRAMEWORK_SELECTION%"
+) else (
+  call "%~dp0resolve-framework.bat"
+)
+if errorlevel 1 exit /b 1
 
 REM --- Resolve the version ---------------------------------------------------
 if not defined VERSION (
@@ -46,7 +70,7 @@ if not defined VERSION (
 set "OUT=%REPO_ROOT%\installers\%VERSION%"
 set "STAGING=%REPO_ROOT%\dist\staging"
 set "PUBLISHER=%REPO_ROOT%\src\Mux.Publisher\Mux.Publisher.csproj"
-set "PUB_DLL=%REPO_ROOT%\src\Mux.Publisher\bin\Release\net10.0\Mux.Publisher.dll"
+set "PUB_DLL=%REPO_ROOT%\src\Mux.Publisher\bin\Release\%TFM%\Mux.Publisher.dll"
 
 echo mux installers
 echo   version : %VERSION%
@@ -59,7 +83,7 @@ if not exist "%OUT%" mkdir "%OUT%"
 
 REM --- Build the orchestrator once -------------------------------------------
 echo Building Mux.Publisher...
-dotnet build "%PUBLISHER%" -c Release -f net10.0 -v quiet -nologo
+dotnet build "%PUBLISHER%" -c Release -f %TFM% -p:TargetFrameworks=%TFM% -v quiet -nologo
 if errorlevel 1 (
   echo error: failed to build Mux.Publisher. 1>&2
   exit /b 1
@@ -78,7 +102,7 @@ echo.
 set "FAILED="
 for %%x in (%CHANNELS%) do (
   echo ==^> %%x
-  dotnet "%PUB_DLL%" --channel %%x --version %VERSION% --repo "%REPO_ROOT%" --out "%OUT%" --staging "%STAGING%" %DRYRUN%
+  dotnet "%PUB_DLL%" --framework %TFM% --channel %%x --version %VERSION% --repo "%REPO_ROOT%" --out "%OUT%" --staging "%STAGING%" %DRYRUN%
   if errorlevel 1 (
     echo     ^(channel %%x failed - is its packaging tool installed? Inno Setup provides iscc.^)
     set "FAILED=!FAILED! %%x"
@@ -106,7 +130,7 @@ if defined FAILED exit /b 1
 exit /b 0
 
 :usage
-echo Usage: scripts\windows\build-installers.bat [VERSION] [--dry-run]
+echo Usage: scripts\windows\build-installers.bat [VERSION] [--framework net8.0^|net10.0] [--dry-run]
 echo   VERSION   defaults to the ^<Version^> in src\Mux.Cli\Mux.Cli.csproj
 echo   --dry-run prints the plan without building
 exit /b 0

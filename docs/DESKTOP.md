@@ -12,11 +12,11 @@ With the .NET 8 or .NET 10 SDK installed, from a clone of the repository:
 
 ```bash
 # Windows
-scripts\windows\run-desktop.bat            # defaults to net10.0
+scripts\windows\run-desktop.bat            # selects net10.0 with a .NET 10 SDK, otherwise net8.0
 scripts\windows\run-desktop.bat net8.0
 
 # Linux (use scripts/macos/ on macOS)
-./scripts/linux/run-desktop.sh           # defaults to net10.0
+./scripts/linux/run-desktop.sh           # selects net10.0 with a .NET 10 SDK, otherwise net8.0
 ./scripts/linux/run-desktop.sh net8.0
 ```
 

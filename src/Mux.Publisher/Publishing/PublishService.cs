@@ -55,6 +55,7 @@ namespace Mux.Publisher.Publishing
                 csproj,
                 "-c", "Release",
                 "-f", tfm,
+                "-p:TargetFrameworks=" + tfm,
                 "-r", rid,
                 "--self-contained", "true",
                 "-p:PublishSingleFile=true",

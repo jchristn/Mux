@@ -7,7 +7,7 @@
 # three at once (see .github/workflows/release.yml).
 #
 # Usage:
-#   ./scripts/linux/build-installers.sh [VERSION] [--dry-run]
+#   ./scripts/linux/build-installers.sh [VERSION] [--framework net8.0|net10.0] [--dry-run]
 #
 # VERSION   defaults to the <Version> in src/Mux.Cli/Mux.Cli.csproj.
 # --dry-run prints the plan (files + commands) without building or needing the packagers.
@@ -19,13 +19,20 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # --- Parse arguments -------------------------------------------------------
 VERSION=""
 DRYRUN=""
-for arg in "$@"; do
-  case "$arg" in
-    --dry-run) DRYRUN="--dry-run" ;;
-    -h|--help) sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) VERSION="$arg" ;;
+. "$SCRIPT_DIR/../common/framework.sh"
+FRAMEWORK_SELECTION="${MUX_TFM:-}"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dry-run) DRYRUN="--dry-run"; shift ;;
+    --framework|-f)
+      [ -n "${2:-}" ] || { echo "Missing framework value after $1." >&2; exit 1; }
+      FRAMEWORK_SELECTION="$2"; shift 2 ;;
+    net*) FRAMEWORK_SELECTION="$1"; shift ;;
+    -h|--help) echo "Usage: $(basename "$0") [VERSION] [--framework net8.0|net10.0] [--dry-run]"; exit 0 ;;
+    *) VERSION="$1"; shift ;;
   esac
 done
+if [ -n "$FRAMEWORK_SELECTION" ]; then resolve_framework --framework "$FRAMEWORK_SELECTION"; else resolve_framework; fi
 
 # --- Resolve the version ---------------------------------------------------
 if [ -z "$VERSION" ]; then
@@ -50,7 +57,7 @@ esac
 OUT="$REPO_ROOT/installers/$VERSION"
 STAGING="$REPO_ROOT/dist/staging"
 PUBLISHER="$REPO_ROOT/src/Mux.Publisher/Mux.Publisher.csproj"
-PUB_DLL="$REPO_ROOT/src/Mux.Publisher/bin/Release/net10.0/Mux.Publisher.dll"
+PUB_DLL="$REPO_ROOT/src/Mux.Publisher/bin/Release/$TFM/Mux.Publisher.dll"
 
 echo "mux installers"
 echo "  version : $VERSION"
@@ -63,7 +70,7 @@ mkdir -p "$OUT"
 
 # --- Build the orchestrator once -------------------------------------------
 echo "Building Mux.Publisher..."
-dotnet build "$PUBLISHER" -c Release -f net10.0 -v quiet -nologo || {
+dotnet build "$PUBLISHER" -c Release -f "$TFM" -p:TargetFrameworks="$TFM" -v quiet -nologo || {
   echo "error: failed to build Mux.Publisher." >&2; exit 1;
 }
 
@@ -78,7 +85,7 @@ echo
 FAILED=""
 for ch in $CHANNELS; do
   echo "==> $ch"
-  if dotnet "$PUB_DLL" --channel "$ch" --version "$VERSION" --repo "$REPO_ROOT" --out "$OUT" --staging "$STAGING" $DRYRUN; then
+  if dotnet "$PUB_DLL" --framework "$TFM" --channel "$ch" --version "$VERSION" --repo "$REPO_ROOT" --out "$OUT" --staging "$STAGING" $DRYRUN; then
     :
   else
     echo "    (channel '$ch' failed — is its packaging tool installed?)"

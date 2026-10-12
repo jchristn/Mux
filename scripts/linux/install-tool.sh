@@ -5,38 +5,11 @@ ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 PACKAGE_SOURCE="$ROOT_DIR/artifacts/tool-packages"
 cd "$ROOT_DIR"
 
-resolve_framework() {
-    local framework="${1:-}"
-
-    case "$framework" in
-        "")
-            if dotnet --list-sdks 2>/dev/null | grep -q '^10\.'; then
-                FRAMEWORK="net10.0"
-            else
-                FRAMEWORK="net8.0"
-            fi
-            ;;
-        -h|--help)
-            echo "Usage: $(basename "$0") [net8.0|net10.0]"
-            echo "Defaults to net10.0 when a .NET 10 SDK is installed, otherwise net8.0."
-            exit 0
-            ;;
-        net8|net8.0)
-            FRAMEWORK="net8.0"
-            ;;
-        net10|net10.0)
-            FRAMEWORK="net10.0"
-            ;;
-        *)
-            echo "Unsupported framework '$framework'."
-            echo "Supported frameworks: net8.0, net10.0."
-            echo "Use net8.0 on systems without a .NET 10 SDK."
-            exit 1
-            ;;
-    esac
-}
-
-resolve_framework "${1:-}"
+. "$ROOT_DIR/scripts/common/framework.sh"
+resolve_framework "$@"
+shift "$FRAMEWORK_ARGS"
+FRAMEWORK="$TFM"
+[ "$#" -eq 0 ] || { echo "Unexpected argument: $1" >&2; exit 1; }
 
 rm -rf "$PACKAGE_SOURCE"
 mkdir -p "$PACKAGE_SOURCE"

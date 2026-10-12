@@ -3,29 +3,15 @@ setlocal
 
 for %%i in ("%~dp0..\..") do set "ROOT_DIR=%%~fi\"
 set "PACKAGE_ROOT=%ROOT_DIR%artifacts\tool-packages"
-set "FRAMEWORK_ARGUMENT=%~1"
-
-if /I "%FRAMEWORK_ARGUMENT%"=="--framework" (
-    if "%~2"=="" (
-        echo Missing framework value after --framework.
-        call :usage
-        exit /b 1
-    )
-    set "FRAMEWORK_ARGUMENT=%~2"
+call "%~dp0resolve-framework.bat" %1 %2
+if errorlevel 2 exit /b 0
+if errorlevel 1 exit /b 1
+for /l %%i in (1,1,%FRAMEWORK_ARGS%) do shift
+if not "%~1"=="" (
+    echo Unexpected argument: %1. 1>&2
+    exit /b 1
 )
-
-if /I "%FRAMEWORK_ARGUMENT%"=="-f" (
-    if "%~2"=="" (
-        echo Missing framework value after -f.
-        call :usage
-        exit /b 1
-    )
-    set "FRAMEWORK_ARGUMENT=%~2"
-)
-
-call :resolve_framework "%FRAMEWORK_ARGUMENT%"
-if %errorlevel% equ 2 exit /b 0
-if %errorlevel% neq 0 exit /b %errorlevel%
+set "FRAMEWORK=%TFM%"
 
 set "PACKAGE_SOURCE=%PACKAGE_ROOT%\%FRAMEWORK%"
 
@@ -88,44 +74,3 @@ echo.
 echo [6/6] Verifying mux command...
 mux -v
 exit /b %errorlevel%
-
-:resolve_framework
-set "FRAMEWORK=%~1"
-if /I "%FRAMEWORK%"=="/?" (
-    call :usage
-    exit /b 2
-)
-if /I "%FRAMEWORK%"=="-h" (
-    call :usage
-    exit /b 2
-)
-if /I "%FRAMEWORK%"=="--help" (
-    call :usage
-    exit /b 2
-)
-
-if "%FRAMEWORK%"=="" (
-    dotnet --list-sdks | findstr /B /C:"10." >nul
-    if errorlevel 1 (
-        set "FRAMEWORK=net8.0"
-    ) else (
-        set "FRAMEWORK=net10.0"
-    )
-    exit /b 0
-)
-
-if /I "%FRAMEWORK%"=="net8" set "FRAMEWORK=net8.0"
-if /I "%FRAMEWORK%"=="net8.0" exit /b 0
-if /I "%FRAMEWORK%"=="net10" set "FRAMEWORK=net10.0"
-if /I "%FRAMEWORK%"=="net10.0" exit /b 0
-
-echo Unsupported framework "%~1".
-echo Supported frameworks: net8.0, net10.0.
-echo Use net8.0 on systems without a .NET 10 SDK.
-exit /b 1
-
-:usage
-echo Usage: %~nx0 [net8.0^|net10.0]
-echo        %~nx0 --framework ^<net8.0^|net10.0^>
-echo Defaults to net10.0 when a .NET 10 SDK is installed, otherwise net8.0.
-exit /b 0

@@ -5,34 +5,36 @@ Builds the mux CLI, seeds a throwaway config directory, reads every default skil
 `mux skill list`, `mux skill pack list`, and `mux skill pack show`, and writes BUILTIN_SKILLS.md at the
 repository root. Run it whenever a skill is added, removed, renamed, or re-described.
 
-Usage: python3 scripts/common/generate-builtin-skills.py [--check] [--no-build] [--configuration Debug|Release]
+Usage: python3 scripts/common/generate-builtin-skills.py [net8.0|net10.0] [--framework TFM] [--check] [--no-build] [--configuration Debug|Release]
   --check          Do not write; exit 1 when BUILTIN_SKILLS.md differs from what would be generated.
-  --no-build       Use the existing net10.0 build of Mux.Cli instead of building it first.
+  --no-build       Use the existing selected-framework build of Mux.Cli instead of building it first.
   --configuration  The build configuration to use (default Debug).
 """
-import collections, json, os, re, shutil, subprocess, sys, tempfile
+import argparse, collections, json, os, re, shutil, subprocess, sys, tempfile
 
-args = sys.argv[1:]
-configuration = 'Debug'
-if '--configuration' in args:
-    at = args.index('--configuration')
-    if at + 1 >= len(args) or args[at + 1] not in ('Debug', 'Release'):
-        print('--configuration needs Debug or Release.', file=sys.stderr)
-        sys.exit(2)
-    configuration = args[at + 1]
-    del args[at:at + 2]
-check = '--check' in args
-no_build = '--no-build' in args
-unknown = [a for a in args if a not in ('--check', '--no-build')]
-if unknown:
-    print('Unknown argument(s): ' + ' '.join(unknown) + '. Use --check, --no-build, and --configuration.', file=sys.stderr)
-    sys.exit(2)
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('framework', nargs='?', choices=('net8', 'net8.0', 'net10', 'net10.0'))
+parser.add_argument('--framework', '-f', dest='named_framework', choices=('net8', 'net8.0', 'net10', 'net10.0'))
+parser.add_argument('--configuration', choices=('Debug', 'Release'), default='Debug')
+parser.add_argument('--check', action='store_true')
+parser.add_argument('--no-build', action='store_true')
+options = parser.parse_args()
+framework = options.named_framework or options.framework or os.environ.get('MUX_TFM')
+if not framework:
+    sdks = subprocess.run(['dotnet', '--list-sdks'], capture_output=True, text=True, check=True).stdout
+    framework = 'net10.0' if any(line.startswith('10.') for line in sdks.splitlines()) else 'net8.0'
+framework = {'net8': 'net8.0', 'net10': 'net10.0'}.get(framework, framework)
+if framework not in ('net8.0', 'net10.0'):
+    parser.error('Supported frameworks: net8.0, net10.0.')
+configuration = options.configuration
+check = options.check
+no_build = options.no_build
 
 repo = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 project = os.path.join(repo, 'src', 'Mux.Cli', 'Mux.Cli.csproj')
-dll = os.path.join(repo, 'src', 'Mux.Cli', 'bin', configuration, 'net10.0', 'Mux.Cli.dll')
+dll = os.path.join(repo, 'src', 'Mux.Cli', 'bin', configuration, framework, 'Mux.Cli.dll')
 if not no_build:
-    built = subprocess.run(['dotnet', 'build', project, '-f', 'net10.0', '-c', configuration, '-v', 'quiet', '-nologo'], capture_output=True, text=True)
+    built = subprocess.run(['dotnet', 'build', project, '-f', framework, '-p:TargetFrameworks=' + framework, '-c', configuration, '-v', 'quiet', '-nologo'], capture_output=True, text=True)
     if built.returncode != 0:
         print(built.stdout + built.stderr, file=sys.stderr)
         sys.exit(built.returncode)

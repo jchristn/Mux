@@ -32,6 +32,10 @@ namespace Mux.Publisher
                     return args.Length == 0 ? 1 : 0;
                 }
 
+                if (flags.Contains("framework")) throw new ArgumentException("--framework requires net8.0 or net10.0.");
+                if (options.TryGetValue("framework", out string? selectedFramework) && selectedFramework != "net8.0" && selectedFramework != "net10.0")
+                    throw new ArgumentException("Supported frameworks: net8.0, net10.0.");
+
                 string repoRoot = options.TryGetValue("repo", out string? r) ? Path.GetFullPath(r) : FindRepoRoot(Directory.GetCurrentDirectory());
 
                 if (flags.Contains("list"))
@@ -76,6 +80,7 @@ namespace Mux.Publisher
                 RunOptions runOptions = new RunOptions
                 {
                     Channel = channel!,
+                    Framework = options.TryGetValue("framework", out string? framework) ? framework : null,
                     Version = version!,
                     RepoRoot = repoRoot,
                     OutputRoot = options.TryGetValue("out", out string? o) ? Path.GetFullPath(o) : Path.Combine(repoRoot, "dist", "release"),
@@ -170,7 +175,7 @@ namespace Mux.Publisher
             Console.WriteLine("Mux.Publisher — build installers and package-manager entries from publisher.json");
             Console.WriteLine();
             Console.WriteLine("Usage:");
-            Console.WriteLine("  Mux.Publisher --channel <name> --version <X.Y.Z> [--repo <dir>] [--out <dir>] [--staging <dir>] [--dry-run] [--force]");
+            Console.WriteLine("  Mux.Publisher --channel <name> --version <X.Y.Z> [--repo <dir>] [--out <dir>] [--staging <dir>] [--framework <net8.0|net10.0>] [--dry-run] [--force]");
             Console.WriteLine("  Mux.Publisher --list        List known channels");
             Console.WriteLine("  Mux.Publisher --validate    Validate publisher.json");
             Console.WriteLine();

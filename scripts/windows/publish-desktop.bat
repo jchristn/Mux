@@ -5,7 +5,7 @@ REM Usage:
 REM   scripts\windows\publish-desktop.bat [RID] [TFM]
 REM
 REM RID  defaults to win-x64. Pass win-arm64, linux-x64, osx-arm64, etc. to cross-publish.
-REM TFM  defaults to net10.0 (pass net8.0 for the LTS build).
+REM TFM  defaults to MUX_TFM, then net10.0 with a .NET 10 SDK, otherwise net8.0.
 REM
 REM Output lands in dist\desktop\<RID>\. The build is self-contained: the target
 REM machine does NOT need the .NET runtime installed. Artifacts are UNSIGNED - see
@@ -15,10 +15,20 @@ setlocal
 chcp 65001 >nul
 for %%i in ("%~dp0..\..") do set "ROOT=%%~fi\"
 
-set RID=%1
-if "%RID%"=="" set RID=win-x64
-set TFM=%2
-if "%TFM%"=="" set TFM=net10.0
+set "RID=win-x64"
+set "FIRST=%~1"
+if defined FIRST if /I not "%FIRST:~0,3%"=="net" if not "%FIRST:~0,1%"=="-" (
+  set "RID=%~1"
+  shift
+)
+call "%~dp0resolve-framework.bat" %1 %2
+if errorlevel 2 exit /b 0
+if errorlevel 1 exit /b 1
+for /l %%i in (1,1,%FRAMEWORK_ARGS%) do shift
+if not "%~1"=="" (
+    echo Unexpected argument: %1. 1>&2
+    exit /b 1
+)
 set OUT=%ROOT%dist\desktop\%RID%
 
 echo Publishing mux Desktop
@@ -31,6 +41,7 @@ echo.
 dotnet publish "%ROOT%src\Mux.Desktop\Mux.Desktop.csproj" ^
   -c Release ^
   -f %TFM% ^
+  -p:TargetFrameworks=%TFM% ^
   -r %RID% ^
   --self-contained true ^
   -p:PublishSingleFile=true ^

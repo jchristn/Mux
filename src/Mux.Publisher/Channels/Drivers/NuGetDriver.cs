@@ -39,6 +39,7 @@ namespace Mux.Publisher.Channels.Drivers
                 Description = "Pack the " + context.Artifact.Id + " .NET tool",
                 WorkingDirectory = context.RepoRoot
             };
+            if (context.Framework != null) pack.Arguments.Add("-p:TargetFrameworks=" + context.Framework);
             plan.AddCommand(pack);
 
             plan.AddCommand(new ShellCommand("dotnet", new System.Collections.Generic.List<string>

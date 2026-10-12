@@ -68,7 +68,9 @@ namespace Mux.Publisher
             GuardOs(driver, options);
 
             ArtifactInfo artifact = manifest.GetArtifact(config.Artifact);
-            string tfm = manifest.Build.Frameworks.Count > 0 ? manifest.Build.Frameworks[0] : "net10.0";
+            if (options.Framework != null && !manifest.Build.Frameworks.Contains(options.Framework))
+                throw new ArgumentException("Framework is not declared in publisher.json: " + options.Framework);
+            string tfm = options.Framework ?? (manifest.Build.Frameworks.Count > 0 ? manifest.Build.Frameworks[0] : "net10.0");
             string outputRoot = options.OutputRoot;
             string stagingRoot = options.StagingRoot;
             Directory.CreateDirectory(outputRoot);
@@ -116,7 +118,7 @@ namespace Mux.Publisher
                 artifact,
                 published,
                 fileName => ReleaseAssetUrl(manifest, options.Version, fileName),
-                assetChecksums);
+                assetChecksums) { Framework = options.Framework };
 
             ChannelPlan plan = driver.Plan(context, config);
 
@@ -358,6 +360,9 @@ namespace Mux.Publisher
     {
         /// <summary>The channel to run.</summary>
         public string Channel { get; set; } = string.Empty;
+
+        /// <summary>Optional framework override for publish and pack, including restore.</summary>
+        public string? Framework { get; set; }
 
         /// <summary>The release version (supplied at build time; never from the manifest).</summary>
         public string Version { get; set; } = string.Empty;

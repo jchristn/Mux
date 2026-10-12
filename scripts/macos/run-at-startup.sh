@@ -7,18 +7,24 @@ set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+. "$SCRIPT_DIR/../common/framework.sh"
+resolve_framework "$@"
+shift "$FRAMEWORK_ARGS"
+[ "$#" -eq 0 ] || { echo "Unexpected argument: $1" >&2; exit 1; }
 
-AGENT_BIN="$REPO_ROOT/dist/Mux.Agent"
-[ -x "$AGENT_BIN" ] || AGENT_BIN="$REPO_ROOT/src/Mux.Agent/bin/Release/net10.0/Mux.Agent"
-[ -x "$AGENT_BIN" ] || AGENT_BIN="$REPO_ROOT/src/Mux.Agent/bin/Release/net8.0/Mux.Agent"
-[ -x "$AGENT_BIN" ] || AGENT_BIN="$REPO_ROOT/src/Mux.Agent/bin/Debug/net10.0/Mux.Agent"
+# An explicit framework selects a dev build; dist has no framework-qualified layout.
+AGENT_BIN="$REPO_ROOT/src/Mux.Agent/bin/Release/$TFM/Mux.Agent"
+[ -x "$AGENT_BIN" ] || AGENT_BIN="$REPO_ROOT/src/Mux.Agent/bin/Debug/$TFM/Mux.Agent"
+if [ "$FRAMEWORK_ARGS" -eq 0 ] && [ -z "${MUX_TFM:-}" ] && [ -x "$REPO_ROOT/dist/Mux.Agent" ]; then
+    AGENT_BIN="$REPO_ROOT/dist/Mux.Agent"
+fi
 
 LABEL="com.jchristn.mux.agent"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
 if [ ! -x "$AGENT_BIN" ]; then
     echo "Mux.Agent not found. Build it first, e.g.:" >&2
-    echo "  dotnet build src/Mux.Agent/Mux.Agent.csproj -c Release" >&2
+    echo "  dotnet build src/Mux.Agent/Mux.Agent.csproj -c Release -f $TFM -p:TargetFrameworks=$TFM" >&2
     exit 1
 fi
 

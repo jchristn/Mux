@@ -124,6 +124,31 @@ scripts\windows\install-tool.bat     # or: scripts\windows\install-tool.bat net8
 ./scripts/linux/install-tool.sh       # or: ./scripts/linux/install-tool.sh net8.0
 ```
 
+All source run and tool-install scripts on Windows, Linux, and macOS accept a leading `net8.0`
+(or `--framework net8.0` / `-f net8.0`). Selection applies to restore, build, and execution,
+so a .NET 8 SDK can build without evaluating the .NET 10 target. Without a CLI selection,
+`MUX_TFM` is used; otherwise scripts choose `net10.0` when a .NET 10 SDK is installed and
+`net8.0` when it is not. Building from source requires the selected framework's SDK and runtime.
+
+```bash
+scripts\windows\run-agent.bat net8.0
+./scripts/linux/run-agent.sh --framework net8.0
+./scripts/macos/run-tui.sh net8.0
+./scripts/linux/run-mcp-server.sh net8.0 --http 8080
+./scripts/macos/worktrees.sh net8.0 list
+./scripts/linux/publish-desktop.sh linux-x64 net8.0
+./scripts/macos/build-installers.sh --framework net8.0 --dry-run
+```
+
+`publish-desktop` retains `[RID] [TFM]`, and also accepts `[RID] --framework <TFM>`
+or just `--framework <TFM>` for the host runtime. `build-installers` accepts a positional
+framework or `--framework <TFM>` alongside its version and `--dry-run` arguments, and forwards
+it to all publish and pack commands. Windows `publish-nuget.bat` accepts the framework after
+the API key. `run-at-startup` accepts the same framework selection and chooses only a Release
+or Debug agent build for that target; without explicit selection, it still prefers `dist`.
+`generate-builtin-skills` also accepts the framework argument for its CLI build. Scripts that
+remove installations or publish the VS Code extension need no framework argument.
+
 To pin a released version without building, download the self-contained CLI archive for your platform from
 [GitHub Releases](https://github.com/jchristn/mux/releases). Each archive holds a single `mux` binary and needs no
 .NET runtime:
