@@ -994,7 +994,7 @@ namespace Mux.Core.Llm
 
             foreach (ConversationMessage message in messages)
             {
-                request.Messages.Add(MapMessage(message, toolNamesById));
+                if (!message.DisplayOnly) request.Messages.Add(MapMessage(message, toolNamesById));
             }
 
             foreach (ToolDefinition tool in tools)

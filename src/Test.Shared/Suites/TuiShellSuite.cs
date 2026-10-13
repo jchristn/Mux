@@ -68,6 +68,164 @@ namespace Test.Shared.Suites
                         }
                     }),
 
+                    new TestCaseDescriptor(SuiteId, "ToastsUseMuxGreenAndWhite", "Shell info toasts emit mux green backgrounds and white text", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            app.Start();
+                            app.ToggleMouseCapture();
+                            app.RenderOnce();
+                            MuxAssert.Contains("48;2;22;163;74", backend.PeekOutput(), "mux green toast background");
+                            MuxAssert.Contains("38;2;255;255;255", backend.PeekOutput(), "white toast text");
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "HiddenToastCommands", "Hidden slash commands trigger every toast severity without model calls or menu entries", async (CancellationToken ct) =>
+                    {
+                        string[] levels = { "debug", "info", "success", "warn", "warning", "error" };
+                        TUIKit.Modals.NotificationSeverity[] severities =
+                        {
+                            TUIKit.Modals.NotificationSeverity.Info, TUIKit.Modals.NotificationSeverity.Info,
+                            TUIKit.Modals.NotificationSeverity.Success, TUIKit.Modals.NotificationSeverity.Warning,
+                            TUIKit.Modals.NotificationSeverity.Warning, TUIKit.Modals.NotificationSeverity.Error
+                        };
+                        for (int i = 0; i < levels.Length; i++)
+                        {
+                            HeadlessBackend backend = new HeadlessBackend(80, 24);
+                            await using (JobManager manager = NewManager(EchoRunner))
+                            using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                            {
+                                backend.FeedInput("/toast " + levels[i] + " Custom test message\r");
+                                app.PumpInputOnce();
+                                var tui = (TUIKit.Hosting.TuiApplication)typeof(MuxTuiApp).GetField("_App",
+                                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(app)!;
+                                var active = tui.Notifications.Active(tui.NowMilliseconds);
+                                MuxAssert.AreEqual(1, active.Count, "one diagnostic toast");
+                                MuxAssert.AreEqual(severities[i], active[0].Severity, "severity mapping for " + levels[i]);
+                                MuxAssert.AreEqual("Custom test message", active[0].Text, "optional message preserved");
+                                MuxAssert.AreEqual(0, manager.Jobs.Count, "diagnostic command makes no model call");
+                                foreach (var command in app.Catalog.Commands)
+                                    MuxAssert.IsTrue(!command.MatchesSlash("toast"), "hidden command excluded from menu/palette catalog");
+                            }
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "ToastHelpAndValidation", "Toast help lists levels and rejects invalid severities locally", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            backend.FeedInput("/toast ?\r"); app.PumpInputOnce();
+                            string help = Join(app.TranscriptSnapshot());
+                            foreach (string level in new[] { "debug", "info", "success", "warn/warning", "error" })
+                                MuxAssert.Contains(level, help, "available severity " + level);
+                            backend.FeedInput("/toast invalid\r"); app.PumpInputOnce();
+                            MuxAssert.Contains("Unknown toast severity: invalid", Join(app.TranscriptSnapshot()), "local validation");
+                            backend.FeedInput("/toaster\r"); app.PumpInputOnce();
+                            MuxAssert.Contains("Unknown command: /toaster", Join(app.TranscriptSnapshot()), "exact command boundary");
+                            MuxAssert.AreEqual(0, manager.Jobs.Count, "help/validation are local");
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "EndpointArgumentCompletionAndNotice", "Endpoint arguments complete and switch inline without opening the editor", async (CancellationToken ct) =>
+                    {
+                        string directory = Path.Combine(Path.GetTempPath(), "mux-endpoint-completion-" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(directory);
+                        try
+                        {
+                            using var config = SettingsLoader.PushConfigDirectoryOverride(directory);
+                            SettingsLoader.SaveEndpoints(new List<EndpointConfig>
+                            {
+                                new EndpointConfig { Name = "homedns-gpt", Model = "gpt-oss-20b" },
+                                new EndpointConfig { Name = "homedns-llama", Model = "llama" }
+                            });
+                            HeadlessBackend backend = new HeadlessBackend(100, 24);
+                            await using JobManager manager = NewManager(EchoRunner);
+                            using MuxTuiApp app = NewApp(backend, manager, "demo");
+                            backend.FeedInput("/endpoint homedn"); app.PumpInputOnce();
+                            MuxAssert.Contains("/endpoint homedns-gpt", Join(app.FooterSnapshot()), "endpoint name suggestions");
+                            backend.FeedInput("\x1b[B\t"); app.PumpInputOnce();
+                            MuxAssert.AreEqual("/endpoint homedns-llama ", app.ComposerText, "arrow and Tab select endpoint");
+                            backend.FeedInput("\r"); app.PumpInputOnce();
+                            MuxAssert.IsFalse(app.IsModalActive, "named endpoint selection does not open editor");
+                            MuxAssert.Contains("Switched to endpoint homedns-llama (llama)", Join(app.TranscriptSnapshot()), "inline switch notice");
+                            MuxAssert.IsTrue(app.BuildSnapshot().ConversationHistory[0].DisplayOnly, "notice included in persisted history");
+                            backend.FeedInput("/endpoint homedns-llama\r"); app.PumpInputOnce();
+                            MuxAssert.AreEqual(1, app.BuildSnapshot().ConversationHistory.Count, "same endpoint does not duplicate notice");
+                            backend.FeedInput("/endpoint homedns-gpt\r"); app.PumpInputOnce();
+                            MuxAssert.AreEqual(2, app.BuildSnapshot().ConversationHistory.Count, "exact endpoint switches directly");
+                            MuxAssert.AreEqual(0, manager.Jobs.Count, "commands never become model turns");
+                            var snapshot = app.BuildSnapshot();
+                            app.RestoreSession(new Mux.Core.Sessions.SessionResumeResult
+                            {
+                                ConversationHistory = snapshot.ConversationHistory,
+                                CompletedJobs = new List<Mux.Core.Sessions.PersistedJobSnapshot>
+                                {
+                                    new Mux.Core.Sessions.PersistedJobSnapshot { Prompt = "old legacy job" }
+                                }
+                            });
+                            MuxAssert.Contains("Switched to endpoint homedns-gpt (gpt-oss-20b)", Join(app.TranscriptSnapshot()), "notice restored even with persisted jobs");
+                            MuxAssert.AreEqual(2, app.BuildSnapshot().ConversationHistory.Count, "resume preserves notices without replay duplication");
+                        }
+                        finally { Directory.Delete(directory, true); }
+                    }),
+                    new TestCaseDescriptor(SuiteId, "SlashPrefixCompletion", "Typing a slash prefix shows aliases and Tab completes without executing", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            backend.FeedInput("/end"); app.PumpInputOnce();
+                            MuxAssert.Contains("/endpoint", Join(app.FooterSnapshot()), "first match");
+                            MuxAssert.Contains("/endpoints", Join(app.FooterSnapshot()), "second match");
+                            backend.FeedInput("\x1b[B\t"); app.PumpInputOnce();
+                            MuxAssert.AreEqual("/endpoints ", app.ComposerText, "arrow selection and Tab acceptance");
+                            MuxAssert.AreEqual(0, manager.Jobs.Count, "completion does not submit");
+                            MuxAssert.IsTrue(!app.IsModalActive, "completion does not open endpoints");
+                            MuxAssert.IsTrue(!Join(app.FooterSnapshot()).Contains("Tab complete"), "arguments stop suggestions");
+                        }
+                    }),
+                    new TestCaseDescriptor(SuiteId, "SlashCompletionDismissAndArguments", "Escape dismisses completion and edits restore it without touching arguments or hidden commands", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            backend.FeedInput("/end"); app.PumpInputOnce();
+                            backend.FeedInput("\x1b"); app.PumpInputOnce(); app.PumpInputOnce();
+                            MuxAssert.IsTrue(!Join(app.FooterSnapshot()).Contains("Tab complete"), "Escape dismisses suggestions");
+                            MuxAssert.AreEqual("/end", app.ComposerText, "dismissal preserves draft");
+                            backend.FeedInput("p"); app.PumpInputOnce();
+                            MuxAssert.Contains("/endpoint", Join(app.FooterSnapshot()), "edit restores completion");
+                            backend.FeedInput("\targument"); app.PumpInputOnce();
+                            MuxAssert.AreEqual("/endpoint argument", app.ComposerText, "completion retains argument entry");
+                            MuxAssert.IsTrue(!Join(app.FooterSnapshot()).Contains("Tab complete"), "argument entry is not completed");
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "SlashEnterCompletesBeforeExecuting", "Enter on a prefix completes it first and Enter again runs the command", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            await Task.CompletedTask.ConfigureAwait(false);
+                            backend.FeedInput("/end\r"); app.PumpInputOnce();
+                            MuxAssert.AreEqual("/endpoint ", app.ComposerText, "Enter completes prefix");
+                            MuxAssert.IsTrue(!app.IsModalActive, "not executed on completion");
+                            backend.FeedInput("\r"); app.PumpInputOnce();
+                            MuxAssert.IsTrue(app.IsModalActive, "completed command executes on second Enter");
+                            MuxAssert.AreEqual(0, manager.Jobs.Count, "no model call");
+                        }
+                    }),
+
                     new TestCaseDescriptor(SuiteId, "TypingUpdatesComposer", "Typed characters accumulate in the composer", async (CancellationToken ct) =>
                     {
                         HeadlessBackend backend = new HeadlessBackend(80, 24);
@@ -97,6 +255,109 @@ namespace Test.Shared.Suites
                             MuxAssert.AreEqual(string.Empty, app.ComposerText, "composer cleared");
 
                             await app.DrainProjectorsAsync().ConfigureAwait(false);
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "VisiblePromptIsNotPinned", "A prompt that fits in the transcript is not duplicated at the top", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            backend.FeedInput("hello\r");
+                            app.PumpInputOnce();
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+                            app.RenderOnce();
+                            MuxAssert.AreEqual(string.Empty, app.RenderRegion("pinnedprompt", 80, 1), "no pinned header while prompt is visible");
+                            MuxAssert.Contains("> hello", app.RenderRegion("transcript", 80, 20), "prompt stays in the conversation");
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "PinnedPromptHasNoBlankRow", "The pinned prompt occupies one row and the transcript starts immediately below it", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(120, 24);
+                        await using (JobManager manager = NewManager(LongResponseRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            app.Start();
+                            backend.FeedInput("hello\r");
+                            app.PumpInputOnce();
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+                            app.RenderOnce();
+                            foreach (string field in new[] { "_ExpandedLayout", "_CollapsedLayout" })
+                            {
+                                var layout = (TUIKit.Layout.Layout)typeof(MuxTuiApp).GetField(field,
+                                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(app)!;
+                                TUIKit.Rect pinned = default, transcript = default;
+                                foreach (var region in layout.Regions)
+                                {
+                                    if (region.Id == "pinnedprompt") pinned = region.ContentRect(new TUIKit.Size(120, 24));
+                                    if (region.Id == "transcript") transcript = region.ContentRect(new TUIKit.Size(120, 24));
+                                }
+                                MuxAssert.AreEqual(1, pinned.Height, field + " pinned header height");
+                                MuxAssert.AreEqual(pinned.Bottom, transcript.Y, field + " transcript follows prompt without a gap");
+                            }
+                            MuxAssert.AreEqual("> hello", app.RenderRegion("pinnedprompt", 80, 1).Trim(), "short single line prompt has no ellipsis");
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "PinnedMultilinePromptShowsEllipsis", "Pinned multiline prompts show the first line followed by an ellipsis", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            app.Start();
+                            // Bracketed paste preserves the prompt's newlines as a single submission.
+                            backend.FeedInput("\x1b[200~This is a very long prompt.\r\n\r\n" + new string('x', 3000) + "\x1b[201~\r");
+                            app.PumpInputOnce();
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+                            app.RenderOnce();
+                            MuxAssert.AreEqual("> This is a very long prompt. ...", app.RenderRegion("pinnedprompt", 80, 1).Trim(), "multiline truncation indicator");
+                            MuxAssert.IsTrue(app.RenderRegion("pinnedprompt", 24, 1).TrimEnd().EndsWith(" ...", StringComparison.Ordinal), "ellipsis remains visible on narrow screens");
+                        }
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "PromptPinnedAfterOverflow", "The current prompt stays pinned when the response fills the transcript", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(80, 24);
+                        await using (JobManager manager = NewManager(EchoRunner))
+                        using (MuxTuiApp app = NewApp(backend, manager, "demo"))
+                        {
+                            app.Start();
+                            backend.FeedInput("working on overflow " + new string('x', 3000) + "\r");
+                            app.PumpInputOnce();
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+                            app.RenderOnce();
+                            string pinned = app.RenderRegion("pinnedprompt", 80, 2);
+                            MuxAssert.Contains("working on overflow", pinned, "prompt prefix remains visible");
+                            MuxAssert.IsTrue(pinned.Split('\n')[0].TrimEnd().EndsWith(" ...", StringComparison.Ordinal), "wide single line truncation indicator");
+                            MuxAssert.Contains("48;2;58;58;58", backend.PeekOutput(), "lighter grey prompt background emitted");
+                            MuxAssert.IsTrue(app.RenderRegion("pinnedprompt", 24, 2).Split('\n')[0].TrimEnd().EndsWith(" ...", StringComparison.Ordinal), "narrow viewport keeps truncation indicator");
+                            backend.Resize(80, 140);
+                            app.ApplyResponsiveLayout();
+                            app.RenderOnce();
+                            MuxAssert.AreEqual(string.Empty, app.RenderRegion("pinnedprompt", 80, 1), "growing terminal reveals prompt and removes header");
+                            backend.Resize(80, 24);
+                            app.ApplyResponsiveLayout();
+                            app.RenderOnce();
+                            MuxAssert.Contains("working on overflow", app.RenderRegion("pinnedprompt", 80, 1), "shrinking terminal pins hidden prompt");
+                            var conversation = (TUIKit.Content.Pane)typeof(MuxTuiApp).GetField("_Conversation",
+                                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(app)!;
+                            conversation.ScrollUp(int.MaxValue);
+                            app.RenderOnce();
+                            MuxAssert.AreEqual(string.Empty, app.RenderRegion("pinnedprompt", 80, 1), "scrolling back to prompt removes header");
+                            conversation.ScrollToBottom();
+                            app.RenderOnce();
+                            MuxAssert.Contains("working on overflow", app.RenderRegion("pinnedprompt", 80, 1), "scrolling past prompt restores header");
+                            backend.FeedInput("replacement prompt\r");
+                            app.PumpInputOnce();
+                            await app.DrainProjectorsAsync().ConfigureAwait(false);
+                            app.RenderOnce();
+                            MuxAssert.AreEqual(string.Empty, app.RenderRegion("pinnedprompt", 80, 1), "new visible prompt is not pinned");
+                            backend.FeedInput("/clear\r");
+                            app.PumpInputOnce();
+                            MuxAssert.AreEqual(string.Empty, app.RenderRegion("pinnedprompt", 80, 2).Trim(), "clear removes pinned prompt");
                         }
                     }),
 
@@ -412,6 +673,14 @@ namespace Test.Shared.Suites
         }
 
         #region Fake-Runners
+
+        private static async IAsyncEnumerable<AgentEvent> LongResponseRunner(
+            Job job, string prompt, [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.CompletedTask.ConfigureAwait(false);
+            for (int i = 0; i < 50; i++) yield return new AssistantTextEvent { Text = "Life continues.\n" };
+            yield return CompletedEvent();
+        }
 
         private static async IAsyncEnumerable<AgentEvent> EchoRunner(
             Job job,

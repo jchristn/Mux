@@ -207,6 +207,7 @@ namespace Mux.Desktop.Views
         {
             _MetricTabs.Children.Clear();
             _MetricButtons.Clear();
+            AddMetricTab("Heatmap", ChartMetric.Heatmap, theme, "Token activity over time");
             AddMetricTab(Localizer.T("usage.metric.tokens"), ChartMetric.Tokens, theme, Localizer.T("usage.metric.tokens.tip"));
             AddMetricTab(Localizer.T("usage.metric.cost"), ChartMetric.Cost, theme, Localizer.T("usage.metric.cost.tip"));
             AddMetricTab(Localizer.T("usage.metric.latency"), ChartMetric.Latency, theme, Localizer.T("usage.metric.latency.tip"));
@@ -504,12 +505,40 @@ namespace Mux.Desktop.Views
             }.Tip(tip);
         }
 
+        private Control BuildTokenHeatmap(AppTheme theme)
+        {
+            StackPanel host = new StackPanel { Spacing = 12 };
+            host.Children.Add(new TextBlock { Text = "Token activity heatmap", Foreground = theme.Text, FontSize = 14 });
+            Grid grid = new Grid();
+            const int rows = 7;
+            int columns = (_Series.Count + rows - 1) / rows;
+            for (int c = 0; c < columns; c++) grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            for (int r = 0; r < rows; r++) grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            double max = 0;
+            foreach (UsageBucket bucket in _Series) max = Math.Max(max, bucket.Metrics.TotalTokens);
+            string[] colors = { "#2d3034", "#0e4429", "#006d32", "#26a641", "#39d353" };
+            for (int i = 0; i < _Series.Count; i++)
+            {
+                double tokens = _Series[i].Metrics.TotalTokens;
+                int level = tokens <= 0 ? 0 : Math.Min(4, 1 + (int)(tokens / Math.Max(1, max) * 3));
+                Border cell = new Border { Height = 24, Margin = new Thickness(2), CornerRadius = new CornerRadius(3), Background = new SolidColorBrush(Color.Parse(colors[level])) };
+                ToolTip.SetTip(cell, BucketTooltip(_Series[i]));
+                Grid.SetColumn(cell, i / rows); Grid.SetRow(cell, i % rows); grid.Children.Add(cell);
+            }
+            host.Children.Add(grid);
+            host.Children.Add(BuildXAxis(theme));
+            host.Children.Add(new TextBlock { Text = "Oldest → newest · Less ░▒▓█ More · peak " + max.ToString("#,##0") + " tokens", Foreground = theme.Muted, FontSize = 12 });
+            return host;
+        }
+
         private Control BuildChart(AppTheme theme)
         {
             if (_Series.Count == 0)
             {
                 return new TextBlock { Text = Localizer.T("usage.noActivity"), Foreground = theme.Muted, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
             }
+
+            if (_Metric == ChartMetric.Heatmap) return BuildTokenHeatmap(theme);
 
             double max = ComputeMax();
             if (max <= 0)

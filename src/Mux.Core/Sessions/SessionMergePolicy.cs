@@ -22,7 +22,8 @@ namespace Mux.Core.Sessions
     ///
     /// <para>Messages are compared by role, textual content, tool-call id, and tool-call count — a stable enough
     /// identity for prefix detection without serializing tool-call arguments. The policy never mutates either
-    /// input list; it returns one of them (or a caller-supplied list) by reference.</para>
+    /// input list; it reuses the selected list unless a matching incoming message omitted persisted telemetry,
+    /// in which case it copies those messages to retain the display metrics.</para>
     /// </summary>
     public static class SessionMergePolicy
     {
@@ -64,7 +65,23 @@ namespace Mux.Core.Sessions
             // Incoming is at least as long: it is the version to persist in both the normal-growth and the
             // divergent cases. (When existing is a prefix of incoming this is plainly correct; when they diverge
             // the active surface is authoritative.)
-            return incoming;
+            List<ConversationMessage>? enriched = null;
+            for (int i = 0; i < existing.Count; i++)
+            {
+                if (!SameMessage(existing[i], incoming[i])) break;
+                if (incoming[i] == null || existing[i] == null) continue;
+                bool restoreTelemetry = incoming[i].Telemetry == null && existing[i].Telemetry != null;
+                bool restoreDisplayOnly = !incoming[i].DisplayOnly && existing[i].DisplayOnly;
+                if (!restoreTelemetry && !restoreDisplayOnly) continue;
+                enriched ??= new List<ConversationMessage>(incoming);
+                ConversationMessage message = incoming[i];
+                enriched[i] = new ConversationMessage
+                {
+                    Role = message.Role, Content = message.Content, Reasoning = message.Reasoning,
+                    ToolCalls = message.ToolCalls, ToolCallId = message.ToolCallId, Telemetry = message.Telemetry ?? existing[i].Telemetry, DisplayOnly = message.DisplayOnly || existing[i].DisplayOnly
+                };
+            }
+            return enriched ?? incoming;
         }
 
         #endregion

@@ -47,6 +47,14 @@ namespace Mux.Cli.App
         private const string TranscriptRegion = "transcript";
         private const string SidebarRegion = "sidebar";
         private const string ComposerRegion = "composer";
+        private readonly Pane _PinnedPrompt = new Pane("pinnedprompt");
+        private bool _HasPinnedPrompt;
+        private bool _PromptPinned;
+        private PaneLineHandle? _CurrentPromptLine;
+        private StyledText _CurrentPromptText = StyledText.Empty;
+        // A render-only marker on the current prompt prefix, normalized back to InputSurface by the overlay.
+        private static readonly Color CurrentPromptMarker = Color.FromRgb(0x3A, 0x3A, 0x3B);
+
         private const string PromptLabelRegion = "promptlabel";
         private const string FooterRegion = "footer";
         private const string QueueRegion = "queue";
@@ -117,6 +125,10 @@ namespace Mux.Cli.App
         private Job? _ActiveJob;
         private bool _TurnInFlight;
         private Mux.Core.Context.FileMentionResolver? _MentionResolver;
+        private List<string> _SlashSuggestions = new List<string>();
+        private int _SlashSuggestionIndex;
+        private string? _SlashDismissedText;
+        private string _SlashSuggestionQuery = string.Empty;
         private List<string> _MentionSuggestions = new List<string>();
         private int _MentionIndex;
         private int _MentionTokenStart = -1;
@@ -168,11 +180,11 @@ namespace Mux.Cli.App
         private static readonly Theme MuxTheme = CreateTheme();
         private static readonly Theme[] _Themes = { MuxTheme, Theme.Dark, Theme.Light, Theme.HighContrast };
 
-        // The input rectangle (the "> " prompt marker plus the composer) sits on a fixed dark grey so it
+        // The input rectangle and submitted prompts share a lighter charcoal surface so it
         // reads as a distinct input affordance regardless of the active theme; the light-grey foreground
         // (palette 7, the mux text color) keeps typed text legible against it.
         private static readonly CellStyle InputSurface =
-            CellStyle.Default.WithForeground(Color.FromPalette(7)).WithBackground(Color.FromRgb(0x2A, 0x2A, 0x2A));
+            CellStyle.Default.WithForeground(Color.FromPalette(7)).WithBackground(Color.FromRgb(0x3A, 0x3A, 0x3A));
 
         #endregion
 
@@ -296,7 +308,12 @@ namespace Mux.Cli.App
             _App.MouseTextSelectionEnabled = true; // click-drag selects within a pane; Ctrl+C copies the selection
             _App.TextCopied += OnTextCopied;
             _App.Theme = MuxTheme; // no background color; the terminal's own background shows through
-            _App.RenderOverlay = DrawBoundaries; // optional dark-grey rules between the main regions
+            _App.AutoRenderNotifications = false;
+            _App.RenderOverlay = surface =>
+            {
+                DrawBoundaries(surface);
+                SeverityToastRenderer.Render(surface, _App.Notifications, _App.NowMilliseconds);
+            };
 
             BuildLayouts(1, 0);
 
@@ -311,6 +328,8 @@ namespace Mux.Cli.App
             _PromptLabel.WriteLine(Text.From(PromptText).Green().Bold());
 
             _App.BindPane(TranscriptRegion, _Conversation);
+            _App.Bind("pinnedprompt", new PinnedPromptView(_PinnedPrompt));
+            _PinnedPrompt.Background = InputSurface;
             _App.BindPane(SidebarRegion, _SidebarPane);
             _App.BindPane(PromptLabelRegion, _PromptLabel);
             _App.BindPane(FooterRegion, _Footer);
@@ -1247,6 +1266,8 @@ namespace Mux.Cli.App
         // rule above the queue strip (when shown), and a vertical rule in the gutter left of the sidebar.
         private void DrawBoundaries(ISurface surface)
         {
+            RefreshPinnedPrompt(surface);
+            ShadePromptRows(surface);
             if (!_ShowBoundaries || surface == null)
             {
                 return;
@@ -1292,6 +1313,65 @@ namespace Mux.Cli.App
                 int gutterX = width - SidebarWidth - 1;
                 int transcriptBottom = height - reserve - 1;
                 DrawVerticalRule(surface, gutterX, transcriptBottom, style);
+            }
+        }
+
+        private void RefreshPinnedPrompt(ISurface surface)
+        {
+            if (!_HasPinnedPrompt || !(surface is BufferSurface root)) return;
+            int width = _CollapsedApplied ? surface.Size.Width : Math.Max(0, surface.Size.Width - SidebarWidth - SidebarGap);
+            int reserve = _ComposerHeight + 2 + _QueueHeight + (_ShowBoundaries ? 1 : 0)
+                + (_ShowBoundaries && _QueueHeight > 0 ? 1 : 0);
+            int height = surface.Size.Height - reserve;
+            if (width <= 0 || height <= 1) return;
+
+            // Test the viewport without a header so the header itself cannot force the prompt offscreen.
+            CellBuffer probe = new CellBuffer(width, height);
+            _Conversation.Render(new BufferSurface(probe));
+            bool visible = false;
+            for (int y = 0; y < height && !visible; y++)
+                for (int x = 0; x < width; x++)
+                    if (probe.Get(x, y).Style.Background == CurrentPromptMarker) { visible = true; break; }
+            bool pinned = !visible;
+            bool changed = _PromptPinned != pinned;
+            if (changed)
+            {
+                lock (_Sync)
+                {
+                    _PromptPinned = pinned;
+                    RebuildLayoutNoLock();
+                }
+            }
+            int offset = pinned ? 1 : 0;
+            if (changed)
+            {
+                _Conversation.Render(root.CreateView(new Rect(0, offset, width, height - offset)));
+                if (pinned) new PinnedPromptView(_PinnedPrompt).Render(root.CreateView(new Rect(0, 0, width, 1)));
+            }
+            else if (pinned)
+            {
+                // Restore the pane's viewport dimensions after the probe without replacing selection highlights.
+                _Conversation.Render(new BufferSurface(new CellBuffer(width, height - offset)));
+            }
+        }
+
+        private void ShadePromptRows(ISurface surface)
+        {
+            if (!(surface is BufferSurface readable)) return;
+            int width = _CollapsedApplied ? surface.Size.Width : Math.Max(0, surface.Size.Width - SidebarWidth - SidebarGap);
+            int bottom = surface.Size.Height - _ComposerHeight - 2 - _QueueHeight;
+            for (int y = 0; y < Math.Max(0, bottom); y++)
+            {
+                bool promptRow = false;
+                for (int x = 0; x < width; x++)
+                    if (readable.Get(x, y).Style.Background == InputSurface.Background || readable.Get(x, y).Style.Background == CurrentPromptMarker) { promptRow = true; break; }
+                if (!promptRow) continue;
+                for (int x = 0; x < width; x++)
+                {
+                    Cell cell = readable.Get(x, y);
+                    if (!cell.IsContinuation)
+                        surface.Set(x, y, Cell.Glyph(cell.Grapheme, cell.Style.WithBackground(InputSurface.Background), cell.Width));
+                }
             }
         }
 
@@ -1503,6 +1583,11 @@ namespace Mux.Cli.App
             lock (_Sync)
             {
                 _Conversation.Clear();
+                _PinnedPrompt.Clear();
+                _HasPinnedPrompt = false;
+                _PromptPinned = false;
+                _CurrentPromptLine = null;
+                RebuildLayoutNoLock();
                 _ConversationHistory.Clear();
                 _TurnJobIds.Clear();
                 _PendingPrompts.Clear();
@@ -1512,24 +1597,23 @@ namespace Mux.Cli.App
             UpdateQueueStrip();
             _PromptHistory.Restore(resume.PromptHistory);
 
+            // Flat history is the portable transcript, including notices between turns.
+            bool replayFlat = resume.ConversationHistory.Count > 0;
+            if (replayFlat)
+            {
+                ReplayConversationHistory(resume.ConversationHistory);
+                StartSessionMirror(_JobManager.SessionId);
+            }
+
             foreach (PersistedJobSnapshot job in resume.CompletedJobs)
             {
-                ReplayJob(job, interrupted: false);
+                if (!replayFlat) ReplayJob(job, interrupted: false);
             }
 
             foreach (PersistedJobSnapshot job in resume.InterruptedJobs)
             {
-                ReplayJob(job, interrupted: true);
-            }
-
-            // Sessions authored by the Desktop or Web surfaces carry no jobs — they persist the flat
-            // ConversationHistory instead. Fall back to replaying that so a session started anywhere is
-            // fully readable and continuable in the TUI (the shared-store portability guarantee).
-            if (resume.CompletedJobs.Count == 0
-                && resume.InterruptedJobs.Count == 0
-                && resume.ConversationHistory.Count > 0)
-            {
-                ReplayConversationHistory(resume.ConversationHistory);
+                if (!replayFlat) ReplayJob(job, interrupted: true);
+                else WriteNotice("⚠ interrupted — re-run required: " + job.Prompt);
             }
 
             // Loops come back paused: a resumed session never starts running prompts on its own.
@@ -1550,7 +1634,11 @@ namespace Mux.Cli.App
         {
             foreach (ConversationMessage message in history)
             {
-                if (message.Role == RoleEnum.User && !string.IsNullOrEmpty(message.Content))
+                if (message.DisplayOnly)
+                {
+                    WriteNotice(message.Content ?? string.Empty);
+                }
+                else if (message.Role == RoleEnum.User && !string.IsNullOrEmpty(message.Content))
                 {
                     EchoPrompt(message.Content);
                 }
@@ -1729,6 +1817,7 @@ namespace Mux.Cli.App
             IWidget? widget = regionId switch
             {
                 TranscriptRegion => _Conversation,
+                "pinnedprompt" => _PromptPinned ? new PinnedPromptView(_PinnedPrompt) : null,
                 SidebarRegion => _SidebarPane,
                 FooterRegion => _Footer,
                 ComposerRegion => _Composer,
@@ -1784,28 +1873,30 @@ namespace Mux.Cli.App
             int queueOffset = footerOffset + footerHeight;
 
             LayoutBuilder expanded = Layout.Create()
-                .Add(TranscriptRegion, r => r.FillWidth(0, SidebarWidth + SidebarGap).FillHeight(0, reserve).WithPadding(0))
+                .Add(TranscriptRegion, r => r.FillWidth(0, SidebarWidth + SidebarGap).FillHeight(_PromptPinned ? 1 : 0, reserve).WithPadding(0))
                 .Add(SidebarRegion, r => r.RightAnchored(0, SidebarWidth).FillHeight(0, reserve).WithPadding(0))
                 .Add(FooterRegion, r => r.FillWidth().BottomAnchored(footerOffset, footerHeight).WithPadding(0))
-                .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).WithPadding(0))
+                .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).Background(InputSurface.Background).WithPadding(0))
                 .Add(ComposerRegion, r => r.FillWidth(promptWidth, 0).BottomAnchored(0, composerHeight).WithPadding(0));
             if (queueHeight > 0)
             {
                 expanded.Add(QueueRegion, r => r.FillWidth(0, SidebarWidth + SidebarGap).BottomAnchored(queueOffset, queueHeight).WithPadding(0));
             }
 
+            if (_PromptPinned) expanded.Add("pinnedprompt", r => r.FillWidth(0, SidebarWidth + SidebarGap).TopAnchored(0, 1).Background(InputSurface.Background).WithPadding(0));
             _ExpandedLayout = expanded.Build();
 
             LayoutBuilder collapsed = Layout.Create()
-                .Add(TranscriptRegion, r => r.FillWidth().FillHeight(0, reserve).WithPadding(0))
+                .Add(TranscriptRegion, r => r.FillWidth().FillHeight(_PromptPinned ? 1 : 0, reserve).WithPadding(0))
                 .Add(FooterRegion, r => r.FillWidth().BottomAnchored(footerOffset, footerHeight).WithPadding(0))
-                .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).WithPadding(0))
+                .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).Background(InputSurface.Background).WithPadding(0))
                 .Add(ComposerRegion, r => r.FillWidth(promptWidth, 0).BottomAnchored(0, composerHeight).WithPadding(0));
             if (queueHeight > 0)
             {
                 collapsed.Add(QueueRegion, r => r.FillWidth().BottomAnchored(queueOffset, queueHeight).WithPadding(0));
             }
 
+            if (_PromptPinned) collapsed.Add("pinnedprompt", r => r.FillWidth().TopAnchored(0, 1).Background(InputSurface.Background).WithPadding(0));
             _CollapsedLayout = collapsed.Build();
         }
 
@@ -1839,6 +1930,7 @@ namespace Mux.Cli.App
             // Shift+Enter and Ctrl+J (the terminal-independent line-feed chord) insert a newline. Ctrl+J is
             // handled here rather than in the Ctrl switch below.
             SubmitDecision submit = _SubmitResolver.Resolve(key);
+            if (HandleSlashCompletionKey(key, submit)) return true;
             if (_MentionSuggestions.Count > 0 && HandleMentionKey(key, submit))
             {
                 return true;
@@ -2711,6 +2803,7 @@ namespace Mux.Cli.App
         // visible as they are typed. Called after any composer edit; rebuilds the layout only on a change.
         private void RefreshComposerLayout()
         {
+            UpdateSlashSuggestions();
             UpdateMentionSuggestions();
 
             int desired = Math.Clamp(ComposerLineCount(), 1, MaxComposerRows);
@@ -3039,11 +3132,63 @@ namespace Mux.Cli.App
         {
             // Built-in and custom (hooks.json) commands win; a skill with the same name is only reached when
             // neither claims the input.
-            bool handled = _SlashHandler != null && _SlashHandler(input);
+            bool handled = TryHandleEndpointCommand(input) || TryHandleToastCommand(input) || (_SlashHandler != null && _SlashHandler(input));
             if (!handled && !TryInvokeSkill(input))
             {
                 _Conversation.WriteLine(Text.From($"Unknown command: {input}").Yellow());
             }
+        }
+
+        private bool TryHandleEndpointCommand(string input)
+        {
+            string text = input.Trim();
+            int space = text.IndexOfAny(new[] { ' ', '\t' });
+            if (space < 0 || !text.Substring(0, space).Equals("/endpoint", StringComparison.OrdinalIgnoreCase)) return false;
+            string name = text.Substring(space + 1).Trim();
+            if (name.Length == 0) return false;
+            foreach (EndpointConfig endpoint in LoadEndpointsSafe())
+                if (endpoint.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    SwitchEndpoint(endpoint);
+                    return true;
+                }
+            _Composer.Text = "/endpoint " + name;
+            RefreshComposerLayout();
+            if (_SlashSuggestions.Count == 0) WriteNotice("Endpoint not found: " + name);
+            return true;
+        }
+
+        // Intentionally kept outside the catalog: diagnostic commands must not appear in menus or palettes.
+        private bool TryHandleToastCommand(string input)
+        {
+            string trimmed = input.Trim();
+            if (!trimmed.StartsWith("/toast", StringComparison.OrdinalIgnoreCase)
+                || (trimmed.Length > 6 && !char.IsWhiteSpace(trimmed[6]))) return false;
+            string argument = trimmed.Length > 6 ? trimmed.Substring(6).Trim() : string.Empty;
+            int separator = argument.IndexOfAny(new[] { ' ', '\t' });
+            string level = separator < 0 ? argument : argument.Substring(0, separator);
+            string message = separator < 0 ? string.Empty : argument.Substring(separator + 1).Trim();
+            if (level.Length == 0 || level == "?" || level.Equals("help", StringComparison.OrdinalIgnoreCase))
+            {
+                WriteNotice("Toast severities: debug (info styling), info, success, warn/warning, error.");
+                WriteNotice("Usage: /toast <severity> [message]");
+                return true;
+            }
+            NotificationSeverity severity;
+            switch (level.ToLowerInvariant())
+            {
+                case "debug":
+                case "info": severity = NotificationSeverity.Info; break;
+                case "success": severity = NotificationSeverity.Success; break;
+                case "warn":
+                case "warning": severity = NotificationSeverity.Warning; break;
+                case "error": severity = NotificationSeverity.Error; break;
+                default:
+                    WriteNotice("Unknown toast severity: " + level + ". Use /toast ? to list levels.");
+                    return true;
+            }
+            _App.Notify(message.Length > 0 ? message : char.ToUpperInvariant(level[0]) + level.Substring(1).ToLowerInvariant() + " test toast", severity);
+            return true;
         }
 
         private bool RecallPrevious()
@@ -3247,12 +3392,22 @@ namespace Mux.Cli.App
             _Conversation.WriteLine(Text.From(string.Empty));
 
             string[] lines = (prompt ?? string.Empty).Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
-            _Conversation.WriteLine(Text.From(PromptText).Green().Bold().Append(Text.From(lines[0])));
+            _PinnedPrompt.Clear();
+            _PinnedPrompt.WriteLine(Text.From(PromptText + lines[0], InputSurface));
+            for (int i = 1; i < lines.Length; i++) _PinnedPrompt.WriteLine(Text.From(lines[i], InputSurface));
+            _HasPinnedPrompt = true;
+            _PromptPinned = false;
+            lock (_Sync) RebuildLayoutNoLock();
+
+            _CurrentPromptLine?.Update(_CurrentPromptText);
+            _CurrentPromptText = Text.From(PromptText, InputSurface).Green().Bold().Append(Text.From(lines[0], InputSurface));
+            _CurrentPromptLine = _Conversation.WriteLine(Text.From(PromptText, InputSurface.WithBackground(CurrentPromptMarker)).Green().Bold()
+                .Append(Text.From(lines[0], InputSurface)));
 
             string indent = new string(' ', PromptText.Length);
             for (int i = 1; i < lines.Length; i++)
             {
-                _Conversation.WriteLine(Text.From(indent + lines[i]));
+                _Conversation.WriteLine(Text.From(indent + lines[i], InputSurface));
             }
         }
 
@@ -4043,7 +4198,11 @@ namespace Mux.Cli.App
 
             foreach (ConversationMessage message in job.ConversationHistory)
             {
-                if (message.Role == RoleEnum.User && !string.IsNullOrEmpty(message.Content))
+                if (message.DisplayOnly)
+                {
+                    WriteNotice(message.Content ?? string.Empty);
+                }
+                else if (message.Role == RoleEnum.User && !string.IsNullOrEmpty(message.Content))
                 {
                     EchoPrompt(message.Content);
                     lock (_Sync)
@@ -4404,6 +4563,7 @@ namespace Mux.Cli.App
 
         private void SwitchEndpoint(EndpointConfig endpoint)
         {
+            bool changed = !string.Equals(_EndpointName, endpoint.Name, StringComparison.OrdinalIgnoreCase);
             _OnEndpointSelected?.Invoke(endpoint);
             lock (_Sync)
             {
@@ -4413,7 +4573,13 @@ namespace Mux.Cli.App
                 _ThinkingLabel = endpoint.ShowThinking ? "on" : "off";
             }
 
-            WriteNotice($"Switched to endpoint {endpoint.Name} ({endpoint.Model})");
+            if (changed)
+            {
+                ConversationMessage notice = ConversationMessage.ModelSwitch(endpoint.Name, endpoint.Model);
+                lock (_Sync) _ConversationHistory.Add(notice);
+                WriteNotice(notice.Content!);
+                _ = SaveSessionAsync();
+            }
             RefreshFooter();
             RefreshSidebar();
 
@@ -6520,6 +6686,11 @@ namespace Mux.Cli.App
         private void ClearTranscript()
         {
             _Conversation.Clear();
+            _PinnedPrompt.Clear();
+            _HasPinnedPrompt = false;
+            _PromptPinned = false;
+            _CurrentPromptLine = null;
+            RebuildLayoutNoLock();
         }
 
         private void CompactConversation()
@@ -6697,10 +6868,19 @@ namespace Mux.Cli.App
         private void RedrawTranscriptFromHistory(List<ConversationMessage> history)
         {
             _Conversation.Clear();
+            _PinnedPrompt.Clear();
+            _HasPinnedPrompt = false;
+            _PromptPinned = false;
+            _CurrentPromptLine = null;
+            RebuildLayoutNoLock();
             WriteHeader();
             foreach (ConversationMessage message in history)
             {
-                if (message.Role == RoleEnum.User && !string.IsNullOrEmpty(message.Content))
+                if (message.DisplayOnly)
+                {
+                    WriteNotice(message.Content ?? string.Empty);
+                }
+                else if (message.Role == RoleEnum.User && !string.IsNullOrEmpty(message.Content))
                 {
                     EchoPrompt(message.Content!);
                 }
@@ -6727,6 +6907,15 @@ namespace Mux.Cli.App
 
         private void RefreshFooter()
         {
+            if (_SlashSuggestions.Count > 0)
+            {
+                StyledText hint = Text.From("/ ").Green().Bold();
+                int start = Math.Max(0, _SlashSuggestionIndex - 2);
+                for (int i = start; i < Math.Min(start + 5, _SlashSuggestions.Count); i++)
+                    hint = hint.Append(i == _SlashSuggestionIndex ? Text.From("[" + _SlashSuggestions[i] + "] ").Green().Bold() : Text.From(_SlashSuggestions[i] + " ").Dim());
+                SetFooterHint(hint.Append(Text.From("↑/↓ choose · Tab complete · Esc dismiss").Dim()));
+                return;
+            }
             if (_MentionSuggestions.Count > 0)
             {
                 SetFooterHint(BuildMentionHint());
@@ -6768,6 +6957,56 @@ namespace Mux.Cli.App
                 return true;
             }
 
+            return false;
+        }
+
+        private void UpdateSlashSuggestions()
+        {
+            string text = _Composer.Text ?? string.Empty;
+            if (text != _SlashSuggestionQuery)
+            {
+                _SlashSuggestionQuery = text;
+                _SlashSuggestionIndex = 0;
+                _SlashDismissedText = null;
+            }
+            List<string> aliases = new List<string>();
+            foreach (CommandDescriptor command in _Catalog.Commands) aliases.AddRange(command.SlashAliases);
+            _SlashSuggestions = _SlashDismissedText == text ? new List<string>()
+                : Mux.Core.Interaction.SlashCommandCompletion.Match(text, ComposerCaretOffset(text), aliases);
+            if (_SlashDismissedText != text && text.StartsWith("/endpoint ", StringComparison.OrdinalIgnoreCase))
+            {
+                List<string> names = new List<string>();
+                foreach (EndpointConfig endpoint in LoadEndpointsSafe()) names.Add(endpoint.Name);
+                _SlashSuggestions = Mux.Core.Interaction.SlashCommandCompletion.MatchArgument(text, ComposerCaretOffset(text), "endpoint", names);
+            }
+            if (_SlashSuggestionIndex >= _SlashSuggestions.Count) _SlashSuggestionIndex = 0;
+            RefreshFooter();
+        }
+
+        private bool HandleSlashCompletionKey(KeyEvent key, SubmitDecision submit)
+        {
+            if (_SlashSuggestions.Count == 0 || key.Modifiers != KeyModifiers.None) return false;
+            if (submit == SubmitDecision.Submit && _Composer.Text.Trim().Equals("/endpoint", StringComparison.OrdinalIgnoreCase)) return false;
+            if (key.Code == KeyCode.Escape)
+            {
+                _SlashDismissedText = _Composer.Text;
+                _SlashSuggestions.Clear();
+                RefreshFooter();
+                return true;
+            }
+            if (key.Code == KeyCode.Up || key.Code == KeyCode.Down)
+            {
+                _SlashSuggestionIndex = (_SlashSuggestionIndex + (key.Code == KeyCode.Down ? 1 : _SlashSuggestions.Count - 1)) % _SlashSuggestions.Count;
+                RefreshFooter();
+                return true;
+            }
+            string selected = _SlashSuggestions[_SlashSuggestionIndex];
+            if (key.Code == KeyCode.Tab || (submit == SubmitDecision.Submit && !string.Equals(_Composer.Text, selected, StringComparison.OrdinalIgnoreCase)))
+            {
+                _Composer.Text = selected + " ";
+                RefreshComposerLayout();
+                return true;
+            }
             return false;
         }
 
@@ -7043,12 +7282,29 @@ namespace Mux.Cli.App
             List<Mux.Core.Telemetry.UsageBucket> series = _UsageQuery.GetTimeseriesAsync(filter, window.BucketMs, _Cts.Token).GetAwaiter().GetResult();
             foreach (Mux.Core.Telemetry.UsageBucket bucket in series)
             {
+                data.BucketStartsUnixMs.Add(bucket.BucketStartUnixMs);
                 data.TokensPerBucket.Add(bucket.Metrics.TotalTokens);
                 data.CostPerBucket.Add(bucket.Metrics.CostUsd);
                 data.TtftMsPerBucket.Add(bucket.Metrics.AvgTtftMs);
                 data.TotalMsPerBucket.Add(bucket.Metrics.AvgTotalMs);
                 data.StreamMsPerBucket.Add(bucket.Metrics.AvgStreamMs);
                 data.BucketLabels.Add(FormatBucketLabel(bucket.BucketStartUnixMs, range));
+            }
+
+            Mux.Core.Telemetry.UsageWindow heatmapWindow = Mux.Core.Telemetry.UsageWindow.ComputeHeatmap(range, now);
+            Mux.Core.Telemetry.UsageFilter heatmapFilter = new Mux.Core.Telemetry.UsageFilter
+            {
+                FromUnixMs = heatmapWindow.FromUnixMs,
+                // The query emits its upper bucket inclusively; avoid an extra cell at the exclusive boundary.
+                ToUnixMs = heatmapWindow.ToUnixMs - 1,
+                Labels = _UsageFilterLabels,
+                Tags = _UsageFilterTags
+            };
+            List<Mux.Core.Telemetry.UsageBucket> heatmap = _UsageQuery.GetTimeseriesAsync(heatmapFilter, heatmapWindow.BucketMs, _Cts.Token).GetAwaiter().GetResult();
+            foreach (Mux.Core.Telemetry.UsageBucket bucket in heatmap)
+            {
+                data.HeatmapTokensPerBucket.Add(bucket.Metrics.TotalTokens);
+                data.HeatmapBucketStartsUnixMs.Add(bucket.BucketStartUnixMs);
             }
 
             List<Mux.Core.Telemetry.UsageBreakdownRow> topModels = _UsageQuery.GetBreakdownAsync("model", filter, _Cts.Token).GetAwaiter().GetResult();

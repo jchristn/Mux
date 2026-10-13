@@ -54,6 +54,20 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(2, eventCount, "event count");
                     }),
 
+                    new TestCaseDescriptor("ConversationService", "ModelSwitchHistory", "Model switch notices stay in history across turns and reloads", async (CancellationToken ct) =>
+                    {
+                        var service = new ConversationService(new ListTurnRunner(new List<AgentEvent>
+                        {
+                            new AssistantTextEvent { Text = "Hi" }, new RunCompletedEvent { Status = "completed" }
+                        }), null);
+                        service.RecordModelSwitch("endpoint-B", "model-B");
+                        await service.RunTurnAsync("hello", ct);
+                        MuxAssert.AreEqual(3, service.History.Count, "notice plus completed exchange");
+                        var reopened = new ConversationService(new ListTurnRunner(new List<AgentEvent>()), service.History);
+                        MuxAssert.IsTrue(reopened.History[0].DisplayOnly, "notice survives resume");
+                        MuxAssert.Contains("endpoint-B (model-B)", reopened.History[0].Content!, "destination recorded");
+                        MuxAssert.IsFalse(Mux.Core.Agent.ConversationCompactor.BuildDigest(service.History, 1000).Contains("endpoint-B"), "notice excluded from summary context");
+                    }),
                     new TestCaseDescriptor("ConversationService", "BlankPromptRejected", "A blank prompt is rejected", async (CancellationToken ct) =>
                     {
                         ConversationService service = new ConversationService(new ListTurnRunner(new List<AgentEvent>()), null);

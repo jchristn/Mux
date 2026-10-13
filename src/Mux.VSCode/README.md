@@ -19,7 +19,7 @@ there, and one you start there opens here.
 ## What it does
 
 - **Chat panel** — stream a run with tool activity, and approve or deny a mutating tool without leaving the
-  editor.
+  editor. Slash-command suggestions support arrow-key selection, Tab completion, and Escape dismissal.
 - **Inline commands** — Explain selection, Fix this problem, Generate tests, Refactor selection, Write commit
   message, Summarize diff, Review current file. The first three are also code actions.
 - **Editor context** — attach the active file, selection, diagnostics, open tabs, or the working-tree diff to
@@ -31,7 +31,7 @@ there, and one you start there opens here.
   default), MCP servers, prompt profiles and the operational prompt catalog (edit/reset by kind), skills, a
   settings editor, and a usage summary.
 - **Endpoint picker** — choose the endpoint runs go against from the status bar, next to a connection-status
-  indicator.
+  indicator. Changes leave saved model-switch notices in the conversation, visible across mux clients.
 
 ## Getting started
 

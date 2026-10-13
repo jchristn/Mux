@@ -138,6 +138,8 @@ namespace Test.Shared
 
                     // Mux.Cli TUIKit interactive shell suite (M6).
                     TuiShellSuite.Create(),
+                    SeverityToastSuite.Create(),
+                    SlashCommandCompletionSuite.Create(),
 
                     // Mux.Cli AgentEvent projector suite (M7).
                     ProjectorSuite.Create(),

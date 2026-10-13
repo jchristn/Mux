@@ -76,6 +76,11 @@ namespace Mux.Desktop.Shell
         private StackPanel _OverviewHost = null!;
         private TextBlock _QuipText = null!;
         private TextBox _Composer = null!;
+        private StackPanel _SlashCompletionPanel = null!;
+        private List<string> _SlashCompletions = new List<string>();
+        private int _SlashCompletionIndex;
+        private string _SlashCompletionQuery = string.Empty;
+        private string? _DismissedSlashQuery;
         private Button _SendButton = null!;
         private Button _UndoButton = null!;
         private Button _RedoButton = null!;
@@ -992,7 +997,50 @@ namespace Mux.Desktop.Shell
 
         private void OpenEndpointsWindow()
         {
-            _ = new EndpointsWindow(PopulateModelPicker).ShowDialog(this);
+            _ = new EndpointsWindow(PopulateModelPicker, endpoint => UseEndpoint(endpoint.Name)).ShowDialog(this);
+        }
+
+        private bool UseEndpoint(string name)
+        {
+            List<EndpointConfig> endpoints;
+            try { endpoints = SettingsLoader.LoadEndpoints(); }
+            catch (Exception exception) { AddNotice(exception.Message, isError: true); return false; }
+            EndpointConfig? selected = EndpointSelection.FindByName(endpoints, name);
+            if (selected == null)
+            {
+                AddNotice(string.Format(L("main.endpointNotFound"), name), isError: true);
+                return false;
+            }
+            // Use the same SelectionChanged path as the conversation's picker: runner, context, and validation.
+            _ModelPicker.ItemsSource = endpoints;
+            _ModelPicker.SelectedItem = selected;
+            return true;
+        }
+
+        private void SelectEndpointCommand(string argument)
+        {
+            List<EndpointConfig> endpoints;
+            try { endpoints = SettingsLoader.LoadEndpoints(); }
+            catch (Exception exception) { AddNotice(exception.Message, isError: true); return; }
+            if (EndpointSelection.FindByName(endpoints, argument) != null) { UseEndpoint(argument); return; }
+            string text = "/endpoint " + argument;
+            if (EndpointSelection.CompleteCommand(text, text.Length, endpoints).Count > 0)
+            {
+                _Composer.Text = text;
+                _Composer.CaretIndex = text.Length;
+                _Composer.Focus();
+                UpdateSlashCompletions();
+            }
+            else AddNotice(string.Format(L("main.endpointNotFound"), argument), isError: true);
+        }
+
+        private List<EndpointConfig> PickerEndpoints()
+        {
+            List<EndpointConfig> endpoints = new List<EndpointConfig>();
+            if (_ModelPicker?.ItemsSource != null)
+                foreach (object? item in _ModelPicker.ItemsSource)
+                    if (item is EndpointConfig endpoint) endpoints.Add(endpoint);
+            return endpoints;
         }
 
         private void OpenMcpServersWindow()
@@ -1263,7 +1311,7 @@ namespace Mux.Desktop.Shell
                 null,
                 NativeMenuFactory.Item("Delete Conversations…", () => _ = OpenBulkDeleteAsync()),
                 null,
-                NativeMenuFactory.Item("Close Window", Close)));
+                NativeMenuFactory.Item("Close Window", Close, Key.W)));
             bar.Items.Add(NativeMenuFactory.Submenu("Edit",
                 NativeMenuFactory.Item("Undo Last Turn", () => _ = UndoLastTurnAsync()),
                 NativeMenuFactory.Item("Redo Turn", () => _ = RedoLastUndoAsync()),
@@ -1295,8 +1343,20 @@ namespace Mux.Desktop.Shell
             bar.Items.Add(NativeMenuFactory.Submenu("Tools",
                 NativeMenuFactory.Item("Usage Dashboard", OpenUsageWindow, Key.U, shift: true),
                 NativeMenuFactory.Item("Local Server…", OpenLocalServerWindow)));
+            bar.Items.Add(NativeMenuFactory.Submenu("Window",
+                NativeMenuFactory.Item("Minimize", () => WindowState = WindowState.Minimized, Key.M),
+                NativeMenuFactory.Item("Zoom", () => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized),
+                null,
+                NativeMenuFactory.Item("Bring All to Front", () =>
+                {
+                    Activate();
+                    foreach (Window window in OwnedWindows) window.Activate();
+                })));
             bar.Items.Add(NativeMenuFactory.Submenu("Help",
                 NativeMenuFactory.Item("Commands", ShowHelpMenu),
+                NativeMenuFactory.Item("Documentation", () => BrowserLauncher.OpenUrl("https://github.com/jchristn/Mux#readme")),
+                NativeMenuFactory.Item("Report an Issue…", () => BrowserLauncher.OpenUrl("https://github.com/jchristn/Mux/issues/new")),
+                null,
                 NativeMenuFactory.Item("About mux", OpenAboutWindow)));
             NativeMenu.SetMenu(this, bar);
         }
@@ -1797,6 +1857,7 @@ namespace Mux.Desktop.Shell
 
         private Control BuildComposer()
         {
+            _SlashCompletionPanel = new StackPanel { Spacing = 2, IsVisible = false, Margin = new Thickness(0, 0, 0, 8) };
             _Composer = new TextBox
             {
                 AcceptsReturn = true,
@@ -1818,7 +1879,13 @@ namespace Mux.Desktop.Shell
                 {
                     _PromptHistory.ResetCursor();
                 }
+                Dispatcher.UIThread.Post(UpdateSlashCompletions, DispatcherPriority.Input);
             };
+            _Composer.PropertyChanged += (sender, args) =>
+            {
+                if (args.Property == TextBox.CaretIndexProperty) UpdateSlashCompletions();
+            };
+            _Composer.LostFocus += (sender, args) => _SlashCompletionPanel.IsVisible = false;
 
             _SendButton = AccentButton(L(StringKeys.Send));
             _SendButton.Tip(L("main.send.tip"));
@@ -1842,6 +1909,7 @@ namespace Mux.Desktop.Shell
             };
 
             StackPanel stack = new StackPanel { Margin = new Thickness(20, 12, 20, 12) };
+            stack.Children.Add(_SlashCompletionPanel);
             stack.Children.Add(bar);
             stack.Children.Add(disclaimer);
 
@@ -1951,6 +2019,7 @@ namespace Mux.Desktop.Shell
         // recycle its text block, so the closed picker always shows the selected endpoint's name.
         private void PopulateModelPicker()
         {
+            _RefreshingModelPicker = true;
             try
             {
                 List<EndpointConfig> endpoints = SettingsLoader.LoadEndpoints();
@@ -1978,6 +2047,7 @@ namespace Mux.Desktop.Shell
             {
                 // No endpoints configured; a send surfaces the error inline.
             }
+            finally { _RefreshingModelPicker = false; }
         }
 
         private async Task LoadThreadsAsync()
@@ -2020,11 +2090,26 @@ namespace Mux.Desktop.Shell
 
         // ---- event handlers ----------------------------------------------------------------------
 
-        private void OnModelSelected(object? sender, SelectionChangedEventArgs e)
+        private bool _RefreshingModelPicker;
+
+        private async void OnModelSelected(object? sender, SelectionChangedEventArgs e)
         {
             if (_ModelPicker.SelectedItem is EndpointConfig endpoint)
             {
+                bool changed = !string.IsNullOrWhiteSpace(_Runner.EndpointName)
+                    && !string.Equals(_Runner.EndpointName, endpoint.Name, StringComparison.OrdinalIgnoreCase);
                 _Runner.EndpointName = endpoint.Name;
+                if (changed && !_RefreshingModelPicker)
+                {
+                    if (Ctx?.Conversation == null) await NewChatAsync();
+                    if (Ctx?.Conversation != null)
+                    {
+                        TabContext context = Ctx;
+                        ConversationMessage notice = context.Conversation.RecordModelSwitch(endpoint.Name, endpoint.Model);
+                        AddNotice(notice.Content!, isError: false);
+                        await PersistCurrentAsync(context);
+                    }
+                }
                 UpdateContextIndicator();
                 _ = ValidateModelAsync(endpoint);
             }
@@ -2087,6 +2172,8 @@ namespace Mux.Desktop.Shell
 
         private void OnComposerKeyDown(object? sender, KeyEventArgs e)
         {
+            UpdateSlashCompletions();
+            if (HandleSlashCompletionKey(e)) { e.Handled = true; return; }
             bool ctrl = (e.KeyModifiers & KeyModifiers.Control) != 0;
             bool shift = (e.KeyModifiers & KeyModifiers.Shift) != 0;
 
@@ -2128,6 +2215,84 @@ namespace Mux.Desktop.Shell
                     SetComposerFromHistory(recalled);
                 }
             }
+        }
+
+        private void UpdateSlashCompletions()
+        {
+            if (_Composer == null) return;
+            string text = _Composer.Text ?? string.Empty;
+            if (text != _SlashCompletionQuery)
+            {
+                _SlashCompletionQuery = text;
+                _SlashCompletionIndex = 0;
+                _DismissedSlashQuery = null;
+            }
+            _SlashCompletions = text == _DismissedSlashQuery || _Composer.SelectionStart != _Composer.SelectionEnd ? new List<string>()
+                : EndpointSelection.CompleteCommand(text, _Composer.CaretIndex, PickerEndpoints());
+            if (_SlashCompletions.Count == 0 && text != _DismissedSlashQuery && _Composer.SelectionStart == _Composer.SelectionEnd)
+                _SlashCompletions = Mux.Core.Interaction.SlashCommandCompletion.Match(text, _Composer.CaretIndex, DesktopSlashCommands.Aliases);
+            if (_SlashCompletionIndex >= _SlashCompletions.Count) _SlashCompletionIndex = 0;
+            RenderSlashCompletions();
+        }
+
+        private void RenderSlashCompletions()
+        {
+            _SlashCompletionPanel.Children.Clear();
+            _SlashCompletionPanel.IsVisible = _SlashCompletions.Count > 0;
+            int start = Math.Max(0, _SlashCompletionIndex - 2);
+            for (int i = start; i < Math.Min(start + 5, _SlashCompletions.Count); i++)
+            {
+                int index = i;
+                Button item = new Button
+                {
+                    Content = _SlashCompletions[i], Focusable = false, HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(10, 4),
+                    Background = i == _SlashCompletionIndex ? _Theme.AccentButton : _Theme.SurfaceAlt,
+                    Foreground = i == _SlashCompletionIndex ? _Theme.AccentText : _Theme.Text
+                };
+                item.Click += (sender, args) => AcceptSlashCompletion(index);
+                _SlashCompletionPanel.Children.Add(item);
+            }
+        }
+
+        private bool HandleSlashCompletionKey(KeyEventArgs e)
+        {
+            if (_SlashCompletions.Count == 0 || e.KeyModifiers != KeyModifiers.None) return false;
+            if (e.Key == Key.Enter && _Composer.Text?.Trim().Equals("/endpoint", StringComparison.OrdinalIgnoreCase) == true) return false;
+            if (e.Key == Key.Escape)
+            {
+                _DismissedSlashQuery = _Composer.Text;
+                _SlashCompletions.Clear();
+                RenderSlashCompletions();
+                return true;
+            }
+            if (e.Key == Key.Up || e.Key == Key.Down)
+            {
+                _SlashCompletionIndex = (_SlashCompletionIndex + (e.Key == Key.Down ? 1 : _SlashCompletions.Count - 1)) % _SlashCompletions.Count;
+                RenderSlashCompletions();
+                return true;
+            }
+            if (e.Key == Key.Enter && _SlashCompletions[_SlashCompletionIndex].StartsWith("/endpoint ", StringComparison.OrdinalIgnoreCase))
+            {
+                // Execute the chosen endpoint through SendAsync after accepting this suggestion.
+                AcceptSlashCompletion(_SlashCompletionIndex);
+                return false;
+            }
+            if (e.Key == Key.Tab || (e.Key == Key.Enter && !string.Equals(_Composer.Text, _SlashCompletions[_SlashCompletionIndex], StringComparison.OrdinalIgnoreCase)))
+            {
+                AcceptSlashCompletion(_SlashCompletionIndex);
+                return true;
+            }
+            return false;
+        }
+
+        private void AcceptSlashCompletion(int index)
+        {
+            string selected = _SlashCompletions[index];
+            _Composer.Text = selected + " ";
+            _Composer.CaretIndex = _Composer.Text.Length;
+            _Composer.Focus();
+            UpdateSlashCompletions();
         }
 
         private void RecordPrompt(string prompt)
@@ -2900,7 +3065,7 @@ namespace Mux.Desktop.Shell
             string trimmedInput = input.Trim();
             string command = trimmedInput;
             string argument = string.Empty;
-            int space = command.IndexOf(' ');
+            int space = command.IndexOfAny(new[] { ' ', '\t' });
             if (space > 0)
             {
                 argument = trimmedInput.Substring(space + 1).Trim();
@@ -2927,8 +3092,11 @@ namespace Mux.Desktop.Shell
                 case "/usage":
                     OpenUsageWindow();
                     break;
-                case "/endpoints":
                 case "/endpoint":
+                    if (argument.Length == 0) OpenEndpointsWindow();
+                    else SelectEndpointCommand(argument);
+                    break;
+                case "/endpoints":
                 case "/models":
                 case "/model":
                     OpenEndpointsWindow();
@@ -4130,7 +4298,11 @@ namespace Mux.Desktop.Shell
 
         private void RenderPersistedMessage(ConversationMessage message)
         {
-            if (message.Role == RoleEnum.User && !string.IsNullOrEmpty(message.Content))
+            if (message.DisplayOnly)
+            {
+                AddNotice(message.Content ?? string.Empty, isError: false);
+            }
+            else if (message.Role == RoleEnum.User && !string.IsNullOrEmpty(message.Content))
             {
                 AddUserBubble(message.Content!);
             }

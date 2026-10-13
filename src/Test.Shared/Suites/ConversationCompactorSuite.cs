@@ -52,6 +52,21 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("ConversationCompactor", "ModelSwitchRetainedAfterCompaction", "Old switch notices remain visible without entering the summarizer context", (CancellationToken ct) =>
+                    {
+                        var notice = ConversationMessage.ModelSwitch("endpoint-b", "model-b");
+                        var plan = new ConversationCompactionPlan
+                        {
+                            MessagesToCompact = new List<ConversationMessage> { notice, new ConversationMessage { Role = RoleEnum.User, Content = "old prompt" } },
+                            MessagesToPreserve = new List<ConversationMessage> { new ConversationMessage { Role = RoleEnum.User, Content = "recent prompt" } }
+                        };
+                        var result = ConversationCompactor.Assemble(plan, "summary");
+                        MuxAssert.AreEqual(3, result.Count, "summary, notice, recent turn");
+                        MuxAssert.IsTrue(result[1].DisplayOnly, "notice preserved");
+                        MuxAssert.IsFalse(ConversationCompactor.BuildDigest(plan.MessagesToCompact, 1000).Contains("endpoint-b"), "notice omitted from summarizer");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("ConversationCompactor", "DigestFormatsRolesAndCaps", "BuildDigest labels roles, skips blanks, and respects the cap", (CancellationToken ct) =>
                     {
                         List<ConversationMessage> messages = new List<ConversationMessage>

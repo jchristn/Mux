@@ -28,7 +28,16 @@ namespace Mux.Server
                 .Replace("__MUX_VERSION__", HtmlEscape(version))
                 .Replace("__LOGO_DARK__", logoDark)
                 .Replace("__LOGO_LIGHT__", logoLight)
-                .Replace("__LOGO_GREY__", logoGrey);
+                .Replace("__LOGO_GREY__", logoGrey)
+                .Replace("__SLASH_COMPLETION_JS__", LoadSlashCompletionScript());
+        }
+
+        private static string LoadSlashCompletionScript()
+        {
+            using Stream stream = typeof(DashboardPage).Assembly.GetManifestResourceStream("Mux.Server.slash-completion.js")
+                ?? throw new InvalidOperationException("Missing slash-completion asset.");
+            using StreamReader reader = new StreamReader(stream);
+            return reader.ReadToEnd();
         }
 
         private static string LoadLogoDataUri(string resourceName)
@@ -139,6 +148,7 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .msg.user{align-items:flex-end}
 .bubble{max-width:min(760px,100%);padding:12px 15px;border-radius:8px;background:var(--panel-2);white-space:normal;word-wrap:break-word}
 .msg.assistant .bubble{position:relative}
+.model-switch{color:var(--muted);font-size:12px;margin:14px 0;padding:8px 12px;border-left:2px solid var(--accent)}
 .msgcopy{position:absolute;bottom:6px;right:6px;background:var(--panel);border:1px solid var(--line);border-radius:5px;color:var(--muted);cursor:pointer;font-size:12px;line-height:1;padding:3px 6px;opacity:0;transition:opacity .12s}
 .msg.assistant .bubble:hover .msgcopy{opacity:1}
 .msgcopy:hover{color:var(--accent);border-color:var(--accent)}
@@ -166,9 +176,10 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .meta{display:flex;align-items:center;gap:8px}
 .statinfo{position:relative;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--line);color:var(--muted);font-size:10px;font-style:normal;font-weight:700;cursor:default;user-select:none}
 .statinfo:hover{border-color:var(--accent);color:var(--accent)}
-.stattip{position:absolute;bottom:130%;left:0;z-index:40;min-width:200px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:10px 12px;font-size:12px;font-weight:400;opacity:0;pointer-events:none;transform:translateY(4px);transition:.15s;white-space:nowrap}
-.statinfo:hover .stattip{opacity:1;transform:none}
+.stattip{position:fixed;z-index:40;box-sizing:border-box;min-width:0;width:max-content;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:10px 12px;font-size:12px;font-weight:400;visibility:hidden;opacity:0;pointer-events:none;overflow:auto;white-space:normal}
+.statinfo.tip-open .stattip{visibility:visible;opacity:1;pointer-events:auto}
 .stattip .r{display:flex;justify-content:space-between;gap:18px;padding:2px 0}
+.stattip .r span{min-width:0;overflow-wrap:anywhere}
 .stattip .r span:first-child{color:var(--muted)}
 .stattip .r span:last-child{font-variant-numeric:tabular-nums}
 .think{border-left:2px solid var(--border);padding:0 0 0 8px;margin:0 0 8px 0}
@@ -192,7 +203,11 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .thinking span:nth-child(3){animation-delay:.4s}
 @keyframes pulse{0%,60%,100%{opacity:.3}30%{opacity:1}}
 .meta{font-size:11px;color:var(--muted);margin-top:4px}
-.composer{border-top:1px solid var(--line);background:var(--panel);padding:14px 20px;display:flex;gap:10px;align-items:flex-end}
+.composer{position:relative;border-top:1px solid var(--line);background:var(--panel);padding:14px 20px;display:flex;gap:10px;align-items:flex-end}
+.slash-completion{position:absolute;bottom:100%;left:20px;right:74px;max-height:220px;overflow-y:auto;padding:4px;background:var(--panel);border:1px solid var(--line);border-radius:6px;z-index:10}
+.slash-completion[hidden]{display:none}
+.slash-option{display:block;width:100%;text-align:left;border:0;background:transparent;color:var(--text);padding:6px 10px;cursor:pointer}
+.slash-option.selected,.slash-option:hover{background:var(--accent);color:white}
 .composer textarea{flex:1;resize:none;max-height:180px;min-height:44px}
 .composer .send{width:44px;height:44px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:18px;padding:0}
 .disclaimer{font-size:11px;color:var(--muted);text-align:center;padding:0 20px 10px}
@@ -561,6 +576,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
           </div>
           <div>
             <div class="composer">
+              <div id="slash-completions" class="slash-completion" hidden></div>
               <textarea id="composer" rows="1" placeholder="Message your model… (Enter to send, Shift+Enter for newline)" title="Type a message. Enter sends it; Shift+Enter inserts a newline."></textarea>
               <button class="btn send" id="sendBtn" title="Send this message to the model">➤</button>
             </div>
@@ -641,6 +657,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
       <div class="chartpanel">
         <div class="ustabs" id="us_tabs">
           <button data-tab="tokens" class="active">Tokens</button>
+          <button data-tab="heatmap">Heatmap</button>
           <button data-tab="cost">Cost</button>
           <button data-tab="latency">Latency</button>
           <button data-tab="ttft">TTFT</button>
@@ -720,6 +737,8 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 </div></div>
 <div class="toast" id="toast"></div>
 <script>
+__SLASH_COMPLETION_JS__
+
 var API_KEY="__MUX_API_KEY__";
 var I18N={
 en:{
@@ -1034,7 +1053,52 @@ function statInfo(s){
     +'<div class="r"><span>Input tokens</span><span>'+(s.InputTokens||0)+'</span></div>'
     +'<div class="r"><span>Output tokens</span><span>'+(s.OutputTokens||0)+'</span></div>'
     +'<div class="r"><span>Total tokens</span><span>'+(s.TotalTokens||0)+'</span></div>';
-  return ' <i class="statinfo">i<span class="stattip">'+rows+'</span></i>';
+  return ' <i class="statinfo" tabindex="0" aria-label="Response telemetry">i<span class="stattip" role="tooltip">'+rows+'</span></i>';
+}
+// Position telemetry in the visible transcript, including its intersection with the browser viewport.
+function statTooltipBounds(box,anchor,width,height){
+  var gap=8;
+  var left=Math.max(0,box.left)+gap,top=Math.max(0,box.top)+gap;
+  var right=Math.max(left,Math.min(window.innerWidth,box.right)-gap);
+  var bottom=Math.max(top,Math.min(window.innerHeight,box.bottom)-gap);
+  width=Math.min(width,right-left);height=Math.min(height,bottom-top);
+  var x=Math.max(left,Math.min(anchor.left,right-width));
+  var y=anchor.top-gap-height;
+  if(y<top)y=anchor.bottom+gap;
+  y=Math.max(top,Math.min(y,bottom-height));
+  return {left:x,top:y,width:width,height:height};
+}
+var statTooltipIcon=null;
+function hideStatTooltip(){
+  if(statTooltipIcon)statTooltipIcon.classList.remove("tip-open");
+  statTooltipIcon=null;
+}
+function showStatTooltip(icon){
+  var box=el("messages"),tip=icon&&icon.querySelector(".stattip");
+  if(!box||!tip||!box.contains(icon))return;
+  hideStatTooltip();
+  var bounds=box.getBoundingClientRect();
+  // client dimensions exclude the transcript scrollbar and border.
+  bounds={left:bounds.left+box.clientLeft,top:bounds.top+box.clientTop,
+    right:bounds.left+box.clientLeft+box.clientWidth,bottom:bounds.top+box.clientTop+box.clientHeight};
+  var availableWidth=Math.min(window.innerWidth,bounds.right)-Math.max(0,bounds.left)-16;
+  var availableHeight=Math.min(window.innerHeight,bounds.bottom)-Math.max(0,bounds.top)-16;
+  if(availableWidth<32||availableHeight<32)return;
+  tip.style.maxWidth=availableWidth+"px";
+  tip.style.maxHeight=availableHeight+"px";
+  var rect=statTooltipBounds(bounds,icon.getBoundingClientRect(),tip.offsetWidth,tip.offsetHeight);
+  tip.style.left=rect.left+"px";tip.style.top=rect.top+"px";
+  statTooltipIcon=icon;icon.classList.add("tip-open");
+}
+function wireStatTooltips(){
+  var box=el("messages");
+  box.addEventListener("mouseover",function(event){var icon=event.target.closest(".statinfo");if(icon&&icon!==statTooltipIcon)showStatTooltip(icon);});
+  box.addEventListener("mouseout",function(event){if(statTooltipIcon&&!statTooltipIcon.contains(event.relatedTarget))hideStatTooltip();});
+  box.addEventListener("focusin",function(event){var icon=event.target.closest(".statinfo");if(icon)showStatTooltip(icon);});
+  box.addEventListener("focusout",hideStatTooltip);
+  box.addEventListener("scroll",hideStatTooltip);
+  window.addEventListener("resize",hideStatTooltip);
+  window.addEventListener("scroll",function(event){if(!statTooltipIcon||!statTooltipIcon.contains(event.target))hideStatTooltip();},true);
 }
 function renderMessages(){
   var box=el("messages");
@@ -1042,6 +1106,7 @@ function renderMessages(){
   var html="";
   for(var i=0;i<messages.length;i++){
     var m=messages[i];
+    if(m.displayOnly){html+='<div class="model-switch" role="status">'+esc(m.content)+'</div>';continue;}
     var think=(m.role==="assistant"&&m.thinking)?'<details class="think"'+(m.typing?' open':'')+'><summary>💭 '+esc(t("chat.thinking")||"Thinking")+'</summary><div class="think-body">'+esc(m.thinking).replace(/\n/g,"<br>")+'</div></details>':'';
     var body=m.typing?'<div class="thinking"><span></span><span></span><span></span></div>':(m.role==="assistant"?md(m.content):"<p>"+esc(m.content).replace(/\n/g,"<br>")+"</p>");
     var cp=(m.role==="assistant"&&!m.typing&&!m.local&&m.content)?'<button class="msgcopy" title="Copy response to the clipboard" onclick="copyMsg('+i+',this)">⧉</button>':'';
@@ -1056,7 +1121,7 @@ function renderMessages(){
     }
     var inner=cp+think+toolsHtml+body;
     html+='<div class="msg '+m.role+'"><div class="bubble">'+inner+'</div>';
-    if(m.role==="assistant"&&!m.typing&&m.model){html+='<div class="meta">'+esc(m.model)+statInfo(m.stats)+'</div>';}
+    if(m.role==="assistant"&&!m.typing&&(m.model||m.stats)){html+='<div class="meta">'+esc(m.model||"")+statInfo(m.stats)+'</div>';}
     html+='</div>';
   }
   box.innerHTML=html;
@@ -1126,7 +1191,7 @@ function doDeleteMultiple(ids){
 }
 function openConvo(id){
   api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
-    messages=((d&&d.Messages)||[]).map(function(m){return {role:m.Role,content:m.Content,thinking:m.Reasoning||null};});
+    messages=((d&&d.Messages)||[]).map(function(m){return {role:m.Role,content:m.Content,thinking:m.Reasoning||null,model:m.Model||(d&&d.Model)||"",stats:m.Stats||null,displayOnly:!!m.DisplayOnly};});
     currentSessionId=(d&&d.Id)||id;currentModel=(d&&d.Model)||"";
     if(d&&d.EndpointName){var sel=el("endpointSelect");if(sel){for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===d.EndpointName){sel.selectedIndex=i;break;}}}}
     setChatTitle((d&&d.Title)||"");renderMessages();highlightConvo();
@@ -1171,7 +1236,7 @@ function reloadOpenTranscript(id){
     if(id!==currentSessionId)return;
     api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
       if(id!==currentSessionId)return;
-      var msgs=((d&&d.Messages)||[]).map(function(mm){return {role:mm.Role,content:mm.Content,thinking:mm.Reasoning||null};});
+      var msgs=((d&&d.Messages)||[]).map(function(mm){return {role:mm.Role,content:mm.Content,thinking:mm.Reasoning||null,model:mm.Model||(d&&d.Model)||"",stats:mm.Stats||null,displayOnly:!!mm.DisplayOnly};});
       if(msgs.length>before||tries>=8){
         messages=msgs;setChatTitle((d&&d.Title)||"");renderMessages();loadConvos();
       }else{tries++;setTimeout(pull,400);}
@@ -1180,17 +1245,32 @@ function reloadOpenTranscript(id){
   setTimeout(pull,250);
 }
 function newChat(){stopConvoWatch();messages=[];currentSessionId=null;currentModel="";setChatTitle("");renderMessages();highlightConvo();var c=el("composer");if(c)c.focus();}
-function persistConvo(){
-  var real=messages.filter(function(m){return !m.typing&&!m.local;});
+var modelSwitchSave=Promise.resolve();var deferredModelSwitchSave=false;
+function recordModelSwitch(){
+  var sel=el("endpointSelect");if(!sel.value||sel.value===selectedEndpointName)return;
+  var option=sel.options[sel.selectedIndex];
+  currentModel=option&&option.dataset.model||"";
+  messages.push({role:"system",content:"Switched to endpoint "+sel.value+" ("+currentModel+")",displayOnly:true});
+  renderMessages();
+  if(busy)deferredModelSwitchSave=true;
+  else{
+    var history=messages.slice(),endpoint=sel.value,model=currentModel;
+    modelSwitchSave=modelSwitchSave.then(function(){return persistConvo(history,endpoint,model);});
+  }
+  warmModel();
+}
+function persistConvo(history,endpoint,model){
+  var real=(history||messages).filter(function(m){return !m.typing&&!m.local;});
   if(!real.length)return;
-  var payload={Id:currentSessionId||"",Title:"",EndpointName:el("endpointSelect").value||"",Model:currentModel||"",Messages:real.map(function(m){return {Role:m.role,Content:m.content,Reasoning:m.thinking||null};})};
-  api("/v1.0/api/sessions","PUT",payload).then(function(s){if(s&&s.Id){currentSessionId=s.Id;setChatTitle(s.Title||"");}loadConvos();}).catch(function(){});
+  var payload={Id:currentSessionId||"",Title:"",EndpointName:endpoint||el("endpointSelect").value||"",Model:model||currentModel||"",Messages:real.map(function(m){return {Role:m.role,Content:m.content,Reasoning:m.thinking||null,Model:m.model||null,Stats:m.stats||null,DisplayOnly:!!m.displayOnly};})};
+  var session=currentSessionId;
+  return api("/v1.0/api/sessions","PUT",payload).then(function(s){if(s&&s.Id&&currentSessionId===session){currentSessionId=s.Id;setChatTitle(s.Title||"");}loadConvos();notifySessionsChanged(s&&s.Id);}).catch(function(e){toast("Could not save conversation: "+e.message,true);});
 }
 function renameConvo(id){
   var cur="";var e=document.querySelector('#convoList .convo-item[data-id="'+id+'"] .ct');if(e)cur=e.getAttribute("title")||e.textContent;
   var val=window.prompt("Rename conversation",cur);if(val==null)return;val=val.trim();if(!val)return;
   api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
-    var payload={Id:id,Title:val,EndpointName:(d&&d.EndpointName)||"",Model:(d&&d.Model)||"",Messages:((d&&d.Messages)||[]).map(function(m){return {Role:m.Role,Content:m.Content,Reasoning:m.Reasoning||null};})};
+    var payload={Id:id,Title:val,EndpointName:(d&&d.EndpointName)||"",Model:(d&&d.Model)||"",Messages:((d&&d.Messages)||[]).map(function(m){return {Role:m.Role,Content:m.Content,Reasoning:m.Reasoning||null,Model:m.Model||null,Stats:m.Stats||null,DisplayOnly:!!m.DisplayOnly};})};
     return api("/v1.0/api/sessions","PUT",payload);
   }).then(function(s){if(id===currentSessionId&&s)setChatTitle(s.Title||"");loadConvos();notifySessionsChanged(id);}).catch(function(e){toast(e.message,true);});
 }
@@ -1246,26 +1326,27 @@ function showChatStats(){
     "- Tokens — in: "+(s.InputTokens||0)+", out: "+(s.OutputTokens||0)+", total: "+(s.TotalTokens||0);
   messages.push({role:"assistant",content:body,local:true});renderMessages();
 }
+var CHAT_COMMAND_VIEWS = {"usage": "usage", "endpoints": "endpoints", "endpoint": "endpoints", "models": "endpoints", "model": "endpoints", "mcp": "mcp", "mcps": "mcp", "prompt": "prompts", "prompts": "prompts", "skill": "skills", "skills": "skills", "subagent": "subagents", "subagents": "subagents", "agents": "subagents", "pricing": "pricing", "plugin": "hooks", "plugins": "hooks", "hooks": "hooks", "commands": "commands", "keys": "keybindings", "keybindings": "keybindings", "shortcuts": "keybindings", "sessions": "sessions", "settings": "settings"};
+var CHAT_COMMAND_ACTIONS = ["?","help","menu","new","clear","context","stats","mirror"];
 function handleChatCommand(text){
-  var raw=text.trim();var sp=raw.indexOf(" ");if(sp>0)raw=raw.slice(0,sp);
+  var raw=text.trim();var sp=raw.search(/[ \t]/);var arg=sp>0?raw.slice(sp+1).trim():"";if(sp>0)raw=raw.slice(0,sp);
   var cmd=raw.slice(1).toLowerCase();
+  if(cmd==="endpoint"&&arg){
+    var select=el("endpointSelect");
+    var option=Array.from(select.options).find(function(o){return o.value.toLowerCase()===arg.toLowerCase();});
+    if(option){select.value=option.value;recordModelSwitch();}
+    else{
+      var composer=el("composer");composer.value="/endpoint "+arg;composer.setSelectionRange(composer.value.length,composer.value.length);composer.focus();chatCompletion.refresh();
+      if(!MuxSlashCompletion.matchArgument(composer.value,composer.value.length,"endpoint",Array.from(select.options).map(function(o){return o.value;})).length)toast("Endpoint not found: "+arg,true);
+    }
+    return;
+  }
+  if(Object.prototype.hasOwnProperty.call(CHAT_COMMAND_VIEWS,cmd)){switchView(CHAT_COMMAND_VIEWS[cmd]);return;}
   switch(cmd){
     case "?": case "help": case "menu": messages.push({role:"assistant",content:CHAT_HELP,local:true});renderMessages();return;
     case "new": case "clear": newChat();return;
     case "context": case "stats": showChatStats();return;
     case "mirror": mirrorSession(text);return;
-    case "usage": switchView("usage");return;
-    case "endpoints": case "endpoint": case "models": case "model": switchView("endpoints");return;
-    case "mcp": case "mcps": switchView("mcp");return;
-    case "prompt": case "prompts": switchView("prompts");return;
-    case "skill": case "skills": switchView("skills");return;
-    case "subagent": case "subagents": case "agents": switchView("subagents");return;
-    case "pricing": switchView("pricing");return;
-    case "plugin": case "plugins": case "hooks": switchView("hooks");return;
-    case "commands": switchView("commands");return;
-    case "keys": case "keybindings": case "shortcuts": switchView("keybindings");return;
-    case "sessions": switchView("sessions");return;
-    case "settings": switchView("settings");return;
     default: expandSkillOrWarn(text);
   }
 }
@@ -1289,14 +1370,14 @@ function sendChat(){
   el("composer").value="";el("composer").style.height="44px";
   var typing={role:"assistant",content:"",typing:true};
   messages.push(typing);renderMessages();busy=true;el("sendBtn").textContent="■";el("sendBtn").title="Stop the response";el("sendBtn").style.background="#e5534b";
-  var payload={endpoint:endpoint,Id:currentSessionId||"",messages:messages.filter(function(m){return !m.typing&&!m.local;}).map(function(m){return {role:m.role,content:m.content};})};
-  streamChat(payload,typing);
+  var payload={endpoint:endpoint,Id:currentSessionId||"",messages:messages.filter(function(m){return !m.typing&&!m.local;}).map(function(m){return {role:m.role,content:m.content,displayOnly:!!m.displayOnly};})};
+  modelSwitchSave.then(function(){payload.Id=currentSessionId||"";streamChat(payload,typing);});
 }
 
 var currentAbort=null;
 var currentRunId=null;
 var currentMirror=null;
-function endChat(){busy=false;currentAbort=null;currentRunId=null;if(currentMirror){try{currentMirror.close();}catch(e){}currentMirror=null;}el("sendBtn").textContent="➤";el("sendBtn").title="Send";el("sendBtn").style.background="";}
+function endChat(){busy=false;if(deferredModelSwitchSave){deferredModelSwitchSave=false;var history=messages.slice();modelSwitchSave=modelSwitchSave.then(function(){return persistConvo(history);});}currentAbort=null;currentRunId=null;if(currentMirror){try{currentMirror.close();}catch(e){}currentMirror=null;}el("sendBtn").textContent="➤";el("sendBtn").title="Send";el("sendBtn").style.background="";}
 // Stop the in-flight response. Ask the server to cancel the run (so it actually stops server-side, not just
 // in this browser), then abort the local stream and drop the incomplete turn (both the empty assistant
 // bubble and the user prompt that started it) so the model history stays clean — matching the TUI/desktop.
@@ -1340,8 +1421,7 @@ function mirrorSession(text){
   };
 }
 function dropIncompleteTurn(typing){
-  var i=messages.indexOf(typing);if(i>=0)messages.splice(i,1);
-  if(messages.length&&messages[messages.length-1].role==="user")messages.pop();
+  var i=messages.indexOf(typing);if(i>=0){messages.splice(i,1);if(i>0&&messages[i-1].role==="user")messages.splice(i-1,1);}
   renderMessages();
 }
 
@@ -1412,16 +1492,18 @@ function loadEndpoints(){
   api("/v1.0/api/endpoints").then(function(res){
     var items=(res&&res.Items)||[];var sel=el("endpointSelect");sel.innerHTML="";
     if(items.length===0){var o=document.createElement("option");o.textContent="(no endpoints configured)";o.value="";sel.appendChild(o);return;}
-    items.forEach(function(ep){var o=document.createElement("option");o.value=ep.Name;o.textContent=ep.Name+"  ·  "+ep.Model;if(ep.IsDefault)o.selected=true;sel.appendChild(o);});
-    warmModel();
+    items.forEach(function(ep){var o=document.createElement("option");o.value=ep.Name;o.dataset.model=ep.Model;o.textContent=ep.Name+"  ·  "+ep.Model;if(ep.IsDefault)o.selected=true;sel.appendChild(o);});
+    warmModel();if(chatCompletion)chatCompletion.refresh();
   }).catch(function(e){toast("Failed to load endpoints: "+e.message,true);});
 }
 
 // Warm (load) the selected model so the first chat token is fast, and surface a small ready/unreachable
 // status. Called when endpoints load, when the chat view opens, and whenever the endpoint is switched.
+var selectedEndpointName="";
 function warmModel(){
   var ep=el("endpointSelect");var st=el("modelStatus");
   if(!ep||!ep.value){if(st)st.textContent="";return;}
+  selectedEndpointName=ep.value;
   if(st){st.textContent="⏳ loading…";st.className="model-status";}
   api("/v1.0/api/model/load","POST",{Endpoint:ep.value}).then(function(r){
     if(!st)return;
@@ -2152,11 +2234,19 @@ function cachedNote(buckets){var any=buckets.some(function(b){return (b.Metrics&
 function drawUsageChart(){
   var host=el("us_chart"),buckets=usageState.buckets;
   if(!buckets||!buckets.length){host.innerHTML='<div class="chartempty"><div class="empty"><div class="eicon">📉</div><div>No usage recorded in this window yet.</div></div></div>';return;}
+  if(usageState.tab==="heatmap"){host.innerHTML=tokenHeatmap(buckets);return;}
   var cfg=CHART_TABS[usageState.tab]||CHART_TABS.tokens;
   var note=(typeof cfg.note==="function")?cfg.note(buckets):(cfg.note||"");
   var body=(cfg.kind==="dist")?distChart(buckets,cfg,usageState.range):barChart(buckets,cfg,usageState.range);
   host.innerHTML=body+legendHtml(cfg)+(note?'<div class="chartnote">'+esc(note)+'</div>':"");
   wireUsageHover(buckets,cfg,usageState.range);
+}
+function tokenHeatmap(buckets){
+  var max=0,colors=["#2d3034","#0e4429","#006d32","#26a641","#39d353"];
+  buckets.forEach(function(b){max=Math.max(max,b.Metrics.TotalTokens||0);});
+  var h='<div style="padding:16px"><strong>Token activity heatmap</strong><div style="display:grid;grid-template-rows:repeat(7,24px);grid-auto-flow:column;grid-auto-columns:minmax(12px,1fr);gap:4px;margin:16px 0;overflow-x:auto">';
+  buckets.forEach(function(b){var v=b.Metrics.TotalTokens||0,level=v<=0?0:Math.min(4,1+Math.floor(v/Math.max(1,max)*3));var label=fmtBucketLabel(b.BucketStartUnixMs,usageState.range)+": "+v.toLocaleString()+" tokens";h+='<div tabindex="0" role="img" aria-label="'+esc(label)+'" title="'+esc(label)+'" style="border-radius:3px;background:'+colors[level]+'"></div>';});
+  return h+'</div><div class="chartnote">'+esc(fmtBucketLabel(buckets[0].BucketStartUnixMs,usageState.range))+' → '+esc(fmtBucketLabel(buckets[buckets.length-1].BucketStartUnixMs,usageState.range))+' · Oldest → newest · Less ░▒▓█ More · peak '+max.toLocaleString()+' tokens</div></div>';
 }
 function niceMax(v){if(v<=0)return 1;var p=Math.pow(10,Math.floor(Math.log(v)/Math.LN10));var f=v/p;var nf=f<=1?1:(f<=2?2:(f<=5?5:10));return nf*p;}
 function fmtBucketLabel(ms,rangeId){var d=new Date(ms);
@@ -2346,7 +2436,7 @@ el("sendBtn").addEventListener("click",function(){if(busy)stopChat();else sendCh
 el("newChatBtn").addEventListener("click",newChat);
 el("delMultiBtn").addEventListener("click",deleteMultiple);
 el("refreshConvosBtn").addEventListener("click",function(){loadConvos();toast("Refreshed");});
-el("endpointSelect").addEventListener("change",function(){currentModel="";warmModel();});
+el("endpointSelect").addEventListener("change",recordModelSwitch);
 el("saveSettingsBtn").addEventListener("click",saveSettings);
 el("reloadSettingsBtn").addEventListener("click",loadSettings);
 /* modal close wiring */
@@ -2394,8 +2484,13 @@ wireTable("skills_list",{menu:function(i){var s=_skView[i];return [{label:t("act
 wireTable("sessions_list",{menu:function(i){var id=_se[i].Id;return [{label:"View Markdown",run:function(){viewSe(id,"md");}},{label:"View HTML",run:function(){viewSe(id,"html");}},{sep:true},{label:t("sess.editLabels"),run:function(){editSeLabels(id);}},{label:t("sess.editTags"),run:function(){editSeTags(id);}},{sep:true},{label:"Download Markdown",run:function(){exportSe(id,"md");}},{label:"Download HTML",run:function(){exportSe(id,"html");}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delSe(id);}}];},row:function(i){viewSe(_se[i].Id,"md");}});
 wireTable("usage_history_list",{menu:function(i){return [{label:t("act.view"),run:function(){viewUsageRow(i);}},{label:t("act.viewjson"),run:function(){viewJson("Usage event",_uhist[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delUsageRow(i);}}];},row:function(i){viewUsageRow(i);}});
 wireTable("pricing_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openPrice(i);}},{label:t("act.duplicate"),run:function(){openPrice(-1,{Model:"",Input:_pr2[i].Input,Cached:_pr2[i].Cached,Output:_pr2[i].Output});}},{label:t("act.viewjson"),run:function(){viewJson("Pricing · "+_pr2[i].Model,_pr2[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delPrice(i);}}];},row:function(i){openPrice(i);},add:function(){openPrice(-1);}});
+wireStatTooltips();
 var comp=el("composer");
-comp.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat();}});
+var chatCompletion=MuxSlashCompletion.attach(comp, el("slash-completions"), function(){return CHAT_COMMAND_ACTIONS.concat(Object.keys(CHAT_COMMAND_VIEWS));}, function(text,caret){
+  var select=el("endpointSelect");
+  return MuxSlashCompletion.matchArgument(text,caret,"endpoint",Array.from(select.options).map(function(option){return option.value;}));
+});
+comp.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();sendChat();}});
 comp.addEventListener("input",function(){comp.style.height="44px";comp.style.height=Math.min(comp.scrollHeight,180)+"px";});
 
 /* Home view delegation: KPI tiles, quick actions, recent-session preview, retry */

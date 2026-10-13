@@ -327,6 +327,7 @@ export interface ToolCallDto {
 
 /** One message in a session's transcript, as returned by `GET /v1.0/api/sessions/detail`. */
 export interface ChatMessageDto {
+    DisplayOnly?: boolean;
     Role: string;
     Content: string;
     Reasoning?: string | null;

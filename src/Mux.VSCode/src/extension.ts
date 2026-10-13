@@ -61,7 +61,7 @@ export function activate(context: vscode.ExtensionContext): void {
     };
     context.subscriptions.push(lifecycle.onDidChangeState((state) => { if (state.connected) { void ensureSessionsWatch(); } }));
 
-    const endpointPicker = new EndpointPicker(lifecycle);
+    const endpointPicker = new EndpointPicker(lifecycle, (endpoint, model) => chat.recordModelSwitch(endpoint, model));
     context.subscriptions.push(endpointPicker);
 
     context.subscriptions.push(new ConnectionStatusBar(lifecycle));

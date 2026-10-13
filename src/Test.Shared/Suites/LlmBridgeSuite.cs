@@ -33,6 +33,16 @@ namespace Test.Shared.Suites
                 "PolyPrompt LlmClient bridge against per-provider mock servers",
                 new List<TestCaseDescriptor>
                 {
+                    Case("ModelSwitchExcludedFromWire", "Transcript notices do not reach the provider", async ct =>
+                    {
+                        using LocalLlmTestServer server = LocalLlmTestServer.Start();
+                        using LlmClient client = new LlmClient(MakeEndpoint(AdapterTypeEnum.OpenAiCompatible, server.Endpoint));
+                        var history = Messages("hello");
+                        history.Insert(0, ConversationMessage.ModelSwitch("secret-notice-endpoint", "secret-notice-model"));
+                        await CollectAsync(client.StreamAsync(history, NoTools(), ct), ct).ConfigureAwait(false);
+                        MuxAssert.IsFalse(server.RequestBodies[0].Contains("secret-notice", System.StringComparison.Ordinal), "display-only notice excluded");
+                        MuxAssert.Contains("hello", server.RequestBodies[0], "user prompt retained");
+                    }),
                     Case("OpenAiBridge", "OpenAI-compatible adapter maps streaming, tools, usage, and errors", ct => RunAdapterScenariosAsync(AdapterTypeEnum.OpenAi, ct)),
                     Case("OpenAiCompatibleBridge", "openai-compatible adapter maps streaming, tools, usage, and errors", ct => RunAdapterScenariosAsync(AdapterTypeEnum.OpenAiCompatible, ct)),
                     Case("VllmBridge", "vLLM adapter maps streaming, tools, usage, and errors", ct => RunAdapterScenariosAsync(AdapterTypeEnum.Vllm, ct)),

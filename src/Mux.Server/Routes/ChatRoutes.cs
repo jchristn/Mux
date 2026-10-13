@@ -379,7 +379,7 @@ namespace Mux.Server.Routes
             for (int i = 0; i < request.Messages.Count - 1; i++)
             {
                 ChatMessageDto m = request.Messages[i];
-                history.Add(new ConversationMessage { Role = RoleEnumExtensions.ParseRole(m.Role), Content = m.Content ?? string.Empty });
+                history.Add(ChatMessageMapper.ToModel(m));
             }
             string prompt = request.Messages[request.Messages.Count - 1].Content ?? string.Empty;
 
@@ -604,8 +604,6 @@ namespace Mux.Server.Routes
                 // durable without depending on a follow-up PUT from the browser, and appears (and is
                 // resumable) on every surface. Best-effort and non-cancellable (the client may have already
                 // disconnected once the run finished).
-                await PersistTurnAsync(sessionId, endpoint, runDirectory, history, prompt, content.ToString(), thinking.ToString()).ConfigureAwait(false);
-
                 ChatReply reply = new ChatReply
                 {
                     Role = "assistant",
@@ -623,6 +621,8 @@ namespace Mux.Server.Routes
                         TotalTokens = (runCompleted?.InputTokens ?? 0) + (runCompleted?.OutputTokens ?? 0)
                     }
                 };
+
+                await PersistTurnAsync(sessionId, endpoint, runDirectory, history, prompt, content.ToString(), thinking.ToString(), reply.Stats).ConfigureAwait(false);
 
                 await ctx.Response.SendEvent(new ServerSentEvent
                 {
@@ -684,7 +684,8 @@ namespace Mux.Server.Routes
             List<ConversationMessage> priorFromRequest,
             string prompt,
             string assistantText,
-            string assistantThinking)
+            string assistantThinking,
+            ChatStats stats)
         {
             if (_SessionStore == null || string.IsNullOrWhiteSpace(sessionId))
             {
@@ -711,7 +712,13 @@ namespace Mux.Server.Routes
                     {
                         Role = RoleEnum.Assistant,
                         Content = assistantText,
-                        Reasoning = string.IsNullOrEmpty(assistantThinking) ? null : assistantThinking
+                        Reasoning = string.IsNullOrEmpty(assistantThinking) ? null : assistantThinking,
+                        Telemetry = new MessageTelemetry
+                        {
+                            Model = endpoint.Model,
+                            TtftMs = stats.TtftMs, StreamingMs = stats.StreamingMs, TotalMs = stats.TotalMs,
+                            InputTokens = stats.InputTokens, OutputTokens = stats.OutputTokens, TotalTokens = stats.TotalTokens
+                        }
                     }
                 };
 
@@ -836,6 +843,7 @@ namespace Mux.Server.Routes
             List<ConversationMessage> messages = new List<ConversationMessage>();
 
             bool callerSuppliedSystem = request.Messages.Count > 0
+                && !request.Messages[0].DisplayOnly
                 && RoleEnumExtensions.ParseRole(request.Messages[0].Role) == RoleEnum.System;
             if (!callerSuppliedSystem)
             {
@@ -864,7 +872,7 @@ namespace Mux.Server.Routes
 
             foreach (ChatMessageDto message in request.Messages)
             {
-                messages.Add(new ConversationMessage { Role = RoleEnumExtensions.ParseRole(message.Role), Content = message.Content ?? string.Empty });
+                if (!message.DisplayOnly) messages.Add(ChatMessageMapper.ToModel(message));
             }
 
             return messages;

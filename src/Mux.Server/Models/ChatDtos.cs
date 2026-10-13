@@ -40,6 +40,15 @@ namespace Mux.Server.Models
         /// <summary>The assistant's reasoning ("thinking") for this message, or null when none.</summary>
         public string? Reasoning { get; set; } = null;
 
+        /// <summary>Transcript-only notice, never included in model context.</summary>
+        public bool DisplayOnly { get; set; }
+
+        /// <summary>The model that produced this message, when known.</summary>
+        public string? Model { get; set; }
+
+        /// <summary>Persisted per-response timing and token metrics, when available.</summary>
+        public ChatStats? Stats { get; set; }
+
         /// <summary>Tool calls requested by the assistant, or null when none.</summary>
         public List<ChatToolCallDto>? ToolCalls { get; set; } = null;
 
@@ -62,10 +71,18 @@ namespace Mux.Server.Models
             {
                 Role = message.Role.ToWire(),
                 Content = message.Content ?? string.Empty,
+                DisplayOnly = message.DisplayOnly,
                 Reasoning = string.IsNullOrEmpty(message.Reasoning) ? null : message.Reasoning,
                 ToolCalls = message.ToolCalls == null || message.ToolCalls.Count == 0
                     ? null
                     : message.ToolCalls.Select(tc => new ChatToolCallDto { Id = tc.Id ?? string.Empty, Name = tc.Name ?? string.Empty, Arguments = tc.Arguments ?? string.Empty, ThoughtSignature = tc.ThoughtSignature }).ToList(),
+                Model = message.Telemetry?.Model,
+                Stats = message.Telemetry == null ? null : new ChatStats
+                {
+                    TtftMs = message.Telemetry.TtftMs, StreamingMs = message.Telemetry.StreamingMs,
+                    TotalMs = message.Telemetry.TotalMs, InputTokens = message.Telemetry.InputTokens,
+                    OutputTokens = message.Telemetry.OutputTokens, TotalTokens = message.Telemetry.TotalTokens
+                },
                 ToolCallId = message.ToolCallId
             };
         }
@@ -79,10 +96,18 @@ namespace Mux.Server.Models
             {
                 Role = RoleEnumExtensions.ParseRole(dto.Role),
                 Content = dto.Content ?? string.Empty,
+                DisplayOnly = dto.DisplayOnly,
                 Reasoning = string.IsNullOrEmpty(dto.Reasoning) ? null : dto.Reasoning,
                 ToolCalls = dto.ToolCalls == null || dto.ToolCalls.Count == 0
                     ? null
                     : dto.ToolCalls.Select(tc => new ToolCall { Id = tc.Id ?? string.Empty, Name = tc.Name ?? string.Empty, Arguments = tc.Arguments ?? string.Empty, ThoughtSignature = tc.ThoughtSignature }).ToList(),
+                Telemetry = dto.Stats == null ? null : new MessageTelemetry
+                {
+                    Model = dto.Model ?? string.Empty,
+                    TtftMs = dto.Stats.TtftMs, StreamingMs = dto.Stats.StreamingMs,
+                    TotalMs = dto.Stats.TotalMs, InputTokens = dto.Stats.InputTokens,
+                    OutputTokens = dto.Stats.OutputTokens, TotalTokens = dto.Stats.TotalTokens
+                },
                 ToolCallId = dto.ToolCallId
             };
         }

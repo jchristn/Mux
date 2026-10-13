@@ -11,7 +11,7 @@ namespace Mux.Cli.App
 
     /// <summary>
     /// A large, paged usage-analytics view. Each metric is its own page — tokens, cost, time-to-first-token,
-    /// total latency, streaming time (all as bar charts over time), and top models by cost — navigated with
+    /// total latency, streaming time (all as bar charts over time), top models by cost, and a token activity heatmap — navigated with
     /// the arrow keys. The time range (last hour / day / week / month) is chosen with the number keys and
     /// re-queried through an injected data provider so the modal performs no I/O. Over-time pages draw a
     /// labeled Y axis and several X-axis time ticks; the models page shows category labels with a value scale.
@@ -36,13 +36,16 @@ namespace Mux.Cli.App
             "Time to first token (ms)",
             "Total latency (ms)",
             "Streaming time (ms)",
-            "Top models by cost"
+            "Top models by cost",
+            "Token activity heatmap"
         };
 
         private readonly string _Title;
         private readonly Func<UsageRange, UsageChartData> _Provider;
         private UsageRange _Range;
         private int _Page;
+        private int _HeatmapRowOffset;
+        private int _HeatmapVisibleRows = 1;
         private UsageChartData _Data = new UsageChartData();
         private string _Error = string.Empty;
 
@@ -90,9 +93,18 @@ namespace Mux.Cli.App
                 return true;
             }
 
+            if (_Page == 6 && (key.Code == KeyCode.PageDown || key.Code == KeyCode.PageUp))
+            {
+                HeatmapShape(out int rows, out _, out _);
+                int step = key.Code == KeyCode.PageDown ? _HeatmapVisibleRows : -_HeatmapVisibleRows;
+                _HeatmapRowOffset = Math.Clamp(_HeatmapRowOffset + step, 0, Math.Max(0, rows - _HeatmapVisibleRows));
+                return true;
+            }
+
             if (key.Rune >= '1' && key.Rune < '1' + _Ranges.Length)
             {
                 _Range = _Ranges[key.Rune - '1'];
+                _HeatmapRowOffset = 0;
                 Load();
                 return true;
             }
@@ -105,13 +117,15 @@ namespace Mux.Cli.App
         {
             if (surface == null) throw new ArgumentNullException(nameof(surface));
 
+            if (surface.Size.Width <= 0 || surface.Size.Height <= 0) return;
+
             int screenWidth = surface.Size.Width;
             int screenHeight = surface.Size.Height;
 
-            int boxWidth = Math.Max(24, screenWidth - 2);
-            int boxHeight = Math.Max(10, screenHeight - 2);
-            int boxX = Math.Max(0, (screenWidth - boxWidth) / 2);
-            int boxY = Math.Max(0, (screenHeight - boxHeight) / 2);
+            int boxWidth = screenWidth;
+            int boxHeight = screenHeight;
+            int boxX = 0;
+            int boxY = 0;
             Rect box = new Rect(boxX, boxY, boxWidth, boxHeight);
 
             surface.Fill(box, Cell.Blank(CellStyle.Default));
@@ -138,7 +152,7 @@ namespace Mux.Cli.App
                 RenderPage(surface, contentX, chartTop, contentW, chartBottom - chartTop + 1, muted);
             }
 
-            surface.DrawText(contentX, footerRow, Trim("←/→ page · 1 hour · 2 day · 3 week · 4 month · Esc close", contentW), muted);
+            surface.DrawText(contentX, footerRow, Trim("←/→ charts + heatmap · 1 hour · 2 day · 3 week · 4 month · Esc close", contentW), muted);
         }
 
         #endregion
@@ -178,10 +192,81 @@ namespace Mux.Cli.App
                 case 4:
                     RenderBars(surface, x, y, w, h, _Data.StreamMsPerBucket, v => FmtMs(v), Color.FromPalette(3), muted);
                     break;
+                case 6:
+                    RenderHeatmap(surface, x, y, w, h, muted);
+                    break;
                 default:
                     RenderModels(surface, x, y, w, h, muted);
                     break;
             }
+        }
+
+        private void HeatmapShape(out int rows, out int columns, out int minutesPerCell)
+        {
+            switch (_Range)
+            {
+                case UsageRange.Hour: rows = 4; columns = 15; minutesPerCell = 1; break;
+                case UsageRange.Day: rows = 24; columns = 4; minutesPerCell = 15; break;
+                case UsageRange.Week: rows = 7; columns = 12; minutesPerCell = 120; break;
+                default: rows = 30; columns = 2; minutesPerCell = 720; break;
+            }
+        }
+
+        private void RenderHeatmap(ISurface surface, int x, int y, int w, int h, CellStyle muted)
+        {
+            List<double> values = _Data.HeatmapTokensPerBucket.Count > 0 ? _Data.HeatmapTokensPerBucket : _Data.TokensPerBucket;
+            List<long> timestamps = _Data.HeatmapBucketStartsUnixMs.Count > 0 ? _Data.HeatmapBucketStartsUnixMs : _Data.BucketStartsUnixMs;
+            if (values.Count == 0 || h < 5 || w < 18)
+            { surface.DrawText(x, y, Trim("No data in this range.", w), muted); return; }
+            HeatmapShape(out int rows, out int columns, out int minutes);
+            const int axisWidth = 12;
+            int plotX = x + axisWidth, plotWidth = w - axisWidth;
+            int plotHeight = h - 4;
+            _HeatmapVisibleRows = Math.Min(rows, plotHeight);
+            _HeatmapRowOffset = Math.Clamp(_HeatmapRowOffset, 0, rows - _HeatmapVisibleRows);
+            double max = 0;
+            foreach (double value in values) max = Math.Max(max, value);
+            Color[] colors = { Color.FromRgb(45, 48, 52), Color.FromRgb(14, 68, 41), Color.FromRgb(0, 109, 50), Color.FromRgb(38, 166, 65), Color.FromRgb(57, 211, 83) };
+            surface.DrawText(x, y, "Row start", muted);
+            for (int c = 0; c < columns; c++)
+            {
+                int offset = c * minutes;
+                string label;
+                if (_Range == UsageRange.Day) label = ":" + offset.ToString("00", CultureInfo.InvariantCulture);
+                else if ((_Range == UsageRange.Week || _Range == UsageRange.Month) && timestamps.Count > 0)
+                    label = DateTimeOffset.FromUnixTimeMilliseconds(timestamps[0]).AddMinutes(offset).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
+                else label = offset < 60 ? "+" + offset + "m" : "+" + offset / 60 + "h";
+                int left = c * plotWidth / columns, right = (c + 1) * plotWidth / columns;
+                surface.DrawText(plotX + left, y, Trim(label, right - left), muted);
+            }
+            for (int visibleRow = 0; visibleRow < _HeatmapVisibleRows; visibleRow++)
+            {
+                int row = visibleRow + _HeatmapRowOffset;
+                int top = visibleRow * plotHeight / _HeatmapVisibleRows;
+                int bottom = (visibleRow + 1) * plotHeight / _HeatmapVisibleRows;
+                int index = row * columns;
+                string rowLabel = "Row " + (row + 1);
+                if (index < timestamps.Count)
+                {
+                    DateTimeOffset time = DateTimeOffset.FromUnixTimeMilliseconds(timestamps[index]).ToLocalTime();
+                    rowLabel = time.ToString(_Range == UsageRange.Hour || _Range == UsageRange.Day ? "HH:mm" : "ddd MM/dd", CultureInfo.InvariantCulture);
+                }
+                else if (index < _Data.BucketLabels.Count) rowLabel = _Data.BucketLabels[index];
+                surface.DrawText(x, y + 1 + top, Trim(rowLabel, axisWidth - 2), muted);
+                for (int c = 0; c < columns; c++)
+                {
+                    int i = index + c;
+                    double value = i < values.Count ? values[i] : 0;
+                    int level = value <= 0 ? 0 : Math.Min(4, 1 + (int)(value / Math.Max(1, max) * 3));
+                    int left = c * plotWidth / columns, right = (c + 1) * plotWidth / columns;
+                    int gapX = right - left > 2 ? 1 : 0, gapY = bottom - top > 1 ? 1 : 0;
+                    surface.Fill(new Rect(plotX + left, y + 1 + top, right - left - gapX, bottom - top - gapY),
+                        Cell.Blank(CellStyle.Default.WithBackground(colors[level])));
+                }
+            }
+            string interval = minutes < 60 ? minutes + " min" : minutes / 60 + " hour";
+            surface.DrawText(x, y + h - 3, Trim(rows * columns + " spots · " + interval + "/spot · rows " + (_HeatmapRowOffset + 1) + "–" + (_HeatmapRowOffset + _HeatmapVisibleRows) + "/" + rows + " · PgUp/PgDn scroll", w), muted);
+            surface.DrawText(x, y + h - 2, Trim("Oldest → newest across rows · Less ░▒▓█ More · peak " + FmtTokens(max), w), muted);
         }
 
         // A vertical bar chart over time with a labeled Y axis (left gutter) and several X-axis time ticks.

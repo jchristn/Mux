@@ -82,7 +82,7 @@ namespace Mux.Desktop.Services
 
             // Snapshot the prior history (turns 1..N-1) before adding this turn's user message; the runner
             // receives the prior history and adds the new prompt itself, so the message is not duplicated.
-            List<ConversationMessage> priorHistory = new List<ConversationMessage>(_History);
+            List<ConversationMessage> priorHistory = _History.FindAll(message => !message.DisplayOnly);
 
             ConversationMessage userMessage = new ConversationMessage
             {
@@ -141,6 +141,15 @@ namespace Mux.Desktop.Services
                 Content = answer,
                 Reasoning = string.IsNullOrEmpty(thinking) ? null : thinking
             });
+        }
+
+        /// <summary>Records an endpoint change as a durable transcript-only entry.</summary>
+        public ConversationMessage RecordModelSwitch(string endpoint, string model)
+        {
+            ConversationMessage notice = ConversationMessage.ModelSwitch(endpoint, model);
+            _History.Add(notice);
+            RaiseStateChanged();
+            return notice;
         }
 
         private void RaiseStateChanged()
