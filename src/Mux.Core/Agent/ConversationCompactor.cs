@@ -50,6 +50,11 @@ namespace Mux.Core.Agent
                 }
             };
 
+            // Keep transcript notices from the collapsed section visible, without summarizing them.
+            if (plan.MessagesToCompact != null)
+                foreach (ConversationMessage message in plan.MessagesToCompact)
+                    if (message.DisplayOnly) result.Add(message);
+
             if (plan.MessagesToPreserve != null)
             {
                 result.AddRange(plan.MessagesToPreserve);
@@ -74,7 +79,7 @@ namespace Mux.Core.Agent
 
             foreach (ConversationMessage message in messages)
             {
-                if (string.IsNullOrWhiteSpace(message.Content))
+                if (message.DisplayOnly || string.IsNullOrWhiteSpace(message.Content))
                 {
                     continue;
                 }

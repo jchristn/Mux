@@ -72,6 +72,12 @@ namespace Mux.Desktop
         {
             return AppBuilder.Configure<App>()
                 .UsePlatformDetect()
+                .With(new MacOSPlatformOptions
+                {
+                    ShowInDock = true,
+                    DisableNativeMenus = false,
+                    DisableDefaultApplicationMenuItems = false
+                })
                 .LogToTrace();
         }
 

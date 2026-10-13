@@ -84,7 +84,8 @@
 - Background processes: the model starts dev servers, watchers, and `docker compose up` with `process_start` (optionally waiting for a ready line), reads only new output with `process_output`, and stops them with `process_stop`; output is kept in a bounded buffer, the number of running processes is capped, and everything is killed when the session ends. `/processes` in the terminal and desktop lists, shows output, and stops them, and the sidebar shows each one. The `react-dev-server` skill starts a React dev server this way and reports its URL
 - Structured automation support: `mux print --output-format jsonl` emits one machine-readable event per line
 - Local REST server & tray agent (`v0.9.0`, opt-in): `mux serve` starts a loopback-bound, token-guarded REST + WebSocket API (Watson 7) over mux's in-process services; a cross-platform Avalonia system-tray agent hosts it in the background with **About / Launch Mux / Exit**. Never auto-starts from a plain run. See `docs/REST_API.md`
-- Usage analytics: every model call is recorded to a local SQLite database (`~/.mux/usage.db`, multi-process safe, no external service) — tokens, cost, time-to-first-token, streaming time, latency, and throughput. See it via `/usage` and the live sidebar cost in the TUI, or the **Usage** and **Pricing** pages on the `mux serve` dashboard (charts over time with endpoint/model filters). Cost derives from an editable `pricing.json`. See `docs/CONFIG.md`
+- **Command completion and model switching**: slash-command suggestions in TUI, desktop, web chat, and VS Code; `/endpoint <name>` completion and direct switching in TUI, desktop, and web. Every surface records model changes as saved transcript notices, excluded from model context.
+- Usage analytics: every model call is recorded to a local SQLite database (`~/.mux/usage.db`, multi-process safe, no external service) — tokens, cost, time-to-first-token, streaming time, latency, and throughput. See it via `/usage` and the live sidebar cost in the TUI, or the **Usage** and **Pricing** pages on the `mux serve` dashboard (charts and token heatmaps over time with endpoint/model filters; heatmaps have labeled axes and clock-aligned buckets). The TUI `/usage` view fills the screen. Cost derives from an editable `pricing.json`. See `docs/CONFIG.md`
 - Desktop app (`v0.11.0`): `mux Desktop` is a cross-platform Avalonia client that links `Mux.Core` in-process. It offers streaming chat with Markdown, tables, and syntax-highlighted code (with per-response copy), thinking and tool-call cards, and auto-safe tool approvals; **parallel conversation tabs** that each run their own agent turn concurrently (switch tabs mid-turn without blocking); conversations/threads with AI-summarized titles, rename/export/bulk-delete; a command palette (`Ctrl+K`) and slash commands; MCP tools and skills in turns; live context/usage stats and the `mux serve` usage dashboard (candlestick charts with endpoint/conversation filters). Configuration is fully managed in-app — endpoints (with model import and validation), MCP servers (with connectivity checks), prompt profiles, skills, subagents, pricing, hooks, custom commands, keybindings, and web-search providers, plus a grouped settings surface, `/compact` and `/effort`, system/light/dark/**high-contrast** theming, and **full localization in 11 languages** (with right-to-left support for Arabic). Launch it with `scripts\windows\run-desktop.bat` / `./scripts/macos/run-desktop.sh` / `./scripts/linux/run-desktop.sh`. See `docs/DESKTOP.md`
 - Run lifecycle (`v0.12.0`): `mux serve` tracks each streamed run as an addressable object you can list (`GET /v1.0/api/runs`), inspect (`GET /v1.0/api/runs/{runId}` — status, counters, task plan), and cancel (`POST /v1.0/api/runs/{runId}/cancel`, cooperative and server-side). The `/v1.0/ws` WebSocket is a live per-run event bridge: subscribe by run or session id and replay-then-tail the same event envelope `mux print --output-format jsonl` emits. Stop in the dashboard and the VS Code extension now cancels server-side. **Live session mirroring** works across surfaces — a run on one surface can be watched read-only on another (`mux mirror <sessionId>` in the terminal, `/mirror` in the dashboard, *Mirror a session's live run* in VS Code); the desktop app publishes its in-process runs through its embedded server. See `docs/REST_API.md`
 - Observability (`v1.1.0`): OpenTelemetry metrics, traces, and logs for operators. `Mux.Core` emits on the `Mux` meter and activity source (agent runs and their stages, LLM calls with time-to-first-token and tokens, tools, approvals, MCP, web search, git checkpoints, hooks, subagents, the job pipeline, the write lease, the usage writer, sessions), the REST server adds Watson's HTTP metrics and per-request spans, and `mux`, the tray agent, and the desktop app export it all (OTLP, optional in-process Prometheus, Loki logs with trace correlation) when `observability.enabled` is on. `docker/compose.yaml` brings up a provisioned Prometheus + Tempo + Loki + Grafana stack with six per-domain dashboards and alert rules, and the web dashboard's home page links to it. See [TELEMETRY.md](TELEMETRY.md)
@@ -183,7 +184,14 @@ mux
 You get a full-screen REPL with per-job transcripts, a job sidebar, a multi-line composer, slash commands and
 key bindings, an interactive tool-approval modal, and autosaved, resumable sessions. Type `/?` (or press `F1`)
 for the command menu, `/endpoint` (or `Ctrl+E`) to switch models, and `/sessions` to browse and resume past
-conversations. For scripting, `mux print --output-format jsonl` runs the same engine non-interactively. See
+conversations. Type `/end` to see matching commands; use Up/Down and Tab to complete. `/endpoint <name>`
+suggests configured endpoint names and switches directly when submitted; bare `/endpoint` and `/endpoints`
+open endpoint management. Submitted prompts retain the composer's dark grey background. The current prompt
+pins to the top only when it would scroll out of view, with ` ...` indicating a longer prompt.
+
+`/usage` opens fullscreen analytics with token heatmaps, timeframe selection, and labeled axes. Toasts use
+severity colors; hidden `/toast debug`, `/toast info`, `/toast warn`, and `/toast error` commands can test them
+(`/toast ?` lists levels). For scripting, `mux print --output-format jsonl` runs the same engine non-interactively. See
 [USAGE.md](USAGE.md).
 
 ### Web dashboard
@@ -197,7 +205,11 @@ mux serve                   # add --allow-tools to let browser chats run mutatin
 `mux serve` hosts a loopback-bound, token-guarded REST + WebSocket API and a self-contained single-page
 dashboard at the printed URL (default `http://127.0.0.1:8710/dashboard`) — chat, configuration, session
 management, and usage/pricing analytics. A cross-platform system-tray agent can host it in the background;
-from the tray you can Launch Dashboard, Launch Terminal, or Launch Desktop. See [docs/REST_API.md](docs/REST_API.md).
+from the tray you can Launch Dashboard, Launch Terminal, or Launch Desktop. Chat supports slash-command
+completion and `/endpoint <name>` selection: Tab completes a suggestion, while Enter on an endpoint
+suggestion switches immediately and leaves a saved notice in the conversation. Per-response telemetry is
+retained on reload, and its info tooltip stays within the conversation area. Usage includes token heatmaps.
+See [docs/REST_API.md](docs/REST_API.md).
 
 ### Desktop app
 
@@ -214,7 +226,11 @@ scripts\windows\run-desktop.bat
 `mux Desktop` links `Mux.Core` in-process and offers streaming chat with Markdown, tables, and
 syntax-highlighted code; **parallel conversation tabs** that each run their own turn concurrently;
 AI-summarized conversation titles with rename/export/bulk-delete; a command palette (`Ctrl+K`); the full set
-of in-app configuration managers; the usage dashboard; and a UI localized into 11 languages. See
+of in-app configuration managers; the usage dashboard with token heatmaps; and a UI localized into 11
+languages. Slash commands and endpoint names offer completion; Enter on an endpoint suggestion switches
+immediately and records a saved conversation notice. **Use this model** in an endpoint row's action menu
+also selects it for the conversation. macOS has native File, Edit, View, Configure, Tools, Window, and Help
+menus. See
 [docs/DESKTOP.md](docs/DESKTOP.md).
 
 ### VS Code extension
@@ -224,7 +240,9 @@ view in the activity bar. On the first message the extension connects to a runni
 for you on loopback with a generated key. You get a streaming chat panel with in-editor tool approvals and
 per-turn stats, inline commands and code actions (explain, fix, generate tests, refactor, commit message,
 summarize diff, review file), editor context injection, a **Manage** view for endpoints / MCP servers /
-prompts / subagents / skills / settings, a native usage dashboard, and the shared session store. Source lives
+prompts / subagents / skills / settings, a native usage dashboard, and the shared session store. The chat
+composer completes slash commands, and endpoint selections leave saved model-switch notices that also
+render when opening conversations from other clients. Source lives
 in `src/Mux.VSCode`; the full guide is in [docs/VSCODE.md](docs/VSCODE.md).
 
 ## CLI Usage

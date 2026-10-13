@@ -30,6 +30,15 @@ namespace Test.Shared.Suites
                 "Shared enum + telemetry mappings",
                 new List<TestCaseDescriptor>
                 {
+                    Case("ModelSwitchNoticeRoundTrip", "Endpoint notices retain their display-only marker through DTO and session JSON", (CancellationToken ct) =>
+                    {
+                        var notice = ConversationMessage.ModelSwitch("homedns-gpt", "gpt-oss-20b");
+                        var mapped = ChatMessageMapper.ToModel(ChatMessageMapper.ToDto(notice));
+                        var restored = System.Text.Json.JsonSerializer.Deserialize<ConversationMessage>(System.Text.Json.JsonSerializer.Serialize(mapped))!;
+                        MuxAssert.IsTrue(restored.DisplayOnly, "transcript-only marker retained");
+                        MuxAssert.AreEqual("Switched to endpoint homedns-gpt (gpt-oss-20b)", restored.Content, "portable notice text");
+                        return Task.CompletedTask;
+                    }),
                     Case("RoleWireRoundTrips", "Role ⇄ wire string round-trips and parses tolerantly", (CancellationToken ct) =>
                     {
                         foreach (RoleEnum role in new[] { RoleEnum.System, RoleEnum.User, RoleEnum.Assistant, RoleEnum.Tool })
@@ -74,6 +83,24 @@ namespace Test.Shared.Suites
                         ConversationMessage restored = ChatMessageMapper.ToModel(ChatMessageMapper.ToDto(message));
                         MuxAssert.AreEqual("sig-1", restored.ToolCalls![0].ThoughtSignature, "signed call keeps its signature");
                         MuxAssert.IsNull(restored.ToolCalls![1].ThoughtSignature, "unsigned call stays unsigned");
+                        return Task.CompletedTask;
+                    }),
+
+                    Case("ResponseTelemetrySurvivesDtoAndJson", "Per-response model and statistics survive DTO and persisted JSON round trips", (CancellationToken ct) =>
+                    {
+                        ConversationMessage message = new ConversationMessage
+                        {
+                            Role = RoleEnum.Assistant, Content = "Life continues.",
+                            Telemetry = new MessageTelemetry { Model = "test-model", TtftMs = 123, StreamingMs = 456, TotalMs = 579, InputTokens = 10, OutputTokens = 20, TotalTokens = 30 }
+                        };
+                        ConversationMessage restored = System.Text.Json.JsonSerializer.Deserialize<ConversationMessage>(
+                            System.Text.Json.JsonSerializer.Serialize(ChatMessageMapper.ToModel(ChatMessageMapper.ToDto(message))))!;
+                        MuxAssert.AreEqual("test-model", restored.Telemetry!.Model, "response model");
+                        MuxAssert.AreEqual(123L, restored.Telemetry.TtftMs, "TTFT retained");
+                        MuxAssert.AreEqual(456L, restored.Telemetry.StreamingMs, "stream time retained");
+                        MuxAssert.AreEqual(579L, restored.Telemetry.TotalMs, "total time retained");
+                        MuxAssert.AreEqual(30, restored.Telemetry.TotalTokens, "token total retained");
+                        MuxAssert.IsNull(ChatMessageMapper.ToDto(new ConversationMessage()).Stats, "legacy messages have no fabricated stats");
                         return Task.CompletedTask;
                     }),
 

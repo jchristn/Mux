@@ -925,7 +925,7 @@ namespace Mux.Core.Agent
             // Existing history
             foreach (ConversationMessage message in _Options.ConversationHistory)
             {
-                conversation.Add(message);
+                if (!message.DisplayOnly) conversation.Add(message);
             }
 
             // New user message

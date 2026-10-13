@@ -73,6 +73,29 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(2, result.Count, "existing kept");
                         return Task.CompletedTask;
                     }),
+                    new TestCaseDescriptor("SessionService", "ModelNoticeSurvivesOlderClientSave", "Matching notices retain their display-only marker when an older client omits it", (CancellationToken ct) =>
+                    {
+                        var notice = ConversationMessage.ModelSwitch("endpoint-b", "model-b");
+                        var incoming = new List<ConversationMessage> { new ConversationMessage { Role = notice.Role, Content = notice.Content } };
+                        var result = SessionMergePolicy.Reconcile(new List<ConversationMessage> { notice }, incoming);
+                        MuxAssert.IsTrue(result[0].DisplayOnly, "marker retained");
+                        MuxAssert.IsFalse(incoming[0].DisplayOnly, "input not mutated");
+                        return Task.CompletedTask;
+                    }),
+                    new TestCaseDescriptor("SessionService", "TelemetrySurvivesOlderClientSave", "An older client's matching transcript preserves stored telemetry without mutating input", (CancellationToken ct) =>
+                    {
+                        var existing = History("prompt", "response");
+                        existing[1].Telemetry = new MessageTelemetry { Model = "model-a", TotalTokens = 42 };
+                        var incoming = History("prompt", "response", "next prompt");
+                        var result = SessionMergePolicy.Reconcile(existing, incoming);
+                        MuxAssert.AreEqual(42, result[1].Telemetry!.TotalTokens, "existing metrics retained");
+                        MuxAssert.AreEqual("model-a", result[1].Telemetry!.Model, "original response model retained");
+                        MuxAssert.IsNull(incoming[1].Telemetry, "input not mutated");
+                        var changed = History("prompt", "different response");
+                        MuxAssert.IsNull(SessionMergePolicy.Reconcile(existing, changed)[1].Telemetry, "metrics not transferred to a different response");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("SessionService", "PersistReconcilesAgainstStore", "PersistConversationAsync does not truncate a store that grew under a stale surface", async (CancellationToken ct) =>
                     {
                         string dir = TempDir();

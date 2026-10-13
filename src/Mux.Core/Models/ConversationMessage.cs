@@ -85,6 +85,24 @@ namespace Mux.Core.Models
             set => _ToolCallId = value;
         }
 
+        /// <summary>Optional display-only metrics for this response, retained across transcript reloads.</summary>
+        [JsonPropertyName("telemetry")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public MessageTelemetry? Telemetry { get; set; }
+
+        /// <summary>A transcript-only notice, excluded from model context.</summary>
+        [JsonPropertyName("displayOnly")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool DisplayOnly { get; set; }
+
+        /// <summary>Creates the portable transcript entry for an endpoint selection.</summary>
+        public static ConversationMessage ModelSwitch(string endpoint, string model) => new ConversationMessage
+        {
+            Role = RoleEnum.System,
+            Content = $"Switched to endpoint {endpoint} ({model})",
+            DisplayOnly = true
+        };
+
         #endregion
     }
 }

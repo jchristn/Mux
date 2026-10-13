@@ -18,6 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\Mux.VSCode\dashboard\chat\slash-completion.js" LogicalName="Mux.Server.slash-completion.js" />
     <!-- Packaged into the NuGet package root (README rendered on nuget.org, icon as the package icon). -->
     <None Include="PACKAGE.md" Pack="true" PackagePath="README.md" />
     <None Include="..\..\assets\icon-black.png" Pack="true" PackagePath="icon.png" />

@@ -63,6 +63,32 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor(SuiteId, "NamedSelectionNeverFallsBack", "Explicit endpoint selection matches only the requested name and does not alter defaults", (CancellationToken ct) =>
+                    {
+                        List<EndpointConfig> endpoints = Build("other", "other", "homedns-gpt-oss-20b", "homedns-llama");
+                        MuxAssert.AreEqual("homedns-gpt-oss-20b", EndpointSelection.FindByName(endpoints, " HOMEDNS-GPT-OSS-20B ")?.Name, "exact case-insensitive selection");
+                        MuxAssert.IsNull(EndpointSelection.FindByName(endpoints, "homedns"), "ambiguous prefix is not selected");
+                        MuxAssert.IsNull(EndpointSelection.FindByName(endpoints, "missing"), "unknown name does not choose default");
+                        MuxAssert.IsTrue(endpoints[0].IsDefault && !endpoints[1].IsDefault, "conversation selection leaves default intact");
+                        return Task.CompletedTask;
+                    }),
+                    new TestCaseDescriptor(SuiteId, "EndpointArgumentCompletion", "Endpoint argument completion offers matching configured names and ends after acceptance", (CancellationToken ct) =>
+                    {
+                        List<EndpointConfig> endpoints = Build("other", "other", "homedns-gpt-oss-20b", "homedns-llama", "Home DNS model");
+                        string prefix = "/endpoint homedn";
+                        var matches = EndpointSelection.CompleteCommand(prefix, prefix.Length, endpoints);
+                        MuxAssert.AreEqual(2, matches.Count, "configured prefix matches");
+                        MuxAssert.AreEqual("/endpoint homedns-gpt-oss-20b", matches[0], "first completion");
+                        MuxAssert.AreEqual("/endpoint homedns-llama", matches[1], "second completion");
+                        MuxAssert.AreEqual(4, EndpointSelection.CompleteCommand("/endpoint ", 10, endpoints).Count, "empty argument lists endpoints");
+                        foreach (string text in new[] { "/endpoints homedn", "/endpoint missing", "/endpoint homedns-gpt-oss-20b ", "/endpoint home\nhello" })
+                            MuxAssert.AreEqual(0, EndpointSelection.CompleteCommand(text, text.Length, endpoints).Count, "no completion for " + text);
+                        MuxAssert.AreEqual(0, EndpointSelection.CompleteCommand(prefix, 5, endpoints).Count, "caret inside command");
+                        string spaced = "/endpoint Home DNS";
+                        MuxAssert.AreEqual("/endpoint Home DNS model", EndpointSelection.CompleteCommand(spaced, spaced.Length, endpoints)[0], "names with spaces supported");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor(SuiteId, "EmptyListSelectsNothing", "An empty or missing list selects nothing", (CancellationToken ct) =>
                     {
                         MuxAssert.IsNull(EndpointSelection.Resolve(new List<EndpointConfig>(), "anything"), "empty list");

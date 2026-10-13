@@ -13,6 +13,15 @@ namespace Mux.Cli.App
         /// <summary>KPI summary line shown in the header (tokens/cost/calls for the selected range).</summary>
         public List<string> HeaderLines { get; } = new List<string>();
 
+        /// <summary>UTC bucket timestamps for labeled heatmap rows.</summary>
+        public List<long> BucketStartsUnixMs { get; } = new List<long>();
+
+        /// <summary>Tokens in clock-aligned heatmap buckets, independent of rolling bar-chart buckets.</summary>
+        public List<double> HeatmapTokensPerBucket { get; } = new List<double>();
+
+        /// <summary>UTC starts of the clock-aligned heatmap buckets.</summary>
+        public List<long> HeatmapBucketStartsUnixMs { get; } = new List<long>();
+
         /// <summary>Short time labels (range-appropriate, e.g. "14:20", "Mon", "09/17") parallel to every per-bucket series.</summary>
         public List<string> BucketLabels { get; } = new List<string>();
 

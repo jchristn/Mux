@@ -69,6 +69,25 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("UsageWindow", "HeatmapRowsAreClockAligned", "Heatmap windows end on clock row boundaries while preserving fixed bucket counts", (CancellationToken ct) =>
+                    {
+                        long now = new DateTimeOffset(2026, 10, 13, 12, 6, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                        UsageRange[] ranges = { UsageRange.Hour, UsageRange.Day, UsageRange.Week, UsageRange.Month };
+                        long[] rowWidths = { 15 * MinuteMs, 60 * MinuteMs, 1440 * MinuteMs, 1440 * MinuteMs };
+                        int[] counts = { 60, 96, 84, 60 };
+                        for (int i = 0; i < ranges.Length; i++)
+                        {
+                            UsageWindow window = UsageWindow.ComputeHeatmap(ranges[i], now);
+                            MuxAssert.AreEqual(0L, window.FromUnixMs % rowWidths[i], "start anchored for " + ranges[i]);
+                            MuxAssert.AreEqual(0L, window.ToUnixMs % rowWidths[i], "end anchored for " + ranges[i]);
+                            MuxAssert.AreEqual(counts[i], window.BucketCount, "fixed spots for " + ranges[i]);
+                            MuxAssert.IsTrue(window.FromUnixMs <= now && now < window.ToUnixMs, "current partial row included");
+                            UsageWindow sameRow = UsageWindow.ComputeHeatmap(ranges[i], now + MinuteMs);
+                            MuxAssert.AreEqual(window.FromUnixMs, sameRow.FromUnixMs, "axes stable within clock row");
+                        }
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("UsageWindow", "UnknownRangeThrows", "An unknown range is rejected", (CancellationToken ct) =>
                     {
                         MuxAssert.Throws<ArgumentOutOfRangeException>(() => UsageWindow.Compute((UsageRange)999, 0L), "unknown range");

@@ -8,6 +8,9 @@ namespace Mux.Desktop.Views
         /// <summary>Stacked prompt/cached/output tokens per bucket.</summary>
         Tokens,
 
+        /// <summary>Token activity intensity per time bucket.</summary>
+        Heatmap,
+
         /// <summary>Derived cost (USD) per bucket.</summary>
         Cost,
 

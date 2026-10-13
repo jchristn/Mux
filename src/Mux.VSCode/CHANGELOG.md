@@ -2,6 +2,12 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## Unreleased
+
+- Chat slash-command autocomplete with arrow-key selection, Tab completion, and Escape dismissal.
+- Endpoint selections leave inline, persisted model-switch notices in chat. Notices survive reopening and
+  cross-client session reloads and stay out of model context.
+
 ## 1.2.0
 
 - **Review current file** now runs the `code-review` skill (`/code-review file <path>`), falling back to the

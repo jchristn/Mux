@@ -11,6 +11,7 @@
     const form = document.getElementById('composer');
     const input = document.getElementById('input');
     const sendButton = document.getElementById('send');
+    MuxSlashCompletion.attach(input, document.getElementById('slash-completions'), window.MUX_SLASH_COMMANDS || []);
 
     let assistant = null; // { wrapper, body } while a reply is streaming
     let assistantRaw = '';
@@ -58,7 +59,7 @@
     function createMessage(role) {
         removeEmpty();
         const wrapper = el('div', 'msg role-' + role);
-        const roleLabel = role === 'user' ? t('role.you') : role === 'assistant' ? t('role.mux') : t('role.error');
+        const roleLabel = role === 'user' ? t('role.you') : role === 'assistant' ? t('role.mux') : role === 'notice' ? 'mux' : t('role.error');
         wrapper.appendChild(withText(el('div', 'msg-role'), roleLabel));
         const body = el('div', 'msg-body');
         wrapper.appendChild(body);
@@ -86,6 +87,7 @@
     // Renders a persisted message, including a collapsed "💭 Thinking" disclosure when the assistant message
     // carries reasoning — so thinking survives a reload and appears the same as it did while streaming.
     function addHistoryMessage(item) {
+        if (item.displayOnly) return addMessage('notice', item.content);
         const m = createMessage(item.role);
         if (item.role === 'assistant' && item.reasoning) {
             const details = document.createElement('details');
@@ -310,7 +312,7 @@
     }
     input.addEventListener('input', autosize);
     input.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
             e.preventDefault();
             form.requestSubmit();
         }
@@ -321,6 +323,9 @@
         switch (message.type) {
             case 'reset':
                 clearTranscript();
+                break;
+            case 'modelSwitch':
+                addMessage('notice', message.message);
                 break;
             case 'load':
                 transcript.textContent = '';
@@ -377,4 +382,5 @@
     });
 
     renderEmpty();
+    vscode.postMessage({ type: 'ready' });
 })();

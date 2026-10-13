@@ -12,9 +12,12 @@ import { log, logError } from '../util/logger';
 
 /** Messages the webview posts to the extension host. */
 type InboundMessage =
+    | { type: 'ready' }
     | { type: 'send'; text: string }
     | { type: 'stop' }
     | { type: 'approve'; runId: string; toolCallId: string; decision: 'y' | 'always' | 'n' };
+
+const CHAT_SLASH_COMMANDS = ["?", "help", "clear", "new", "endpoints", "endpoint", "models", "model", "usage", "settings", "about", "reconnect", "cwd"];
 
 /**
  * Drives the chat panel. It owns the workspace-bound session, streams a run over the server's SSE surface,
@@ -28,7 +31,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private readonly extensionUri: vscode.Uri;
     private readonly lifecycle: MuxServerLifecycle;
     private view: vscode.WebviewView | undefined;
-    private history: Array<{ role: string; content: string; reasoning?: string | null }> = [];
+    private history: Array<{ role: string; content: string; reasoning?: string | null; displayOnly?: boolean }> = [];
     private sessionId = '';
     private activeRun: AbortController | undefined;
     private activeRunId: string | undefined;
@@ -153,8 +156,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const detail = await client.getSessionDetail(id);
             this.sessionId = detail.Id;
             this.history = detail.Messages
-                .filter((m) => m.Role === 'user' || m.Role === 'assistant')
-                .map((m) => ({ role: m.Role, content: m.Content, reasoning: m.Reasoning ?? null }));
+                .filter((m) => m.DisplayOnly || m.Role === 'user' || m.Role === 'assistant')
+                .map((m) => ({ role: m.Role, content: m.Content, reasoning: m.Reasoning ?? null, displayOnly: !!m.DisplayOnly }));
             this.post({ type: 'load', messages: this.history, title: detail.Title });
             this.startSessionSync(client, detail.Id);
         } catch (error) {
@@ -277,8 +280,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 }
 
                 const messages = detail.Messages
-                    .filter((m) => m.Role === 'user' || m.Role === 'assistant')
-                    .map((m) => ({ role: m.Role, content: m.Content, reasoning: m.Reasoning ?? null }));
+                    .filter((m) => m.DisplayOnly || m.Role === 'user' || m.Role === 'assistant')
+                    .map((m) => ({ role: m.Role, content: m.Content, reasoning: m.Reasoning ?? null, displayOnly: !!m.DisplayOnly }));
                 if (messages.length > before || attempt === 7) {
                     this.history = messages;
                     this.post({ type: 'load', messages: this.history, title: detail.Title });
@@ -334,6 +337,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     private async onMessage(message: InboundMessage): Promise<void> {
         switch (message.type) {
+            case 'ready':
+                if (this.history.length > 0) this.post({ type: 'load', messages: this.history });
+                break;
             case 'send':
                 if (message.text.trim().startsWith('/')) {
                     await this.handleSlash(message.text.trim());
@@ -476,21 +482,49 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    private modelSwitchSave: Promise<void> = Promise.resolve();
+    private turnFinished: Promise<void> = Promise.resolve();
+    private finishTurn: (() => void) | undefined;
+
+    /** Records an explicit endpoint selection in the portable conversation transcript. */
+    public recordModelSwitch(endpoint: string, model: string): Promise<void> {
+        const notice = { role: 'system', content: `Switched to endpoint ${endpoint} (${model})`, displayOnly: true };
+        const history = this.history;
+        const initialSession = this.sessionId;
+        const turnFinished = this.turnFinished;
+        history.push(notice);
+        this.post({ type: 'modelSwitch', message: notice.content });
+        this.modelSwitchSave = this.modelSwitchSave.then(async () => {
+            await turnFinished;
+            const client = await this.lifecycle.getClient(new vscode.CancellationTokenSource().token);
+            const session = this.history === history ? this.sessionId : initialSession;
+            const saved = await client.putSession({ Id: session, Title: '', EndpointName: endpoint, Model: model,
+                Messages: history.map(m => ({ Role: m.role, Content: m.content, Reasoning: m.reasoning, DisplayOnly: m.displayOnly })) });
+            if (this.history === history && this.sessionId === session) this.sessionId = saved.Id;
+            await vscode.commands.executeCommand('mux.sessions.refresh');
+        }).catch(error => { this.post({ type: 'error', message: `Could not save model switch: ${String(error)}` }); });
+        return this.modelSwitchSave;
+    }
+
     private async runTurn(userText: string): Promise<void> {
         const text = userText.trim();
         if (!text || this.activeRun) {
             return;
         }
 
+        const priorSwitchSave = this.modelSwitchSave;
+        this.turnFinished = new Promise(resolve => { this.finishTurn = resolve; });
         const controller = new AbortController();
         this.activeRun = controller;
         this.post({ type: 'busy', busy: true });
+        let submittedMessage: { role: string; content: string } | undefined;
 
         try {
             const token = new vscode.CancellationTokenSource().token;
             const client = await this.lifecycle.getClient(token);
             this.client = client;
 
+            await priorSwitchSave;
             const endpoint = await this.resolveEndpoint(client);
             if (!endpoint) {
                 this.post({ type: 'error', message: vscode.l10n.t('No endpoint is configured. Add one in mux, then try again.') });
@@ -508,7 +542,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 this.post({ type: 'notice', message: vscode.l10n.t('Truncated to fit: {0}', composed.truncated.join(', ')) });
             }
 
-            this.history.push({ role: 'user', content: composed.prompt });
+            submittedMessage = { role: 'user', content: composed.prompt };
+            this.history.push(submittedMessage);
             let assistant = '';
 
             for await (const event of client.streamChat(
@@ -563,7 +598,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             await vscode.commands.executeCommand('mux.sessions.refresh');
         } catch (error) {
             if (controller.signal.aborted) {
-                this.history.pop();
+                const userIndex = submittedMessage ? this.history.indexOf(submittedMessage) : -1;
+                if (userIndex >= 0) this.history.splice(userIndex, 1);
                 this.post({ type: 'stopped' });
             } else {
                 logError('A chat turn failed.', error);
@@ -572,6 +608,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         } finally {
             this.activeRun = undefined;
             this.activeRunId = undefined;
+            this.finishTurn?.();
+            this.finishTurn = undefined;
             this.post({ type: 'busy', busy: false });
         }
     }
@@ -630,11 +668,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 <div id="transcript" aria-live="polite"></div>
 <div id="notice" role="status"></div>
 <form id="composer">
+  <div id="slash-completions" class="slash-completion" hidden></div>
   <textarea id="input" rows="1" placeholder="${this.uiStrings()['composer.aria']}" aria-label="${this.uiStrings()['composer.aria']}"></textarea>
   <button id="send" type="submit">${this.uiStrings()['composer.send']}</button>
 </form>
-<script nonce="${nonce}">window.MUX_STRINGS = ${strings};</script>
+<script nonce="${nonce}">window.MUX_STRINGS = ${strings}; window.MUX_SLASH_COMMANDS = ${JSON.stringify(CHAT_SLASH_COMMANDS)};</script>
 <script nonce="${nonce}">${this.readAsset('markdown.js')}</script>
+<script nonce="${nonce}">${this.readAsset('slash-completion.js')}</script>
 <script nonce="${nonce}" src="${asset('main.js')}"></script>
 </body>
 </html>`;

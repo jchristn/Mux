@@ -2,6 +2,40 @@
 
 All notable changes to mux are documented here.
 
+## Unreleased
+
+### Added
+
+- **Token heatmaps** in the TUI, desktop app, and web dashboard. Timeframe selection determines a fixed
+  number of cells, with labeled X/Y axes and clock-aligned time buckets (quarter-hour anchors where applicable).
+  The TUI `/usage` view fills the screen and uses the available width.
+- **Slash-command autocomplete** in the TUI, desktop, web chat, and VS Code chat. Arrow keys select matches,
+  Tab completes, and Escape dismisses suggestions. Hidden diagnostic commands stay out of completion lists.
+- **Endpoint-name completion** for `/endpoint <name>` in the TUI, desktop, and web chat. A full name switches
+  directly; `/endpoint` and `/endpoints` alone open endpoint management. In desktop and web chat, Enter on
+  an endpoint suggestion accepts and executes it in one keypress. The desktop endpoint row menu also has
+  **Use this model**, using the same selection path as the conversation's model picker.
+- **Persistent model-switch notices** across TUI, desktop, web, and VS Code conversations. Notices identify
+  the endpoint and model, survive reloads and manual compaction, and are excluded from model context.
+- **macOS desktop menus** for File, Edit, View, Configure, Tools, Window, and Help, including Command-W to
+  close the window and links to documentation and issue reporting.
+- **Severity-aware TUI toasts**: info/debug and success use mux green with white text, warnings use red with
+  yellow text, and errors use red with white text. Hidden `/toast <severity> [message]` commands exercise the
+  renderer; `/toast ?` lists supported levels.
+
+### Changed
+
+- The TUI composer uses a lighter dark grey background, carried into submitted user prompts. The current
+  prompt pins to the top only when scrolling would hide it, without an extra blank line. Multiline or
+  width-truncated pinned prompts end with ` ...`.
+
+### Fixed
+
+- Web response telemetry retains its per-response model, timing, and token counts across conversation
+  reloads and session round trips. Legacy responses without recorded metrics do not invent them.
+- Web telemetry tooltips stay inside the visible conversation area, flip below icons near the top, and fit
+  narrow windows. Hover and keyboard focus open them; transcript scrolling and window resizing close them.
+
 ## 1.4.0
 
 ### Added

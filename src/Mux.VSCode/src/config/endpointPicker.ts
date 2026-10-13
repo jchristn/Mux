@@ -16,7 +16,7 @@ export class EndpointPicker implements vscode.Disposable {
      *
      * @param lifecycle The server lifecycle used to obtain a client.
      */
-    public constructor(lifecycle: MuxServerLifecycle) {
+    public constructor(lifecycle: MuxServerLifecycle, private readonly onSelected?: (endpoint: string, model: string) => Promise<void>) {
         this.lifecycle = lifecycle;
         this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
         this.item.command = 'mux.selectEndpoint';
@@ -49,7 +49,10 @@ export class EndpointPicker implements vscode.Disposable {
                 return;
             }
 
+            const previous = vscode.workspace.getConfiguration('mux').get<string>('defaultEndpoint', '')
+                || endpoints.find(e => e.IsDefault)?.Name || endpoints[0].Name;
             await vscode.workspace.getConfiguration('mux').update('defaultEndpoint', picked.label, vscode.ConfigurationTarget.Workspace);
+            if (previous !== picked.label) await this.onSelected?.(picked.label, endpoints.find(e => e.Name === picked.label)!.Model);
             this.refresh();
         } catch (error) {
             logError('Failed to pick an endpoint.', error);

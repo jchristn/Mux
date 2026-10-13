@@ -19,6 +19,7 @@ namespace Mux.Desktop.Views
     public sealed class EndpointsWindow : Window
     {
         private readonly Action? _OnChanged;
+        private readonly Func<EndpointConfig, bool>? _OnUse;
         private readonly List<EndpointConfig> _Endpoints;
         private readonly DataTableView<EndpointConfig> _Table;
 
@@ -26,9 +27,11 @@ namespace Mux.Desktop.Views
         /// Instantiate the endpoints manager.
         /// </summary>
         /// <param name="onChanged">Invoked after endpoints are saved; null to ignore.</param>
-        public EndpointsWindow(Action? onChanged)
+        /// <param name="onUse">Selects an endpoint for the active conversation; true closes the editor.</param>
+        public EndpointsWindow(Action? onChanged, Func<EndpointConfig, bool>? onUse = null)
         {
             _OnChanged = onChanged;
+            _OnUse = onUse;
             _Endpoints = SettingsLoader.LoadEndpoints();
 
             AppTheme theme = AppTheme.Current;
@@ -68,6 +71,12 @@ namespace Mux.Desktop.Views
                 new TableRowAction<EndpointConfig>(Localizer.T("endpoint.action.duplicate"), e => OnDuplicate(e)),
                 new TableRowAction<EndpointConfig>(Localizer.T("endpoint.action.import"), e => OnImport(e))
             };
+
+            if (_OnUse != null)
+                actions.Insert(0, new TableRowAction<EndpointConfig>(Localizer.T("endpoint.action.use"), e =>
+                {
+                    if (_OnUse(e)) Close();
+                }));
 
             if (!endpoint.IsDefault)
             {

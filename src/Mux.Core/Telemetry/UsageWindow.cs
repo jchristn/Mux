@@ -77,6 +77,22 @@ namespace Mux.Core.Telemetry
         }
 
         /// <summary>
+        /// Aligns a heatmap to whole clock rows: quarters of an hour, hours, or days.
+        /// Keeps the range's fixed bucket count and includes the current partial row.
+        /// </summary>
+        /// <param name="range">The selected range.</param>
+        /// <param name="nowUnixMs">The reference UTC time.</param>
+        /// <returns>The aligned heatmap window.</returns>
+        public static UsageWindow ComputeHeatmap(UsageRange range, long nowUnixMs)
+        {
+            UsageWindow window = Compute(range, nowUnixMs);
+            long rowMs = range == UsageRange.Hour ? 15L * MinuteMs
+                : range == UsageRange.Day ? 60L * MinuteMs : 1440L * MinuteMs;
+            long to = ((nowUnixMs + rowMs - 1) / rowMs) * rowMs;
+            return new UsageWindow(to - window.BucketMs * window.BucketCount, to, window.BucketMs, window.BucketCount);
+        }
+
+        /// <summary>
         /// The timeseries bucket size and count for a range keyword (hour/day/week/month). Unrecognized
         /// values fall back to the day grid (96 × 15 minutes).
         /// </summary>

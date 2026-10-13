@@ -145,8 +145,9 @@ namespace Test.Shared.Suites
                             string upsertBody =
                                 "{\"id\":\"toolsess\",\"endpointName\":\"unit-ollama\",\"model\":\"gemma3:4b\",\"messages\":[" +
                                 "{\"role\":\"user\",\"content\":\"list files\"}," +
-                                "{\"role\":\"assistant\",\"content\":\"\",\"toolCalls\":[{\"id\":\"tc1\",\"name\":\"glob\",\"arguments\":\"{\\\"pattern\\\":\\\"*\\\"}\"}]}," +
-                                "{\"role\":\"tool\",\"content\":\"a.txt\",\"toolCallId\":\"tc1\"}]}";
+                                "{\"role\":\"assistant\",\"content\":\"\",\"Model\":\"original-model\",\"Stats\":{\"TtftMs\":123,\"StreamingMs\":456,\"TotalMs\":579,\"InputTokens\":10,\"OutputTokens\":20,\"TotalTokens\":30},\"toolCalls\":[{\"id\":\"tc1\",\"name\":\"glob\",\"arguments\":\"{\\\"pattern\\\":\\\"*\\\"}\"}]}," +
+                                "{\"role\":\"tool\",\"content\":\"a.txt\",\"toolCallId\":\"tc1\"}," +
+                                "{\"role\":\"system\",\"content\":\"Switched to endpoint unit (gemma)\",\"displayOnly\":true}]}";
                             using HttpRequestMessage putReq = new HttpRequestMessage(HttpMethod.Put, baseUrl + "/v1.0/api/sessions");
                             putReq.Headers.Add("Authorization", "Bearer testkey123");
                             putReq.Content = new StringContent(upsertBody, System.Text.Encoding.UTF8, "application/json");
@@ -161,6 +162,14 @@ namespace Test.Shared.Suites
                             MuxAssert.Contains("tc1", detailBody, "tool call id round-trips");
                             MuxAssert.Contains("glob", detailBody, "tool name round-trips");
                             MuxAssert.Contains("ToolCallId", detailBody, "tool result id round-trips");
+                            MuxAssert.Contains("original-model", detailBody, "per-response model round-trips");
+                            using (System.Text.Json.JsonDocument telemetryDetail = System.Text.Json.JsonDocument.Parse(detailBody))
+                            {
+                                var response = telemetryDetail.RootElement.GetProperty("Messages")[1];
+                                MuxAssert.IsTrue(telemetryDetail.RootElement.GetProperty("Messages")[3].GetProperty("DisplayOnly").GetBoolean(), "model-switch marker persists through session API");
+                                MuxAssert.AreEqual(579L, response.GetProperty("Stats").GetProperty("TotalMs").GetInt64(), "timing persists through session API");
+                                MuxAssert.AreEqual(30, response.GetProperty("Stats").GetProperty("TotalTokens").GetInt32(), "tokens persist through session API");
+                            }
 
                             // Metadata endpoint: add a label + tag, verify they come back, and normalize the key.
                             string metaBody = "{\"addLabels\":[\"WIP\"],\"setTags\":[{\"key\":\"Env\",\"value\":\"prod\"}]}";
