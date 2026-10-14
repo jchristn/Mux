@@ -6,6 +6,13 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **Width-aware Markdown in the TUI** (TUIKit 1.6.0). Assistant replies stream into one Markdown block that is
+  laid out at the transcript's width and reflows on resize: GFM tables draw as aligned grids (rounded borders,
+  wrapping long cells, falling back to `Header: value` records when too narrow), and nested lists, quotes, and
+  code keep their indent. A half-received table row is held back until its newline arrives. Resumed history,
+  transcripts redrawn after another surface changes the session, and `exit_plan` proposals use the same renderer, and the skill viewer shows
+  SKILL.md as scrollable Markdown with its frontmatter in a `yaml` block. Single newlines inside a paragraph
+  now join as standard Markdown soft breaks.
 - **Token heatmaps** in the TUI, desktop app, and web dashboard. Timeframe selection determines a fixed
   number of cells, with labeled X/Y axes and clock-aligned time buckets (quarter-hour anchors where applicable).
   The TUI `/usage` view fills the screen and uses the available width.

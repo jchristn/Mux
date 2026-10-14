@@ -298,6 +298,80 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(0, lines.Count, "no lines");
                     }),
 
+                    Case("AssistantMarkdownTableRendersAsGrid", "A GFM table renders as an aligned grid, not raw pipes", async (CancellationToken ct) =>
+                    {
+                        IReadOnlyList<string> lines = await ProjectAsync(ct, Text("| Key | Value |\n|-----|------:|\n| alpha | 1 |\n| beta | 22 |\n"), Completed());
+                        string joined = Join(lines);
+                        MuxAssert.Contains("alpha", joined, "first row");
+                        MuxAssert.Contains("beta", joined, "second row");
+                        MuxAssert.IsFalse(joined.Contains("|-----|", StringComparison.Ordinal), "delimiter row consumed");
+                        MuxAssert.IsFalse(joined.Contains("| alpha |", StringComparison.Ordinal), "raw pipe row replaced by a drawn grid");
+                        int[] widths = lines.Where(l => l.Contains("alpha", StringComparison.Ordinal) || l.Contains("beta", StringComparison.Ordinal) || l.Contains("Key", StringComparison.Ordinal))
+                            .Select(l => TUIKit.Unicode.Graphemes.MeasureWidth(l.TrimEnd())).Distinct().ToArray();
+                        MuxAssert.AreEqual(1, widths.Length, "every table row has the same width");
+                    }),
+
+                    Case("AssistantMarkdownReflowsToPaneWidth", "Assistant Markdown is laid out at the pane's width and reflows on resize", async (CancellationToken ct) =>
+                    {
+                        Pane pane = new Pane("t");
+                        string table = "| Name | Description |\n|---|---|\n| alpha | " + string.Join(" ", Enumerable.Repeat("word", 30)) + " |\n";
+                        await new AgentEventProjector(pane).ProjectAsync(Script(new AgentEvent[] { Text(table), Completed() }, ct), ct).ConfigureAwait(false);
+
+                        pane.Render(new TUIKit.BufferSurface(new TUIKit.CellBuffer(40, 30)));
+                        IReadOnlyList<string> narrow = pane.SnapshotPlainLines();
+                        MuxAssert.IsTrue(narrow.All(l => TUIKit.Unicode.Graphemes.MeasureWidth(l) <= 40), "no row wider than 40 columns");
+
+                        pane.Render(new TUIKit.BufferSurface(new TUIKit.CellBuffer(200, 30)));
+                        IReadOnlyList<string> wide = pane.SnapshotPlainLines();
+                        MuxAssert.IsTrue(wide.Count < narrow.Count, "a wider pane uses fewer rows for the same block");
+                    }),
+
+                    Case("AssistantStreamingHoldsBackPartialTableRow", "While streaming, a half-received table row is held back until its newline arrives", async (CancellationToken ct) =>
+                    {
+                        Pane pane = new Pane("t");
+                        AgentEventProjector projector = new AgentEventProjector(pane);
+                        System.Threading.Channels.Channel<AgentEvent> channel = System.Threading.Channels.Channel.CreateUnbounded<AgentEvent>();
+                        Task projecting = projector.ProjectAsync(channel.Reader.ReadAllAsync(ct), ct);
+
+                        await channel.Writer.WriteAsync(Text("| A | B |\n|---|---|\n| one | tw"), ct).ConfigureAwait(false);
+                        await WaitForAsync(() => Join(pane.SnapshotPlainLines()).Contains("A", StringComparison.Ordinal), ct).ConfigureAwait(false);
+                        MuxAssert.IsFalse(Join(pane.SnapshotPlainLines()).Contains("one", StringComparison.Ordinal), "partial row not shown yet");
+
+                        await channel.Writer.WriteAsync(Text("o |\n"), ct).ConfigureAwait(false);
+                        await channel.Writer.WriteAsync(Completed(), ct).ConfigureAwait(false);
+                        channel.Writer.Complete();
+                        await projecting.ConfigureAwait(false);
+
+                        string joined = Join(pane.SnapshotPlainLines());
+                        MuxAssert.Contains("one", joined, "completed row shown");
+                        MuxAssert.Contains("two", joined, "completed cell shown");
+                    }),
+
+                    Case("AssistantBlocksStaySeparateAroundTools", "Text before and after a tool call render as separate Markdown blocks in order", async (CancellationToken ct) =>
+                    {
+                        IReadOnlyList<string> lines = await ProjectAsync(ct, Text("**before**"), Proposed("t1", "glob"), CompletedTool("t1", "glob", true, 3), Text("_after_"), Completed());
+                        int before = IndexOfContaining(lines, "before");
+                        int tool = IndexOfContaining(lines, "glob");
+                        int after = IndexOfContaining(lines, "after");
+                        MuxAssert.IsTrue(before >= 0 && tool > before && after > tool, "ordered before < tool < after");
+                        MuxAssert.IsFalse(Join(lines).Contains("**", StringComparison.Ordinal), "strong markers rendered, not shown");
+                    }),
+
+                    Case("SkillMarkdownFrontmatterShownAsYaml", "The SKILL.md viewer shows frontmatter as a yaml block and renders the body as Markdown", (CancellationToken ct) =>
+                    {
+                        string display = MuxTuiApp.SkillMarkdownForDisplay("---\r\nname: demo\r\ndescription: d\r\n---\r\n# Demo\r\n\r\n- step\r\n");
+                        MuxAssert.IsTrue(display.StartsWith("```yaml\nname: demo\ndescription: d\n```", StringComparison.Ordinal), "frontmatter fenced as yaml");
+                        MuxAssert.Contains("# Demo", display, "body kept");
+                        MuxAssert.AreEqual("# plain", MuxTuiApp.SkillMarkdownForDisplay("# plain"), "no frontmatter passes through");
+
+                        MarkdownBoxModal modal = new MarkdownBoxModal("demo", display);
+                        string rows = string.Join("\n", modal.RowsAt(60).Select(r => r.ToPlainString()));
+                        MuxAssert.Contains("name: demo", rows, "frontmatter visible");
+                        MuxAssert.Contains("• step", rows, "list rendered with a bullet glyph");
+                        MuxAssert.IsFalse(rows.Contains("---", StringComparison.Ordinal), "frontmatter fences not shown as rules or raw dashes");
+                        return Task.CompletedTask;
+                    }),
+
                     Case("CancellationWritesNotice", "A cancelled stream writes a cancellation notice", async (CancellationToken ct) =>
                     {
                         Pane pane = new Pane("t");
@@ -324,6 +398,14 @@ namespace Test.Shared.Suites
             Pane pane = new Pane("t");
             await new AgentEventProjector(pane).ProjectAsync(Script(events, ct), ct).ConfigureAwait(false);
             return pane.SnapshotPlainLines();
+        }
+
+        private static async Task WaitForAsync(Func<bool> condition, CancellationToken ct)
+        {
+            for (int i = 0; i < 200 && !condition(); i++)
+            {
+                await Task.Delay(10, ct).ConfigureAwait(false);
+            }
         }
 
         private static async IAsyncEnumerable<AgentEvent> Script(AgentEvent[] events, [EnumeratorCancellation] CancellationToken ct)

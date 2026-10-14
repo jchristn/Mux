@@ -1644,7 +1644,7 @@ namespace Mux.Cli.App
                 }
                 else if (message.Role == RoleEnum.Assistant && !string.IsNullOrEmpty(message.Content))
                 {
-                    _Conversation.WriteLine(Text.From(message.Content));
+                    _Conversation.WriteMarkdown(message.Content, MarkdownOptions.Create());
                 }
 
                 // Preserve every message (including tool calls / tool results, which have no text to echo)
@@ -2698,7 +2698,7 @@ namespace Mux.Cli.App
             if (proposal is null) throw new ArgumentNullException(nameof(proposal));
 
             WriteNotice("── Proposed plan ──");
-            _Conversation.WriteLine(Text.From(proposal.ToText()));
+            _Conversation.WriteMarkdown(proposal.ToText(), MarkdownOptions.Create());
             SelectModal modal = new SelectModal("Approve this plan?", new List<string>
             {
                 "Approve and auto-accept edits",
@@ -4212,7 +4212,7 @@ namespace Mux.Cli.App
                 }
                 else if (message.Role == RoleEnum.Assistant && !string.IsNullOrEmpty(message.Content))
                 {
-                    _Conversation.WriteLine(Text.From(message.Content));
+                    _Conversation.WriteMarkdown(message.Content, MarkdownOptions.Create());
                     lock (_Sync)
                     {
                         _ConversationHistory.Add(new ConversationMessage { Role = RoleEnum.Assistant, Content = message.Content });
@@ -6471,26 +6471,43 @@ namespace Mux.Cli.App
         private void ViewSkill(SkillStatus status)
         {
             string path = Path.Combine(_SkillRuntime!.SkillsDirectory, status.Name, "SKILL.md");
-            List<string> lines = new List<string>();
+            string markdown;
             try
             {
-                foreach (string line in File.ReadAllLines(path))
-                {
-                    lines.Add(line);
-                }
+                markdown = SkillMarkdownForDisplay(File.ReadAllText(path));
             }
             catch (Exception ex)
             {
-                lines.Add("Could not read SKILL.md: " + ex.Message);
+                markdown = "Could not read SKILL.md: " + ex.Message;
             }
 
             if (!status.Valid && status.Error != null)
             {
-                lines.Insert(0, "⚠ " + status.Error);
-                lines.Insert(1, string.Empty);
+                markdown = "> ⚠ " + status.Error + "\n\n" + markdown;
             }
 
-            _App.Modals.Push(new MuxBoxModal(status.Name, lines));
+            _App.Modals.Push(new MarkdownBoxModal(status.Name, markdown));
+        }
+
+        /// <summary>
+        /// Prepares a SKILL.md for the Markdown viewer: YAML frontmatter (which Markdown would read as a rule and a
+        /// setext heading) is shown as a fenced <c>yaml</c> block above the body.
+        /// </summary>
+        /// <param name="content">The raw SKILL.md text. May be null.</param>
+        /// <returns>Markdown ready to render. Never null.</returns>
+        internal static string SkillMarkdownForDisplay(string? content)
+        {
+            string text = (content ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+            if (!text.StartsWith("---\n", StringComparison.Ordinal)) return text;
+
+            int close = text.IndexOf("\n---", 3, StringComparison.Ordinal);
+            if (close < 0) return text;
+
+            int bodyStart = close + 4;
+            if (bodyStart < text.Length && text[bodyStart] != '\n') return text; // "---" was not alone on its line
+            string frontmatter = text.Substring(4, close - 4);
+            string body = bodyStart < text.Length ? text.Substring(bodyStart).TrimStart('\n') : string.Empty;
+            return "```yaml\n" + frontmatter + "\n```\n\n" + body;
         }
 
         private void ToggleSkill(SkillStatus status)
@@ -6886,7 +6903,7 @@ namespace Mux.Cli.App
                 }
                 else if (message.Role == RoleEnum.Assistant && !string.IsNullOrEmpty(message.Content))
                 {
-                    _Conversation.WriteLine(Text.From(message.Content!));
+                    _Conversation.WriteMarkdown(message.Content!, MarkdownOptions.Create());
                 }
                 else if (message.Role == RoleEnum.System && !string.IsNullOrEmpty(message.Content)
                     && message.Content!.StartsWith(ConversationCompactor.SummaryPrefix, StringComparison.Ordinal))

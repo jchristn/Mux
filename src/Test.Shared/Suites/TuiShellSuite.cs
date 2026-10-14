@@ -678,7 +678,9 @@ namespace Test.Shared.Suites
             Job job, string prompt, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             await Task.CompletedTask.ConfigureAwait(false);
-            for (int i = 0; i < 50; i++) yield return new AssistantTextEvent { Text = "Life continues.\n" };
+            // Blank-line separated paragraphs: the reply is rendered as Markdown, where single newlines are soft
+            // breaks that would join into one short wrapped paragraph.
+            for (int i = 0; i < 50; i++) yield return new AssistantTextEvent { Text = "Life continues.\n\n" };
             yield return CompletedEvent();
         }
 

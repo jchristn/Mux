@@ -18,9 +18,9 @@ namespace Mux.Cli.App
 
     /// <summary>
     /// Projects a single job's <see cref="AgentEvent"/> stream onto a TUIKit <see cref="Pane"/>.
-    /// Assistant text is buffered per block and, when the block ends (a tool call, an error, or run
-    /// completion), re-rendered through <see cref="MarkdownRenderer"/>; while a block is streaming a
-    /// single live line shows the latest content. Tool calls render as one line per call that is
+    /// Assistant text is buffered per block and streamed into a single reflowing Markdown block
+    /// (<see cref="Pane.WriteMarkdown(string, MarkdownRenderOptions)"/>) that TUIKit lays out at the pane's
+    /// width; when the block ends (a tool call, an error, or run completion) it is committed with the full text. Tool calls render as one line per call that is
     /// updated in place from "running" to a success/failure result. One projector instance drives one
     /// pane; the pane is thread-safe so projection may run on a background task while the render loop
     /// reads the pane.
@@ -44,7 +44,7 @@ namespace Mux.Cli.App
         private readonly List<PaneLineHandle> _ThinkingLines = new List<PaneLineHandle>();
         private bool _ThinkingHeaderShown;
         private readonly Dictionary<string, PaneLineHandle> _ToolLines = new Dictionary<string, PaneLineHandle>(StringComparer.Ordinal);
-        private readonly List<PaneLineHandle> _AssistantLines = new List<PaneLineHandle>();
+        private PaneLineHandle? _AssistantBlock;
         private readonly List<PaneLineHandle> _TaskLines = new List<PaneLineHandle>();
         private bool _MirrorEnabled;
         private string _MirrorSessionId = string.Empty;
@@ -376,60 +376,42 @@ namespace Mux.Cli.App
             FinalizeThinkingBlock();
             _AssistantText.Append(text);
 
-            // Stream the full response as it grows, one pane line per text line, so it fills the
-            // available vertical space; the block is re-rendered as markdown when it finalizes.
-            string[] lines = _AssistantText.ToString().Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
-            for (int i = 0; i < lines.Length; i++)
+            // Stream the response into one Markdown block that TUIKit lays out at the pane's width (and
+            // reflows on resize), so tables, lists, and code look right while they arrive. A half-received
+            // table row is held back until its newline lands, so the grid does not flicker as a paragraph.
+            string source = _AssistantText.ToString();
+            int lastNewline = source.LastIndexOf('\n');
+            string partial = lastNewline >= 0 ? source.Substring(lastNewline + 1) : source;
+            if (partial.TrimStart(' ').StartsWith("|", StringComparison.Ordinal))
             {
-                StyledText styled = Text.From(lines[i]);
-                if (i < _AssistantLines.Count)
-                {
-                    if (!_AssistantLines[i].Update(styled))
-                    {
-                        _AssistantLines[i] = _Pane.WriteLine(styled);
-                    }
-                }
-                else
-                {
-                    _AssistantLines.Add(_Pane.WriteLine(styled));
-                }
+                source = lastNewline >= 0 ? source.Substring(0, lastNewline) : string.Empty;
             }
+
+            if (source.Trim().Length == 0) return;
+            WriteAssistantMarkdown(source);
         }
 
         private void FinalizeAssistantBlock()
         {
             FinalizeThinkingBlock();
 
-            if (_AssistantLines.Count == 0)
+            string markdown = _AssistantText.ToString();
+            if (_AssistantBlock != null || markdown.Trim().Length > 0)
             {
-                _AssistantText.Clear();
-                return;
+                WriteAssistantMarkdown(markdown);
             }
 
-            IReadOnlyList<StyledText> rendered = MarkdownRenderer.Render(_AssistantText.ToString());
-
-            int i = 0;
-            for (; i < rendered.Count; i++)
-            {
-                if (i < _AssistantLines.Count)
-                {
-                    _AssistantLines[i].Update(rendered[i]);
-                }
-                else
-                {
-                    _AssistantLines.Add(_Pane.WriteLine(rendered[i]));
-                }
-            }
-
-            // Markdown often yields fewer lines than the raw stream (e.g. code fences removed); blank the
-            // leftover streamed lines so no stale raw text remains.
-            for (; i < _AssistantLines.Count; i++)
-            {
-                _AssistantLines[i].Update(StyledText.Empty);
-            }
-
-            _AssistantLines.Clear();
+            _AssistantBlock = null;
             _AssistantText.Clear();
+        }
+
+        private void WriteAssistantMarkdown(string markdown)
+        {
+            if (_AssistantBlock == null || !_AssistantBlock.UpdateMarkdown(markdown))
+            {
+                // First write of the block, or the block scrolled out of the pane's scrollback: commit anew.
+                _AssistantBlock = _Pane.WriteMarkdown(markdown, MarkdownOptions.Create());
+            }
         }
 
         private void ProjectToolCompleted(ToolCallCompletedEvent completedEvent)
