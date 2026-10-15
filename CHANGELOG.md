@@ -6,7 +6,7 @@ All notable changes to mux are documented here.
 
 ### Added
 
-- **TUI forms on TUIKit 1.9.0.** The endpoint, MCP server, and settings forms draw each validation error under
+- **TUI forms on TUIKit 1.9.0** (now on 1.10.0). The endpoint, MCP server, and settings forms draw each validation error under
   its field (Enter checks every field and jumps to the first problem; the footer counts what is left and clears
   as fields are fixed), scroll to keep the focused field and its error in view, and accept pasted text.
   Settings are grouped under section headings, text fields take readline-style Ctrl+A/E/U/K/W editing, and
