@@ -73,6 +73,14 @@ namespace Mux.Cli.App
         #region Public-Methods
 
         /// <inheritdoc/>
+        public override bool HandlePaste(string text)
+        {
+            // A paste lands in the skill text at the caret (newlines kept).
+            _Editor.HandlePaste(text);
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override bool HandleKey(KeyEvent key)
         {
             _Status = string.Empty;

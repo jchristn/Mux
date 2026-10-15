@@ -377,16 +377,10 @@ namespace Mux.Cli.App
             _AssistantText.Append(text);
 
             // Stream the response into one Markdown block that TUIKit lays out at the pane's width (and
-            // reflows on resize), so tables, lists, and code look right while they arrive. A half-received
-            // table row is held back until its newline lands, so the grid does not flicker as a paragraph.
-            string source = _AssistantText.ToString();
-            int lastNewline = source.LastIndexOf('\n');
-            string partial = lastNewline >= 0 ? source.Substring(lastNewline + 1) : source;
-            if (partial.TrimStart(' ').StartsWith("|", StringComparison.Ordinal))
-            {
-                source = lastNewline >= 0 ? source.Substring(0, lastNewline) : string.Empty;
-            }
-
+            // reflows on resize), so tables, lists, and code look right while they arrive. StreamingPrefix
+            // holds back a half-received table row until its newline lands, and a table header until its
+            // delimiter row arrives, so the grid never flickers as a paragraph.
+            string source = MarkdownRenderer.StreamingPrefix(_AssistantText.ToString());
             if (source.Trim().Length == 0) return;
             WriteAssistantMarkdown(source);
         }

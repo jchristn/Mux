@@ -48,6 +48,18 @@ namespace Mux.Cli.App
         #region Public-Methods
 
         /// <inheritdoc/>
+        public override bool HandlePaste(string text)
+        {
+            // A paste lands in the item being edited (newlines dropped); outside editing it is ignored.
+            if (_Editing)
+            {
+                _Editor.HandlePaste(text);
+            }
+
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override bool HandleMouse(MouseEvent mouse)
         {
             if (mouse != null && !_Editing && mouse.Kind == MouseEventKind.Press && mouse.Button == MouseButton.Left && _ListTop >= 0)

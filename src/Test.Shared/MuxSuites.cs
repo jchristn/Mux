@@ -144,6 +144,9 @@ namespace Test.Shared
                     // Mux.Cli AgentEvent projector suite (M7).
                     ProjectorSuite.Create(),
 
+                    // Mux.Cli form and editor modals on TUIKit's form support (paste, field errors, scrolling).
+                    FormModalsSuite.Create(),
+
                     // Mux.Cli sidebar + responsive collapse suite (M8).
                     SidebarSuite.Create(),
 

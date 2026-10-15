@@ -6,10 +6,17 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **TUI forms on TUIKit 1.9.0.** The endpoint, MCP server, and settings forms draw each validation error under
+  its field (Enter checks every field and jumps to the first problem; the footer counts what is left and clears
+  as fields are fixed), scroll to keep the focused field and its error in view, and accept pasted text.
+  Settings are grouped under section headings, text fields take readline-style Ctrl+A/E/U/K/W editing, and
+  the MCP bearer token and API key can be revealed with Ctrl+R. Pastes also reach the queue, task-note,
+  prompt, prompt-catalog, and skill editors, which previously dropped them.
 - **Width-aware Markdown in the TUI** (TUIKit 1.6.0). Assistant replies stream into one Markdown block that is
   laid out at the transcript's width and reflows on resize: GFM tables draw as aligned grids (rounded borders,
   wrapping long cells, falling back to `Header: value` records when too narrow), and nested lists, quotes, and
-  code keep their indent. A half-received table row is held back until its newline arrives. Resumed history,
+  code keep their indent. A half-received table row is held back until its newline arrives, and a table header until its
+  delimiter row arrives (TUIKit's `StreamingPrefix`). Resumed history,
   transcripts redrawn after another surface changes the session, and `exit_plan` proposals use the same renderer, and the skill viewer shows
   SKILL.md as scrollable Markdown with its frontmatter in a `yaml` block. Single newlines inside a paragraph
   now join as standard Markdown soft breaks.

@@ -347,6 +347,27 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("two", joined, "completed cell shown");
                     }),
 
+                    Case("AssistantStreamingHoldsBackTableHeader", "While streaming, a table header is held back until its delimiter row arrives", async (CancellationToken ct) =>
+                    {
+                        Pane pane = new Pane("t");
+                        AgentEventProjector projector = new AgentEventProjector(pane);
+                        System.Threading.Channels.Channel<AgentEvent> channel = System.Threading.Channels.Channel.CreateUnbounded<AgentEvent>();
+                        Task projecting = projector.ProjectAsync(channel.Reader.ReadAllAsync(ct), ct);
+
+                        await channel.Writer.WriteAsync(Text("Results:\n\n| Key | Value |\n"), ct).ConfigureAwait(false);
+                        await WaitForAsync(() => Join(pane.SnapshotPlainLines()).Contains("Results", StringComparison.Ordinal), ct).ConfigureAwait(false);
+                        MuxAssert.IsFalse(Join(pane.SnapshotPlainLines()).Contains("Key", StringComparison.Ordinal), "header not shown as text before its delimiter row");
+
+                        await channel.Writer.WriteAsync(Text("|---|---|\n| a | 1 |\n"), ct).ConfigureAwait(false);
+                        await channel.Writer.WriteAsync(Completed(), ct).ConfigureAwait(false);
+                        channel.Writer.Complete();
+                        await projecting.ConfigureAwait(false);
+
+                        string joined = Join(pane.SnapshotPlainLines());
+                        MuxAssert.Contains("Key", joined, "header shown with the table");
+                        MuxAssert.IsFalse(joined.Contains("|---", StringComparison.Ordinal), "delimiter row rendered as a grid, not text");
+                    }),
+
                     Case("AssistantBlocksStaySeparateAroundTools", "Text before and after a tool call render as separate Markdown blocks in order", async (CancellationToken ct) =>
                     {
                         IReadOnlyList<string> lines = await ProjectAsync(ct, Text("**before**"), Proposed("t1", "glob"), CompletedTool("t1", "glob", true, 3), Text("_after_"), Completed());

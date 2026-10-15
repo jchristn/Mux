@@ -36,44 +36,11 @@ namespace Mux.Cli.App
         private static readonly string[] _CompactionStrategies = { "summary", "trim" };
         private static readonly string[] _LargeFileModes = { "map", "summarize", "truncate" };
 
-        // Per-field widget row heights, in the same order fields are added to the form below. Used to
-        // compute the focused field's vertical offset so the modal can scroll a form taller than the box.
-        // Text fields and checkboxes occupy one row; a radio group occupies one row per option.
-        private static readonly int[] _WidgetRows =
-        {
-            1,                                // Max agent iterations
-            1,                                // Max token budget
-            1,                                // Max concurrency
-            _ApprovalPolicies.Length,         // Default approval policy
-            _EnqueueBehaviors.Length,         // Default enqueue behavior
-            1,                                // Tool timeout
-            1,                                // Process timeout
-            1,                                // Context window safety margin
-            1,                                // Token estimation ratio
-            1,                                // Auto-compact enabled
-            1,                                // Context warning threshold
-            _CompactionStrategies.Length,     // Compaction strategy
-            1,                                // Compaction preserve turns
-            1,                                // Skills enabled
-            1,                                // Skill refresh interval
-            1,                                // Skills directory
-            1,                                // Task planning enabled
-            1,                                // Task parallelism enabled
-            1,                                // Ignore cert errors
-            1,                                // Show boundary lines
-            _LargeFileModes.Length,           // Large-file mode
-            1,                                // Inline threshold bytes
-            1,                                // Inline context-window fraction
-            1,                                // Summary chunk lines
-            1,                                // Summary cache enabled
-            1,                                // Summary cache retention days
-        };
 
         private readonly string _Title;
         private readonly MuxSettings _Settings;
         private readonly Form _Form;
-        private Rect _FormRect;
-        private int _FormScrollY;
+        private readonly ScrollingFormHost _Host;
         private readonly TextField _MaxAgentIterations;
         private readonly TextField _MaxTokenBudget;
         private readonly TextField _MaxConcurrency;
@@ -100,7 +67,6 @@ namespace Mux.Cli.App
         private readonly TextField _SummaryChunkLines;
         private readonly Checkbox _SummaryCacheEnabled;
         private readonly TextField _SummaryCacheRetentionDays;
-        private string _Error = string.Empty;
 
         #endregion
 
@@ -153,32 +119,41 @@ namespace Mux.Cli.App
             _SummaryCacheRetentionDays = new TextField { Value = _Settings.Context.SummaryCacheRetentionDays.ToString(CultureInfo.InvariantCulture) };
 
             _Form = new Form();
+            _Form.AddSection("Agent");
             _Form.Add("Max agent iterations", _MaxAgentIterations, () => ValidateInt(_MaxAgentIterations.Value, "Max agent iterations", 1, 100));
             _Form.Add("Max token budget (blank = off)", _MaxTokenBudget, () => ValidateOptionalInt(_MaxTokenBudget.Value, "Max token budget", 1, int.MaxValue));
             _Form.Add("Max concurrency", _MaxConcurrency, () => ValidateInt(_MaxConcurrency.Value, "Max concurrency", 1, 32));
             _Form.Add("Default approval policy", _ApprovalPolicy);
             _Form.Add("Default enqueue behavior", _EnqueueBehavior);
+            _Form.AddSection("Tools");
             _Form.Add("Tool timeout (ms)", _ToolTimeout, () => ValidateInt(_ToolTimeout.Value, "Tool timeout", 1000, 300000));
             _Form.Add("Process timeout (ms)", _ProcessTimeout, () => ValidateInt(_ProcessTimeout.Value, "Process timeout", 1000, 600000));
+            _Form.AddSection("Context and compaction");
             _Form.Add("Context window safety margin (%)", _ContextSafetyMargin, () => ValidateInt(_ContextSafetyMargin.Value, "Context window safety margin", 5, 50));
             _Form.Add("Token estimation ratio", _TokenEstimationRatio, () => ValidateDouble(_TokenEstimationRatio.Value, "Token estimation ratio", 2.0, 6.0));
             _Form.Add("Auto-compact", _AutoCompact);
             _Form.Add("Context warning threshold (%)", _ContextWarningThreshold, () => ValidateInt(_ContextWarningThreshold.Value, "Context warning threshold", 50, 95));
             _Form.Add("Compaction strategy", _CompactionStrategy);
             _Form.Add("Compaction preserve turns", _CompactionPreserveTurns, () => ValidateInt(_CompactionPreserveTurns.Value, "Compaction preserve turns", 1, 10));
+            _Form.AddSection("Skills");
             _Form.Add("Skills", _SkillsEnabled);
             _Form.Add("Skill refresh interval (s)", _SkillRefreshInterval, () => ValidateInt(_SkillRefreshInterval.Value, "Skill refresh interval", 5, int.MaxValue));
             _Form.Add("Skills directory (blank = default)", _SkillsDirectory);
+            _Form.AddSection("Tasks");
             _Form.Add("Task planning", _TaskPlanning);
             _Form.Add("Task parallelism", _TaskParallelism);
+            _Form.AddSection("Network and display");
             _Form.Add("Ignore cert errors", _IgnoreCertErrors);
             _Form.Add("Boundary lines", _ShowBoundaryLines);
+            _Form.AddSection("Large files");
             _Form.Add("Large-file mode", _LargeFileMode);
             _Form.Add("Inline threshold (bytes)", _InlineThresholdBytes, () => ValidateInt(_InlineThresholdBytes.Value, "Inline threshold", 1024, 10485760));
             _Form.Add("Inline context-window fraction", _InlineContextWindowFraction, () => ValidateDouble(_InlineContextWindowFraction.Value, "Inline context-window fraction", 0.05, 0.9));
             _Form.Add("Summary chunk lines", _SummaryChunkLines, () => ValidateInt(_SummaryChunkLines.Value, "Summary chunk lines", 50, 5000));
             _Form.Add("Summary cache", _SummaryCacheEnabled);
             _Form.Add("Summary cache retention (days)", _SummaryCacheRetentionDays, () => ValidateInt(_SummaryCacheRetentionDays.Value, "Summary cache retention", 1, 365));
+            _Form.SubmitRequested += (sender, e) => Complete();
+            _Host = new ScrollingFormHost(_Form);
         }
 
         #endregion
@@ -204,17 +179,17 @@ namespace Mux.Cli.App
         }
 
         /// <inheritdoc/>
+        public override bool HandlePaste(string text)
+        {
+            // A pasted path or number goes to the focused text field; a paste over a selector is dropped.
+            _Form.HandlePaste(text);
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override bool HandleMouse(MouseEvent mouse)
         {
-            if (mouse == null || _FormRect.Width <= 0
-                || mouse.X < _FormRect.X || mouse.X >= _FormRect.X + _FormRect.Width
-                || mouse.Y < _FormRect.Y || mouse.Y >= _FormRect.Y + _FormRect.Height)
-            {
-                return true;
-            }
-
-            // Translate into the form's own coordinates, accounting for the vertical scroll offset.
-            _Form.HandleMouse(new MouseEvent(mouse.Kind, mouse.Button, mouse.X - _FormRect.X, (mouse.Y - _FormRect.Y) + _FormScrollY, mouse.Modifiers, mouse.ClickCount));
+            _Host.HandleMouse(mouse);
             return true;
         }
 
@@ -226,9 +201,9 @@ namespace Mux.Cli.App
             int screenWidth = surface.Size.Width;
             int screenHeight = surface.Size.Height;
 
-            int formHeight = EstimateFormHeight();
             int hintRows = 2; // blank + hint/error
             int contentWidth = Math.Max(8, Math.Min(ContentWidth, screenWidth - 2 - (2 * PadX)));
+            int formHeight = _Host.MeasureHeight(contentWidth);
             int boxWidth = Math.Min(screenWidth, contentWidth + 2 + (2 * PadX));
 
             // Cap the box to the screen; when the form is taller than the visible area the content is
@@ -252,27 +227,14 @@ namespace Mux.Cli.App
                 return;
             }
 
-            // The Form only renders its field widgets into a BufferSurface, so render the full form into a
-            // buffer tall enough to hold every field, then copy a vertical window of it into the modal box.
-            // The window is scrolled so the focused field is always visible even when the form overflows.
-            int scrollY = ComputeScrollOffset(formHeight, usableHeight);
-            _FormRect = new Rect(contentX, firstRow, contentWidth, usableHeight);
-            _FormScrollY = scrollY;
-            CellBuffer buffer = new CellBuffer(contentWidth, Math.Max(usableHeight, formHeight));
-            _Form.Render(new BufferSurface(buffer));
-            for (int y = 0; y < usableHeight; y++)
-            {
-                int sourceY = y + scrollY;
-                for (int x = 0; x < contentWidth; x++)
-                {
-                    surface.Set(contentX + x, firstRow + y, buffer.Get(x, sourceY));
-                }
-            }
+            // The host scrolls the form so the focused field, and any error under it, stays in view.
+            _Host.Render(surface, new Rect(contentX, firstRow, contentWidth, usableHeight));
 
             int hintRow = boxY + boxHeight - 2;
-            if (_Error.Length > 0)
+            string? errors = _Host.ErrorSummary;
+            if (errors != null)
             {
-                surface.DrawText(contentX, hintRow, Trim(_Error, contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(9)));
+                surface.DrawText(contentX, hintRow, Trim(errors, contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(9)));
             }
             else
             {
@@ -286,13 +248,13 @@ namespace Mux.Cli.App
 
         private void Submit()
         {
-            string? error = _Form.Validate();
-            if (error != null)
-            {
-                _Error = error;
-                return;
-            }
+            // Submit validates every field, draws each error under its field, focuses the first invalid one,
+            // and raises SubmitRequested (handled by Complete) only when the whole form is valid.
+            _Form.Submit();
+        }
 
+        private void Complete()
+        {
             // Apply onto the passed-in instance; the property setters clamp/normalize each value, so the
             // validated form values land within their documented ranges. Nested settings not surfaced here
             // (ExternalSearch, SystemPromptPath) are preserved because the same instance is edited in place.
@@ -324,56 +286,6 @@ namespace Mux.Cli.App
             _Settings.Context.SummaryCacheRetentionDays = ParseInt(_SummaryCacheRetentionDays.Value);
 
             Close(_Settings);
-        }
-
-        private int ComputeScrollOffset(int formHeight, int usableHeight)
-        {
-            if (formHeight <= usableHeight)
-            {
-                return 0;
-            }
-
-            int focused = _Form.FocusedIndex;
-            if (focused < 0 || focused >= _WidgetRows.Length)
-            {
-                return 0;
-            }
-
-            // Reconstruct the focused field's vertical span using the same per-field layout the Form uses:
-            // one label row, the widget rows, then a trailing spacer row.
-            int top = 0;
-            for (int i = 0; i < focused; i++)
-            {
-                top += 1 + _WidgetRows[i] + 1;
-            }
-
-            int blockHeight = 1 + _WidgetRows[focused] + 1;
-
-            int scrollY = 0;
-            if (top < scrollY)
-            {
-                scrollY = top;
-            }
-
-            if (top + blockHeight > scrollY + usableHeight)
-            {
-                scrollY = top + blockHeight - usableHeight;
-            }
-
-            int maxScroll = Math.Max(0, formHeight - usableHeight);
-            return Math.Clamp(scrollY, 0, maxScroll);
-        }
-
-        private int EstimateFormHeight()
-        {
-            // Each field renders a label row plus its widget height plus a spacing row.
-            int height = 0;
-            for (int i = 0; i < _WidgetRows.Length; i++)
-            {
-                height += 1 + _WidgetRows[i] + 1;
-            }
-
-            return height;
         }
 
         private static void SelectRadio(RadioGroup group, string[] options, string current)

@@ -53,6 +53,18 @@ namespace Mux.Cli.App
 
         /// <inheritdoc/>
         /// <inheritdoc/>
+        public override bool HandlePaste(string text)
+        {
+            // A paste lands in the note being edited (newlines dropped); outside editing it is ignored.
+            if (_EditingNote)
+            {
+                _Editor.HandlePaste(text);
+            }
+
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override bool HandleMouse(MouseEvent mouse)
         {
             if (mouse != null && !_EditingNote && mouse.Kind == MouseEventKind.Press && mouse.Button == MouseButton.Left && _ListTop >= 0)

@@ -27,6 +27,9 @@ namespace Mux.Cli.App
         private const int ContentWidth = 46;
         private const char MaskChar = '•';
 
+        // Toggles a masked secret between hidden and shown, so a pasted token can be checked before saving.
+        private static readonly KeyChord RevealKey = KeyChord.Parse("ctrl+r");
+
         // Fixed field indices used to restore focus to a selector after the form is rebuilt.
         private const int TransportFieldIndex = 1;
         private const int AuthFieldIndex = 4; // Name, Transport, URL, MCP path, Auth (http layout only).
@@ -47,10 +50,7 @@ namespace Mux.Cli.App
         private readonly TextField _ApiKeyHeader;
         private readonly TextField _ApiKeyValue;
 
-        private Form _Form;
-        private Rect _FormRect;
-        private int _FormHeight;
-        private string _Error = string.Empty;
+        private readonly ScrollingFormHost _Host;
 
         #endregion
 
@@ -73,9 +73,9 @@ namespace Mux.Cli.App
             _Url = new TextField();
             _McpPath = new TextField();
             _AuthType = new RadioGroup(_AuthTypes);
-            _BearerToken = new TextField { MaskChar = MaskChar };
+            _BearerToken = new TextField { MaskChar = MaskChar, RevealKey = RevealKey };
             _ApiKeyHeader = new TextField();
-            _ApiKeyValue = new TextField { MaskChar = MaskChar };
+            _ApiKeyValue = new TextField { MaskChar = MaskChar, RevealKey = RevealKey };
 
             _ApiKeyHeader.Value = "X-API-Key";
             _McpPath.Value = "/mcp";
@@ -98,7 +98,7 @@ namespace Mux.Cli.App
                 _ApiKeyValue.Value = auth.ApiKeyValue ?? string.Empty;
             }
 
-            _Form = BuildForm();
+            _Host = new ScrollingFormHost(BuildForm());
         }
 
         #endregion
@@ -122,7 +122,7 @@ namespace Mux.Cli.App
 
             int previousTransport = _Transport.SelectedIndex;
             int previousAuth = _AuthType.SelectedIndex;
-            bool handled = _Form.HandleKey(key);
+            bool handled = _Host.Form.HandleKey(key);
 
             if (_Transport.SelectedIndex != previousTransport)
             {
@@ -137,18 +137,19 @@ namespace Mux.Cli.App
         }
 
         /// <inheritdoc/>
+        public override bool HandlePaste(string text)
+        {
+            // A pasted URL, command, or token goes to the focused text field; a paste over a selector is dropped.
+            _Host.Form.HandlePaste(text);
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override bool HandleMouse(MouseEvent mouse)
         {
-            if (mouse == null || _FormRect.Width <= 0
-                || mouse.X < _FormRect.X || mouse.X >= _FormRect.X + _FormRect.Width
-                || mouse.Y < _FormRect.Y || mouse.Y >= _FormRect.Y + _FormRect.Height)
-            {
-                return true;
-            }
-
             int previousTransport = _Transport.SelectedIndex;
             int previousAuth = _AuthType.SelectedIndex;
-            _Form.HandleMouse(new MouseEvent(mouse.Kind, mouse.Button, mouse.X - _FormRect.X, mouse.Y - _FormRect.Y, mouse.Modifiers, mouse.ClickCount));
+            _Host.HandleMouse(mouse);
 
             // Clicking the transport or auth selector changes which fields apply, so rebuild the form as the
             // keyboard path does.
@@ -172,11 +173,12 @@ namespace Mux.Cli.App
             int screenWidth = surface.Size.Width;
             int screenHeight = surface.Size.Height;
 
-            int formHeight = _FormHeight;
             int hintRows = 2; // blank + hint/error
             int contentWidth = Math.Max(8, Math.Min(ContentWidth, screenWidth - 2 - (2 * PadX)));
+            int formHeight = _Host.MeasureHeight(contentWidth);
             int boxWidth = Math.Min(screenWidth, contentWidth + 2 + (2 * PadX));
-            int boxHeight = Math.Min(screenHeight, formHeight + hintRows + 2 + (2 * PadY));
+            int maxContentHeight = Math.Max(1, screenHeight - hintRows - 2 - (2 * PadY));
+            int boxHeight = Math.Min(screenHeight, Math.Min(formHeight, maxContentHeight) + hintRows + 2 + (2 * PadY));
 
             int boxX = Math.Max(0, (screenWidth - boxWidth) / 2);
             int boxY = Math.Max(0, (screenHeight - boxHeight) / 2);
@@ -193,27 +195,18 @@ namespace Mux.Cli.App
                 return;
             }
 
-            // The Form only renders its field widgets into a BufferSurface, so render it to a buffer and
-            // copy the cells into the modal box.
-            _FormRect = new Rect(contentX, firstRow, contentWidth, usableHeight);
-            CellBuffer buffer = new CellBuffer(contentWidth, usableHeight);
-            _Form.Render(new BufferSurface(buffer));
-            for (int y = 0; y < usableHeight; y++)
-            {
-                for (int x = 0; x < contentWidth; x++)
-                {
-                    surface.Set(contentX + x, firstRow + y, buffer.Get(x, y));
-                }
-            }
+            // The host scrolls the form so the focused field, and any error under it, stays in view.
+            _Host.Render(surface, new Rect(contentX, firstRow, contentWidth, usableHeight));
 
             int hintRow = boxY + boxHeight - 2;
-            if (_Error.Length > 0)
+            string? errors = _Host.ErrorSummary;
+            if (errors != null)
             {
-                surface.DrawText(contentX, hintRow, Trim(_Error, contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(9)));
+                surface.DrawText(contentX, hintRow, Trim(errors, contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(9)));
             }
             else
             {
-                surface.DrawText(contentX, hintRow, Trim("Tab/↑↓ move · Enter save · Esc cancel", contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(8)));
+                surface.DrawText(contentX, hintRow, Trim("Tab/↑↓ move · Ctrl+R show secret · Enter save · Esc cancel", contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(8)));
             }
         }
 
@@ -224,43 +217,31 @@ namespace Mux.Cli.App
         private Form BuildForm()
         {
             Form form = new Form();
-            int height = 0;
 
             form.Add("Name", _Name, () => _Name.Value.Trim().Length == 0 ? "Name is required." : null);
-            height += FieldHeight(1);
             form.Add("Transport", _Transport);
-            height += FieldHeight(_Transports.Length);
 
             if (ParseTransport(_Transport.SelectedOption) == McpTransportTypeEnum.Stdio)
             {
                 form.Add("Command (stdio)", _Command, () => _Command.Value.Trim().Length == 0 ? "Command is required for stdio." : null);
-                height += FieldHeight(1);
                 form.Add("Args (space-separated)", _Args);
-                height += FieldHeight(1);
                 form.Add("Env (KEY=VALUE, comma-sep)", _Env);
-                height += FieldHeight(1);
             }
             else
             {
                 form.Add("URL (http)", _Url, () => _Url.Value.Trim().Length == 0 ? "URL is required for http." : null);
-                height += FieldHeight(1);
                 form.Add("MCP path (http)", _McpPath);
-                height += FieldHeight(1);
                 form.Add("Auth (none/bearer/apikey)", _AuthType);
-                height += FieldHeight(_AuthTypes.Length);
 
                 switch (ParseAuthType(_AuthType.SelectedOption))
                 {
                     case McpAuthTypeEnum.Bearer:
                         form.Add("Bearer token", _BearerToken, () => _BearerToken.Value.Trim().Length == 0 ? "Bearer token is required." : null);
-                        height += FieldHeight(1);
                         break;
 
                     case McpAuthTypeEnum.ApiKey:
                         form.Add("API key header", _ApiKeyHeader, () => _ApiKeyHeader.Value.Trim().Length == 0 ? "API key header is required." : null);
-                        height += FieldHeight(1);
                         form.Add("API key value", _ApiKeyValue, () => _ApiKeyValue.Value.Trim().Length == 0 ? "API key value is required." : null);
-                        height += FieldHeight(1);
                         break;
 
                     case McpAuthTypeEnum.None:
@@ -269,32 +250,33 @@ namespace Mux.Cli.App
                 }
             }
 
-            _FormHeight = height;
+            form.SubmitRequested += (sender, e) => Complete();
             return form;
         }
 
         private void RebuildForm(int focusIndex)
         {
-            _Form = BuildForm();
+            Form form = BuildForm();
+            _Host.Form = form;
 
             // A freshly built form focuses its first field; advance focus to the selector that changed
             // so the user can keep adjusting it and watch the dependent fields update.
-            int target = Math.Min(focusIndex, _Form.FieldCount - 1);
+            int target = Math.Min(focusIndex, form.FieldCount - 1);
             for (int i = 0; i < target; i++)
             {
-                _Form.HandleKey(KeyEvent.Special(KeyCode.Tab));
+                form.HandleKey(KeyEvent.Special(KeyCode.Tab));
             }
         }
 
         private void Submit()
         {
-            string? error = _Form.Validate();
-            if (error != null)
-            {
-                _Error = error;
-                return;
-            }
+            // Submit validates every field, draws each error under its field, focuses the first invalid one,
+            // and raises SubmitRequested (handled by Complete) only when the whole form is valid.
+            _Host.Form.Submit();
+        }
 
+        private void Complete()
+        {
             McpTransportTypeEnum transport = ParseTransport(_Transport.SelectedOption);
 
             McpServerConfig server = new McpServerConfig
@@ -341,12 +323,6 @@ namespace Mux.Cli.App
             }
 
             return auth;
-        }
-
-        private static int FieldHeight(int widgetHeight)
-        {
-            // A field renders a label row, the widget, and a spacing row.
-            return 1 + widgetHeight + 1;
         }
 
         private static void SelectRadio(RadioGroup group, int targetIndex)

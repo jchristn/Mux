@@ -12,7 +12,8 @@ namespace Mux.Cli.App
     /// <summary>
     /// A near-full-screen modal that shows a Markdown document through TUIKit's width-aware renderer (a
     /// <see cref="MarkdownView"/>), so tables, lists, quotes, and code lay out at the box's width and reflow on
-    /// resize. Up/Down, PageUp/PageDown, Home/End, and the mouse wheel scroll; Escape or Enter closes it.
+    /// resize. The view's own keyboard scrolling (Up/Down, PageUp/PageDown, Home/End) and the mouse wheel move
+    /// it; Escape or Enter closes it.
     /// </summary>
     public sealed class MarkdownBoxModal : Modal
     {
@@ -24,7 +25,6 @@ namespace Mux.Cli.App
 
         private readonly string _Title;
         private readonly MarkdownView _View;
-        private int _PageRows = 1;
         private Rect _ViewRect;
 
         #endregion
@@ -67,32 +67,14 @@ namespace Mux.Cli.App
         /// <inheritdoc/>
         public override bool HandleKey(KeyEvent key)
         {
-            switch (key.Code)
+            if (key.Code == KeyCode.Escape || key.Code == KeyCode.Enter)
             {
-                case KeyCode.Escape:
-                case KeyCode.Enter:
-                    Close(0);
-                    return true;
-                case KeyCode.Up:
-                    ScrollBy(-1);
-                    return true;
-                case KeyCode.Down:
-                    ScrollBy(1);
-                    return true;
-                case KeyCode.PageUp:
-                    ScrollBy(-_PageRows);
-                    return true;
-                case KeyCode.PageDown:
-                    ScrollBy(_PageRows);
-                    return true;
-                case KeyCode.Home:
-                    _View.ScrollOffset = 0;
-                    return true;
-                case KeyCode.End:
-                    _View.ScrollOffset = Math.Max(0, _View.ContentHeight - _PageRows);
-                    return true;
+                Close(0);
+                return true;
             }
 
+            // The view scrolls itself (a row, a page, or to either end) and clamps at its last page.
+            _View.HandleKey(key);
             return true;
         }
 
@@ -129,7 +111,6 @@ namespace Mux.Cli.App
             surface.Fill(box, Cell.Blank(CellStyle.Default));
             surface.DrawBox(box, CellStyle.Default.WithForeground(Color.FromPalette(6)), _Title);
 
-            _PageRows = bodyRows;
             _ViewRect = new Rect(boxX + 1 + PadX, boxY + 1 + PadY, contentWidth, bodyRows);
             _View.Render(new SurfaceView(surface, _ViewRect));
 
@@ -142,16 +123,6 @@ namespace Mux.Cli.App
             {
                 surface.DrawText(_ViewRect.X, hintRow, TextFit.Truncate(hint, contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(8)));
             }
-        }
-
-        #endregion
-
-        #region Private-Methods
-
-        private void ScrollBy(int delta)
-        {
-            int max = Math.Max(0, _View.ContentHeight - _PageRows);
-            _View.ScrollOffset = Math.Max(0, Math.Min(max, _View.ScrollOffset + delta));
         }
 
         #endregion

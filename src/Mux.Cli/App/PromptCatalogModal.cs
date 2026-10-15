@@ -73,6 +73,18 @@ namespace Mux.Cli.App
         #region Public-Methods
 
         /// <inheritdoc/>
+        public override bool HandlePaste(string text)
+        {
+            // A paste lands in the prompt body while it is being edited (newlines kept).
+            if (_Editing)
+            {
+                _Editor.HandlePaste(text);
+            }
+
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override bool HandleKey(KeyEvent key)
         {
             if (key.Code == KeyCode.Character && key.Rune == 0)

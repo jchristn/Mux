@@ -40,36 +40,11 @@ namespace Mux.Cli.App
         private static readonly string[] _Adapters = { "openai-compatible", "ollama", "openai", "vllm" };
         private static readonly string[] _Placements = { "bearer", "header", "query" };
 
-        // Per-field widget row heights, in the same order fields are added to the form below. Used to
-        // compute the focused field's vertical offset so the modal can scroll a form that is taller than
-        // the visible box. Text fields and checkboxes occupy one row; the adapter radio group occupies one
-        // row per option.
-        private static readonly int[] _WidgetRows =
-        {
-            1,                    // Name
-            _Adapters.Length,     // Adapter
-            1,                    // Base URL
-            1,                    // Model
-            1,                    // API key
-            1,                    // API key placement
-            1,                    // Auth parameter name
-            1,                    // Default endpoint
-            1,                    // Max output tokens
-            1,                    // Temperature
-            1,                    // Context window
-            1,                    // Timeout
-            1,                    // Auto-approve tools
-            1,                    // Max agent iterations
-            1,                    // Reasoning effort
-            1,                    // Gemini thinking budget
-            1,                    // Show thinking
-        };
 
         private readonly string _Title;
         private readonly EndpointConfig? _Existing;
         private readonly Form _Form;
-        private Rect _FormRect;
-        private int _FormScrollY;
+        private readonly ScrollingFormHost _Host;
         private readonly TextField _Name;
         private readonly RadioGroup _Adapter;
         private readonly TextField _BaseUrl;
@@ -87,7 +62,6 @@ namespace Mux.Cli.App
         private readonly TextField _ReasoningEffort;
         private readonly TextField _GeminiThinkingBudget;
         private readonly Checkbox _ShowThinking;
-        private string _Error = string.Empty;
 
         #endregion
 
@@ -188,6 +162,8 @@ namespace Mux.Cli.App
             _Form.Add("Reasoning effort (blank = off)", _ReasoningEffort, () => ValidateOptionalEffort(_ReasoningEffort.Value));
             _Form.Add("Gemini thinking budget (blank = default)", _GeminiThinkingBudget, () => ValidateOptionalInt(_GeminiThinkingBudget.Value, "Gemini thinking budget", -1, 32768));
             _Form.Add("Show thinking", _ShowThinking);
+            _Form.SubmitRequested += (sender, e) => Complete();
+            _Host = new ScrollingFormHost(_Form);
         }
 
         #endregion
@@ -224,17 +200,18 @@ namespace Mux.Cli.App
         }
 
         /// <inheritdoc/>
+        public override bool HandlePaste(string text)
+        {
+            // A pasted API key or URL goes to the focused text field; a paste over a selector is dropped.
+            _Form.HandlePaste(text);
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override bool HandleMouse(MouseEvent mouse)
         {
-            if (mouse == null || _FormRect.Width <= 0
-                || mouse.X < _FormRect.X || mouse.X >= _FormRect.X + _FormRect.Width
-                || mouse.Y < _FormRect.Y || mouse.Y >= _FormRect.Y + _FormRect.Height)
-            {
-                return true;
-            }
-
             int adapterBefore = _Adapter.SelectedIndex;
-            _Form.HandleMouse(new MouseEvent(mouse.Kind, mouse.Button, mouse.X - _FormRect.X, (mouse.Y - _FormRect.Y) + _FormScrollY, mouse.Modifiers, mouse.ClickCount));
+            _Host.HandleMouse(mouse);
 
             // Clicking the adapter selector can re-seed the Base URL prefill, mirroring the keyboard path.
             if (_Adapter.SelectedIndex != adapterBefore && IsDefaultBaseUrl(_BaseUrl.Value))
@@ -253,9 +230,9 @@ namespace Mux.Cli.App
             int screenWidth = surface.Size.Width;
             int screenHeight = surface.Size.Height;
 
-            int formHeight = EstimateFormHeight();
             int hintRows = 2; // blank + hint/error
             int contentWidth = Math.Max(8, Math.Min(ContentWidth, screenWidth - 2 - (2 * PadX)));
+            int formHeight = _Host.MeasureHeight(contentWidth);
             int boxWidth = Math.Min(screenWidth, contentWidth + 2 + (2 * PadX));
 
             // Cap the box to the screen; when the form is taller than the visible area the content is
@@ -279,27 +256,14 @@ namespace Mux.Cli.App
                 return;
             }
 
-            // The Form only renders its field widgets into a BufferSurface, so render the full form into a
-            // buffer tall enough to hold every field, then copy a vertical window of it into the modal box.
-            // The window is scrolled so the focused field is always visible even when the form overflows.
-            int scrollY = ComputeScrollOffset(formHeight, usableHeight);
-            _FormRect = new Rect(contentX, firstRow, contentWidth, usableHeight);
-            _FormScrollY = scrollY;
-            CellBuffer buffer = new CellBuffer(contentWidth, Math.Max(usableHeight, formHeight));
-            _Form.Render(new BufferSurface(buffer));
-            for (int y = 0; y < usableHeight; y++)
-            {
-                int sourceY = y + scrollY;
-                for (int x = 0; x < contentWidth; x++)
-                {
-                    surface.Set(contentX + x, firstRow + y, buffer.Get(x, sourceY));
-                }
-            }
+            // The host scrolls the form so the focused field, and any error under it, stays in view.
+            _Host.Render(surface, new Rect(contentX, firstRow, contentWidth, usableHeight));
 
             int hintRow = boxY + boxHeight - 2;
-            if (_Error.Length > 0)
+            string? errors = _Host.ErrorSummary;
+            if (errors != null)
             {
-                surface.DrawText(contentX, hintRow, Trim(_Error, contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(9)));
+                surface.DrawText(contentX, hintRow, Trim(errors, contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(9)));
             }
             else
             {
@@ -313,13 +277,13 @@ namespace Mux.Cli.App
 
         private void Submit()
         {
-            string? error = _Form.Validate();
-            if (error != null)
-            {
-                _Error = error;
-                return;
-            }
+            // Submit validates every field, draws each error under its field, focuses the first invalid one,
+            // and raises SubmitRequested (handled by Complete) only when the whole form is valid.
+            _Form.Submit();
+        }
 
+        private void Complete()
+        {
             AdapterTypeEnum adapterType = ParseAdapter(_Adapter.SelectedOption);
             string apiKey = _ApiKey.Value.Trim();
 
@@ -365,56 +329,6 @@ namespace Mux.Cli.App
             }
 
             Close(endpoint);
-        }
-
-        private int ComputeScrollOffset(int formHeight, int usableHeight)
-        {
-            if (formHeight <= usableHeight)
-            {
-                return 0;
-            }
-
-            int focused = _Form.FocusedIndex;
-            if (focused < 0 || focused >= _WidgetRows.Length)
-            {
-                return 0;
-            }
-
-            // Reconstruct the focused field's vertical span using the same per-field layout the Form uses:
-            // one label row, the widget rows, then a trailing spacer row.
-            int top = 0;
-            for (int i = 0; i < focused; i++)
-            {
-                top += 1 + _WidgetRows[i] + 1;
-            }
-
-            int blockHeight = 1 + _WidgetRows[focused] + 1;
-
-            int scrollY = 0;
-            if (top < scrollY)
-            {
-                scrollY = top;
-            }
-
-            if (top + blockHeight > scrollY + usableHeight)
-            {
-                scrollY = top + blockHeight - usableHeight;
-            }
-
-            int maxScroll = Math.Max(0, formHeight - usableHeight);
-            return Math.Clamp(scrollY, 0, maxScroll);
-        }
-
-        private int EstimateFormHeight()
-        {
-            // Each field renders a label row plus its widget height plus a spacing row.
-            int height = 0;
-            for (int i = 0; i < _WidgetRows.Length; i++)
-            {
-                height += 1 + _WidgetRows[i] + 1;
-            }
-
-            return height;
         }
 
         private static string? ValidateInt(string value, string label, int min, int max)

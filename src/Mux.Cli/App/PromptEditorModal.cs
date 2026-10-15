@@ -114,6 +114,22 @@ namespace Mux.Cli.App
         #region Public-Methods
 
         /// <inheritdoc/>
+        public override bool HandlePaste(string text)
+        {
+            // A paste lands in whichever text is being edited: the profile name, or the prompt body (newlines kept).
+            if (_Naming)
+            {
+                _Name.HandlePaste(text);
+            }
+            else if (_Editing)
+            {
+                _Editor.HandlePaste(text);
+            }
+
+            return true;
+        }
+
+        /// <inheritdoc/>
         public override bool HandleKey(KeyEvent key)
         {
             if (key.Code == KeyCode.Character && key.Rune == 0)
