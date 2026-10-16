@@ -3,6 +3,7 @@ namespace Test.Shared.Suites
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
@@ -27,6 +28,20 @@ namespace Test.Shared.Suites
                 "Write-file tool behavior",
                 new List<TestCaseDescriptor>
                 {
+                    Case("PreservesEncodingAndPreamble", "Existing encodings, preambles and line endings survive edits", async (string dir, WriteFileTool tool, CancellationToken ct) =>
+                    {
+                        foreach (System.Text.Encoding encoding in new System.Text.Encoding[] { new System.Text.UTF8Encoding(false), new System.Text.UTF8Encoding(true), new System.Text.UnicodeEncoding(false, true), new System.Text.UnicodeEncoding(true, true), new System.Text.UTF32Encoding(false, true), new System.Text.UTF32Encoding(true, true) })
+                        foreach (string newline in new[] { "\r\n", "\n" })
+                        {
+                            string filePath = Path.Combine(dir, "encoding.txt");
+                            string original = "old café" + newline + "line" + newline;
+                            File.WriteAllText(filePath, original, encoding);
+                            ToolResult result = await tool.ExecuteAsync("encoding", ToolArgs.From(new { file_path = filePath, content = "new café\nline\n" }), dir, ct).ConfigureAwait(false);
+                            MuxAssert.IsTrue(result.Success, "edit succeeded");
+                            byte[] expected = encoding.GetPreamble().Concat(encoding.GetBytes(original.Replace("old", "new"))).ToArray();
+                            MuxAssert.IsTrue(expected.SequenceEqual(File.ReadAllBytes(filePath)), "encoding, preamble, content and newlines preserved");
+                        }
+                    }),
                     Case("WriteNewFileCreatesFileWithContent", "Writing a new file creates it with the specified content", async (string dir, WriteFileTool tool, CancellationToken ct) =>
                     {
                         string filePath = Path.Combine(dir, "new.txt");
@@ -66,6 +81,7 @@ namespace Test.Shared.Suites
                         string raw = Encoding.UTF8.GetString(File.ReadAllBytes(filePath));
                         string expected = "a" + Environment.NewLine + "b" + Environment.NewLine;
                         MuxAssert.AreEqual(expected, raw, "platform line endings");
+                        MuxAssert.IsTrue(Encoding.UTF8.GetBytes(expected).SequenceEqual(File.ReadAllBytes(filePath)), "new files are UTF-8 without BOM");
                     })
                 });
         }

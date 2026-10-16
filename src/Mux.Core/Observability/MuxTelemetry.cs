@@ -613,18 +613,20 @@ namespace Mux.Core.Observability
         }
 
         /// <summary>
-        /// Records a transport-level LLM retry.
+        /// Records an LLM retry, classified by reason.
         /// </summary>
         /// <param name="provider">The provider.</param>
         /// <param name="operation">The LLM operation being retried.</param>
-        public static void RecordLlmRetry(string provider, string operation)
+        /// <param name="reason">Transport or a recognized generation failure.</param>
+        public static void RecordLlmRetry(string provider, string operation, string reason = "transport")
         {
             try
             {
                 _LlmRetries.Add(
                     1,
                     new KeyValuePair<string, object?>(MuxTelemetryNames.LabelProvider, provider),
-                    new KeyValuePair<string, object?>(MuxTelemetryNames.LabelLlmOperation, operation));
+                    new KeyValuePair<string, object?>(MuxTelemetryNames.LabelLlmOperation, operation),
+                    new KeyValuePair<string, object?>("reason", reason));
             }
             catch (Exception)
             {

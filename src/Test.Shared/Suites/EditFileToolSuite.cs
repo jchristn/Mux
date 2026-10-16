@@ -3,6 +3,7 @@ namespace Test.Shared.Suites
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
@@ -27,6 +28,20 @@ namespace Test.Shared.Suites
                 "Edit-file tool behavior",
                 new List<TestCaseDescriptor>
                 {
+                    Case("PreservesEncodingAndPreamble", "Existing encodings, preambles and line endings survive edits", async (string dir, EditFileTool tool, CancellationToken ct) =>
+                    {
+                        foreach (System.Text.Encoding encoding in new System.Text.Encoding[] { new System.Text.UTF8Encoding(false), new System.Text.UTF8Encoding(true), new System.Text.UnicodeEncoding(false, true), new System.Text.UnicodeEncoding(true, true), new System.Text.UTF32Encoding(false, true), new System.Text.UTF32Encoding(true, true) })
+                        foreach (string newline in new[] { "\r\n", "\n" })
+                        {
+                            string filePath = Path.Combine(dir, "encoding.txt");
+                            string original = "old café" + newline + "line" + newline;
+                            File.WriteAllText(filePath, original, encoding);
+                            ToolResult result = await tool.ExecuteAsync("encoding", ToolArgs.From(new { file_path = filePath, old_string = "old", new_string = "new" }), dir, ct).ConfigureAwait(false);
+                            MuxAssert.IsTrue(result.Success, "edit succeeded");
+                            byte[] expected = encoding.GetPreamble().Concat(encoding.GetBytes(original.Replace("old", "new"))).ToArray();
+                            MuxAssert.IsTrue(expected.SequenceEqual(File.ReadAllBytes(filePath)), "encoding, preamble, content and newlines preserved");
+                        }
+                    }),
                     Case("SuccessfulEditReturnsSuccess", "A successful single edit modifies the file", async (string dir, EditFileTool tool, CancellationToken ct) =>
                     {
                         string filePath = Path.Combine(dir, "edit.txt");

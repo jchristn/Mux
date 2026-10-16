@@ -176,7 +176,7 @@ context error, or an unhandled exception), `max_iterations_reached`, `budget_exc
 | `mux.llm.request.duration` (`mux_llm_request_duration_seconds`) | histogram | s | same | Request duration (a streaming call is timed to the last chunk). |
 | `mux.llm.time_to_first_token` (`mux_llm_time_to_first_token_seconds`) | histogram | s | `gen_ai.provider.name` | Provider-reported time to first token. |
 | `mux.llm.tokens` (`mux_llm_tokens_total`) | counter | `{token}` | `gen_ai.provider.name`, `gen_ai.token.type` | Provider-reported tokens: `input`, `output`, `cached`, `reasoning`. |
-| `mux.llm.retries` (`mux_llm_retries_total`) | counter | `{retry}` | `gen_ai.provider.name`, `gen_ai.operation.name` | Transport-level retries (connection refused, reset, DNS, TLS). |
+| `mux.llm.retries` (`mux_llm_retries_total`) | counter | `{retry}` | `gen_ai.provider.name`, `gen_ai.operation.name`, `reason` | Retries classified as `transport`, `malformed_tool_call`, or `token_repeat_limit`. |
 
 ### Integrations
 

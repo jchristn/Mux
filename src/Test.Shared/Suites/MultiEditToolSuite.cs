@@ -3,6 +3,7 @@ namespace Test.Shared.Suites
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Models;
@@ -26,6 +27,20 @@ namespace Test.Shared.Suites
                 "Multi-edit tool atomic behavior",
                 new List<TestCaseDescriptor>
                 {
+                    Case("PreservesEncodingAndPreamble", "Existing encodings, preambles and line endings survive edits", async (string dir, MultiEditTool tool, CancellationToken ct) =>
+                    {
+                        foreach (System.Text.Encoding encoding in new System.Text.Encoding[] { new System.Text.UTF8Encoding(false), new System.Text.UTF8Encoding(true), new System.Text.UnicodeEncoding(false, true), new System.Text.UnicodeEncoding(true, true), new System.Text.UTF32Encoding(false, true), new System.Text.UTF32Encoding(true, true) })
+                        foreach (string newline in new[] { "\r\n", "\n" })
+                        {
+                            string filePath = Path.Combine(dir, "encoding.txt");
+                            string original = "old café" + newline + "line" + newline;
+                            File.WriteAllText(filePath, original, encoding);
+                            ToolResult result = await tool.ExecuteAsync("encoding", ToolArgs.From(new { file_path = filePath, edits = new[] { new { old_string = "old", new_string = "new" } } }), dir, ct).ConfigureAwait(false);
+                            MuxAssert.IsTrue(result.Success, "edit succeeded");
+                            byte[] expected = encoding.GetPreamble().Concat(encoding.GetBytes(original.Replace("old", "new"))).ToArray();
+                            MuxAssert.IsTrue(expected.SequenceEqual(File.ReadAllBytes(filePath)), "encoding, preamble, content and newlines preserved");
+                        }
+                    }),
                     Case("AllEditsSucceedAppliesAtomically", "When all edits succeed they are applied atomically", async (string dir, MultiEditTool tool, CancellationToken ct) =>
                     {
                         string filePath = Path.Combine(dir, "multi.txt");

@@ -33,6 +33,78 @@ namespace Test.Shared.Suites
                 "PolyPrompt LlmClient bridge against per-provider mock servers",
                 new List<TestCaseDescriptor>
                 {
+                    Case("OllamaGenerationRecovery", "Generation errors recover with bounded retries in both chat paths", async ct =>
+                    {
+                        foreach (bool stream in new[] { false, true })
+                        foreach (string scenario in new[] { "recover-malformed", "recover-repeat", "recover-malformed exhaust-recovery", "http500" })
+                        foreach (bool enabled in new[] { false, true })
+                        {
+                            using LocalLlmTestServer server = LocalLlmTestServer.Start();
+                            EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.Ollama, server.Endpoint);
+                            endpoint.Quirks = new BackendQuirks { EnableMalformedToolCallRecovery = enabled };
+                            using LlmClient client = new LlmClient(endpoint);
+                            var history = Messages(scenario);
+                            bool succeeds = enabled && !scenario.Contains("exhaust") && scenario != "http500";
+                            bool failed = false;
+                            if (stream)
+                            {
+                                var events = await CollectAsync(client.StreamAsync(history, NoTools(), ct), ct).ConfigureAwait(false);
+                                failed = FirstError(events) != null;
+                                if (failed) MuxAssert.AreEqual("llm_error", FirstError(events)!.Code, "stable failure code");
+                                else MuxAssert.AreEqual("hello world", AssistantText(events), "only successful attempt emits text");
+                                MuxAssert.IsFalse(HasToolCall(events), "no failed-attempt calls escape");
+                            }
+                            else
+                            {
+                                try { await client.SendAsync(history, NoTools(), ct).ConfigureAwait(false); }
+                                catch (System.Net.Http.HttpRequestException) { failed = true; }
+                            }
+                            MuxAssert.AreEqual(!succeeds, failed, "expected outcome");
+                            int expected = !enabled || scenario == "http500" ? 1 : scenario.Contains("exhaust") ? 3 : 2;
+                            MuxAssert.AreEqual(expected, server.RequestCount, "bounded generation retries");
+                            MuxAssert.AreEqual(1, history.Count, "caller history unchanged");
+                            if (expected > 1) MuxAssert.Contains("Your last", server.RequestBodies[1], "corrective context sent");
+                        }
+                    }),
+                    Case("OllamaRecoveryCancellation", "Cancellation during recovery prevents another request", async ct =>
+                    {
+                        foreach (bool stream in new[] { false, true })
+                        {
+                            using LocalLlmTestServer server = LocalLlmTestServer.Start();
+                            using LlmClient client = new LlmClient(MakeEndpoint(AdapterTypeEnum.Ollama, server.Endpoint));
+                            using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                            client.OnRetry = (_, _, _) => cancellation.Cancel();
+                            bool cancelled = false;
+                            try
+                            {
+                                if (stream) await CollectAsync(client.StreamAsync(Messages("recover-malformed"), NoTools(), cancellation.Token), cancellation.Token).ConfigureAwait(false);
+                                else await client.SendAsync(Messages("recover-malformed"), NoTools(), cancellation.Token).ConfigureAwait(false);
+                            }
+                            catch (OperationCanceledException) { cancelled = true; }
+                            MuxAssert.IsTrue(cancelled, "cancellation propagated");
+                            MuxAssert.AreEqual(1, server.RequestCount, "no retry after cancellation");
+                        }
+                    }),
+                    Case("OllamaRecoveryToolCalls", "A recovered tool turn proposes each call once", async ct =>
+                    {
+                        using LocalLlmTestServer server = LocalLlmTestServer.Start();
+                        using LlmClient client = new LlmClient(MakeEndpoint(AdapterTypeEnum.Ollama, server.Endpoint));
+                        var events = await CollectAsync(client.StreamAsync(Messages("recover-malformed toolcall"), WeatherTools(), ct), ct).ConfigureAwait(false);
+                        MuxAssert.IsTrue(FirstError(events) == null, "recovered turn succeeds");
+                        int calls = 0;
+                        foreach (AgentEvent item in events) if (item is ToolCallProposedEvent) calls++;
+                        MuxAssert.AreEqual(1, calls, "exactly one proposed call");
+                        MuxAssert.AreEqual("get_weather", FirstToolCall(events)!.Name, "intended tool");
+                        MuxAssert.AreEqual(2, server.RequestCount, "one recovery request");
+                    }),
+                    Case("RecoveryIsOllamaOnly", "Other providers do not retry matching backend errors", async ct =>
+                    {
+                        using LocalLlmTestServer server = LocalLlmTestServer.Start();
+                        using LlmClient client = new LlmClient(MakeEndpoint(AdapterTypeEnum.OpenAiCompatible, server.Endpoint));
+                        var events = await CollectAsync(client.StreamAsync(Messages("recover-malformed"), NoTools(), ct), ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual("llm_error", FirstError(events)!.Code, "ordinary HTTP failure");
+                        MuxAssert.AreEqual(1, server.RequestCount, "no recovery outside Ollama");
+                    }),
                     Case("ModelSwitchExcludedFromWire", "Transcript notices do not reach the provider", async ct =>
                     {
                         using LocalLlmTestServer server = LocalLlmTestServer.Start();

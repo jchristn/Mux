@@ -64,7 +64,7 @@ namespace Mux.Core.Models
         }
 
         /// <summary>
-        /// Whether mux should try to infer tool calls from malformed freeform assistant text.
+        /// Whether mux retries Ollama HTTP 500 tool-call parse and token repetition errors (at most twice).
         /// </summary>
         [JsonPropertyName("enableMalformedToolCallRecovery")]
         public bool EnableMalformedToolCallRecovery

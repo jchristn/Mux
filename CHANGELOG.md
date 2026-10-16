@@ -4,6 +4,19 @@ All notable changes to mux are documented here.
 
 ## Unreleased
 
+## 1.4.1
+
+### Fixed
+
+- File edit, multi-edit, and write tools preserve existing UTF-8 BOM and BOM-marked UTF-16/UTF-32 encoding,
+  along with line endings. New files remain UTF-8 without a BOM. Regression tests check exact output bytes.
+- Ollama chat now honors `enableMalformedToolCallRecovery`: recognized tool-call parsing and token repetition
+  HTTP 500 errors retry up to twice with corrective context, in streaming startup and nonstreaming requests.
+  Retries preserve caller history, do not replay tool execution, and retain the final `llm_error` contract.
+  Retry telemetry distinguishes generation failures from transport retries; unrelated HTTP errors are unchanged.
+- Archived the completed Garrison integration report. Added Armada regression coverage for both fixes.
+
+
 ### Added
 
 - **TUI forms on TUIKit 1.9.0** (now on 1.10.0). The endpoint, MCP server, and settings forms draw each validation error under

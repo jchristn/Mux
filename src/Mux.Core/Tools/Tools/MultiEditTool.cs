@@ -189,7 +189,7 @@ namespace Mux.Core.Tools.Tools
                 }
 
                 string outputContent = workingContent.Replace("\n", lineEnding);
-                await File.WriteAllTextAsync(resolvedPath, outputContent, cancellationToken).ConfigureAwait(false);
+                await File.WriteAllTextAsync(resolvedPath, outputContent, FileTextEncoding.Detect(resolvedPath), cancellationToken).ConfigureAwait(false);
 
                 int newLineCount = workingContent.Split('\n').Length;
 

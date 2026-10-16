@@ -141,7 +141,7 @@ namespace Mux.Core.Tools.Tools
                     + lfContent.Substring(matchPositions[0] + lfOldString.Length);
 
                 string outputContent = lfResult.Replace("\n", lineEnding);
-                await File.WriteAllTextAsync(resolvedPath, outputContent, cancellationToken).ConfigureAwait(false);
+                await File.WriteAllTextAsync(resolvedPath, outputContent, FileTextEncoding.Detect(resolvedPath), cancellationToken).ConfigureAwait(false);
 
                 int newLineCount = lfResult.Split('\n').Length;
 

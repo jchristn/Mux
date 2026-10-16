@@ -206,13 +206,20 @@ namespace Mux.Core.Llm
             Pp.ToolChatRequest request = BuildRequest(messages, tools);
 
             Pp.ToolChatResponse response;
-            for (int attempt = 0; ; attempt++)
+            int recoveryAttempts = 0;
+            int attempt = 0;
+            while (true)
             {
                 response = await _Client.ToolChatAsync(request, cancellationToken).ConfigureAwait(false);
 
-                // Retry only transport-level failures (connection refused, reset, DNS, TLS), which
-                // PolyPrompt surfaces as an unsuccessful response with no HTTP status. An HTTP error
-                // status is a definitive answer and is left for the caller to handle.
+                if (!response.Success && TryRecoverGeneration(request, response.StatusCode, response.Error, ref recoveryAttempts, OperationChat))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    continue;
+                }
+
+                // Other than recognized generation failures above, retry only transport failures
+                // (connection refused, reset, DNS, TLS), surfaced without an HTTP status.
                 if (response.Success || !IsTransportFailure(response.StatusCode) || attempt >= MaxRetries)
                 {
                     break;
@@ -220,7 +227,7 @@ namespace Mux.Core.Llm
 
                 MuxTelemetry.RecordLlmRetry(ProviderName, OperationChat);
                 _OnRetry?.Invoke(attempt + 1, MaxRetries, string.IsNullOrEmpty(response.Error) ? "connection error" : response.Error);
-                await Task.Delay(RetryBackoff(attempt), cancellationToken).ConfigureAwait(false);
+                await Task.Delay(RetryBackoff(attempt++), cancellationToken).ConfigureAwait(false);
             }
 
             if (!response.Success)
@@ -538,8 +545,10 @@ namespace Mux.Core.Llm
 
             Pp.ToolChatStreamingResponse? response = null;
             ErrorEvent? startupError = null;
+            int recoveryAttempts = 0;
+            int attempt = 0;
 
-            for (int attempt = 0; ; attempt++)
+            while (true)
             {
                 bool retry = false;
                 string? failureMessage = null;
@@ -547,6 +556,12 @@ namespace Mux.Core.Llm
                 try
                 {
                     response = await _Client.ToolChatStreamingAsync(request, cancellationToken).ConfigureAwait(false);
+
+                    if (!response.Success && TryRecoverGeneration(request, response.StatusCode, response.Error, ref recoveryAttempts, OperationChatStream))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        continue;
+                    }
 
                     // PolyPrompt surfaces transport-level failures (connection refused, DNS, TLS) as an
                     // unsuccessful response with no HTTP status rather than throwing. Treat those like the
@@ -590,7 +605,7 @@ namespace Mux.Core.Llm
 
                 // Space retries apart so a transient connection failure has time to clear; immediate
                 // back-to-back attempts would all fail against the same brief condition.
-                await Task.Delay(RetryBackoff(attempt), cancellationToken).ConfigureAwait(false);
+                await Task.Delay(RetryBackoff(attempt++), cancellationToken).ConfigureAwait(false);
             }
 
             if (startupError != null)
@@ -821,6 +836,25 @@ namespace Mux.Core.Llm
         private static string? OpenAiFamilyBearerKey(EndpointConfig endpoint, string? resolvedApiKey)
         {
             return endpoint.AuthPlacement == AuthPlacementEnum.Bearer ? resolvedApiKey : null;
+        }
+
+        // Recovery happens only before a stream opens: no text or tool calls from a failed
+        // attempt have escaped, and the caller's conversation is never mutated.
+        private bool TryRecoverGeneration(Pp.ToolChatRequest request, int? status, string? error, ref int attempts, string operation)
+        {
+            if (_Endpoint.AdapterType != AdapterTypeEnum.Ollama || !(_Endpoint.Quirks?.EnableMalformedToolCallRecovery ?? true)
+                || status != 500 || attempts >= 2 || string.IsNullOrEmpty(error)) return false;
+            bool malformed = error.Contains("error parsing tool call", StringComparison.OrdinalIgnoreCase);
+            bool repeating = error.Contains("token repeat limit reached", StringComparison.OrdinalIgnoreCase);
+            if (!malformed && !repeating) return false;
+            attempts++;
+            // Do not echo arbitrary backend text (which may contain secrets) into the prompt.
+            request.Messages.Add(Pp.ChatMessage.System(malformed
+                ? "Your last tool call had invalid JSON arguments. Re-issue the intended tool call with valid JSON matching the tool schema."
+                : "Your last response reached the token repetition limit. Stop repeating and continue the task concisely."));
+            MuxTelemetry.RecordLlmRetry(ProviderName, operation, malformed ? "malformed_tool_call" : "token_repeat_limit");
+            _OnRetry?.Invoke(attempts, 2, malformed ? "malformed tool call" : "token repeat limit");
+            return true;
         }
 
         private static bool IsNetworkFailure(Pp.ToolChatStreamingResponse response)

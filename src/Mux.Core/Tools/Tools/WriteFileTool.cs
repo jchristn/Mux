@@ -84,7 +84,7 @@ namespace Mux.Core.Tools.Tools
                 string normalizedContent = content.Replace("\r\n", "\n").Replace("\r", "\n");
                 string outputContent = normalizedContent.Replace("\n", lineEnding);
 
-                await File.WriteAllTextAsync(resolvedPath, outputContent, cancellationToken).ConfigureAwait(false);
+                await File.WriteAllTextAsync(resolvedPath, outputContent, FileTextEncoding.Detect(resolvedPath), cancellationToken).ConfigureAwait(false);
 
                 int lineCount = normalizedContent.Split('\n').Length;
 
@@ -126,14 +126,14 @@ namespace Mux.Core.Tools.Tools
 
         private string DetectLineEnding(string filePath)
         {
-            using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+            using (StreamReader fs = new StreamReader(filePath, FileTextEncoding.Detect(filePath), detectEncodingFromByteOrderMarks: true))
             {
                 int current;
-                while ((current = fs.ReadByte()) != -1)
+                while ((current = fs.Read()) != -1)
                 {
                     if (current == '\r')
                     {
-                        int next = fs.ReadByte();
+                        int next = fs.Read();
                         if (next == '\n')
                         {
                             return "\r\n";

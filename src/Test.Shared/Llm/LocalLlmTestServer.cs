@@ -239,6 +239,15 @@ namespace Test.Shared
                 bool wantReasoning = body.Contains("reasoncapture", StringComparison.OrdinalIgnoreCase);
                 bool wantSigned = body.Contains("signedtool", StringComparison.OrdinalIgnoreCase);
 
+                bool recoveryScenario = body.Contains("recover-malformed", StringComparison.Ordinal) || body.Contains("recover-repeat", StringComparison.Ordinal);
+                bool corrected = body.Contains("Your last", StringComparison.Ordinal);
+                if (recoveryScenario && (!corrected || body.Contains("exhaust-recovery", StringComparison.Ordinal)))
+                {
+                    string error = body.Contains("recover-malformed", StringComparison.Ordinal) ? "error parsing tool call: invalid JSON" : "token repeat limit reached";
+                    await WriteJsonAsync(context, 500, System.Text.Json.JsonSerializer.Serialize(new { error })).ConfigureAwait(false);
+                    return;
+                }
+
                 if (wantError)
                 {
                     await WriteJsonAsync(context, 500, "{\"error\":\"internal server error\"}").ConfigureAwait(false);

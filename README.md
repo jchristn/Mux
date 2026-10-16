@@ -9,7 +9,7 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.4.0-blue.svg" alt="v1.4.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.4.1-blue.svg" alt="v1.4.1"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-yellow.svg" alt="beta"></a>
 </p>
 
@@ -155,7 +155,7 @@ To pin a released version without building, download the self-contained CLI arch
 .NET runtime:
 
 ```bash
-curl -fsSL https://github.com/jchristn/mux/releases/download/v1.4.0/mux-1.4.0-linux-x64.tar.gz | tar xz -C /usr/local/bin mux
+curl -fsSL https://github.com/jchristn/mux/releases/download/v1.4.1/mux-1.4.1-linux-x64.tar.gz | tar xz -C /usr/local/bin mux
 ```
 
 Archives are `mux-<version>-<rid>.tar.gz` for `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64`, and
@@ -769,3 +769,15 @@ See [CONFIG.md](CONFIG.md) for the full reference.
 ## License
 
 [MIT](LICENSE.md)
+
+### File encoding and local-model recovery
+
+The `edit_file`, `multi_edit`, and `write_file` tools preserve the encoding, BOM, and line endings of existing
+UTF-8 and BOM-marked UTF-16/UTF-32 files. New files use UTF-8 without a BOM.
+
+For Ollama endpoints, `quirks.enableMalformedToolCallRecovery` (default `true`) retries HTTP 500
+`error parsing tool call` and `token repeat limit reached` responses up to twice with corrective context.
+Recovery applies before streaming begins and to nonstreaming chat; unrelated HTTP errors and failures after
+a stream opens are not retried by this setting. Exhausted generation recovery retains `llm_error` in streaming
+runs. Set the quirk to `false` to disable it. The LLM retry counter includes a `reason` label distinguishing
+`transport`, `malformed_tool_call`, and `token_repeat_limit`.
