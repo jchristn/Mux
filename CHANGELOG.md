@@ -4,6 +4,23 @@ All notable changes to mux are documented here.
 
 ## Unreleased
 
+## 1.5.0
+
+### Added
+
+- **`mux print --permission-prompt-tool`**: an MCP tool approves or denies tool calls, with the contract of Claude
+  Code's flag of the same name, so headless runs can use the `ask` policy (read-only tools run; the rest are sent to
+  the prompt tool). Errors, timeouts, and unrecognized answers deny the call. A denial's message is returned to the
+  model. `--permission-prompt-timeout` bounds each wait (default 900 seconds), and `--auto-approve-tools` names tools
+  that run without asking. Armada uses this to send a Mux captain's tool calls to its approvers.
+- MCP tool calls accept a per-call timeout (`McpToolManager.ExecuteAsync` and `McpRuntime.ExecuteToolAsync`
+  overloads); the default stays 60 seconds.
+
+### Changed
+
+- The AutoSafe approval allowlist (`AgentLoopOptions.AutoSafeApprovalAllowlist`) accepts glob patterns with the
+  `--allow-tools` syntax, not only exact tool names.
+
 ## 1.4.1
 
 ### Fixed

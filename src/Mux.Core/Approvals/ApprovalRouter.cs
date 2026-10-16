@@ -4,6 +4,7 @@ namespace Mux.Core.Approvals
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Agent;
     using Mux.Core.Enums;
     using Mux.Core.Tools;
 
@@ -20,7 +21,7 @@ namespace Mux.Core.Approvals
         private readonly object _SyncRoot = new object();
         private readonly ApprovalPolicyEnum _Policy;
         private readonly HashSet<string> _AlwaysApprovedTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _AutoSafeAllowlist = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly List<string> _AutoSafeAllowlist = new List<string>();
         private bool _AlwaysApproveSession = false;
 
         #endregion
@@ -32,8 +33,9 @@ namespace Mux.Core.Approvals
         /// </summary>
         /// <param name="policy">The approval policy to enforce.</param>
         /// <param name="autoSafeAllowlist">
-        /// Optional tool names that <see cref="ApprovalPolicyEnum.AutoSafe"/> auto-approves in addition
-        /// to read-only tools. Ignored under other policies.
+        /// Optional tool names or glob patterns (the <c>--allow-tools</c> syntax: <c>*</c>, <c>?</c>, and <c>|</c>
+        /// between alternatives) that <see cref="ApprovalPolicyEnum.AutoSafe"/> auto-approves in addition to
+        /// read-only tools. Ignored under other policies.
         /// </param>
         public ApprovalRouter(ApprovalPolicyEnum policy, IEnumerable<string>? autoSafeAllowlist = null)
         {
@@ -43,9 +45,9 @@ namespace Mux.Core.Approvals
             {
                 foreach (string toolName in autoSafeAllowlist)
                 {
-                    if (!string.IsNullOrEmpty(toolName))
+                    if (!string.IsNullOrWhiteSpace(toolName))
                     {
-                        _AutoSafeAllowlist.Add(toolName);
+                        _AutoSafeAllowlist.Add(toolName.Trim());
                     }
                 }
             }
@@ -86,7 +88,7 @@ namespace Mux.Core.Approvals
 
                 // AutoSafe auto-approves read-only tools and any allowlisted tool.
                 if (_Policy == ApprovalPolicyEnum.AutoSafe
-                    && (request.MutationKind == ToolMutationKind.ReadOnly || _AutoSafeAllowlist.Contains(request.ToolName)))
+                    && (request.MutationKind == ToolMutationKind.ReadOnly || IsAllowlisted(request.ToolName)))
                 {
                     return true;
                 }
@@ -120,6 +122,23 @@ namespace Mux.Core.Approvals
             {
                 _AlwaysApproveSession = true;
             }
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private bool IsAllowlisted(string toolName)
+        {
+            foreach (string pattern in _AutoSafeAllowlist)
+            {
+                if (ToolGovernance.MatchesToolPattern(toolName, pattern))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         #endregion

@@ -12,6 +12,7 @@ namespace Mux.Cli.Commands
     using Mux.Cli.App;
     using Mux.Cli.Rendering;
     using Mux.Core.Agent;
+    using Mux.Core.Approvals;
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Mux.Core.Processes;
@@ -135,6 +136,31 @@ namespace Mux.Cli.Commands
         [CommandOption("--loop-max")]
         public int? LoopMax { get; set; }
 
+        /// <summary>
+        /// An MCP tool (from <c>--mcp-config</c>) that decides tool calls needing approval, with the contract of Claude
+        /// Code's <c>--permission-prompt-tool</c>. Accepts "server.tool" or "mcp__server__tool". Enables the <c>ask</c>
+        /// approval policy (the default when this is set and no other policy is given): read-only tools run, other tools
+        /// are sent to the prompt tool, and an error, timeout, or unrecognized answer denies the call.
+        /// </summary>
+        [Description("MCP tool (server.tool or mcp__server__tool) that approves or denies tool calls under the ask policy.")]
+        [CommandOption("--permission-prompt-tool")]
+        public string? PermissionPromptTool { get; set; }
+
+        /// <summary>
+        /// Seconds a call to <see cref="PermissionPromptTool"/> may wait for its answer (10 to 86400, default 900).
+        /// </summary>
+        [Description("Seconds to wait for the permission prompt tool's answer (10-86400, default 900).")]
+        [CommandOption("--permission-prompt-timeout")]
+        public int? PermissionPromptTimeout { get; set; }
+
+        /// <summary>
+        /// Tools that run without asking the permission prompt tool: names or globs (<c>*</c>, <c>?</c>), separated by
+        /// commas or <c>|</c>. Needs <see cref="PermissionPromptTool"/>.
+        /// </summary>
+        [Description("Tools (names or globs, comma or | separated) that run without asking the permission prompt tool.")]
+        [CommandOption("--auto-approve-tools")]
+        public string? AutoApproveTools { get; set; }
+
         #endregion
     }
 
@@ -144,6 +170,12 @@ namespace Mux.Cli.Commands
     /// </summary>
     public class PrintCommand : AsyncCommand<PrintSettings>
     {
+        #region Private-Members
+
+        private const int DefaultPermissionPromptTimeoutSeconds = 900;
+
+        #endregion
+
         #region Public-Methods
 
         /// <summary>
@@ -221,6 +253,29 @@ namespace Mux.Cli.Commands
                 return 1;
             }
 
+            // --permission-prompt-tool: tool calls that need approval are decided by an MCP tool, so ask works headless.
+            bool permissionPromptRequested = !string.IsNullOrWhiteSpace(settings.PermissionPromptTool);
+            int permissionPromptTimeoutSeconds = settings.PermissionPromptTimeout ?? DefaultPermissionPromptTimeoutSeconds;
+            if (permissionPromptRequested)
+            {
+                if (string.IsNullOrWhiteSpace(settings.McpConfig) || settings.NoMcp)
+                {
+                    EmitBootstrapError(settings, "--permission-prompt-tool needs --mcp-config (and not --no-mcp) to reach the prompt tool's server.");
+                    return 1;
+                }
+
+                if (permissionPromptTimeoutSeconds < 10 || permissionPromptTimeoutSeconds > 86400)
+                {
+                    EmitBootstrapError(settings, "--permission-prompt-timeout must be between 10 and 86400 seconds.");
+                    return 1;
+                }
+            }
+            else if (settings.PermissionPromptTimeout.HasValue || !string.IsNullOrWhiteSpace(settings.AutoApproveTools))
+            {
+                EmitBootstrapError(settings, "--permission-prompt-timeout and --auto-approve-tools need --permission-prompt-tool.");
+                return 1;
+            }
+
             // In jsonl input mode the prompt stream is read from stdin (one record per line) inside the run
             // loop; the positional prompt is ignored. In text mode the single prompt comes from the argument
             // or stdin as before.
@@ -243,7 +298,7 @@ namespace Mux.Cli.Commands
             ResolvedRuntime runtime;
             try
             {
-                runtime = CommandRuntimeResolver.ResolveRuntime(settings, "print", supportsMcp: mcpConfigSupplied, allowAskApproval: false);
+                runtime = CommandRuntimeResolver.ResolveRuntime(settings, "print", supportsMcp: mcpConfigSupplied, allowAskApproval: permissionPromptRequested);
                 SettingsLoader.ValidateEnvironmentReferences(runtime.Endpoint);
             }
             catch (UnresolvedEnvironmentReferenceException ex)
@@ -365,7 +420,9 @@ namespace Mux.Cli.Commands
                 // Resumable only when the run is written to a session (a session flag without --no-session-persistence).
                 SessionResumable = persistSession,
                 SystemPrompt = effectiveSystemPrompt,
-                ApprovalPolicy = runtime.ApprovalPolicy,
+                // ask is only reachable with --permission-prompt-tool; like the interactive shell it runs as AutoSafe, so
+                // read-only tools run and the rest are sent to the prompt tool.
+                ApprovalPolicy = runtime.ApprovalPolicy == ApprovalPolicyEnum.Ask ? ApprovalPolicyEnum.AutoSafe : runtime.ApprovalPolicy,
                 WorkingDirectory = runtime.WorkingDirectory,
                 SessionId = sessionId,
                 MaxTokenBudget = runtime.MuxSettings.MaxTokenBudget,
@@ -443,6 +500,11 @@ namespace Mux.Cli.Commands
                         loopOptions.AdditionalTools = mcpRuntime.CurrentTools;
                         loopOptions.ExternalToolExecutor = mcpRuntime.ExecuteToolAsync;
                         loopOptions.EffectiveToolCount = runtime.Capabilities.EffectiveToolCount + mcpRuntime.CurrentTools.Count;
+                    }
+
+                    if (permissionPromptRequested)
+                    {
+                        ConfigurePermissionPrompt(loopOptions, settings, mcpRuntime, permissionPromptTimeoutSeconds);
                     }
 
                     // Discover skills once for the invocation (user skills plus the project's checked-in skills,
@@ -635,6 +697,57 @@ namespace Mux.Cli.Commands
         #endregion
 
         #region Private-Methods
+
+        private static void ConfigurePermissionPrompt(AgentLoopOptions loopOptions, PrintSettings settings, McpRuntime? mcpRuntime, int timeoutSeconds)
+        {
+            int timeoutMs = timeoutSeconds * 1000;
+            McpPermissionPrompter prompter = new McpPermissionPrompter(
+                settings.PermissionPromptTool!,
+                (string toolName, JsonElement arguments, CancellationToken token) => mcpRuntime != null
+                    ? mcpRuntime.ExecuteToolAsync(toolName, arguments, timeoutMs, token)
+                    : Task.FromResult(new ToolResult
+                    {
+                        ToolCallId = toolName,
+                        Success = false,
+                        Content = JsonSerializer.Serialize(new { error = "unknown_mcp_tool", message = $"MCP tool '{toolName}' is not available." })
+                    }));
+
+            loopOptions.PermissionPrompt = prompter.PromptAsync;
+            loopOptions.AutoSafeApprovalAllowlist = ParseToolPatterns(settings.AutoApproveTools);
+
+            // The prompt tool is Mux's, not the model's: hide it from the advertised tools and refuse a call to it.
+            if (loopOptions.AdditionalTools != null)
+            {
+                int before = loopOptions.AdditionalTools.Count;
+                loopOptions.AdditionalTools = loopOptions.AdditionalTools
+                    .Where((ToolDefinition tool) => !string.Equals(tool.Name, prompter.ToolName, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                loopOptions.EffectiveToolCount -= before - loopOptions.AdditionalTools.Count;
+            }
+
+            List<string> denied = loopOptions.DeniedTools == null ? new List<string>() : new List<string>(loopOptions.DeniedTools);
+            denied.Add(prompter.ToolName);
+            loopOptions.DeniedTools = denied;
+
+            bool available = mcpRuntime != null && mcpRuntime.CurrentTools.Any((ToolDefinition tool) => string.Equals(tool.Name, prompter.ToolName, StringComparison.OrdinalIgnoreCase));
+            if (!available)
+            {
+                Console.Error.WriteLine(ConsoleMessageStyler.Notification(
+                    $"Warning: permission prompt tool '{prompter.ToolName}' is not available; tool calls that need approval will be denied."));
+            }
+        }
+
+        private static List<string> ParseToolPatterns(string? patterns)
+        {
+            List<string> parsed = new List<string>();
+            if (string.IsNullOrWhiteSpace(patterns)) return parsed;
+            foreach (string pattern in patterns.Split(new[] { ',', '|' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                parsed.Add(pattern);
+            }
+
+            return parsed;
+        }
 
         /// <summary>
         /// Resolves the prompt from the command argument or stdin.

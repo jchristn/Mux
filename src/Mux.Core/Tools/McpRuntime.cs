@@ -14,7 +14,7 @@ namespace Mux.Core.Tools
     /// connects to every configured server and discovers its tools; on a periodic timer it re-validates
     /// connectivity and, when a server is down or the configuration changed, rebuilds the connections. The
     /// discovered tools and per-server status are exposed for the shell to render and for the agent template
-    /// to consume; <see cref="ExecuteToolAsync"/> routes an MCP tool call to the right server.
+    /// to consume; <see cref="ExecuteToolAsync(string, JsonElement, string, CancellationToken)"/> routes an MCP tool call to the right server.
     ///
     /// <para>Thread-safety follows an immutable-swap model: a refresh builds a brand-new <see cref="McpToolManager"/>,
     /// fully initializes it off to the side, then atomically swaps it in. A published manager is only ever read
@@ -157,7 +157,22 @@ namespace Mux.Core.Tools
         /// <param name="workingDirectory">The working directory (unused by MCP; part of the executor contract).</param>
         /// <param name="cancellationToken">A token to cancel the call.</param>
         /// <returns>The tool result, or an error result when the tool is unknown.</returns>
-        public async Task<ToolResult> ExecuteToolAsync(string toolName, JsonElement arguments, string workingDirectory, CancellationToken cancellationToken)
+        public Task<ToolResult> ExecuteToolAsync(string toolName, JsonElement arguments, string workingDirectory, CancellationToken cancellationToken)
+        {
+            return ExecuteToolAsync(toolName, arguments, McpToolManager.DefaultToolCallTimeoutMs, cancellationToken);
+        }
+
+        /// <summary>
+        /// Executes an MCP tool call by routing it to the connected server that owns it, waiting up to
+        /// <paramref name="timeoutMs"/> for the answer.
+        /// </summary>
+        /// <param name="toolName">The prefixed MCP tool name (for example "serverName.toolName").</param>
+        /// <param name="arguments">The JSON arguments.</param>
+        /// <param name="timeoutMs">Milliseconds to wait for the answer (at least 1000).</param>
+        /// <param name="cancellationToken">A token to cancel the call.</param>
+        /// <returns>The tool result, or an error result when the tool is unknown.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="timeoutMs"/> is below 1000.</exception>
+        public async Task<ToolResult> ExecuteToolAsync(string toolName, JsonElement arguments, int timeoutMs, CancellationToken cancellationToken)
         {
             McpToolManager? manager;
             lock (_Sync)
@@ -175,7 +190,7 @@ namespace Mux.Core.Tools
                 };
             }
 
-            return await manager.ExecuteAsync(toolName, toolName, arguments, cancellationToken).ConfigureAwait(false);
+            return await manager.ExecuteAsync(toolName, toolName, arguments, timeoutMs, cancellationToken).ConfigureAwait(false);
         }
 
         /// <inheritdoc/>

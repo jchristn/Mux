@@ -1002,6 +1002,7 @@ namespace Mux.Core.Jobs
                 AdditionalTools = templateOptions.AdditionalTools == null ? null : new List<ToolDefinition>(templateOptions.AdditionalTools),
                 ExternalToolProviders = templateOptions.ExternalToolProviders == null ? null : new List<IExternalToolProvider>(templateOptions.ExternalToolProviders),
                 PromptUserFunc = templateOptions.PromptUserFunc,
+                PermissionPrompt = templateOptions.PermissionPrompt,
                 AskUserFunc = templateOptions.AskUserFunc,
                 ReviewPlanFunc = templateOptions.ReviewPlanFunc,
                 PlanMode = job.PlanMode,

@@ -168,6 +168,9 @@ OPTIONS:
         --output-last-message <path>     Write only the final assistant response text to a file
         --mcp-config <path|json>         print: load MCP servers from a file or inline JSON (enables MCP)
         --strict-mcp-config              print: use only --mcp-config servers, ignoring mcp-servers.json
+        --permission-prompt-tool <tool>  print: MCP tool (server.tool) that approves or denies tool calls (enables ask)
+        --permission-prompt-timeout <s>  print: seconds to wait for the prompt tool's answer (default 900)
+        --auto-approve-tools <globs>     print: tools that run without asking the prompt tool (comma or | separated)
         --no-mcp                         Interactive only: skip MCP server initialization
         --ignore-cert-errors, --insecure Disable TLS certificate validation for mux-owned network requests
     -v, --verbose                        Emit detailed progress to stderr

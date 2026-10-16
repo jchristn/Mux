@@ -299,6 +299,9 @@ The **desktop app** launches from the repo with `scripts\windows\run-desktop.bat
 | `--output-schema <path>` |  | print: constrain the final response to a JSON Schema file |
 | `--mcp-config <path\|json>` |  | print: load MCP servers from a file or inline JSON (enables MCP) |
 | `--strict-mcp-config` |  | print: use only `--mcp-config` servers, ignoring `mcp-servers.json` |
+| `--permission-prompt-tool <tool>` |  | print: MCP tool (`server.tool`) that approves or denies tool calls under the `ask` policy |
+| `--permission-prompt-timeout <s>` |  | print: seconds to wait for the prompt tool's answer (10-86400, default 900) |
+| `--auto-approve-tools <globs>` |  | print: tools that run without asking the prompt tool (comma separated) |
 | `--input-format <format>` |  | print: `text` (default) or `jsonl` (multi-turn stdin records) |
 | `--output-last-message <path>` |  | Write only the final assistant response text to a file |
 | `--resume <id\|title>` |  | print: resume a persisted session by id or title |
@@ -640,7 +643,7 @@ Exit codes:
 Non-interactive constraints:
 - `mux print` loads MCP servers only when `--mcp-config` is supplied (opt-in); otherwise it stays hermetic. `mux probe` never loads MCP
 - `--no-mcp` is interactive-only and is rejected in `print` and `probe`
-- `--approval-policy ask` is rejected in `print` and `probe`; use `auto` or `--yolo`, or `deny`
+- `--approval-policy ask` is rejected in `print` and `probe`; use `auto` or `--yolo`, or `deny`. The exception is `mux print --permission-prompt-tool <server.tool>`: an MCP tool from `--mcp-config` approves or denies each tool call (Claude Code's contract), and errors or timeouts deny. See the Permission prompt tool section of `docs/USAGE.md`
 
 Two more print options for orchestrators:
 - `--output-schema <path>` folds a JSON Schema directive into the prompt and validates the response recursively (`type` incl. unions/`integer`, `enum`, `required`, nested `properties`, and array `items`; value-level bounds/patterns/formats are not enforced); a non-conforming response fails with `schema_validation_failed` (exit `1`)

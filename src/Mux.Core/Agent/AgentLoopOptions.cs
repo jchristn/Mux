@@ -6,6 +6,7 @@ namespace Mux.Core.Agent
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Approvals;
     using Mux.Core.Enums;
     using Mux.Core.Jobs;
     using Mux.Core.Models;
@@ -342,6 +343,14 @@ namespace Mux.Core.Agent
         public Mux.Core.Plugins.PluginRegistry? Hooks { get; set; }
 
         /// <summary>
+        /// An external permission prompt (for example an MCP permission prompt tool, see
+        /// <see cref="McpPermissionPrompter"/>) that decides tool calls the approval policy escalates.
+        /// When set it is used instead of <see cref="PromptUserFunc"/>, and a denial's message becomes the tool result
+        /// the model sees. Null (the default) uses <see cref="PromptUserFunc"/>.
+        /// </summary>
+        public Func<ApprovalRequest, CancellationToken, Task<PermissionPromptResult>>? PermissionPrompt { get; set; }
+
+        /// <summary>
         /// A callback that prompts the user for interactive approval of a tool call and returns their response. Nullable.
         /// </summary>
         public Func<ToolCall, Task<string>>? PromptUserFunc
@@ -445,8 +454,9 @@ namespace Mux.Core.Agent
         }
 
         /// <summary>
-        /// Optional tool names that the <c>AutoSafe</c> approval policy auto-approves in addition to
-        /// read-only tools. Ignored under other policies. Null (the default) means read-only tools only.
+        /// Optional tool names or glob patterns (<c>*</c>, <c>?</c>, <c>|</c> between alternatives) that the
+        /// <c>AutoSafe</c> approval policy auto-approves in addition to read-only tools. Ignored under other policies.
+        /// Null (the default) means read-only tools only.
         /// </summary>
         public List<string>? AutoSafeApprovalAllowlist
         {

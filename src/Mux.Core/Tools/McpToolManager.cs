@@ -20,6 +20,15 @@ namespace Mux.Core.Tools
     /// </summary>
     public class McpToolManager : IDisposable
     {
+        #region Public-Members
+
+        /// <summary>
+        /// Milliseconds a tool call waits for its answer unless the caller passes its own timeout.
+        /// </summary>
+        public const int DefaultToolCallTimeoutMs = 60000;
+
+        #endregion
+
         #region Private-Members
 
         private static readonly SemaphoreSlim _StdioLaunchGate = new SemaphoreSlim(1, 1);
@@ -112,8 +121,26 @@ namespace Mux.Core.Tools
         /// <param name="arguments">The parsed JSON arguments from the LLM.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A <see cref="ToolResult"/> containing the execution output.</returns>
-        public async Task<ToolResult> ExecuteAsync(string toolCallId, string toolName, JsonElement arguments, CancellationToken cancellationToken)
+        public Task<ToolResult> ExecuteAsync(string toolCallId, string toolName, JsonElement arguments, CancellationToken cancellationToken)
         {
+            return ExecuteAsync(toolCallId, toolName, arguments, DefaultToolCallTimeoutMs, cancellationToken);
+        }
+
+        /// <summary>
+        /// Executes an MCP tool call by routing it to the appropriate server, waiting up to <paramref name="timeoutMs"/>
+        /// for the answer (for example a permission prompt tool that waits for a person).
+        /// </summary>
+        /// <param name="toolCallId">The unique identifier for this tool call.</param>
+        /// <param name="toolName">The prefixed tool name (for example "serverName.toolName").</param>
+        /// <param name="arguments">The parsed JSON arguments from the LLM.</param>
+        /// <param name="timeoutMs">Milliseconds to wait for the answer (at least 1000).</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A <see cref="ToolResult"/> containing the execution output.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="timeoutMs"/> is below 1000.</exception>
+        public async Task<ToolResult> ExecuteAsync(string toolCallId, string toolName, JsonElement arguments, int timeoutMs, CancellationToken cancellationToken)
+        {
+            if (timeoutMs < 1000) throw new ArgumentOutOfRangeException(nameof(timeoutMs), "timeoutMs must be at least 1000.");
+
             if (!_ToolToServer.TryGetValue(toolName, out string? serverName))
             {
                 return new ToolResult
@@ -150,7 +177,7 @@ namespace Mux.Core.Tools
             try
             {
                 object callParams = new { name = originalToolName, arguments = arguments };
-                JsonElement result = await client.CallAsync<JsonElement>("tools/call", callParams, 60000, cancellationToken).ConfigureAwait(false);
+                JsonElement result = await client.CallAsync<JsonElement>("tools/call", callParams, timeoutMs, cancellationToken).ConfigureAwait(false);
 
                 // Tool execution errors (including input-schema violations, per MCP 2025-11-25+) arrive as a
                 // normal result with isError: true rather than a JSON-RPC error; keep the payload so the model

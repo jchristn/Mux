@@ -744,7 +744,34 @@ Notes:
 - `mux print` defaults to `deny` unless `--yolo`, `--approval-policy`, or the selected endpoint's `autoApproveTools` setting overrides it
 - interactive mode typically uses ask semantics
 - interactive mode also honors endpoint-scoped `autoApproveTools` unless CLI approval flags override it
-- `mux print` and `mux probe` reject `--approval-policy ask`
+- `mux print` and `mux probe` reject `--approval-policy ask`, except `mux print` with `--permission-prompt-tool` (below)
+
+### Permission prompt tool (`--permission-prompt-tool`)
+
+`mux print --permission-prompt-tool <server.tool>` lets an MCP tool approve or deny tool calls, so a headless run
+can use the `ask` policy. It follows the contract of Claude Code's `--permission-prompt-tool`, so a prompt tool
+written for Claude Code works unchanged:
+
+- The tool comes from a server in `--mcp-config` (required). Its name is `server.tool`; Claude Code's
+  `mcp__server__tool` form is accepted too. The tool is hidden from the model.
+- With the flag, `ask` is allowed and is the default policy (`--yolo`, `--approval-policy auto` or `deny`, and an
+  endpoint's `autoApproveTools` still win). `ask` runs like the interactive shell: read-only tools run, and every
+  other tool call is sent to the prompt tool.
+- The prompt tool receives `{"tool_name": "...", "input": {...}, "tool_use_id": "..."}` and answers with text (or
+  `structuredContent`) holding `{"behavior": "allow"}` or `{"behavior": "deny", "message": "..."}`. A denial's
+  message is the tool result the model sees, and the call is reported as `tool_call_denied` (exit `2`).
+- Anything else denies the call: an error result, a timeout, a server that is not connected, or an answer without a
+  recognized `behavior`. A broken prompt tool never lets a tool run.
+- `--permission-prompt-timeout <seconds>` bounds the wait for each answer (10 to 86400, default 900), since a prompt
+  tool may wait for a person.
+- `--auto-approve-tools <patterns>` names tools that run without asking: names or globs (`*`, `?`), separated by
+  commas or `|`, for example `--auto-approve-tools "write_file,edit_file,armada.*"`.
+
+```bash
+mux print --mcp-config ./mcp-servers.json --strict-mcp-config \
+  --permission-prompt-tool armada.cli_permission_prompt --auto-approve-tools "armada.*" \
+  --output-format jsonl "fix the failing test"
+```
 
 ## Structured Output (`--output-schema`)
 

@@ -522,6 +522,7 @@ namespace Mux.Core.Agent
 
                     // Run through approval
                     bool approved = false;
+                    string? permissionDenyMessage = null;
                     ErrorEvent? approvalError = null;
                     long approvalStart = Stopwatch.GetTimestamp();
                     Activity? approvalActivity = MuxTelemetry.StartActivity("stage:approval");
@@ -546,6 +547,13 @@ namespace Mux.Core.Agent
                                 approvalRequest,
                                 async (ApprovalRequest request, CancellationToken escalationToken) =>
                                 {
+                                    if (_Options.PermissionPrompt != null)
+                                    {
+                                        PermissionPromptResult answer = await _Options.PermissionPrompt(request, escalationToken).ConfigureAwait(false);
+                                        if (!answer.Approved) permissionDenyMessage = answer.Message;
+                                        return answer.Approved ? ApprovalDecision.Approved : ApprovalDecision.Denied;
+                                    }
+
                                     Func<ToolCall, Task<string>> promptFunc = _Options.PromptUserFunc ?? DefaultPromptUserFunc;
                                     string response = await promptFunc(toolCall).ConfigureAwait(false);
                                     return MapPromptResponseToDecision(response);
@@ -594,7 +602,9 @@ namespace Mux.Core.Agent
                         yield return new ErrorEvent
                         {
                             Code = "tool_call_denied",
-                            Message = $"Tool call '{toolCall.Name}' (id: {toolCall.Id}) was denied by the user."
+                            Message = permissionDenyMessage == null
+                                ? $"Tool call '{toolCall.Name}' (id: {toolCall.Id}) was denied by the user."
+                                : $"Tool call '{toolCall.Name}' (id: {toolCall.Id}) was denied: {permissionDenyMessage}"
                         };
 
                         // Add denial result to conversation
@@ -602,7 +612,7 @@ namespace Mux.Core.Agent
                         {
                             Role = RoleEnum.Tool,
                             ToolCallId = toolCall.Id,
-                            Content = JsonSerializer.Serialize(new { error = "tool_call_denied", message = PromptResolver.Shared.GetEffective("result.tool_call_denied") })
+                            Content = JsonSerializer.Serialize(new { error = "tool_call_denied", message = permissionDenyMessage ?? PromptResolver.Shared.GetEffective("result.tool_call_denied") })
                         });
                         continue;
                     }

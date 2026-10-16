@@ -109,6 +109,7 @@ namespace Mux.Core.Subagents
                 ApprovalPolicy = parent.ApprovalPolicy,
                 AutoSafeApprovalAllowlist = parent.AutoSafeApprovalAllowlist,
                 PromptUserFunc = parent.PromptUserFunc,
+                PermissionPrompt = parent.PermissionPrompt,
                 WorkingDirectory = string.IsNullOrWhiteSpace(workingDirectory) ? parent.WorkingDirectory : workingDirectory,
                 MaxIterations = definition.MaxIterations ?? parent.MaxIterations,
                 MuxSettings = parent.MuxSettings,

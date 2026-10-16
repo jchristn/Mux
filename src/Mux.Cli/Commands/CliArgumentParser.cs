@@ -92,6 +92,22 @@ namespace Mux.Cli.Commands
 
                         settings.LoopMax = parsedLoopMax;
                         return true;
+                    case "--permission-prompt-tool":
+                        settings.PermissionPromptTool = ReadValue(option, inlineValue, values, ref index);
+                        return true;
+                    case "--permission-prompt-timeout":
+                        string promptTimeout = ReadValue(option, inlineValue, values, ref index);
+                        if (!int.TryParse(promptTimeout, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedPromptTimeout))
+                        {
+                            throw new InvalidOperationException($"--permission-prompt-timeout must be a whole number of seconds (got '{promptTimeout}').");
+                        }
+
+                        settings.PermissionPromptTimeout = parsedPromptTimeout;
+                        return true;
+                    case "--auto-approve-tools":
+                        string autoApprove = ReadValue(option, inlineValue, values, ref index);
+                        settings.AutoApproveTools = string.IsNullOrWhiteSpace(settings.AutoApproveTools) ? autoApprove : settings.AutoApproveTools + "," + autoApprove;
+                        return true;
                     default:
                         return false;
                 }

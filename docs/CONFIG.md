@@ -343,7 +343,7 @@ Notes:
 - CLI flags override settings file values
 - `--ignore-cert-errors`, `--insecure`, or `MUX_IGNORE_CERT_ERRORS=1` can enable certificate-error bypass for runs behind enterprise TLS inspection
 - When `settings.json` is loaded, mux rewrites it with normalized values so newly added settings are visible with defaults
-- `mux print` and `mux probe` reject `--approval-policy ask`
+- `mux print` and `mux probe` reject `--approval-policy ask`, except `mux print` with `--permission-prompt-tool` (see `USAGE.md`)
 - endpoint `maxAgentIterations` is nullable; leave it unset or set it to `null` to inherit the global `settings.json` default
 - `mux print` and `mux probe` do not load MCP servers, even if `mcp-servers.json` exists
 
