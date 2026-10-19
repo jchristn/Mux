@@ -16,9 +16,11 @@
 > **Beta software**
 > mux is in beta. APIs, interfaces, configuration formats, tool schemas, and CLI behavior are all subject to change. Feedback is welcome via [issues](https://github.com/jchristn/Mux/issues) and [discussions](https://github.com/jchristn/Mux/discussions).
 
+[Get started](#getting-started) · [Model providers](#model-providers) · [CLI usage](#cli-usage) · [Configuration](#configuration) · [Documentation](#documentation)
+
 ## What is mux?
 
-`mux` is an AI coding agent that gives you a Claude Code / Codex-like experience using the backend and model you choose — from the terminal, a web dashboard, a desktop app, or your editor. It can run against Ollama, OpenAI, vLLM, LM Studio, Azure OpenAI, or any OpenAI-compatible API.
+`mux` is an AI coding agent that gives you a Claude Code / Codex-like experience using the backend and model you choose — from the terminal, a web dashboard, a desktop app, or your editor. It connects to local runners, self-hosted inference servers, and hosted models through native and OpenAI-compatible adapters. See [model providers](#model-providers) for the supported connections.
 
 `mux` can read and write files, run commands, search code, and manage a project across five surfaces that all share one engine (`Mux.Core`):
 - **Interactive terminal UI** — a full-screen REPL with per-job transcripts, a tool-approval modal, slash commands, and resumable sessions (`mux`).
@@ -61,7 +63,7 @@
 ## Highlights
 
 - Backend-agnostic: one CLI for local and remote model runners
-- Built-in tools: file edit/read/write/delete, directory management, glob, grep, process execution, and rendered web retrieval
+- Built-in tools: file edit/read/write/delete, directory management, glob, grep, process execution, and rendered web retrieval. File edits preserve existing UTF-8/UTF-16/UTF-32 encoding, BOM, and line endings; new files use UTF-8 without a BOM.
 - External web search: optional Tavily and You.com providers expose `web_search` for result discovery
 - Shell-aware process execution metadata: `run_process` tells the model which OS and shell it will run under
 - MCP tool servers: define `stdio`/HTTP servers in `mcp-servers.json` or manage them with `/mcp`; the interactive UI connects to them, discovers their tools, exposes those tools to the model, and shows per-server connectivity
@@ -104,8 +106,7 @@ exclusive, and a conversation started in one resumes in another.
 ### Prerequisites
 
 - **.NET 8 SDK or later** (the install scripts default to .NET 10 when present, otherwise .NET 8).
-- **A model backend.** Anything OpenAI-compatible works, plus native adapters for Ollama Cloud, xAI Grok, Anthropic, Gemini, Vertex,
-  and Bedrock. The quickest local start is [Ollama](https://ollama.com):
+- **A model backend.** Choose a [supported provider](#model-providers). For a local start with [Ollama](https://ollama.com):
 
   ```bash
   ollama pull qwen2.5-coder:7b
@@ -124,6 +125,9 @@ scripts\windows\install-tool.bat     # or: scripts\windows\install-tool.bat net8
 # Linux (use scripts/macos/ on macOS)
 ./scripts/linux/install-tool.sh       # or: ./scripts/linux/install-tool.sh net8.0
 ```
+
+<details>
+<summary>Framework selection and packaging scripts</summary>
 
 All source run and tool-install scripts on Windows, Linux, and macOS accept a leading `net8.0`
 (or `--framework net8.0` / `-f net8.0`). Selection applies to restore, build, and execution,
@@ -150,6 +154,8 @@ or Debug agent build for that target; without explicit selection, it still prefe
 `generate-builtin-skills` also accepts the framework argument for its CLI build. Scripts that
 remove installations or publish the VS Code extension need no framework argument.
 
+</details>
+
 To pin a released version without building, download the self-contained CLI archive for your platform from
 [GitHub Releases](https://github.com/jchristn/mux/releases). Each archive holds a single `mux` binary and needs no
 .NET runtime:
@@ -163,7 +169,7 @@ Archives are `mux-<version>-<rid>.tar.gz` for `linux-x64`, `linux-arm64`, `osx-x
 
 On first run mux seeds `~/.mux/endpoints.json` (a default local Ollama endpoint) and `~/.mux/settings.json`.
 Set `MUX_CONFIG_DIR` before first launch if you want an isolated config directory. The full walkthrough is in
-[GETTING_STARTED.md](GETTING_STARTED.md).
+[GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
 To confirm the model and tools work end to end, run `mux` and try:
 
@@ -172,74 +178,6 @@ mux> create a file called hello.py that prints "hello world", then read it back 
 ```
 
 You should see `write_file` and `read_file` tool calls, the file created on disk, and the contents read back.
-
-### Ollama Cloud
-
-Mux uses PolyPrompt 3.4.0's dedicated `ollama-cloud` provider for direct cloud access.
-Set `OLLAMA_API_KEY` in your environment, then run:
-
-```bash
-mux --adapter-type ollama-cloud --model deepseek-v4.1-flash
-```
-
-This provider always connects to `https://ollama.com` using bearer authentication;
-`--base-url` and custom API-key placement do not change that provider's URL or auth scheme.
-An endpoint's `apiKey` (including a `${VAR}` reference) takes precedence over `OLLAMA_API_KEY`.
-Use direct API model names from `https://ollama.com/api/tags`, without the CLI's `:cloud` suffix.
-You can save a named endpoint in `~/.mux/endpoints.json`:
-
-```json
-{
-  "endpoints": [{
-    "name": "ollama-cloud",
-    "adapterType": "ollama-cloud",
-    "baseUrl": "https://ollama.com",
-    "model": "deepseek-v4.1-flash",
-    "apiKey": "${OLLAMA_API_KEY}"
-  }]
-}
-```
-
-Select it with `mux --endpoint ollama-cloud`. Use the `ollama` adapter for models
-served through a signed-in local Ollama service, including names ending in `:cloud`.
-The [proposed upstream launcher integration](https://github.com/ollama/ollama/pull/19125) adds
-`ollama launch mux --model deepseek-v4.1-flash:cloud`; this requires an Ollama build
-containing the Mux integration until it is accepted and released upstream.
-
-### xAI Grok
-
-Mux's discrete `xai` provider uses PolyPrompt 3.4.0's native Responses API for
-streaming, local function tools, reasoning summaries, and usage reporting.
-Set `XAI_API_KEY` in your environment, then run:
-
-```bash
-mux --adapter-type xai --model grok-4.7
-```
-
-`grok`, `x-ai`, and `spacex` are accepted provider aliases; saved JSON uses `xai`.
-Choose an accessible model from `mux endpoint models <endpoint-name>`.
-The default URL is `https://api.x.ai/v1`; API-root URLs and custom gateways are also supported.
-An endpoint's `apiKey` (including a `${VAR}` reference) takes precedence over `XAI_API_KEY`.
-xAI always uses bearer authentication, independent of custom API-key placement.
-
-Select `xai` in the TUI, desktop, web, or VS Code endpoint editor, or add a named endpoint:
-
-```json
-{
-  "endpoints": [{
-    "name": "grok",
-    "adapterType": "xai",
-    "baseUrl": "https://api.x.ai/v1",
-    "model": "grok-4.7",
-    "apiKey": "${XAI_API_KEY}"
-  }]
-}
-```
-
-Run it with `mux --endpoint grok`. Common reasoning-effort levels and thinking display
-work through the existing controls. Encrypted reasoning is retained as opaque continuation
-state across tools and saved sessions; it is never displayed as readable thinking.
-Mux uses its own local tools; xAI-hosted tools are not enabled automatically.
 
 ### Terminal UI
 
@@ -260,7 +198,7 @@ pins to the top only when it would scroll out of view, with ` ...` indicating a 
 `/usage` opens fullscreen analytics with token heatmaps, timeframe selection, and labeled axes. Toasts use
 severity colors; hidden `/toast debug`, `/toast info`, `/toast warn`, and `/toast error` commands can test them
 (`/toast ?` lists levels). For scripting, `mux print --output-format jsonl` runs the same engine non-interactively. See
-[USAGE.md](USAGE.md).
+[USAGE.md](docs/USAGE.md).
 
 ### Web dashboard
 
@@ -313,6 +251,35 @@ composer completes slash commands, and endpoint selections leave saved model-swi
 render when opening conversations from other clients. Source lives
 in `src/Mux.VSCode`; the full guide is in [docs/VSCODE.md](docs/VSCODE.md).
 
+## Model providers
+
+Choose a provider, configure a named endpoint, and select it in the surface you use.
+All surfaces share `~/.mux/endpoints.json`; CLI runs select an endpoint with
+`mux --endpoint <name>`. Native adapters handle each provider's protocol and authentication;
+OpenAI-compatible adapters connect to local servers and gateways using that API format.
+
+| Provider or server | Adapter | Connection and credentials |
+|---|---|---|
+| <a id="ollama"></a>[Ollama](docs/PROVIDERS.md#ollama) | `ollama` | Local or remote Ollama service; no key needed for an ordinary local server |
+| <a id="ollama-cloud"></a>[Ollama Cloud](docs/PROVIDERS.md#ollama-cloud) | `ollama-cloud` | Direct cloud API; Ollama bearer key |
+| <a id="openai"></a>[OpenAI](docs/PROVIDERS.md#openai) | `openai` | OpenAI API; bearer key |
+| <a id="anthropic"></a>[Anthropic](docs/PROVIDERS.md#anthropic) | `anthropic` | Native Messages API; Anthropic key |
+| <a id="gemini"></a>[Google Gemini](docs/PROVIDERS.md#google-gemini) | `gemini` | Gemini API; Google AI Studio key |
+| <a id="azure-openai"></a>[Azure OpenAI](docs/PROVIDERS.md#azure-openai) | `azure-openai` | Azure resource URL, deployment name, and API key |
+| <a id="vertex"></a>[Google Vertex AI](docs/PROVIDERS.md#google-vertex-ai) | `vertex` | Project, region, and Application Default Credentials |
+| <a id="bedrock"></a>[AWS Bedrock](docs/PROVIDERS.md#aws-bedrock) | `bedrock` | Region and AWS environment credentials |
+| <a id="xai-grok"></a>[xAI Grok](docs/PROVIDERS.md#xai-grok) | `xai` | Native Responses API; xAI bearer key |
+| <a id="vllm"></a>[vLLM](docs/PROVIDERS.md#vllm) | `vllm` | Your inference server's URL and authentication, if enabled |
+| <a id="openai-compatible"></a>[LM Studio and other compatible servers](docs/PROVIDERS.md#openai-compatible-servers) | `openai-compatible` | Server or gateway URL and its authentication requirements |
+
+Use the endpoint editor to add the connection, model, and credentials, or edit
+`endpoints.json` directly. Store secret references such as `${MY_API_KEY}` instead
+of literal keys. Select a model that supports tools for coding tasks.
+
+The [provider setup guide](docs/PROVIDERS.md) gives every adapter an endpoint example,
+credential setup, and relevant model or protocol notes. The [configuration reference](docs/CONFIG.md)
+covers shared settings such as timeouts, context windows, reasoning effort, and tool approval.
+
 ## CLI Usage
 
 ```text
@@ -341,7 +308,7 @@ The **desktop app** launches from the repo with `scripts\windows\run-desktop.bat
 | `--endpoint <name>` | `-e` | Use a named endpoint |
 | `--model <name>` | `-m` | Override model |
 | `--base-url <url>` |  | Override base URL |
-| `--adapter-type <type>` |  | `ollama`, `ollama-cloud`, `xai`, `openai`, `vllm`, `openai-compatible` |
+| `--adapter-type <type>` |  | Adapter identifier from the [provider table](#model-providers) |
 | `--temperature <float>` |  | Override temperature |
 | `--max-tokens <int>` |  | Override max output tokens |
 | `--context-window <int>` |  | Override the context window size in tokens (1024 - 1048576) |
@@ -821,34 +788,23 @@ Main files:
 - `settings.json`
 - `system-prompt.md`
 
-See [CONFIG.md](CONFIG.md) for the full reference.
+See [CONFIG.md](docs/CONFIG.md) for the full reference.
 
 ## Documentation
 
-- [GETTING_STARTED.md](GETTING_STARTED.md)
-- [USAGE.md](USAGE.md)
-- [CONFIG.md](CONFIG.md)
-- [TELEMETRY.md](TELEMETRY.md): OpenTelemetry metrics, traces, logs, dashboards, and alerts
-- [SKILLS_AUTHORING.md](SKILLS_AUTHORING.md)
-- [ARMADA.md](ARMADA.md)
-- [TESTING.md](TESTING.md)
-- [HEADLESS_COMPARISON.md](HEADLESS_COMPARISON.md)
-- [TypeScript SDK](sdk/typescript/README.md)
-- [Python SDK](sdk/python/README.md)
-- [CHANGELOG.md](CHANGELOG.md)
+- [Getting started](docs/GETTING_STARTED.md)
+- [Model providers](docs/PROVIDERS.md)
+- [Usage and interactive commands](docs/USAGE.md)
+- [Configuration reference](docs/CONFIG.md)
+- [Desktop app](docs/DESKTOP.md)
+- [VS Code extension](docs/VSCODE.md)
+- [REST API](docs/REST_API.md)
+- [Observability](TELEMETRY.md): OpenTelemetry metrics, traces, logs, dashboards, and alerts
+- [Authoring skills](docs/SKILLS_AUTHORING.md)
+- [Testing](docs/TESTING.md)
+- [TypeScript SDK](sdk/typescript/README.md) and [Python SDK](sdk/python/README.md)
+- [Changelog](CHANGELOG.md)
 
 ## License
 
 [MIT](LICENSE.md)
-
-### File encoding and local-model recovery
-
-The `edit_file`, `multi_edit`, and `write_file` tools preserve the encoding, BOM, and line endings of existing
-UTF-8 and BOM-marked UTF-16/UTF-32 files. New files use UTF-8 without a BOM.
-
-For Ollama endpoints, `quirks.enableMalformedToolCallRecovery` (default `true`) retries HTTP 500
-`error parsing tool call` and `token repeat limit reached` responses up to twice with corrective context.
-Recovery applies before streaming begins and to nonstreaming chat; unrelated HTTP errors and failures after
-a stream opens are not retried by this setting. Exhausted generation recovery retains `llm_error` in streaming
-runs. Set the quirk to `false` to disable it. The LLM retry counter includes a `reason` label distinguishing
-`transport`, `malformed_tool_call`, and `token_repeat_limit`.
