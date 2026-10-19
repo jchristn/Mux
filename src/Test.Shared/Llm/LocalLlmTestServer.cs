@@ -260,6 +260,29 @@ namespace Test.Shared
                     return;
                 }
 
+                if (path == "/v1/responses")
+                {
+                    string response = System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        id = "resp-fixture", @object = "response", model = "test-model", status = "completed",
+                        output = new object[]
+                        {
+                            new { type = "reasoning", id = "reason-fixture", encrypted_content = "opaque-fixture", summary = new[] { new { type = "summary_text", text = "Check the evidence." } } },
+                            new { type = "function_call", id = "fc-item", call_id = "call-weather-1", name = "get_weather", arguments = "{\"city\":\"Seattle\"}", status = "completed" }
+                        },
+                        usage = new { input_tokens = 10, output_tokens = 5, total_tokens = 15 }
+                    });
+                    if (stream)
+                    {
+                        context.Response.StatusCode = 200;
+                        context.Response.ContentType = "text/event-stream";
+                        await WriteChunkAsync(context, "event: response.completed\ndata: " + "{\"type\":\"response.completed\",\"response\":" + response + "}\n\ndata: [DONE]\n\n").ConfigureAwait(false);
+                        context.Response.Close();
+                    }
+                    else await WriteJsonAsync(context, 200, response).ConfigureAwait(false);
+                    return;
+                }
+
                 if (path == "/v1/chat/completions")
                 {
                     await HandleOpenAiAsync(context, stream, hasTools, wantReasoning, wantSigned).ConfigureAwait(false);

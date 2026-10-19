@@ -91,6 +91,9 @@ namespace Mux.Core.Llm
 
         #region Public-Members
 
+        /// <summary>Opaque continuation state from the last fully completed stream; never display as thinking.</summary>
+        public JsonElement? LastProviderState { get; private set; }
+
         /// <summary>
         /// The endpoint configuration used by this client.
         /// </summary>
@@ -242,7 +245,8 @@ namespace Mux.Core.Llm
             {
                 Role = RoleEnum.Assistant,
                 Content = string.IsNullOrEmpty(response.Text) ? null : response.Text,
-                ToolCalls = MapToolCallsToMux(response.ToolCalls)
+                ToolCalls = MapToolCallsToMux(response.ToolCalls),
+                ProviderState = response.ProviderState?.Clone()
             };
         }
 
@@ -437,6 +441,7 @@ namespace Mux.Core.Llm
             List<ToolDefinition> tools,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
+            LastProviderState = null;
             if (messages == null) throw new ArgumentNullException(nameof(messages));
             if (tools == null) throw new ArgumentNullException(nameof(tools));
 
@@ -720,6 +725,14 @@ namespace Mux.Core.Llm
 
             RecordUsage(response);
 
+            // Native Responses streams can fail after opening. Never execute incomplete tool calls.
+            if (!response.Success)
+            {
+                yield return new ErrorEvent { Code = "llm_error", Message = response.Error ?? "The provider stream did not complete." };
+                yield break;
+            }
+            LastProviderState = response.ProviderState?.Clone();
+
             if (response.ToolCalls != null)
             {
                 foreach (Pp.ToolCall call in response.ToolCalls)
@@ -842,7 +855,7 @@ namespace Mux.Core.Llm
         // attempt have escaped, and the caller's conversation is never mutated.
         private bool TryRecoverGeneration(Pp.ToolChatRequest request, int? status, string? error, ref int attempts, string operation)
         {
-            if (_Endpoint.AdapterType != AdapterTypeEnum.Ollama || !(_Endpoint.Quirks?.EnableMalformedToolCallRecovery ?? true)
+            if ((_Endpoint.AdapterType != AdapterTypeEnum.Ollama && _Endpoint.AdapterType != AdapterTypeEnum.OllamaCloud) || !(_Endpoint.Quirks?.EnableMalformedToolCallRecovery ?? true)
                 || status != 500 || attempts >= 2 || string.IsNullOrEmpty(error)) return false;
             bool malformed = error.Contains("error parsing tool call", StringComparison.OrdinalIgnoreCase);
             bool repeating = error.Contains("token repeat limit reached", StringComparison.OrdinalIgnoreCase);
@@ -1082,7 +1095,8 @@ namespace Mux.Core.Llm
                     {
                         Role = "assistant",
                         Content = message.Content,
-                        ToolCalls = MapToolCallsToPoly(message.ToolCalls)
+                        ToolCalls = MapToolCallsToPoly(message.ToolCalls),
+                        ProviderState = message.ProviderState?.Clone()
                     };
                 case RoleEnum.Tool:
                     return new Pp.ChatMessage
@@ -1188,6 +1202,18 @@ namespace Mux.Core.Llm
                     // Honor the auth placement: only bearer placement hands the key to the client; header and
                     // query placements apply it to the transport instead (see the constructor).
                     client = new OllamaCompletionClient(NormalizeOllamaBaseUrl(endpoint.BaseUrl), apiKey: OpenAiFamilyBearerKey(endpoint, apiKey), logging: SilentLogging, httpClient: httpClient);
+                    break;
+                case AdapterTypeEnum.OllamaCloud:
+                    // Cloud has a fixed endpoint and bearer scheme; never inherit local/custom auth placement.
+                    client = new OllamaCloudCompletionClient(
+                        apiKey ?? Environment.GetEnvironmentVariable("OLLAMA_API_KEY") ?? string.Empty,
+                        logging: SilentLogging, httpClient: httpClient);
+                    break;
+                case AdapterTypeEnum.XAi:
+                    client = new XAiCompletionClient(
+                        apiKey ?? Environment.GetEnvironmentVariable("XAI_API_KEY") ?? string.Empty,
+                        DefaultIfBlank(endpoint.BaseUrl, "https://api.x.ai/v1"),
+                        logging: SilentLogging, httpClient: httpClient);
                     break;
                 case AdapterTypeEnum.Anthropic:
                     // Anthropic authenticates with an API key sent as x-api-key; PolyPrompt's client attaches

@@ -11,6 +11,8 @@ there, and one you start there opens here.
 
 > Beta. Tracks the mux `contractVersion` API and may change alongside it.
 
+Dedicated **Ollama Cloud** (`ollama-cloud`) and **xAI Grok** (`xai`) providers are available in the endpoint editor, including bearer API keys and environment-variable references.
+
 ## Requirements
 
 - The `mux` CLI installed and on `PATH` (or set `mux.server.path`). See the mux install guide.

@@ -104,7 +104,7 @@ exclusive, and a conversation started in one resumes in another.
 ### Prerequisites
 
 - **.NET 8 SDK or later** (the install scripts default to .NET 10 when present, otherwise .NET 8).
-- **A model backend.** Anything OpenAI-compatible works, plus native adapters for Anthropic, Gemini, Vertex,
+- **A model backend.** Anything OpenAI-compatible works, plus native adapters for Ollama Cloud, xAI Grok, Anthropic, Gemini, Vertex,
   and Bedrock. The quickest local start is [Ollama](https://ollama.com):
 
   ```bash
@@ -172,6 +172,74 @@ mux> create a file called hello.py that prints "hello world", then read it back 
 ```
 
 You should see `write_file` and `read_file` tool calls, the file created on disk, and the contents read back.
+
+### Ollama Cloud
+
+Mux uses PolyPrompt 3.4.0's dedicated `ollama-cloud` provider for direct cloud access.
+Set `OLLAMA_API_KEY` in your environment, then run:
+
+```bash
+mux --adapter-type ollama-cloud --model deepseek-v4.1-flash
+```
+
+This provider always connects to `https://ollama.com` using bearer authentication;
+`--base-url` and custom API-key placement do not change that provider's URL or auth scheme.
+An endpoint's `apiKey` (including a `${VAR}` reference) takes precedence over `OLLAMA_API_KEY`.
+Use direct API model names from `https://ollama.com/api/tags`, without the CLI's `:cloud` suffix.
+You can save a named endpoint in `~/.mux/endpoints.json`:
+
+```json
+{
+  "endpoints": [{
+    "name": "ollama-cloud",
+    "adapterType": "ollama-cloud",
+    "baseUrl": "https://ollama.com",
+    "model": "deepseek-v4.1-flash",
+    "apiKey": "${OLLAMA_API_KEY}"
+  }]
+}
+```
+
+Select it with `mux --endpoint ollama-cloud`. Use the `ollama` adapter for models
+served through a signed-in local Ollama service, including names ending in `:cloud`.
+The [proposed upstream launcher integration](https://github.com/ollama/ollama/pull/19125) adds
+`ollama launch mux --model deepseek-v4.1-flash:cloud`; this requires an Ollama build
+containing the Mux integration until it is accepted and released upstream.
+
+### xAI Grok
+
+Mux's discrete `xai` provider uses PolyPrompt 3.4.0's native Responses API for
+streaming, local function tools, reasoning summaries, and usage reporting.
+Set `XAI_API_KEY` in your environment, then run:
+
+```bash
+mux --adapter-type xai --model grok-4.7
+```
+
+`grok`, `x-ai`, and `spacex` are accepted provider aliases; saved JSON uses `xai`.
+Choose an accessible model from `mux endpoint models <endpoint-name>`.
+The default URL is `https://api.x.ai/v1`; API-root URLs and custom gateways are also supported.
+An endpoint's `apiKey` (including a `${VAR}` reference) takes precedence over `XAI_API_KEY`.
+xAI always uses bearer authentication, independent of custom API-key placement.
+
+Select `xai` in the TUI, desktop, web, or VS Code endpoint editor, or add a named endpoint:
+
+```json
+{
+  "endpoints": [{
+    "name": "grok",
+    "adapterType": "xai",
+    "baseUrl": "https://api.x.ai/v1",
+    "model": "grok-4.7",
+    "apiKey": "${XAI_API_KEY}"
+  }]
+}
+```
+
+Run it with `mux --endpoint grok`. Common reasoning-effort levels and thinking display
+work through the existing controls. Encrypted reasoning is retained as opaque continuation
+state across tools and saved sessions; it is never displayed as readable thinking.
+Mux uses its own local tools; xAI-hosted tools are not enabled automatically.
 
 ### Terminal UI
 
@@ -273,7 +341,7 @@ The **desktop app** launches from the repo with `scripts\windows\run-desktop.bat
 | `--endpoint <name>` | `-e` | Use a named endpoint |
 | `--model <name>` | `-m` | Override model |
 | `--base-url <url>` |  | Override base URL |
-| `--adapter-type <type>` |  | `ollama`, `openai`, `vllm`, `openai-compatible` |
+| `--adapter-type <type>` |  | `ollama`, `ollama-cloud`, `xai`, `openai`, `vllm`, `openai-compatible` |
 | `--temperature <float>` |  | Override temperature |
 | `--max-tokens <int>` |  | Override max output tokens |
 | `--context-window <int>` |  | Override the context window size in tokens (1024 - 1048576) |

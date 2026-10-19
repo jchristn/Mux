@@ -1,0 +1,5 @@
+simulation: xai-responses
+routing: path
+mocks:
+  - routeKey: xai
+    path: ../mocks/xai/config.yaml

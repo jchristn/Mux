@@ -296,7 +296,7 @@ namespace Mux.Core.Models
         /// <c>Authorization: Bearer</c> header (the default), as a caller-named header, or as a caller-named
         /// query-string parameter. This is required for services that authenticate with a query-string value
         /// or a custom header rather than a bearer token. Native adapters (<c>anthropic</c>, <c>gemini</c>,
-        /// <c>azure-openai</c>, <c>vertex</c>, <c>bedrock</c>) carry a fixed scheme and ignore this.
+        /// <c>azure-openai</c>, <c>vertex</c>, <c>bedrock</c>, <c>ollama-cloud</c>, <c>xai</c>) carry a fixed scheme and ignore this.
         /// </summary>
         [JsonPropertyName("authPlacement")]
         public AuthPlacementEnum AuthPlacement

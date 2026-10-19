@@ -135,7 +135,9 @@ namespace Mux.Core.Settings
             switch (adapterType)
             {
                 case AdapterTypeEnum.Ollama:
+                case AdapterTypeEnum.OllamaCloud:
                     return OllamaDefaults();
+                case AdapterTypeEnum.XAi:
                 case AdapterTypeEnum.OpenAi:
                     return OpenAiDefaults();
                 case AdapterTypeEnum.Vllm:

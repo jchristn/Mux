@@ -39,6 +39,18 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual("Switched to endpoint homedns-gpt (gpt-oss-20b)", restored.Content, "portable notice text");
                         return Task.CompletedTask;
                     }),
+                    Case("ProviderStateSurvivesPersistence", "Encrypted continuation state survives core JSON, DTOs, and session reconciliation", (CancellationToken ct) =>
+                    {
+                        using var state = System.Text.Json.JsonDocument.Parse("[{\"type\":\"reasoning\",\"encrypted_content\":\"opaque-fixture\"}]");
+                        var message = new ConversationMessage { Role = RoleEnum.Assistant, Content = "answer", ProviderState = state.RootElement.Clone() };
+                        var restored = System.Text.Json.JsonSerializer.Deserialize<ConversationMessage>(System.Text.Json.JsonSerializer.Serialize(ChatMessageMapper.ToModel(ChatMessageMapper.ToDto(message))))!;
+                        MuxAssert.AreEqual("opaque-fixture", restored.ProviderState!.Value[0].GetProperty("encrypted_content").GetString(), "opaque output survives");
+                        var display = new ConversationMessage { Role = RoleEnum.Assistant, Content = "answer" };
+                        var merged = Mux.Core.Sessions.SessionMergePolicy.Reconcile(new List<ConversationMessage> { message }, new List<ConversationMessage> { display });
+                        MuxAssert.IsTrue(merged[0].ProviderState.HasValue, "display-only saves retain continuation");
+                        MuxAssert.IsNull(display.ProviderState, "input remains untouched");
+                        return Task.CompletedTask;
+                    }),
                     Case("RoleWireRoundTrips", "Role ⇄ wire string round-trips and parses tolerantly", (CancellationToken ct) =>
                     {
                         foreach (RoleEnum role in new[] { RoleEnum.System, RoleEnum.User, RoleEnum.Assistant, RoleEnum.Tool })
@@ -55,7 +67,7 @@ namespace Test.Shared.Suites
 
                     Case("AdapterKebabRoundTrips", "Adapter ⇄ kebab round-trips and accepts snake input", (CancellationToken ct) =>
                     {
-                        foreach (AdapterTypeEnum a in new[] { AdapterTypeEnum.Ollama, AdapterTypeEnum.OpenAiCompatible, AdapterTypeEnum.AzureOpenAi, AdapterTypeEnum.Bedrock })
+                        foreach (AdapterTypeEnum a in new[] { AdapterTypeEnum.Ollama, AdapterTypeEnum.OllamaCloud, AdapterTypeEnum.XAi, AdapterTypeEnum.OpenAiCompatible, AdapterTypeEnum.AzureOpenAi, AdapterTypeEnum.Bedrock })
                         {
                             MuxAssert.AreEqual(a, AdapterTypeEnumExtensions.FromKebab(a.ToKebab()), "round-trip " + a);
                         }

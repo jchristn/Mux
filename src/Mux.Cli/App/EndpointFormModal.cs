@@ -32,12 +32,11 @@ namespace Mux.Cli.App
         // without truncation on a normal-width terminal; it still shrinks to fit narrower screens in Render.
         private const int ContentWidth = 60;
 
-        // The local-inference default host. The native Ollama API lives at the root; every other adapter
-        // speaks the OpenAI-compatible surface under /v1. These seed the Base URL prefill per adapter.
+        // Default roots for the local native/OpenAI-compatible APIs; Ollama Cloud uses its fixed public root.
         private const string OllamaDefaultBaseUrl = "http://localhost:11434";
         private const string OpenAiDefaultBaseUrl = "http://localhost:11434/v1";
 
-        private static readonly string[] _Adapters = { "openai-compatible", "ollama", "openai", "vllm" };
+        private static readonly string[] _Adapters = { "openai-compatible", "ollama", "openai", "vllm", "ollama-cloud", "xai" };
         private static readonly string[] _Placements = { "bearer", "header", "query" };
 
 
@@ -147,11 +146,11 @@ namespace Mux.Cli.App
             _Form = new Form();
             _Form.Add("Name", _Name, () => _Name.Value.Trim().Length == 0 ? "Name is required." : null);
             _Form.Add("Adapter", _Adapter);
-            _Form.Add("Base URL", _BaseUrl, () => _BaseUrl.Value.Trim().Length == 0 ? "Base URL is required." : null);
+            _Form.Add("Base URL", _BaseUrl, () => !UsesFixedBearer(ParseAdapter(_Adapter.SelectedOption)) && _BaseUrl.Value.Trim().Length == 0 ? "Base URL is required." : null);
             _Form.Add("Model", _Model, () => _Model.Value.Trim().Length == 0 ? "Model is required." : null);
             _Form.Add("API key (optional)", _ApiKey);
-            _Form.Add("API key placement (bearer/header/query)", _AuthPlacement, () => ValidatePlacement(_AuthPlacement.Value));
-            _Form.Add("Auth parameter name (for header/query)", _AuthParameterName, () => ValidateParameterName(_AuthPlacement.Value, _AuthParameterName.Value));
+            _Form.Add("API key placement (bearer/header/query)", _AuthPlacement, () => UsesFixedBearer(ParseAdapter(_Adapter.SelectedOption)) ? null : ValidatePlacement(_AuthPlacement.Value));
+            _Form.Add("Auth parameter name (for header/query)", _AuthParameterName, () => UsesFixedBearer(ParseAdapter(_Adapter.SelectedOption)) ? null : ValidateParameterName(_AuthPlacement.Value, _AuthParameterName.Value));
             _Form.Add("Default", _Default);
             _Form.Add("Max output tokens", _MaxTokens, () => ValidateInt(_MaxTokens.Value, "Max output tokens", 1024, 131072));
             _Form.Add("Temperature", _Temperature, () => ValidateDouble(_Temperature.Value, "Temperature", 0.0, 2.0));
@@ -307,8 +306,8 @@ namespace Mux.Cli.App
                 // header, or a query-string parameter) — the engine applies it, so no Authorization header is
                 // written here.
                 ApiKey = apiKey.Length > 0 ? apiKey : null,
-                AuthPlacement = AuthPlacementEnumConverter.Parse(_AuthPlacement.Value),
-                AuthParameterName = _AuthParameterName.Value.Trim().Length > 0 ? _AuthParameterName.Value.Trim() : null,
+                AuthPlacement = UsesFixedBearer(adapterType) ? AuthPlacementEnum.Bearer : AuthPlacementEnumConverter.Parse(_AuthPlacement.Value),
+                AuthParameterName = !UsesFixedBearer(adapterType) && _AuthParameterName.Value.Trim().Length > 0 ? _AuthParameterName.Value.Trim() : null,
 
                 // The quirks object is not editable here; carry it over so an edit never silently resets a
                 // hand-tuned backend behavior profile back to the adapter defaults.
@@ -461,6 +460,8 @@ namespace Mux.Cli.App
             return int.Parse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture);
         }
 
+        private static bool UsesFixedBearer(AdapterTypeEnum adapter) => adapter == AdapterTypeEnum.OllamaCloud || adapter == AdapterTypeEnum.XAi;
+
         private static int IndexOfAdapter(AdapterTypeEnum adapterType)
         {
             switch (adapterType)
@@ -468,6 +469,8 @@ namespace Mux.Cli.App
                 case AdapterTypeEnum.Ollama: return 1;
                 case AdapterTypeEnum.OpenAi: return 2;
                 case AdapterTypeEnum.Vllm: return 3;
+                case AdapterTypeEnum.OllamaCloud: return 4;
+                case AdapterTypeEnum.XAi: return 5;
                 default: return 0;
             }
         }
@@ -479,13 +482,17 @@ namespace Mux.Cli.App
 
         private static string DefaultBaseUrlFor(AdapterTypeEnum adapterType)
         {
-            return adapterType == AdapterTypeEnum.Ollama ? OllamaDefaultBaseUrl : OpenAiDefaultBaseUrl;
+            return adapterType == AdapterTypeEnum.XAi ? "https://api.x.ai/v1"
+                : adapterType == AdapterTypeEnum.OllamaCloud ? "https://ollama.com"
+                : adapterType == AdapterTypeEnum.Ollama ? OllamaDefaultBaseUrl : OpenAiDefaultBaseUrl;
         }
 
         private static bool IsDefaultBaseUrl(string? value)
         {
             string trimmed = (value ?? string.Empty).Trim().TrimEnd('/');
-            return string.Equals(trimmed, OllamaDefaultBaseUrl, StringComparison.OrdinalIgnoreCase)
+            return string.Equals(trimmed, "https://api.x.ai/v1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(trimmed, "https://ollama.com", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(trimmed, OllamaDefaultBaseUrl, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(trimmed, OpenAiDefaultBaseUrl, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -493,6 +500,8 @@ namespace Mux.Cli.App
         {
             // The Ollama adapter speaks Ollama's native API at the server root; a trailing /v1 targets the
             // separate OpenAI-compatible surface and 404s. Drop it so a stray /v1 is never persisted.
+            if (adapterType == AdapterTypeEnum.OllamaCloud) return "https://ollama.com";
+            if (adapterType == AdapterTypeEnum.XAi && string.IsNullOrWhiteSpace(baseUrl)) return "https://api.x.ai/v1";
             if (adapterType == AdapterTypeEnum.Ollama)
             {
                 string trimmed = baseUrl.TrimEnd('/');

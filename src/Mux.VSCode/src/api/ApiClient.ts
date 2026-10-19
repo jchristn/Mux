@@ -95,7 +95,7 @@ export class ApiClient {
      * Creates or updates a session. A blank `id` mints a new one server-side; the saved summary is returned.
      */
     public putSession(
-        body: { Id: string; Title: string; EndpointName: string; Model: string; Messages: Array<{ Role: string; Content: string; Reasoning?: string | null; DisplayOnly?: boolean }> },
+        body: { Id: string; Title: string; EndpointName: string; Model: string; Messages: Array<{ Role: string; Content: string; Reasoning?: string | null; ProviderState?: unknown; ToolCalls?: unknown[] | null; ToolCallId?: string | null; DisplayOnly?: boolean }> },
         signal?: AbortSignal,
     ): Promise<SessionSummary> {
         return this.sendJson<SessionSummary>('PUT', '/v1.0/api/sessions', body, signal);

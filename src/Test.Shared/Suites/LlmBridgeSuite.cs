@@ -33,6 +33,32 @@ namespace Test.Shared.Suites
                 "PolyPrompt LlmClient bridge against per-provider mock servers",
                 new List<TestCaseDescriptor>
                 {
+                    Case("XAiNativeBridge", "xAI uses Responses, bearer auth, native tokens, and replays persisted encrypted tool state", async ct =>
+                    {
+                        using LocalLlmTestServer server = LocalLlmTestServer.Start();
+                        var endpoint = MakeEndpoint(AdapterTypeEnum.XAi, server.Endpoint);
+                        endpoint.ApiKey = "fixture-key";
+                        endpoint.AuthPlacement = AuthPlacementEnum.Query;
+                        endpoint.AuthParameterName = "must-not-be-used";
+                        using LlmClient client = new LlmClient(endpoint);
+                        var history = Messages("hello");
+                        ConversationMessage assistant = await client.SendAsync(history, NoTools(), ct).ConfigureAwait(false);
+                        MuxAssert.IsTrue(assistant.ProviderState.HasValue, "nonstream native output retained");
+                        MuxAssert.AreEqual("call-weather-1", assistant.ToolCalls![0].Id, "function call_id, not output item id");
+                        assistant = System.Text.Json.JsonSerializer.Deserialize<ConversationMessage>(System.Text.Json.JsonSerializer.Serialize(assistant))!;
+                        history.Add(assistant);
+                        history.Add(new ConversationMessage { Role = RoleEnum.Tool, ToolCallId = "call-weather-1", Content = "sunny" });
+                        await CollectAsync(client.StreamAsync(history, NoTools(), ct), ct).ConfigureAwait(false);
+                        MuxAssert.IsTrue(client.LastProviderState.HasValue, "stream native output retained");
+                        MuxAssert.AreEqual("/v1/responses", server.RequestPaths[0], "native API path");
+                        MuxAssert.AreEqual("Bearer fixture-key", server.HeaderValue("Authorization"), "fixed bearer auth");
+                        MuxAssert.DoesNotContain("must-not-be-used", server.RequestQueries[0], "key is never a query parameter");
+                        using var request = JsonDocument.Parse(server.RequestBodies[1]);
+                        MuxAssert.IsTrue(request.RootElement.TryGetProperty("max_output_tokens", out _), "native token limit");
+                        MuxAssert.DoesNotContain("\"max_tokens\"", server.RequestBodies[1], "no legacy completion fields");
+                        MuxAssert.Contains("opaque-fixture", server.RequestBodies[1], "encrypted state replayed after save/reload");
+                        MuxAssert.Contains("function_call_output", server.RequestBodies[1], "native tool output");
+                    }),
                     Case("OllamaGenerationRecovery", "Generation errors recover with bounded retries in both chat paths", async ct =>
                     {
                         foreach (bool stream in new[] { false, true })

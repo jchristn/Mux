@@ -4,6 +4,25 @@ All notable changes to mux are documented here.
 
 ## Unreleased
 
+### Added
+
+- First-class `xai` (Grok) provider across TUI, desktop, web, and VS Code using the
+  native Responses API, required bearer credentials, `XAI_API_KEY` fallback, and
+  authenticated model discovery. Tool calls retain encrypted continuation state
+  across turns, persistence, and session resume; incomplete streams cannot execute tools.
+  Live `grok-4.7` model discovery and a file-read tool cycle were verified.
+- Dedicated `ollama-cloud` provider using PolyPrompt 3.4.0, with bearer authentication,
+  `OLLAMA_API_KEY` fallback, native cloud model discovery, and endpoint selection in the
+  terminal, desktop, dashboard, and VS Code. All endpoint editors preserve the fixed cloud
+  URL and bearer scheme. Verified live text and file-read tool turns with
+  `deepseek-v4.1-flash`.
+- A reusable local Ollama API simulation for testing the proposed upstream
+  `ollama launch mux` integration.
+
+### Changed
+
+- Updated PolyPrompt from 3.1.0 to 3.4.0.
+
 ## 1.5.0
 
 ### Added

@@ -1,0 +1,10 @@
+version: 1
+name: xAI Responses contract fixture
+slug: xai
+protocol: http
+port: 4912
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

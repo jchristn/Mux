@@ -56,7 +56,7 @@ namespace Mux.Core.Models
         /// The assistant's reasoning ("thinking") text for this message, or null when the model produced none
         /// (or the message is not an assistant message). Persisted with the conversation so every surface can
         /// show a collapsible thinking section that survives reloads, but never sent back to the model
-        /// (<see cref="Mux.Core.Llm.LlmClient"/> maps only role, content, and tool calls into a request).
+        /// (<see cref="Mux.Core.Llm.LlmClient"/> maps role, content, tool calls, and opaque provider continuation state into a request).
         /// </summary>
         [JsonPropertyName("reasoning")]
         public string? Reasoning
@@ -84,6 +84,11 @@ namespace Mux.Core.Models
             get => _ToolCallId;
             set => _ToolCallId = value;
         }
+
+        /// <summary>Opaque provider continuation output, including encrypted reasoning. Persist and replay unchanged.</summary>
+        [JsonPropertyName("providerState")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public System.Text.Json.JsonElement? ProviderState { get; set; }
 
         /// <summary>Optional display-only metrics for this response, retained across transcript reloads.</summary>
         [JsonPropertyName("telemetry")]

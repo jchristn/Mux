@@ -403,7 +403,8 @@ namespace Mux.Core.Agent
                 {
                     Role = RoleEnum.Assistant,
                     Content = string.IsNullOrEmpty(assistantText) ? null : assistantText,
-                    ToolCalls = proposedToolCalls.Count > 0 ? proposedToolCalls : null
+                    ToolCalls = proposedToolCalls.Count > 0 ? proposedToolCalls : null,
+                    ProviderState = streamErrorCode == null ? _LlmClient.LastProviderState?.Clone() : null
                 };
                 conversation.Add(assistantMessage);
 

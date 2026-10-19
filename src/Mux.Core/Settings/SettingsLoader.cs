@@ -1113,6 +1113,10 @@ namespace Mux.Core.Settings
             {
                 if (AdapterTypeEnumConverter.TryParse(cliAdapterType, out AdapterTypeEnum parsedAdapter))
                 {
+                    if (parsedAdapter == AdapterTypeEnum.XAi && selected.AdapterType != parsedAdapter && string.IsNullOrWhiteSpace(cliBaseUrl))
+                    {
+                        selected.BaseUrl = "https://api.x.ai/v1";
+                    }
                     selected.AdapterType = parsedAdapter;
                 }
             }
@@ -1125,6 +1129,17 @@ namespace Mux.Core.Settings
             if (cliMaxTokens.HasValue)
             {
                 selected.MaxTokens = cliMaxTokens.Value;
+            }
+
+            // PolyPrompt's discrete cloud provider has a fixed native API root.
+            if (selected.AdapterType == AdapterTypeEnum.OllamaCloud)
+            {
+                selected.BaseUrl = "https://ollama.com";
+            }
+
+            if (selected.AdapterType == AdapterTypeEnum.XAi && string.IsNullOrWhiteSpace(selected.BaseUrl))
+            {
+                selected.BaseUrl = "https://api.x.ai/v1";
             }
 
             // Expand environment variables in all header values

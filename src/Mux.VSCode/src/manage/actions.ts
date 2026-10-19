@@ -9,7 +9,7 @@ import { isValidSkillCategory, KNOWN_SKILL_CATEGORIES, normalizeSkillCategory } 
 import { ManageNode } from './ManageTree';
 
 /** Adapter types the endpoint form offers, matching the server's kebab-case values. */
-const ADAPTERS = ['ollama', 'openai', 'openai-compatible', 'vllm', 'anthropic', 'gemini', 'azure-openai', 'vertex', 'bedrock'];
+const ADAPTERS = ['ollama', 'ollama-cloud', 'xai', 'openai', 'openai-compatible', 'vllm', 'anthropic', 'gemini', 'azure-openai', 'vertex', 'bedrock'];
 
 /** Splits a textarea value into trimmed, non-empty lines. */
 function splitLines(value: string): string[] {
@@ -89,7 +89,7 @@ export class ManageActions {
         // The OpenAI-family adapters honor a configurable auth placement; everything except the cloud-IAM
         // adapters (vertex/bedrock) takes an API key and custom headers. These drive the adaptive visibility.
         const openAiFamily = ['ollama', 'openai', 'openai-compatible', 'vllm'];
-        const usesKey = [...openAiFamily, 'anthropic', 'gemini', 'azure-openai'];
+        const usesKey = [...openAiFamily, 'ollama-cloud', 'xai', 'anthropic', 'gemini', 'azure-openai'];
 
         const fields: FormField[] = [
             { key: 'Name', label: vscode.l10n.t('Name'), type: 'text', value: existing?.Name ?? '', required: true },
@@ -121,7 +121,7 @@ export class ManageActions {
             ...(existing ?? {}),
             Name: String(result.Name).trim(),
             AdapterType: String(result.AdapterType),
-            BaseUrl: String(result.BaseUrl).trim(),
+            BaseUrl: result.AdapterType === 'ollama-cloud' ? 'https://ollama.com' : (String(result.BaseUrl ?? '').trim() || (result.AdapterType === 'xai' ? 'https://api.x.ai/v1' : '')),
             Model: String(result.Model).trim(),
             IsDefault: Boolean(result.IsDefault),
             MaxTokens: Number(result.MaxTokens) || undefined,
@@ -130,8 +130,8 @@ export class ManageActions {
             TimeoutMs: Number(result.TimeoutMs) || undefined,
             AutoApproveTools: Boolean(result.AutoApproveTools),
             ShowThinking: Boolean(result.ShowThinking),
-            AuthPlacement: String(result.AuthPlacement ?? 'bearer'),
-            AuthParameterName: String(result.AuthParameterName ?? '').trim(),
+            AuthPlacement: ['ollama-cloud', 'xai'].includes(String(result.AdapterType)) ? 'bearer' : String(result.AuthPlacement ?? 'bearer'),
+            AuthParameterName: ['ollama-cloud', 'xai'].includes(String(result.AdapterType)) ? '' : String(result.AuthParameterName ?? '').trim(),
             Region: String(result.Region ?? '').trim(),
             Project: String(result.Project ?? '').trim(),
             ApiVersion: String(result.ApiVersion ?? '').trim(),

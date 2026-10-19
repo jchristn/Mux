@@ -7,6 +7,8 @@ namespace Test.Shared.Suites
     using System.Threading.Tasks;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Llm;
+    using Mux.Core.Settings;
     using Touchstone.Core;
 
     /// <summary>
@@ -26,6 +28,35 @@ namespace Test.Shared.Suites
                 "Endpoint config serialization, clamping, and validation",
                 new List<TestCaseDescriptor>
                 {
+                    new TestCaseDescriptor("EndpointConfig", "XAiProviderContract", "xAI accepts Grok aliases, serializes canonically, and requires bearer credentials", (CancellationToken ct) =>
+                    {
+                        foreach (string alias in new[] { "XAi", "x-ai", "x_ai", "grok", "spacex" })
+                        {
+                            MuxAssert.IsTrue(AdapterTypeEnumConverter.TryParse(alias, out var adapter), "alias accepted: " + alias);
+                            MuxAssert.AreEqual(AdapterTypeEnum.XAi, adapter, "discrete xAI provider");
+                        }
+                        var endpoint = new EndpointConfig { Name = "grok", AdapterType = AdapterTypeEnum.XAi, Model = "grok-4.7", ApiKey = "invalid key" };
+                        MuxAssert.Contains("\"xai\"", JsonSerializer.Serialize(endpoint), "canonical provider name");
+                        MuxAssert.Throws<ArgumentException>(() => { using var client = new LlmClient(endpoint); }, "invalid bearer key rejected locally");
+                        return Task.CompletedTask;
+                    }),
+                    new TestCaseDescriptor("EndpointConfig", "OllamaCloudProviderContract", "Ollama Cloud accepts provider aliases, round-trips JSON, and requires a token", (CancellationToken ct) =>
+                    {
+                        foreach (string alias in new[] { "OllamaCloud", "ollama-cloud", "ollama_cloud", "ollamacloud" })
+                        {
+                            MuxAssert.IsTrue(AdapterTypeEnumConverter.TryParse(alias, out AdapterTypeEnum adapter), "cloud alias accepted");
+                            MuxAssert.AreEqual(AdapterTypeEnum.OllamaCloud, adapter, "dedicated provider");
+                        }
+                        EndpointConfig endpoint = new EndpointConfig { Name = "cloud", AdapterType = AdapterTypeEnum.OllamaCloud, Model = "deepseek-v4.1-flash", ApiKey = "${OLLAMA_API_KEY}" };
+                        string json = JsonSerializer.Serialize(endpoint);
+                        MuxAssert.Contains("ollama-cloud", json, "canonical wire value");
+                        MuxAssert.AreEqual(AdapterTypeEnum.OllamaCloud, JsonSerializer.Deserialize<EndpointConfig>(json)!.AdapterType, "provider round trip");
+                        MuxAssert.IsFalse(Defaults.QuirksForAdapter(AdapterTypeEnum.OllamaCloud).SupportsParallelToolCalls, "native Ollama defaults");
+                        // An explicit invalid token must fail locally, regardless of the developer's environment.
+                        endpoint.ApiKey = " ";
+                        MuxAssert.Throws<ArgumentException>(() => { using LlmClient client = new LlmClient(endpoint); }, "required bearer token");
+                        return Task.CompletedTask;
+                    }),
                     new TestCaseDescriptor("EndpointConfig", "SerializationRoundTripPreservesAllFields", "Serializing and deserializing preserves all fields", (CancellationToken ct) =>
                     {
                         EndpointConfig original = new EndpointConfig

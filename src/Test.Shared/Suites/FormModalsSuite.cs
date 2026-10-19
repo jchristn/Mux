@@ -7,6 +7,7 @@ namespace Test.Shared.Suites
     using System.Threading.Tasks;
     using Mux.Cli.App;
     using Mux.Core.Models;
+    using Mux.Core.Enums;
     using Touchstone.Core;
     using TUIKit;
     using TUIKit.Input;
@@ -34,6 +35,30 @@ namespace Test.Shared.Suites
                 "Form and editor modals",
                 new List<TestCaseDescriptor>
                 {
+                    Case("OllamaCloudFormUsesFixedBearerEndpoint", "Editing a cloud endpoint with no URL preserves its provider and key reference", async (CancellationToken ct) =>
+                    {
+                        foreach (var provider in new[] { AdapterTypeEnum.OllamaCloud, AdapterTypeEnum.XAi })
+                        {
+                        EndpointConfig existing = new EndpointConfig
+                        {
+                            Name = "cloud", AdapterType = provider,
+                            Model = "deepseek-v4.1-flash", ApiKey = "${OLLAMA_API_KEY}",
+                            AuthPlacement = AuthPlacementEnum.Query
+                        };
+                        EndpointFormModal modal = new EndpointFormModal("Edit endpoint", existing);
+                        string screen = Render(modal, 100, 60);
+                        MuxAssert.Contains(provider.ToKebab(), screen, "discrete provider offered");
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Enter));
+                        MuxAssert.IsTrue(modal.IsClosed, "fixed cloud URL needs no user input");
+                        EndpointConfig? result = await modal.Completion.ConfigureAwait(false) as EndpointConfig;
+                        MuxAssert.IsNotNull(result, "endpoint returned");
+                        MuxAssert.AreEqual(provider, result!.AdapterType, "provider retained");
+                        MuxAssert.AreEqual(provider == AdapterTypeEnum.XAi ? "https://api.x.ai/v1" : "https://ollama.com", result.BaseUrl, "native cloud root");
+                        MuxAssert.AreEqual("${OLLAMA_API_KEY}", result.ApiKey, "key reference retained");
+                        MuxAssert.AreEqual(AuthPlacementEnum.Bearer, result.AuthPlacement, "fixed bearer authentication");
+                        MuxAssert.IsNull(result.AuthParameterName, "no query credential parameter");
+                        }
+                    }),
                     Case("EndpointFormPasteReachesFocusedField", "A paste into the endpoint form lands in the focused text field", (CancellationToken ct) =>
                     {
                         EndpointFormModal modal = new EndpointFormModal("Add endpoint");

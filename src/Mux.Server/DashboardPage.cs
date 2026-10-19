@@ -1191,7 +1191,7 @@ function doDeleteMultiple(ids){
 }
 function openConvo(id){
   api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
-    messages=((d&&d.Messages)||[]).map(function(m){return {role:m.Role,content:m.Content,thinking:m.Reasoning||null,model:m.Model||(d&&d.Model)||"",stats:m.Stats||null,displayOnly:!!m.DisplayOnly};});
+    messages=((d&&d.Messages)||[]).map(function(m){return {role:m.Role,content:m.Content,thinking:m.Reasoning||null,providerState:m.ProviderState||null,toolCalls:m.ToolCalls||null,toolCallId:m.ToolCallId||null,model:m.Model||(d&&d.Model)||"",stats:m.Stats||null,displayOnly:!!m.DisplayOnly};});
     currentSessionId=(d&&d.Id)||id;currentModel=(d&&d.Model)||"";
     if(d&&d.EndpointName){var sel=el("endpointSelect");if(sel){for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===d.EndpointName){sel.selectedIndex=i;break;}}}}
     setChatTitle((d&&d.Title)||"");renderMessages();highlightConvo();
@@ -1236,7 +1236,7 @@ function reloadOpenTranscript(id){
     if(id!==currentSessionId)return;
     api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
       if(id!==currentSessionId)return;
-      var msgs=((d&&d.Messages)||[]).map(function(mm){return {role:mm.Role,content:mm.Content,thinking:mm.Reasoning||null,model:mm.Model||(d&&d.Model)||"",stats:mm.Stats||null,displayOnly:!!mm.DisplayOnly};});
+      var msgs=((d&&d.Messages)||[]).map(function(mm){return {role:mm.Role,content:mm.Content,thinking:mm.Reasoning||null,providerState:mm.ProviderState||null,toolCalls:mm.ToolCalls||null,toolCallId:mm.ToolCallId||null,model:mm.Model||(d&&d.Model)||"",stats:mm.Stats||null,displayOnly:!!mm.DisplayOnly};});
       if(msgs.length>before||tries>=8){
         messages=msgs;setChatTitle((d&&d.Title)||"");renderMessages();loadConvos();
       }else{tries++;setTimeout(pull,400);}
@@ -1262,7 +1262,7 @@ function recordModelSwitch(){
 function persistConvo(history,endpoint,model){
   var real=(history||messages).filter(function(m){return !m.typing&&!m.local;});
   if(!real.length)return;
-  var payload={Id:currentSessionId||"",Title:"",EndpointName:endpoint||el("endpointSelect").value||"",Model:model||currentModel||"",Messages:real.map(function(m){return {Role:m.role,Content:m.content,Reasoning:m.thinking||null,Model:m.model||null,Stats:m.stats||null,DisplayOnly:!!m.displayOnly};})};
+  var payload={Id:currentSessionId||"",Title:"",EndpointName:endpoint||el("endpointSelect").value||"",Model:model||currentModel||"",Messages:real.map(function(m){return {Role:m.role,Content:m.content,Reasoning:m.thinking||null,ProviderState:m.providerState||null,ToolCalls:m.toolCalls||null,ToolCallId:m.toolCallId||null,Model:m.model||null,Stats:m.stats||null,DisplayOnly:!!m.displayOnly};})};
   var session=currentSessionId;
   return api("/v1.0/api/sessions","PUT",payload).then(function(s){if(s&&s.Id&&currentSessionId===session){currentSessionId=s.Id;setChatTitle(s.Title||"");}loadConvos();notifySessionsChanged(s&&s.Id);}).catch(function(e){toast("Could not save conversation: "+e.message,true);});
 }
@@ -1270,7 +1270,7 @@ function renameConvo(id){
   var cur="";var e=document.querySelector('#convoList .convo-item[data-id="'+id+'"] .ct');if(e)cur=e.getAttribute("title")||e.textContent;
   var val=window.prompt("Rename conversation",cur);if(val==null)return;val=val.trim();if(!val)return;
   api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
-    var payload={Id:id,Title:val,EndpointName:(d&&d.EndpointName)||"",Model:(d&&d.Model)||"",Messages:((d&&d.Messages)||[]).map(function(m){return {Role:m.Role,Content:m.Content,Reasoning:m.Reasoning||null,Model:m.Model||null,Stats:m.Stats||null,DisplayOnly:!!m.DisplayOnly};})};
+    var payload={Id:id,Title:val,EndpointName:(d&&d.EndpointName)||"",Model:(d&&d.Model)||"",Messages:((d&&d.Messages)||[]).map(function(m){return {Role:m.Role,Content:m.Content,Reasoning:m.Reasoning||null,ProviderState:m.ProviderState||null,ToolCalls:m.ToolCalls||null,ToolCallId:m.ToolCallId||null,Model:m.Model||null,Stats:m.Stats||null,DisplayOnly:!!m.DisplayOnly};})};
     return api("/v1.0/api/sessions","PUT",payload);
   }).then(function(s){if(id===currentSessionId&&s)setChatTitle(s.Title||"");loadConvos();notifySessionsChanged(id);}).catch(function(e){toast(e.message,true);});
 }
@@ -1780,14 +1780,14 @@ function renderEp(){renderGrid("endpoints_list",
    {h:t("col.auth"),w:"60px",tip:"Whether an API key is stored for this endpoint (never shown)",get:function(e){return e.ApiKeySet?'🔑':'<span class="muted">—</span>'}}],
   _ep,{icon:"🔌",msg:t("empty.endpoints"),add:"+ "+t("add.endpoint")});}
 function epIsOpenAiFamily(v){return v.AdapterType==="ollama"||v.AdapterType==="openai"||v.AdapterType==="openai-compatible"||v.AdapterType==="vllm";}
-function epUsesKey(v){return epIsOpenAiFamily(v)||v.AdapterType==="anthropic"||v.AdapterType==="gemini"||v.AdapterType==="azure-openai";}
+function epUsesKey(v){return epIsOpenAiFamily(v)||v.AdapterType==="xai"||v.AdapterType==="ollama-cloud"||v.AdapterType==="anthropic"||v.AdapterType==="gemini"||v.AdapterType==="azure-openai";}
 function epUsesParamName(v){return epIsOpenAiFamily(v)&&(v.AuthPlacement==="header"||v.AuthPlacement==="query");}
 function epHeadersToText(hs){return (hs||[]).map(function(h){return h.Key+":"+(h.Value?" "+h.Value:"");});}
 function epTextToHeaders(lines){return (lines||[]).map(function(ln){var i=ln.indexOf(":");var k=(i<0?ln:ln.slice(0,i)).trim();var val=(i<0?"":ln.slice(i+1)).trim();return {Key:k,Value:val};}).filter(function(h){return h.Key;});}
 function epFields(isEdit){return [
   {type:"section",label:"Connection"},
   {id:"Name",label:"Name",disabled:isEdit,tip:"A unique name you use to select this endpoint (e.g. with --endpoint). Cannot be changed after creation."},
-  {id:"AdapterType",label:"Adapter type",type:"select",options:["ollama","openai","openai-compatible","vllm","anthropic","gemini","azure-openai","vertex","bedrock"],tip:"Which backend protocol to speak. Determines the auth fields shown below and how the base URL is used."},
+  {id:"AdapterType",label:"Adapter type",type:"select",options:["ollama","ollama-cloud","xai","openai","openai-compatible","vllm","anthropic","gemini","azure-openai","vertex","bedrock"],tip:"Which backend protocol to speak. Determines the auth fields shown below and how the base URL is used."},
   {id:"BaseUrl",label:"Base URL",placeholder:"http://localhost:11434",tip:"The API root of the model server. Blank uses the provider's public API (for hosted adapters); required for Azure."},
   {type:"section",label:"Model & sampling"},
   {id:"Model",label:"Model",sub:"(Azure: deployment)",tip:"The model identifier sent to the backend. For Azure OpenAI this is the deployment name, not the model name."},
@@ -1813,6 +1813,8 @@ function openEp(i,prefill,onSaved){var isEdit=i>=0,e=isEdit?Object.assign({},_ep
   e.HeadersText=epHeadersToText(e.Headers);
   formModal(isEdit?"Edit endpoint":"Add endpoint",epFields(isEdit),e,function(v){
     if(!v.Name){toast(t("toast.nameReq"),true);return;}
+    if(v.AdapterType==="ollama-cloud"){v.BaseUrl="https://ollama.com";v.AuthPlacement="bearer";v.AuthParameterName="";}
+    if(v.AdapterType==="xai"){v.BaseUrl=v.BaseUrl||"https://api.x.ai/v1";v.AuthPlacement="bearer";v.AuthParameterName="";}
     v.Headers=epTextToHeaders(v.HeadersText);delete v.HeadersText;
     var list=_ep.slice();if(isEdit)list[i]=v;else list.push(v);
     // Enforce a single default: when this endpoint is marked default, demote every other one so the

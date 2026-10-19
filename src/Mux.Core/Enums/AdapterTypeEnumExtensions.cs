@@ -17,6 +17,8 @@ namespace Mux.Core.Enums
             switch (adapter)
             {
                 case AdapterTypeEnum.Ollama: return "ollama";
+                case AdapterTypeEnum.OllamaCloud: return "ollama-cloud";
+                case AdapterTypeEnum.XAi: return "xai";
                 case AdapterTypeEnum.OpenAi: return "openai";
                 case AdapterTypeEnum.Vllm: return "vllm";
                 case AdapterTypeEnum.OpenAiCompatible: return "openai-compatible";
@@ -41,6 +43,12 @@ namespace Mux.Core.Enums
             switch ((adapter ?? string.Empty).Trim().ToLowerInvariant().Replace('_', '-'))
             {
                 case "ollama": return AdapterTypeEnum.Ollama;
+                case "ollamacloud":
+                case "ollama-cloud": return AdapterTypeEnum.OllamaCloud;
+                case "xai":
+                case "x-ai":
+                case "grok":
+                case "spacex": return AdapterTypeEnum.XAi;
                 case "openai": return AdapterTypeEnum.OpenAi;
                 case "vllm": return AdapterTypeEnum.Vllm;
                 case "openai-compatible": return AdapterTypeEnum.OpenAiCompatible;

@@ -39,9 +39,9 @@ namespace Mux.Cli.Commands
         public string? BaseUrl { get; set; }
 
         /// <summary>
-        /// Override the adapter type (e.g. Ollama, OpenAi, Vllm, OpenAiCompatible).
+        /// Override the adapter type (e.g. Ollama, OllamaCloud, XAi, OpenAi, Vllm, OpenAiCompatible).
         /// </summary>
-        [Description("Adapter type (Ollama, OpenAi, Vllm, OpenAiCompatible).")]
+        [Description("Adapter type (Ollama, OllamaCloud, XAi, OpenAi, Vllm, OpenAiCompatible).")]
         [CommandOption("--adapter-type")]
         public string? AdapterType { get; set; }
 

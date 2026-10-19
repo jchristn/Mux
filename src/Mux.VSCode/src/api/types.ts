@@ -331,6 +331,8 @@ export interface ChatMessageDto {
     Role: string;
     Content: string;
     Reasoning?: string | null;
+    /** Opaque continuation state, retained but never rendered. */
+    ProviderState?: unknown;
     ToolCalls?: ToolCallDto[] | null;
     ToolCallId?: string | null;
 }

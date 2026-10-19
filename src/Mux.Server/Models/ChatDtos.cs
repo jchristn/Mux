@@ -40,6 +40,9 @@ namespace Mux.Server.Models
         /// <summary>The assistant's reasoning ("thinking") for this message, or null when none.</summary>
         public string? Reasoning { get; set; } = null;
 
+        /// <summary>Opaque provider continuation state; retained for resumed tool conversations.</summary>
+        public System.Text.Json.JsonElement? ProviderState { get; set; }
+
         /// <summary>Transcript-only notice, never included in model context.</summary>
         public bool DisplayOnly { get; set; }
 
@@ -72,6 +75,7 @@ namespace Mux.Server.Models
                 Role = message.Role.ToWire(),
                 Content = message.Content ?? string.Empty,
                 DisplayOnly = message.DisplayOnly,
+                ProviderState = message.ProviderState?.Clone(),
                 Reasoning = string.IsNullOrEmpty(message.Reasoning) ? null : message.Reasoning,
                 ToolCalls = message.ToolCalls == null || message.ToolCalls.Count == 0
                     ? null
@@ -97,6 +101,7 @@ namespace Mux.Server.Models
                 Role = RoleEnumExtensions.ParseRole(dto.Role),
                 Content = dto.Content ?? string.Empty,
                 DisplayOnly = dto.DisplayOnly,
+                ProviderState = dto.ProviderState?.Clone(),
                 Reasoning = string.IsNullOrEmpty(dto.Reasoning) ? null : dto.Reasoning,
                 ToolCalls = dto.ToolCalls == null || dto.ToolCalls.Count == 0
                     ? null

@@ -62,6 +62,14 @@ namespace Mux.Core.Enums
         /// AWS Bedrock (unified Converse API). Requires a region; credentials come from the AWS environment.
         /// </summary>
         [EnumMember(Value = "bedrock")]
-        Bedrock
+        Bedrock,
+
+        /// <summary>Ollama Cloud native API with required bearer authentication.</summary>
+        [EnumMember(Value = "ollama_cloud")]
+        OllamaCloud,
+
+        /// <summary>xAI Grok using the native Responses API and required bearer authentication.</summary>
+        [EnumMember(Value = "xai")]
+        XAi
     }
 }

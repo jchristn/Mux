@@ -203,7 +203,7 @@ namespace Mux.Desktop.Views
                 || adapter == AdapterTypeEnum.OpenAi
                 || adapter == AdapterTypeEnum.OpenAiCompatible
                 || adapter == AdapterTypeEnum.Vllm;
-            bool usesKey = openAiFamily
+            bool usesKey = adapter == AdapterTypeEnum.XAi || adapter == AdapterTypeEnum.OllamaCloud || openAiFamily
                 || adapter == AdapterTypeEnum.Anthropic
                 || adapter == AdapterTypeEnum.Gemini
                 || adapter == AdapterTypeEnum.AzureOpenAi;
@@ -320,7 +320,7 @@ namespace Mux.Desktop.Views
 
             // Hosted/cloud adapters resolve a default endpoint (anthropic/gemini) or use SDK credentials
             // (vertex/bedrock), so a base URL is optional for them; every other adapter needs one.
-            bool baseUrlOptional = adapter == AdapterTypeEnum.Anthropic
+            bool baseUrlOptional = adapter == AdapterTypeEnum.XAi || adapter == AdapterTypeEnum.OllamaCloud || adapter == AdapterTypeEnum.Anthropic
                 || adapter == AdapterTypeEnum.Gemini
                 || adapter == AdapterTypeEnum.Vertex
                 || adapter == AdapterTypeEnum.Bedrock;
@@ -382,12 +382,12 @@ namespace Mux.Desktop.Views
 
             _Config.Name = name;
             _Config.AdapterType = adapter;
-            _Config.BaseUrl = (_BaseUrl.Text ?? string.Empty).Trim();
+            _Config.BaseUrl = adapter == AdapterTypeEnum.OllamaCloud ? "https://ollama.com" : adapter == AdapterTypeEnum.XAi && string.IsNullOrWhiteSpace(_BaseUrl.Text) ? "https://api.x.ai/v1" : (_BaseUrl.Text ?? string.Empty).Trim();
             _Config.Model = (_Model.Text ?? string.Empty).Trim();
             _Config.ApiKey = string.IsNullOrWhiteSpace(_ApiKey.Text) ? null : _ApiKey.Text;
-            _Config.AuthPlacement = AuthPlacementEnumConverter.Parse(_AuthPlacement.SelectedItem as string);
+            _Config.AuthPlacement = (adapter == AdapterTypeEnum.XAi || adapter == AdapterTypeEnum.OllamaCloud) ? AuthPlacementEnum.Bearer : AuthPlacementEnumConverter.Parse(_AuthPlacement.SelectedItem as string);
             string parameterName = (_AuthParameterName.Text ?? string.Empty).Trim();
-            _Config.AuthParameterName = parameterName.Length == 0 ? null : parameterName;
+            _Config.AuthParameterName = adapter == AdapterTypeEnum.XAi || adapter == AdapterTypeEnum.OllamaCloud || parameterName.Length == 0 ? null : parameterName;
             _Config.Region = string.IsNullOrWhiteSpace(_Region.Text) ? null : _Region.Text!.Trim();
             _Config.Project = string.IsNullOrWhiteSpace(_Project.Text) ? null : _Project.Text!.Trim();
             _Config.ApiVersion = string.IsNullOrWhiteSpace(_ApiVersion.Text) ? null : _ApiVersion.Text!.Trim();

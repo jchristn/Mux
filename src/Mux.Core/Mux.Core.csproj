@@ -47,7 +47,7 @@
          transitively (2.1.10) carries advisory GHSA-2m69-gcr7-jv3q. -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <PackageReference Include="Microsoft.Playwright" Version="1.63.0" />
-    <PackageReference Include="PolyPrompt" Version="3.1.0" />
+    <PackageReference Include="PolyPrompt" Version="3.4.0" />
     <PackageReference Include="Voltaic" Version="2.2.1" />
     <!-- SourceLink is bundled in the .NET 8+ SDK; PublishRepositoryUrl/EmbedUntrackedSources
          (in Directory.Build.props) drive the source-linked .snupkg with no extra package. -->

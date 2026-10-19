@@ -421,6 +421,19 @@ namespace Mux.Server.Routes
                 }
             }
 
+            // Native xAI continuation must use the complete persisted transcript, including function
+            // outputs and encrypted reasoning that display-only clients may omit from their history.
+            if (endpoint.AdapterType == AdapterTypeEnum.XAi && _SessionStore != null && !string.IsNullOrWhiteSpace(request.Id))
+            {
+                SessionSnapshot? prior = await _SessionStore.LoadAsync(sessionId, ctx.Token).ConfigureAwait(false);
+                if (prior != null && string.Equals(prior.EndpointName, endpoint.Name, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(prior.Model, endpoint.Model, StringComparison.Ordinal)
+                    && prior.ConversationHistory.Exists(m => m.ProviderState.HasValue))
+                {
+                    history = prior.ConversationHistory.Where(m => m.Role != RoleEnum.System || m.DisplayOnly).ToList();
+                }
+            }
+
             ResolvedSystemPrompt resolved = SystemPromptResolver.Resolve(
                 SettingsLoader.LoadSystemPrompt(null, settings),
                 SettingsLoader.GetActivePromptProfile(),
@@ -622,7 +635,7 @@ namespace Mux.Server.Routes
                     }
                 };
 
-                await PersistTurnAsync(sessionId, endpoint, runDirectory, history, prompt, content.ToString(), thinking.ToString(), reply.Stats).ConfigureAwait(false);
+                await PersistTurnAsync(sessionId, endpoint, runDirectory, history, prompt, content.ToString(), thinking.ToString(), reply.Stats, loop.FinalConversation).ConfigureAwait(false);
 
                 await ctx.Response.SendEvent(new ServerSentEvent
                 {
@@ -685,7 +698,8 @@ namespace Mux.Server.Routes
             string prompt,
             string assistantText,
             string assistantThinking,
-            ChatStats stats)
+            ChatStats stats,
+            IReadOnlyList<ConversationMessage>? completedConversation = null)
         {
             if (_SessionStore == null || string.IsNullOrWhiteSpace(sessionId))
             {
@@ -722,6 +736,18 @@ namespace Mux.Server.Routes
                     }
                 };
 
+                if (endpoint.AdapterType == AdapterTypeEnum.XAi && completedConversation != null && completedConversation.Count > 0)
+                {
+                    // A single display reply cannot represent Responses function outputs or encrypted state.
+                    var telemetry = updated[updated.Count - 1].Telemetry;
+                    updated = completedConversation.Where(m => m.Role != RoleEnum.System || m.DisplayOnly).ToList();
+                    ConversationMessage? finalAssistant = updated.LastOrDefault(m => m.Role == RoleEnum.Assistant);
+                    if (finalAssistant != null)
+                    {
+                        finalAssistant.Telemetry = telemetry;
+                        finalAssistant.Reasoning = string.IsNullOrEmpty(assistantThinking) ? null : assistantThinking;
+                    }
+                }
                 snapshot.ConversationHistory = updated;
                 snapshot.EndpointName = endpoint.Name;
                 snapshot.Model = endpoint.Model;

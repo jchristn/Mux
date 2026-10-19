@@ -1,0 +1,5 @@
+simulation: mux-ollama-launch
+routing: path
+mocks:
+  - routeKey: ollama
+    path: ../mocks/ollama/config.yaml

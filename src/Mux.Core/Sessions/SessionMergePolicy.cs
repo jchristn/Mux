@@ -72,12 +72,14 @@ namespace Mux.Core.Sessions
                 if (incoming[i] == null || existing[i] == null) continue;
                 bool restoreTelemetry = incoming[i].Telemetry == null && existing[i].Telemetry != null;
                 bool restoreDisplayOnly = !incoming[i].DisplayOnly && existing[i].DisplayOnly;
-                if (!restoreTelemetry && !restoreDisplayOnly) continue;
+                bool restoreProviderState = incoming[i].ProviderState == null && existing[i].ProviderState != null;
+                if (!restoreTelemetry && !restoreDisplayOnly && !restoreProviderState) continue;
                 enriched ??= new List<ConversationMessage>(incoming);
                 ConversationMessage message = incoming[i];
                 enriched[i] = new ConversationMessage
                 {
                     Role = message.Role, Content = message.Content, Reasoning = message.Reasoning,
+                    ProviderState = (message.ProviderState ?? existing[i].ProviderState)?.Clone(),
                     ToolCalls = message.ToolCalls, ToolCallId = message.ToolCallId, Telemetry = message.Telemetry ?? existing[i].Telemetry, DisplayOnly = message.DisplayOnly || existing[i].DisplayOnly
                 };
             }

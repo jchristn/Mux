@@ -136,7 +136,7 @@ OPTIONS:
     -e, --endpoint <name>                Named endpoint from active config endpoints.json
     -m, --model <name>                   Override model name
         --base-url <url>                 Override base URL
-        --adapter-type <type>            Adapter: ollama, openai, vllm, openai-compatible
+        --adapter-type <type>            Adapter: ollama, ollama-cloud, xai, openai, vllm, openai-compatible
         --temperature <float>            Override temperature (0.0 - 2.0)
         --max-tokens <int>               Override max output tokens
         --context-window <int>           Override the context window size in tokens

@@ -1042,7 +1042,7 @@ namespace Mux.Server.Documentation
             s["EndpointDto"] = Obj(new Dictionary<string, M>
             {
                 ["Name"] = Pstr("Unique endpoint name."),
-                ["AdapterType"] = Pstr("Adapter type (kebab-case): `ollama`, `openai`, `azure-openai`, `anthropic`, `vertex`, `bedrock`, …"),
+                ["AdapterType"] = Pstr("Adapter type (kebab-case): `ollama`, `ollama-cloud`, `xai` (Grok), `openai`, `azure-openai`, `anthropic`, `vertex`, `bedrock`, …"),
                 ["BaseUrl"] = Pstr("Base URL."),
                 ["Model"] = Pstr("Model identifier (or Azure deployment name)."),
                 ["IsDefault"] = Pbool("Whether this endpoint is the default."),

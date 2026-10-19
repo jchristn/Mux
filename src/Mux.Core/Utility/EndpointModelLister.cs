@@ -8,6 +8,7 @@ namespace Mux.Core.Utility
     using System.Threading.Tasks;
     using Mux.Core.Enums;
     using Mux.Core.Models;
+    using Mux.Core.Settings;
 
     /// <summary>
     /// Live-enumerates the models a configured endpoint's backend advertises. Ollama endpoints are queried
@@ -38,11 +39,23 @@ namespace Mux.Core.Utility
             try
             {
                 List<string> models;
-                if (endpoint.AdapterType == AdapterTypeEnum.Ollama)
+                if (endpoint.AdapterType == AdapterTypeEnum.Ollama || endpoint.AdapterType == AdapterTypeEnum.OllamaCloud)
                 {
                     models = await OllamaModelLister
-                        .ListModelsAsync(endpoint.BaseUrl, ignoreCertErrors, cancellationToken)
+                        .ListModelsAsync(endpoint.AdapterType == AdapterTypeEnum.OllamaCloud ? "https://ollama.com" : endpoint.BaseUrl, ignoreCertErrors, cancellationToken)
                         .ConfigureAwait(false);
+                }
+                else if (endpoint.AdapterType == AdapterTypeEnum.XAi)
+                {
+                    SettingsLoader.ValidateEnvironmentReferences(endpoint);
+                    string? key = string.IsNullOrWhiteSpace(endpoint.ApiKey)
+                        ? Environment.GetEnvironmentVariable("XAI_API_KEY")
+                        : SettingsLoader.ExpandEnvironmentVariables(endpoint.ApiKey);
+                    if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("xAI requires an API key or XAI_API_KEY.");
+                    string root = string.IsNullOrWhiteSpace(endpoint.BaseUrl) ? "https://api.x.ai/v1" : endpoint.BaseUrl.TrimEnd('/');
+                    if (!root.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)) root += "/v1";
+                    var headers = new Dictionary<string, string>(endpoint.Headers) { ["Authorization"] = "Bearer " + key };
+                    models = await OpenAiModelLister.ListModelsAsync(root, headers, ignoreCertErrors, cancellationToken).ConfigureAwait(false);
                 }
                 else
                 {

@@ -1,0 +1,10 @@
+version: 1
+name: Ollama launcher contract
+slug: ollama
+protocol: http
+port: 4917
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

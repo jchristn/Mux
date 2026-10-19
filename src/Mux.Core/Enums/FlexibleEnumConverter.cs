@@ -24,7 +24,7 @@ namespace Mux.Core.Enums
 
             if (!TryParse(value, out AdapterTypeEnum result))
             {
-                throw new JsonException($"Unknown adapter type: '{value}'. Expected: ollama, openai, vllm, openai-compatible, anthropic, gemini, azure-openai, vertex, bedrock.");
+                throw new JsonException($"Unknown adapter type: '{value}'. Expected: ollama, ollama-cloud, xai (grok), openai, vllm, openai-compatible, anthropic, gemini, azure-openai, vertex, bedrock.");
             }
 
             return result;
@@ -54,6 +54,14 @@ namespace Mux.Core.Enums
             {
                 case "ollama":
                     result = AdapterTypeEnum.Ollama;
+                    return true;
+                case "ollamacloud":
+                    result = AdapterTypeEnum.OllamaCloud;
+                    return true;
+                case "xai":
+                case "grok":
+                case "spacex":
+                    result = AdapterTypeEnum.XAi;
                     return true;
                 case "openai":
                     result = AdapterTypeEnum.OpenAi;
@@ -97,6 +105,8 @@ namespace Mux.Core.Enums
             string output = value switch
             {
                 AdapterTypeEnum.Ollama => "ollama",
+                AdapterTypeEnum.OllamaCloud => "ollama-cloud",
+                AdapterTypeEnum.XAi => "xai",
                 AdapterTypeEnum.OpenAi => "openai",
                 AdapterTypeEnum.Vllm => "vllm",
                 AdapterTypeEnum.OpenAiCompatible => "openai-compatible",
