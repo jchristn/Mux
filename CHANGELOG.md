@@ -21,6 +21,9 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- macOS install/reinstall scripts now install Finder applications in `~/Applications`;
+  desktop and agent run scripts refresh and launch their respective app bundles.
+
 - Updated NuGet dependencies, including TUIKit 1.11.2, PolyPrompt 3.5.0, Voltaic 2.4.0,
   Watson 7.3.2, Avalonia 12.1.4, Radiant 0.1.3, and Touchstone 0.2.1.
 

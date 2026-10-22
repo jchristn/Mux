@@ -20,3 +20,10 @@ dotnet pack src/Mux.Cli/Mux.Cli.csproj --configuration Release -p:TargetFramewor
 echo "Installing mux..."
 dotnet tool install -g --source "$PACKAGE_SOURCE" --framework "$FRAMEWORK" --disable-parallel Mux.Cli
 mux -v
+
+if [ "$(uname -s)" = Darwin ]; then
+    REPO_ROOT="$ROOT_DIR"
+    . "$ROOT_DIR/scripts/macos/app-bundle.sh"
+    install_macos_app desktop
+    install_macos_app agent
+fi

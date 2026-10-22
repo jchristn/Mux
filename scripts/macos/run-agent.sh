@@ -8,4 +8,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 resolve_framework "$@"
 shift "$FRAMEWORK_ARGS"
 [ "$#" -eq 0 ] || { echo "Unexpected argument: $1" >&2; exit 1; }
-dotnet run --project "$REPO_ROOT/src/Mux.Agent/Mux.Agent.csproj" --framework "$TFM" -p:TargetFrameworks="$TFM"
+if [ "$(uname -s)" = Darwin ]; then
+    . "$SCRIPT_DIR/app-bundle.sh"
+    install_macos_app agent
+    open -a "$HOME/Applications/Mux Agent.app"
+else
+    dotnet run --project "$REPO_ROOT/src/Mux.Agent/Mux.Agent.csproj" --framework "$TFM" -p:TargetFrameworks="$TFM"
+fi

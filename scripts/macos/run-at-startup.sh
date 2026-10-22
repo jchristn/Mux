@@ -1,8 +1,7 @@
 #!/bin/sh
 # Register the mux agent (the menu-bar host that runs the local REST server) as a
 # launchd user agent so it starts at login. No sudo needed; everything lives under
-# ~/Library/LaunchAgents. Resolves the agent binary from dist/ (published layout)
-# first, then the dev build output.
+# ~/Library/LaunchAgents. Refreshes the Finder app and uses its self-contained agent.
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -12,12 +11,9 @@ resolve_framework "$@"
 shift "$FRAMEWORK_ARGS"
 [ "$#" -eq 0 ] || { echo "Unexpected argument: $1" >&2; exit 1; }
 
-# An explicit framework selects a dev build; dist has no framework-qualified layout.
-AGENT_BIN="$REPO_ROOT/src/Mux.Agent/bin/Release/$TFM/Mux.Agent"
-[ -x "$AGENT_BIN" ] || AGENT_BIN="$REPO_ROOT/src/Mux.Agent/bin/Debug/$TFM/Mux.Agent"
-if [ "$FRAMEWORK_ARGS" -eq 0 ] && [ -z "${MUX_TFM:-}" ] && [ -x "$REPO_ROOT/dist/Mux.Agent" ]; then
-    AGENT_BIN="$REPO_ROOT/dist/Mux.Agent"
-fi
+. "$SCRIPT_DIR/app-bundle.sh"
+install_macos_app agent
+AGENT_BIN="$HOME/Applications/Mux Agent.app/Contents/MacOS/Mux.Agent"
 
 LABEL="com.jchristn.mux.agent"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"

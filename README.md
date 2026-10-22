@@ -126,6 +126,11 @@ scripts\windows\install-tool.bat     # or: scripts\windows\install-tool.bat net8
 ./scripts/linux/install-tool.sh       # or: ./scripts/linux/install-tool.sh net8.0
 ```
 
+On macOS, `scripts/macos/install-tool.sh` and `reinstall-tool.sh` also build and
+install self-contained `Mux.app` and `Mux Agent.app` in `~/Applications`, visible in
+Finder. `run-desktop.sh` and `run-agent.sh` refresh and launch their installed app;
+`run-tui.sh` runs the terminal UI from source. No administrator access is required.
+
 <details>
 <summary>Framework selection and packaging scripts</summary>
 

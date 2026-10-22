@@ -9,6 +9,8 @@ import sys,os,json
 if sys.argv[1:]==['--list-sdks']: print(os.environ.get('MOCK_SDKS','8.0.425 [mock]')); sys.exit(0)
 with open(os.environ['CALL_LOG'],'a') as f: f.write(json.dumps(sys.argv[1:])+'\\n')
 ''');fake.chmod(0o755)
+ # Exercise framework forwarding without invoking native macOS packaging.
+ uname=d/'uname'; uname.write_text('#!/bin/sh\nprintf \"Linux\\n\"\n'); uname.chmod(0o755)
  env=dict(os.environ,PATH=str(d)+':'+os.environ['PATH'],CALL_LOG=str(log));env.pop('MUX_TFM',None)
  # Check precedence and SDK fallback without launching applications.
  helper=root/'scripts/common/framework.sh'
