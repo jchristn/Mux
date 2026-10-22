@@ -17,8 +17,8 @@
   <ItemGroup>
     <!-- TUIKit (pinned, exact) drives the interactive UI. Source lives at ~/Code/TUIKit for reference
          only; always consume the published NuGet package, never a project reference. -->
-    <PackageReference Include="Radiant" Version="0.1.2" />
-    <PackageReference Include="TUIKit" Version="1.10.0" />
+    <PackageReference Include="Radiant" Version="0.1.3" />
+    <PackageReference Include="TUIKit" Version="1.11.2" />
   </ItemGroup>
 
   <ItemGroup>

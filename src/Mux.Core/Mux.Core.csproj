@@ -42,13 +42,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
     <!-- Pin the native SQLite bundle to a patched build; the version Microsoft.Data.Sqlite pulls
          transitively (2.1.10) carries advisory GHSA-2m69-gcr7-jv3q. -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
-    <PackageReference Include="Microsoft.Playwright" Version="1.63.0" />
-    <PackageReference Include="PolyPrompt" Version="3.4.0" />
-    <PackageReference Include="Voltaic" Version="2.2.1" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.64.0" />
+    <PackageReference Include="PolyPrompt" Version="3.5.0" />
+    <PackageReference Include="Voltaic" Version="2.4.0" />
     <!-- SourceLink is bundled in the .NET 8+ SDK; PublishRepositoryUrl/EmbedUntrackedSources
          (in Directory.Build.props) drive the source-linked .snupkg with no extra package. -->
   </ItemGroup>
