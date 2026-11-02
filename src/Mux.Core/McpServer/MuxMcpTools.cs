@@ -251,7 +251,7 @@ namespace Mux.Core.McpServer
                 Endpoint = OptionalString(root, "endpoint") ?? _Options.DefaultEndpoint,
                 WorkingDirectory = ResolveDirectory(OptionalString(root, "working_directory")),
                 ApprovalPolicy = ResolvePolicy(OptionalString(root, "approval_policy"), _Options.MaxApprovalPolicy),
-                MaxTurns = OptionalInt(root, "max_turns", 1, 200)
+                MaxTurns = OptionalInt(root, "max_turns", 1, 1024)
             };
 
             McpToolCallContext? call = McpToolCallContext.Current;

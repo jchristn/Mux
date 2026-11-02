@@ -157,7 +157,7 @@ namespace Mux.Cli.App
             _Form.Add("Context window", _ContextWindow, () => ValidateInt(_ContextWindow.Value, "Context window", 1024, 1048576));
             _Form.Add("Timeout (ms)", _Timeout, () => ValidateInt(_Timeout.Value, "Timeout", 10000, int.MaxValue));
             _Form.Add("Auto-approve tools", _AutoApprove);
-            _Form.Add("Max agent iterations (blank = global)", _MaxAgentIterations, () => ValidateOptionalInt(_MaxAgentIterations.Value, "Max agent iterations", 1, 100));
+            _Form.Add("Max agent iterations (blank = global)", _MaxAgentIterations, () => ValidateOptionalInt(_MaxAgentIterations.Value, "Max agent iterations", 1, 1024));
             _Form.Add("Reasoning effort (blank = off)", _ReasoningEffort, () => ValidateOptionalEffort(_ReasoningEffort.Value));
             _Form.Add("Gemini thinking budget (blank = default)", _GeminiThinkingBudget, () => ValidateOptionalInt(_GeminiThinkingBudget.Value, "Gemini thinking budget", -1, 32768));
             _Form.Add("Show thinking", _ShowThinking);

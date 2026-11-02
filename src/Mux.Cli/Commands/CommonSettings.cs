@@ -180,7 +180,7 @@ namespace Mux.Cli.Commands
         public string? CompactionStrategy { get; set; }
 
         /// <summary>
-        /// Override the maximum number of agent loop iterations (turns) for the run. Clamped to 1-100.
+        /// Override the maximum number of agent loop iterations (turns) for the run. Clamped to 1-1024.
         /// </summary>
         [Description("Maximum agent loop iterations (turns) for the run.")]
         [CommandOption("--max-turns")]

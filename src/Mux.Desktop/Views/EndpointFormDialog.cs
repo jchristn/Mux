@@ -358,7 +358,7 @@ namespace Mux.Desktop.Views
             string iterText = (_MaxAgentIterations.Text ?? string.Empty).Trim();
             if (iterText.Length > 0)
             {
-                if (!int.TryParse(iterText, out int iters) || iters < 1 || iters > 100)
+                if (!int.TryParse(iterText, out int iters) || iters < 1 || iters > 1024)
                 {
                     _Error.Text = Localizer.T("endpoint.form.err.maxIterations");
                     return;

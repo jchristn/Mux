@@ -39,6 +39,22 @@ All notable changes to mux are documented here.
   stateless TUI helpers moved from `MuxTuiApp` to `Mux.Cli/App/TuiPresentation.cs` and
   nested `EndpointMenuAction`/`McpMenuAction` enums to their own files; static window
   text helpers moved from `MainWindow` to `Mux.Desktop/Shell/MainWindowText.cs`.
+- Raised the agent-loop iteration guard for agentic workflows: `maxAgentIterations`
+  (settings, endpoint overrides, `--max-turns`, and the MCP `run` tool's `max_turns`)
+  now defaults to **256** and clamps to **1-1024** (was default 50, clamp 1-100;
+  `max_turns` was 1-200). Settings forms, the web dashboard, the desktop app, the REST
+  API docs, and all localized desktop labels reflect the new range.
+- Process timeouts: the `processTimeoutMs` setting is now actually consumed — it is the
+  default `timeout_ms` for `run_process` (previously hardcoded at 120000 while the
+  setting was exposed in every UI). The `processTimeoutMs` clamp ceiling rose from
+  10 minutes to **1 hour** (`1000-3600000`), and an explicit per-call `timeout_ms`
+  clamps to the same 1-hour ceiling (`ToolSafetyLimits.MaxProcessTimeoutMs`); the
+  `run_process` schema now states the effective default and directs longer-running
+  commands to `process_start`. `toolTimeoutMs` remains reserved (not yet enforced per
+  tool call).
+- Background process tools (`process_start`, `process_output`) may now wait up to
+  **1 hour** on a `wait_for` pattern (`BackgroundProcessRegistry.MaxWaitMs`, was
+  5 minutes); a wait that times out never stops the process.
 - Aligned shipped versions at 1.5.0 across the CLI/packages, Python SDK, TypeScript SDK,
   and VS Code extension (including both lockfiles), the README version badge and release
   download example, and the `Mux.Server` package README example. Added CI and NuGet

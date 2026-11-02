@@ -324,7 +324,7 @@ The **desktop app** launches from the repo with `scripts\windows\run-desktop.bat
 | `--effort-gemini-budget <int>` |  | Override the Gemini thinking budget (`-1`..`32768`) |
 | `--effort-ollama-think <val>` |  | Override the Ollama `think` value (`low`/`medium`/`high`/`true`/`false`) |
 | `--show-thinking` |  | Surface the model's reasoning ("thinking") for this run |
-| `--max-turns <int>` |  | Override max agent loop iterations (1-100) |
+| `--max-turns <int>` |  | Override max agent loop iterations (1-1024) |
 | `--max-token-budget <int>` |  | Stop with `budget_exceeded` when estimated context tokens exceed this |
 | `--compaction-strategy <mode>` |  | Override compaction strategy: `summary` or `trim` |
 | `--config-dir <path>` |  | Override the active config directory |

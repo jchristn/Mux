@@ -22,7 +22,7 @@ namespace Mux.Core.Models
         private int _ContextWarningThresholdPercent = 80;
         private string _CompactionStrategy = "summary";
         private int _CompactionPreserveTurns = 3;
-        private int _MaxAgentIterations = 50;
+        private int _MaxAgentIterations = 256;
         private int? _MaxTokenBudget = null;
         private int _MaxConcurrency = 3;
         private string _DefaultEnqueueBehavior = "ask";
@@ -102,14 +102,15 @@ namespace Mux.Core.Models
         }
 
         /// <summary>
-        /// The timeout in milliseconds for spawned processes.
-        /// Clamped to the range 1000-600000.
+        /// The timeout in milliseconds for spawned processes; used as the default timeout for
+        /// <c>run_process</c> calls that do not pass an explicit <c>timeout_ms</c>.
+        /// Clamped to the range 1000-3600000 (1 second to 1 hour).
         /// </summary>
         [JsonPropertyName("processTimeoutMs")]
         public int ProcessTimeoutMs
         {
             get => _ProcessTimeoutMs;
-            set => _ProcessTimeoutMs = Math.Clamp(value, 1000, 600000);
+            set => _ProcessTimeoutMs = Math.Clamp(value, 1000, 3600000);
         }
 
         /// <summary>
@@ -185,13 +186,13 @@ namespace Mux.Core.Models
 
         /// <summary>
         /// The maximum number of agent loop iterations before forcing a stop.
-        /// Clamped to the range 1-100.
+        /// Clamped to the range 1-1024. Defaults to 256.
         /// </summary>
         [JsonPropertyName("maxAgentIterations")]
         public int MaxAgentIterations
         {
             get => _MaxAgentIterations;
-            set => _MaxAgentIterations = Math.Clamp(value, 1, 100);
+            set => _MaxAgentIterations = Math.Clamp(value, 1, 1024);
         }
 
         /// <summary>

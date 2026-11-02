@@ -81,7 +81,7 @@ namespace Mux.Core.Processes
                             working_directory = new { type = "string", description = "Working directory. Defaults to the agent's working directory." },
                             name = new { type = "string", description = "Optional short label, for example 'web' or 'api'." },
                             wait_for = new { type = "string", description = "Optional regular expression; wait until the output matches it (for example 'ready|listening on|Local:')." },
-                            timeout_ms = new { type = "integer", description = "How long to wait for wait_for, in milliseconds (default 30000, at most 300000)." }
+                            timeout_ms = new { type = "integer", description = "How long to wait for wait_for, in milliseconds (default 30000, at most 3600000; a wait that times out never stops the process)." }
                         },
                         required = new[] { "command" }
                     }
@@ -97,7 +97,7 @@ namespace Mux.Core.Processes
                         {
                             id = new { type = "string", description = "The process id from process_start, for example p1." },
                             wait_for = new { type = "string", description = "Optional regular expression to wait for in the new output." },
-                            timeout_ms = new { type = "integer", description = "How long to wait, in milliseconds (default 0 without wait_for, 30000 with it; at most 300000)." }
+                            timeout_ms = new { type = "integer", description = "How long to wait, in milliseconds (default 0 without wait_for, 30000 with it; at most 3600000)." }
                         },
                         required = new[] { "id" }
                     }

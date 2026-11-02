@@ -627,7 +627,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
           <p class="hint">Run limits and approval behavior for the agent loop.</p>
           <div class="field"><label>Default approval policy</label>
             <select id="s_defaultApprovalPolicy" title="How tool calls are approved by default: ask (prompt for mutating tools), auto (approve all), or deny (block all)."><option>ask</option><option>auto</option><option>deny</option></select></div>
-          <div class="field"><label>Max agent iterations <span class="sub">(1–100)</span></label><input type="number" id="s_maxAgentIterations" title="Maximum number of model turns in a single run before mux stops (1-100)." min="1" max="100"></div>
+          <div class="field"><label>Max agent iterations <span class="sub">(1–1024)</span></label><input type="number" id="s_maxAgentIterations" title="Maximum number of model turns in a single run before mux stops (1-1024)." min="1" max="1024"></div>
           <div class="field"><label>Max concurrency <span class="sub">(1–32)</span></label><input type="number" id="s_maxConcurrency" title="Maximum number of jobs that may run at the same time (1-32)." min="1" max="32"></div>
           <div class="field"><label>Default enqueue behavior</label>
             <select id="s_defaultEnqueueBehavior" title="What happens when you submit a prompt while another turn is already running."><option>ask</option><option>run_now</option><option>queue_after</option><option>add_to_focused</option></select></div>

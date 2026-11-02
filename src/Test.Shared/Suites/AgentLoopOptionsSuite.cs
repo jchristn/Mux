@@ -62,7 +62,7 @@ namespace Test.Shared.Suites
                             MuxAssert.AreEqual(0, options.ConversationHistory.Count, "ConversationHistory empty");
                             MuxAssert.AreEqual(string.Empty, options.SystemPrompt, "SystemPrompt");
                             MuxAssert.AreEqual(ApprovalPolicyEnum.Ask, options.ApprovalPolicy, "ApprovalPolicy");
-                            MuxAssert.AreEqual(50, options.MaxIterations, "MaxIterations");
+                            MuxAssert.AreEqual(256, options.MaxIterations, "MaxIterations");
                             MuxAssert.IsFalse(options.Verbose, "Verbose");
                             MuxAssert.AreEqual(3.5, options.TokenEstimationRatio, "TokenEstimationRatio");
                             MuxAssert.AreEqual(15, options.ContextWindowSafetyMarginPercent, "ContextWindowSafetyMarginPercent");
@@ -87,8 +87,8 @@ namespace Test.Shared.Suites
 
                             options.MaxIterations = 0;
                             MuxAssert.AreEqual(1, options.MaxIterations, "clamped low");
-                            options.MaxIterations = 200;
-                            MuxAssert.AreEqual(100, options.MaxIterations, "clamped high");
+                            options.MaxIterations = 2000;
+                            MuxAssert.AreEqual(1024, options.MaxIterations, "clamped high");
                             options.MaxIterations = 50;
                             MuxAssert.AreEqual(50, options.MaxIterations, "within range");
                             return Task.CompletedTask;

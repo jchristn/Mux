@@ -262,7 +262,7 @@ Example:
   "contextWarningThresholdPercent": 80,
   "compactionStrategy": "summary",
   "compactionPreserveTurns": 3,
-  "maxAgentIterations": 50,
+  "maxAgentIterations": 256,
   "maxTokenBudget": null,
   "ignoreCertErrors": false,
   "showBoundaryLines": false,
@@ -301,15 +301,15 @@ Fields:
 |---|---|---|
 | `systemPromptPath` | string or null | optional path to a custom prompt file |
 | `defaultApprovalPolicy` | string | `ask`, `auto`, or `deny` |
-| `toolTimeoutMs` | int | built-in tool timeout |
-| `processTimeoutMs` | int | `run_process` timeout |
+| `toolTimeoutMs` | int | built-in tool timeout (reserved; not yet enforced per tool call) |
+| `processTimeoutMs` | int | default `run_process` timeout in ms when a call omits `timeout_ms`; clamped to `1000-3600000` (1 hour), default `120000`; an explicit `timeout_ms` per call also clamps to `1000-3600000` |
 | `contextWindowSafetyMarginPercent` | int | safety margin for conversation truncation |
 | `tokenEstimationRatio` | number | rough chars-to-tokens estimate |
 | `autoCompactEnabled` | bool | automatically compact persisted history before interactive runs when the next prompt would exceed the usable context budget |
 | `contextWarningThresholdPercent` | int | warning threshold for estimated context usage; clamped to `50-95` |
 | `compactionStrategy` | string | `summary` or `trim`; controls `/compact`, interactive preflight auto-compaction, and in-run active-conversation compaction |
 | `compactionPreserveTurns` | int | number of recent user-led turns to preserve during compaction; clamped to `1-10` |
-| `maxAgentIterations` | int | default loop guard for tool-using runs; clamped to `1-100` and overridden by endpoint `maxAgentIterations` when that value is set |
+| `maxAgentIterations` | int | default loop guard for tool-using runs; clamped to `1-1024`, defaults to `256`, and overridden by endpoint `maxAgentIterations` when that value is set; `--max-turns` overrides per run |
 | `maxTokenBudget` | int or null | optional ceiling on estimated working-context tokens; when set and exceeded before a model call, the run stops with a `budget_exceeded` error; backend-agnostic (mux's estimate, not provider billing); overridden per run by `--max-token-budget`; `null` (default) disables the cap |
 | `ignoreCertErrors` | bool | disable TLS certificate validation for mux-owned network requests; default `false` |
 | `showBoundaryLines` | bool | draw dark-grey boundary lines in the interactive shell (above the prompt input, above the queued-messages strip, and left of the sidebar); toggle live with `/borders`; default `false` |

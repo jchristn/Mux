@@ -1445,7 +1445,7 @@ namespace Mux.Server.Documentation
             s["SettingsDto"] = Obj(new Dictionary<string, M>
             {
                 ["DefaultApprovalPolicy"] = Pstr("Default approval policy (`ask`/`auto`/`deny`)."),
-                ["MaxAgentIterations"] = Pint("Max agent iterations (1-100)."),
+                ["MaxAgentIterations"] = Pint("Max agent iterations (1-1024)."),
                 ["MaxConcurrency"] = Pint("Max concurrent jobs (1-32)."),
                 ["ToolTimeoutMs"] = Pint("Per-tool timeout (ms)."),
                 ["ProcessTimeoutMs"] = Pint("Per-process timeout (ms)."),
@@ -1462,7 +1462,7 @@ namespace Mux.Server.Documentation
                 ["Rest"] = Ref("RestSettingsDto")
             }, new Dictionary<string, object?>
             {
-                ["DefaultApprovalPolicy"] = "ask", ["MaxAgentIterations"] = 50, ["MaxConcurrency"] = 3,
+                ["DefaultApprovalPolicy"] = "ask", ["MaxAgentIterations"] = 256, ["MaxConcurrency"] = 3,
                 ["ToolTimeoutMs"] = 30000, ["ProcessTimeoutMs"] = 120000, ["AutoCompactEnabled"] = true,
                 ["CompactionStrategy"] = "summary", ["CompactionPreserveTurns"] = 3, ["ContextWarningThresholdPercent"] = 80,
                 ["SkillsEnabled"] = true, ["TaskPlanningEnabled"] = true, ["TaskParallelismEnabled"] = false,

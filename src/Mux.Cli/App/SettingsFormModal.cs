@@ -120,14 +120,14 @@ namespace Mux.Cli.App
 
             _Form = new Form();
             _Form.AddSection("Agent");
-            _Form.Add("Max agent iterations", _MaxAgentIterations, () => ValidateInt(_MaxAgentIterations.Value, "Max agent iterations", 1, 100));
+            _Form.Add("Max agent iterations", _MaxAgentIterations, () => ValidateInt(_MaxAgentIterations.Value, "Max agent iterations", 1, 1024));
             _Form.Add("Max token budget (blank = off)", _MaxTokenBudget, () => ValidateOptionalInt(_MaxTokenBudget.Value, "Max token budget", 1, int.MaxValue));
             _Form.Add("Max concurrency", _MaxConcurrency, () => ValidateInt(_MaxConcurrency.Value, "Max concurrency", 1, 32));
             _Form.Add("Default approval policy", _ApprovalPolicy);
             _Form.Add("Default enqueue behavior", _EnqueueBehavior);
             _Form.AddSection("Tools");
             _Form.Add("Tool timeout (ms)", _ToolTimeout, () => ValidateInt(_ToolTimeout.Value, "Tool timeout", 1000, 300000));
-            _Form.Add("Process timeout (ms)", _ProcessTimeout, () => ValidateInt(_ProcessTimeout.Value, "Process timeout", 1000, 600000));
+            _Form.Add("Process timeout (ms)", _ProcessTimeout, () => ValidateInt(_ProcessTimeout.Value, "Process timeout", 1000, 3600000));
             _Form.AddSection("Context and compaction");
             _Form.Add("Context window safety margin (%)", _ContextSafetyMargin, () => ValidateInt(_ContextSafetyMargin.Value, "Context window safety margin", 5, 50));
             _Form.Add("Token estimation ratio", _TokenEstimationRatio, () => ValidateDouble(_TokenEstimationRatio.Value, "Token estimation ratio", 2.0, 6.0));

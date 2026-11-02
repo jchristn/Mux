@@ -105,6 +105,30 @@ namespace Test.Shared.Suites
                         JsonElement commandProperty = schema.GetProperty("properties").GetProperty("command");
                         MuxAssert.Contains("mux_runtime_context", commandProperty.GetProperty("description").GetString(), "command description");
                         return Task.CompletedTask;
+                    }),
+
+                    Case("ConfiguredDefaultTimeoutShapesSchema", "The processTimeoutMs-driven default and the one-hour maximum appear in the tool schema", async (string dir, RunProcessTool tool, CancellationToken ct) =>
+                    {
+                        string configured = JsonSerializer.Serialize(new RunProcessTool(500000).ParametersSchema);
+                        MuxAssert.Contains("500000", configured, "configured default in schema");
+                        MuxAssert.Contains("3600000", configured, "one-hour maximum in schema");
+
+                        string clamped = JsonSerializer.Serialize(new RunProcessTool(int.MaxValue).ParametersSchema);
+                        MuxAssert.IsFalse(clamped.Contains(int.MaxValue.ToString()), "default clamped to the one-hour maximum");
+
+                        string defaulted = JsonSerializer.Serialize(new RunProcessTool().ParametersSchema);
+                        MuxAssert.Contains("120000", defaulted, "null default keeps 120 seconds");
+                        await Task.CompletedTask.ConfigureAwait(false);
+                    }),
+
+                    Case("ConfiguredDefaultTimeoutKillsProcess", "A small processTimeoutMs default times out a run without an explicit timeout_ms", async (string dir, RunProcessTool tool, CancellationToken ct) =>
+                    {
+                        RunProcessTool configured = new RunProcessTool(1000);
+                        string longRunning = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ping -n 30 127.0.0.1" : "sleep 30";
+                        ToolResult result = await configured.ExecuteAsync("call5", ToolArgs.From(new { command = longRunning }), dir, ct).ConfigureAwait(false);
+                        MuxAssert.IsFalse(result.Success, "failure");
+                        JsonDocument doc = JsonDocument.Parse(result.Content);
+                        MuxAssert.IsTrue(doc.RootElement.GetProperty("timed_out").GetBoolean(), "timed_out");
                     })
                 });
         }

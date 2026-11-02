@@ -80,19 +80,19 @@ namespace Test.Shared.Suites
                 MuxAssert.Contains("must be a JSON object", await Error(tools["run"], "\"text\"", ct).ConfigureAwait(false), "string");
                 MuxAssert.Contains("not valid JSON", await Error(tools["run"], "{broken", ct).ConfigureAwait(false), "invalid JSON");
             });
-            Add("RunMaxTurnsBounds", "max_turns must be a whole number from 1 to 200", async (string root, CancellationToken ct) =>
+            Add("RunMaxTurnsBounds", "max_turns must be a whole number from 1 to 1024", async (string root, CancellationToken ct) =>
             {
                 FakeMcpRunExecutor executor = new FakeMcpRunExecutor();
                 Dictionary<string, RegisteredMcpTool> tools = Register(new MuxMcpServerOptions(), executor, new List<EndpointConfig>(), Store(root), null, root);
-                foreach (string bad in new[] { "0", "201", "-3", "\"ten\"", "1.5", "true" })
+                foreach (string bad in new[] { "0", "1025", "-3", "\"ten\"", "1.5", "true" })
                 {
-                    MuxAssert.Contains("max_turns must be a whole number from 1 to 200", await Error(tools["run"], "{\"prompt\":\"p\",\"max_turns\":" + bad + "}", ct).ConfigureAwait(false), "rejects " + bad);
+                    MuxAssert.Contains("max_turns must be a whole number from 1 to 1024", await Error(tools["run"], "{\"prompt\":\"p\",\"max_turns\":" + bad + "}", ct).ConfigureAwait(false), "rejects " + bad);
                 }
 
                 await Ok(tools["run"], "{\"prompt\":\"p\",\"max_turns\":1}", ct).ConfigureAwait(false);
-                await Ok(tools["run"], "{\"prompt\":\"p\",\"max_turns\":200}", ct).ConfigureAwait(false);
+                await Ok(tools["run"], "{\"prompt\":\"p\",\"max_turns\":1024}", ct).ConfigureAwait(false);
                 MuxAssert.AreEqual(1, executor.Requests[0].MaxTurns ?? 0, "lower bound passed");
-                MuxAssert.AreEqual(200, executor.Requests[1].MaxTurns ?? 0, "upper bound passed");
+                MuxAssert.AreEqual(1024, executor.Requests[1].MaxTurns ?? 0, "upper bound passed");
             });
             Add("RunWorkingDirectoryResolution", "working_directory resolves relative to the default and must exist", async (string root, CancellationToken ct) =>
             {

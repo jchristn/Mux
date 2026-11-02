@@ -233,8 +233,8 @@ namespace Test.Shared.Suites
                         MuxAssert.IsNull(config.MaxAgentIterations, "initially null");
                         config.MaxAgentIterations = 0;
                         MuxAssert.AreEqual(1, config.MaxAgentIterations, "clamped low");
-                        config.MaxAgentIterations = 200;
-                        MuxAssert.AreEqual(100, config.MaxAgentIterations, "clamped high");
+                        config.MaxAgentIterations = 5000;
+                        MuxAssert.AreEqual(1024, config.MaxAgentIterations, "clamped high");
                         config.MaxAgentIterations = 60;
                         MuxAssert.AreEqual(60, config.MaxAgentIterations, "within range");
                         config.MaxAgentIterations = null;

@@ -21,8 +21,27 @@ namespace Mux.Core.Tools.Tools
     {
         #region Private-Members
 
-        private const int _DefaultTimeoutMs = 120000;
+        private readonly int _DefaultTimeoutMs;
         private static readonly bool _IsWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+
+        #endregion
+
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="RunProcessTool"/> class.
+        /// </summary>
+        /// <param name="defaultTimeoutMs">The default timeout applied when a call does not pass
+        /// <c>timeout_ms</c>; callers supply <see cref="MuxSettings.ProcessTimeoutMs"/>. Clamped to the range
+        /// 1000-<see cref="ToolSafetyLimits.MaxProcessTimeoutMs"/>; null uses
+        /// <see cref="ToolSafetyLimits.DefaultProcessTimeoutMs"/> (120 seconds).</param>
+        public RunProcessTool(int? defaultTimeoutMs = null)
+        {
+            _DefaultTimeoutMs = Math.Clamp(
+                defaultTimeoutMs ?? ToolSafetyLimits.DefaultProcessTimeoutMs,
+                1000,
+                ToolSafetyLimits.MaxProcessTimeoutMs);
+        }
 
         #endregion
 
@@ -83,7 +102,7 @@ namespace Mux.Core.Tools.Tools
                 timeout_ms = new
                 {
                     type = "integer",
-                    description = "Timeout in milliseconds. The process is killed if it exceeds this. Defaults to 120000."
+                    description = $"Timeout in milliseconds. The process is killed if it exceeds this. Defaults to the processTimeoutMs setting ({_DefaultTimeoutMs} on this system); at most {ToolSafetyLimits.MaxProcessTimeoutMs} (1 hour). For longer-running commands use process_start and poll with process_output."
                 }
             },
             required = new[] { "command" }
@@ -107,7 +126,7 @@ namespace Mux.Core.Tools.Tools
             {
                 string command = GetRequiredString(arguments, "command");
                 string processWorkDir = GetOptionalString(arguments, "working_directory", workingDirectory);
-                int timeoutMs = GetOptionalInt(arguments, "timeout_ms", _DefaultTimeoutMs);
+                int timeoutMs = Math.Clamp(GetOptionalInt(arguments, "timeout_ms", _DefaultTimeoutMs), 1000, ToolSafetyLimits.MaxProcessTimeoutMs);
                 string resolvedWorkDir = ResolvePath(processWorkDir, workingDirectory);
 
                 // Build the full command string with arguments

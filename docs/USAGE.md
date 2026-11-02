@@ -160,10 +160,7 @@ kept separate from the answer and never fed back to the model. Headless runs sur
 the answer.
 
 `/settings` (`/config`, `/preferences`, `/prefs`) opens a global settings editor over `settings.json`.
-It covers the agent-loop run limits — **max agent iterations** (the 1–100 cap on model turns per run; each
-iteration may issue several tool calls) and an optional **max token budget** — plus max concurrency, the
-default approval and enqueue behaviors, tool/process timeouts, the context and compaction tuning, the
-skills and task-planning toggles, and the cert-error and boundary-line flags. Save (Enter) persists to
+It covers the agent-loop run limits — **max agent iterations** (the 1–1024 cap on model turns per run, default 256; each iteration may issue several tool calls) and an optional **max token budget** — plus max concurrency, the default approval and enqueue behaviors, tool/process timeouts (`processTimeoutMs` is the default `run_process` timeout; an explicit per-call `timeout_ms` wins, both capped at one hour), the context and compaction tuning, the skills and task-planning toggles, and the cert-error and boundary-line flags. Save (Enter) persists to
 `settings.json`; the run-affecting values (iteration cap, token budget, compaction, context tuning, cert
 errors) apply on the next turn, while concurrency and startup-only wiring apply on the next launch. This
 editor sets the **global** defaults — a per-model iteration override lives in the endpoint Add/Edit form
@@ -506,7 +503,7 @@ Commands that keep running (a dev server, `docker compose up`, a watch-mode test
 
 | Tool | Kind | What it does |
 |---|---|---|
-| `process_start` | mutating | Starts `command` through the same shell as `run_process` and returns an id (`p1`, `p2`, ...) at once. With `wait_for` (a regular expression) and `timeout_ms` (default 30000, at most 300000) it first waits for a ready line, such as `Local:\s+(\S+)`. Optional `working_directory` and `name`. |
+| `process_start` | mutating | Starts `command` through the same shell as `run_process` and returns an id (`p1`, `p2`, ...) at once. With `wait_for` (a regular expression) and `timeout_ms` (default 30000, at most 3600000 — one hour; a wait that times out never stops the process) it first waits for a ready line, such as `Local:\s+(\S+)`. Optional `working_directory` and `name`. |
 | `process_output` | read-only | Returns only the output produced since the previous read, with `running` and `exit_code`. With `wait_for` it waits until that pattern appears, the process exits, or the timeout passes (`matched`, `timed_out`). |
 | `process_list` | read-only | Lists every process with its id, command, pid, state, and unread output. |
 | `process_stop` | mutating | Stops a process and its children and returns its last output. `id: "all"` stops every one. |
@@ -673,7 +670,7 @@ mux print --output-format jsonl --yolo "read README.md"
 Example JSONL lines:
 
 ```json
-{"contractVersion":2,"eventType":"run_started","timestampUtc":"2026-03-31T20:00:00Z","runId":"...","endpointName":"ollama-local","model":"qwen2.5-coder:7b","maxIterations":50}
+{"contractVersion":2,"eventType":"run_started","timestampUtc":"2026-03-31T20:00:00Z","runId":"...","endpointName":"ollama-local","model":"qwen2.5-coder:7b","maxIterations":256}
 {"contractVersion":2,"eventType":"assistant_text","timestampUtc":"2026-03-31T20:00:01Z","text":"Here is the summary..."}
 {"contractVersion":2,"eventType":"run_completed","timestampUtc":"2026-03-31T20:00:02Z","runId":"...","status":"completed","durationMs":1042,"usage":{"inputTokens":1234,"outputTokens":567,"cachedTokens":512,"reasoningTokens":0,"totalTokens":1801,"estimatedTokens":1750,"costUsd":0.008237}}
 ```

@@ -195,14 +195,14 @@ namespace Mux.Core.Models
         /// <summary>
         /// Optional endpoint-scoped maximum number of agent loop iterations before forcing a stop.
         /// When null, the global <see cref="MuxSettings.MaxAgentIterations"/> value is used.
-        /// Clamped to the range 1-100 when set.
+        /// Clamped to the range 1-1024 when set.
         /// </summary>
         [JsonPropertyName("maxAgentIterations")]
         public int? MaxAgentIterations
         {
             get => _MaxAgentIterations;
             set => _MaxAgentIterations = value.HasValue
-                ? Math.Clamp(value.Value, 1, 100)
+                ? Math.Clamp(value.Value, 1, 1024)
                 : null;
         }
 

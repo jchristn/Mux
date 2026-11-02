@@ -36,6 +36,13 @@ namespace Mux.Core.Tools
         /// </summary>
         public static int DefaultProcessTimeoutMs = 120_000;
 
+        /// <summary>
+        /// The maximum timeout in milliseconds a single foreground process execution (run_process) may use,
+        /// whether passed explicitly as <c>timeout_ms</c> or configured through <c>processTimeoutMs</c>.
+        /// One hour; longer-running commands should start in the background with process_start instead.
+        /// </summary>
+        public static int MaxProcessTimeoutMs = 3_600_000;
+
         #endregion
     }
 }

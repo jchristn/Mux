@@ -249,7 +249,7 @@ namespace Test.Shared.Suites
                     MuxAssert.AreEqual(80, settings.ContextWarningThresholdPercent, "warningThreshold");
                     MuxAssert.AreEqual("summary", settings.CompactionStrategy, "compactionStrategy");
                     MuxAssert.AreEqual(3, settings.CompactionPreserveTurns, "preserveTurns");
-                    MuxAssert.AreEqual(50, settings.MaxAgentIterations, "maxAgentIterations");
+                    MuxAssert.AreEqual(256, settings.MaxAgentIterations, "maxAgentIterations");
                     MuxAssert.AreEqual(3, settings.MaxConcurrency, "maxConcurrency");
                     MuxAssert.AreEqual("ask", settings.DefaultEnqueueBehavior, "enqueueBehavior");
                     MuxAssert.IsFalse(settings.IgnoreCertErrors, "ignoreCertErrors");

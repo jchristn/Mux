@@ -63,8 +63,8 @@ namespace Mux.Core.Processes
         /// <summary>The largest allowed output buffer.</summary>
         public const int MaxOutputCapacity = 16777216;
 
-        /// <summary>The longest a single read may wait, in milliseconds.</summary>
-        public const int MaxWaitMs = 300000;
+        /// <summary>The longest a single read may wait, in milliseconds (1 hour). Timing out never stops the process.</summary>
+        public const int MaxWaitMs = 3600000;
 
         /// <summary>
         /// Raised (outside the lock) when a process starts, exits, or is stopped.

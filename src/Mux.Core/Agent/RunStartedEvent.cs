@@ -20,7 +20,7 @@ namespace Mux.Core.Agent
         private string _Model = string.Empty;
         private string _ApprovalPolicy = string.Empty;
         private string _WorkingDirectory = string.Empty;
-        private int _MaxIterations = 50;
+        private int _MaxIterations = 256;
         private bool _ToolsEnabled = true;
         private string _CommandName = string.Empty;
         private string _ConfigDirectory = string.Empty;

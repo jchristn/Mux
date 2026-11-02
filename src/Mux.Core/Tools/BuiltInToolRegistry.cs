@@ -61,7 +61,7 @@ namespace Mux.Core.Tools
             RegisterTool(new ManageDirectoryTool(), ToolMutationKind.Mutating);
             RegisterTool(new GlobTool(), ToolMutationKind.ReadOnly);
             RegisterTool(new GrepTool(), ToolMutationKind.ReadOnly);
-            RegisterTool(new RunProcessTool(), ToolMutationKind.Mutating);
+            RegisterTool(new RunProcessTool(muxSettings?.ProcessTimeoutMs), ToolMutationKind.Mutating);
             RegisterTool(new WebRetrieveTool(muxSettings?.IgnoreCertErrors ?? false), ToolMutationKind.ReadOnly);
 
             if (WebSearchServiceFactory.Create(muxSettings) is { } searchService)

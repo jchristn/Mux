@@ -155,7 +155,7 @@ namespace Mux.Cli.Commands
                 Endpoint = endpoint,
                 MuxSettings = muxSettings,
                 MaxAgentIterations = settings.MaxTurns.HasValue
-                    ? Math.Clamp(settings.MaxTurns.Value, 1, 100)
+                    ? Math.Clamp(settings.MaxTurns.Value, 1, 1024)
                     : muxSettings.GetEffectiveMaxAgentIterations(endpoint),
                 WorkingDirectory = workingDirectory,
                 ProjectInstructions = projectInstructions,
@@ -468,7 +468,7 @@ namespace Mux.Cli.Commands
         /// <summary>
         /// Effective maximum agent iterations after endpoint overrides and global settings are resolved.
         /// </summary>
-        public int MaxAgentIterations { get; set; } = 50;
+        public int MaxAgentIterations { get; set; } = 256;
 
         /// <summary>
         /// Effective working directory.

@@ -39,8 +39,8 @@ namespace Mux.Server.Models
         /// <summary>Default approval policy (ask/auto/deny).</summary>
         public string DefaultApprovalPolicy { get; set; } = "ask";
 
-        /// <summary>Max agent iterations (1-100).</summary>
-        public int MaxAgentIterations { get; set; } = 50;
+        /// <summary>Max agent iterations (1-1024).</summary>
+        public int MaxAgentIterations { get; set; } = 256;
 
         /// <summary>Max concurrent jobs (1-32).</summary>
         public int MaxConcurrency { get; set; } = 3;
