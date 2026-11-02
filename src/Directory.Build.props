@@ -19,12 +19,9 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <NoWarn>1701;1702;CS1591;CS1587;CS1572;IDE0063;CS1998;CS8600;CS8602;CS8603;CS8618;CS8625;CS0108;CS8601;CS0618</NoWarn>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <NoWarn>1701;1702;CS1591;CS1587;CS1572;IDE0063;CS1998;CS8600;CS8602;CS8603;CS8618;CS8625;CS0108;CS8601;CS0618</NoWarn>
+  <PropertyGroup>
+    <!-- No blanket warning suppression. Nullable (CS86xx), obsolete-usage (CS0618), XML-documentation
+         (CS1591/CS1572/CS1587), and other warnings must be fixed at the call site, not silenced here. -->
   </PropertyGroup>
 
 </Project>

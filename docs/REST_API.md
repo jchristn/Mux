@@ -276,7 +276,7 @@ curl -H "Authorization: Bearer <key>" http://127.0.0.1:8710/v1.0/api/sessions
 Health response:
 
 ```json
-{ "Status": "healthy", "Product": "mux", "Version": "0.9.0", "Pid": 12345,
+{ "Status": "healthy", "Product": "mux", "Version": "1.5.0", "Pid": 12345,
   "StartedUtc": "2026-09-07T17:00:00Z", "Uptime": "0.00:01:23", "TimestampUtc": "2026-09-07T17:01:23Z" }
 ```
 

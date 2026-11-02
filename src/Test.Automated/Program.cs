@@ -16,14 +16,9 @@ namespace Test.Automated
     public static class Program
     {
         /// <summary>
-        /// Runs all MUX Touchstone suites through the console runner.
+        /// Maps each live-model command-line flag to the environment variable used by the live
+        /// skill-selection suite.
         /// </summary>
-        /// <param name="args">Command-line arguments. Pass <c>--results &lt;path&gt;</c> to export JSON results,
-        /// <c>--suite &lt;id&gt;</c> (repeatable, case-insensitive) to run only those suites, and <c>--llm-endpoint</c>,
-        /// <c>--llm-model</c>, <c>--llm-adapter</c>, <c>--llm-api-key</c>, <c>--llm-floor</c>, <c>--llm-cases</c>,
-        /// <c>--llm-report</c>, and <c>--llm-timeout</c> to run the live skill-selection suite against a model, and
-        /// <c>--docker</c> to run the Docker integration suite.</param>
-        /// <returns>0 if all tests pass; a non-zero value if any test fails.</returns>
         private static readonly Dictionary<string, string> LiveOptions = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["--llm-endpoint"] = LiveModelOptions.EndpointVariable,
@@ -36,6 +31,15 @@ namespace Test.Automated
             ["--llm-timeout"] = LiveModelOptions.TimeoutVariable
         };
 
+        /// <summary>
+        /// Runs all MUX Touchstone suites through the console runner.
+        /// </summary>
+        /// <param name="args">Command-line arguments. Pass <c>--results &lt;path&gt;</c> to export JSON results,
+        /// <c>--suite &lt;id&gt;</c> (repeatable, case-insensitive) to run only those suites, and <c>--llm-endpoint</c>,
+        /// <c>--llm-model</c>, <c>--llm-adapter</c>, <c>--llm-api-key</c>, <c>--llm-floor</c>, <c>--llm-cases</c>,
+        /// <c>--llm-report</c>, and <c>--llm-timeout</c> to run the live skill-selection suite against a model, and
+        /// <c>--docker</c> to run the Docker integration suite.</param>
+        /// <returns>0 if all tests pass; a non-zero value if any test fails.</returns>
         public static async Task<int> Main(string[] args)
         {
             string? resultsPath = null;

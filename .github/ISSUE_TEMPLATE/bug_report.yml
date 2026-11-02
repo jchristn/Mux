@@ -1,0 +1,60 @@
+name: Bug report
+description: Something is broken in mux
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please fill in as much as you can — a minimal reproduction is the
+        single biggest accelerator for a fix.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface?
+      options:
+        - Interactive CLI (mux)
+        - Headless CLI (mux print)
+        - Web dashboard (mux serve)
+        - Desktop app (mux Desktop)
+        - VS Code extension
+        - Python SDK
+        - TypeScript SDK
+        - Engine (Mux.Core / Mux.Search as a library)
+        - Installer / packaging
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: mux version
+      description: Output of "mux --version" (or the NuGet/SDK package version).
+      placeholder: 1.5.0
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, shell, .NET version ("dotnet --info"), model provider and model in use.
+      placeholder: macOS 26 / zsh / .NET 10.0 / Ollama, qwen3
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: Relevant excerpts, redacted of credentials. Please do not paste API keys or tokens.
+      render: text
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. mux --config-dir /tmp/x
+        2. ...

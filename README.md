@@ -9,8 +9,10 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.4.1-blue.svg" alt="v1.4.1"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.5.0-blue.svg" alt="v1.5.0"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-yellow.svg" alt="beta"></a>
+  <a href="https://github.com/jchristn/Mux/actions/workflows/ci.yml"><img src="https://github.com/jchristn/Mux/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.nuget.org/packages/Mux.Core"><img src="https://img.shields.io/nuget/v/Mux.Core.svg" alt="NuGet Mux.Core"></a>
 </p>
 
 > **Beta software**
@@ -166,7 +168,7 @@ To pin a released version without building, download the self-contained CLI arch
 .NET runtime:
 
 ```bash
-curl -fsSL https://github.com/jchristn/mux/releases/download/v1.4.1/mux-1.4.1-linux-x64.tar.gz | tar xz -C /usr/local/bin mux
+curl -fsSL https://github.com/jchristn/mux/releases/download/v1.5.0/mux-1.5.0-linux-x64.tar.gz | tar xz -C /usr/local/bin mux
 ```
 
 Archives are `mux-<version>-<rid>.tar.gz` for `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64`, and

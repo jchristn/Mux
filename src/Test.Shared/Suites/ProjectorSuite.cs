@@ -380,10 +380,10 @@ namespace Test.Shared.Suites
 
                     Case("SkillMarkdownFrontmatterShownAsYaml", "The SKILL.md viewer shows frontmatter as a yaml block and renders the body as Markdown", (CancellationToken ct) =>
                     {
-                        string display = MuxTuiApp.SkillMarkdownForDisplay("---\r\nname: demo\r\ndescription: d\r\n---\r\n# Demo\r\n\r\n- step\r\n");
+                        string display = TuiPresentation.SkillMarkdownForDisplay("---\r\nname: demo\r\ndescription: d\r\n---\r\n# Demo\r\n\r\n- step\r\n");
                         MuxAssert.IsTrue(display.StartsWith("```yaml\nname: demo\ndescription: d\n```", StringComparison.Ordinal), "frontmatter fenced as yaml");
                         MuxAssert.Contains("# Demo", display, "body kept");
-                        MuxAssert.AreEqual("# plain", MuxTuiApp.SkillMarkdownForDisplay("# plain"), "no frontmatter passes through");
+                        MuxAssert.AreEqual("# plain", TuiPresentation.SkillMarkdownForDisplay("# plain"), "no frontmatter passes through");
 
                         MarkdownBoxModal modal = new MarkdownBoxModal("demo", display);
                         string rows = string.Join("\n", modal.RowsAt(60).Select(r => r.ToPlainString()));

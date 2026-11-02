@@ -769,7 +769,7 @@ namespace Mux.Cli.App
         {
             EndpointConfig? active = LoadActiveEndpoint();
             ReasoningLevelEnum? current = active?.ReasoningEffort?.Level;
-            int selected = EffortIndexFor(current);
+            int selected = TuiPresentation.EffortIndexFor(current);
 
             string[] names = { "Off", "Minimal", "Low", "Medium", "High" };
             List<string> labels = new List<string>();
@@ -801,7 +801,7 @@ namespace Mux.Cli.App
                 return;
             }
 
-            ReasoningLevelEnum? level = LevelForEffortIndex(index);
+            ReasoningLevelEnum? level = TuiPresentation.LevelForEffortIndex(index);
             if (level.HasValue)
             {
                 ReasoningEffortConfig config = active.ReasoningEffort?.Clone() ?? new ReasoningEffortConfig();
@@ -830,10 +830,10 @@ namespace Mux.Cli.App
             _OnEndpointSelected?.Invoke(active);
             lock (_Sync)
             {
-                _EffortLabel = EffortLabelFor(active);
+                _EffortLabel = TuiPresentation.EffortLabelFor(active);
             }
 
-            WriteNotice($"Reasoning effort set to {EffortDisplayName(level)}");
+            WriteNotice($"Reasoning effort set to {TuiPresentation.EffortDisplayName(level)}");
             RefreshSidebar();
         }
 
@@ -983,7 +983,7 @@ namespace Mux.Cli.App
                 {
                     if (string.Equals(endpoint.Name, endpointName, StringComparison.OrdinalIgnoreCase))
                     {
-                        return EffortLabelFor(endpoint);
+                        return TuiPresentation.EffortLabelFor(endpoint);
                     }
                 }
             }
@@ -995,47 +995,9 @@ namespace Mux.Cli.App
             return string.Empty;
         }
 
-        private static string EffortLabelFor(EndpointConfig endpoint)
-        {
-            ReasoningLevelEnum? level = endpoint.ReasoningEffort?.Level;
-            return level.HasValue ? ReasoningLevelEnumConverter.ToWire(level.Value) : "off";
-        }
 
-        private static int EffortIndexFor(ReasoningLevelEnum? level)
-        {
-            switch (level)
-            {
-                case ReasoningLevelEnum.Minimal: return 1;
-                case ReasoningLevelEnum.Low: return 2;
-                case ReasoningLevelEnum.Medium: return 3;
-                case ReasoningLevelEnum.High: return 4;
-                default: return 0;
-            }
-        }
 
-        private static ReasoningLevelEnum? LevelForEffortIndex(int index)
-        {
-            switch (index)
-            {
-                case 1: return ReasoningLevelEnum.Minimal;
-                case 2: return ReasoningLevelEnum.Low;
-                case 3: return ReasoningLevelEnum.Medium;
-                case 4: return ReasoningLevelEnum.High;
-                default: return null;
-            }
-        }
 
-        private static string EffortDisplayName(ReasoningLevelEnum? level)
-        {
-            switch (level)
-            {
-                case ReasoningLevelEnum.Minimal: return "Minimal";
-                case ReasoningLevelEnum.Low: return "Low";
-                case ReasoningLevelEnum.Medium: return "Medium";
-                case ReasoningLevelEnum.High: return "High";
-                default: return "Off";
-            }
-        }
 
         /// <summary>
         /// Opens a modal theme selector. The chosen theme is applied to the whole UI — text and the
@@ -1047,7 +1009,7 @@ namespace Mux.Cli.App
             for (int i = 0; i < _Themes.Length; i++)
             {
                 string marker = i == _ThemeIndex ? "● " : "  ";
-                labels.Add(marker + ThemeLabel(_Themes[i]));
+                labels.Add(marker + TuiPresentation.ThemeLabel(_Themes[i]));
             }
 
             SelectModal modal = new SelectModal("Theme — ↑↓ then Enter to apply", labels);
@@ -1061,7 +1023,7 @@ namespace Mux.Cli.App
             if (result is int index && index >= 0 && index < _Themes.Length)
             {
                 ApplyTheme(index);
-                PersistThemeName(ThemeNameForIndex(_ThemeIndex));
+                PersistThemeName(TuiPresentation.ThemeNameForIndex(_ThemeIndex));
             }
         }
 
@@ -1097,11 +1059,11 @@ namespace Mux.Cli.App
         /// <param name="persist">True to save the choice to settings.json.</param>
         public void ApplyThemeByName(string name, bool persist)
         {
-            ApplyTheme(ThemeIndexForName(name));
+            ApplyTheme(TuiPresentation.ThemeIndexForName(name));
 
             if (persist)
             {
-                PersistThemeName(ThemeNameForIndex(_ThemeIndex));
+                PersistThemeName(TuiPresentation.ThemeNameForIndex(_ThemeIndex));
             }
         }
 
@@ -1119,35 +1081,7 @@ namespace Mux.Cli.App
             }
         }
 
-        private static int ThemeIndexForName(string? name)
-        {
-            switch ((name ?? string.Empty).Trim().ToLowerInvariant())
-            {
-                case "dark":
-                    return 1;
-                case "light":
-                    return 2;
-                case "highcontrast":
-                    return 3;
-                default:
-                    return 0;
-            }
-        }
 
-        private static string ThemeNameForIndex(int index)
-        {
-            switch (index)
-            {
-                case 1:
-                    return "dark";
-                case 2:
-                    return "light";
-                case 3:
-                    return "highcontrast";
-                default:
-                    return "mux";
-            }
-        }
 
         /// <summary>
         /// Advances to the next theme preset. Retained for programmatic and test use; the interactive
@@ -1181,16 +1115,6 @@ namespace Mux.Cli.App
             _PromptLabel.WriteLine(Text.From(PromptText).Green().Bold());
         }
 
-        private static string ThemeLabel(Theme theme)
-        {
-            string name = theme.Name ?? string.Empty;
-            if (name.Length == 0)
-            {
-                return "theme";
-            }
-
-            return char.ToUpperInvariant(name[0]) + name.Substring(1);
-        }
 
         /// <summary>
         /// Toggles terminal mouse capture.
@@ -1959,7 +1883,7 @@ namespace Mux.Cli.App
             // Fallback for terminals that deliver a modified Enter as a raw carriage-return or line-feed
             // character (rune 13/10) rather than a decoded key, which the resolver classifies as Ignore.
             // Alt+Enter is intercepted by Windows Terminal for the full-screen toggle and never reaches us.
-            if (IsCarriageReturn(key))
+            if (TuiPresentation.IsCarriageReturn(key))
             {
                 _Composer.InsertNewline();
                 RefreshComposerLayout();
@@ -2174,7 +2098,7 @@ namespace Mux.Cli.App
 
                         if (verb == "show")
                         {
-                            WriteNotice("── " + entry.Slug + " (" + ScopeLabel(entry.Scope) + ", updated " + entry.UpdatedUtc.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " UTC) ──");
+                            WriteNotice("── " + entry.Slug + " (" + TuiPresentation.ScopeLabel(entry.Scope) + ", updated " + entry.UpdatedUtc.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " UTC) ──");
                             WriteNotice(entry.Description);
                             if (!string.Equals(entry.Content, entry.Description, StringComparison.Ordinal))
                             {
@@ -2191,7 +2115,7 @@ namespace Mux.Cli.App
                         }
 
                         _Memory.Delete(entry.Slug, entry.Scope, _HookWorkingDirectory);
-                        WriteNotice("✓ Deleted " + ScopeLabel(entry.Scope) + " memory '" + entry.Slug + "'.");
+                        WriteNotice("✓ Deleted " + TuiPresentation.ScopeLabel(entry.Scope) + " memory '" + entry.Slug + "'.");
                         return;
                     case "clear":
                         bool confirmed = rest.IndexOf("--yes", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -2201,17 +2125,17 @@ namespace Mux.Cli.App
                         int count = _Memory.List(scope, _HookWorkingDirectory).Count;
                         if (count == 0)
                         {
-                            WriteNotice("No " + ScopeLabel(scope) + " memories to clear.");
+                            WriteNotice("No " + TuiPresentation.ScopeLabel(scope) + " memories to clear.");
                             return;
                         }
 
                         if (!confirmed)
                         {
-                            WriteNotice("⚠ This deletes " + count + " " + ScopeLabel(scope) + (count == 1 ? " memory" : " memories") + ". Confirm with /memory clear " + (scope == Mux.Core.Memory.MemoryScopeEnum.Global ? "global " : string.Empty) + "--yes");
+                            WriteNotice("⚠ This deletes " + count + " " + TuiPresentation.ScopeLabel(scope) + (count == 1 ? " memory" : " memories") + ". Confirm with /memory clear " + (scope == Mux.Core.Memory.MemoryScopeEnum.Global ? "global " : string.Empty) + "--yes");
                             return;
                         }
 
-                        WriteNotice("✓ Cleared " + _Memory.Clear(scope, _HookWorkingDirectory) + " " + ScopeLabel(scope) + " memories.");
+                        WriteNotice("✓ Cleared " + _Memory.Clear(scope, _HookWorkingDirectory) + " " + TuiPresentation.ScopeLabel(scope) + " memories.");
                         return;
                     default:
                         WriteNotice("Usage: /memory [list | show <name> | edit <name> | delete <name> | clear [global] [--yes]]. Start a prompt with # to remember a line (#global for every project).");
@@ -2236,7 +2160,7 @@ namespace Mux.Cli.App
             WriteNotice("Memories (" + entries.Count + "):");
             foreach (Mux.Core.Memory.MemoryEntry entry in entries)
             {
-                WriteNotice("  [" + ScopeLabel(entry.Scope) + "] " + entry.Slug + ": " + Truncate(entry.Description, 90));
+                WriteNotice("  [" + TuiPresentation.ScopeLabel(entry.Scope) + "] " + entry.Slug + ": " + TuiPresentation.Truncate(entry.Description, 90));
             }
 
             WriteNotice("/memory show|edit|delete <name>; /memory clear [global] --yes.");
@@ -2263,10 +2187,6 @@ namespace Mux.Cli.App
             }
         }
 
-        private static string ScopeLabel(Mux.Core.Memory.MemoryScopeEnum scope)
-        {
-            return scope == Mux.Core.Memory.MemoryScopeEnum.Global ? "global" : "project";
-        }
 
         /// <summary>
         /// Submits the startup <see cref="_InitialPrompt"/> as the first turn, then clears it so it runs
@@ -2344,7 +2264,7 @@ namespace Mux.Cli.App
             {
                 try
                 {
-                    _CheckpointManager.RecordAsync(Truncate(prompt, 60), _Cts.Token).GetAwaiter().GetResult();
+                    _CheckpointManager.RecordAsync(TuiPresentation.Truncate(prompt, 60), _Cts.Token).GetAwaiter().GetResult();
                 }
                 catch (Exception)
                 {
@@ -2850,7 +2770,7 @@ namespace Mux.Cli.App
             {
                 for (int i = 0; i < queued.Count; i++)
                 {
-                    _QueuePane.WriteLine(Text.From($"  {i + 1}. {PromptPreview(queued[i])}").Dim());
+                    _QueuePane.WriteLine(Text.From($"  {i + 1}. {TuiPresentation.PromptPreview(queued[i])}").Dim());
                 }
 
                 return;
@@ -2858,16 +2778,12 @@ namespace Mux.Cli.App
 
             for (int i = 0; i < promptRows - 1; i++)
             {
-                _QueuePane.WriteLine(Text.From($"  {i + 1}. {PromptPreview(queued[i])}").Dim());
+                _QueuePane.WriteLine(Text.From($"  {i + 1}. {TuiPresentation.PromptPreview(queued[i])}").Dim());
             }
 
             _QueuePane.WriteLine(Text.From($"  …and {queued.Count - (promptRows - 1)} more").Dim());
         }
 
-        private static string PromptPreview(string prompt)
-        {
-            return Mux.Core.Prompting.PromptText.Preview(prompt, 60);
-        }
 
         // Opens the queue editor. Processing pauses while it is open so a turn finishing mid-edit does not
         // start the next prompt; on close the edited list becomes the queue and processing resumes.
@@ -3036,7 +2952,7 @@ namespace Mux.Cli.App
             // varied, the way mux's per-swap random pick did.
             ActivityIndicator indicator = new ActivityIndicator
             {
-                Phrases = ShuffledThinkingPhrases()
+                Phrases = TuiPresentation.ShuffledThinkingPhrases()
             };
             CancellationTokenSource cts = new CancellationTokenSource();
 
@@ -3114,19 +3030,6 @@ namespace Mux.Cli.App
             }
         }
 
-        private static string[] ShuffledThinkingPhrases()
-        {
-            List<string> phrases = new List<string>(ThinkingPhrases.All);
-            for (int i = phrases.Count - 1; i > 0; i--)
-            {
-                int j = Random.Shared.Next(i + 1);
-                string swap = phrases[i];
-                phrases[i] = phrases[j];
-                phrases[j] = swap;
-            }
-
-            return phrases.ToArray();
-        }
 
         private void RouteSlash(string input)
         {
@@ -3240,38 +3143,8 @@ namespace Mux.Cli.App
         // Scans backward from an offset over a run of trailing whitespace and then the word before it,
         // returning the resulting offset. Line breaks count as whitespace, so a caret at column 0 eats the
         // break and the previous line's last word — matching Claude Code / Codex and readline's Ctrl+W.
-        private static int WordStartBefore(string text, int offset)
-        {
-            int i = offset;
-            while (i > 0 && char.IsWhiteSpace(text[i - 1]))
-            {
-                i--;
-            }
-
-            while (i > 0 && !char.IsWhiteSpace(text[i - 1]))
-            {
-                i--;
-            }
-
-            return i;
-        }
 
         // Scans forward from an offset over a run of leading whitespace and then the word after it.
-        private static int WordEndAfter(string text, int offset)
-        {
-            int i = offset;
-            while (i < text.Length && char.IsWhiteSpace(text[i]))
-            {
-                i++;
-            }
-
-            while (i < text.Length && !char.IsWhiteSpace(text[i]))
-            {
-                i++;
-            }
-
-            return i;
-        }
 
         // Ctrl+Backspace / Ctrl+W / Alt+Backspace: delete the word before the caret, crossing a line break
         // when the caret sits at the start of a line.
@@ -3279,7 +3152,7 @@ namespace Mux.Cli.App
         {
             string text = _Composer.Text.Replace("\r\n", "\n").Replace("\r", "\n");
             int caret = ComposerCaretOffset(text);
-            int target = WordStartBefore(text, caret);
+            int target = TuiPresentation.WordStartBefore(text, caret);
             int count = caret - target;
             if (count <= 0)
             {
@@ -3299,7 +3172,7 @@ namespace Mux.Cli.App
         {
             string text = _Composer.Text.Replace("\r\n", "\n").Replace("\r", "\n");
             int caret = ComposerCaretOffset(text);
-            int target = WordEndAfter(text, caret);
+            int target = TuiPresentation.WordEndAfter(text, caret);
             int count = target - caret;
             if (count <= 0)
             {
@@ -3319,7 +3192,7 @@ namespace Mux.Cli.App
         {
             string text = _Composer.Text.Replace("\r\n", "\n").Replace("\r", "\n");
             int caret = ComposerCaretOffset(text);
-            int target = WordStartBefore(text, caret);
+            int target = TuiPresentation.WordStartBefore(text, caret);
             int steps = caret - target;
             if (steps <= 0 && caret > 0)
             {
@@ -3339,7 +3212,7 @@ namespace Mux.Cli.App
         {
             string text = _Composer.Text.Replace("\r\n", "\n").Replace("\r", "\n");
             int caret = ComposerCaretOffset(text);
-            int target = WordEndAfter(text, caret);
+            int target = TuiPresentation.WordEndAfter(text, caret);
             int steps = target - caret;
             if (steps <= 0 && caret < text.Length)
             {
@@ -3454,7 +3327,7 @@ namespace Mux.Cli.App
             try
             {
                 SessionSnapshot snapshot = BuildSnapshot();
-                string stem = SanitizeFileStem(!string.IsNullOrWhiteSpace(snapshot.Title) ? snapshot.Title : snapshot.Id);
+                string stem = TuiPresentation.SanitizeFileStem(!string.IsNullOrWhiteSpace(snapshot.Title) ? snapshot.Title : snapshot.Id);
                 if (string.IsNullOrWhiteSpace(stem))
                 {
                     stem = "mux-session";
@@ -3685,42 +3558,7 @@ namespace Mux.Cli.App
             }
         }
 
-        private static string Truncate(string value, int maxLength)
-        {
-            if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
-            {
-                return value ?? string.Empty;
-            }
 
-            return value.Substring(0, maxLength) + "…";
-        }
-
-        private static string SanitizeFileStem(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return string.Empty;
-            }
-
-            char[] invalid = System.IO.Path.GetInvalidFileNameChars();
-            System.Text.StringBuilder builder = new System.Text.StringBuilder(value.Length);
-            foreach (char c in value.Trim())
-            {
-                bool bad = c == ' ';
-                foreach (char inv in invalid)
-                {
-                    if (c == inv)
-                    {
-                        bad = true;
-                        break;
-                    }
-                }
-
-                builder.Append(bad ? '-' : c);
-            }
-
-            return builder.ToString();
-        }
 
         private async Task SaveWithNoticeAsync()
         {
@@ -3860,15 +3698,15 @@ namespace Mux.Cli.App
                 Mux.Core.Sessions.SessionManager manager = new Mux.Core.Sessions.SessionManager(_Store);
                 string id = ActiveSessionId();
 
-                if (TryStripRemovePrefix(argument, out string toRemove))
+                if (TuiPresentation.TryStripRemovePrefix(argument, out string toRemove))
                 {
                     Mux.Core.Sessions.SessionInfo? info = await manager.RemoveLabelAsync(id, toRemove, _Cts.Token).ConfigureAwait(false);
-                    WriteNotice(info == null ? "No active session to update." : "✓ Removed label. " + DescribeLabels(info));
+                    WriteNotice(info == null ? "No active session to update." : "✓ Removed label. " + TuiPresentation.DescribeLabels(info));
                 }
                 else
                 {
                     Mux.Core.Sessions.SessionInfo? info = await manager.AddLabelAsync(id, argument, _Cts.Token).ConfigureAwait(false);
-                    WriteNotice(info == null ? "No active session to update." : "✓ Labeled. " + DescribeLabels(info));
+                    WriteNotice(info == null ? "No active session to update." : "✓ Labeled. " + TuiPresentation.DescribeLabels(info));
                 }
             }
             catch (ArgumentException ex)
@@ -3890,10 +3728,10 @@ namespace Mux.Cli.App
                 Mux.Core.Sessions.SessionManager manager = new Mux.Core.Sessions.SessionManager(_Store);
                 string id = ActiveSessionId();
 
-                if (TryStripRemovePrefix(argument, out string keyToRemove))
+                if (TuiPresentation.TryStripRemovePrefix(argument, out string keyToRemove))
                 {
                     Mux.Core.Sessions.SessionInfo? info = await manager.RemoveTagAsync(id, keyToRemove, _Cts.Token).ConfigureAwait(false);
-                    WriteNotice(info == null ? "No active session to update." : "✓ Removed tag. " + DescribeTags(info));
+                    WriteNotice(info == null ? "No active session to update." : "✓ Removed tag. " + TuiPresentation.DescribeTags(info));
                     return;
                 }
 
@@ -3907,7 +3745,7 @@ namespace Mux.Cli.App
                 string key = argument.Substring(0, colon);
                 string value = argument.Substring(colon + 1);
                 Mux.Core.Sessions.SessionInfo? tagged = await manager.SetTagAsync(id, key, value, _Cts.Token).ConfigureAwait(false);
-                WriteNotice(tagged == null ? "No active session to update." : "✓ Tagged. " + DescribeTags(tagged));
+                WriteNotice(tagged == null ? "No active session to update." : "✓ Tagged. " + TuiPresentation.DescribeTags(tagged));
             }
             catch (ArgumentException ex)
             {
@@ -3915,33 +3753,8 @@ namespace Mux.Cli.App
             }
         }
 
-        private static bool TryStripRemovePrefix(string argument, out string remainder)
-        {
-            foreach (string prefix in new[] { "rm ", "remove ", "delete ", "-" })
-            {
-                if (argument.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    remainder = argument.Substring(prefix.Length).Trim();
-                    return true;
-                }
-            }
 
-            remainder = argument;
-            return false;
-        }
 
-        private static string DescribeLabels(Mux.Core.Sessions.SessionInfo info)
-        {
-            return info.Labels.Count == 0 ? "Labels: (none)" : "Labels: " + string.Join(", ", info.Labels);
-        }
-
-        private static string DescribeTags(Mux.Core.Sessions.SessionInfo info)
-        {
-            if (info.Tags.Count == 0) return "Tags: (none)";
-            List<string> parts = new List<string>();
-            foreach (Mux.Core.Sessions.SessionTag tag in info.Tags) parts.Add(tag.Key + ": " + tag.Value);
-            return "Tags: " + string.Join(", ", parts);
-        }
 
         private void OpenSessionBrowser()
         {
@@ -4159,7 +3972,7 @@ namespace Mux.Cli.App
             }
 
             string ext = string.Equals(format, "html", StringComparison.OrdinalIgnoreCase) ? "html" : "md";
-            string baseName = SanitizeFileStem(string.IsNullOrWhiteSpace(session.Title) ? session.Id : session.Title);
+            string baseName = TuiPresentation.SanitizeFileStem(string.IsNullOrWhiteSpace(session.Title) ? session.Id : session.Title);
             if (string.IsNullOrEmpty(baseName))
             {
                 baseName = session.Id;
@@ -4317,7 +4130,7 @@ namespace Mux.Cli.App
         {
             MessageModal modal = new MessageModal(
                 string.Empty,
-                CenterMessage("Exit mux?"),
+                TuiPresentation.CenterMessage("Exit mux?"),
                 new List<string> { "Exit", "Cancel" });
             _App.Modals.Push(modal);
             _ = ResolveQuitAsync(modal);
@@ -4325,12 +4138,6 @@ namespace Mux.Cli.App
 
         // MessageModal draws its message left-aligned in a box that is at least 28 columns wide, so a short
         // prompt looks left-shifted; pad it so it renders centered.
-        private static string CenterMessage(string text)
-        {
-            const int minBoxContentWidth = 28;
-            int pad = Math.Max(0, (minBoxContentWidth - text.Length) / 2);
-            return new string(' ', pad) + text;
-        }
 
         private async Task ResolveQuitAsync(MessageModal modal)
         {
@@ -4341,17 +4148,6 @@ namespace Mux.Cli.App
             }
         }
 
-        // The kinds of rows shown in the Endpoints / models list, kept in a list parallel to the option
-        // strings so a blank separator or a trailing action never has to be inferred from index math.
-        private enum EndpointMenuAction
-        {
-            Switch,
-            None,
-            Add,
-            Edit,
-            Remove,
-            Import
-        }
 
         private void OpenEndpointModal()
         {
@@ -4487,79 +4283,10 @@ namespace Mux.Cli.App
                 result = ModelLoadResult.Fail(ex.Message);
             }
 
-            _App.Modals.Push(new MuxBoxModal($"Validate: {endpoint.Name}", BuildValidationLines(endpoint, result)));
+            _App.Modals.Push(new MuxBoxModal($"Validate: {endpoint.Name}", TuiPresentation.BuildValidationLines(endpoint, result)));
         }
 
-        private static List<string> BuildValidationLines(EndpointConfig endpoint, ModelLoadResult result)
-        {
-            const int wrapWidth = 60;
-            string label = string.IsNullOrWhiteSpace(endpoint.Model) ? endpoint.Name : endpoint.Model;
-            List<string> lines = new List<string>();
 
-            if (result.Success)
-            {
-                lines.Add($"✓ {label} is ready.");
-                lines.Add(string.Empty);
-                lines.Add("The endpoint responded successfully.");
-            }
-            else if (result.Reachable)
-            {
-                lines.Add($"⚠ {endpoint.Name} is reachable, but the validation");
-                lines.Add("   request did not succeed:");
-                lines.Add(string.Empty);
-                lines.AddRange(WrapText(result.Error ?? "unknown error", wrapWidth));
-                lines.Add(string.Empty);
-                lines.Add("Normal chats may still work — for example, a");
-                lines.Add("reasoning model that answers slowly.");
-            }
-            else
-            {
-                lines.Add($"✗ {endpoint.Name} is unreachable:");
-                lines.Add(string.Empty);
-                lines.AddRange(WrapText(result.Error ?? "unknown error", wrapWidth));
-            }
-
-            return lines;
-        }
-
-        private static List<string> WrapText(string text, int width)
-        {
-            List<string> lines = new List<string>();
-            if (string.IsNullOrEmpty(text) || width <= 0)
-            {
-                if (!string.IsNullOrEmpty(text))
-                {
-                    lines.Add(text);
-                }
-
-                return lines;
-            }
-
-            string current = string.Empty;
-            foreach (string word in text.Split(' '))
-            {
-                if (current.Length == 0)
-                {
-                    current = word;
-                }
-                else if (current.Length + 1 + word.Length <= width)
-                {
-                    current += " " + word;
-                }
-                else
-                {
-                    lines.Add(current);
-                    current = word;
-                }
-            }
-
-            if (current.Length > 0)
-            {
-                lines.Add(current);
-            }
-
-            return lines;
-        }
 
         private void SwitchEndpoint(EndpointConfig endpoint)
         {
@@ -4569,7 +4296,7 @@ namespace Mux.Cli.App
             {
                 _EndpointName = endpoint.Name;
                 _Model = endpoint.Model;
-                _EffortLabel = EffortLabelFor(endpoint);
+                _EffortLabel = TuiPresentation.EffortLabelFor(endpoint);
                 _ThinkingLabel = endpoint.ShowThinking ? "on" : "off";
             }
 
@@ -4772,7 +4499,7 @@ namespace Mux.Cli.App
                     result = ModelLoadResult.Fail(ex.Message);
                 }
 
-                MuxBoxModal check = new MuxBoxModal("Setup — connectivity", BuildValidationLines(endpoint, result), "Enter to continue");
+                MuxBoxModal check = new MuxBoxModal("Setup — connectivity", TuiPresentation.BuildValidationLines(endpoint, result), "Enter to continue");
                 _App.Modals.Push(check);
                 await check.Completion.ConfigureAwait(false);
             }
@@ -5035,7 +4762,7 @@ namespace Mux.Cli.App
                     continue;
                 }
 
-                string name = UniqueEndpointName(model, takenNames);
+                string name = TuiPresentation.UniqueEndpointName(model, takenNames);
                 takenNames.Add(name);
                 current.Add(new EndpointConfig
                 {
@@ -5064,23 +4791,6 @@ namespace Mux.Cli.App
             }
         }
 
-        private static string UniqueEndpointName(string model, HashSet<string> taken)
-        {
-            string baseName = string.IsNullOrWhiteSpace(model) ? "ollama-model" : model.Trim();
-            if (!taken.Contains(baseName))
-            {
-                return baseName;
-            }
-
-            for (int suffix = 2; ; suffix++)
-            {
-                string candidate = $"{baseName} ({suffix})";
-                if (!taken.Contains(candidate))
-                {
-                    return candidate;
-                }
-            }
-        }
 
         private static bool LoadIgnoreCertSafe()
         {
@@ -5106,17 +4816,6 @@ namespace Mux.Cli.App
             }
         }
 
-        // The kinds of rows shown in the MCP servers list, kept in a list parallel to the option strings
-        // so a blank separator or a trailing action never has to be inferred from index math. Selecting a
-        // server row edits that server directly.
-        private enum McpMenuAction
-        {
-            Edit,
-            None,
-            Add,
-            Remove,
-            Details
-        }
 
         private void OpenMcpModal()
         {
@@ -5152,8 +4851,8 @@ namespace Mux.Cli.App
                     else
                     {
                         glyph = "○";
-                        string? cause = statusByName.TryGetValue(server.Name, out McpServerStatus? failed) ? FirstLine(failed.Error) : null;
-                        state = string.IsNullOrEmpty(cause) ? " · offline" : " · offline: " + Truncate(StripServerPrefix(cause!), 48);
+                        string? cause = statusByName.TryGetValue(server.Name, out McpServerStatus? failed) ? TuiPresentation.FirstLine(failed.Error) : null;
+                        state = string.IsNullOrEmpty(cause) ? " · offline" : " · offline: " + TuiPresentation.Truncate(TuiPresentation.StripServerPrefix(cause!), 48);
                     }
                 }
 
@@ -5257,24 +4956,9 @@ namespace Mux.Cli.App
             }
         }
 
-        private static string? FirstLine(string? text)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                return null;
-            }
-
-            int newline = text.IndexOfAny(new[] { '\r', '\n' });
-            return newline < 0 ? text.Trim() : text.Substring(0, newline).Trim();
-        }
 
         // "Failed to connect to HTTP MCP server 'x' at URL: connection refused" becomes "connection refused" for the
         // compact menu row; the full text is one keypress away.
-        private static string StripServerPrefix(string firstLine)
-        {
-            int colon = firstLine.LastIndexOf(": ", StringComparison.Ordinal);
-            return colon >= 0 && colon + 2 < firstLine.Length ? firstLine.Substring(colon + 2) : firstLine;
-        }
 
         private async Task AddMcpFormAsync()
         {
@@ -5490,7 +5174,7 @@ namespace Mux.Cli.App
                     await ManageSkillAsync(statuses[index]).ConfigureAwait(false);
                     break;
                 case SkillMenuAction.ProjectInfo:
-                    ShowProjectSkillInfo(StatusForRow(statuses, actions, index));
+                    ShowProjectSkillInfo(TuiPresentation.StatusForRow(statuses, actions, index));
                     break;
                 case SkillMenuAction.Trust:
                     await ChooseProjectTrustAsync().ConfigureAwait(false);
@@ -5536,19 +5220,6 @@ namespace Mux.Cli.App
             return string.Empty;
         }
 
-        private static SkillStatus StatusForRow(List<SkillStatus> statuses, List<SkillMenuAction> actions, int index)
-        {
-            int position = -1;
-            for (int i = 0; i <= index && i < actions.Count; i++)
-            {
-                if (actions[i] == SkillMenuAction.Manage || actions[i] == SkillMenuAction.ProjectInfo)
-                {
-                    position++;
-                }
-            }
-
-            return position >= 0 && position < statuses.Count ? statuses[position] : new SkillStatus();
-        }
 
         private void ShowProjectSkillInfo(SkillStatus status)
         {
@@ -5894,7 +5565,7 @@ namespace Mux.Cli.App
                     ? "running"
                     : (info.StoppedByUser ? "stopped" : "exited " + (info.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"));
                 string label = string.IsNullOrEmpty(info.Name) ? string.Empty : " [" + info.Name + "]";
-                WriteNotice("  " + info.Id + "  " + state + "  pid " + info.ProcessId + "  " + Truncate(info.Command, 70) + label);
+                WriteNotice("  " + info.Id + "  " + state + "  pid " + info.ProcessId + "  " + TuiPresentation.Truncate(info.Command, 70) + label);
             }
 
             WriteNotice("/processes output <id> shows recent output; /processes stop <id|all> stops; /processes clear removes exited ones.");
@@ -6474,7 +6145,7 @@ namespace Mux.Cli.App
             string markdown;
             try
             {
-                markdown = SkillMarkdownForDisplay(File.ReadAllText(path));
+                markdown = TuiPresentation.SkillMarkdownForDisplay(File.ReadAllText(path));
             }
             catch (Exception ex)
             {
@@ -6489,26 +6160,6 @@ namespace Mux.Cli.App
             _App.Modals.Push(new MarkdownBoxModal(status.Name, markdown));
         }
 
-        /// <summary>
-        /// Prepares a SKILL.md for the Markdown viewer: YAML frontmatter (which Markdown would read as a rule and a
-        /// setext heading) is shown as a fenced <c>yaml</c> block above the body.
-        /// </summary>
-        /// <param name="content">The raw SKILL.md text. May be null.</param>
-        /// <returns>Markdown ready to render. Never null.</returns>
-        internal static string SkillMarkdownForDisplay(string? content)
-        {
-            string text = (content ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
-            if (!text.StartsWith("---\n", StringComparison.Ordinal)) return text;
-
-            int close = text.IndexOf("\n---", 3, StringComparison.Ordinal);
-            if (close < 0) return text;
-
-            int bodyStart = close + 4;
-            if (bodyStart < text.Length && text[bodyStart] != '\n') return text; // "---" was not alone on its line
-            string frontmatter = text.Substring(4, close - 4);
-            string body = bodyStart < text.Length ? text.Substring(bodyStart).TrimStart('\n') : string.Empty;
-            return "```yaml\n" + frontmatter + "\n```\n\n" + body;
-        }
 
         private void ToggleSkill(SkillStatus status)
         {
@@ -6665,10 +6316,6 @@ namespace Mux.Cli.App
             }
         }
 
-        private static bool IsCarriageReturn(KeyEvent key)
-        {
-            return key.Code == KeyCode.Character && (key.Rune == 13 || key.Rune == 10);
-        }
 
         // The number of visual (wrapped) rows the composer occupies at its current render width, so the
         // composer grows to fit wrapped text rather than letting it run off the right edge.
@@ -6833,7 +6480,7 @@ namespace Mux.Cli.App
                 SessionSnapshot? candidate;
                 try { candidate = await _Store.LoadAsync(sessionId, _Cts.Token).ConfigureAwait(false); }
                 catch (Exception) { return; }
-                if (candidate != null && !HistoryEquals(candidate.ConversationHistory, shownHistory))
+                if (candidate != null && !TuiPresentation.HistoryEquals(candidate.ConversationHistory, shownHistory))
                 {
                     snapshot = candidate;
                     break;
@@ -6863,24 +6510,6 @@ namespace Mux.Cli.App
         // Compares two conversation histories by length and per-message role + content, so a reload triggers on
         // any real change — a turn appended, or one replaced by another surface — but not on an identical store
         // (our own just-persisted turn).
-        private static bool HistoryEquals(IReadOnlyList<ConversationMessage> left, IReadOnlyList<ConversationMessage> right)
-        {
-            if (left.Count != right.Count)
-            {
-                return false;
-            }
-
-            for (int i = 0; i < left.Count; i++)
-            {
-                if (left[i].Role != right[i].Role
-                    || !string.Equals(left[i].Content ?? string.Empty, right[i].Content ?? string.Empty, StringComparison.Ordinal))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
 
         private void RedrawTranscriptFromHistory(List<ConversationMessage> history)
         {

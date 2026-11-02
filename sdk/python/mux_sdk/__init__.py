@@ -7,4 +7,4 @@ from .client import Mux, MuxOptions, RunResult, Thread, build_print_args
 
 __all__ = ["Mux", "MuxOptions", "RunResult", "Thread", "build_print_args"]
 
-__version__ = "0.7.0"
+__version__ = "1.5.0"

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mux-sdk"
-version = "0.7.0"
+version = "1.5.0"
 description = "Thin Python driver for the mux CLI: spawns `mux print --output-format jsonl` and returns typed results."
 readme = "README.md"
 requires-python = ">=3.8"

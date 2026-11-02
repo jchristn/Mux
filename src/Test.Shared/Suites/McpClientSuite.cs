@@ -148,7 +148,7 @@ namespace Test.Shared.Suites
             Add("SchemaViolationsRejected", "Undeclared arguments and missing required arguments are rejected as tool errors", async (CancellationToken ct) =>
             {
                 await using (ScriptableMcpHttpServer server = await ScriptableMcpHttpServer.StartAsync((McpHttpServer s) =>
-                    s.RegisterTool("strict", "Strict", new { type = "object", properties = new { text = new { type = "string" } }, required = new[] { "text" }, additionalProperties = false }, (RpcParameters? a) => (object)("got " + a.GetString("text")))).ConfigureAwait(false))
+                    s.RegisterTool("strict", "Strict", new { type = "object", properties = new { text = new { type = "string" } }, required = new[] { "text" }, additionalProperties = false }, (RpcParameters? a) => (object)("got " + a!.GetString("text")))).ConfigureAwait(false))
                 using (McpToolManager manager = await Connect(ct, Http("srv", server.BaseUrl)).ConfigureAwait(false))
                 {
                     ToolResult extra = await manager.ExecuteAsync("c", "srv.strict", Json("{\"text\":\"a\",\"bogus\":1}"), ct).ConfigureAwait(false);
@@ -473,7 +473,7 @@ namespace Test.Shared.Suites
             Add("ConcurrentCallsAllSucceed", "Ten concurrent calls to one server all succeed with their own results", async (CancellationToken ct) =>
             {
                 await using (ScriptableMcpHttpServer server = await ScriptableMcpHttpServer.StartAsync((McpHttpServer s) =>
-                    s.RegisterTool("twice", "Doubles n", new { type = "object", properties = new { n = new { type = "integer" } } }, async (RpcParameters? a) => { await Task.Delay(50).ConfigureAwait(false); return (object)("v=" + (a.GetInt64("n") * 2)); })).ConfigureAwait(false))
+                    s.RegisterTool("twice", "Doubles n", new { type = "object", properties = new { n = new { type = "integer" } } }, async (RpcParameters? a) => { await Task.Delay(50).ConfigureAwait(false); return (object)("v=" + (a!.GetInt64("n") * 2)); })).ConfigureAwait(false))
                 using (McpToolManager manager = await Connect(ct, Http("srv", server.BaseUrl)).ConfigureAwait(false))
                 {
                     List<Task<ToolResult>> calls = new List<Task<ToolResult>>();

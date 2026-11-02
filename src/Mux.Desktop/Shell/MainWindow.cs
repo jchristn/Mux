@@ -1095,20 +1095,20 @@ namespace Mux.Desktop.Shell
         {
             MenuFlyout flyout = new MenuFlyout();
 
-            MenuItem sidebar = new MenuItem { Header = ViewItemHeader(L("main.viewCollapseSidebar"), _SidebarCollapsed) };
+            MenuItem sidebar = new MenuItem { Header = MainWindowText.ViewItemHeader(L("main.viewCollapseSidebar"), _SidebarCollapsed) };
             sidebar.Click += (sender, args) =>
             {
                 ToggleSidebarCollapse();
-                sidebar.Header = ViewItemHeader(L("main.viewCollapseSidebar"), _SidebarCollapsed);
+                sidebar.Header = MainWindowText.ViewItemHeader(L("main.viewCollapseSidebar"), _SidebarCollapsed);
             };
             flyout.Items.Add(sidebar);
 
-            MenuItem thinking = new MenuItem { Header = ViewItemHeader(L("main.viewAutoExpandThinking"), _AutoExpandThinking) };
+            MenuItem thinking = new MenuItem { Header = MainWindowText.ViewItemHeader(L("main.viewAutoExpandThinking"), _AutoExpandThinking) };
             thinking.Click += (sender, args) =>
             {
                 _AutoExpandThinking = !_AutoExpandThinking;
                 SavePreferences();
-                thinking.Header = ViewItemHeader(L("main.viewAutoExpandThinking"), _AutoExpandThinking);
+                thinking.Header = MainWindowText.ViewItemHeader(L("main.viewAutoExpandThinking"), _AutoExpandThinking);
             };
             flyout.Items.Add(thinking);
 
@@ -1116,17 +1116,13 @@ namespace Mux.Desktop.Shell
             // toggled elsewhere (the « » rail button), not just through this menu.
             flyout.Opened += (sender, args) =>
             {
-                sidebar.Header = ViewItemHeader(L("main.viewCollapseSidebar"), _SidebarCollapsed);
-                thinking.Header = ViewItemHeader(L("main.viewAutoExpandThinking"), _AutoExpandThinking);
+                sidebar.Header = MainWindowText.ViewItemHeader(L("main.viewCollapseSidebar"), _SidebarCollapsed);
+                thinking.Header = MainWindowText.ViewItemHeader(L("main.viewAutoExpandThinking"), _AutoExpandThinking);
             };
 
             return flyout;
         }
 
-        private static string ViewItemHeader(string label, bool on)
-        {
-            return (on ? "✓   " : "      ") + label;
-        }
 
         private Button HeaderGlyphButton(string glyph, string tip)
         {
@@ -1459,7 +1455,7 @@ namespace Mux.Desktop.Shell
                     }
                 }
 
-                return ResolveSystemDark();
+                return MainWindowText.ResolveSystemDark();
             }
 
             bool dark = string.Equals(mode, "dark", StringComparison.OrdinalIgnoreCase);
@@ -1498,14 +1494,10 @@ namespace Mux.Desktop.Shell
         {
             if (string.Equals(_ThemeMode, "system", StringComparison.OrdinalIgnoreCase))
             {
-                ApplyThemeDark(ResolveSystemDark());
+                ApplyThemeDark(MainWindowText.ResolveSystemDark());
             }
         }
 
-        private static bool ResolveSystemDark()
-        {
-            return Application.Current == null || Application.Current.ActualThemeVariant == ThemeVariant.Dark;
-        }
 
         private void ApplyThemeDark(bool dark)
         {
@@ -2410,7 +2402,7 @@ namespace Mux.Desktop.Shell
             context.TitlePinned = snapshot.TitlePinned;
             // Treat an already-substantial conversation as already titled so we don't re-summarize on reopen;
             // a short one may still cross the threshold and get an AI title as it grows.
-            context.TitleSummarized = ConversationCharCount(snapshot.ConversationHistory) >= TitleSummaryThreshold;
+            context.TitleSummarized = MainWindowText.ConversationCharCount(snapshot.ConversationHistory) >= TitleSummaryThreshold;
             context.CreatedUtc = snapshot.CreatedUtc == default ? DateTime.UtcNow : snapshot.CreatedUtc;
             _Tabs[snapshot.Id] = context;
 
@@ -2803,7 +2795,7 @@ namespace Mux.Desktop.Shell
                 await _CheckpointGate.WaitAsync().ConfigureAwait(true);
                 try
                 {
-                    await _Checkpoints.RecordAsync(CheckpointLabel(prompt), context.TurnCts!.Token);
+                    await _Checkpoints.RecordAsync(MainWindowText.CheckpointLabel(prompt), context.TurnCts!.Token);
                     UpdateUndoRedoButtons();
                 }
                 catch (Exception)
@@ -2994,11 +2986,6 @@ namespace Mux.Desktop.Shell
             return completion.Task;
         }
 
-        private static string CheckpointLabel(string prompt)
-        {
-            string label = PromptText.Preview(prompt, 60);
-            return label.Length == 0 ? "turn" : label;
-        }
 
         // Reflect a tab's busy state on its tab dot, and — when it is the active tab — on the shared send
         // button (Send ↔ red Stop). A background tab's turn updates only its dot, not the visible button.
@@ -3821,7 +3808,7 @@ namespace Mux.Desktop.Shell
             // Until the conversation is substantial, use a quick heuristic title (the first user message).
             if (!context.TitlePinned && !context.TitleSummarized)
             {
-                string firstUser = FirstUserMessage(conversation.History);
+                string firstUser = MainWindowText.FirstUserMessage(conversation.History);
                 if (!string.IsNullOrWhiteSpace(firstUser))
                 {
                     context.Title = SessionTitleHelper.Normalize(firstUser, SessionTitleHelper.DefaultTitle);
@@ -3867,7 +3854,7 @@ namespace Mux.Desktop.Shell
 
             // Once the conversation crosses the threshold, replace the heuristic title with an AI summary
             // of the whole conversation (once). This becomes the session name in the nav.
-            if (!context.TitlePinned && !context.TitleSummarized && ConversationCharCount(conversation.History) >= TitleSummaryThreshold)
+            if (!context.TitlePinned && !context.TitleSummarized && MainWindowText.ConversationCharCount(conversation.History) >= TitleSummaryThreshold)
             {
                 context.TitleSummarized = true;
                 _ = GenerateAndApplyTitleAsync(context, new List<ConversationMessage>(conversation.History));
@@ -3890,24 +3877,6 @@ namespace Mux.Desktop.Shell
             }
         }
 
-        private static int ConversationCharCount(IReadOnlyList<ConversationMessage>? history)
-        {
-            if (history == null)
-            {
-                return 0;
-            }
-
-            int total = 0;
-            foreach (ConversationMessage message in history)
-            {
-                if (!string.IsNullOrEmpty(message.Content))
-                {
-                    total += message.Content!.Length;
-                }
-            }
-
-            return total;
-        }
 
         private async Task GenerateAndApplyTitleAsync(TabContext context, List<ConversationMessage> history)
         {
@@ -3968,7 +3937,7 @@ namespace Mux.Desktop.Shell
                 if (argument.Length == 0) { await ShowThreadMetadataAsync(id); return; }
 
                 ThreadSummary? updated;
-                if (TryStripRemovePrefix(argument, out string toRemove))
+                if (MainWindowText.TryStripRemovePrefix(argument, out string toRemove))
                 {
                     updated = await _Threads.RemoveLabelAsync(id, toRemove, CancellationToken.None);
                 }
@@ -3977,7 +3946,7 @@ namespace Mux.Desktop.Shell
                     updated = await _Threads.AddLabelAsync(id, argument, CancellationToken.None);
                 }
 
-                AddNotice(updated == null ? L("main.metaNoThread") : L("thread.labels") + ": " + DescribeLabels(updated), isError: false);
+                AddNotice(updated == null ? L("main.metaNoThread") : L("thread.labels") + ": " + MainWindowText.DescribeLabels(updated), isError: false);
                 await LoadThreadsAsync();
                 NotifySessionsChanged(id);
             }
@@ -3998,7 +3967,7 @@ namespace Mux.Desktop.Shell
                 if (argument.Length == 0) { await ShowThreadMetadataAsync(id); return; }
 
                 ThreadSummary? updated;
-                if (TryStripRemovePrefix(argument, out string keyToRemove))
+                if (MainWindowText.TryStripRemovePrefix(argument, out string keyToRemove))
                 {
                     updated = await _Threads.RemoveTagAsync(id, keyToRemove, CancellationToken.None);
                 }
@@ -4009,7 +3978,7 @@ namespace Mux.Desktop.Shell
                     updated = await _Threads.SetTagAsync(id, argument.Substring(0, colon), argument.Substring(colon + 1), CancellationToken.None);
                 }
 
-                AddNotice(updated == null ? L("main.metaNoThread") : L("thread.tags") + ": " + DescribeTags(updated), isError: false);
+                AddNotice(updated == null ? L("main.metaNoThread") : L("thread.tags") + ": " + MainWindowText.DescribeTags(updated), isError: false);
                 await LoadThreadsAsync();
                 NotifySessionsChanged(id);
             }
@@ -4029,36 +3998,11 @@ namespace Mux.Desktop.Shell
             }
 
             if (summary == null) { AddNotice(L("main.metaNoThread"), isError: true); return; }
-            AddNotice(L("thread.labels") + ": " + DescribeLabels(summary) + "   " + L("thread.tags") + ": " + DescribeTags(summary), isError: false);
+            AddNotice(L("thread.labels") + ": " + MainWindowText.DescribeLabels(summary) + "   " + L("thread.tags") + ": " + MainWindowText.DescribeTags(summary), isError: false);
         }
 
-        private static bool TryStripRemovePrefix(string argument, out string remainder)
-        {
-            foreach (string prefix in new[] { "rm ", "remove ", "delete ", "-" })
-            {
-                if (argument.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    remainder = argument.Substring(prefix.Length).Trim();
-                    return true;
-                }
-            }
 
-            remainder = argument;
-            return false;
-        }
 
-        private static string DescribeLabels(ThreadSummary s)
-        {
-            return s.Labels.Count == 0 ? "(none)" : string.Join(", ", s.Labels);
-        }
-
-        private static string DescribeTags(ThreadSummary s)
-        {
-            if (s.Tags.Count == 0) return "(none)";
-            System.Collections.Generic.List<string> parts = new System.Collections.Generic.List<string>();
-            foreach (Mux.Core.Sessions.SessionTag tag in s.Tags) parts.Add(tag.Key + ": " + tag.Value);
-            return string.Join(", ", parts);
-        }
 
         // Edit a thread's labels: prompt for a comma-separated set and reconcile (remove dropped, add new)
         // through the shared thread service so normalization matches every surface.
@@ -4196,7 +4140,7 @@ namespace Mux.Desktop.Shell
             {
                 string exportsDir = Path.Combine(_ConfigDirectory, "exports");
                 Directory.CreateDirectory(exportsDir);
-                string path = Path.Combine(exportsDir, SafeFileName(title) + ".md");
+                string path = Path.Combine(exportsDir, MainWindowText.SafeFileName(title) + ".md");
                 await File.WriteAllTextAsync(path, content);
                 await new ConfirmDialog(L("main.exportedTitle"), L("main.savedTo") + path, L("main.ok"), destructive: false).ShowDialog<bool>(this);
             }
@@ -4482,7 +4426,7 @@ namespace Mux.Desktop.Shell
             foreach (AgentTask task in plan.Tasks)
             {
                 StackPanel row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-                row.Children.Add(new TextBlock { Text = TaskGlyph(task.Status), Foreground = TaskColor(task.Status), Width = 16, VerticalAlignment = VerticalAlignment.Top });
+                row.Children.Add(new TextBlock { Text = MainWindowText.TaskGlyph(task.Status), Foreground = TaskColor(task.Status), Width = 16, VerticalAlignment = VerticalAlignment.Top });
                 row.Children.Add(new TextBlock { Text = task.Title, Foreground = task.Status == AgentTaskStatusEnum.Completed ? _Theme.Muted : _Theme.Text, TextWrapping = TextWrapping.Wrap });
                 _TaskPlanBody.Children.Add(row);
             }
@@ -4490,22 +4434,6 @@ namespace Mux.Desktop.Shell
             ScrollTranscriptToEnd();
         }
 
-        private static string TaskGlyph(AgentTaskStatusEnum status)
-        {
-            switch (status)
-            {
-                case AgentTaskStatusEnum.Completed:
-                    return "✓";
-                case AgentTaskStatusEnum.InProgress:
-                    return "◐";
-                case AgentTaskStatusEnum.Failed:
-                    return "✗";
-                case AgentTaskStatusEnum.Skipped:
-                    return "–";
-                default:
-                    return "○";
-            }
-        }
 
         private IBrush TaskColor(AgentTaskStatusEnum status)
         {
@@ -4679,15 +4607,6 @@ namespace Mux.Desktop.Shell
             return title!;
         }
 
-        private static string FormatMs(long milliseconds)
-        {
-            if (milliseconds < 1000)
-            {
-                return milliseconds + " ms";
-            }
-
-            return (milliseconds / 1000.0).ToString("0.0") + " s";
-        }
 
         private string? SelectedEndpointName()
         {
@@ -4719,30 +4638,6 @@ namespace Mux.Desktop.Shell
             return completion.Task;
         }
 
-        private static string SafeFileName(string title)
-        {
-            char[] invalid = Path.GetInvalidFileNameChars();
-            string result = title;
-            foreach (char c in invalid)
-            {
-                result = result.Replace(c, '_');
-            }
 
-            result = result.Trim();
-            return result.Length == 0 ? "conversation" : result;
-        }
-
-        private static string FirstUserMessage(IReadOnlyList<ConversationMessage> history)
-        {
-            foreach (ConversationMessage message in history)
-            {
-                if (message.Role == RoleEnum.User && !string.IsNullOrWhiteSpace(message.Content))
-                {
-                    return message.Content!;
-                }
-            }
-
-            return string.Empty;
-        }
     }
 }

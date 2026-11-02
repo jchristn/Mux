@@ -18,6 +18,9 @@ All notable changes to mux are documented here.
   `deepseek-v4.1-flash`.
 - A reusable local Ollama API simulation for testing the proposed upstream
   `ollama launch mux` integration.
+- `CONTRIBUTING.md`, `SECURITY.md`, a pull request template, and GitHub issue forms
+  (bug report and feature request), with blank issues routed to Discussions and security
+  reports routed to private advisories.
 
 ### Changed
 
@@ -26,6 +29,20 @@ All notable changes to mux are documented here.
 
 - Updated NuGet dependencies, including TUIKit 1.11.2, PolyPrompt 3.5.0, Voltaic 2.4.0,
   Watson 7.3.2, Avalonia 12.1.4, Radiant 0.1.3, and Touchstone 0.2.1.
+
+- Removed the blanket warning suppression from `src/Directory.Build.props`; the full
+  solution builds with zero warnings with CS1591, CS0618, CS1998, and all nullable
+  (CS86xx) warnings enabled. XML documentation and obsolete-usage issues are fixed at
+  the call site going forward (see `CONTRIBUTING.md`).
+- Decomposed oversized UI files: the dashboard's 2,448-line embedded markup moved to
+  `Mux.Server/DashboardTemplate.cs` (render logic stays in `DashboardPage`);
+  stateless TUI helpers moved from `MuxTuiApp` to `Mux.Cli/App/TuiPresentation.cs` and
+  nested `EndpointMenuAction`/`McpMenuAction` enums to their own files; static window
+  text helpers moved from `MainWindow` to `Mux.Desktop/Shell/MainWindowText.cs`.
+- Aligned shipped versions at 1.5.0 across the CLI/packages, Python SDK, TypeScript SDK,
+  and VS Code extension (including both lockfiles), the README version badge and release
+  download example, and the `Mux.Server` package README example. Added CI and NuGet
+  badges to `README.md`.
 
 ## 1.5.0
 
