@@ -1,6 +1,7 @@
 namespace Mux.Cli.App
 {
     using System.Collections.Generic;
+    using Mux.Core.Telemetry;
 
     /// <summary>
     /// A plain, pre-computed snapshot of usage telemetry for one time range, rendered by
@@ -10,6 +11,9 @@ namespace Mux.Cli.App
     /// </summary>
     public sealed class UsageChartData
     {
+        /// <summary>Per-model metrics aligned with BucketLabels; empty buckets contain zero metrics.</summary>
+        public Dictionary<string, List<UsageMetrics>> ModelBuckets { get; } = new Dictionary<string, List<UsageMetrics>>(System.StringComparer.Ordinal);
+
         /// <summary>KPI summary line shown in the header (tokens/cost/calls for the selected range).</summary>
         public List<string> HeaderLines { get; } = new List<string>();
 

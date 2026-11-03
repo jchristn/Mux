@@ -31,6 +31,71 @@ namespace Test.Shared.Suites
                 "Usage charts modal: paging, ranges, and axes",
                 new List<TestCaseDescriptor>
                 {
+                    new TestCaseDescriptor(SuiteId, "ModelStacksAndGroupedLatencies", "Mixed-model buckets stack totals, group latency averages, and keep model colors across pages", (CancellationToken ct) =>
+                    {
+                        UsageChartData data = new UsageChartData();
+                        data.BucketLabels.Add("12:00");
+                        data.TokensPerBucket.Add(1000);
+                        data.CostPerBucket.Add(1);
+                        data.TtftMsPerBucket.Add(250);
+                        data.ModelBuckets["alpha"] = new List<UsageMetrics> { new UsageMetrics { TotalTokens = 300, CostUsd = .3, AvgTtftMs = 100 } };
+                        data.ModelBuckets["beta"] = new List<UsageMetrics> { new UsageMetrics { TotalTokens = 700, CostUsd = .7, AvgTtftMs = 400 } };
+                        UsageChartsModal modal = new UsageChartsModal("Usage", r => data, UsageRange.Day);
+                        string tokens = Render(modal, 80, 30);
+                        MuxAssert.Contains("1k", tokens, "stack uses total scale");
+                        MuxAssert.Contains("Stacked by model", tokens, "stack explained");
+                        MuxAssert.Contains("alpha", tokens, "first legend label");
+                        MuxAssert.Contains("beta", tokens, "second legend label");
+                        var buffer = new CellBuffer(80, 30);
+                        modal.Render(new BufferSurface(buffer));
+                        HashSet<Color> colors = new HashSet<Color>();
+                        for (int y = 5; y < 20; y++)
+                            for (int x = 13; x < 76; x++)
+                            {
+                                var cell = buffer.Get(x, y);
+                                if (cell.Grapheme == "█") colors.Add(cell.Style.Foreground);
+                            }
+                        MuxAssert.AreEqual(2, colors.Count, "two model colors in the actual bar");
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Right));
+                        var costBuffer = new CellBuffer(80, 30);
+                        modal.Render(new BufferSurface(costBuffer));
+                        for (int y = 5; y < 20; y++)
+                            for (int x = 13; x < 76; x++)
+                            {
+                                var cell = costBuffer.Get(x, y);
+                                if (cell.Grapheme == "█") MuxAssert.IsTrue(colors.Contains(cell.Style.Foreground), "model colors stable across metrics");
+                            }
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Right));
+                        string latency = Render(modal, 80, 30);
+                        MuxAssert.Contains("Per-model averages", latency, "averages grouped");
+                        MuxAssert.Contains("400", latency, "axis uses largest model average");
+                        MuxAssert.DoesNotContain("500", latency, "averages never summed");
+                        return Task.CompletedTask;
+                    }),
+                    new TestCaseDescriptor(SuiteId, "ModelBarsPageWithoutMergingBuckets", "Narrow model charts page through buckets without merging or dropping their data", (CancellationToken ct) =>
+                    {
+                        UsageChartData data = new UsageChartData();
+                        data.ModelBuckets["alpha"] = new List<UsageMetrics>();
+                        data.ModelBuckets["beta"] = new List<UsageMetrics>();
+                        for (int i = 0; i < 60; i++)
+                        {
+                            data.BucketLabels.Add("t" + i);
+                            data.TokensPerBucket.Add(30);
+                            data.ModelBuckets["alpha"].Add(new UsageMetrics { TotalTokens = 10 });
+                            data.ModelBuckets["beta"].Add(new UsageMetrics { TotalTokens = 20 });
+                        }
+                        UsageChartsModal modal = new UsageChartsModal("Usage", r => data, UsageRange.Hour);
+                        string first = Render(modal, 60, 24);
+                        MuxAssert.Contains("PgUp/PgDn", first, "paging advertised");
+                        modal.HandleKey(KeyEvent.Special(KeyCode.PageDown));
+                        string next = Render(modal, 60, 24);
+                        MuxAssert.IsTrue(first != next, "next buckets visible");
+                        modal.HandleKey(KeyEvent.Special(KeyCode.PageUp));
+                        MuxAssert.AreEqual(first, Render(modal, 60, 24), "page back is stable");
+                        for (int width = 1; width < 40; width++)
+                            for (int height = 1; height < 15; height++) Render(modal, width, height);
+                        return Task.CompletedTask;
+                    }),
                     new TestCaseDescriptor(SuiteId, "FirstPageTokensWithAxes", "The first page shows tokens over time with X/Y axis labels", (CancellationToken ct) =>
                     {
                         UsageChartsModal modal = new UsageChartsModal("Usage", r => SampleData(), UsageRange.Day);
@@ -90,22 +155,69 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor(SuiteId, "FullscreenHeatmapUsesAvailableWidth", "Usage covers the screen and heatmap cells reach both sides of the chart", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "HeatmapSquaresGrowWithTerminal", "Heatmap squares scale with terminal space and retain every time bucket", (CancellationToken ct) =>
                     {
-                        foreach (int width in new[] { 40, 120, 200 })
+                        foreach (UsageRange range in new[] { UsageRange.Hour, UsageRange.Day, UsageRange.Week, UsageRange.Month })
                         {
-                            UsageChartData data = new UsageChartData();
-                            for (int i = 0; i < 96; i++) data.TokensPerBucket.Add(100);
-                            UsageChartsModal modal = new UsageChartsModal("Usage", r => data, UsageRange.Day);
-                            modal.HandleKey(KeyEvent.Special(KeyCode.Left));
-                            CellBuffer buffer = new CellBuffer(width, 40);
-                            new BufferSurface(buffer).Fill(new Rect(0, 0, width, 40), Cell.Glyph("!", CellStyle.Default, 1));
-                            modal.Render(new BufferSurface(buffer));
-                            MuxAssert.IsTrue(buffer.Get(0, 0).Grapheme != "!", "top left covered");
-                            MuxAssert.IsTrue(buffer.Get(width - 1, 39).Grapheme != "!", "bottom right covered");
-                            Color peak = Color.FromRgb(57, 211, 83);
-                            MuxAssert.AreEqual(peak, buffer.Get(15, 6).Style.Background, "first heatmap column");
-                            MuxAssert.AreEqual(peak, buffer.Get(width - 5, 6).Style.Background, "last heatmap column reaches screen edge");
+                            int previousHeight = 0;
+                            foreach (var size in new[] { (Width: 80, Height: 30), (Width: 160, Height: 50), (Width: 240, Height: 80) })
+                            {
+                                UsageWindow window = UsageWindow.ComputeHeatmap(range, 1791870000000L);
+                                UsageChartData data = new UsageChartData();
+                                for (int i = 0; i < window.BucketCount; i++)
+                                {
+                                    data.HeatmapTokensPerBucket.Add(100);
+                                    data.HeatmapBucketStartsUnixMs.Add(window.FromUnixMs + i * window.BucketMs);
+                                }
+                                UsageChartsModal modal = new UsageChartsModal("Usage", _ => data, range);
+                                modal.HandleKey(KeyEvent.Special(KeyCode.Left));
+                                CellBuffer buffer = new CellBuffer(size.Width, size.Height);
+                                modal.Render(new BufferSurface(buffer));
+                                Color peak = Color.FromRgb(57, 211, 83);
+                                int cellWidth = 0, cellHeight = 0;
+                                while (buffer.Get(15 + cellWidth, 7).Style.Background == peak) cellWidth++;
+                                while (buffer.Get(15, 7 + cellHeight).Style.Background == peak) cellHeight++;
+                                MuxAssert.AreEqual(cellHeight * 2, cellWidth, "terminal aspect ratio makes cells square");
+                                MuxAssert.IsTrue(cellHeight > previousHeight, "larger terminal grows cells for " + range);
+                                previousHeight = cellHeight;
+                                int spots = 0;
+                                // Count top-left corners, excluding the legend at the bottom.
+                                for (int y = 7; y < size.Height - 6; y++)
+                                    for (int x = 15; x < size.Width - 3; x++)
+                                        if (buffer.Get(x, y).Style.Background == peak
+                                            && buffer.Get(x - 1, y).Style.Background != peak
+                                            && buffer.Get(x, y - 1).Style.Background != peak) spots++;
+                                MuxAssert.AreEqual(window.BucketCount, spots, "every bucket is drawn once");
+                            }
+                        }
+                        return Task.CompletedTask;
+                    }),
+                    new TestCaseDescriptor(SuiteId, "AllChartsHaveUnitsAndLegends", "Every chart exposes its axes, units, and a model or token-color legend", (CancellationToken ct) =>
+                    {
+                        UsageChartsModal modal = new UsageChartsModal("Usage", _ => SampleData(), UsageRange.Day);
+                        for (int page = 0; page < 7; page++)
+                        {
+                            string text = Render(modal, 160, 50);
+                            if (page < 5)
+                            {
+                                MuxAssert.Contains("Time (local)", text, "time axis on page " + page);
+                                MuxAssert.Contains("Legend: color = model", text, "model legend on page " + page);
+                                MuxAssert.Contains(page == 0 ? "Tokens ↑" : page == 1 ? "Cost (USD)" : "Mean latency (ms / s)", text, "metric unit");
+                            }
+                            else if (page == 5)
+                            {
+                                MuxAssert.Contains("Model ↓", text, "ranking category axis");
+                                MuxAssert.Contains("Cost (USD)", text, "ranking value unit");
+                                MuxAssert.Contains("Legend: color = model", text, "ranking legend");
+                            }
+                            else
+                            {
+                                MuxAssert.Contains("Row start (local)", text, "heatmap time zone");
+                                MuxAssert.Contains("column offset", text, "heatmap columns");
+                                MuxAssert.Contains("Tokens: 0", text, "heatmap color legend");
+                                MuxAssert.Contains("9k (peak)", text, "legend upper bound");
+                            }
+                            modal.HandleKey(KeyEvent.Special(KeyCode.Right));
                         }
                         return Task.CompletedTask;
                     }),
@@ -133,16 +245,16 @@ namespace Test.Shared.Suites
                             MuxAssert.Contains("Row start", rendered, "Y axis label");
                             if (i == 1)
                             {
-                                foreach (string anchor in new[] { ":00", ":15", ":30", ":45" })
-                                    MuxAssert.Contains(anchor, rendered, "quarter-hour column anchor");
+                                MuxAssert.Contains("15 min/spot", rendered, "quarter-hour buckets preserved after reflow");
+                                MuxAssert.Contains("column offset", rendered, "columns label offsets from each row");
                             }
                         }
-                        string firstPage = Render(modal, 120, 20);
+                        string firstPage = Render(modal, 40, 20);
                         modal.HandleKey(KeyEvent.Special(KeyCode.PageDown));
-                        string secondPage = Render(modal, 120, 20);
+                        string secondPage = Render(modal, 40, 20);
                         MuxAssert.IsTrue(firstPage != secondPage, "month rows scroll on short screens");
                         modal.HandleKey(KeyEvent.Special(KeyCode.PageUp));
-                        MuxAssert.AreEqual(firstPage, Render(modal, 120, 20), "PageUp returns to first rows");
+                        MuxAssert.AreEqual(firstPage, Render(modal, 40, 20), "PageUp returns to first rows");
                         return Task.CompletedTask;
                     }),
 
@@ -161,7 +273,9 @@ namespace Test.Shared.Suites
                         UsageChartsModal modal = new UsageChartsModal("Usage", r => data, UsageRange.Day);
                         modal.HandleKey(KeyEvent.Special(KeyCode.Left));
                         string rendered = Render(modal, 120, 40);
-                        foreach (string anchor in new[] { ":00", ":15", ":30", ":45" }) MuxAssert.Contains(anchor, rendered, "anchored column " + anchor);
+                        string rowStart = DateTimeOffset.FromUnixTimeMilliseconds(aligned.FromUnixMs).ToLocalTime().ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+                        MuxAssert.Contains(rowStart, rendered, "first row uses the aligned timestamp");
+                        MuxAssert.Contains("15 min/spot", rendered, "quarter-hour bucket duration");
                         MuxAssert.Contains("peak 100", rendered, "aligned values used without relabeling rolling values");
                         MuxAssert.IsTrue(!rendered.Contains(":06"), "off-boundary rolling timestamps do not label heatmap");
                         return Task.CompletedTask;

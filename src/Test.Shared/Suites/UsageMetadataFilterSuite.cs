@@ -37,6 +37,11 @@ namespace Test.Shared.Suites
                         UsageFilter wip = new UsageFilter { Labels = new List<string> { "wip" } };
                         UsageSummary wipSummary = await query.GetSummaryAsync(wip, ct).ConfigureAwait(false);
                         MuxAssert.AreEqual(4L, wipSummary.Metrics.Calls, "only s-wip (2) + s-both (2) events");
+                        var models = await query.GetModelTimeseriesAsync(wip, 60000, ct);
+                        long modelCalls = 0;
+                        foreach (var series in models.Values)
+                            foreach (var bucket in series) modelCalls += bucket.Metrics.Calls;
+                        MuxAssert.AreEqual(4L, modelCalls, "model bars honor label scope");
                     }),
 
                     Case("TagFilterScopesSummary", "Filtering usage by tag counts only that tag's sessions", async (UsageQueryService query, CancellationToken ct) =>

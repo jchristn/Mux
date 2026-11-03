@@ -3,11 +3,11 @@ namespace Mux.Cli.App
     using System;
     using System.Collections.Generic;
     using System.Globalization;
+    using System.Linq;
     using Mux.Core.Telemetry;
     using TUIKit;
     using TUIKit.Input;
     using TUIKit.Modals;
-    using TUIKit.Widgets;
 
     /// <summary>
     /// A large, paged usage-analytics view. Each metric is its own page — tokens, cost, time-to-first-token,
@@ -20,6 +20,19 @@ namespace Mux.Cli.App
     public sealed class UsageChartsModal : Modal
     {
         #region Private-Members
+
+        private static readonly Color[] _ModelPalette =
+        {
+            Color.FromRgb(110, 168, 230), Color.FromRgb(91, 192, 174),
+            Color.FromRgb(224, 179, 102), Color.FromRgb(177, 151, 218),
+            Color.FromRgb(223, 142, 153), Color.FromRgb(137, 190, 214),
+            Color.FromRgb(180, 196, 128), Color.FromRgb(205, 165, 128)
+        };
+        private readonly Dictionary<string, Color> _ModelColors = new(StringComparer.Ordinal);
+        private int _BarBucketOffset;
+        private int _VisibleBuckets = 1;
+        private int _LegendOffset;
+        private int _LegendVisibleRows = 1;
 
         private const int PadX = 2;
         private const int PadY = 1;
@@ -46,6 +59,7 @@ namespace Mux.Cli.App
         private int _Page;
         private int _HeatmapRowOffset;
         private int _HeatmapVisibleRows = 1;
+        private int _HeatmapRows = 1;
         private UsageChartData _Data = new UsageChartData();
         private string _Error = string.Empty;
 
@@ -83,19 +97,32 @@ namespace Mux.Cli.App
 
             if (key.Code == KeyCode.Right || key.Code == KeyCode.Tab)
             {
+                _BarBucketOffset = 0;
                 _Page = (_Page + 1) % _PageTitles.Length;
                 return true;
             }
 
             if (key.Code == KeyCode.Left)
             {
+                _BarBucketOffset = 0;
                 _Page = (_Page + _PageTitles.Length - 1) % _PageTitles.Length;
+                return true;
+            }
+
+            if (_Page < 5 && (key.Code == KeyCode.PageDown || key.Code == KeyCode.PageUp))
+            {
+                _BarBucketOffset = Math.Clamp(_BarBucketOffset + (key.Code == KeyCode.PageDown ? _VisibleBuckets : -_VisibleBuckets), 0, Math.Max(0, _Data.BucketLabels.Count - _VisibleBuckets));
+                return true;
+            }
+            if (_Page < 5 && (key.Code == KeyCode.Down || key.Code == KeyCode.Up))
+            {
+                _LegendOffset = Math.Clamp(_LegendOffset + (key.Code == KeyCode.Down ? 1 : -1), 0, Math.Max(0, _Data.ModelBuckets.Count - _LegendVisibleRows));
                 return true;
             }
 
             if (_Page == 6 && (key.Code == KeyCode.PageDown || key.Code == KeyCode.PageUp))
             {
-                HeatmapShape(out int rows, out _, out _);
+                int rows = _HeatmapRows;
                 int step = key.Code == KeyCode.PageDown ? _HeatmapVisibleRows : -_HeatmapVisibleRows;
                 _HeatmapRowOffset = Math.Clamp(_HeatmapRowOffset + step, 0, Math.Max(0, rows - _HeatmapVisibleRows));
                 return true;
@@ -105,6 +132,8 @@ namespace Mux.Cli.App
             {
                 _Range = _Ranges[key.Rune - '1'];
                 _HeatmapRowOffset = 0;
+                _BarBucketOffset = 0;
+                _LegendOffset = 0;
                 Load();
                 return true;
             }
@@ -164,6 +193,7 @@ namespace Mux.Cli.App
             try
             {
                 _Data = _Provider(_Range) ?? new UsageChartData();
+                foreach (string model in _Data.ModelBuckets.Keys.Concat(_Data.ModelLabels).Distinct().OrderBy(k => k, StringComparer.Ordinal)) ModelColor(model);
                 _Error = string.Empty;
             }
             catch (Exception ex)
@@ -178,19 +208,19 @@ namespace Mux.Cli.App
             switch (_Page)
             {
                 case 0:
-                    RenderBars(surface, x, y, w, h, _Data.TokensPerBucket, v => FmtTokens(v), Color.FromPalette(6), muted);
+                    RenderBars(surface, x, y, w, h, _Data.TokensPerBucket, v => FmtTokens(v), muted);
                     break;
                 case 1:
-                    RenderBars(surface, x, y, w, h, _Data.CostPerBucket, v => FmtUsd(v), Color.FromPalette(2), muted);
+                    RenderBars(surface, x, y, w, h, _Data.CostPerBucket, v => FmtUsd(v), muted);
                     break;
                 case 2:
-                    RenderBars(surface, x, y, w, h, _Data.TtftMsPerBucket, v => FmtMs(v), Color.FromPalette(4), muted);
+                    RenderBars(surface, x, y, w, h, _Data.TtftMsPerBucket, v => FmtMs(v), muted);
                     break;
                 case 3:
-                    RenderBars(surface, x, y, w, h, _Data.TotalMsPerBucket, v => FmtMs(v), Color.FromPalette(5), muted);
+                    RenderBars(surface, x, y, w, h, _Data.TotalMsPerBucket, v => FmtMs(v), muted);
                     break;
                 case 4:
-                    RenderBars(surface, x, y, w, h, _Data.StreamMsPerBucket, v => FmtMs(v), Color.FromPalette(3), muted);
+                    RenderBars(surface, x, y, w, h, _Data.StreamMsPerBucket, v => FmtMs(v), muted);
                     break;
                 case 6:
                     RenderHeatmap(surface, x, y, w, h, muted);
@@ -216,145 +246,242 @@ namespace Mux.Cli.App
         {
             List<double> values = _Data.HeatmapTokensPerBucket.Count > 0 ? _Data.HeatmapTokensPerBucket : _Data.TokensPerBucket;
             List<long> timestamps = _Data.HeatmapBucketStartsUnixMs.Count > 0 ? _Data.HeatmapBucketStartsUnixMs : _Data.BucketStartsUnixMs;
-            if (values.Count == 0 || h < 5 || w < 18)
+            if (values.Count == 0 || h < 8 || w < 18)
             { surface.DrawText(x, y, Trim("No data in this range.", w), muted); return; }
-            HeatmapShape(out int rows, out int columns, out int minutes);
+            HeatmapShape(out int originalRows, out int originalColumns, out int minutes);
+            int count = originalRows * originalColumns;
             const int axisWidth = 12;
-            int plotX = x + axisWidth, plotWidth = w - axisWidth;
-            int plotHeight = h - 4;
-            _HeatmapVisibleRows = Math.Min(rows, plotHeight);
+            int plotX = x + axisWidth, plotWidth = w - axisWidth, plotHeight = h - 6;
+            HeatmapLayout(count, plotWidth, plotHeight, out int rows, out int columns, out int cellHeight);
+            int cellWidth = 2 * cellHeight; // Terminal characters are roughly twice as tall as they are wide.
+            int pitchX = cellWidth + 1, pitchY = cellHeight + 1;
+            _HeatmapRows = rows;
+            _HeatmapVisibleRows = Math.Min(rows, Math.Max(1, (plotHeight + 1) / pitchY));
             _HeatmapRowOffset = Math.Clamp(_HeatmapRowOffset, 0, rows - _HeatmapVisibleRows);
-            double max = 0;
-            foreach (double value in values) max = Math.Max(max, value);
+            double max = values.Count > 0 ? values.Max() : 0;
             Color[] colors = { Color.FromRgb(45, 48, 52), Color.FromRgb(14, 68, 41), Color.FromRgb(0, 109, 50), Color.FromRgb(38, 166, 65), Color.FromRgb(57, 211, 83) };
-            surface.DrawText(x, y, "Row start", muted);
-            for (int c = 0; c < columns; c++)
+            surface.DrawText(x, y, Trim("Row start (local) · column offset → · tokens per spot", w), muted);
+            int tickStride = Math.Max(1, (6 + pitchX - 1) / pitchX);
+            for (int c = 0; c < columns; c += tickStride)
             {
                 int offset = c * minutes;
-                string label;
-                if (_Range == UsageRange.Day) label = ":" + offset.ToString("00", CultureInfo.InvariantCulture);
-                else if ((_Range == UsageRange.Week || _Range == UsageRange.Month) && timestamps.Count > 0)
-                    label = DateTimeOffset.FromUnixTimeMilliseconds(timestamps[0]).AddMinutes(offset).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
-                else label = offset < 60 ? "+" + offset + "m" : "+" + offset / 60 + "h";
-                int left = c * plotWidth / columns, right = (c + 1) * plotWidth / columns;
-                surface.DrawText(plotX + left, y, Trim(label, right - left), muted);
+                string label = offset < 60 ? "+" + offset + "m" : "+" + offset / 60 + "h" + (offset % 60 == 0 ? "" : (offset % 60).ToString("00", CultureInfo.InvariantCulture));
+                surface.DrawText(plotX + c * pitchX, y + 1, Trim(label, Math.Min(tickStride * pitchX - 1, plotWidth - c * pitchX)), muted);
             }
             for (int visibleRow = 0; visibleRow < _HeatmapVisibleRows; visibleRow++)
             {
-                int row = visibleRow + _HeatmapRowOffset;
-                int top = visibleRow * plotHeight / _HeatmapVisibleRows;
-                int bottom = (visibleRow + 1) * plotHeight / _HeatmapVisibleRows;
-                int index = row * columns;
+                int row = visibleRow + _HeatmapRowOffset, index = row * columns;
+                int top = y + 2 + visibleRow * pitchY;
                 string rowLabel = "Row " + (row + 1);
                 if (index < timestamps.Count)
                 {
                     DateTimeOffset time = DateTimeOffset.FromUnixTimeMilliseconds(timestamps[index]).ToLocalTime();
-                    rowLabel = time.ToString(_Range == UsageRange.Hour || _Range == UsageRange.Day ? "HH:mm" : "ddd MM/dd", CultureInfo.InvariantCulture);
+                    rowLabel = time.ToString(_Range == UsageRange.Hour || _Range == UsageRange.Day ? "HH:mm" : "MM/dd HH:mm", CultureInfo.InvariantCulture);
                 }
                 else if (index < _Data.BucketLabels.Count) rowLabel = _Data.BucketLabels[index];
-                surface.DrawText(x, y + 1 + top, Trim(rowLabel, axisWidth - 2), muted);
+                surface.DrawText(x, top, Trim(rowLabel, axisWidth - 1), muted);
                 for (int c = 0; c < columns; c++)
                 {
                     int i = index + c;
                     double value = i < values.Count ? values[i] : 0;
                     int level = value <= 0 ? 0 : Math.Min(4, 1 + (int)(value / Math.Max(1, max) * 3));
-                    int left = c * plotWidth / columns, right = (c + 1) * plotWidth / columns;
-                    int gapX = right - left > 2 ? 1 : 0, gapY = bottom - top > 1 ? 1 : 0;
-                    surface.Fill(new Rect(plotX + left, y + 1 + top, right - left - gapX, bottom - top - gapY),
-                        Cell.Blank(CellStyle.Default.WithBackground(colors[level])));
+                    CellStyle style = CellStyle.Default.WithBackground(colors[level]);
+                    int left = plotX + c * pitchX;
+                    surface.Fill(new Rect(left, top, cellWidth, cellHeight), Cell.Blank(style));
+                    if (cellHeight >= 3)
+                    {
+                        string label = Trim(FmtTokens(value), cellWidth);
+                        Color foreground = level >= 3 ? Color.FromRgb(12, 35, 21) : Color.FromRgb(225, 238, 228);
+                        surface.DrawText(left + Math.Max(0, (cellWidth - label.Length) / 2), top + cellHeight / 2, label, style.WithForeground(foreground));
+                    }
                 }
             }
             string interval = minutes < 60 ? minutes + " min" : minutes / 60 + " hour";
-            surface.DrawText(x, y + h - 3, Trim(rows * columns + " spots · " + interval + "/spot · rows " + (_HeatmapRowOffset + 1) + "–" + (_HeatmapRowOffset + _HeatmapVisibleRows) + "/" + rows + " · PgUp/PgDn scroll", w), muted);
-            surface.DrawText(x, y + h - 2, Trim("Oldest → newest across rows · Less ░▒▓█ More · peak " + FmtTokens(max), w), muted);
+            string navigation = _HeatmapVisibleRows < rows ? " · PgUp/PgDn scroll" : "";
+            surface.DrawText(x, y + h - 4, Trim(count + " spots · " + interval + "/spot · rows " + (_HeatmapRowOffset + 1) + "–" + (_HeatmapRowOffset + _HeatmapVisibleRows) + "/" + rows + navigation, w), muted);
+            surface.DrawText(x, y + h - 3, Trim("Oldest → newest across rows · peak " + FmtTokens(max) + " tokens", w), muted);
+            surface.DrawText(x, y + h - 2, Trim("Tokens: 0", w), muted);
+            for (int i = 0; i < colors.Length; i++)
+            {
+                int left = x + 10 + i * 3;
+                if (left + 2 > x + w) break;
+                surface.Fill(new Rect(left, y + h - 2, 2, 1), Cell.Blank(CellStyle.Default.WithBackground(colors[i])));
+            }
+            if (w > 26) surface.DrawText(x + 26, y + h - 2, Trim(FmtTokens(max) + " (peak)", w - 26), muted);
         }
 
-        // A vertical bar chart over time with a labeled Y axis (left gutter) and several X-axis time ticks.
-        private void RenderBars(ISurface surface, int x, int y, int w, int h, List<double> values, Func<double, string> fmt, Color color, CellStyle muted)
+        private static void HeatmapLayout(int count, int width, int height, out int rows, out int columns, out int cellHeight)
         {
-            if (values.Count == 0 || w <= YAxisWidth + 2 || h < 3)
+            columns = 1;
+            for (int c = 1; c <= count && c * 3 - 1 <= width; c++)
+                if (count % c == 0) columns = c;
+            rows = count / columns;
+            cellHeight = 1;
+            double bestFill = -1;
+            for (int c = 1; c <= count; c++)
+            {
+                if (count % c != 0) continue;
+                int r = count / c;
+                int size = Math.Min((width - c + 1) / (2 * c), (height - r + 1) / r);
+                if (size < 1) continue;
+                double fill = Math.Min((c * (2 * size + 1) - 1) / (double)width, (r * (size + 1) - 1) / (double)height);
+                if (size > cellHeight || (size == cellHeight && fill > bestFill))
+                {
+                    columns = c; rows = r; cellHeight = size; bestFill = fill;
+                }
+            }
+        }
+
+        // Totals stack; per-model latency averages are grouped, never summed.
+        private void RenderBars(ISurface surface, int x, int y, int w, int h, List<double> values, Func<double, string> fmt, CellStyle muted)
+        {
+            if (values.Count == 0 || w <= YAxisWidth + 2 || h < 7)
             {
                 surface.DrawText(x, y, Trim("No data in this range.", w), muted);
                 return;
             }
-
-            double max = 0.0;
-            foreach (double v in values)
+            string unit = _Page == 0 ? "Tokens" : _Page == 1 ? "Cost (USD)" : "Mean latency (ms / s)";
+            surface.DrawText(x, y, Trim(unit + " ↑ · Time (local) → · Legend: color = model", w), muted);
+            y++; h--;
+            List<string> models = _Data.ModelBuckets.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
+            if (models.Count == 0) models.Add("All models");
+            bool stacked = _Page < 2;
+            int plotX = x + YAxisWidth, plotW = w - YAxisWidth;
+            int slot = stacked ? 1 : models.Count + 1;
+            if (plotW < slot)
             {
-                if (v > max) max = v;
-            }
-
-            if (max <= 0.0)
-            {
-                surface.DrawText(x, y, Trim("No activity in this range.", w), muted);
+                surface.DrawText(x, y, Trim("Widen terminal to compare " + models.Count + " models.", w), muted);
                 return;
             }
-
-            int plotX = x + YAxisWidth;
-            int plotW = w - YAxisWidth;
-            int plotH = h - 1; // reserve the bottom row for X labels
-            CellStyle barStyle = CellStyle.Default.WithForeground(color);
-
-            // Y axis: labels at top (max), middle, and bottom (0), with a divider column.
+            _LegendVisibleRows = Math.Min(models.Count, Math.Max(1, h / 4));
+            int plotH = h - _LegendVisibleRows - 3;
+            _VisibleBuckets = Math.Min(values.Count, Math.Max(1, plotW / slot));
+            _BarBucketOffset = Math.Clamp(_BarBucketOffset, 0, Math.Max(0, values.Count - _VisibleBuckets));
+            _LegendOffset = Math.Clamp(_LegendOffset, 0, Math.Max(0, models.Count - _LegendVisibleRows));
+            double Value(int model, int bucket)
+            {
+                if (_Data.ModelBuckets.Count == 0) return values[bucket];
+                List<UsageMetrics> metrics = _Data.ModelBuckets[models[model]];
+                return bucket < metrics.Count ? MetricValue(metrics[bucket]) : 0;
+            }
+            // Keep the scale stable while paging buckets.
+            double max = 0;
+            for (int bucket = 0; bucket < values.Count; bucket++)
+            {
+                double total = 0;
+                for (int m = 0; m < models.Count; m++)
+                {
+                    double value = Value(m, bucket);
+                    total += value;
+                    if (!stacked) max = Math.Max(max, value);
+                }
+                if (stacked) max = Math.Max(max, total);
+            }
             DrawRightAligned(surface, x, y, YAxisWidth - 1, fmt(max), muted);
-            DrawRightAligned(surface, x, y + (plotH / 2), YAxisWidth - 1, fmt(max / 2.0), muted);
+            DrawRightAligned(surface, x, y + plotH / 2, YAxisWidth - 1, fmt(max / 2), muted);
             DrawRightAligned(surface, x, y + plotH - 1, YAxisWidth - 1, fmt(0), muted);
             for (int row = 0; row < plotH; row++)
+                surface.Set(plotX - 1, y + row, Cell.Glyph("│", muted, 1));
+
+            for (int c = 0; c < _VisibleBuckets && max > 0; c++)
             {
-                surface.Set(x + YAxisWidth - 1, y + row, Cell.Glyph("│", muted, 1));
+                int bucket = _BarBucketOffset + c;
+                int left = plotX + c * plotW / _VisibleBuckets;
+                int right = plotX + (c + 1) * plotW / _VisibleBuckets;
+                if (stacked)
+                {
+                    // Quantize cumulative boundaries, so rounding cannot increase the stack total.
+                    int lower = 0;
+                    double cumulative = 0;
+                    Color previousColor = ModelColor(models[0]);
+                    for (int m = 0; m < models.Count; m++)
+                    {
+                        cumulative += Value(m, bucket);
+                        int upper = Math.Clamp((int)Math.Round(cumulative / max * plotH * 8), 0, plotH * 8);
+                        DrawSegment(surface, left, y + plotH - 1, Math.Max(1, right - left - 1), lower, upper, ModelColor(models[m]), previousColor);
+                        if (upper > lower) previousColor = ModelColor(models[m]);
+                        lower = upper;
+                    }
+                }
+                else
+                {
+                    for (int m = 0; m < models.Count; m++)
+                    {
+                        int upper = Math.Clamp((int)Math.Round(Value(m, bucket) / max * plotH * 8), 0, plotH * 8);
+                        DrawSegment(surface, left + m, y + plotH - 1, 1, 0, upper, ModelColor(models[m]));
+                    }
+                }
             }
-
-            // One column per bucket, spread across the plot width; when there are more buckets than columns,
-            // adjacent buckets are averaged into each column.
-            int cols = Math.Min(values.Count, plotW);
-            for (int c = 0; c < cols; c++)
+            if (max <= 0) surface.DrawText(plotX, y + plotH / 2, Trim("No activity in this range.", plotW), muted);
+            int ticks = Math.Min(_VisibleBuckets, Math.Max(1, plotW / 12));
+            for (int t = 0; t < ticks; t++)
             {
-                double v = AggregateColumn(values, c, cols);
-                double cells = (v / max) * plotH;
-                int full = (int)cells;
-                int rem = (int)Math.Round((cells - full) * 8.0);
-                if (rem >= 8) { full++; rem = 0; }
-                if (full > plotH) { full = plotH; rem = 0; }
-
-                int barX = plotX + (cols <= 1 ? 0 : (int)Math.Round(c * (double)(plotW - 1) / (cols - 1)));
-                for (int r = 0; r < full; r++)
-                {
-                    surface.Set(barX, y + plotH - 1 - r, Cell.Glyph("█", barStyle, 1));
-                }
-
-                if (rem > 0 && full < plotH)
-                {
-                    surface.Set(barX, y + plotH - 1 - full, Cell.Glyph(_Eighths[rem - 1], barStyle, 1));
-                }
+                int c = ticks == 1 ? 0 : t * (_VisibleBuckets - 1) / (ticks - 1);
+                int bucket = _BarBucketOffset + c;
+                if (bucket >= _Data.BucketLabels.Count) continue;
+                string label = Trim(_Data.BucketLabels[bucket], Math.Min(12, plotW));
+                int labelX = Math.Min(plotX + c * plotW / _VisibleBuckets, plotX + plotW - label.Length);
+                surface.DrawText(labelX, y + plotH, label, muted);
             }
-
-            DrawXAxisLabels(surface, plotX, y + plotH, plotW, muted);
+            string hint = (stacked ? "Stacked by model" : "Per-model averages") + " · buckets " + (_BarBucketOffset + 1) + "–" + (_BarBucketOffset + _VisibleBuckets) + "/" + values.Count;
+            if (_VisibleBuckets < values.Count) hint += " · PgUp/PgDn";
+            if (_LegendVisibleRows < models.Count) hint += " · ↑/↓ legend";
+            surface.DrawText(x, y + plotH + 1, Trim(hint, w), muted);
+            for (int row = 0; row < _LegendVisibleRows; row++)
+            {
+                string model = models[_LegendOffset + row];
+                surface.DrawText(x, y + plotH + 2 + row, "■", CellStyle.Default.WithForeground(ModelColor(model)));
+                surface.DrawText(x + 2, y + plotH + 2 + row, Trim(ModelLabel(model), w - 2), CellStyle.Default);
+            }
         }
 
-        // Draws up to six evenly-spaced bucket labels along the X axis.
-        private void DrawXAxisLabels(ISurface surface, int plotX, int row, int plotW, CellStyle muted)
+        private double MetricValue(UsageMetrics metrics) => _Page switch
         {
-            List<string> labels = _Data.BucketLabels;
-            if (labels.Count == 0)
-            {
-                return;
-            }
+            0 => metrics.TotalTokens,
+            1 => metrics.CostUsd,
+            2 => metrics.AvgTtftMs,
+            3 => metrics.AvgTotalMs,
+            _ => metrics.AvgStreamMs
+        };
 
-            int desired = Math.Max(2, Math.Min(6, plotW / 10));
-            int count = Math.Min(desired, labels.Count);
-            for (int i = 0; i < count; i++)
+        private static string ModelLabel(string model) => string.IsNullOrWhiteSpace(model) ? "Unknown model" : model;
+
+        private Color ModelColor(string model)
+        {
+            if (!_ModelColors.TryGetValue(model, out Color color))
             {
-                int labelIndex = count == 1 ? labels.Count - 1 : (int)Math.Round(i * (double)(labels.Count - 1) / (count - 1));
-                string label = labels[labelIndex];
-                int pos = count == 1 ? 0 : (int)Math.Round(i * (double)(plotW - label.Length) / (count - 1));
-                if (pos < 0) pos = 0;
-                if (pos + label.Length > plotW) pos = Math.Max(0, plotW - label.Length);
-                surface.DrawText(plotX + pos, row, label, muted);
+                color = _ModelPalette[_ModelColors.Count % _ModelPalette.Length];
+                _ModelColors[model] = color;
+            }
+            return color;
+        }
+
+        private static void DrawSegment(ISurface surface, int x, int bottom, int width, int lower, int upper, Color color, Color? previousColor = null)
+        {
+            if (upper <= lower) return;
+            for (int cell = lower / 8; cell < (upper + 7) / 8; cell++)
+            {
+                int top = Math.Min(8, upper - cell * 8);
+                int start = Math.Max(0, lower - cell * 8);
+                // A terminal cell can show two segment colors at a boundary. Use the lower block
+                // in the preceding color and this segment as its background when the cell is full.
+                for (int dx = 0; dx < width; dx++)
+                {
+                    CellStyle style = CellStyle.Default.WithForeground(color);
+                    string glyph = _Eighths[top - 1];
+                    if (start > 0 && top == 8)
+                    {
+                        Color previous = previousColor ?? color;
+                        style = CellStyle.Default.WithForeground(previous).WithBackground(color);
+                        glyph = _Eighths[start - 1];
+                    }
+                    surface.Set(x + dx, bottom - cell, Cell.Glyph(glyph, style, 1));
+                }
             }
         }
 
-        // A horizontal bar chart: BarChart draws the category (Y) labels and bars; a bottom line gives the
-        // value (X) scale.
+
+        // The cost ranking uses the same per-model colors as the time series.
         private void RenderModels(ISurface surface, int x, int y, int w, int h, CellStyle muted)
         {
             if (_Data.ModelLabels.Count == 0)
@@ -363,55 +490,20 @@ namespace Mux.Cli.App
                 return;
             }
 
-            double max = 0.0;
-            BarChart chart = new BarChart { Color = Color.FromPalette(4) };
-            for (int i = 0; i < _Data.ModelLabels.Count; i++)
+            surface.DrawText(x, y, Trim("Model ↓ · Cost (USD) → · Legend: color = model", w), muted);
+            y++; h--;
+            double max = _Data.ModelCosts.Count > 0 ? _Data.ModelCosts.Max() : 0;
+            int labelWidth = Math.Min(32, Math.Max(8, w / 3));
+            int barWidth = Math.Max(1, w - labelWidth - 12);
+            for (int i = 0; i < Math.Min(_Data.ModelLabels.Count, h - 1); i++)
             {
-                chart.Add(_Data.ModelLabels[i], _Data.ModelCosts[i]);
-                if (_Data.ModelCosts[i] > max) max = _Data.ModelCosts[i];
-            }
-
-            int plotH = Math.Min(h - 1, Math.Max(1, chart.Count));
-            BlitWidget(surface, chart, x, y, w, plotH);
-            surface.DrawText(x, y + plotH, Trim("cost (USD) →  0 to " + FmtUsd(max), w), muted);
-        }
-
-        private static double AggregateColumn(List<double> values, int column, int columns)
-        {
-            if (values.Count <= columns)
-            {
-                return values[column];
-            }
-
-            int from = (int)((long)column * values.Count / columns);
-            int to = (int)((long)(column + 1) * values.Count / columns);
-            if (to <= from) to = from + 1;
-            if (to > values.Count) to = values.Count;
-
-            double sum = 0.0;
-            for (int i = from; i < to; i++)
-            {
-                sum += values[i];
-            }
-
-            return sum / (to - from);
-        }
-
-        private static void BlitWidget(ISurface surface, IWidget widget, int x, int y, int w, int h)
-        {
-            if (w <= 0 || h <= 0)
-            {
-                return;
-            }
-
-            CellBuffer buffer = new CellBuffer(w, h);
-            widget.Render(new BufferSurface(buffer));
-            for (int row = 0; row < h; row++)
-            {
-                for (int col = 0; col < w; col++)
-                {
-                    surface.Set(x + col, y + row, buffer.Get(col, row));
-                }
+                string model = _Data.ModelLabels[i];
+                double cost = i < _Data.ModelCosts.Count ? _Data.ModelCosts[i] : 0;
+                surface.DrawText(x, y + i, "■", CellStyle.Default.WithForeground(ModelColor(model)));
+                surface.DrawText(x + 2, y + i, Trim(ModelLabel(model), labelWidth - 3), CellStyle.Default);
+                int cells = max > 0 ? (int)Math.Round(cost / max * barWidth) : 0;
+                surface.DrawText(x + labelWidth, y + i, new string('█', cells), CellStyle.Default.WithForeground(ModelColor(model)));
+                surface.DrawText(x + labelWidth + barWidth + 1, y + i, Trim(FmtUsd(cost), 10), muted);
             }
         }
 

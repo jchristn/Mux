@@ -6940,6 +6940,14 @@ namespace Mux.Cli.App
                 data.BucketLabels.Add(FormatBucketLabel(bucket.BucketStartUnixMs, range));
             }
 
+            var modelSeries = _UsageQuery.GetModelTimeseriesAsync(filter, window.BucketMs, _Cts.Token).GetAwaiter().GetResult();
+            foreach (var model in modelSeries)
+            {
+                var metrics = new List<Mux.Core.Telemetry.UsageMetrics>();
+                foreach (var bucket in model.Value) metrics.Add(bucket.Metrics);
+                data.ModelBuckets[model.Key] = metrics;
+            }
+
             Mux.Core.Telemetry.UsageWindow heatmapWindow = Mux.Core.Telemetry.UsageWindow.ComputeHeatmap(range, now);
             Mux.Core.Telemetry.UsageFilter heatmapFilter = new Mux.Core.Telemetry.UsageFilter
             {

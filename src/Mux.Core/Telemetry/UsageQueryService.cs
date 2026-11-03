@@ -152,6 +152,38 @@ namespace Mux.Core.Telemetry
             return buckets;
         }
 
+        /// <summary>Returns totals and timing means per model (without percentiles), using the total series filters and bucket boundaries.</summary>
+        /// <param name="filter">The usage scope and time window.</param>
+        /// <param name="bucketMs">Bucket width in milliseconds.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>Model names mapped to ascending buckets, including empty buckets in bounded windows.</returns>
+        public async Task<Dictionary<string, List<UsageBucket>>> GetModelTimeseriesAsync(UsageFilter? filter, long bucketMs, CancellationToken token)
+        {
+            filter = await ResolveFilterAsync(filter, token).ConfigureAwait(false);
+            long width = Math.Max(1, bucketMs);
+            PricingTable pricing = _PricingProvider();
+            List<UsageAggregateRow> rows = await _Store.FetchAggregatesAsync(filter, width, token).ConfigureAwait(false);
+            Dictionary<string, List<UsageBucket>> result = new(StringComparer.Ordinal);
+            foreach (var model in rows.GroupBy(r => r.Model).OrderBy(g => g.Key, StringComparer.Ordinal))
+            {
+                var groups = model.GroupBy(r => r.BucketStartUnixMs).ToDictionary(g => g.Key, g => RollUp(g, pricing));
+                List<UsageBucket> buckets = new();
+                if (filter != null && filter.FromUnixMs > 0 && filter.ToUnixMs > 0)
+                {
+                    long start = filter.FromUnixMs / width * width;
+                    for (int guard = 0; start <= filter.ToUnixMs && guard < 100000; guard++, start += width)
+                        buckets.Add(new UsageBucket { BucketStartUnixMs = start, Metrics = groups.TryGetValue(start, out var metrics) ? metrics : new UsageMetrics() });
+                }
+                else
+                {
+                    foreach (var bucket in groups.OrderBy(g => g.Key))
+                        buckets.Add(new UsageBucket { BucketStartUnixMs = bucket.Key, Metrics = bucket.Value });
+                }
+                result[model.Key] = buckets;
+            }
+            return result;
+        }
+
         /// <summary>
         /// Computes a breakdown of the window grouped by a dimension.
         /// </summary>

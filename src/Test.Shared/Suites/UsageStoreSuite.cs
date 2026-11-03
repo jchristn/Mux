@@ -29,6 +29,39 @@ namespace Test.Shared.Suites
                 "SQLite usage telemetry: schema, inserts, retention, and concurrent writers",
                 new List<TestCaseDescriptor>
                 {
+                    StoreCase("ModelTimeseriesPreservesBucketsAndSamples", "Model time series preserve mixed-model totals, empty buckets, filters, and timing sample counts", async (SqliteUsageStore store, CancellationToken ct) =>
+                    {
+                        UsageEvent a = MakeEvent(1100, "openai", "alpha");
+                        a.TimeToFirstTokenMs = 100;
+                        UsageEvent b = MakeEvent(1200, "anthropic", "alpha");
+                        b.TimeToFirstTokenMs = null;
+                        UsageEvent c = MakeEvent(1300, "openai", "beta");
+                        c.TimeToFirstTokenMs = 400;
+                        await store.InsertBatchAsync(new List<UsageEvent> { a, b, c, MakeEvent(3100, "openai", "beta") }, ct);
+                        PricingTable pricing = new PricingTable();
+                        pricing.Models["alpha"] = new ModelPricing(1, 0, 2);
+                        pricing.Models["beta"] = new ModelPricing(3, 0, 4);
+                        UsageQueryService query = new UsageQueryService(store, () => pricing);
+                        UsageFilter filter = new UsageFilter { FromUnixMs = 1000, ToUnixMs = 3999 };
+                        var models = await query.GetModelTimeseriesAsync(filter, 1000, ct);
+                        var totals = await query.GetTimeseriesAsync(filter, 1000, ct);
+                        MuxAssert.AreEqual(2, models.Count, "both models");
+                        MuxAssert.IsTrue(models["alpha"][0].Metrics.CostUsd > 0, "priced model has cost");
+                        MuxAssert.AreEqual(3, models["alpha"].Count, "dense buckets");
+                        MuxAssert.AreEqual(100.0, models["alpha"][0].Metrics.AvgTtftMs, "missing timings do not dilute the mean");
+                        MuxAssert.AreEqual(400.0, models["beta"][0].Metrics.AvgTtftMs, "independent model average");
+                        for (int i = 0; i < totals.Count; i++)
+                        {
+                            MuxAssert.IsTrue(Math.Abs(totals[i].Metrics.CostUsd - models["alpha"][i].Metrics.CostUsd - models["beta"][i].Metrics.CostUsd) < 1e-10, "model costs sum to total");
+                            MuxAssert.AreEqual(totals[i].BucketStartUnixMs, models["alpha"][i].BucketStartUnixMs, "aligned timestamp");
+                            MuxAssert.AreEqual(totals[i].Metrics.TotalTokens, models["alpha"][i].Metrics.TotalTokens + models["beta"][i].Metrics.TotalTokens, "stack equals total");
+                        }
+                        MuxAssert.AreEqual(0L, models["beta"][1].Metrics.Calls, "empty bucket stays empty");
+                        filter.EndpointName = "anthropic-endpoint";
+                        var filtered = await query.GetModelTimeseriesAsync(filter, 1000, ct);
+                        MuxAssert.AreEqual(1, filtered.Count, "endpoint filter");
+                        MuxAssert.AreEqual(1L, filtered["alpha"][0].Metrics.Calls, "matching call only");
+                    }),
                     StoreCase("EmptyStoreCountsZero", "A freshly created store reports zero events", async (SqliteUsageStore store, CancellationToken ct) =>
                     {
                         MuxAssert.AreEqual(0L, await store.CountAsync(ct).ConfigureAwait(false), "empty store count");
