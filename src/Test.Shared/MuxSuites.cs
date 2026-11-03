@@ -331,9 +331,195 @@ namespace Test.Shared
                     PublisherManifestSuite.Create(),
                     PublishServiceSuite.Create(),
                     PublisherDriversSuite.Create(),
-                    StartupRegistrarSuite.Create()
+                    StartupRegistrarSuite.Create(),
+
+                    // Meta: the registry verifies itself (group coverage, duplicate ids, group hygiene).
+                    SuiteRegistrySuite.Create()
                 };
             }
+        }
+
+        /// <summary>
+        /// A named, cross-runner group of suites: the same id selects the same suites in the console
+        /// runner (<c>--group</c>), the xUnit hosts (<c>Groups.&lt;Name&gt;SuiteTests</c>), and the NUnit
+        /// fixtures. Groups partition <see cref="All"/>; <see cref="SuiteRegistrySuite"/> enforces it.
+        /// </summary>
+        public sealed class GroupInfo
+        {
+            /// <summary>Creates a group descriptor.</summary>
+            /// <param name="id">Lowercase, kebab-case id used on the command line (for example <c>skill-scripts</c>).</param>
+            /// <param name="description">One-line summary of what the group covers.</param>
+            /// <param name="suites">Factory producing fresh descriptors for the group's suites.</param>
+            public GroupInfo(string id, string description, Func<List<TestSuiteDescriptor>> suites)
+            {
+                Id = id;
+                Description = description;
+                _Suites = suites;
+            }
+
+            private readonly Func<List<TestSuiteDescriptor>> _Suites;
+
+            /// <summary>Gets the group id used on the command line and in host class names.</summary>
+            public string Id { get; }
+
+            /// <summary>Gets the one-line summary of what the group covers.</summary>
+            public string Description { get; }
+
+            /// <summary>Builds fresh descriptors for the group's suites.</summary>
+            /// <returns>The group's suites, in canonical order.</returns>
+            public List<TestSuiteDescriptor> CreateSuites()
+            {
+                return _Suites();
+            }
+        }
+
+        /// <summary>
+        /// Gets the registered groups in display order.
+        /// </summary>
+        public static IReadOnlyList<GroupInfo> Groups { get; } = new List<GroupInfo>
+        {
+            new GroupInfo("headless", "Non-interactive CLI contracts: print mode, input formats, run outcomes, approvals, endpoint switch, MCP headless", () => new List<TestSuiteDescriptor>
+            {
+                SingleTurnSuite.Create(), ToolUseSuite.Create(), PrintModeSuite.Create(),
+                HeadlessFeaturesSuite.Create(), HeadlessOutputModesSuite.Create(), ToolGovernanceSuite.Create(),
+                Phase4FeaturesSuite.Create(), InputFormatSuite.Create(), CliContractSuite.Create(),
+                RunOutcomeSuite.Create(), ApprovalPolicySuite.Create(), MultiEditSuite.Create(),
+                EndpointSwitchingSuite.Create(), McpIntegrationSuite.Create()
+            }),
+            new GroupInfo("core", "Agent runtime core: context window, compaction, conversation loop, jobs, leases, LLM bridge, telemetry, memory", () => new List<TestSuiteDescriptor>
+            {
+                ContextWindowManagerSuite.Create(), ApprovalRoutingSuite.Create(), PermissionPromptSuite.Create(),
+                ConversationCompactionPlannerSuite.Create(), ConversationCompactorSuite.Create(), ConversationTrimCompactorSuite.Create(),
+                AgentLoopOptionsSuite.Create(), ExternalToolProviderSuite.Create(), JobManagerSuite.Create(),
+                WriteLeaseSuite.Create(), WriteLeaseIntegrationSuite.Create(), LlmBridgeSuite.Create(),
+                TelemetryCoreSuite.Create(), TelemetryHostSuite.Create(), AgentEventSerializerSuite.Create(),
+                MemorySuite.Create(), LoopSchedulerSuite.Create(), ProjectInstructionsSuite.Create(), FileContextSuite.Create(),
+                PlanModeSuite.Create()
+            }),
+            new GroupInfo("tools", "Built-in tools and execution plumbing: file/glob/grep/edit/process/web tools, checkpoints, plugins, hooks, background processes", () => new List<TestSuiteDescriptor>
+            {
+                BuiltInToolRegistrySuite.Create(), ReadFileToolSuite.Create(), WriteFileToolSuite.Create(),
+                GlobToolSuite.Create(), GrepToolSuite.Create(), EditFileToolSuite.Create(), MultiEditToolSuite.Create(),
+                RunProcessToolSuite.Create(), WebRetrieveToolSuite.Create(), McpToolManagerSuite.Create(),
+                WorkingDirectoryResolverSuite.Create(), WorktreeIsolationSuite.Create(), CheckpointSuite.Create(),
+                PluginSuite.Create(), ToolHooksSuite.Create(), TerminalLaunchSuite.Create(),
+                BackgroundProcessSuite.Create(), WebSearchServiceSuite.Create(), AskUserSuite.Create()
+            }),
+            new GroupInfo("cli", "Command plumbing: command runtime resolver, endpoint parser, structured output, the skill CLI verb, F1 menu", () => new List<TestSuiteDescriptor>
+            {
+                CommandRuntimeResolverSuite.Create(), EndpointCommandParserSuite.Create(),
+                StructuredOutputFormatterSuite.Create(), CliCommandSuite.Create(), CommandMenuFormatterSuite.Create()
+            }),
+            new GroupInfo("settings", "Settings schema and loaders: endpoint config and auth placement, setup state, settings loader", () => new List<TestSuiteDescriptor>
+            {
+                EndpointConfigSuite.Create(), EndpointAuthPlacementSuite.Create(),
+                SetupStateSuite.Create(), SettingsLoaderSuite.Create()
+            }),
+            new GroupInfo("server", "Embedded REST server: settings, routes, run registry, session titles, Markdown/HTML export", () => new List<TestSuiteDescriptor>
+            {
+                RestServerSettingsSuite.Create(), MuxServerRouteSuite.Create(), RunRegistrySuite.Create(),
+                SessionTitleHelperSuite.Create(), SessionExporterSuite.Create()
+            }),
+            new GroupInfo("sessions", "Session persistence and lifecycle: store, service, manager verbs, metadata normalization", () => new List<TestSuiteDescriptor>
+            {
+                SessionStoreSuite.Create(), SessionServiceSuite.Create(),
+                SessionManagerSuite.Create(), SessionMetadataNormalizerSuite.Create()
+            }),
+            new GroupInfo("desktop", "Desktop view-model logic: localization, formatters, turn/thread/conversation services, workspace, preferences", () => new List<TestSuiteDescriptor>
+            {
+                DesktopLocalizationSuite.Create(), DesktopFormattersSuite.Create(), DesktopTurnInfoSuite.Create(),
+                DesktopEndpointSelectionSuite.Create(), ThreadServiceSuite.Create(), TurnProjectionSuite.Create(),
+                ConversationStatsSuite.Create(), ConversationControllerSuite.Create(), CoreMappingSuite.Create(),
+                SystemPromptResolverSuite.Create(), ConversationServiceSuite.Create(), EmbeddedServerSuite.Create(),
+                WorkspaceSuite.Create(), CodeTokenizerSuite.Create(), DesktopPreferencesSuite.Create(),
+                PromptHistorySuite.Create(), KeybindingEditorSuite.Create(), WelcomeQuipsSuite.Create(),
+                DesktopPromptCatalogSuite.Create()
+            }),
+            new GroupInfo("tui", "Interactive terminal UI: shell, composer, sidebar, modals, frames, prompts, endpoint/MCP management, keybindings", () => new List<TestSuiteDescriptor>
+            {
+                TuiShellSuite.Create(), SeverityToastSuite.Create(), SlashCommandCompletionSuite.Create(),
+                ProjectorSuite.Create(), FormModalsSuite.Create(), SidebarSuite.Create(), ComposerSuite.Create(),
+                PromptsSuite.Create(), PromptCatalogSuite.Create(), PromptCatalogModalSuite.Create(),
+                SurfaceWiringSuite.Create(), CommandSurfacesSuite.Create(), SettingsSuite.Create(),
+                ModalsSuite.Create(), PersistenceUxSuite.Create(), FrameSnapshotSuite.Create(), PolishSuite.Create(),
+                EndpointManagementSuite.Create(), OllamaImportSuite.Create(), EndpointModelListerSuite.Create(),
+                McpManagementSuite.Create(), BoundaryLinesSuite.Create(), FileMentionsSuite.Create(),
+                TaskModalSuite.Create(), KeybindingSuite.Create()
+            }),
+            new GroupInfo("usage", "Usage telemetry end to end: SQLite store, metadata filters, REST routes, window math, desktop analytics, TUI charts", () => new List<TestSuiteDescriptor>
+            {
+                UsageStoreSuite.Create(), UsageMetadataFilterSuite.Create(), UsageRoutesSuite.Create(),
+                UsageWindowSuite.Create(), UsageAnalyticsSuite.Create(), UsageChartsModalSuite.Create()
+            }),
+            new GroupInfo("skills", "Skill platform: loader, provider, runtime, security, manager, defaults, project skills, selection", () => new List<TestSuiteDescriptor>
+            {
+                SkillLoaderSuite.Create(), SkillProviderSuite.Create(), SkillSecuritySuite.Create(),
+                SkillRuntimeSuite.Create(), ExternalToolsBinderSuite.Create(), ToolRuntimeBinderSuite.Create(),
+                SkillManagerSuite.Create(), SkillManagementSuite.Create(), SkillEditorCopySuite.Create(),
+                SkillCategoriesSuite.Create(), SkillCommandSuite.Create(), DefaultSkillsSuite.Create(),
+                ProjectSkillsSuite.Create(), SkillInvocationSuite.Create(), SkillListingSuite.Create(),
+                SkillScriptRuntimeSuite.Create(), SkillSelectionEvalSuite.Create(), SkillSelectionLiveSuite.Create()
+            }),
+            new GroupInfo("skill-scripts", "Shipped skill scripts executed for real: toolchain, review, loops, script commands, audits, lint, upgrades, Docker (slow)", () => new List<TestSuiteDescriptor>
+            {
+                ToolchainSkillsSuite.Create(), ReviewSkillsSuite.Create(), LoopSkillsSuite.Create(),
+                ImportedSkillsSuite.Create(), ScriptCommandsSuite1.Create(), ScriptCommandsSuite2.Create(),
+                ScriptCommandsSuite3.Create(), ShippedSkillsSuite.Create(), DependencyAuditSuite.Create(),
+                ScriptLintSuite.Create(), DatabaseSkillsSuite.Create(), UpgradeSkillsSuite.Create(),
+                MobileLanguageSkillsSuite.Create(), WebFrameworkSkillsSuite.Create(), RuntimeSkillsSuite.Create(),
+                InfraSkillsSuite.Create(), ApiContractSkillsSuite.Create(), DockerServicesSuite.Create()
+            }),
+            new GroupInfo("mcp", "MCP wiring: server, template binder, runtime, diagnostics, stdio/HTTP clients, config, end-to-end", () => new List<TestSuiteDescriptor>
+            {
+                McpServerSuite.Create(), McpTemplateBinderSuite.Create(), McpRuntimeSuite.Create(),
+                McpDiagnosticsSuite.Create(), McpClientSuite.Create(), McpStdioClientSuite.Create(),
+                McpConfigSuite.Create(), McpServerToolsSuite.Create(), McpEndToEndSuite.Create()
+            }),
+            new GroupInfo("tasks", "Background tasks and subagents: plan model, tools, events, orchestrator, subagent registry", () => new List<TestSuiteDescriptor>
+            {
+                TaskPlanSuite.Create(), TaskToolsSuite.Create(), TaskEventSuite.Create(),
+                TaskOrchestratorSuite.Create(), SubagentSuite.Create()
+            }),
+            new GroupInfo("publisher", "Mux.Publisher: manifest, publish service, channel drivers, startup registration", () => new List<TestSuiteDescriptor>
+            {
+                PublisherManifestSuite.Create(), PublishServiceSuite.Create(),
+                PublisherDriversSuite.Create(), StartupRegistrarSuite.Create()
+            }),
+            new GroupInfo("meta", "The registry verifies itself: group coverage, unique ids, well-formed group names", () => new List<TestSuiteDescriptor>
+            {
+                SuiteRegistrySuite.Create()
+            })
+        };
+
+        /// <summary>
+        /// Looks up a group by id, case-insensitively.
+        /// </summary>
+        /// <param name="id">The group id (for example <c>usage</c> or <c>skill-scripts</c>).</param>
+        /// <returns>The group, or null when no group has that id.</returns>
+        public static GroupInfo? FindGroup(string id)
+        {
+            foreach (GroupInfo group in Groups)
+            {
+                if (string.Equals(group.Id, id, StringComparison.OrdinalIgnoreCase)) return group;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Builds fresh descriptors for one group's suites.
+        /// </summary>
+        /// <param name="id">The group id.</param>
+        /// <returns>The group's suites.</returns>
+        /// <exception cref="ArgumentException">Thrown when no group has that id; the message lists the valid ids.</exception>
+        public static List<TestSuiteDescriptor> Group(string id)
+        {
+            GroupInfo? group = FindGroup(id);
+            if (group != null) return group.CreateSuites();
+
+            List<string> ids = new List<string>();
+            foreach (GroupInfo known in Groups) ids.Add(known.Id);
+            throw new ArgumentException("Unknown group '" + id + "'. Valid groups: " + string.Join(", ", ids) + ".", nameof(id));
         }
     }
 }

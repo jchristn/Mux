@@ -39,6 +39,30 @@ dotnet run --project src/Test.Automated/Test.Automated.csproj --framework net10.
 
 Pass `--suite <id>` (repeatable) to run only some suites, for example `--suite DatabaseSkills`.
 
+## Groups
+
+Suites are partitioned into named groups in `MuxSuites.Groups` (`headless`, `core`, `tools`, `cli`,
+`settings`, `server`, `sessions`, `desktop`, `tui`, `usage`, `skills`, `skill-scripts`, `mcp`, `tasks`,
+`publisher`, `meta`), so a focused run never has to load the full suite. The console runner takes
+`--group <id>` (repeatable; combines with `--suite` by filtering within the selected groups) and
+`--list-groups`:
+
+```bash
+dotnet run --project src/Test.Automated/Test.Automated.csproj --framework net10.0 -- --group usage
+dotnet run --project src/Test.Automated/Test.Automated.csproj --framework net10.0 -- --list-groups
+```
+
+The xUnit and NUnit runners expose the same groups as one class per group under the `Groups`
+namespace, so the same filter string selects a group in both:
+
+```bash
+dotnet test src/Test.Xunit/Test.Xunit.csproj --filter "FullyQualifiedName~Groups.Usage"
+dotnet test src/Test.Nunit/Test.Nunit.csproj --filter "FullyQualifiedName~Groups.Usage"
+```
+
+The `SuiteRegistry` meta suite runs on every runner and fails when a suite is missing from every
+group, appears in two groups, or a group id is malformed — the grouping cannot silently drift.
+
 ## Docker integration suite (opt-in)
 
 `DockerServices` runs the database and dependency-audit skills against real services in throwaway

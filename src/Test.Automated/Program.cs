@@ -35,15 +35,19 @@ namespace Test.Automated
         /// Runs all MUX Touchstone suites through the console runner.
         /// </summary>
         /// <param name="args">Command-line arguments. Pass <c>--results &lt;path&gt;</c> to export JSON results,
-        /// <c>--suite &lt;id&gt;</c> (repeatable, case-insensitive) to run only those suites, and <c>--llm-endpoint</c>,
-        /// <c>--llm-model</c>, <c>--llm-adapter</c>, <c>--llm-api-key</c>, <c>--llm-floor</c>, <c>--llm-cases</c>,
-        /// <c>--llm-report</c>, and <c>--llm-timeout</c> to run the live skill-selection suite against a model, and
-        /// <c>--docker</c> to run the Docker integration suite.</param>
+        /// <c>--suite &lt;id&gt;</c> (repeatable, case-insensitive) to run only those suites,
+        /// <c>--group &lt;id&gt;</c> (repeatable, case-insensitive) to run only the suites of those named groups
+        /// (<c>--suite</c> then filters within the selected groups), <c>--list-groups</c> to print the groups,
+        /// and <c>--llm-endpoint</c>, <c>--llm-model</c>, <c>--llm-adapter</c>, <c>--llm-api-key</c>, <c>--llm-floor</c>,
+        /// <c>--llm-cases</c>, <c>--llm-report</c>, and <c>--llm-timeout</c> to run the live skill-selection suite
+        /// against a model, and <c>--docker</c> to run the Docker integration suite.</param>
         /// <returns>0 if all tests pass; a non-zero value if any test fails.</returns>
         public static async Task<int> Main(string[] args)
         {
             string? resultsPath = null;
+            bool listGroups = false;
             HashSet<string> suiteIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<MuxSuites.GroupInfo> groups = new List<MuxSuites.GroupInfo>();
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -54,6 +58,24 @@ namespace Test.Automated
                 else if (args[i] == "--suite" && i + 1 < args.Length)
                 {
                     suiteIds.Add(args[++i]);
+                }
+                else if (args[i] == "--group" && i + 1 < args.Length)
+                {
+                    string groupId = args[++i];
+                    MuxSuites.GroupInfo? group = MuxSuites.FindGroup(groupId);
+                    if (group == null)
+                    {
+                        List<string> ids = new List<string>();
+                        foreach (MuxSuites.GroupInfo known in MuxSuites.Groups) ids.Add(known.Id);
+                        Console.Error.WriteLine("Unknown group '" + groupId + "'. Valid groups: " + string.Join(", ", ids) + ".");
+                        return 2;
+                    }
+
+                    groups.Add(group);
+                }
+                else if (args[i] == "--list-groups")
+                {
+                    listGroups = true;
                 }
                 else if (args[i] == "--docker")
                 {
@@ -67,8 +89,37 @@ namespace Test.Automated
                 }
             }
 
+            if (listGroups)
+            {
+                foreach (MuxSuites.GroupInfo group in MuxSuites.Groups)
+                {
+                    Console.WriteLine(group.Id.PadRight(16) + group.Description);
+                }
+
+                return 0;
+            }
+
+            // The selection universe is every suite, or the union of the named groups; --suite filters
+            // within that universe, so group and suite ids combine predictably.
+            List<TestSuiteDescriptor> universe = new List<TestSuiteDescriptor>();
+            if (groups.Count == 0)
+            {
+                universe.AddRange(MuxSuites.All);
+            }
+            else
+            {
+                HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (MuxSuites.GroupInfo group in groups)
+                {
+                    foreach (TestSuiteDescriptor suite in group.CreateSuites())
+                    {
+                        if (seen.Add(suite.SuiteId)) universe.Add(suite);
+                    }
+                }
+            }
+
             List<TestSuiteDescriptor> suites = new List<TestSuiteDescriptor>();
-            foreach (TestSuiteDescriptor suite in MuxSuites.All)
+            foreach (TestSuiteDescriptor suite in universe)
             {
                 if (suiteIds.Count == 0 || suiteIds.Contains(suite.SuiteId))
                 {
@@ -78,7 +129,9 @@ namespace Test.Automated
 
             if (suites.Count == 0)
             {
-                Console.Error.WriteLine("No suite matches " + string.Join(", ", suiteIds) + ".");
+                List<string> requested = new List<string>(suiteIds);
+                foreach (MuxSuites.GroupInfo group in groups) requested.Add("group:" + group.Id);
+                Console.Error.WriteLine("No suite matches " + string.Join(", ", requested) + ".");
                 return 2;
             }
 

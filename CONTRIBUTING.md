@@ -59,7 +59,10 @@ dotnet run --project src/Test.Automated/Test.Automated.csproj --configuration Re
 dotnet run --project src/Test.Automated/Test.Automated.csproj --configuration Release --framework net10.0
 ```
 
-Run a single suite while iterating: add `-- --suite <id>` (for example `--suite AgentLoop`).
+Run a single suite while iterating: add `-- --suite <id>` (for example `--suite AgentLoop`), or a named
+group of suites with `-- --group <id>` (for example `--group usage`; `--list-groups` shows the ids). The
+xUnit and NUnit adapters expose the same groups as classes under the `Groups` namespace, so
+`dotnet test --filter "FullyQualifiedName~Groups.Usage"` selects the same suites in either runner.
 
 The xUnit and NUnit adapters run the same suites through `dotnet test`:
 
