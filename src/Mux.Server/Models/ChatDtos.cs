@@ -308,6 +308,9 @@ namespace Mux.Server.Models
     /// </summary>
     public class ChatApprovalRequest
     {
+        /// <summary>Visible client approval countdown in seconds; zero disables.</summary>
+        public int ToolAutoApproveSeconds { get; set; }
+
         /// <summary>The run id correlating this prompt with its decision.</summary>
         public string RunId { get; set; } = string.Empty;
 

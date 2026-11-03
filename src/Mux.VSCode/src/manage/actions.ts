@@ -108,6 +108,7 @@ export class ManageActions {
             { key: 'TimeoutMs', label: vscode.l10n.t('Timeout (ms)'), type: 'number', value: existing?.TimeoutMs ?? 120000 },
             { key: 'Headers', label: vscode.l10n.t('Custom headers'), type: 'textarea', value: endpointHeadersToText(existing?.Headers), hint: vscode.l10n.t('Extra HTTP headers, one "Name: Value" per line. Leave a value blank to keep the stored one.'), showIf: [{ key: 'AdapterType', anyOf: usesKey }] },
             { key: 'IsDefault', label: vscode.l10n.t('Default endpoint'), type: 'checkbox', value: existing?.IsDefault ?? false },
+            { key: 'ToolAutoApproveSeconds', label: vscode.l10n.t('Tool auto-approve seconds (blank = global, 0 = off)'), type: 'number', value: existing?.ToolAutoApproveSeconds ?? '' },
             { key: 'AutoApproveTools', label: vscode.l10n.t('Auto-approve tools for this endpoint'), type: 'checkbox', value: existing?.AutoApproveTools ?? false },
             { key: 'ShowThinking', label: vscode.l10n.t('Show model thinking'), type: 'checkbox', value: existing?.ShowThinking ?? false },
         ];
@@ -129,6 +130,7 @@ export class ManageActions {
             ContextWindow: Number(result.ContextWindow) || undefined,
             TimeoutMs: Number(result.TimeoutMs) || undefined,
             AutoApproveTools: Boolean(result.AutoApproveTools),
+            ToolAutoApproveSeconds: result.ToolAutoApproveSeconds === '' || result.ToolAutoApproveSeconds == null ? null : Math.max(0, Number(result.ToolAutoApproveSeconds)),
             ShowThinking: Boolean(result.ShowThinking),
             AuthPlacement: ['ollama-cloud', 'xai'].includes(String(result.AdapterType)) ? 'bearer' : String(result.AuthPlacement ?? 'bearer'),
             AuthParameterName: ['ollama-cloud', 'xai'].includes(String(result.AdapterType)) ? '' : String(result.AuthParameterName ?? '').trim(),
@@ -661,6 +663,7 @@ export class ManageActions {
         return this.withClient(async (client) => {
             const settings = await client.getSettings();
             const fields: FormField[] = [
+                { key: 'ToolAutoApproveSeconds', label: vscode.l10n.t('Tool auto-approve seconds (0 = off)'), type: 'number', value: settings.ToolAutoApproveSeconds ?? 0 },
                 { key: 'DefaultApprovalPolicy', label: vscode.l10n.t('Default approval policy'), type: 'select', options: ['ask', 'auto', 'deny'], value: settings.DefaultApprovalPolicy },
                 { key: 'MaxAgentIterations', label: vscode.l10n.t('Max agent iterations'), type: 'number', value: settings.MaxAgentIterations, hint: '1–1024' },
                 { key: 'MaxConcurrency', label: vscode.l10n.t('Max concurrency'), type: 'number', value: settings.MaxConcurrency, hint: '1–32' },
@@ -684,6 +687,7 @@ export class ManageActions {
             const next: MuxServerSettings = {
                 ...settings,
                 DefaultApprovalPolicy: String(result.DefaultApprovalPolicy),
+                ToolAutoApproveSeconds: Math.max(0, Number(result.ToolAutoApproveSeconds) || 0),
                 MaxAgentIterations: Number(result.MaxAgentIterations),
                 MaxConcurrency: Number(result.MaxConcurrency),
                 ToolTimeoutMs: Number(result.ToolTimeoutMs),

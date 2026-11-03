@@ -1735,6 +1735,7 @@ namespace Mux.Core.Settings
                 TimeoutMs = source.TimeoutMs,
                 Headers = new Dictionary<string, string>(source.Headers ?? new Dictionary<string, string>()),
                 AutoApproveTools = source.AutoApproveTools,
+                ToolAutoApproveSeconds = source.ToolAutoApproveSeconds,
                 MaxAgentIterations = source.MaxAgentIterations,
                 Quirks = source.Quirks == null
                     ? null

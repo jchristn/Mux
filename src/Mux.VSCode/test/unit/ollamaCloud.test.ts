@@ -37,7 +37,7 @@ test(`${provider}: VS Code form shows its key and saves native bearer settings`,
 });
 
 test(`${provider}: web form saves its native URL and bearer scheme`, () => {
-    const source = fs.readFileSync(path.join(__dirname, '../../../../Mux.Server/DashboardPage.cs'), 'utf8');
+    const source = fs.readFileSync(path.join(__dirname, '../../../../Mux.Server/DashboardTemplate.cs'), 'utf8');
     let fields: any[] = [];
     let saved: any[] = [];
     const sandbox: any = {

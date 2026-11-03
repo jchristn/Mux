@@ -53,7 +53,11 @@ namespace Test.Shared.Suites
 
                         MuxAssert.Contains("BASE PROMPT.", template.SystemPrompt, "base prompt preserved");
                         MuxAssert.Contains("docs.search", template.SystemPrompt, "MCP tool named in prompt");
-                        MuxAssert.Contains("[MCP:docs] Searches the docs", template.SystemPrompt, "MCP tool description in prompt");
+                        MuxAssert.DoesNotContain("[MCP:docs] Searches the docs", template.SystemPrompt, "description is not duplicated in prompt");
+                        MuxAssert.AreEqual("[MCP:docs] Searches the docs", template.AdditionalTools![0].Description, "full description remains available to model");
+                        MuxAssert.IsTrue(ReferenceEquals(mcp[0], template.AdditionalTools[0]), "schema and metadata are preserved unchanged");
+                        ToolResult result = template.ExternalToolExecutor!("docs.search", default, ".", ct).GetAwaiter().GetResult();
+                        MuxAssert.IsTrue(result.Success, "executor still routes the tool");
                         MuxAssert.AreEqual("COMPACT.", template.CompactionSystemPrompt, "compaction prompt applied");
 
                         return Task.CompletedTask;

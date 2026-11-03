@@ -57,6 +57,8 @@ namespace Test.Shared.Suites
 
                                 MuxAssert.Contains("BASE PROMPT.", template.SystemPrompt, "base prompt preserved");
                                 MuxAssert.Contains("srv.tool", template.SystemPrompt, "MCP tool in prompt");
+                                MuxAssert.DoesNotContain("[MCP:srv] a tool", template.SystemPrompt, "description not repeated");
+                                MuxAssert.AreEqual(mcpTools[0].Description, template.AdditionalTools[0].Description, "callable definition retains description");
                                 MuxAssert.Contains("echoer", template.SystemPrompt, "skill in prompt");
                             }
                         })),

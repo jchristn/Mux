@@ -112,6 +112,7 @@ namespace Mux.Cli.App
         private readonly MuxCommandCatalog _Catalog;
         private Layout _ExpandedLayout = null!;
         private Layout _CollapsedLayout = null!;
+        private bool _HasSubmittedPrompt;
         private readonly List<ConversationMessage> _ConversationHistory = new List<ConversationMessage>();
         private readonly List<string> _PendingPrompts = new List<string>();
         private readonly List<string> _TurnJobIds = new List<string>();
@@ -1190,6 +1191,12 @@ namespace Mux.Cli.App
         // rule above the queue strip (when shown), and a vertical rule in the gutter left of the sidebar.
         private void DrawBoundaries(ISurface surface)
         {
+            if (surface is BufferSurface background && !_HasSubmittedPrompt && _Composer.Text.Length == 0 && _ConversationHistory.Count == 0)
+            {
+                int artWidth = _CollapsedApplied ? surface.Size.Width : Math.Max(0, surface.Size.Width - SidebarWidth - SidebarGap);
+                int artHeight = Math.Max(0, surface.Size.Height - _ComposerHeight - 2 - _QueueHeight - (_ShowBoundaries ? 1 : 0) - (_ShowBoundaries && _QueueHeight > 0 ? 1 : 0));
+                IdleMuxArtwork.Render(background.CreateView(new Rect(0, 0, artWidth, artHeight)));
+            }
             RefreshPinnedPrompt(surface);
             ShadePromptRows(surface);
             if (!_ShowBoundaries || surface == null)
@@ -1350,17 +1357,19 @@ namespace Mux.Cli.App
         /// thread. Escaping the modal, or app shutdown, denies.
         /// </summary>
         /// <param name="toolCall">The tool call awaiting approval.</param>
+        /// <param name="seconds">Resolved auto-approval countdown; zero disables.</param>
+        /// <param name="cancellationToken">Turn cancellation.</param>
         /// <returns>The approval response string.</returns>
-        public async Task<string> RequestApprovalAsync(ToolCall toolCall)
+        public async Task<string> RequestApprovalAsync(ToolCall toolCall, int seconds = 0, CancellationToken cancellationToken = default)
         {
             string name = toolCall != null && !string.IsNullOrWhiteSpace(toolCall.Name) ? toolCall.Name : "tool";
-            SelectModal modal = new SelectModal(
-                $"Approve {name}?",
-                new List<string> { "Approve once", "Deny", "Always allow this session" });
+            ToolApprovalModal modal = new ToolApprovalModal(name, seconds);
 
+            using CancellationTokenSource stop = CancellationTokenSource.CreateLinkedTokenSource(_Cts.Token, cancellationToken);
+            stop.Token.ThrowIfCancellationRequested();
             _App.Modals.Push(modal);
 
-            using (CancellationTokenRegistration registration = _Cts.Token.Register(() => modal.RequestClose(-1)))
+            using (CancellationTokenRegistration registration = stop.Token.Register(() => modal.RequestClose(-1)))
             {
                 object? result = await modal.Completion.ConfigureAwait(false);
                 int index = result is int value ? value : -1;
@@ -1513,6 +1522,7 @@ namespace Mux.Cli.App
                 _CurrentPromptLine = null;
                 RebuildLayoutNoLock();
                 _ConversationHistory.Clear();
+                _HasSubmittedPrompt = false;
                 _TurnJobIds.Clear();
                 _PendingPrompts.Clear();
                 _QueuePaused = false;
@@ -2227,6 +2237,7 @@ namespace Mux.Cli.App
             bool startNow;
             lock (_Sync)
             {
+                _HasSubmittedPrompt = true;
                 // Run immediately only when idle and the queue isn't paused for editing; otherwise the
                 // prompt joins the queue and is serviced in order once the model is free again.
                 if (!_TurnInFlight && !_QueuePaused)
@@ -2257,6 +2268,7 @@ namespace Mux.Cli.App
 
         private void RunTurn(string prompt)
         {
+            _HasSubmittedPrompt = true;
             // Record a per-turn workspace checkpoint before the turn can mutate any files, so /undo can
             // roll the working tree back to this point. Best-effort and only active when checkpointing was
             // enabled (a git work tree); a failure here must never block the turn.

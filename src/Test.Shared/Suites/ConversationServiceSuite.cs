@@ -54,6 +54,48 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(2, eventCount, "event count");
                     }),
 
+                    new TestCaseDescriptor("ConversationService", "PreparationDoesNotBlockCaller", "Synchronous preparation runs off the caller thread and Stop cancels it", async (CancellationToken ct) =>
+                    {
+                        using CancellationTokenSource stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        using PreparationTurnRunner runner = new PreparationTurnRunner();
+                        ConversationService service = new ConversationService(runner, null);
+                        TaskCompletionSource<Task<TurnProjection>> returned = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                        int callerThread = 0;
+                        Thread caller = new Thread(() =>
+                        {
+                            callerThread = Environment.CurrentManagedThreadId;
+                            try { returned.TrySetResult(service.RunTurnAsync("prepare", stop.Token)); }
+                            catch (Exception ex) { returned.TrySetException(ex); }
+                        }) { IsBackground = true };
+                        caller.Start();
+                        try
+                        {
+                            await runner.Started.Task.WaitAsync(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
+                            Task<TurnProjection> turn = await returned.Task.WaitAsync(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
+                            MuxAssert.IsTrue(runner.ThreadId != callerThread, "preparation did not run on the caller/UI thread");
+                            MuxAssert.IsTrue(service.IsBusy, "turn reserved while preparing");
+                            await MuxAssert.ThrowsAsync<InvalidOperationException>(async () => await service.RunTurnAsync("duplicate", ct), "same-tab second turn rejected");
+                            stop.Cancel();
+                            TurnProjection projection = await turn.WaitAsync(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
+                            MuxAssert.IsTrue(projection.WasCancelled, "Stop cancels preparation");
+                            MuxAssert.IsFalse(service.IsBusy, "busy reset after cancellation");
+                            MuxAssert.AreEqual(0, service.History.Count, "cancelled prompt removed");
+                            runner.Release.Set();
+                            await service.RunTurnAsync("next turn", ct).ConfigureAwait(false);
+                            MuxAssert.AreEqual(2, service.History.Count, "conversation reusable after cancellation");
+                        }
+                        finally
+                        {
+                            stop.Cancel();
+                            runner.Release.Set();
+                            caller.Join(TimeSpan.FromSeconds(5));
+                            if (returned.Task.IsCompletedSuccessfully)
+                            {
+                                await (await returned.Task).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                            }
+                        }
+                    }),
+
                     new TestCaseDescriptor("ConversationService", "ModelSwitchHistory", "Model switch notices stay in history across turns and reloads", async (CancellationToken ct) =>
                     {
                         var service = new ConversationService(new ListTurnRunner(new List<AgentEvent>
@@ -217,6 +259,26 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual("ok", service.History[3].Content, "new assistant appended");
                     })
                 });
+        }
+
+        private sealed class PreparationTurnRunner : ITurnRunner, IDisposable
+        {
+            public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            public ManualResetEventSlim Release { get; } = new(false);
+            public int ThreadId { get; private set; }
+
+            public async IAsyncEnumerable<AgentEvent> RunAsync(string prompt, IReadOnlyList<ConversationMessage> history, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
+            {
+                ThreadId = Environment.CurrentManagedThreadId;
+                Started.TrySetResult(true);
+                // Deliberately synchronous, like disk/skill preparation before an iterator's first await.
+                Release.Wait(token);
+                await Task.CompletedTask;
+                yield return new AssistantTextEvent { Text = "ready" };
+                yield return new RunCompletedEvent { Status = "completed" };
+            }
+
+            public void Dispose() => Release.Dispose();
         }
 
         // Runs each turn through a real AgentLoop against the given endpoint.

@@ -43,6 +43,9 @@ namespace Mux.Server.Models
         /// <summary>Auto-approve tool calls when this endpoint is active.</summary>
         public bool AutoApproveTools { get; set; }
 
+        /// <summary>Interactive approval countdown; null inherits global, zero disables.</summary>
+        public int? ToolAutoApproveSeconds { get; set; }
+
         /// <summary>Per-endpoint agent-iteration override; null inherits the global setting.</summary>
         public int? MaxAgentIterations { get; set; }
 

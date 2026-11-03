@@ -87,6 +87,10 @@ namespace Mux.Core.Agent
 
         #region Public-Members
 
+        /// <summary>Interactive approval UI callback receiving the resolved countdown and turn cancellation. When set, takes precedence over PromptUserFunc.</summary>
+        public Func<ToolCall, int, CancellationToken, Task<string>>? InteractiveApprovalPrompt { get; set; }
+
+
         /// <summary>
         /// The LLM endpoint configuration. Required.
         /// </summary>
@@ -345,8 +349,8 @@ namespace Mux.Core.Agent
         /// <summary>
         /// An external permission prompt (for example an MCP permission prompt tool, see
         /// <see cref="McpPermissionPrompter"/>) that decides tool calls the approval policy escalates.
-        /// When set it is used instead of <see cref="PromptUserFunc"/>, and a denial's message becomes the tool result
-        /// the model sees. Null (the default) uses <see cref="PromptUserFunc"/>.
+        /// When set it is used instead of <see cref="InteractiveApprovalPrompt"/> or <see cref="PromptUserFunc"/>, and a denial's message becomes the tool result
+        /// the model sees. Null (the default) uses the interactive or legacy prompt callback.
         /// </summary>
         public Func<ApprovalRequest, CancellationToken, Task<PermissionPromptResult>>? PermissionPrompt { get; set; }
 

@@ -1050,6 +1050,7 @@ namespace Mux.Server.Documentation
                 ["Temperature"] = Pnum("Sampling temperature."),
                 ["ContextWindow"] = Pint("Model context window."),
                 ["TimeoutMs"] = Pint("HTTP timeout in milliseconds."),
+                ["ToolAutoApproveSeconds"] = PintNullable("Interactive approval countdown in seconds; null inherits global, zero disables."),
                 ["AutoApproveTools"] = Pbool("Auto-approve tool calls when this endpoint is active."),
                 ["MaxAgentIterations"] = PintNullable("Per-endpoint agent-iteration override; null inherits the global setting."),
                 ["ShowThinking"] = Pbool("Whether the model's reasoning is displayed."),
@@ -1444,6 +1445,7 @@ namespace Mux.Server.Documentation
 
             s["SettingsDto"] = Obj(new Dictionary<string, M>
             {
+                ["ToolAutoApproveSeconds"] = Pint("Interactive approval countdown in seconds; zero disables."),
                 ["DefaultApprovalPolicy"] = Pstr("Default approval policy (`ask`/`auto`/`deny`)."),
                 ["MaxAgentIterations"] = Pint("Max agent iterations (1-1024)."),
                 ["MaxConcurrency"] = Pint("Max concurrent jobs (1-32)."),

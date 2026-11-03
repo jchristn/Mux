@@ -46,7 +46,6 @@ namespace Mux.Desktop.Shell
         // ---- per-turn engine state ----
         internal CancellationTokenSource? TurnCts { get; set; }
         internal Stopwatch? TurnStopwatch { get; set; }
-        internal long? TurnTtftMs { get; set; }
         internal int LastEstimatedTokens { get; set; }
 
         // ---- per-turn streaming widgets ----

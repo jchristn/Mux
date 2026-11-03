@@ -625,6 +625,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
         <div class="card">
           <h2 data-i18n="set.agent">Agent</h2>
           <p class="hint">Run limits and approval behavior for the agent loop.</p>
+          <div class="field"><label>Tool auto-approve seconds (0 = off)</label><input id="s_toolAutoApproveSeconds" type="number" min="0" step="1"></div>
           <div class="field"><label>Default approval policy</label>
             <select id="s_defaultApprovalPolicy" title="How tool calls are approved by default: ask (prompt for mutating tools), auto (approve all), or deny (block all)."><option>ask</option><option>auto</option><option>deny</option></select></div>
           <div class="field"><label>Max agent iterations <span class="sub">(1–1024)</span></label><input type="number" id="s_maxAgentIterations" title="Maximum number of model turns in a single run before mux stops (1-1024)." min="1" max="1024"></div>
@@ -1321,7 +1322,7 @@ function sendChat(){
 var currentAbort=null;
 var currentRunId=null;
 var currentMirror=null;
-function endChat(){busy=false;if(deferredModelSwitchSave){deferredModelSwitchSave=false;var history=messages.slice();modelSwitchSave=modelSwitchSave.then(function(){return persistConvo(history);});}currentAbort=null;currentRunId=null;if(currentMirror){try{currentMirror.close();}catch(e){}currentMirror=null;}el("sendBtn").textContent="➤";el("sendBtn").title="Send";el("sendBtn").style.background="";}
+function endChat(){busy=false;if(pendingApproval)pendingApproval("n");if(deferredModelSwitchSave){deferredModelSwitchSave=false;var history=messages.slice();modelSwitchSave=modelSwitchSave.then(function(){return persistConvo(history);});}currentAbort=null;currentRunId=null;if(currentMirror){try{currentMirror.close();}catch(e){}currentMirror=null;}el("sendBtn").textContent="➤";el("sendBtn").title="Send";el("sendBtn").style.background="";}
 // Stop the in-flight response. Ask the server to cancel the run (so it actually stops server-side, not just
 // in this browser), then abort the local stream and drop the incomplete turn (both the empty assistant
 // bubble and the user prompt that started it) so the model history stays clean — matching the TUI/desktop.
@@ -1423,13 +1424,33 @@ function handleSse(block,typing){
 
 // A mutating tool was proposed during an interactive web chat (server started with --allow-tools). Ask the
 // user to approve or deny and POST the decision back so the blocked run can continue.
+var pendingApproval=null;
 function handleApproval(req){
   if(!req||!req.RunId){return;}
-  var name=req.Name||"a tool";
-  var args=req.Arguments?("\n\n"+req.Arguments):"";
-  var ok=false;
-  try{ok=window.confirm("Allow mux to run "+name+"?"+args);}catch(e){ok=false;}
-  api("/v1.0/api/chat/approve","POST",{RunId:req.RunId,ToolCallId:req.ToolCallId,Decision:ok?"y":"n"}).catch(function(){});
+  if(pendingApproval)pendingApproval("n");
+  var dialog=document.createElement("dialog");
+  dialog.style.cssText="max-width:640px;background:var(--bg);color:var(--text);border:1px solid #555;padding:24px";
+  var title=document.createElement("h3");title.textContent="Allow mux to run "+(req.Name||"a tool")+"?";dialog.appendChild(title);
+  var args=document.createElement("pre");args.textContent=req.Arguments||"";args.style.cssText="white-space:pre-wrap;max-height:40vh;overflow:auto";dialog.appendChild(args);
+  var label=document.createElement("p");dialog.appendChild(label);
+  var remaining=Math.max(0,req.ToolAutoApproveSeconds||0)*1000,last=performance.now(),timer=null,resolved=false;
+  function decide(value){
+    if(resolved)return;resolved=true;clearInterval(timer);dialog.remove();if(pendingApproval===decide)pendingApproval=null;
+    api("/v1.0/api/chat/approve","POST",{RunId:req.RunId,ToolCallId:req.ToolCallId,Decision:value}).catch(function(){});
+  }
+  [["Approve","y"],["Approve for session","always"],["Deny","n"]].forEach(function(item){var button=document.createElement("button");button.textContent=item[0];button.onclick=function(){decide(item[1]);};dialog.appendChild(button);});
+  dialog.addEventListener("cancel",function(e){e.preventDefault();decide("n");});
+  pendingApproval=decide;document.body.appendChild(dialog);dialog.showModal();
+  function tick(){
+    var now=performance.now(),elapsed=now-last;last=now;
+    if(!busy){decide("n");return;}
+    if(req.ToolAutoApproveSeconds>0){
+      if(!document.hidden)remaining-=elapsed;
+      label.textContent="Auto-approve in "+Math.ceil(Math.max(0,remaining)/1000)+"s";
+      if(remaining<=0)decide("y");
+    }else{label.textContent="Automatic approval disabled";}
+  }
+  tick();timer=setInterval(tick,100);
 }
 
 function loadEndpoints(){
@@ -1462,6 +1483,7 @@ function loadChat(){loadConvos();warmModel();startSessionsWatch();}
 function loadSettings(){
   api("/v1.0/api/settings").then(function(s){
     el("s_defaultApprovalPolicy").value=s.DefaultApprovalPolicy;
+    el("s_toolAutoApproveSeconds").value=s.ToolAutoApproveSeconds||0;
     el("s_maxAgentIterations").value=s.MaxAgentIterations;
     el("s_maxConcurrency").value=s.MaxConcurrency;
     el("s_defaultEnqueueBehavior").value=s.DefaultEnqueueBehavior;
@@ -1495,6 +1517,7 @@ function loadSettings(){
 function saveSettings(){
   var dto={
     DefaultApprovalPolicy:el("s_defaultApprovalPolicy").value,
+    ToolAutoApproveSeconds:parseInt(el("s_toolAutoApproveSeconds").value,10)||0,
     MaxAgentIterations:parseInt(el("s_maxAgentIterations").value,10),
     MaxConcurrency:parseInt(el("s_maxConcurrency").value,10),
     DefaultEnqueueBehavior:el("s_defaultEnqueueBehavior").value,
@@ -1741,6 +1764,7 @@ function epFields(isEdit){return [
   {type:"section",label:"Behavior"},
   {id:"IsDefault",label:"Default endpoint",type:"checkbox",tip:"Use this endpoint automatically when none is specified. Only one endpoint can be the default."},
   {id:"TimeoutMs",label:"Timeout (ms)",type:"number",tip:"How long to wait for the backend to respond before failing the request, in milliseconds."},
+  {id:"ToolAutoApproveSeconds",label:"Tool auto-approve seconds",sub:"(blank = global, 0 = off)",type:"number",nullable:true,tip:"Countdown while awaiting tool approval. Zero disables timed approval."},
   {id:"AutoApproveTools",label:"Auto-approve tools",type:"checkbox",tip:"When active, tool calls run without an approval prompt while this endpoint is selected (unless CLI flags override)."},
   {id:"ShowThinking",label:"Show thinking",type:"checkbox",tip:"Display the model's reasoning ('thinking') output separately from its answer, when the model produces it."},
   {id:"MaxAgentIterations",label:"Max agent iterations",sub:"(blank = global)",type:"number",nullable:true,tip:"Cap on model turns per run for this endpoint. Leave blank to inherit the global setting."},

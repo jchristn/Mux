@@ -25,6 +25,18 @@ namespace Mux.Core.McpServer
         /// <summary>Whether the <c>run_skill</c> tool is registered. Defaults to false.</summary>
         public bool AllowSkills { get; set; }
 
+        /// <summary>Whether direct Bash command execution is enabled (independent of the agent approval policy).</summary>
+        public bool AllowBash { get; set; }
+
+        /// <summary>Optional explicit Bash executable path. Windows otherwise discovers Git Bash.</summary>
+        public string? BashPath { get; set; }
+
+        /// <summary>Whether direct PowerShell execution is enabled, independently of the agent approval policy.</summary>
+        public bool AllowPowerShell { get; set; }
+
+        /// <summary>Optional PowerShell executable path. Otherwise prefers pwsh, then Windows PowerShell on Windows.</summary>
+        public string? PowerShellPath { get; set; }
+
         /// <summary>
         /// Whether stdio mode keeps Voltaic's full per-message log on stderr. Off by default: message lines are
         /// shortened to the method, id, and size so prompts and answers do not land in MCP client logs.

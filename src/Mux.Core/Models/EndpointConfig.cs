@@ -12,6 +12,8 @@ namespace Mux.Core.Models
     {
         #region Private-Members
 
+        private int? _ToolAutoApproveSeconds = null;
+
         private string _Name = string.Empty;
         private AdapterTypeEnum _AdapterType = AdapterTypeEnum.Ollama;
         private string _BaseUrl = string.Empty;
@@ -58,6 +60,14 @@ namespace Mux.Core.Models
         #endregion
 
         #region Public-Members
+
+        /// <summary>Interactive tool approval countdown in seconds. Zero disables timed approval. Null inherits the global setting. Negative values are clamped to zero.</summary>
+        [JsonPropertyName("toolAutoApproveSeconds")]
+        public int? ToolAutoApproveSeconds
+        {
+            get => _ToolAutoApproveSeconds;
+            set => _ToolAutoApproveSeconds = value.HasValue ? Math.Max(0, value.Value) : null;
+        }
 
         /// <summary>
         /// The unique name of this endpoint.

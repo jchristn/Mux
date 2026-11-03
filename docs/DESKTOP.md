@@ -42,6 +42,29 @@ On launch the About window shows as a splash for about 2.5 seconds, then closes 
 
 Type in the composer and press **Enter** to send (**Shift+Enter** inserts a newline). On launch, focus goes straight to the composer. While a turn is running the send button becomes a red **Stop** button that cancels the turn; a cancelled turn is dropped from the model-facing history so the next prompt is never mis-batched with an unanswered one. The transcript auto-scrolls to the newest content as it streams.
 
+Desktop conversations start in your home directory (`~`), regardless of where the GUI launcher
+starts the process. Use `/cwd` to see the active directory or `/cwd /path/to/project` to change it.
+After installing a new build, quit and reopen the app: replacing its files does not update a
+running process.
+
+Prompt and skill preparation runs on a worker thread so the window remains responsive before
+streaming starts. Recursive skill relevance searches are skipped when the working directory
+is your home directory or a filesystem root such as `/` or `C:\`; select your project with
+`/cwd` for project discovery. Direct marker checks and explicit skill invocation still work at home.
+
+- **Turn info** — the response's info button shows, for example, `357,549 tokens processed · 4 model calls`.
+  This is input plus output summed across the primary model calls in that turn, including input
+  resent on subsequent calls. It is not the size of the typed prompt or the current context window.
+  Click for input/output totals, timing, model-call count, tool activity, and the separate estimated context size.
+  **First model call: time to first token** is measured from the first model request's start;
+  **Model streaming (all calls)** sums each call's first-token-to-last-token interval. Preparation,
+  approval waits, and tool execution contribute to **Total turn time**, not model streaming.
+  Missing timings display as `—`; a partial sum is not shown as a complete streaming total.
+  **Run errors** counts emitted run error events; recoverable failed tool results appear on their
+  tool cards and can occur in a successfully completed turn.
+  The call count excludes transport retries, compaction, and title generation; older completion
+  events without a count omit it. MCP tool descriptions and parameter schemas remain available
+  in tool definitions; the system prompt lists only their names to avoid repeating descriptions.
 - **Streaming & thinking** — assistant text streams token-by-token. Models that emit reasoning show a distinct thinking section.
 - **Markdown & code** — replies render as Markdown with syntax-highlighted code blocks.
 - **Copy** — hovering an assistant reply reveals a copy icon in its bottom-right corner; clicking it copies the raw text and briefly flips to a green checkmark.

@@ -3,6 +3,7 @@ namespace Mux.Cli.Commands
     using System;
     using System.Collections.Generic;
     using System.ComponentModel;
+    using System.Globalization;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -306,6 +307,7 @@ namespace Mux.Cli.Commands
                 ContextWindow = endpoint.ContextWindow,
                 TimeoutMs = endpoint.TimeoutMs,
                 AutoApproveTools = endpoint.AutoApproveTools,
+                ToolAutoApproveSeconds = endpoint.ToolAutoApproveSeconds,
                 MaxAgentIterations = endpoint.MaxAgentIterations,
                 EffectiveMaxAgentIterations = muxSettings.GetEffectiveMaxAgentIterations(endpoint),
                 MaxAgentIterationsSource = hasEndpointIterationOverride ? "endpoint" : "settings",
@@ -329,6 +331,7 @@ namespace Mux.Cli.Commands
             AnsiConsole.MarkupLine($"[bold]Context Window:[/] {endpoint.ContextWindow}");
             AnsiConsole.MarkupLine($"[bold]Timeout:[/] {endpoint.TimeoutMs}ms");
             AnsiConsole.MarkupLine($"[bold]Tool Approval:[/] {(endpoint.AutoApproveTools ? "[green]auto[/]" : "ask")}");
+            AnsiConsole.MarkupLine($"[bold]Tool Auto-Approve Seconds:[/] {(endpoint.ToolAutoApproveSeconds.HasValue ? endpoint.ToolAutoApproveSeconds.Value.ToString(CultureInfo.InvariantCulture) : "global")}");
             AnsiConsole.MarkupLine($"[bold]Max Agent Iterations:[/] {Markup.Escape(FormatEndpointIterationsForText(endpoint))}");
             AnsiConsole.MarkupLine($"[bold]Tool Calling:[/] {(endpoint.ToolsEnabled ? "[green]enabled[/]" : "[yellow]disabled[/]")}");
             if (endpoint.HeaderNames.Count > 0)
@@ -476,6 +479,9 @@ namespace Mux.Cli.Commands
         /// Whether this endpoint auto-approves tool calls.
         /// </summary>
         public bool AutoApproveTools { get; set; }
+
+        /// <summary>Interactive approval countdown; null inherits global, zero disables.</summary>
+        public int? ToolAutoApproveSeconds { get; set; }
 
         /// <summary>
         /// Endpoint-scoped maximum agent iterations, or null to inherit the global setting.

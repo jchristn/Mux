@@ -1,6 +1,9 @@
 namespace Mux.Desktop.Views
 {
     using System;
+    using System.Threading;
+    using Avalonia.Threading;
+    using Mux.Core.Approvals;
     using Avalonia;
     using Avalonia.Controls;
     using Avalonia.Layout;
@@ -19,15 +22,17 @@ namespace Mux.Desktop.Views
         /// Instantiate the approval dialog for a proposed tool call.
         /// </summary>
         /// <param name="toolCall">The proposed tool call. Required.</param>
+        /// <param name="seconds">Auto-approval seconds; zero disables.</param>
+        /// <param name="cancellationToken">Cancels the pending approval.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="toolCall"/> is null.</exception>
-        public ApprovalDialog(ToolCall toolCall)
+        public ApprovalDialog(ToolCall toolCall, int seconds = 0, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(toolCall);
 
             Title = Localizer.T("approval.title");
             Icon = IconResources.LoadWindowIcon();
             Width = 520;
-            Height = 320;
+            Height = 360;
             CanResize = false;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
@@ -86,6 +91,25 @@ namespace Mux.Desktop.Views
             approve.Click += (sender, args) => Close("y");
             buttons.Children.Add(approve);
 
+            TextBlock countdownText = new TextBlock();
+            panel.Children.Add(countdownText);
+            ApprovalCountdown countdown = new ApprovalCountdown(seconds);
+            DispatcherTimer timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+            CancellationTokenRegistration cancellation = default;
+            void Tick()
+            {
+                if (cancellationToken.IsCancellationRequested) { Close("n"); return; }
+                if (countdown.Update(IsActive)) { Close("y"); return; }
+                countdownText.Text = seconds > 0 ? "Auto-approve in " + countdown.RemainingSeconds + "s" : "Automatic approval disabled";
+            }
+            timer.Tick += (_, _) => Tick();
+            Opened += (_, _) =>
+            {
+                cancellation = cancellationToken.Register(() => Dispatcher.UIThread.Post(() => { if (IsVisible) Close("n"); }));
+                Tick();
+                if (IsVisible) timer.Start();
+            };
+            Closed += (_, _) => { timer.Stop(); cancellation.Dispose(); };
             panel.Children.Add(buttons);
             Content = panel;
         }

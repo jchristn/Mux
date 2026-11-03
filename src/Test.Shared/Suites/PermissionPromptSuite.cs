@@ -143,6 +143,40 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(2, escalations, "escalated the rest");
                     }),
 
+
+                    new TestCaseDescriptor("PermissionPrompt", "InteractiveCountdownResolution", "AgentLoop resolves endpoint countdown overrides and Deny never opens the prompt", async (CancellationToken ct) =>
+                    {
+                        foreach (int? seconds in new int?[] { null, 0, 3 })
+                        foreach (ApprovalPolicyEnum policy in new[] { ApprovalPolicyEnum.Ask, ApprovalPolicyEnum.Deny })
+                        {
+                            string root = Path.Combine(Path.GetTempPath(), "mux-countdown-" + Guid.NewGuid().ToString("N"));
+                            Directory.CreateDirectory(root);
+                            try
+                            {
+                                using MockHttpServer server = new MockHttpServer();
+                                string toolCall = "{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_x\",\"function\":{\"name\":\"write_file\",\"arguments\":\"{\\\"file_path\\\":\\\"a.txt\\\",\\\"content\\\":\\\"x\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}";
+                                server.RegisterStreamingResponse("write it", new List<string> { toolCall }); server.Start();
+                                EndpointConfig endpoint = AgentTestHarness.BuildMockEndpoint(server.BaseUrl);
+                                endpoint.ToolAutoApproveSeconds = seconds;
+                                int prompts = 0;
+                                AgentLoopOptions options = new AgentLoopOptions(endpoint)
+                                {
+                                    MuxSettings = new MuxSettings { ToolAutoApproveSeconds = 10 },
+                                    WorkingDirectory = root, MaxIterations = 1, ApprovalPolicy = policy,
+                                    InteractiveApprovalPrompt = (call, resolved, token) =>
+                                    {
+                                        prompts++;
+                                        MuxAssert.AreEqual(seconds ?? 10, resolved, "resolved seconds");
+                                        return Task.FromResult("y");
+                                    }
+                                };
+                                await AgentTestHarness.CollectEventsAsync(options, "write it", ct);
+                                MuxAssert.AreEqual(policy == ApprovalPolicyEnum.Deny ? 0 : 1, prompts, "prompt routing");
+                                MuxAssert.AreEqual(policy != ApprovalPolicyEnum.Deny, File.Exists(Path.Combine(root, "a.txt")), "approved call executes; denied never does");
+                            }
+                            finally { Directory.Delete(root, true); }
+                        }
+                    }),
                     new TestCaseDescriptor("PermissionPrompt", "AgentLoopReturnsDenyMessage", "Through AgentLoop, a prompt denial's message is the tool result the model sees", async (CancellationToken ct) =>
                     {
                         string tempDir = Path.Combine(Path.GetTempPath(), "mux_permission_prompt_" + Guid.NewGuid().ToString("N"));

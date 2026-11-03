@@ -17,7 +17,7 @@ namespace Mux.Core.McpServer
     /// <summary>
     /// The tools mux publishes as an MCP server: <c>run</c> (one headless agent turn), the read-only
     /// <c>list_sessions</c>, <c>get_session</c>, <c>list_endpoints</c>, and <c>list_skills</c>, and, only when the
-    /// operator allows it, <c>run_skill</c>. Handlers validate their arguments, never return secrets, and report errors
+    /// operator allows it, <c>run_skill</c>, <c>bash</c>, and <c>powershell</c>. Handlers validate arguments and report errors
     /// the calling model can act on as <see cref="McpToolException"/>. Transport-independent: the host registers the
     /// handlers on Voltaic's stdio or HTTP server.
     /// </summary>
@@ -68,6 +68,8 @@ namespace Mux.Core.McpServer
             get
             {
                 List<string> names = new List<string> { "run", "list_sessions", "get_session", "list_endpoints", "list_skills" };
+                if (_Options.AllowBash) names.Add("bash");
+                if (_Options.AllowPowerShell) names.Add("powershell");
                 if (_Options.AllowSkills) names.Add("run_skill");
                 return names;
             }
@@ -136,6 +138,38 @@ namespace Mux.Core.McpServer
                     }
                 },
                 ListSkillsAsync);
+
+            if (_Options.AllowBash)
+            {
+                register("bash", "Execute a command in Bash on the server machine and return stdout, stderr, exit_code, timed_out, and output_truncated. Requires server opt-in; commands run with the server account's permissions.",
+                    new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            command = new { type = "string", description = "Bash script to execute." },
+                            working_directory = new { type = "string", description = "Existing directory, relative to the server default or absolute." },
+                            timeout_ms = new { type = "integer", minimum = 1, maximum = 3600000, description = "Execution deadline in milliseconds (default 120000)." }
+                        },
+                        required = new[] { "command" }
+                    }, BashAsync);
+            }
+
+            if (_Options.AllowPowerShell)
+            {
+                register("powershell", "Execute a PowerShell script on the server machine without profiles or interactive prompts. Returns stdout, stderr, exit_code, timed_out, output_truncated, and executable (the resolved engine path). Requires server opt-in; commands run with the server account's permissions.",
+                    new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            command = new { type = "string", description = "PowerShell script to execute." },
+                            working_directory = new { type = "string", description = "Existing native directory, relative to the server default or absolute." },
+                            timeout_ms = new { type = "integer", minimum = 1, maximum = 3600000, description = "Execution deadline in milliseconds (default 120000)." }
+                        },
+                        required = new[] { "command" }
+                    }, PowerShellAsync);
+            }
 
             if (_Options.AllowSkills)
             {
@@ -427,6 +461,26 @@ namespace Mux.Core.McpServer
             }
 
             return Task.FromResult<object>(Serialize(new { enabled = true, run_skill_allowed = _Options.AllowSkills, category = wanted, skills = rows }));
+        }
+
+        private async Task<object> PowerShellAsync(RpcParameters? args, CancellationToken token)
+        {
+            if (!_Options.AllowPowerShell) throw new McpToolException("powershell is disabled. Start the server with --allow-powershell.");
+            using JsonDocument doc = Parse(args);
+            string command = OptionalString(doc.RootElement, "command") ?? throw new McpToolException("command is required.");
+            string directory = ResolveDirectory(OptionalString(doc.RootElement, "working_directory"));
+            int timeout = OptionalInt(doc.RootElement, "timeout_ms", 1, 3600000) ?? 120000;
+            return await PowerShellCommandRunner.RunAsync(_Options.PowerShellPath, command, directory, timeout, token).ConfigureAwait(false);
+        }
+
+        private async Task<object> BashAsync(RpcParameters? args, CancellationToken token)
+        {
+            if (!_Options.AllowBash) throw new McpToolException("bash is disabled. Start the server with --allow-bash.");
+            using JsonDocument doc = Parse(args);
+            string command = OptionalString(doc.RootElement, "command") ?? throw new McpToolException("command is required.");
+            string directory = ResolveDirectory(OptionalString(doc.RootElement, "working_directory"));
+            int timeout = OptionalInt(doc.RootElement, "timeout_ms", 1, 3600000) ?? 120000;
+            return await BashCommandRunner.RunAsync(_Options.BashPath, command, directory, timeout, token).ConfigureAwait(false);
         }
 
         private async Task<object> RunSkillAsync(RpcParameters? args, CancellationToken token)

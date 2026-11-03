@@ -119,7 +119,7 @@ test('endpoint argument completion supports selection while bare endpoint Enter 
 });
 
 test('complete dashboard bootstrap wires command and endpoint autocomplete into the chat composer', () => {
-    const source = fs.readFileSync(path.join(root, '..', 'Mux.Server', 'DashboardPage.cs'), 'utf8');
+    const source = fs.readFileSync(path.join(root, '..', 'Mux.Server', 'DashboardTemplate.cs'), 'utf8');
     const asset = fs.readFileSync(path.join(root, 'dashboard', 'chat', 'slash-completion.js'), 'utf8');
     const script = source.split('<script>')[1].split('</script>')[0].replace('__SLASH_COMPLETION_JS__', asset);
     const elements = new Map<string, any>();

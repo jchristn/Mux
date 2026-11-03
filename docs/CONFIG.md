@@ -81,6 +81,7 @@ Example:
       "timeoutMs": 120000,
       "headers": {},
       "autoApproveTools": false,
+      "toolAutoApproveSeconds": null,
       "maxAgentIterations": null,
       "quirks": null,
       "reasoningEffort": { "level": "high" },
@@ -104,6 +105,7 @@ Fields:
 | `contextWindow` | int | model context window in tokens. When omitted, mux uses 32768 and `run_started.contextWindowSource` reports `default`; set it to the window your server actually serves (for Ollama, the `num_ctx` it runs with, not the model's trained maximum). `--context-window` overrides it for one run |
 | `timeoutMs` | int | HTTP timeout |
 | `headers` | object | auth or custom headers; values may be stored directly or sourced from environment-variable references |
+| `toolAutoApproveSeconds` | int or null | interactive tool-approval countdown in seconds; null or omitted inherits the global setting, 0 disables timed approval, positive values approve once when the countdown expires |
 | `autoApproveTools` | bool | auto-approve tool calls whenever this endpoint is active unless CLI approval flags override it |
 | `maxAgentIterations` | int or null | optional endpoint override for the agent loop guard; `null` inherits `settings.json` |
 | `quirks` | object or null | backend behavior flags |
@@ -254,6 +256,7 @@ Example:
 {
   "systemPromptPath": null,
   "defaultApprovalPolicy": "ask",
+  "toolAutoApproveSeconds": 0,
   "toolTimeoutMs": 30000,
   "processTimeoutMs": 120000,
   "contextWindowSafetyMarginPercent": 15,
@@ -300,6 +303,7 @@ Fields:
 | Field | Type | Notes |
 |---|---|---|
 | `systemPromptPath` | string or null | optional path to a custom prompt file |
+| `toolAutoApproveSeconds` | int | interactive tool-approval countdown in seconds; default 0 (disabled); endpoints can override, including with 0 |
 | `defaultApprovalPolicy` | string | `ask`, `auto`, or `deny` |
 | `toolTimeoutMs` | int | built-in tool timeout (reserved; not yet enforced per tool call) |
 | `processTimeoutMs` | int | default `run_process` timeout in ms when a call omits `timeout_ms`; clamped to `1000-3600000` (1 hour), default `120000`; an explicit `timeout_ms` per call also clamps to `1000-3600000` |
@@ -768,3 +772,20 @@ for it port by changing only the configuration:
 **Custom commands** register as `/<name>` on the interactive command surface. Invoking one runs the
 command out-of-process in the working directory and posts its output into the transcript. `timeoutMs`
 defaults to 30000. Inspect the configured hooks and commands with `mux plugin list`.
+
+### Timed tool approval
+
+Set `"toolAutoApproveSeconds": 10` in `settings.json` to give each interactive tool
+approval prompt a ten-second countdown. An endpoint can set the same property to
+another number, set it to `0` to wait for an explicit decision, or leave it `null`
+(or absent) to inherit the global setting. Negative values normalize to zero.
+The settings and endpoint forms in the TUI, desktop, dashboard, and VS Code expose
+these fields; a blank endpoint field means inherit.
+
+The countdown approves **only the pending call**. Approve, Deny, Escape/close, or
+turn cancellation resolves the prompt immediately. Countdown time starts when the
+prompt is displayed and pauses when a TUI prompt is covered, a desktop dialog is
+inactive, or a browser/webview is hidden. Existing immediate approval policies and
+`autoApproveTools: true` still skip prompts; `deny` continues to deny without opening
+a countdown. Headless `mux print`, the MCP server's `run` approval ceiling, and
+external permission-prompt brokers do not gain a timeout-based grant.

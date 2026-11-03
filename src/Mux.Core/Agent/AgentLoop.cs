@@ -218,6 +218,8 @@ namespace Mux.Core.Agent
         {
             Stopwatch stopwatch = Stopwatch.StartNew();
             int iterationCount = 0;
+            int modelCallCount = 0;
+            LlmRunTiming modelTiming = new LlmRunTiming();
             int toolCallCount = 0;
             int errorCount = 0;
             int stopHookReentries = 0;
@@ -331,6 +333,7 @@ namespace Mux.Core.Agent
                 ErrorEvent? degenerateError = null;
                 long llmStageStart = Stopwatch.GetTimestamp();
 
+                modelCallCount++;
                 await foreach (AgentEvent streamEvent in _LlmClient
                     .StreamAsync(conversation, allTools, cancellationToken)
                     .ConfigureAwait(false))
@@ -395,6 +398,7 @@ namespace Mux.Core.Agent
                 LlmCallMetrics? completedCall = _LlmClient.LastCall;
                 bool isFreshCall = completedCall != null && !ReferenceEquals(completedCall, previousCall);
                 RecordCallUsage(runId, iterationCount, isFreshCall ? completedCall : null, streamErrorCode);
+                modelTiming.Add(isFreshCall ? completedCall : null);
                 previousCall = completedCall;
 
                 // Add assistant message to conversation history
@@ -553,6 +557,14 @@ namespace Mux.Core.Agent
                                         PermissionPromptResult answer = await _Options.PermissionPrompt(request, escalationToken).ConfigureAwait(false);
                                         if (!answer.Approved) permissionDenyMessage = answer.Message;
                                         return answer.Approved ? ApprovalDecision.Approved : ApprovalDecision.Denied;
+                                    }
+
+                                    if (_Options.InteractiveApprovalPrompt != null)
+                                    {
+                                        int seconds = _Options.Endpoint?.ToolAutoApproveSeconds ?? _Options.MuxSettings?.ToolAutoApproveSeconds ?? 0;
+                                        string answer = await _Options.InteractiveApprovalPrompt(toolCall, seconds, escalationToken).ConfigureAwait(false);
+                                        escalationToken.ThrowIfCancellationRequested();
+                                        return MapPromptResponseToDecision(answer);
                                     }
 
                                     Func<ToolCall, Task<string>> promptFunc = _Options.PromptUserFunc ?? DefaultPromptUserFunc;
@@ -841,6 +853,9 @@ namespace Mux.Core.Agent
                 SessionId = _Options.SessionId,
                 Status = ResolveRunStatus(budgetExceeded, maxIterationsReached, endedOnError, errorCount),
                 IterationsCompleted = iterationCount,
+                ModelCallCount = modelCallCount,
+                FirstModelCallTtftMs = modelTiming.FirstCallTtftMs,
+                ModelStreamingMs = modelTiming.StreamingMs,
                 ToolCallCount = toolCallCount,
                 ErrorCount = errorCount,
                 AssistantTextChars = assistantTextChars,
@@ -1448,6 +1463,7 @@ namespace Mux.Core.Agent
                 TimeoutMs = endpoint.TimeoutMs,
                 Headers = new Dictionary<string, string>(endpoint.Headers),
                 AutoApproveTools = endpoint.AutoApproveTools,
+                ToolAutoApproveSeconds = endpoint.ToolAutoApproveSeconds,
                 MaxAgentIterations = endpoint.MaxAgentIterations,
                 Quirks = CloneBackendQuirks(endpoint.Quirks)
             };

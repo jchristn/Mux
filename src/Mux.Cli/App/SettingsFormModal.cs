@@ -45,6 +45,7 @@ namespace Mux.Cli.App
         private readonly TextField _MaxTokenBudget;
         private readonly TextField _MaxConcurrency;
         private readonly RadioGroup _ApprovalPolicy;
+        private readonly TextField _ToolAutoApproveSeconds;
         private readonly RadioGroup _EnqueueBehavior;
         private readonly TextField _ToolTimeout;
         private readonly TextField _ProcessTimeout;
@@ -90,6 +91,7 @@ namespace Mux.Cli.App
                     : string.Empty
             };
             _MaxConcurrency = new TextField { Value = _Settings.MaxConcurrency.ToString(CultureInfo.InvariantCulture) };
+            _ToolAutoApproveSeconds = new TextField { Value = _Settings.ToolAutoApproveSeconds.ToString(CultureInfo.InvariantCulture) };
             _ApprovalPolicy = new RadioGroup(_ApprovalPolicies);
             SelectRadio(_ApprovalPolicy, _ApprovalPolicies, _Settings.DefaultApprovalPolicy);
             _EnqueueBehavior = new RadioGroup(_EnqueueBehaviors);
@@ -124,6 +126,7 @@ namespace Mux.Cli.App
             _Form.Add("Max token budget (blank = off)", _MaxTokenBudget, () => ValidateOptionalInt(_MaxTokenBudget.Value, "Max token budget", 1, int.MaxValue));
             _Form.Add("Max concurrency", _MaxConcurrency, () => ValidateInt(_MaxConcurrency.Value, "Max concurrency", 1, 32));
             _Form.Add("Default approval policy", _ApprovalPolicy);
+            _Form.Add("Tool auto-approve seconds (0 = off)", _ToolAutoApproveSeconds, () => ValidateInt(_ToolAutoApproveSeconds.Value, "Tool auto-approve seconds", 0, int.MaxValue));
             _Form.Add("Default enqueue behavior", _EnqueueBehavior);
             _Form.AddSection("Tools");
             _Form.Add("Tool timeout (ms)", _ToolTimeout, () => ValidateInt(_ToolTimeout.Value, "Tool timeout", 1000, 300000));
@@ -262,6 +265,7 @@ namespace Mux.Cli.App
             _Settings.MaxTokenBudget = ParseOptionalIntValue(_MaxTokenBudget.Value);
             _Settings.MaxConcurrency = ParseInt(_MaxConcurrency.Value);
             _Settings.DefaultApprovalPolicy = _ApprovalPolicy.SelectedOption;
+            _Settings.ToolAutoApproveSeconds = ParseInt(_ToolAutoApproveSeconds.Value);
             _Settings.DefaultEnqueueBehavior = _EnqueueBehavior.SelectedOption;
             _Settings.ToolTimeoutMs = ParseInt(_ToolTimeout.Value);
             _Settings.ProcessTimeoutMs = ParseInt(_ProcessTimeout.Value);

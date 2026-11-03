@@ -9,7 +9,7 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.5.0-blue.svg" alt="v1.5.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.6.0-blue.svg" alt="v1.6.0"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-yellow.svg" alt="beta"></a>
   <a href="https://github.com/jchristn/Mux/actions/workflows/ci.yml"><img src="https://github.com/jchristn/Mux/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.nuget.org/packages/Mux.Core"><img src="https://img.shields.io/nuget/v/Mux.Core.svg" alt="NuGet Mux.Core"></a>
@@ -19,6 +19,12 @@
 > mux is in beta. APIs, interfaces, configuration formats, tool schemas, and CLI behavior are all subject to change. Feedback is welcome via [issues](https://github.com/jchristn/Mux/issues) and [discussions](https://github.com/jchristn/Mux/discussions).
 
 [Get started](#getting-started) · [Model providers](#model-providers) · [CLI usage](#cli-usage) · [Configuration](#configuration) · [Documentation](#documentation)
+
+Version 1.6.0 adds opt-in `bash` and `powershell` MCP tools
+(`mux mcp serve --allow-bash --allow-powershell`),
+configurable tool-approval countdowns, and a faint, responsive MUX watermark in an
+idle TUI conversation. See [MCP usage](docs/USAGE.md#mux-as-an-mcp-server-mux-mcp-serve)
+and [configuration](docs/CONFIG.md) for setup and Windows behavior.
 
 ## What is mux?
 
@@ -243,7 +249,11 @@ of in-app configuration managers; the usage dashboard with token heatmaps; and a
 languages. Slash commands and endpoint names offer completion; Enter on an endpoint suggestion switches
 immediately and records a saved conversation notice. **Use this model** in an endpoint row's action menu
 also selects it for the conversation. macOS has native File, Edit, View, Configure, Tools, Window, and Help
-menus. See
+menus. Prompt preparation runs off the UI thread. Each response's info button shows tokens
+processed across the turn's model calls, with input/output totals and estimated context size
+in the details. Model timings distinguish the first call's time to first token, streaming summed
+across all calls, and total turn time. A short prompt can still send a large tool catalog on every call. MCP tool
+descriptions are sent once in the tool definitions, with only names repeated in the system prompt. See
 [docs/DESKTOP.md](docs/DESKTOP.md).
 
 ### VS Code extension

@@ -76,6 +76,17 @@ namespace Test.Shared.Suites
             RunCompletedEvent completed = (RunCompletedEvent)events[^1];
             MuxAssert.AreEqual("completed", completed.Status, "run status");
             MuxAssert.AreEqual(1, completed.IterationsCompleted, "iterations completed");
+            MuxAssert.AreEqual(1, completed.ModelCallCount, "one actual primary model call");
+            MuxAssert.IsTrue(completed.FirstModelCallTtftMs >= 0, "first-call timing reaches completion event");
+            MuxAssert.IsTrue(completed.ModelStreamingMs >= 0, "streaming timing reaches completion event");
+
+            options.MaxTokenBudget = 1;
+            events = await AgentTestHarness.CollectEventsAsync(options, "budget stops before model", ct).ConfigureAwait(false);
+            completed = (RunCompletedEvent)events[^1];
+            MuxAssert.AreEqual("budget_exceeded", completed.Status, "budget stopped run");
+            MuxAssert.AreEqual(0, completed.ModelCallCount, "budget check is not counted as a model call");
+            MuxAssert.IsNull(completed.FirstModelCallTtftMs, "no model means no TTFT");
+            MuxAssert.IsNull(completed.ModelStreamingMs, "no model means no stream");
         }
 
         private static void PrintCommandJsonlEmitsStructuredEvents()

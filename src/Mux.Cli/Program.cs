@@ -776,7 +776,7 @@ CONFIG:
                 // Route escalated tool approvals to the shell's modal. The template is captured by
                 // CreateForAgentLoop and read per job run, so setting this before the run loop starts
                 // (jobs only run after the user submits) takes effect for every job.
-                template.PromptUserFunc = (ToolCall toolCall) => app.RequestApprovalAsync(toolCall);
+                template.InteractiveApprovalPrompt = app.RequestApprovalAsync;
                 template.AskUserFunc = app.AskUserAsync;
                 template.ReviewPlanFunc = app.ReviewPlanAsync;
 

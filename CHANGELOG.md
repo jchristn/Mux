@@ -2,9 +2,33 @@
 
 All notable changes to mux are documented here.
 
-## Unreleased
+## 1.6.0 (unreleased)
 
 ### Added
+
+- Opt-in `powershell` MCP tool via `mux mcp serve --allow-powershell`, with
+  `--powershell-path` for an explicit executable. Prefers `pwsh`, with Windows
+  PowerShell fallback on Windows. Runs without profiles or interactive prompts,
+  preserves Unicode and script declarations, and reports the executable used.
+  Shares Bash's bounded stdout/stderr capture, deadline, and cancellation handling.
+  Includes real command and MCP HTTP tests, plus executable-discovery and validation tests.
+
+- Opt-in `bash` MCP tool via `mux mcp serve --allow-bash`, with an optional
+  `--bash-path`, working-directory selection, bounded stdout/stderr capture,
+  exit status, timeout reporting, and cancellation. Uses native Bash on macOS/Linux
+  and Git Bash on Windows; mux can also run inside WSL.
+- Global `toolAutoApproveSeconds` and nullable endpoint overrides. Zero disables
+  timed approval; a positive value shows a countdown and approves once if unanswered.
+  TUI, desktop, web, and VS Code approval prompts honor the setting; manual denial
+  and cancellation close the prompt. Hidden prompts pause their countdown.
+- Faint MUX artwork centered in the idle TUI transcript, using the existing banner's
+  `█`, `▀`, and `▄` block characters. Its filled half-cells scale proportionally
+  within one third of the pane, preserving the logo's shape without tiled letters
+  or stripes. Typing hides it, erasing an unsent draft restores it, and sending a
+  prompt keeps it hidden for that conversation.
+- Regression coverage for Bash execution/validation/cancellation, approval
+  precedence and timing, and artwork sizing/lifecycle. Updated VS Code dashboard
+  tests to read the extracted dashboard template.
 
 - First-class `xai` (Grok) provider across TUI, desktop, web, and VS Code using the
   native Responses API, required bearer credentials, `XAI_API_KEY` fallback, and
@@ -23,6 +47,30 @@ All notable changes to mux are documented here.
   reports routed to private advisories.
 
 ### Changed
+
+- Desktop turn timing uses recorded model-call metrics: first-call time to first token
+  and streaming duration summed across all primary calls. It no longer labels the wait
+  for final answer text as TTFT or derives streaming from the remaining turn time.
+  Missing timings display as unavailable. All 11 desktop locales distinguish model
+  timings, total turn time, model-call count, cumulative token traffic, and estimated context.
+  Completion envelopes optionally include `firstModelCallTtftMs` and `modelStreamingMs`.
+
+- Desktop conversations and tool execution default to the user's home directory (`~`),
+  rather than inheriting a GUI launcher's working directory (often `/` on macOS).
+  `/cwd` still selects an explicit project directory. Recursive skill relevance discovery
+  also skips the home directory, avoiding stalls in protected or cloud-backed personal folders;
+  direct marker checks and explicit skill invocation remain available.
+
+- Desktop agent preparation runs off the UI thread, keeping Send/Stop and the window
+  responsive while prompts, skills, and tool catalogs are assembled. Recursive skill
+  relevance searches no longer traverse filesystem roots (`/`, Windows drive roots,
+  or UNC share roots); explicit skill invocation remains available.
+- MCP system-prompt listings include tool names without repeating their descriptions.
+  Full descriptions and parameter schemas remain in the callable tool definitions.
+- Desktop turn summaries show grouped **tokens processed** and the number of primary
+  model calls. Usage is summed across the turn's calls, including repeated input;
+  it is separate from the estimated context size. Completion events optionally expose
+  `modelCallCount`, excluding transport retries, compaction, and title generation.
 
 - macOS install/reinstall scripts now install Finder applications in `~/Applications`;
   desktop and agent run scripts refresh and launch their respective app bundles.

@@ -82,6 +82,24 @@ namespace Mux.Core.Agent
         }
 
         /// <summary>
+        /// Primary model calls started during this run, excluding internal transport retries,
+        /// compaction, and title generation. Null for older events that did not report a count.
+        /// </summary>
+        public int? ModelCallCount { get; set; }
+
+        /// <summary>
+        /// Request-start to first token for the first primary model call, excluding turn preparation.
+        /// Null when the first call has no timing or no call was made; later calls never substitute for it.
+        /// </summary>
+        public long? FirstModelCallTtftMs { get; set; }
+
+        /// <summary>
+        /// Sum of first-token to last-token durations across primary model calls, excluding tool execution
+        /// and approval waits. Null when any call lacks a streaming duration, or no call was made.
+        /// </summary>
+        public long? ModelStreamingMs { get; set; }
+
+        /// <summary>
         /// Total proposed tool calls handled during the run.
         /// </summary>
         public int ToolCallCount

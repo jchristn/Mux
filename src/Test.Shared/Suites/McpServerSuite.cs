@@ -120,6 +120,32 @@ namespace Test.Shared.Suites
                 return Task.CompletedTask;
             });
 
+            Add("HttpBash", "Opt-in Bash runs through the MCP HTTP transport and returns structured execution output", (CancellationToken ct) => WithServerAsync(new MuxMcpServerOptions { AllowBash = true }, null, async (McpServerFixture f) =>
+            {
+                using McpHttpClient client = (await f.Server.ConnectAsync(null, ct).ConfigureAwait(false))!;
+                McpToolOutcome result = await CallTool(client, "bash", new { command = "printf 'MCP bash'; printf 'stderr' >&2; exit 4", timeout_ms = 10000 }, ct).ConfigureAwait(false);
+                MuxAssert.IsFalse(result.IsError, "Bash process completed: " + result.Text);
+                using JsonDocument doc = JsonDocument.Parse(result.Text);
+                MuxAssert.AreEqual("MCP bash", doc.RootElement.GetProperty("stdout").GetString(), "stdout over HTTP");
+                MuxAssert.AreEqual("stderr", doc.RootElement.GetProperty("stderr").GetString(), "stderr over HTTP");
+                MuxAssert.AreEqual(4, doc.RootElement.GetProperty("exit_code").GetInt32(), "exit over HTTP");
+            }));
+
+            bool powerShellAvailable;
+            try { PowerShellCommandRunner.ResolveExecutable(null); powerShellAvailable = true; }
+            catch (McpToolException) { powerShellAvailable = false; }
+            cases.Add(new TestCaseDescriptor(SuiteId, "HttpPowerShell", "Opt-in PowerShell executes over MCP HTTP and identifies its executable", (CancellationToken ct) => WithServerAsync(new MuxMcpServerOptions { AllowPowerShell = true }, null, async (McpServerFixture f) =>
+            {
+                using McpHttpClient client = (await f.Server.ConnectAsync(null, ct).ConfigureAwait(false))!;
+                McpToolOutcome result = await CallTool(client, "powershell", new { command = "[Console]::Out.Write('MCP PowerShell'); [Console]::Error.Write('stderr'); exit 4", timeout_ms = 10000 }, ct).ConfigureAwait(false);
+                MuxAssert.IsFalse(result.IsError, "PowerShell process completed: " + result.Text);
+                using JsonDocument doc = JsonDocument.Parse(result.Text);
+                MuxAssert.AreEqual("MCP PowerShell", doc.RootElement.GetProperty("stdout").GetString(), "stdout over HTTP");
+                MuxAssert.AreEqual("stderr", doc.RootElement.GetProperty("stderr").GetString(), "stderr over HTTP");
+                MuxAssert.AreEqual(4, doc.RootElement.GetProperty("exit_code").GetInt32(), "exit over HTTP");
+                MuxAssert.AreEqual(PowerShellCommandRunner.ResolveExecutable(null), doc.RootElement.GetProperty("executable").GetString(), "engine path over HTTP");
+            }), skip: !powerShellAvailable, skipReason: "Install PowerShell to run the real MCP shell integration check."));
+
             // --- over HTTP with a fake executor ---
             Add("HttpToolsListAndRun", "tools/list shows the catalog with schemas, and run returns the answer and summary", (CancellationToken ct) => WithServerAsync(new MuxMcpServerOptions { MaxApprovalPolicy = ApprovalPolicyEnum.AutoSafe }, null, async (McpServerFixture f) =>
             {

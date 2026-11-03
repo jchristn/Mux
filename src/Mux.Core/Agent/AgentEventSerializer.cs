@@ -202,6 +202,18 @@ namespace Mux.Core.Agent
                     if (includeStats)
                     {
                         payload["iterationsCompleted"] = runCompletedEvent.IterationsCompleted;
+                        if (runCompletedEvent.ModelCallCount.HasValue)
+                        {
+                            payload["modelCallCount"] = runCompletedEvent.ModelCallCount.Value;
+                        }
+                        if (runCompletedEvent.FirstModelCallTtftMs.HasValue)
+                        {
+                            payload["firstModelCallTtftMs"] = runCompletedEvent.FirstModelCallTtftMs.Value;
+                        }
+                        if (runCompletedEvent.ModelStreamingMs.HasValue)
+                        {
+                            payload["modelStreamingMs"] = runCompletedEvent.ModelStreamingMs.Value;
+                        }
                         payload["toolCallCount"] = runCompletedEvent.ToolCallCount;
                         payload["errorCount"] = runCompletedEvent.ErrorCount;
                         payload["assistantTextChars"] = runCompletedEvent.AssistantTextChars;

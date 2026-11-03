@@ -36,6 +36,33 @@ namespace Test.Shared.Suites
                 "TUIKit interactive shell boot, input, submit, and event projection",
                 new List<TestCaseDescriptor>
                 {
+
+                    new TestCaseDescriptor(SuiteId, "IdleArtworkLifecycle", "Idle artwork hides while typing, returns after erasing, and stays hidden after submitting", async (CancellationToken ct) =>
+                    {
+                        HeadlessBackend backend = new HeadlessBackend(160, 48);
+                        await using JobManager manager = NewManager(EchoRunner);
+                        using MuxTuiApp app = NewApp(backend, manager, "demo");
+                        app.Start();
+                        app.RenderOnce();
+                        MuxAssert.Contains("38;2;32;32;32", backend.TakeOutput(), "idle gray art");
+                        backend.FeedInput("x"); app.PumpInputOnce(); app.RenderOnce(); backend.TakeOutput();
+                        backend.FeedInput("\u007f"); app.PumpInputOnce(); app.RenderOnce();
+                        MuxAssert.Contains("38;2;32;32;32", backend.TakeOutput(), "art returns after erasing");
+                        backend.FeedInput("hello\r"); app.PumpInputOnce();
+                        await app.DrainProjectorsAsync();
+                        app.RenderOnce(); backend.TakeOutput();
+                        backend.FeedInput("\u000c"); app.PumpInputOnce(); app.RenderOnce();
+                        MuxAssert.IsFalse(backend.TakeOutput().Contains("38;2;32;32;32", StringComparison.Ordinal), "clear transcript does not restore art after a prompt");
+                    }),
+                    new TestCaseDescriptor(SuiteId, "ApprovalCancellation", "Cancelling a pending tool approval denies and removes the modal", async (CancellationToken ct) =>
+                    {
+                        await using JobManager manager = NewManager(EchoRunner);
+                        using MuxTuiApp app = NewApp(new HeadlessBackend(100, 30), manager, "demo");
+                        using CancellationTokenSource stop = new CancellationTokenSource();
+                        Task<string> answer = app.RequestApprovalAsync(new ToolCall { Name = "write_file" }, 10, stop.Token);
+                        stop.Cancel();
+                        MuxAssert.AreEqual("n", await answer.WaitAsync(TimeSpan.FromSeconds(2), ct), "cancel denies");
+                    }),
                     new TestCaseDescriptor(SuiteId, "BootWritesHeaderAndFooter", "Boot renders the session header and footer hints", async (CancellationToken ct) =>
                     {
                         await using (JobManager manager = NewManager(EchoRunner))

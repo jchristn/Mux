@@ -68,7 +68,8 @@ namespace Mux.Core.Tools
             builder.Append("\n\n").Append(PromptResolver.Shared.GetEffective("section.mcp")).Append('\n');
             foreach (ToolDefinition tool in mcpTools)
             {
-                builder.Append($"- {tool.Name}: {tool.Description}\n");
+                // Full descriptions and parameter schemas already travel in AdditionalTools.
+                builder.Append("- ").Append(tool.Name).Append('\n');
             }
 
             return builder.ToString().TrimEnd();
