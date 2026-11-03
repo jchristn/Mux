@@ -98,7 +98,7 @@ namespace Mux.Core.McpServer
                         endpoint = new { type = "string", description = "Optional endpoint name (see list_endpoints)." },
                         working_directory = new { type = "string", description = "Optional working directory for the run." },
                         approval_policy = new { type = "string", @enum = new[] { "deny", "auto-safe", "auto" }, description = "Optional approval policy; it can only be as permissive as the server allows." },
-                        max_turns = new { type = "integer", minimum = 1, maximum = 200, description = "Optional cap on agent iterations." }
+                        max_turns = new { type = "integer", minimum = 1, maximum = 1024, description = "Optional cap on agent iterations." }
                     },
                     required = new[] { "prompt" }
                 },

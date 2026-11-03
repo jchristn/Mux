@@ -662,7 +662,7 @@ export class ManageActions {
             const settings = await client.getSettings();
             const fields: FormField[] = [
                 { key: 'DefaultApprovalPolicy', label: vscode.l10n.t('Default approval policy'), type: 'select', options: ['ask', 'auto', 'deny'], value: settings.DefaultApprovalPolicy },
-                { key: 'MaxAgentIterations', label: vscode.l10n.t('Max agent iterations'), type: 'number', value: settings.MaxAgentIterations, hint: '1–100' },
+                { key: 'MaxAgentIterations', label: vscode.l10n.t('Max agent iterations'), type: 'number', value: settings.MaxAgentIterations, hint: '1–1024' },
                 { key: 'MaxConcurrency', label: vscode.l10n.t('Max concurrency'), type: 'number', value: settings.MaxConcurrency, hint: '1–32' },
                 { key: 'ToolTimeoutMs', label: vscode.l10n.t('Tool timeout (ms)'), type: 'number', value: settings.ToolTimeoutMs },
                 { key: 'ProcessTimeoutMs', label: vscode.l10n.t('Process timeout (ms)'), type: 'number', value: settings.ProcessTimeoutMs },
