@@ -93,6 +93,27 @@ namespace Mux.Core.Telemetry
         }
 
         /// <summary>
+        /// The month-range heatmap as a Monday-aligned calendar of whole days: one bucket per day, starting
+        /// on the Monday of the week that contains the oldest day of the 30-day range and ending on the
+        /// current day, so the chart modal can draw a seven-column weekday calendar with no leading partial
+        /// week and no scrolling. Days are UTC calendar days (00:00Z starts) so the buckets land exactly on
+        /// the store's absolute day grid.
+        /// </summary>
+        /// <param name="nowUnixMs">The reference time, Unix epoch milliseconds.</param>
+        /// <returns>The day-bucketed calendar window.</returns>
+        public static UsageWindow ComputeHeatmapDays(long nowUnixMs)
+        {
+            const long DayMs = 24L * 60L * 60L * 1000L;
+            DateTime today = DateTimeOffset.FromUnixTimeMilliseconds(nowUnixMs).UtcDateTime.Date;
+            DateTime oldest = today.AddDays(-29);
+            int pad = ((int)oldest.DayOfWeek + 6) % 7; // DayOfWeek is Sunday-based; shift so Monday = 0
+            DateTime first = oldest.AddDays(-pad);
+            int count = (int)(today - first).TotalDays + 1;
+            long from = new DateTimeOffset(first, TimeSpan.Zero).ToUnixTimeMilliseconds();
+            return new UsageWindow(from, from + count * DayMs, DayMs, count);
+        }
+
+        /// <summary>
         /// The timeseries bucket size and count for a range keyword (hour/day/week/month). Unrecognized
         /// values fall back to the day grid (96 × 15 minutes).
         /// </summary>

@@ -83,6 +83,11 @@ namespace Test.Shared.Suites
                         MuxAssert.IsTrue(colors.Contains(Color.FromRgb(45, 48, 52)), "zero usage cell");
                         MuxAssert.IsTrue(colors.Contains(Color.FromRgb(14, 68, 41)), "low usage cell");
                         MuxAssert.IsTrue(colors.Contains(Color.FromRgb(57, 211, 83)), "peak usage cell");
+                        // The day grid is transposed (columns = hours, rows = quarter-hours), centered,
+                        // cells 2x1 with one-column gaps: bucket 0 at (28,6), bucket 1 at (28,8), bucket 2 at (28,10).
+                        MuxAssert.AreEqual(Color.FromRgb(45, 48, 52), buffer.Get(28, 6).Style.Background, "zero series value maps to empty level");
+                        MuxAssert.AreEqual(Color.FromRgb(14, 68, 41), buffer.Get(28, 8).Style.Background, "tiny series value maps to the lowest level (sqrt scale)");
+                        MuxAssert.AreEqual(Color.FromRgb(57, 211, 83), buffer.Get(28, 10).Style.Background, "peak series value maps to the highest level");
                         UsageChartsModal empty = new UsageChartsModal("Usage", r => new UsageChartData(), UsageRange.Day);
                         empty.HandleKey(KeyEvent.Special(KeyCode.Left));
                         MuxAssert.Contains("No data in this range", Render(empty, 120, 40), "empty heatmap");
@@ -90,7 +95,7 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor(SuiteId, "FullscreenHeatmapUsesAvailableWidth", "Usage covers the screen and heatmap cells reach both sides of the chart", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "HeatmapCellsStayFixedSquares", "Usage covers the screen while heatmap cells keep a fixed square size with one-column gaps", (CancellationToken ct) =>
                     {
                         foreach (int width in new[] { 40, 120, 200 })
                         {
@@ -103,18 +108,38 @@ namespace Test.Shared.Suites
                             modal.Render(new BufferSurface(buffer));
                             MuxAssert.IsTrue(buffer.Get(0, 0).Grapheme != "!", "top left covered");
                             MuxAssert.IsTrue(buffer.Get(width - 1, 39).Grapheme != "!", "bottom right covered");
+
+                            // Cells are 2 columns wide with a 1-column gap at every screen width: every
+                            // horizontal peak-colored run is exactly 2 cells, and runs start 3 apart.
                             Color peak = Color.FromRgb(57, 211, 83);
-                            MuxAssert.AreEqual(peak, buffer.Get(15, 6).Style.Background, "first heatmap column");
-                            MuxAssert.AreEqual(peak, buffer.Get(width - 5, 6).Style.Background, "last heatmap column reaches screen edge");
+                            int runs = 0;
+                            for (int y = 0; y < 40; y++)
+                            {
+                                int runStart = -1;
+                                for (int x = 0; x < width; x++)
+                                {
+                                    bool isPeak = peak.Equals(buffer.Get(x, y).Style.Background);
+                                    if (isPeak && runStart < 0) runStart = x;
+                                    if (!isPeak && runStart >= 0)
+                                    {
+                                        MuxAssert.AreEqual(2, x - runStart, "cell is exactly 2 columns wide at width " + width);
+                                        runs++;
+                                        runStart = -1;
+                                    }
+                                }
+                            }
+                            MuxAssert.IsTrue(runs >= 8, "grid cells rendered at width " + width);
                         }
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor(SuiteId, "HeatmapTimeAxesAndFixedSpots", "Each timeframe has fixed spot counts, labeled axes, and scrollable rows", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "HeatmapTimeAxesAndFixedCells", "Each timeframe renders a labeled fixed-cell grid; the month is a weekday calendar that needs no paging", (CancellationToken ct) =>
                     {
                         UsageChartsModal modal = new UsageChartsModal("Usage", range =>
                         {
-                            UsageWindow window = UsageWindow.ComputeHeatmap(range, 1791870000000L);
+                            UsageWindow window = range == UsageRange.Month
+                                ? UsageWindow.ComputeHeatmapDays(1791870000000L)
+                                : UsageWindow.ComputeHeatmap(range, 1791870000000L);
                             UsageChartData data = new UsageChartData();
                             for (int i = 0; i < window.BucketCount; i++)
                             {
@@ -124,25 +149,52 @@ namespace Test.Shared.Suites
                             return data;
                         }, UsageRange.Day);
                         modal.HandleKey(KeyEvent.Special(KeyCode.Left));
-                        string[] expected = { "60 spots", "96 spots", "84 spots", "60 spots" };
+                        string[] cells = { "60 cells", "96 cells", "84 cells" };
+                        string[] gutters = { "Time", "Time", "Day", "Week" };
                         for (int i = 0; i < 4; i++)
                         {
                             modal.HandleKey(KeyEvent.Char((char)('1' + i)));
                             string rendered = Render(modal, 120, 40);
-                            MuxAssert.Contains(expected[i], rendered, "fixed spot count for timeframe " + i);
-                            MuxAssert.Contains("Row start", rendered, "Y axis label");
+                            if (i < 3)
+                            {
+                                MuxAssert.Contains(cells[i], rendered, "fixed cell count for timeframe " + i);
+                            }
+                            else
+                            {
+                                MuxAssert.Contains("cells · 1 day/cell · UTC days", rendered, "month calendar footer");
+                                foreach (string weekday in new[] { "Mo", "We", "Su" })
+                                    MuxAssert.Contains(weekday, rendered, "weekday column " + weekday);
+                            }
+                            MuxAssert.Contains(gutters[i], rendered, "row-axis label for timeframe " + i);
                             if (i == 1)
                             {
                                 foreach (string anchor in new[] { ":00", ":15", ":30", ":45" })
-                                    MuxAssert.Contains(anchor, rendered, "quarter-hour column anchor");
+                                    MuxAssert.Contains(anchor, rendered, "quarter-hour row label");
                             }
                         }
-                        string firstPage = Render(modal, 120, 20);
+                        string shortScreen = Render(modal, 120, 20);
                         modal.HandleKey(KeyEvent.Special(KeyCode.PageDown));
-                        string secondPage = Render(modal, 120, 20);
-                        MuxAssert.IsTrue(firstPage != secondPage, "month rows scroll on short screens");
-                        modal.HandleKey(KeyEvent.Special(KeyCode.PageUp));
-                        MuxAssert.AreEqual(firstPage, Render(modal, 120, 20), "PageUp returns to first rows");
+                        MuxAssert.AreEqual(shortScreen, Render(modal, 120, 20), "calendar fits the page; PgDn is inert");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "MonthHeatmapRendersWeekdayCalendar", "The month heatmap is a Monday-first calendar of UTC days on a fixed square grid", (CancellationToken ct) =>
+                    {
+                        long now = new DateTimeOffset(2026, 10, 13, 12, 6, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                        UsageWindow window = UsageWindow.ComputeHeatmapDays(now);
+                        UsageChartData data = new UsageChartData();
+                        for (int i = 0; i < window.BucketCount; i++)
+                        {
+                            data.HeatmapTokensPerBucket.Add(100);
+                            data.HeatmapBucketStartsUnixMs.Add(window.FromUnixMs + i * window.BucketMs);
+                        }
+                        UsageChartsModal modal = new UsageChartsModal("Usage", r => data, UsageRange.Month);
+                        modal.HandleKey(KeyEvent.Special(KeyCode.Left));
+                        string rendered = Render(modal, 120, 40);
+                        MuxAssert.Contains(window.BucketCount + " cells · 1 day/cell · UTC days", rendered, "calendar footer");
+                        foreach (string weekday in new[] { "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su" })
+                            MuxAssert.Contains(weekday, rendered, "weekday column " + weekday);
+                        MuxAssert.Contains("Week", rendered, "row-axis label");
                         return Task.CompletedTask;
                     }),
 
@@ -161,7 +213,7 @@ namespace Test.Shared.Suites
                         UsageChartsModal modal = new UsageChartsModal("Usage", r => data, UsageRange.Day);
                         modal.HandleKey(KeyEvent.Special(KeyCode.Left));
                         string rendered = Render(modal, 120, 40);
-                        foreach (string anchor in new[] { ":00", ":15", ":30", ":45" }) MuxAssert.Contains(anchor, rendered, "anchored column " + anchor);
+                        foreach (string anchor in new[] { ":00", ":15", ":30", ":45" }) MuxAssert.Contains(anchor, rendered, "quarter-hour row label " + anchor);
                         MuxAssert.Contains("peak 100", rendered, "aligned values used without relabeling rolling values");
                         MuxAssert.IsTrue(!rendered.Contains(":06"), "off-boundary rolling timestamps do not label heatmap");
                         return Task.CompletedTask;

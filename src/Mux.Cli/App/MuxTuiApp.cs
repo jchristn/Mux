@@ -6940,7 +6940,11 @@ namespace Mux.Cli.App
                 data.BucketLabels.Add(FormatBucketLabel(bucket.BucketStartUnixMs, range));
             }
 
-            Mux.Core.Telemetry.UsageWindow heatmapWindow = Mux.Core.Telemetry.UsageWindow.ComputeHeatmap(range, now);
+            // The month heatmap draws a Monday-aligned weekday calendar, so it needs whole-day buckets
+            // (UTC-grid) instead of the range's 12-hour bars; the other ranges stay on their clock rows.
+            Mux.Core.Telemetry.UsageWindow heatmapWindow = range == Mux.Core.Telemetry.UsageRange.Month
+                ? Mux.Core.Telemetry.UsageWindow.ComputeHeatmapDays(now)
+                : Mux.Core.Telemetry.UsageWindow.ComputeHeatmap(range, now);
             Mux.Core.Telemetry.UsageFilter heatmapFilter = new Mux.Core.Telemetry.UsageFilter
             {
                 FromUnixMs = heatmapWindow.FromUnixMs,

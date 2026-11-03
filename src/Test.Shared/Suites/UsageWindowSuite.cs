@@ -88,6 +88,21 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("UsageWindow", "HeatmapDaysCalendar", "Month heatmap days form a Monday-aligned whole-week calendar on the UTC day grid", (CancellationToken ct) =>
+                    {
+                        const long DayMs = 24L * 60L * 60L * 1000L;
+                        long now = new DateTimeOffset(2026, 10, 13, 12, 6, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                        UsageWindow window = UsageWindow.ComputeHeatmapDays(now);
+                        MuxAssert.AreEqual(DayMs, window.BucketMs, "day buckets");
+                        MuxAssert.AreEqual(0L, window.FromUnixMs % DayMs, "start on the UTC day grid");
+                        MuxAssert.AreEqual(DayOfWeek.Monday, DateTimeOffset.FromUnixTimeMilliseconds(window.FromUnixMs).UtcDateTime.DayOfWeek, "starts on Monday");
+                        MuxAssert.IsTrue(window.BucketCount >= 30 && window.BucketCount <= 36, "30 days plus leading pad to Monday");
+                        long todayStart = new DateTimeOffset(2026, 10, 13, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                        MuxAssert.AreEqual(todayStart, window.FromUnixMs + (window.BucketCount - 1) * DayMs, "ends on today");
+                        MuxAssert.AreEqual(todayStart + DayMs, window.ToUnixMs, "exclusive bound is tomorrow");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("UsageWindow", "UnknownRangeThrows", "An unknown range is rejected", (CancellationToken ct) =>
                     {
                         MuxAssert.Throws<ArgumentOutOfRangeException>(() => UsageWindow.Compute((UsageRange)999, 0L), "unknown range");
