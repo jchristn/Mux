@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <Version>1.5.0</Version>
+    <Version>1.6.0</Version>
     <Description>CLI interface for mux AI agent</Description>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>mux</ToolCommandName>
@@ -10,7 +10,7 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>0.5.0: Background tasks — the model decomposes a job into a tracked plan of tasks and advances them as it works, with a live in-place checklist in the interactive shell, a TASKS n/m sidebar row, a /tasks viewer for inspecting and hand-annotating the plan, per-job persistence across save/resume, and a task_plan_updated event in the jsonl automation contract. Gated by taskPlanningEnabled; an opt-in orchestration engine (taskParallelismEnabled) runs independent tasks as parallel jobs under the shared write lease. See CHANGELOG.md and BACKGROUND_TASKS.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>1.6.0: Opt-in Bash MCP execution with timeout and cancellation support; global and per-endpoint tool-approval countdowns; responsive idle MUX ASCII artwork. Includes provider, usage-chart, and test improvements. See CHANGELOG.md and docs/USAGE.md.</PackageReleaseNotes>
     <NoWarn>$(NoWarn);NU5111</NoWarn>
   </PropertyGroup>
 

@@ -43,6 +43,7 @@ namespace Mux.Desktop.Views
         private readonly TextBox _MaxTokens = new TextBox();
         private readonly TextBox _ContextWindow = new TextBox();
         private readonly TextBox _Timeout = new TextBox();
+        private readonly TextBox _ToolAutoApproveSeconds = new TextBox();
         private readonly TextBox _MaxAgentIterations = new TextBox();
         private readonly ComboBox _ReasoningEffort = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly TextBox _GeminiThinkingBudget = new TextBox();
@@ -103,6 +104,7 @@ namespace Mux.Desktop.Views
             _GeminiThinkingBudget.Text = config.ReasoningEffort?.GeminiThinkingBudget?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             _IsDefault.IsChecked = config.IsDefault;
             _AutoApprove.IsChecked = config.AutoApproveTools;
+            _ToolAutoApproveSeconds.Text = config.ToolAutoApproveSeconds?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             _ShowThinking.IsChecked = config.ShowThinking;
 
             _ReasoningEffort.ItemsSource = new[] { EffortOff, "minimal", "low", "medium", "high" };
@@ -175,6 +177,7 @@ namespace Mux.Desktop.Views
             body.Children.Add(TwoColumn(
                 Field(Localizer.T("endpoint.form.reasoning"), _ReasoningEffort, Localizer.T("endpoint.form.reasoning.tip")),
                 Field(Localizer.T("endpoint.form.geminiBudget"), _GeminiThinkingBudget, Localizer.T("endpoint.form.geminiBudget.tip"))));
+            body.Children.Add(Field("Tool auto-approve seconds", _ToolAutoApproveSeconds, "Blank inherits global; 0 disables timed approval."));
             body.Children.Add(Field(Localizer.T("endpoint.form.maxIterations"), _MaxAgentIterations, Localizer.T("endpoint.form.maxIterations.tip")));
 
             body.Children.Add(Section(Localizer.T("endpoint.form.section.behavior")));
@@ -354,6 +357,17 @@ namespace Mux.Desktop.Views
                 return;
             }
 
+            int? approvalSeconds = null;
+            string approvalText = (_ToolAutoApproveSeconds.Text ?? string.Empty).Trim();
+            if (approvalText.Length > 0)
+            {
+                if (!int.TryParse(approvalText, out int seconds) || seconds < 0)
+                {
+                    _Error.Text = "Tool auto-approve seconds must be a non-negative integer, or blank to inherit.";
+                    return;
+                }
+                approvalSeconds = seconds;
+            }
             int? maxIterations = null;
             string iterText = (_MaxAgentIterations.Text ?? string.Empty).Trim();
             if (iterText.Length > 0)
@@ -399,6 +413,7 @@ namespace Mux.Desktop.Views
             _Config.MaxAgentIterations = maxIterations;
             _Config.IsDefault = _IsDefault.IsChecked ?? false;
             _Config.AutoApproveTools = _AutoApprove.IsChecked ?? false;
+            _Config.ToolAutoApproveSeconds = approvalSeconds;
             _Config.ShowThinking = _ShowThinking.IsChecked ?? false;
             _Config.ReasoningEffort = BuildEffort(geminiBudget);
             Close(true);

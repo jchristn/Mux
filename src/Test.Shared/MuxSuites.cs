@@ -51,6 +51,7 @@ namespace Test.Shared
                     // Mux.Core / Agent unit suites (ported from Test.Xunit/Agent).
                     ContextWindowManagerSuite.Create(),
                     ApprovalRoutingSuite.Create(),
+                    ApprovalCountdownSuite.Create(),
                     PermissionPromptSuite.Create(),
                     ConversationCompactionPlannerSuite.Create(),
                     ConversationCompactorSuite.Create(),

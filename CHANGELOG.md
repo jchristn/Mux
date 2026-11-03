@@ -2,9 +2,24 @@
 
 All notable changes to mux are documented here.
 
-## Unreleased
+## 1.6.0 (unreleased)
 
 ### Added
+
+- Opt-in `bash` MCP tool via `mux mcp serve --allow-bash`, with an optional
+  `--bash-path`, working-directory selection, bounded stdout/stderr capture,
+  exit status, timeout reporting, and cancellation. Uses native Bash on macOS/Linux
+  and Git Bash on Windows; mux can also run inside WSL.
+- Global `toolAutoApproveSeconds` and nullable endpoint overrides. Zero disables
+  timed approval; a positive value shows a countdown and approves once if unanswered.
+  TUI, desktop, web, and VS Code approval prompts honor the setting; manual denial
+  and cancellation close the prompt. Hidden prompts pause their countdown.
+- Faint ASCII MUX artwork centered in the idle TUI transcript, sized to about one
+  third of its width and height. Typing hides it, erasing an unsent draft restores
+  it, and sending a prompt keeps it hidden for that conversation.
+- Regression coverage for Bash execution/validation/cancellation, approval
+  precedence and timing, and artwork sizing/lifecycle. Updated VS Code dashboard
+  tests to read the extracted dashboard template.
 
 - First-class `xai` (Grok) provider across TUI, desktop, web, and VS Code using the
   native Responses API, required bearer credentials, `XAI_API_KEY` fallback, and

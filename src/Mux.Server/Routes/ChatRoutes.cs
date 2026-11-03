@@ -482,9 +482,10 @@ namespace Mux.Server.Routes
                     // prompt the browser for approval over the SSE channel.
                     ApprovalPolicy = ApprovalPolicyEnum.AutoSafe,
                     PlanMode = request.PlanMode,
-                    PromptUserFunc = _AllowInteractiveTools
-                        ? toolCall => RequestBrowserApprovalAsync(ctx, runHandle, toolCall)
-                        : (Func<ToolCall, Task<string>>)(_ => Task.FromResult("n")),
+                    PromptUserFunc = _ => Task.FromResult("n"),
+                    InteractiveApprovalPrompt = _AllowInteractiveTools
+                        ? (toolCall, seconds, token) => RequestBrowserApprovalAsync(ctx, runHandle, toolCall, seconds, token)
+                        : null,
                     WorkingDirectory = runDirectory,
                     MuxSettings = settings,
                     MaxIterations = settings.GetEffectiveMaxAgentIterations(endpoint),
@@ -779,11 +780,11 @@ namespace Mux.Server.Routes
         }
 
         // Streams an approval prompt to the browser and blocks the run until the browser answers (via
-        // POST /v1.0/api/chat/approve or an "approve" WebSocket frame), the run is cancelled, or a timeout
-        // elapses. The pending approval is registered on the run handle so either transport can resolve it.
+        // POST /v1.0/api/chat/approve or an "approve" WebSocket frame), the run is cancelled, or the client
+        // disconnects. The pending approval is registered on the run handle so either transport can resolve it.
         // Returns "y"/"always" to approve or "n" to deny. Only used when the server was started with
         // interactive web tools enabled.
-        private async Task<string> RequestBrowserApprovalAsync(HttpContextBase ctx, RunHandle handle, ToolCall toolCall)
+        private async Task<string> RequestBrowserApprovalAsync(HttpContextBase ctx, RunHandle handle, ToolCall toolCall, int seconds, CancellationToken cancellationToken)
         {
             string toolCallId = toolCall?.Id ?? string.Empty;
             if (string.IsNullOrEmpty(toolCallId))
@@ -803,7 +804,8 @@ namespace Mux.Server.Routes
                         RunId = handle.RunId,
                         ToolCallId = toolCallId,
                         Name = toolCall?.Name ?? string.Empty,
-                        Arguments = toolCall?.Arguments ?? string.Empty
+                        Arguments = toolCall?.Arguments ?? string.Empty,
+                        ToolAutoApproveSeconds = seconds
                     })
                 }, false, ctx.Token).ConfigureAwait(false);
             }
@@ -815,16 +817,14 @@ namespace Mux.Server.Routes
 
             try
             {
-                Task delay = Task.Delay(TimeSpan.FromMinutes(5), handle.Token);
-                Task finished = await Task.WhenAny(source.Task, delay).ConfigureAwait(false);
-                if (finished == source.Task)
-                {
-                    return source.Task.Result;
-                }
+                // The visible client owns the countdown and posts its normal approval decision.
+                // Disconnecting or cancelling a run must never leave a server-side auto-approval timer.
+                using CancellationTokenSource stop = CancellationTokenSource.CreateLinkedTokenSource(handle.Token, ctx.Token, cancellationToken);
+                return await source.Task.WaitAsync(stop.Token).ConfigureAwait(false);
             }
             catch (Exception)
             {
-                // Fall through to deny on cancellation/timeout.
+                // Fall through to deny on cancellation/disconnect.
             }
 
             handle.ResolveApproval(toolCallId, "n");

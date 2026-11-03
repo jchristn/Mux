@@ -39,6 +39,9 @@ namespace Mux.Server.Models
         /// <summary>Default approval policy (ask/auto/deny).</summary>
         public string DefaultApprovalPolicy { get; set; } = "ask";
 
+        /// <summary>Interactive tool approval countdown in seconds; zero disables.</summary>
+        public int ToolAutoApproveSeconds { get; set; }
+
         /// <summary>Max agent iterations (1-1024).</summary>
         public int MaxAgentIterations { get; set; } = 256;
 
@@ -115,6 +118,7 @@ namespace Mux.Server.Models
             return new SettingsDto
             {
                 DefaultApprovalPolicy = settings.DefaultApprovalPolicy,
+                ToolAutoApproveSeconds = settings.ToolAutoApproveSeconds,
                 MaxAgentIterations = settings.MaxAgentIterations,
                 MaxConcurrency = settings.MaxConcurrency,
                 ToolTimeoutMs = settings.ToolTimeoutMs,
@@ -157,6 +161,7 @@ namespace Mux.Server.Models
         public void ApplyTo(MuxSettings settings)
         {
             settings.DefaultApprovalPolicy = DefaultApprovalPolicy;
+            settings.ToolAutoApproveSeconds = ToolAutoApproveSeconds;
             settings.MaxAgentIterations = MaxAgentIterations;
             settings.MaxConcurrency = MaxConcurrency;
             settings.ToolTimeoutMs = ToolTimeoutMs;

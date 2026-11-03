@@ -12,6 +12,8 @@ namespace Mux.Core.Models
     {
         #region Private-Members
 
+        private int _ToolAutoApproveSeconds = 0;
+
         private string? _SystemPromptPath = null;
         private string _DefaultApprovalPolicy = "ask";
         private int _ToolTimeoutMs = 30000;
@@ -69,6 +71,14 @@ namespace Mux.Core.Models
         #endregion
 
         #region Public-Members
+
+        /// <summary>Interactive tool approval countdown in seconds. Zero disables timed approval. Negative values are clamped to zero.</summary>
+        [JsonPropertyName("toolAutoApproveSeconds")]
+        public int ToolAutoApproveSeconds
+        {
+            get => _ToolAutoApproveSeconds;
+            set => _ToolAutoApproveSeconds = Math.Max(0, value);
+        }
 
         /// <summary>
         /// The file path to the system prompt, or null to use the built-in default.

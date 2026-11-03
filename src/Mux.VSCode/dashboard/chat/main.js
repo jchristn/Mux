@@ -234,9 +234,28 @@
         e.appendChild(row);
         transcript.appendChild(e);
         scrollToEnd();
+        const label = el('div', 'approval-countdown');
+        e.appendChild(label);
+        let remaining = Math.max(0, req.ToolAutoApproveSeconds || 0) * 1000;
+        let last = performance.now();
+        const tick = () => {
+            const now = performance.now(), elapsed = now - last;
+            last = now;
+            if (!e.isConnected || e.classList.contains('resolved')) { clearInterval(e.approvalTimer); return; }
+            if (!busy) { decide(req, 'n', e); return; }
+            if (req.ToolAutoApproveSeconds > 0) {
+                if (!document.hidden) remaining -= elapsed;
+                label.textContent = 'Auto-approve in ' + Math.ceil(Math.max(0, remaining) / 1000) + 's';
+                if (remaining <= 0) decide(req, 'y', e);
+            } else { label.textContent = 'Automatic approval disabled'; }
+        };
+        tick();
+        e.approvalTimer = setInterval(tick, 100);
     }
 
     function decide(req, decision, e) {
+        if (e.classList.contains('resolved')) return;
+        clearInterval(e.approvalTimer);
         vscode.postMessage({ type: 'approve', runId: req.RunId, toolCallId: req.ToolCallId, decision: decision });
         e.classList.add('resolved');
         Array.prototype.forEach.call(e.querySelectorAll('button'), function (b) {
@@ -246,6 +265,11 @@
 
     function setBusy(value) {
         busy = value;
+        if (!value) transcript.querySelectorAll('.approval:not(.resolved)').forEach(e => {
+            clearInterval(e.approvalTimer);
+            e.classList.add('resolved');
+            e.querySelectorAll('button').forEach(b => { b.disabled = true; });
+        });
         sendButton.textContent = value ? t('composer.stop') : t('composer.send');
         sendButton.classList.toggle('stop', value);
         if (!value) {

@@ -31,6 +31,7 @@ export interface EndpointDetail {
     ContextWindow?: number;
     TimeoutMs?: number;
     AutoApproveTools?: boolean;
+    ToolAutoApproveSeconds?: number | null;
     ShowThinking?: boolean;
     ApiKey?: string;
     ApiKeySet?: boolean;
@@ -219,6 +220,7 @@ export interface RestSettings {
 /** The editable settings object as returned by `GET /v1.0/api/settings`. */
 export interface MuxServerSettings {
     DefaultApprovalPolicy: string;
+    ToolAutoApproveSeconds: number;
     MaxAgentIterations: number;
     MaxConcurrency: number;
     ToolTimeoutMs: number;
@@ -413,6 +415,7 @@ export interface ChatToolEvent {
 
 /** An approval prompt streamed as `approval` when the server runs with `--allow-tools`. */
 export interface ChatApprovalRequest {
+    ToolAutoApproveSeconds?: number;
     RunId: string;
     ToolCallId: string;
     Name: string;

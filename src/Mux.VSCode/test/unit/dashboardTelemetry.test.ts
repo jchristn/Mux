@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import * as vm from 'node:vm';
 import { test } from 'node:test';
 
-const source = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'Mux.Server', 'DashboardPage.cs'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'Mux.Server', 'DashboardTemplate.cs'), 'utf8');
 function fn(name: string): string {
     const found = source.match(new RegExp('function ' + name + '\\([^]*?\\n}'));
     assert.ok(found, 'dashboard function exists: ' + name);

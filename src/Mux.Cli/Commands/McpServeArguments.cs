@@ -21,6 +21,12 @@ namespace Mux.Cli.Commands
         /// <summary>Whether <c>run_skill</c> is registered.</summary>
         public bool AllowSkills { get; set; }
 
+        /// <summary>Whether direct Bash command execution is enabled (independent of the agent approval policy).</summary>
+        public bool AllowBash { get; set; }
+
+        /// <summary>Optional explicit Bash executable path. Windows otherwise discovers Git Bash.</summary>
+        public string? BashPath { get; set; }
+
         /// <summary>Whether stdio mode keeps the full per-message log on stderr (<c>--log-messages</c>).</summary>
         public bool LogMessages { get; set; }
 

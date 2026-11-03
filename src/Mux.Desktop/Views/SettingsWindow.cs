@@ -31,6 +31,7 @@ namespace Mux.Desktop.Views
         private readonly Action<string>? _OnThemeMode;
 
         private readonly ComboBox _ThemeSelector = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
+        private readonly TextBox _ToolAutoApproveSeconds = new TextBox();
         private readonly ComboBox _ApprovalPolicy = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly TextBox _MaxIterations = new TextBox();
         private readonly TextBox _SystemPromptPath = new TextBox();
@@ -134,6 +135,7 @@ namespace Mux.Desktop.Views
             _SkillsEnabled.Content = Localizer.T("settings.loadSkills");
             _Telemetry.Content = Localizer.T("settings.recordTelemetry");
 
+            _ToolAutoApproveSeconds.Text = _Settings.ToolAutoApproveSeconds.ToString(CultureInfo.InvariantCulture);
             _MaxIterations.Text = _Settings.MaxAgentIterations.ToString(CultureInfo.InvariantCulture);
             _SystemPromptPath.Text = _Settings.SystemPromptPath ?? string.Empty;
             _MaxTokenBudget.Text = _Settings.MaxTokenBudget?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
@@ -188,6 +190,7 @@ namespace Mux.Desktop.Views
 
             form.Children.Add(Section(Localizer.T("settings.sec.general")));
             form.Children.Add(LabeledRow(Localizer.T("settings.theme"), _ThemeSelector, Localizer.T("settings.theme.tip")));
+            form.Children.Add(LabeledRow("Tool auto-approve seconds", _ToolAutoApproveSeconds, "0 disables timed approval. Endpoints can override this value."));
             form.Children.Add(LabeledRow(Localizer.T("settings.approval"), _ApprovalPolicy, Localizer.T("settings.approval.tip")));
             form.Children.Add(LabeledRow(Localizer.T("settings.maxIter"), _MaxIterations, Localizer.T("settings.maxIter.tip")));
             form.Children.Add(LabeledRow(Localizer.T("settings.maxBudget"), _MaxTokenBudget, Localizer.T("settings.maxBudget.tip")));
@@ -271,6 +274,7 @@ namespace Mux.Desktop.Views
             _Settings.DefaultEnqueueBehavior = ValueAt(EnqueueValues, _EnqueueBehavior.SelectedIndex, _Settings.DefaultEnqueueBehavior);
             _Settings.Context.LargeFileMode = ValueAt(LargeFileModeValues, _LargeFileMode.SelectedIndex, _Settings.Context.LargeFileMode);
 
+            AssignInt(_ToolAutoApproveSeconds, value => _Settings.ToolAutoApproveSeconds = value);
             AssignInt(_MaxIterations, value => _Settings.MaxAgentIterations = value);
             AssignInt(_InlineThresholdBytes, value => _Settings.Context.InlineThresholdBytes = value);
             AssignInt(_SummaryChunkLines, value => _Settings.Context.SummaryChunkLines = value);
@@ -325,6 +329,7 @@ namespace Mux.Desktop.Views
         private void SyncBack()
         {
             // Reflect any clamping the settings model applied.
+            _ToolAutoApproveSeconds.Text = _Settings.ToolAutoApproveSeconds.ToString(CultureInfo.InvariantCulture);
             _MaxIterations.Text = _Settings.MaxAgentIterations.ToString(CultureInfo.InvariantCulture);
             _CompactionPreserveTurns.Text = _Settings.CompactionPreserveTurns.ToString(CultureInfo.InvariantCulture);
             _ContextWarningThreshold.Text = _Settings.ContextWarningThresholdPercent.ToString(CultureInfo.InvariantCulture);

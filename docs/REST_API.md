@@ -382,3 +382,18 @@ run-driving routes are documented follow-ups.
 - A task-state route beyond `GET /v1.0/api/runs/{runId}` (for example historical/persisted run state).
 - Generated client SDKs from the OpenAPI document (the OpenAPI 3.0 document + Swagger UI now ship at
   `/openapi.json` and `/swagger`).
+
+### Approval countdown settings (1.6.0)
+
+Settings DTOs expose `ToolAutoApproveSeconds` (integer, default `0`). Endpoint DTOs
+expose the same field as a nullable integer: omitted/null inherits global settings,
+`0` disables the countdown, and a positive number overrides the global delay.
+Configuration files use the camel-case property `toolAutoApproveSeconds`.
+
+When interactive web tools are enabled, each `approval` SSE event includes the
+resolved `ToolAutoApproveSeconds`, alongside `RunId`, `ToolCallId`, `Name`, and
+`Arguments`. Dashboard and VS Code clients show the countdown while the prompt is
+visible and post the ordinary approval decision on expiry. Zero never auto-approves.
+The server does not run a timer after a client disconnects. Custom clients may
+require a manual decision regardless of this advisory countdown. Cancelling the
+run resolves its pending approvals as denied.

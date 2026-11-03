@@ -252,7 +252,7 @@ namespace Mux.Desktop.Shell
         // MCP/skills runtimes. Each tab owns one so concurrent turns don't clash on endpoint/session state.
         private AgentLoopTurnRunner CreateRunner()
         {
-            AgentLoopTurnRunner runner = new AgentLoopTurnRunner(_ConfigDirectory, ApproveToolAsync, _UsageRecorder);
+            AgentLoopTurnRunner runner = new AgentLoopTurnRunner(_ConfigDirectory, toolCall => ApproveToolAsync(toolCall, 0, default), _UsageRecorder) { InteractiveApprovalPrompt = ApproveToolAsync };
             runner.Mcp = _Mcp;
             runner.Skills = _Skills;
             runner.Processes = EnsureProcessRegistry();
@@ -4618,7 +4618,7 @@ namespace Mux.Desktop.Shell
             return _ModelPicker.SelectedItem is EndpointConfig endpoint ? endpoint.Model : null;
         }
 
-        private Task<string> ApproveToolAsync(ToolCall toolCall)
+        private Task<string> ApproveToolAsync(ToolCall toolCall, int seconds, CancellationToken cancellationToken)
         {
             TaskCompletionSource<string> completion = new TaskCompletionSource<string>();
 
@@ -4626,7 +4626,8 @@ namespace Mux.Desktop.Shell
             {
                 try
                 {
-                    string result = await new ApprovalDialog(toolCall).ShowDialog<string>(this);
+                    if (cancellationToken.IsCancellationRequested) { completion.SetResult("n"); return; }
+                    string result = await new ApprovalDialog(toolCall, seconds, cancellationToken).ShowDialog<string>(this);
                     completion.SetResult(string.IsNullOrEmpty(result) ? "n" : result);
                 }
                 catch (Exception)

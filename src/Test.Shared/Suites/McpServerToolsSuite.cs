@@ -451,6 +451,62 @@ namespace Test.Shared.Suites
                 MuxAssert.Throws<ArgumentNullException>(() => new MuxMcpTools(new MuxMcpServerOptions(), new FakeMcpRunExecutor(), () => new List<EndpointConfig>(), null!, null), "null sessions");
             });
 
+
+            Add("BashOptInAndParser", "Bash is opt-in and CLI preserves an explicit executable path", (string root, CancellationToken ct) =>
+            {
+                var options = new MuxMcpServerOptions();
+                var disabled = Register(options, new FakeMcpRunExecutor(), new List<EndpointConfig>(), Store(root), null, root);
+                MuxAssert.IsFalse(disabled.ContainsKey("bash"), "disabled by default");
+                options.AllowBash = true;
+                var enabled = new MuxMcpTools(options, new FakeMcpRunExecutor(), () => new List<EndpointConfig>(), Store(root), null);
+                MuxAssert.IsTrue(enabled.ToolNames.Contains("bash"), "advertised");
+                MuxAssert.IsTrue(Capture(enabled).ContainsKey("bash"), "registered");
+                MuxAssert.IsTrue(Mux.Cli.Commands.McpServeCommand.TryParse(new[] { "serve", "--allow-bash", "--bash-path", "C:/Program Files/Git/bin/bash.exe" }, out var parsed, out var error), error);
+                MuxAssert.IsTrue(parsed!.AllowBash, "enabled CLI");
+                MuxAssert.AreEqual("C:/Program Files/Git/bin/bash.exe", parsed.BashPath, "path with spaces");
+                return Task.CompletedTask;
+            });
+            Add("BashOutputAndDirectory", "Bash preserves quotes, multiline scripts, stderr, exit code, and working directory", async (string root, CancellationToken ct) =>
+            {
+                Directory.CreateDirectory(Path.Combine(root, "work with spaces"));
+                var tools = Register(new MuxMcpServerOptions { AllowBash = true }, new FakeMcpRunExecutor(), new List<EndpointConfig>(), Store(root), null, root);
+                string command = "printf '%s' \"a 'quote' and \\\"double\\\"\"\nprintf 'error' >&2\nprintf 'created' > result.txt\nexit 7";
+                using JsonDocument result = JsonDocument.Parse(await Ok(tools["bash"], JsonSerializer.Serialize(new { command, working_directory = "work with spaces" }), ct));
+                MuxAssert.AreEqual("a 'quote' and \"double\"", result.RootElement.GetProperty("stdout").GetString(), "literal quotes");
+                MuxAssert.AreEqual("error", result.RootElement.GetProperty("stderr").GetString(), "stderr");
+                MuxAssert.AreEqual(7, result.RootElement.GetProperty("exit_code").GetInt32(), "nonzero exit");
+                MuxAssert.IsFalse(result.RootElement.GetProperty("timed_out").GetBoolean(), "finished normally");
+                MuxAssert.AreEqual("created", File.ReadAllText(Path.Combine(root, "work with spaces", "result.txt")), "working directory");
+            });
+            Add("BashValidation", "Bash rejects invalid inputs and reports a missing executable", async (string root, CancellationToken ct) =>
+            {
+                var tools = Register(new MuxMcpServerOptions { AllowBash = true, BashPath = Path.Combine(root, "missing-bash") }, new FakeMcpRunExecutor(), new List<EndpointConfig>(), Store(root), null, root);
+                MuxAssert.Contains("command is required", await Error(tools["bash"], "{}", ct), "required command");
+                MuxAssert.Contains("command must be a string", await Error(tools["bash"], "{\"command\":42}", ct), "command type");
+                foreach (string timeout in new[] { "0", "-1", "1.5", "3600001", "\"100\"" })
+                    MuxAssert.Contains("timeout_ms must", await Error(tools["bash"], "{\"command\":\"true\",\"timeout_ms\":" + timeout + "}", ct), "timeout validation");
+                MuxAssert.Contains("does not exist", await Error(tools["bash"], "{\"command\":\"true\",\"working_directory\":\"missing\"}", ct), "directory validation");
+                MuxAssert.Contains("Bash executable does not exist", await Error(tools["bash"], "{\"command\":\"true\"}", ct), "missing executable");
+            });
+            Add("BashTimeoutAndCancellation", "Bash stops long commands on deadline and propagates cancellation", async (string root, CancellationToken ct) =>
+            {
+                var tools = Register(new MuxMcpServerOptions { AllowBash = true }, new FakeMcpRunExecutor(), new List<EndpointConfig>(), Store(root), null, root);
+                using JsonDocument result = JsonDocument.Parse(await Ok(tools["bash"], "{\"command\":\"sleep 30\",\"timeout_ms\":100}", ct));
+                MuxAssert.IsTrue(result.RootElement.GetProperty("timed_out").GetBoolean(), "deadline reported");
+                using CancellationTokenSource stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                stop.CancelAfter(100);
+                await MuxAssert.ThrowsAsync<OperationCanceledException>(() => Ok(tools["bash"], "{\"command\":\"sleep 30\"}", stop.Token), "cancelled");
+            });
+            Add("BashBoundedOutput", "Bash drains noisy output without unbounded capture", async (string root, CancellationToken ct) =>
+            {
+                var tools = Register(new MuxMcpServerOptions { AllowBash = true }, new FakeMcpRunExecutor(), new List<EndpointConfig>(), Store(root), null, root);
+                using JsonDocument result = JsonDocument.Parse(await Ok(tools["bash"], JsonSerializer.Serialize(new { command = "printf '%100000s' x; printf '%100000s' y >&2" }), ct));
+                MuxAssert.AreEqual(65536, result.RootElement.GetProperty("stdout").GetString()!.Length, "stdout limit");
+                MuxAssert.AreEqual(65536, result.RootElement.GetProperty("stderr").GetString()!.Length, "stderr limit");
+                MuxAssert.IsTrue(result.RootElement.GetProperty("output_truncated").GetBoolean(), "truncation indicated");
+                MuxAssert.AreEqual(0, result.RootElement.GetProperty("exit_code").GetInt32(), "drained to exit");
+            });
+
             return new TestSuiteDescriptor(SuiteId, "MCP server tools: arguments, policies, serialization, sessions, masking, skills, auth", cases);
         }
 

@@ -183,3 +183,29 @@ matrix of Linux and Windows by `net8.0` and `net10.0`, validates the default ski
 `BUILTIN_SKILLS.md` is current. The xUnit and NUnit adapters run the same suites, so CI runs them weekly
 and on demand rather than on every push. The Docker integration suite runs in its own job on pushes to
 `main` and on demand. A newer push to the same branch cancels the run in progress.
+
+## Bash, timed approvals, and idle artwork
+
+The `McpServerTools` suite executes Bash scripts to check quoting, working directories,
+stdout/stderr capture, nonzero exits, timeout/cancellation, output limits, and input
+validation. `McpServer` also invokes `bash` over a real local MCP HTTP connection.
+These checks require Bash; Windows machines should have Git for Windows installed.
+
+`ApprovalCountdown` uses a controllable monotonic clock to check expiration, disabled
+countdowns, covered prompts, manual denial, settings round trips, and watermark
+geometry without waiting ten seconds. `PermissionPrompt` verifies endpoint/global
+precedence through the agent loop and confirms that a deny policy never opens a
+countdown. `TuiShell` covers typing/erasing/submitting and cancellation of pending
+approval prompts. VS Code unit tests exercise web countdown labels, expiry, denial,
+hidden tabs, and stopped runs.
+
+Run the focused checks on either supported framework:
+
+```bash
+dotnet run --project src/Test.Automated -c Release -f net10.0 -- \
+  --suite McpServer --suite McpServerTools --suite ApprovalCountdown \
+  --suite PermissionPrompt --suite TuiShell --suite FormModals
+```
+
+Use `-f net8.0` for .NET 8. Run extension and dashboard checks with
+`npm --prefix src/Mux.VSCode run test:unit`.

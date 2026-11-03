@@ -57,6 +57,7 @@ namespace Mux.Cli.App
         private readonly TextField _ContextWindow;
         private readonly TextField _Timeout;
         private readonly Checkbox _AutoApprove;
+        private readonly TextField _ToolAutoApproveSeconds;
         private readonly TextField _MaxAgentIterations;
         private readonly TextField _ReasoningEffort;
         private readonly TextField _GeminiThinkingBudget;
@@ -92,6 +93,7 @@ namespace Mux.Cli.App
             _Temperature = new TextField();
             _ContextWindow = new TextField();
             _Timeout = new TextField();
+            _ToolAutoApproveSeconds = new TextField { Value = source.ToolAutoApproveSeconds?.ToString(CultureInfo.InvariantCulture) ?? string.Empty };
             _AutoApprove = new Checkbox("Auto-approve tool calls", source.AutoApproveTools);
             _MaxAgentIterations = new TextField();
             _ReasoningEffort = new TextField();
@@ -156,7 +158,8 @@ namespace Mux.Cli.App
             _Form.Add("Temperature", _Temperature, () => ValidateDouble(_Temperature.Value, "Temperature", 0.0, 2.0));
             _Form.Add("Context window", _ContextWindow, () => ValidateInt(_ContextWindow.Value, "Context window", 1024, 1048576));
             _Form.Add("Timeout (ms)", _Timeout, () => ValidateInt(_Timeout.Value, "Timeout", 10000, int.MaxValue));
-            _Form.Add("Auto-approve tools", _AutoApprove);
+            _Form.Add("Auto-approve tools immediately", _AutoApprove);
+            _Form.Add("Auto-approve seconds (blank = global, 0 = off)", _ToolAutoApproveSeconds, () => ValidateOptionalInt(_ToolAutoApproveSeconds.Value, "Tool auto-approve seconds", 0, int.MaxValue));
             _Form.Add("Max agent iterations (blank = global)", _MaxAgentIterations, () => ValidateOptionalInt(_MaxAgentIterations.Value, "Max agent iterations", 1, 1024));
             _Form.Add("Reasoning effort (blank = off)", _ReasoningEffort, () => ValidateOptionalEffort(_ReasoningEffort.Value));
             _Form.Add("Gemini thinking budget (blank = default)", _GeminiThinkingBudget, () => ValidateOptionalInt(_GeminiThinkingBudget.Value, "Gemini thinking budget", -1, 32768));
@@ -298,6 +301,7 @@ namespace Mux.Cli.App
                 ContextWindow = int.Parse(_ContextWindow.Value.Trim(), CultureInfo.InvariantCulture),
                 TimeoutMs = int.Parse(_Timeout.Value.Trim(), CultureInfo.InvariantCulture),
                 AutoApproveTools = _AutoApprove.Checked,
+                ToolAutoApproveSeconds = ParseOptionalInt(_ToolAutoApproveSeconds.Value),
                 MaxAgentIterations = ParseOptionalInt(_MaxAgentIterations.Value),
                 ReasoningEffort = BuildReasoningConfig(),
                 ShowThinking = _ShowThinking.Checked,

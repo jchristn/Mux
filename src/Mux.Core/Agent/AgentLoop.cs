@@ -555,6 +555,14 @@ namespace Mux.Core.Agent
                                         return answer.Approved ? ApprovalDecision.Approved : ApprovalDecision.Denied;
                                     }
 
+                                    if (_Options.InteractiveApprovalPrompt != null)
+                                    {
+                                        int seconds = _Options.Endpoint?.ToolAutoApproveSeconds ?? _Options.MuxSettings?.ToolAutoApproveSeconds ?? 0;
+                                        string answer = await _Options.InteractiveApprovalPrompt(toolCall, seconds, escalationToken).ConfigureAwait(false);
+                                        escalationToken.ThrowIfCancellationRequested();
+                                        return MapPromptResponseToDecision(answer);
+                                    }
+
                                     Func<ToolCall, Task<string>> promptFunc = _Options.PromptUserFunc ?? DefaultPromptUserFunc;
                                     string response = await promptFunc(toolCall).ConfigureAwait(false);
                                     return MapPromptResponseToDecision(response);
@@ -1448,6 +1456,7 @@ namespace Mux.Core.Agent
                 TimeoutMs = endpoint.TimeoutMs,
                 Headers = new Dictionary<string, string>(endpoint.Headers),
                 AutoApproveTools = endpoint.AutoApproveTools,
+                ToolAutoApproveSeconds = endpoint.ToolAutoApproveSeconds,
                 MaxAgentIterations = endpoint.MaxAgentIterations,
                 Quirks = CloneBackendQuirks(endpoint.Quirks)
             };

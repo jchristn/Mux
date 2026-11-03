@@ -1147,6 +1147,7 @@ the protocol.
 | `list_endpoints` | Endpoint names, adapters, models, and base URLs with embedded credentials masked. API keys and headers are never returned. |
 | `list_skills` | The skills available in a working directory. |
 | `run_skill` | Runs one skill command deterministically. Registered only with `--allow-skills`. |
+| `bash` | Executes a Bash script directly, without an LLM turn. Registered only with `--allow-bash`. Takes `command`, optional `working_directory`, and optional `timeout_ms` (1–3,600,000; default 120,000). Returns `stdout`, `stderr`, `exit_code`, `timed_out`, and `output_truncated`. |
 
 The operator decides how much a caller may do. `--approval-policy deny|auto-safe|auto` (or `--yolo` for `auto`) is
 a ceiling, `deny` by default: a `run` call may ask for a stricter policy but never a looser one, and `ask` is refused
@@ -1161,6 +1162,41 @@ mux mcp serve --approval-policy auto-safe -e big      # default endpoint "big"
 mux mcp serve --allow-skills -w ~/src/app             # expose run_skill; default working directory
 mux mcp serve --http 8811 --api-key "$MUX_MCP_KEY"    # http://localhost:8811/mcp, bearer key required
 ```
+
+Bash is a separate execution opt-in: `--allow-bash` permits direct commands with
+the server account's filesystem and environment access, independently of the
+`run` tool's `--approval-policy` ceiling. It is not a sandbox. A Bash call does not
+open a local approval prompt; use the calling MCP client's approval controls.
+Captured output is limited to 65,536 characters per stream while both streams
+continue to drain. A timeout reports `timed_out: true`; cancellation cancels the
+request. Both attempt to terminate the process tree. Calls use a fresh shell,
+closed stdin, and `--noprofile --norc`; `BASH_ENV`/`ENV` startup overrides are removed.
+Shell state does not persist between calls.
+
+```bash
+mux mcp serve --allow-bash --working-directory ~/src/app
+```
+
+An MCP `tools/call` request can then use:
+
+```json
+{"name":"bash","arguments":{"command":"git status --short","timeout_ms":10000}}
+```
+
+On **Windows**, install Git for Windows. mux discovers Git Bash in standard Git
+installation locations and on PATH. For a custom installation, pass the executable
+explicitly (PowerShell example):
+
+```powershell
+mux mcp serve --allow-bash --bash-path "C:\Program Files\Git\bin\bash.exe" --working-directory "C:\src\app"
+```
+
+`working_directory` is a native Windows path; commands use Git Bash syntax and
+its Unix-style paths (for example `/c/src/app`). If you prefer **WSL**, install and
+run mux inside the WSL distribution, using Linux paths such as `/mnt/c/src/app`.
+mux does not silently substitute PowerShell, cmd, or the legacy Windows WSL Bash
+launcher. Missing Bash produces an actionable error. On macOS and Linux, mux
+uses native Bash; `--bash-path` also works there.
 
 Over HTTP the server binds `localhost` (loopback clients only) unless `--host` says otherwise; a non-loopback host
 without a key prints a warning. The key can also come from the `mcpServeApiKey` setting.
@@ -1478,3 +1514,16 @@ Compatibility rules:
 - additive fields are non-breaking within a contract version
 - consumers should ignore unknown fields within a known contract version
 - a contract-version bump is required for removals, renames, type changes, or semantic changes to required fields
+
+## Idle TUI artwork and approval countdowns
+
+Before the first prompt, the conversation pane shows a barely visible dark-grey
+ASCII MUX mark. It scales with the available pane to roughly one third of both
+dimensions. Any draft text hides it; clearing an unsent draft restores it. Sending
+a prompt hides it for that conversation, including after clearing the displayed
+transcript. The artwork is never saved as a conversation message.
+
+Set **Tool auto-approve seconds** in `/settings`, or override it in the endpoint
+form. `0` waits for your decision; `10` shows a ten-second countdown before approving
+the pending call once. A blank endpoint value inherits global settings. See
+[Timed tool approval](CONFIG.md#timed-tool-approval) for policy and cancellation behavior.

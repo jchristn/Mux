@@ -61,6 +61,9 @@ namespace Mux.Desktop.Conversation
             _UsageRecorder = usageRecorder;
         }
 
+        /// <summary>Optional cancellation-aware interactive approval UI with countdown support.</summary>
+        public Func<ToolCall, int, CancellationToken, System.Threading.Tasks.Task<string>>? InteractiveApprovalPrompt { get; set; }
+
         /// <summary>The name of the endpoint to run against; null selects the default endpoint.</summary>
         public string? EndpointName
         {
@@ -270,6 +273,7 @@ namespace Mux.Desktop.Conversation
                 CommandName = "desktop",
                 SessionId = _SessionId ?? string.Empty,
                 PromptUserFunc = _ApprovalHandler,
+                InteractiveApprovalPrompt = InteractiveApprovalPrompt,
                 UsageRecorder = _UsageRecorder,
                 Hooks = Mux.Core.Plugins.PluginRegistry.LoadHooksOrNull()
             };
