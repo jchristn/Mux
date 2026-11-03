@@ -204,7 +204,8 @@ independently of the host operating system.
 
 `ApprovalCountdown` uses a controllable monotonic clock to check expiration, disabled
 countdowns, covered prompts, manual denial, settings round trips, and watermark
-geometry without waiting ten seconds. `PermissionPrompt` verifies endpoint/global
+geometry without waiting ten seconds. Artwork checks also compare the native rendering
+with `MuxBanner.WordmarkLines()` and verify enlarged half-cell shapes and proportions. `PermissionPrompt` verifies endpoint/global
 precedence through the agent loop and confirms that a deny policy never opens a
 countdown. `TuiShell` covers typing/erasing/submitting and cancellation of pending
 approval prompts. VS Code unit tests exercise web countdown labels, expiry, denial,

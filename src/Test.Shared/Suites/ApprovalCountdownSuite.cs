@@ -73,7 +73,35 @@ namespace Test.Shared.Suites
                 settings.ToolAutoApproveSeconds = -2; MuxAssert.AreEqual(0, settings.ToolAutoApproveSeconds, "negative disabled");
                 return Task.CompletedTask;
             }),
-            new TestCaseDescriptor("ApprovalCountdown", "ArtworkGeometry", "Watermark scales to one third, stays faint, and preserves foreground text", ct =>
+            new TestCaseDescriptor("ApprovalCountdown", "ArtworkUsesCanonicalBlocks", "Watermark reproduces the actual banner and enlarges filled half-cells without letter tiles or stripes", ct =>
+            {
+                var lines = MuxBanner.WordmarkLines();
+                foreach (int scale in new[] { 1, 2, 3 })
+                {
+                    int width = lines[0].Length * scale;
+                    int height = lines.Count * scale;
+                    CellBuffer buffer = new CellBuffer(width * 3, height * 3);
+                    IdleMuxArtwork.Render(new BufferSurface(buffer));
+                    for (int y = 0; y < height; y++) for (int x = 0; x < width; x++)
+                    {
+                        string glyph = buffer.Get(width + x, height + y).Grapheme;
+                        MuxAssert.IsTrue(glyph == " " || glyph == "█" || glyph == "▀" || glyph == "▄", "only block glyphs");
+                        if (scale == 1) MuxAssert.AreEqual(lines[y][x].ToString(), glyph, "canonical banner at native size");
+                        // Compare the rendered halves with the corresponding source halves, including
+                        // spaces within letters: this catches repeated half-block stripes when enlarged.
+                        for (int half = 0; half < 2; half++)
+                        {
+                            int sourceHalf = (y * 2 + half) / scale;
+                            char source = lines[sourceHalf / 2][x / scale];
+                            bool expected = source == '█' || (source == '▀' && sourceHalf % 2 == 0) || (source == '▄' && sourceHalf % 2 == 1);
+                            bool actual = glyph == "█" || (glyph == "▀" && half == 0) || (glyph == "▄" && half == 1);
+                            MuxAssert.AreEqual(expected, actual, "scaled silhouette");
+                        }
+                    }
+                }
+                return Task.CompletedTask;
+            }),
+            new TestCaseDescriptor("ApprovalCountdown", "ArtworkGeometry", "Canonical block wordmark scales within one third, stays faint, and preserves foreground text", ct =>
             {
                 foreach (var size in new[] { (90, 24), (180, 60), (240, 90) })
                 {
@@ -91,7 +119,9 @@ namespace Test.Shared.Suites
                     }
                     MuxAssert.IsTrue(count > 0, "art rendered");
                     MuxAssert.AreEqual(size.Item1 / 3, maxX - minX + 1, "one third width");
-                    MuxAssert.AreEqual(size.Item2 / 3, maxY - minY + 1, "one third height");
+                    MuxAssert.IsTrue(maxY - minY + 1 <= size.Item2 / 3, "fits within one third height");
+                    double visibleHeight = (maxX - minX + 1) * 5.0 / 19 / 2;
+                    MuxAssert.IsTrue(Math.Abs(maxY - minY + 1 - visibleHeight) <= 1, "banner proportions preserved within one terminal cell");
                     MuxAssert.AreEqual("f", buffer.Get(size.Item1 / 2, size.Item2 / 2).Grapheme, "foreground preserved");
                 }
                 return Task.CompletedTask;

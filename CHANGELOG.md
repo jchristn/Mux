@@ -21,9 +21,11 @@ All notable changes to mux are documented here.
   timed approval; a positive value shows a countdown and approves once if unanswered.
   TUI, desktop, web, and VS Code approval prompts honor the setting; manual denial
   and cancellation close the prompt. Hidden prompts pause their countdown.
-- Faint ASCII MUX artwork centered in the idle TUI transcript, sized to about one
-  third of its width and height. Typing hides it, erasing an unsent draft restores
-  it, and sending a prompt keeps it hidden for that conversation.
+- Faint MUX artwork centered in the idle TUI transcript, using the existing banner's
+  `█`, `▀`, and `▄` block characters. Its filled half-cells scale proportionally
+  within one third of the pane, preserving the logo's shape without tiled letters
+  or stripes. Typing hides it, erasing an unsent draft restores it, and sending a
+  prompt keeps it hidden for that conversation.
 - Regression coverage for Bash execution/validation/cancellation, approval
   precedence and timing, and artwork sizing/lifecycle. Updated VS Code dashboard
   tests to read the extracted dashboard template.

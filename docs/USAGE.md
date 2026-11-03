@@ -1557,8 +1557,10 @@ Compatibility rules:
 ## Idle TUI artwork and approval countdowns
 
 Before the first prompt, the conversation pane shows a barely visible dark-grey
-ASCII MUX mark. It scales with the available pane to roughly one third of both
-dimensions. Any draft text hides it; clearing an unsent draft restores it. Sending
+MUX wordmark built from the banner's `█`, `▀`, and `▄` characters. It scales to fit
+within one third of the pane's width and height while preserving the original
+proportions. Filled half-cells become continuous block strokes as the logo grows.
+Any draft text hides it; clearing an unsent draft restores it. Sending
 a prompt hides it for that conversation, including after clearing the displayed
 transcript. The artwork is never saved as a conversation message.
 
