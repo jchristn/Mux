@@ -308,6 +308,12 @@ compaction, and title generation. This is distinct from `iterationsCompleted`, s
 check can stop an iteration before a model call. Older or synthetic events may omit the field;
 consumers should treat omission as unknown, not zero. Token usage totals accumulate across
 the run's primary calls and are distinct from `finalEstimatedTokens` (the estimated context size).
+Two optional, nonnegative millisecond fields carry model timing when statistics are enabled:
+`firstModelCallTtftMs` is request-start to first token for the first primary call, excluding
+preparation; `modelStreamingMs` sums first-token-to-last-token durations across all primary calls,
+excluding tools and approval waits. The first is omitted if the first call has no timing; the second
+is omitted if any call has no streaming timing. Both are omitted when no model call ran. Zero is a
+valid reported duration. These fields are independent of `durationMs`, the agent run's wall-clock time.
 
 **Subscribe to a session** (what "mirror on by default" uses). Name a `sessionId` instead of a `runId`:
 

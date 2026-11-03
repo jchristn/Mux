@@ -146,7 +146,6 @@ namespace Mux.Desktop.Shell
         private int _QuipIndex { get => Ctx?.QuipIndex ?? 0; set { if (Ctx != null) { Ctx.QuipIndex = value; } } }
         private Dictionary<string, ToolCardView> _ToolCards { get => Ctx?.ToolCards ?? _EmptyToolCards; }
         private Stopwatch? _TurnStopwatch { get => Ctx?.TurnStopwatch; set { if (Ctx != null) { Ctx.TurnStopwatch = value; } } }
-        private long? _TurnTtftMs { get => Ctx?.TurnTtftMs; set { if (Ctx != null) { Ctx.TurnTtftMs = value; } } }
         private int _LastEstimatedTokens { get => Ctx?.LastEstimatedTokens ?? 0; set { if (Ctx != null) { Ctx.LastEstimatedTokens = value; } } }
         private CancellationTokenSource? _TurnCts { get => Ctx?.TurnCts; set { if (Ctx != null) { Ctx.TurnCts = value; } } }
         private string _CurrentThreadId { get => Ctx?.Id ?? string.Empty; set { if (Ctx != null) { Ctx.Id = value; } } }
@@ -2780,7 +2779,6 @@ namespace Mux.Desktop.Shell
             {
                 ResetStreamingState();
                 _TurnStopwatch = Stopwatch.StartNew();
-                _TurnTtftMs = null;
                 _TurnCts = new CancellationTokenSource();
                 AddUserBubble(prompt);
                 StartPendingIndicator();
@@ -3684,10 +3682,6 @@ namespace Mux.Desktop.Shell
                     ScrollTranscriptToEnd();
                     break;
                 case AssistantTextEvent text:
-                    if (_TurnTtftMs == null && _TurnStopwatch != null)
-                    {
-                        _TurnTtftMs = _TurnStopwatch.ElapsedMilliseconds;
-                    }
                     StopPendingIndicator();
                     EnsureAssistantBubble();
                     if (_StreamingBlock != null)
@@ -3754,7 +3748,8 @@ namespace Mux.Desktop.Shell
             TurnInfo turn = new TurnInfo
             {
                 TotalMs = _TurnStopwatch != null ? _TurnStopwatch.ElapsedMilliseconds : completed.DurationMs,
-                TtftMs = _TurnTtftMs,
+                TtftMs = completed.FirstModelCallTtftMs,
+                StreamingMs = completed.ModelStreamingMs,
                 InputTokens = completed.InputTokens,
                 OutputTokens = completed.OutputTokens,
                 TotalTokens = completed.TotalTokens,

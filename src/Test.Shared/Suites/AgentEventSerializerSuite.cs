@@ -92,14 +92,22 @@ namespace Test.Shared.Suites
 
                     new TestCaseDescriptor("AgentEventSerializer", "OptionalModelCallCount", "Model-call counts are optional and obey stats suppression", (CancellationToken ct) =>
                     {
-                        RunCompletedEvent completed = new RunCompletedEvent { ModelCallCount = 4, IterationsCompleted = 5 };
+                        RunCompletedEvent completed = new RunCompletedEvent { ModelCallCount = 4, IterationsCompleted = 5, FirstModelCallTtftMs = 773, ModelStreamingMs = 1413 };
                         using JsonDocument current = JsonDocument.Parse(AgentEventSerializer.ToEnvelopeLine(completed));
                         MuxAssert.AreEqual(4, current.RootElement.GetProperty("modelCallCount").GetInt32(), "calls distinct from steps");
+                        MuxAssert.AreEqual(773L, current.RootElement.GetProperty("firstModelCallTtftMs").GetInt64(), "first-call timing");
+                        MuxAssert.AreEqual(1413L, current.RootElement.GetProperty("modelStreamingMs").GetInt64(), "aggregate streaming");
                         using JsonDocument suppressed = JsonDocument.Parse(AgentEventSerializer.ToEnvelopeLine(completed, false));
                         MuxAssert.IsFalse(suppressed.RootElement.TryGetProperty("modelCallCount", out _), "stats suppressed");
+                        MuxAssert.IsFalse(suppressed.RootElement.TryGetProperty("firstModelCallTtftMs", out _), "TTFT suppressed");
+                        MuxAssert.IsFalse(suppressed.RootElement.TryGetProperty("modelStreamingMs", out _), "streaming suppressed");
                         completed.ModelCallCount = null;
+                        completed.FirstModelCallTtftMs = null;
+                        completed.ModelStreamingMs = null;
                         using JsonDocument legacy = JsonDocument.Parse(AgentEventSerializer.ToEnvelopeLine(completed));
                         MuxAssert.IsFalse(legacy.RootElement.TryGetProperty("modelCallCount", out _), "unknown omitted, not reported as zero");
+                        MuxAssert.IsFalse(legacy.RootElement.TryGetProperty("firstModelCallTtftMs", out _), "unknown TTFT omitted");
+                        MuxAssert.IsFalse(legacy.RootElement.TryGetProperty("modelStreamingMs", out _), "unknown streaming omitted");
                         return Task.CompletedTask;
                     }),
 

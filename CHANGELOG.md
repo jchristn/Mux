@@ -48,6 +48,13 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- Desktop turn timing uses recorded model-call metrics: first-call time to first token
+  and streaming duration summed across all primary calls. It no longer labels the wait
+  for final answer text as TTFT or derives streaming from the remaining turn time.
+  Missing timings display as unavailable. All 11 desktop locales distinguish model
+  timings, total turn time, model-call count, cumulative token traffic, and estimated context.
+  Completion envelopes optionally include `firstModelCallTtftMs` and `modelStreamingMs`.
+
 - Desktop conversations and tool execution default to the user's home directory (`~`),
   rather than inheriting a GUI launcher's working directory (often `/` on macOS).
   `/cwd` still selects an explicit project directory. Recursive skill relevance discovery

@@ -4,6 +4,7 @@ namespace Test.Shared.Suites
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Desktop.Conversation;
+    using Mux.Core.Llm;
     using Mux.Desktop.I18n;
     using Touchstone.Core;
 
@@ -44,12 +45,48 @@ namespace Test.Shared.Suites
                     new TestCaseDescriptor(SuiteId, "DetailsIncludeTimingAndActivity", "Details carry timing, tokens, steps, tool calls, errors, context, and status", (CancellationToken ct) =>
                     {
                         string details = Sample().BuildDetails(null, null);
-                        MuxAssert.Contains("Time to first token: 200 ms", details, "ttft");
-                        MuxAssert.Contains("Streaming: 1300 ms", details, "streaming");
-                        MuxAssert.Contains("Total: 1.5 s", details, "total");
+                        MuxAssert.Contains("First model call: time to first token 200 ms", details, "ttft");
+                        MuxAssert.Contains("Model streaming (all calls): 300 ms", details, "streaming");
+                        MuxAssert.Contains("Total turn time: 1.5 s", details, "total");
                         MuxAssert.Contains("input 300 · output 45 · total 345", details, "tokens");
-                        MuxAssert.Contains("Steps: 3 · tool calls: 2 · errors: 1", details, "activity");
-                        MuxAssert.Contains("Context: ~4096 tokens · status: completed", details, "context and status");
+                        MuxAssert.Contains("Model calls: 4 · steps: 3 · tool calls: 2 · run errors: 1", details, "activity");
+                        MuxAssert.Contains("Estimated context: ~4096 tokens · status: completed", details, "context and status");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "MultipleCallsUseRecordedTimings", "Tool/thinking turns use first-call TTFT and the sum of all model streams", (CancellationToken ct) =>
+                    {
+                        LlmRunTiming timing = new LlmRunTiming();
+                        timing.Add(new LlmCallMetrics { TimeToFirstTokenMs = 773, StreamingMs = 1246 });
+                        timing.Add(new LlmCallMetrics { TimeToFirstTokenMs = 793, StreamingMs = 114 });
+                        timing.Add(new LlmCallMetrics { TimeToFirstTokenMs = 807, StreamingMs = 0 });
+                        timing.Add(new LlmCallMetrics { TimeToFirstTokenMs = 722, StreamingMs = 53 });
+                        MuxAssert.AreEqual(773L, timing.FirstCallTtftMs, "first call, not last answer");
+                        MuxAssert.AreEqual(1413L, timing.StreamingMs, "all streams, including zero-duration stream");
+                        TurnInfo info = new TurnInfo { TotalMs = 10121, TtftMs = timing.FirstCallTtftMs, StreamingMs = timing.StreamingMs, ModelCalls = 4 };
+                        string details = info.BuildDetails(null, null);
+                        MuxAssert.Contains("first token 773 ms", details, "first-call timing displayed");
+                        MuxAssert.Contains("(all calls): 1413 ms", details, "real aggregate displayed");
+                        MuxAssert.Contains("Total turn time: 10.1 s", details, "turn duration kept separate");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "IncompleteTimingRemainsUnknown", "Missing call timings do not understate aggregate streaming or substitute a later TTFT", (CancellationToken ct) =>
+                    {
+                        LlmRunTiming timing = new LlmRunTiming();
+                        MuxAssert.IsNull(timing.FirstCallTtftMs, "no first call");
+                        MuxAssert.IsNull(timing.StreamingMs, "no stream");
+                        timing.Add(null);
+                        timing.Add(new LlmCallMetrics { TimeToFirstTokenMs = 800, StreamingMs = 50 });
+                        MuxAssert.IsNull(timing.FirstCallTtftMs, "later TTFT does not replace missing first call");
+                        MuxAssert.IsNull(timing.StreamingMs, "partial stream sum not presented as complete");
+                        LlmRunTiming partial = new LlmRunTiming();
+                        partial.Add(new LlmCallMetrics { TimeToFirstTokenMs = 0, StreamingMs = 0 });
+                        MuxAssert.AreEqual(0L, partial.FirstCallTtftMs, "reported zero is valid");
+                        MuxAssert.AreEqual(0L, partial.StreamingMs, "reported zero stream is valid");
+                        partial.Add(new LlmCallMetrics());
+                        MuxAssert.AreEqual(0L, partial.FirstCallTtftMs, "first-call metric preserved");
+                        MuxAssert.IsNull(partial.StreamingMs, "one missing stream makes sum unknown");
                         return Task.CompletedTask;
                     }),
 
@@ -64,7 +101,7 @@ namespace Test.Shared.Suites
                             string timing = service.Get("main.turnInfo.tip");
                             string activity = service.Get("main.turnInfo.more");
                             MuxAssert.IsFalse(string.IsNullOrWhiteSpace(activity) || activity == "main.turnInfo.more", locale.Code + " has main.turnInfo.more");
-                            MuxAssert.Contains("{4}", activity, locale.Code + " activity format has every placeholder");
+                            MuxAssert.Contains("{5}", activity, locale.Code + " activity format has every placeholder");
                             string details = Sample().BuildDetails(timing, activity);
                             MuxAssert.Contains("4096", details, locale.Code + " shows the context size");
                             MuxAssert.Contains("345", details, locale.Code + " shows the total tokens");
@@ -79,15 +116,17 @@ namespace Test.Shared.Suites
                     new TestCaseDescriptor(SuiteId, "MalformedFormatFallsBack", "A malformed or blank localized format falls back to English instead of throwing", (CancellationToken ct) =>
                     {
                         string details = Sample().BuildDetails("broken {9", "   ");
-                        MuxAssert.Contains("Time to first token: 200 ms", details, "timing fallback");
-                        MuxAssert.Contains("Steps: 3", details, "activity fallback");
+                        MuxAssert.Contains("First model call: time to first token 200 ms", details, "timing fallback");
+                        MuxAssert.Contains("steps: 3", details, "activity fallback");
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor(SuiteId, "StreamingNeverNegative", "Streaming time is never negative and treats a missing first token as zero", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "MissingTimingIsNotFabricated", "Missing timings stay unknown rather than being derived from total turn time", (CancellationToken ct) =>
                     {
-                        MuxAssert.AreEqual(0L, new TurnInfo { TotalMs = 100, TtftMs = 500 }.StreamingMs, "ttft after total");
-                        MuxAssert.AreEqual(800L, new TurnInfo { TotalMs = 800, TtftMs = null }.StreamingMs, "no first token");
+                        TurnInfo missing = new TurnInfo { TotalMs = 10121, ModelCalls = 4 };
+                        MuxAssert.IsNull(missing.StreamingMs, "missing streaming stays unknown");
+                        MuxAssert.Contains("first token — ms", missing.BuildDetails(null, null), "no false zero TTFT");
+                        MuxAssert.Contains("(all calls): — ms", missing.BuildDetails(null, null), "turn duration is not streaming");
                         MuxAssert.Contains("status: unknown", new TurnInfo().BuildDetails(null, null), "blank status");
                         MuxAssert.AreEqual("0 ms", TurnInfo.FormatMs(-5), "negative duration clamps");
                         return Task.CompletedTask;
@@ -105,6 +144,7 @@ namespace Test.Shared.Suites
             {
                 TotalMs = 1500,
                 TtftMs = 200,
+                StreamingMs = 300,
                 InputTokens = 300,
                 OutputTokens = 45,
                 TotalTokens = 345,

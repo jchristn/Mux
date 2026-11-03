@@ -219,6 +219,7 @@ namespace Mux.Core.Agent
             Stopwatch stopwatch = Stopwatch.StartNew();
             int iterationCount = 0;
             int modelCallCount = 0;
+            LlmRunTiming modelTiming = new LlmRunTiming();
             int toolCallCount = 0;
             int errorCount = 0;
             int stopHookReentries = 0;
@@ -397,6 +398,7 @@ namespace Mux.Core.Agent
                 LlmCallMetrics? completedCall = _LlmClient.LastCall;
                 bool isFreshCall = completedCall != null && !ReferenceEquals(completedCall, previousCall);
                 RecordCallUsage(runId, iterationCount, isFreshCall ? completedCall : null, streamErrorCode);
+                modelTiming.Add(isFreshCall ? completedCall : null);
                 previousCall = completedCall;
 
                 // Add assistant message to conversation history
@@ -852,6 +854,8 @@ namespace Mux.Core.Agent
                 Status = ResolveRunStatus(budgetExceeded, maxIterationsReached, endedOnError, errorCount),
                 IterationsCompleted = iterationCount,
                 ModelCallCount = modelCallCount,
+                FirstModelCallTtftMs = modelTiming.FirstCallTtftMs,
+                ModelStreamingMs = modelTiming.StreamingMs,
                 ToolCallCount = toolCallCount,
                 ErrorCount = errorCount,
                 AssistantTextChars = assistantTextChars,

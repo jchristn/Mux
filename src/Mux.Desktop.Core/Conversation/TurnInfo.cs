@@ -15,7 +15,7 @@ namespace Mux.Desktop.Conversation
         /// <summary>The whole turn's duration, in milliseconds.</summary>
         public long TotalMs { get; set; }
 
-        /// <summary>The time to the first streamed token, in milliseconds, or null when nothing streamed.</summary>
+        /// <summary>The first model call's time to first token, excluding preparation; null when unavailable.</summary>
         public long? TtftMs { get; set; }
 
         /// <summary>Input (prompt) tokens.</summary>
@@ -46,9 +46,10 @@ namespace Mux.Desktop.Conversation
         public string Status { get; set; } = string.Empty;
 
         /// <summary>
-        /// The streaming time: the total minus the time to first token, never negative.
+        /// Sum of the model calls' streaming durations, excluding tools and approval waits.
+        /// Null when any call lacks timing; never inferred from the total turn duration.
         /// </summary>
-        public long StreamingMs => Math.Max(0, TotalMs - (TtftMs ?? 0));
+        public long? StreamingMs { get; set; }
 
         #endregion
 
@@ -73,16 +74,16 @@ namespace Mux.Desktop.Conversation
         /// <summary>
         /// The multi-line details. <paramref name="timingFormat"/> takes time to first token, streaming, total,
         /// input, output, and total tokens; <paramref name="activityFormat"/> takes steps, tool calls, errors, context
-        /// tokens, and status. A missing or malformed localized format falls back to English, so the details always
+        /// tokens, status, and model-call count. A missing or malformed localized format falls back to English, so the details always
         /// render.
         /// </summary>
         /// <param name="timingFormat">The localized timing and token format.</param>
-        /// <param name="activityFormat">The localized steps, tools, errors, context, and status format.</param>
+        /// <param name="activityFormat">The localized steps, tools, errors, context, status, and model-call-count format.</param>
         /// <returns>The details text.</returns>
         public string BuildDetails(string? timingFormat, string? activityFormat)
         {
-            string timing = SafeFormat(timingFormat, DefaultTimingFormat, TtftMs ?? 0, StreamingMs, FormatMs(TotalMs), InputTokens, OutputTokens, TotalTokens);
-            string activity = SafeFormat(activityFormat, DefaultActivityFormat, Steps, ToolCalls, Errors, ContextTokens, string.IsNullOrWhiteSpace(Status) ? "unknown" : Status);
+            string timing = SafeFormat(timingFormat, DefaultTimingFormat, FormatMetric(TtftMs), FormatMetric(StreamingMs), FormatMs(TotalMs), InputTokens, OutputTokens, TotalTokens);
+            string activity = SafeFormat(activityFormat, DefaultActivityFormat, Steps, ToolCalls, Errors, ContextTokens, string.IsNullOrWhiteSpace(Status) ? "unknown" : Status, ModelCalls.HasValue ? ModelCalls.Value.ToString(CultureInfo.InvariantCulture) : "—");
             return timing + "\n" + activity;
         }
 
@@ -105,12 +106,17 @@ namespace Mux.Desktop.Conversation
 
         #region Private-Members
 
-        private const string DefaultTimingFormat = "Time to first token: {0} ms\nStreaming: {1} ms\nTotal: {2}\nTokens processed across this turn: input {3} · output {4} · total {5}";
-        private const string DefaultActivityFormat = "Steps: {0} · tool calls: {1} · errors: {2}\nContext: ~{3} tokens · status: {4}";
+        private const string DefaultTimingFormat = "First model call: time to first token {0} ms\nModel streaming (all calls): {1} ms\nTotal turn time: {2}\nTokens processed across this turn: input {3} · output {4} · total {5}";
+        private const string DefaultActivityFormat = "Model calls: {5} · steps: {0} · tool calls: {1} · run errors: {2}\nEstimated context: ~{3} tokens · status: {4}";
 
         #endregion
 
         #region Private-Methods
+
+        private static string FormatMetric(long? value)
+        {
+            return value.HasValue && value.Value >= 0 ? value.Value.ToString(CultureInfo.InvariantCulture) : "—";
+        }
 
         private static string SafeFormat(string? format, string fallback, params object[] values)
         {

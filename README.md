@@ -251,7 +251,8 @@ immediately and records a saved conversation notice. **Use this model** in an en
 also selects it for the conversation. macOS has native File, Edit, View, Configure, Tools, Window, and Help
 menus. Prompt preparation runs off the UI thread. Each response's info button shows tokens
 processed across the turn's model calls, with input/output totals and estimated context size
-in the details; a short prompt can still send a large tool catalog on every call. MCP tool
+in the details. Model timings distinguish the first call's time to first token, streaming summed
+across all calls, and total turn time. A short prompt can still send a large tool catalog on every call. MCP tool
 descriptions are sent once in the tool definitions, with only names repeated in the system prompt. See
 [docs/DESKTOP.md](docs/DESKTOP.md).
 

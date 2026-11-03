@@ -55,7 +55,13 @@ is your home directory or a filesystem root such as `/` or `C:\`; select your pr
 - **Turn info** — the response's info button shows, for example, `357,549 tokens processed · 4 model calls`.
   This is input plus output summed across the primary model calls in that turn, including input
   resent on subsequent calls. It is not the size of the typed prompt or the current context window.
-  Click for input/output totals, timing, tool activity, and the separate estimated context size.
+  Click for input/output totals, timing, model-call count, tool activity, and the separate estimated context size.
+  **First model call: time to first token** is measured from the first model request's start;
+  **Model streaming (all calls)** sums each call's first-token-to-last-token interval. Preparation,
+  approval waits, and tool execution contribute to **Total turn time**, not model streaming.
+  Missing timings display as `—`; a partial sum is not shown as a complete streaming total.
+  **Run errors** counts emitted run error events; recoverable failed tool results appear on their
+  tool cards and can occur in a successfully completed turn.
   The call count excludes transport retries, compaction, and title generation; older completion
   events without a count omit it. MCP tool descriptions and parameter schemas remain available
   in tool definitions; the system prompt lists only their names to avoid repeating descriptions.
