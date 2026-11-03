@@ -2420,6 +2420,9 @@ namespace Mux.Cli.App
         private void ConfigureJob(Job job)
         {
             job.PlanMode = _Mode == Mux.Core.Interaction.InteractionModeEnum.Plan;
+            // Attribute the job's run events, hooks, and usage telemetry to the session shown in the transcript —
+            // a resumed foreign session, or the launch session — not the terminal's immutable launch session id.
+            job.SessionIdOverride = string.IsNullOrEmpty(_ActiveSessionId) ? _JobManager.SessionId : _ActiveSessionId;
             Mux.Core.Interaction.PlanProposal? seed;
             lock (_Sync)
             {

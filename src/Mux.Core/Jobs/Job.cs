@@ -95,6 +95,24 @@ namespace Mux.Core.Jobs
         }
 
         /// <summary>
+        /// Optional session id that overrides the manager-owned <see cref="SessionId"/> for this job's run events,
+        /// hooks, and usage telemetry. Set before the job starts, through the configure callback of <see
+        /// cref="JobManager.SubmitAsync(string, ApprovalPolicyEnum, IEnumerable{Mux.Core.Models.ConversationMessage}, Action{Job}, System.Threading.CancellationToken)"/>,
+        /// when the conversation the job works on belongs to a different session than the manager's own (for example,
+        /// a session started in the dashboard and resumed in the terminal).
+        /// </summary>
+        public string? SessionIdOverride { get; set; }
+
+        /// <summary>
+        /// The session id downstream consumers attribute this job to: <see cref="SessionIdOverride"/> when set,
+        /// otherwise <see cref="SessionId"/>.
+        /// </summary>
+        public string EffectiveSessionId
+        {
+            get => string.IsNullOrWhiteSpace(SessionIdOverride) ? _SessionId : SessionIdOverride!;
+        }
+
+        /// <summary>
         /// The initial prompt that created the job.
         /// </summary>
         public string Prompt

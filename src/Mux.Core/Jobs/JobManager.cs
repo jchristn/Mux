@@ -697,7 +697,7 @@ namespace Mux.Core.Jobs
             Activity.Current = null;
             Activity? jobActivity = MuxTelemetry.StartActivity("job", ActivityKind.Internal, job.ParentContext);
             MuxTelemetry.SetTag(jobActivity, MuxTelemetryNames.AttrJobId, job.Id);
-            MuxTelemetry.SetTag(jobActivity, MuxTelemetryNames.AttrSessionId, _SessionId);
+            MuxTelemetry.SetTag(jobActivity, MuxTelemetryNames.AttrSessionId, job.EffectiveSessionId);
             RecordQueuedStage(job, jobActivity);
             string jobOutcome = "failed";
 
@@ -1012,7 +1012,8 @@ namespace Mux.Core.Jobs
                 MuxSettings = templateOptions.MuxSettings,
                 IgnoreCertErrors = templateOptions.IgnoreCertErrors,
                 UsageRecorder = templateOptions.UsageRecorder,
-                UsageCallKind = templateOptions.UsageCallKind
+                UsageCallKind = templateOptions.UsageCallKind,
+                SessionId = job.EffectiveSessionId
             };
 
             return options;
