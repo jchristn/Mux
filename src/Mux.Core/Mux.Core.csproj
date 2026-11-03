@@ -57,4 +57,7 @@
     <ProjectReference Include="..\Mux.Search\Mux.Search.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Test.Shared" />
+  </ItemGroup>
 </Project>

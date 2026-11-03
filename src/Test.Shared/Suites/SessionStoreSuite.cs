@@ -222,6 +222,75 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(2, jobMessages.Count, "jobMessages unchanged");
                         await Task.CompletedTask.ConfigureAwait(false);
                     }),
+                    Case("WatcherFlushesDuringContinuousEvents", "Continuous native events cannot indefinitely postpone a pending notification", async (SessionStore store, string dir, CancellationToken ct) =>
+                    {
+                        await store.SaveAsync(BuildRichSnapshot("busy", "Busy"), ct).ConfigureAwait(false);
+                        using SessionStoreWatcher watcher = new SessionStoreWatcher(dir, 150, useNativeWatcher: false);
+                        TaskCompletionSource<bool> changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                        watcher.Changed += id => changed.TrySetResult(true);
+                        watcher.Start();
+                        using CancellationTokenSource stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        Task producer = Task.Run(async () =>
+                        {
+                            while (!stop.IsCancellationRequested)
+                            {
+                                watcher.Enqueue(Path.Combine(dir, "busy.json"));
+                                await Task.Delay(20, stop.Token).ConfigureAwait(false);
+                            }
+                        }, ct);
+                        try
+                        {
+                            await changed.Task.WaitAsync(TimeSpan.FromSeconds(4), ct).ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            stop.Cancel();
+                            try { await producer.ConfigureAwait(false); } catch (OperationCanceledException) { }
+                        }
+                    }),
+                    Case("WatcherReconcilesWithoutNativeEvents", "Polling recovers external creates, same-size rewrites, renames and deletes without native notifications", async (SessionStore store, string dir, CancellationToken ct) =>
+                    {
+                        Directory.CreateDirectory(dir);
+                        string existing = Path.Combine(dir, "existing.json");
+                        await File.WriteAllTextAsync(existing, "old", ct).ConfigureAwait(false);
+                        File.SetLastWriteTimeUtc(existing, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+                        var events = System.Threading.Channels.Channel.CreateUnbounded<string>();
+                        using SessionStoreWatcher watcher = new SessionStoreWatcher(dir, 25, useNativeWatcher: false);
+                        watcher.Changed += id => events.Writer.TryWrite("changed:" + id);
+                        watcher.Removed += id => events.Writer.TryWrite("removed:" + id);
+                        watcher.Start();
+                        watcher.Start(); // Idempotent; must not reset the baseline.
+                        await Task.Delay(1200, ct).ConfigureAwait(false);
+                        MuxAssert.IsFalse(events.Reader.TryRead(out _), "existing files do not broadcast on startup");
+
+                        await File.WriteAllTextAsync(existing, "new", ct).ConfigureAwait(false);
+                        File.SetLastWriteTimeUtc(existing, new DateTime(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+                        MuxAssert.AreEqual("changed:existing", await events.Reader.ReadAsync(ct).AsTask().WaitAsync(TimeSpan.FromSeconds(4), ct).ConfigureAwait(false), "same-size rewrite");
+
+                        // Exercise the same atomic save as another process, including ignored temp files.
+                        await File.WriteAllTextAsync(Path.Combine(dir, "ignored.json.tmp"), "partial", ct).ConfigureAwait(false);
+                        await store.SaveAsync(BuildRichSnapshot("created", "External"), ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual("changed:created", await events.Reader.ReadAsync(ct).AsTask().WaitAsync(TimeSpan.FromSeconds(4), ct).ConfigureAwait(false), "external atomic create");
+
+                        File.Move(existing, Path.Combine(dir, "renamed.json"));
+                        string first = await events.Reader.ReadAsync(ct).AsTask().WaitAsync(TimeSpan.FromSeconds(4), ct).ConfigureAwait(false);
+                        string second = await events.Reader.ReadAsync(ct).AsTask().WaitAsync(TimeSpan.FromSeconds(4), ct).ConfigureAwait(false);
+                        MuxAssert.IsTrue(new HashSet<string> { first, second }.SetEquals(new[] { "removed:existing", "changed:renamed" }), "rename reconciles both ids");
+                        await store.DeleteAsync("created", ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual("removed:created", await events.Reader.ReadAsync(ct).AsTask().WaitAsync(TimeSpan.FromSeconds(4), ct).ConfigureAwait(false), "external deletion");
+
+                        await Task.Delay(1200, ct).ConfigureAwait(false);
+                        MuxAssert.IsFalse(events.Reader.TryRead(out _), "unchanged files and temp files do not broadcast");
+                        Directory.Delete(dir, true);
+                        MuxAssert.AreEqual("removed:renamed", await events.Reader.ReadAsync(ct).AsTask().WaitAsync(TimeSpan.FromSeconds(4), ct).ConfigureAwait(false), "store directory removed");
+                        Directory.CreateDirectory(dir);
+                        await store.SaveAsync(BuildRichSnapshot("recreated", "Recreated"), ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual("changed:recreated", await events.Reader.ReadAsync(ct).AsTask().WaitAsync(TimeSpan.FromSeconds(4), ct).ConfigureAwait(false), "store directory recreated");
+                        watcher.Dispose();
+                        await File.WriteAllTextAsync(Path.Combine(dir, "after-dispose.json"), "{}", ct).ConfigureAwait(false);
+                        await Task.Delay(1200, ct).ConfigureAwait(false);
+                        MuxAssert.IsFalse(events.Reader.TryRead(out _), "disposed watcher stops polling");
+                    }),
                     Case("WatcherFiresChangedOnWriteAndRemovedOnDelete", "SessionStoreWatcher raises Changed on a save and Removed on a delete", async (SessionStore store, string dir, CancellationToken ct) =>
                     {
                         // This is the foundation of cross-surface consume: every surface (and the server) watches

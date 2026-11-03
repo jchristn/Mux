@@ -167,7 +167,7 @@ ValueError: bad payload
             try
             {
                 string skills = Path.Combine(root, "skills");
-                DefaultSkillLibrary.SeedInto(skills);
+                Directory.CreateDirectory(skills);
                 Directory.CreateDirectory(Path.Combine(root, "project"));
                 await body(new SkillTestContext(root, skills, ct)).ConfigureAwait(false);
             }

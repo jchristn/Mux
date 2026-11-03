@@ -29,6 +29,10 @@ namespace Mux.Core.Sessions
         private readonly object _Sync = new object();
         private readonly HashSet<string> _Pending = new HashSet<string>(StringComparer.Ordinal);
         private readonly Timer _Debounce;
+        private readonly Timer _Poll;
+        private readonly bool _UseNativeWatcher;
+        private Dictionary<string, (long Length, long Written)> _Known = new(StringComparer.Ordinal);
+        private bool _Started;
 
         private FileSystemWatcher? _Watcher;
         private bool _Disposed;
@@ -55,11 +59,18 @@ namespace Mux.Core.Sessions
         /// raising, in milliseconds. Clamped to at least 25 ms. Default 150 ms.</param>
         /// <exception cref="ArgumentException">Thrown when <paramref name="directory"/> is null or empty.</exception>
         public SessionStoreWatcher(string directory, int debounceMilliseconds = 150)
+            : this(directory, debounceMilliseconds, true)
+        {
+        }
+
+        internal SessionStoreWatcher(string directory, int debounceMilliseconds, bool useNativeWatcher)
         {
             if (string.IsNullOrWhiteSpace(directory)) throw new ArgumentException("Directory is required.", nameof(directory));
             _Directory = directory;
+            _UseNativeWatcher = useNativeWatcher;
             _DebounceInterval = TimeSpan.FromMilliseconds(debounceMilliseconds < 25 ? 25 : debounceMilliseconds);
             _Debounce = new Timer(OnDebounceElapsed, null, Timeout.Infinite, Timeout.Infinite);
+            _Poll = new Timer(OnPoll, null, Timeout.Infinite, Timeout.Infinite);
         }
 
         #endregion
@@ -68,20 +79,28 @@ namespace Mux.Core.Sessions
 
         /// <summary>
         /// Begins watching. Creates the directory if it does not yet exist (a fresh install has not written a
-        /// session), so the watcher attaches successfully and sees the first save. Best-effort: if the watcher
-        /// cannot be established, the store simply produces no change events and the caller falls back to its
-        /// existing refresh path.
+        /// session). Native events provide low latency; a one-second metadata scan reconciles persistent
+        /// changes even when native events are lost or the native watcher cannot be established.
+        /// Existing files form the baseline and do not produce startup notifications.
         /// </summary>
         public void Start()
         {
             lock (_Sync)
             {
-                if (_Disposed || _Watcher != null) return;
-
+                if (_Disposed || _Started) return;
                 try
                 {
                     Directory.CreateDirectory(_Directory);
+                    _Known = ReadSnapshot();
+                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+                _Started = true;
+                _Poll.Change(1000, 1000);
+                if (!_UseNativeWatcher) return;
 
+                try
+                {
                     FileSystemWatcher watcher = new FileSystemWatcher(_Directory, "*.json")
                     {
                         NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
@@ -91,11 +110,12 @@ namespace Mux.Core.Sessions
                     watcher.Changed += OnFileEvent;
                     watcher.Deleted += OnFileEvent;
                     watcher.Renamed += OnFileRenamed;
-                    watcher.EnableRaisingEvents = true;
                     _Watcher = watcher;
+                    watcher.EnableRaisingEvents = true;
                 }
                 catch (Exception)
                 {
+                    _Watcher?.Dispose();
                     _Watcher = null;
                 }
             }
@@ -109,6 +129,7 @@ namespace Mux.Core.Sessions
                 if (_Disposed) return;
                 _Disposed = true;
 
+                try { _Poll.Dispose(); } catch (Exception) { }
                 try { _Debounce.Dispose(); } catch (Exception) { }
                 if (_Watcher != null)
                 {
@@ -123,6 +144,49 @@ namespace Mux.Core.Sessions
 
         #region Private-Methods
 
+        private Dictionary<string, (long Length, long Written)> ReadSnapshot()
+        {
+            Dictionary<string, (long Length, long Written)> snapshot = new(StringComparer.Ordinal);
+            try
+            {
+                foreach (FileInfo file in new DirectoryInfo(_Directory).EnumerateFiles("*.json"))
+                {
+                    snapshot[Path.GetFileNameWithoutExtension(file.Name)] = (file.Length, file.LastWriteTimeUtc.Ticks);
+                }
+            }
+            catch (DirectoryNotFoundException)
+            {
+                // The store itself can be removed/recreated while the watcher is running.
+                snapshot.Clear();
+            }
+            return snapshot;
+        }
+
+        private void OnPoll(object? state)
+        {
+            lock (_Sync)
+            {
+                if (_Disposed) return;
+                try
+                {
+                    Dictionary<string, (long Length, long Written)> current = ReadSnapshot();
+                    foreach (var entry in current)
+                    {
+                        if (!_Known.TryGetValue(entry.Key, out var previous) || previous != entry.Value)
+                            Enqueue(Path.Combine(_Directory, entry.Key + ".json"));
+                    }
+                    foreach (string id in _Known.Keys)
+                    {
+                        if (!current.ContainsKey(id)) Enqueue(Path.Combine(_Directory, id + ".json"));
+                    }
+                    _Known = current;
+                }
+                // A failed/partial directory scan must never turn unreadable files into deletions.
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
+
         private void OnFileEvent(object sender, FileSystemEventArgs e)
         {
             Enqueue(e.FullPath);
@@ -136,7 +200,7 @@ namespace Mux.Core.Sessions
             Enqueue(e.OldFullPath);
         }
 
-        private void Enqueue(string fullPath)
+        internal void Enqueue(string fullPath)
         {
             if (string.IsNullOrEmpty(fullPath) || !fullPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             {
@@ -152,8 +216,11 @@ namespace Mux.Core.Sessions
             lock (_Sync)
             {
                 if (_Disposed) return;
+                // Bound the batch latency: continuous writes to another session must not postpone
+                // every pending notification indefinitely.
+                bool schedule = _Pending.Count == 0;
                 _Pending.Add(id);
-                try { _Debounce.Change(_DebounceInterval, Timeout.InfiniteTimeSpan); } catch (ObjectDisposedException) { }
+                if (schedule) _Debounce.Change(_DebounceInterval, Timeout.InfiniteTimeSpan);
             }
         }
 
@@ -165,6 +232,19 @@ namespace Mux.Core.Sessions
                 if (_Disposed || _Pending.Count == 0) return;
                 ids = new List<string>(_Pending);
                 _Pending.Clear();
+                // Update the polling baseline before releasing the lock, avoiding a second notification
+                // for the same native event on the next scan. Failed reads are retried by the poller.
+                foreach (string id in ids)
+                {
+                    try
+                    {
+                        FileInfo file = new FileInfo(Path.Combine(_Directory, id + ".json"));
+                        if (file.Exists) _Known[id] = (file.Length, file.LastWriteTimeUtc.Ticks);
+                        else _Known.Remove(id);
+                    }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
             }
 
             foreach (string id in ids)

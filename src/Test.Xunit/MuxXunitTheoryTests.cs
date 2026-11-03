@@ -9,7 +9,7 @@ namespace Test.Xunit
     /// <summary>
     /// Runs each non-skipped MUX Touchstone case as an individual xUnit theory row, giving per-case
     /// visibility in the test explorer. Skipped descriptors are excluded here (they are still honored by
-    /// <see cref="MuxXunitFactTests"/> and the console runner).
+    /// the console and NUnit runners). Each case executes once per target framework.
     /// </summary>
     public sealed class MuxXunitTheoryTests
     {

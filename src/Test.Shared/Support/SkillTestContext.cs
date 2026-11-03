@@ -95,6 +95,7 @@ namespace Test.Shared.Support
 
         private async Task<SkillRunResult> RunCoreAsync(string workingDirectory, bool dryRun, Dictionary<string, string>? environment, string skill, string command, string[] arguments)
         {
+            SkillScriptFixture.EnsureSkill(Skills, skill);
             Skill loaded = new SkillLoader(Skills).Load(Path.Combine(Skills, skill));
             MuxAssert.IsTrue(loaded.IsValid, skill + " valid: " + string.Join("; ", loaded.Validation.Errors));
             SkillCommand? found = null;

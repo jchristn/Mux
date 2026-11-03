@@ -312,7 +312,7 @@ Write-Output 'ok'
             await WithTempAsync(async (string root) =>
             {
                 string skills = Path.Combine(root, "skills");
-                DefaultSkillLibrary.SeedInto(skills);
+                Directory.CreateDirectory(skills);
                 await body(new SkillTestContext(root, skills, ct)).ConfigureAwait(false);
             }).ConfigureAwait(false);
         }

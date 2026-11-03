@@ -36,6 +36,21 @@ namespace Test.Shared.Suites
             bool pwsh = IsOnPath("pwsh");
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>
             {
+                new TestCaseDescriptor(SuiteId, "ScriptFixturesRemainIsolated", "Script fixtures copy production resources without sharing mutable files", (CancellationToken ct) => WithTempAsync((string root) =>
+                {
+                    string first = Path.Combine(root, "first");
+                    string second = Path.Combine(root, "second");
+                    SkillScriptFixture.EnsureSkill(first, "js-test");
+                    string helper = Path.Combine("js-test", "resources", "mux-skill.ps1");
+                    MuxAssert.AreEqual(DefaultSkillHelpers.Script, File.ReadAllText(Path.Combine(first, helper)), "production helper copied");
+                    File.WriteAllText(Path.Combine(first, helper), "changed by test");
+                    SkillScriptFixture.EnsureSkill(second, "js-test");
+                    MuxAssert.AreEqual(DefaultSkillHelpers.Script, File.ReadAllText(Path.Combine(second, helper)), "another case gets pristine files");
+                    SkillScriptFixture.EnsureSkill(first, "js-test");
+                    MuxAssert.AreEqual("changed by test", File.ReadAllText(Path.Combine(first, helper)), "same case keeps its mutations");
+                    MuxAssert.AreEqual(1, Directory.GetDirectories(first).Length, "only the requested skill is seeded");
+                    return Task.CompletedTask;
+                })),
                 new TestCaseDescriptor(SuiteId, "SeedsHelperResource", "Toolchain skills seed resources/mux-skill.ps1 and dot-source it", (CancellationToken ct) => WithTempAsync((string root) =>
                 {
                     DefaultSkillLibrary.SeedInto(root);
@@ -492,7 +507,7 @@ namespace Test.Shared.Suites
             return WithTempAsync(async (string root) =>
             {
                 string skills = Path.Combine(root, "skills");
-                DefaultSkillLibrary.SeedInto(skills);
+                Directory.CreateDirectory(skills);
                 string project = Path.Combine(root, "project");
                 Directory.CreateDirectory(Path.Combine(project, ".git"));
                 toolchainCase.Fixture(project);
@@ -515,6 +530,7 @@ namespace Test.Shared.Suites
 
         private static async Task<ToolResult> RunAsync(string skillsDirectory, string skillId, string command, List<string> arguments, string workingDirectory, bool dryRun, CancellationToken ct, Dictionary<string, string>? extraEnvironment = null)
         {
+            SkillScriptFixture.EnsureSkill(skillsDirectory, skillId);
             Skill skill = new SkillLoader(skillsDirectory).Load(Path.Combine(skillsDirectory, skillId));
             MuxAssert.IsTrue(skill.IsValid, skillId + " valid: " + string.Join("; ", skill.Validation.Errors));
             SkillCommand? found = null;
