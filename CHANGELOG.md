@@ -48,6 +48,10 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- Desktop conversations and tool execution default to the user's home directory (`~`),
+  rather than inheriting a GUI launcher's working directory (often `/` on macOS).
+  `/cwd` still selects an explicit project directory.
+
 - Desktop agent preparation runs off the UI thread, keeping Send/Stop and the window
   responsive while prompts, skills, and tool catalogs are assembled. Recursive skill
   relevance searches no longer traverse filesystem roots (`/`, Windows drive roots,

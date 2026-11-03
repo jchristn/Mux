@@ -7,6 +7,7 @@ namespace Test.Shared.Suites
     using System.Threading.Tasks;
     using Mux.Core.Sessions;
     using Mux.Desktop.Services;
+    using Mux.Desktop.Conversation;
     using Touchstone.Core;
 
     /// <summary>
@@ -36,6 +37,8 @@ namespace Test.Shared.Suites
                             ThreadSummary created = await service.CreateAsync("My thread", "ep", "model", ct);
                             MuxAssert.AreEqual("My thread", created.Title, "created title");
                             MuxAssert.IsTrue(created.TitlePinned, "title pinned");
+                            SessionSnapshot? saved = await new SessionStore(dir).LoadAsync(created.Id, ct);
+                            MuxAssert.AreEqual(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), saved!.WorkingDirectory, "new desktop sessions persist home instead of the launcher directory");
 
                             IReadOnlyList<ThreadSummary> list = await service.ListAsync(ct);
                             MuxAssert.AreEqual(1, list.Count, "list count");
@@ -44,6 +47,20 @@ namespace Test.Shared.Suites
                         {
                             Cleanup(dir);
                         }
+                    }),
+
+                    new TestCaseDescriptor("ThreadService", "RunnerDefaultsToHome", "Desktop tools default to home and respect an explicit working directory", (CancellationToken ct) =>
+                    {
+                        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                        AgentLoopTurnRunner runner = new AgentLoopTurnRunner(Path.GetTempPath(), _ => Task.FromResult("n"), null);
+                        MuxAssert.AreEqual(home, runner.WorkingDirectory, "runner defaults to home");
+                        runner.WorkingDirectory = Path.GetTempPath();
+                        MuxAssert.AreEqual(Path.GetTempPath(), runner.WorkingDirectory, "explicit directory preserved");
+                        runner.WorkingDirectory = " ";
+                        MuxAssert.AreEqual(home, runner.WorkingDirectory, "blank resets to home");
+                        runner.WorkingDirectory = Path.GetPathRoot(home)!;
+                        MuxAssert.AreEqual(Path.GetPathRoot(home), runner.WorkingDirectory, "explicit root remains supported");
+                        return Task.CompletedTask;
                     }),
 
                     new TestCaseDescriptor("ThreadService", "DefaultTitleUnpinned", "Create without a title uses the default and leaves it unpinned", async (CancellationToken ct) =>

@@ -36,7 +36,7 @@ namespace Mux.Desktop.Conversation
         private readonly IUsageRecorder? _UsageRecorder;
         private string? _EndpointName;
         private string? _SessionId;
-        private string _WorkingDirectory = Directory.GetCurrentDirectory();
+        private string _WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         private McpRuntime? _Mcp;
         private SkillRuntime? _Skills;
         private Mux.Core.Processes.BackgroundProcessRegistry? _Processes;
@@ -130,11 +130,11 @@ namespace Mux.Desktop.Conversation
         }
 
 
-        /// <summary>The working directory tools execute in. Defaults to the process working directory.</summary>
+        /// <summary>The working directory tools execute in. Defaults to the user's home directory, independent of the GUI launcher.</summary>
         public string WorkingDirectory
         {
             get => _WorkingDirectory;
-            set => _WorkingDirectory = string.IsNullOrWhiteSpace(value) ? Directory.GetCurrentDirectory() : value;
+            set => _WorkingDirectory = string.IsNullOrWhiteSpace(value) ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) : value;
         }
 
         /// <summary>

@@ -42,6 +42,11 @@ On launch the About window shows as a splash for about 2.5 seconds, then closes 
 
 Type in the composer and press **Enter** to send (**Shift+Enter** inserts a newline). On launch, focus goes straight to the composer. While a turn is running the send button becomes a red **Stop** button that cancels the turn; a cancelled turn is dropped from the model-facing history so the next prompt is never mis-batched with an unanswered one. The transcript auto-scrolls to the newest content as it streams.
 
+Desktop conversations start in your home directory (`~`), regardless of where the GUI launcher
+starts the process. Use `/cwd` to see the active directory or `/cwd /path/to/project` to change it.
+After installing a new build, quit and reopen the app: replacing its files does not update a
+running process.
+
 Prompt and skill preparation runs on a worker thread so the window remains responsive before
 streaming starts. Recursive skill relevance searches are skipped when the working directory
 is a filesystem root such as `/` or `C:\`; select your project with `/cwd` for project discovery.

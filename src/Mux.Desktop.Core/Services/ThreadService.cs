@@ -52,7 +52,8 @@ namespace Mux.Desktop.Services
         /// <inheritdoc />
         public async Task<ThreadSummary> CreateAsync(string? title, string? endpointName, string? model, CancellationToken token)
         {
-            SessionInfo info = await _Sessions.CreateAsync(title, endpointName, model, null, token).ConfigureAwait(false);
+            SessionInfo info = await _Sessions.CreateAsync(title, endpointName, model,
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), token).ConfigureAwait(false);
             return MapToSummary(info);
         }
 
