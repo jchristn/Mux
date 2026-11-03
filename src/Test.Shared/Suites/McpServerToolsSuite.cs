@@ -41,9 +41,12 @@ namespace Test.Shared.Suites
         public static TestSuiteDescriptor Create()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
-            void Add(string id, string name, Func<string, CancellationToken, Task> body)
+            bool powerShellAvailable;
+            try { PowerShellCommandRunner.ResolveExecutable(null); powerShellAvailable = true; }
+            catch (McpToolException) { powerShellAvailable = false; }
+            void Add(string id, string name, Func<string, CancellationToken, Task> body, bool requiresPowerShell = false)
             {
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => WithTempAsync((string root) => body(root, ct))));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => WithTempAsync((string root) => body(root, ct)), skip: requiresPowerShell && !powerShellAvailable, skipReason: "Install PowerShell (pwsh), or use Windows PowerShell on Windows, to run shell integration checks."));
             }
 
             // --- registration ---
@@ -506,6 +509,112 @@ namespace Test.Shared.Suites
                 MuxAssert.IsTrue(result.RootElement.GetProperty("output_truncated").GetBoolean(), "truncation indicated");
                 MuxAssert.AreEqual(0, result.RootElement.GetProperty("exit_code").GetInt32(), "drained to exit");
             });
+
+
+            Add("PowerShellOptInAndParser", "PowerShell has its own opt-in, schema, and executable override", (string root, CancellationToken ct) =>
+            {
+                var options = new MuxMcpServerOptions { AllowBash = true };
+                var disabled = Register(options, new FakeMcpRunExecutor(), new List<EndpointConfig>(), Store(root), null, root);
+                MuxAssert.IsFalse(disabled.ContainsKey("powershell"), "bash flag does not enable PowerShell");
+                options.AllowPowerShell = true;
+                options.AllowSkills = true;
+                var catalog = new MuxMcpTools(options, new FakeMcpRunExecutor(), () => new List<EndpointConfig>(), Store(root), null);
+                var enabled = Capture(catalog);
+                MuxAssert.AreEqual(string.Join(",", enabled.Keys), string.Join(",", catalog.ToolNames), "advertised registration order");
+                using JsonDocument schema = JsonDocument.Parse(JsonSerializer.Serialize(enabled["powershell"].Schema));
+                MuxAssert.AreEqual("command", schema.RootElement.GetProperty("required")[0].GetString(), "command required");
+                MuxAssert.AreEqual(3600000, schema.RootElement.GetProperty("properties").GetProperty("timeout_ms").GetProperty("maximum").GetInt32(), "timeout bound");
+                MuxAssert.IsTrue(Mux.Cli.Commands.McpServeCommand.TryParse(new[] { "serve", "--allow-powershell", "--powershell-path", "C:/Program Files/PowerShell/7/pwsh.exe" }, out var parsed, out var error), error);
+                MuxAssert.IsTrue(parsed!.AllowPowerShell, "enabled");
+                MuxAssert.IsFalse(parsed.AllowBash, "PowerShell flag does not enable Bash");
+                MuxAssert.AreEqual("C:/Program Files/PowerShell/7/pwsh.exe", parsed.PowerShellPath, "spaced path");
+                MuxAssert.IsFalse(Mux.Cli.Commands.McpServeCommand.TryParse(new[] { "serve", "--powershell-path" }, out _, out _), "missing path rejected");
+                options.AllowPowerShell = false;
+                return MuxAssert.ThrowsAsync<McpToolException>(() => Ok(enabled["powershell"], "{\"command\":\"exit 0\"}", ct), "disabled handler refuses execution");
+            });
+            Add("PowerShellDiscovery", "Discovery prefers pwsh and only offers Windows PowerShell on Windows", (string root, CancellationToken ct) =>
+            {
+                string bin = Path.Combine(root, "tools with spaces");
+                var windows = new List<string>(PowerShellCommandRunner.ExecutableCandidates(true, bin, root, root));
+                MuxAssert.AreEqual(Path.Combine(bin, "pwsh.exe"), windows[0], "PATH pwsh first");
+                MuxAssert.AreEqual(Path.Combine(root, "PowerShell", "7", "pwsh.exe"), windows[1], "installed PowerShell 7 before fallback");
+                MuxAssert.AreEqual(Path.Combine(root, "WindowsPowerShell", "v1.0", "powershell.exe"), windows[2], "Windows PowerShell fallback");
+                var unix = new List<string>(PowerShellCommandRunner.ExecutableCandidates(false, bin, root, root));
+                MuxAssert.AreEqual(1, unix.Count, "no Windows fallback on Unix");
+                MuxAssert.AreEqual(Path.Combine(bin, "pwsh"), unix[0], "Unix executable");
+                return Task.CompletedTask;
+            });
+            Add("PowerShellValidation", "PowerShell rejects malformed arguments and nonexistent paths before execution", async (string root, CancellationToken ct) =>
+            {
+                var tools = Register(new MuxMcpServerOptions { AllowPowerShell = true, PowerShellPath = Path.Combine(root, "missing pwsh") }, new FakeMcpRunExecutor(), new List<EndpointConfig>(), Store(root), null, root);
+                MuxAssert.Contains("command is required", await Error(tools["powershell"], "{}", ct), "required command");
+                MuxAssert.Contains("command must be a string", await Error(tools["powershell"], "{\"command\":42}", ct), "command type");
+                foreach (string timeout in new[] { "0", "-1", "1.5", "3600001", "\"100\"" })
+                    MuxAssert.Contains("timeout_ms must", await Error(tools["powershell"], "{\"command\":\"exit 0\",\"timeout_ms\":" + timeout + "}", ct), "timeout validation");
+                MuxAssert.Contains("does not exist", await Error(tools["powershell"], "{\"command\":\"exit 0\",\"working_directory\":\"missing\"}", ct), "directory validation");
+                MuxAssert.Contains("PowerShell executable does not exist", await Error(tools["powershell"], "{\"command\":\"exit 0\"}", ct), "missing executable");
+            });
+            Add("PowerShellOutputAndDirectory", "Real PowerShell preserves quotes, Unicode, multiline scripts, workdir, and exit status", async (string root, CancellationToken ct) =>
+            {
+                Directory.CreateDirectory(Path.Combine(root, "work with spaces"));
+                string path = PowerShellCommandRunner.ResolveExecutable(null);
+                var tools = Register(new MuxMcpServerOptions { AllowPowerShell = true, PowerShellPath = path }, new FakeMcpRunExecutor(), new List<EndpointConfig>(), Store(root), null, root);
+                string command = "[Console]::Out.Write('a \"quote\" and ''single'' — 雪')\n[Console]::Error.Write('stderr — 雪')\nSet-Content -LiteralPath result.txt -Value created -NoNewline\nexit 7";
+                using JsonDocument result = JsonDocument.Parse(await Ok(tools["powershell"], JsonSerializer.Serialize(new { command, working_directory = "work with spaces" }), ct));
+                MuxAssert.AreEqual("a \"quote\" and 'single' — 雪", result.RootElement.GetProperty("stdout").GetString(), "Unicode output and quoting");
+                MuxAssert.AreEqual("stderr — 雪", result.RootElement.GetProperty("stderr").GetString(), "Unicode stderr");
+                MuxAssert.AreEqual(7, result.RootElement.GetProperty("exit_code").GetInt32(), "explicit exit");
+                MuxAssert.AreEqual(path, result.RootElement.GetProperty("executable").GetString(), "resolved engine identified");
+                MuxAssert.IsFalse(result.RootElement.GetProperty("timed_out").GetBoolean(), "normal exit");
+                MuxAssert.AreEqual("created", File.ReadAllText(Path.Combine(root, "work with spaces", "result.txt")), "native workdir");
+                using JsonDocument declarations = JsonDocument.Parse(await Ok(tools["powershell"], JsonSerializer.Serialize(new { command = "using namespace System.Text\nparam()\n[Console]::Write([StringBuilder]::new('script').ToString())" }), ct));
+                MuxAssert.AreEqual("script", declarations.RootElement.GetProperty("stdout").GetString(), "leading script declarations preserved");
+                MuxAssert.AreEqual(0, declarations.RootElement.GetProperty("exit_code").GetInt32(), "declarations parsed successfully");
+            }, requiresPowerShell: true);
+            Add("PowerShellTimeoutAndCancellation", "PowerShell deadlines stop long commands and cancellation interrupts a running script", async (string root, CancellationToken ct) =>
+            {
+                var tools = Register(new MuxMcpServerOptions { AllowPowerShell = true }, new FakeMcpRunExecutor(), new List<EndpointConfig>(), Store(root), null, root);
+                using JsonDocument result = JsonDocument.Parse(await Ok(tools["powershell"], "{\"command\":\"Start-Sleep 30\",\"timeout_ms\":200}", ct));
+                MuxAssert.IsTrue(result.RootElement.GetProperty("timed_out").GetBoolean(), "deadline reported");
+                using CancellationTokenSource stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                stop.CancelAfter(TimeSpan.FromSeconds(10));
+                Task<string> running = Ok(tools["powershell"], JsonSerializer.Serialize(new { command = "Set-Content ready.txt started; Start-Sleep 30; Set-Content finished.txt bad" }), stop.Token);
+                try
+                {
+                    while (!File.Exists(Path.Combine(root, "ready.txt")) && !running.IsCompleted)
+                        await Task.Delay(20, stop.Token);
+                    MuxAssert.IsTrue(File.Exists(Path.Combine(root, "ready.txt")), "script started before cancellation");
+                }
+                finally { stop.Cancel(); }
+                await MuxAssert.ThrowsAsync<OperationCanceledException>(() => running, "cancellation propagated");
+                MuxAssert.IsFalse(File.Exists(Path.Combine(root, "finished.txt")), "script did not continue");
+            }, requiresPowerShell: true);
+            Add("PowerShellBoundedOutput", "PowerShell drains both streams with bounded capture", async (string root, CancellationToken ct) =>
+            {
+                var tools = Register(new MuxMcpServerOptions { AllowPowerShell = true }, new FakeMcpRunExecutor(), new List<EndpointConfig>(), Store(root), null, root);
+                using JsonDocument result = JsonDocument.Parse(await Ok(tools["powershell"], JsonSerializer.Serialize(new { command = "[Console]::Out.Write(('x' * 100000)); [Console]::Error.Write(('y' * 100000))" }), ct));
+                MuxAssert.AreEqual(65536, result.RootElement.GetProperty("stdout").GetString()!.Length, "stdout limit");
+                MuxAssert.AreEqual(65536, result.RootElement.GetProperty("stderr").GetString()!.Length, "stderr limit");
+                MuxAssert.IsTrue(result.RootElement.GetProperty("output_truncated").GetBoolean(), "truncation indicated");
+                MuxAssert.AreEqual(0, result.RootElement.GetProperty("exit_code").GetInt32(), "normal exit after draining");
+            }, requiresPowerShell: true);
+            Add("PowerShellNonInteractiveErrors", "PowerShell errors and prompts return without hanging; shell state is fresh per call", async (string root, CancellationToken ct) =>
+            {
+                var tools = Register(new MuxMcpServerOptions { AllowPowerShell = true }, new FakeMcpRunExecutor(), new List<EndpointConfig>(), Store(root), null, root);
+                foreach (string command in new[] { "throw 'test failure'", "Read-Host 'Enter a value'", "Write-Error 'final error'" })
+                {
+                    using JsonDocument result = JsonDocument.Parse(await Ok(tools["powershell"], JsonSerializer.Serialize(new { command, timeout_ms = 10000 }), ct));
+                    MuxAssert.IsFalse(result.RootElement.GetProperty("timed_out").GetBoolean(), "noninteractive command returned");
+                    MuxAssert.IsTrue(result.RootElement.GetProperty("exit_code").GetInt32() != 0, "error exit");
+                    MuxAssert.IsTrue(result.RootElement.GetProperty("stderr").GetString()!.Length > 0, "error captured");
+                }
+                using JsonDocument recovered = JsonDocument.Parse(await Ok(tools["powershell"], JsonSerializer.Serialize(new { command = "Write-Error 'earlier error'; [Console]::Write('recovered') # final comment" }), ct));
+                MuxAssert.AreEqual(0, recovered.RootElement.GetProperty("exit_code").GetInt32(), "successful last command retains normal PowerShell status");
+                MuxAssert.AreEqual("recovered", recovered.RootElement.GetProperty("stdout").GetString(), "continued after nonterminating error");
+                await Ok(tools["powershell"], JsonSerializer.Serialize(new { command = "$env:MUX_POWERSHELL_CALL_STATE='first'" }), ct);
+                using JsonDocument next = JsonDocument.Parse(await Ok(tools["powershell"], JsonSerializer.Serialize(new { command = "[Console]::Write($env:MUX_POWERSHELL_CALL_STATE)" }), ct));
+                MuxAssert.AreEqual("", next.RootElement.GetProperty("stdout").GetString(), "fresh shell state");
+            }, requiresPowerShell: true);
 
             return new TestSuiteDescriptor(SuiteId, "MCP server tools: arguments, policies, serialization, sessions, masking, skills, auth", cases);
         }

@@ -27,6 +27,12 @@ namespace Mux.Cli.Commands
         /// <summary>Optional explicit Bash executable path. Windows otherwise discovers Git Bash.</summary>
         public string? BashPath { get; set; }
 
+        /// <summary>Whether direct PowerShell execution is enabled, independently of the agent approval policy.</summary>
+        public bool AllowPowerShell { get; set; }
+
+        /// <summary>Optional PowerShell executable path. Otherwise prefers pwsh, then Windows PowerShell on Windows.</summary>
+        public string? PowerShellPath { get; set; }
+
         /// <summary>Whether stdio mode keeps the full per-message log on stderr (<c>--log-messages</c>).</summary>
         public bool LogMessages { get; set; }
 

@@ -1148,6 +1148,7 @@ the protocol.
 | `list_skills` | The skills available in a working directory. |
 | `run_skill` | Runs one skill command deterministically. Registered only with `--allow-skills`. |
 | `bash` | Executes a Bash script directly, without an LLM turn. Registered only with `--allow-bash`. Takes `command`, optional `working_directory`, and optional `timeout_ms` (1–3,600,000; default 120,000). Returns `stdout`, `stderr`, `exit_code`, `timed_out`, and `output_truncated`. |
+| `powershell` | Executes a PowerShell script directly. Registered only with `--allow-powershell`. Takes the same arguments and returns the same execution fields as `bash`, plus `executable`, the resolved PowerShell executable path. |
 
 The operator decides how much a caller may do. `--approval-policy deny|auto-safe|auto` (or `--yolo` for `auto`) is
 a ceiling, `deny` by default: a `run` call may ask for a stricter policy but never a looser one, and `ask` is refused
@@ -1197,6 +1198,44 @@ run mux inside the WSL distribution, using Linux paths such as `/mnt/c/src/app`.
 mux does not silently substitute PowerShell, cmd, or the legacy Windows WSL Bash
 launcher. Missing Bash produces an actionable error. On macOS and Linux, mux
 uses native Bash; `--bash-path` also works there.
+
+**PowerShell** is enabled independently with `--allow-powershell`. It uses `pwsh`
+from PATH first. On Windows it also checks the standard PowerShell 7 installation,
+then falls back to Windows PowerShell (`powershell.exe`). macOS/Linux require
+`pwsh` on PATH or an explicit executable path. A configured path takes precedence;
+a missing executable produces an actionable error without changing shells.
+
+```powershell
+mux mcp serve --allow-powershell --working-directory "C:\src\app"
+mux mcp serve --allow-powershell --powershell-path "C:\Program Files\PowerShell\7\pwsh.exe"
+```
+
+To select Windows PowerShell explicitly:
+
+```powershell
+mux mcp serve --allow-powershell --powershell-path "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"
+```
+
+An MCP `tools/call` request uses PowerShell syntax:
+
+```json
+{"name":"powershell","arguments":{"command":"Get-ChildItem -Name","timeout_ms":10000}}
+```
+
+The result's `executable` field identifies the selected executable, so callers can
+distinguish `pwsh` from Windows PowerShell. Commands run in a fresh process with
+`-NoLogo -NoProfile -NonInteractive`, closed stdin, and UTF-8 captured output.
+Scripts are passed with UTF-16LE `-EncodedCommand` to preserve Unicode, quotes, and
+newlines; see Microsoft's [PowerShell command-line reference](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_pwsh).
+Leading `using` and `param` declarations remain valid. Progress output is suppressed.
+Normal PowerShell exit semantics apply; use `exit <code>` to set the result explicitly,
+or `exit $LASTEXITCODE` after a native command to preserve that command's exit code.
+
+Like Bash, this is a direct execution opt-in independent of the `run` approval
+ceiling, with no local approval countdown. It runs with the server account's access,
+limits captured stdout/stderr to 65,536 characters each, and attempts to terminate
+the process tree on timeout or cancellation. Enable both shell tools with
+`mux mcp serve --allow-bash --allow-powershell`; each retains its own shell syntax.
 
 Over HTTP the server binds `localhost` (loopback clients only) unless `--host` says otherwise; a non-loopback host
 without a key prints a warning. The key can also come from the `mcpServeApiKey` setting.

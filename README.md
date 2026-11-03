@@ -20,7 +20,8 @@
 
 [Get started](#getting-started) · [Model providers](#model-providers) · [CLI usage](#cli-usage) · [Configuration](#configuration) · [Documentation](#documentation)
 
-Version 1.6.0 adds an opt-in `bash` MCP tool (`mux mcp serve --allow-bash`),
+Version 1.6.0 adds opt-in `bash` and `powershell` MCP tools
+(`mux mcp serve --allow-bash --allow-powershell`),
 configurable tool-approval countdowns, and a faint, responsive MUX watermark in an
 idle TUI conversation. See [MCP usage](docs/USAGE.md#mux-as-an-mcp-server-mux-mcp-serve)
 and [configuration](docs/CONFIG.md) for setup and Windows behavior.

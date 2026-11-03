@@ -25,7 +25,7 @@ namespace Mux.Cli.Commands
         #region Public-Members
 
         /// <summary>The usage text.</summary>
-        public const string Usage = "Usage: mux mcp serve [--http <port>] [--host <name>] [--api-key <key>] [--allow-skills] [--allow-bash] [--bash-path <executable>] [--log-messages] [--approval-policy deny|auto-safe|auto] [--yolo] [--endpoint <name>] [--working-directory <dir>]";
+        public const string Usage = "Usage: mux mcp serve [--http <port>] [--host <name>] [--api-key <key>] [--allow-skills] [--allow-bash] [--bash-path <executable>] [--allow-powershell] [--powershell-path <executable>] [--log-messages] [--approval-policy deny|auto-safe|auto] [--yolo] [--endpoint <name>] [--working-directory <dir>]";
 
         #endregion
 
@@ -79,6 +79,13 @@ namespace Mux.Cli.Commands
                     case "--api-key":
                         result.ApiKey = Next();
                         if (string.IsNullOrWhiteSpace(result.ApiKey)) { error = "--api-key needs a value."; return false; }
+                        break;
+                    case "--allow-powershell":
+                        result.AllowPowerShell = true;
+                        break;
+                    case "--powershell-path":
+                        result.PowerShellPath = Next();
+                        if (string.IsNullOrWhiteSpace(result.PowerShellPath)) { error = "--powershell-path needs an executable path."; return false; }
                         break;
                     case "--allow-bash":
                         result.AllowBash = true;
@@ -159,6 +166,8 @@ namespace Mux.Cli.Commands
                 AllowSkills = parsed.AllowSkills,
                 AllowBash = parsed.AllowBash,
                 BashPath = parsed.BashPath,
+                AllowPowerShell = parsed.AllowPowerShell,
+                PowerShellPath = parsed.PowerShellPath,
                 LogMessages = parsed.LogMessages,
                 MaxApprovalPolicy = parsed.MaxApprovalPolicy,
                 DefaultEndpoint = parsed.Endpoint,

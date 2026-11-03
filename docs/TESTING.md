@@ -184,12 +184,23 @@ matrix of Linux and Windows by `net8.0` and `net10.0`, validates the default ski
 and on demand rather than on every push. The Docker integration suite runs in its own job on pushes to
 `main` and on demand. A newer push to the same branch cancels the run in progress.
 
-## Bash, timed approvals, and idle artwork
+## Shell tools, timed approvals, and idle artwork
 
 The `McpServerTools` suite executes Bash scripts to check quoting, working directories,
 stdout/stderr capture, nonzero exits, timeout/cancellation, output limits, and input
 validation. `McpServer` also invokes `bash` over a real local MCP HTTP connection.
 These checks require Bash; Windows machines should have Git for Windows installed.
+
+The same suites cover `powershell`: discovery and opt-in validation, Unicode and
+quoting, leading script declarations, working directories, stdout/stderr, exit
+status, timeout/cancellation, bounded output, and noninteractive failures. The HTTP
+check runs a real PowerShell process through MCP. Real PowerShell cases skip with
+an installation hint when neither `pwsh` nor Windows PowerShell is discoverable;
+discovery, registration, and input-validation cases always run. Install `pwsh` on
+PATH to exercise the full set on macOS/Linux. Windows PowerShell runtime behavior
+should additionally be verified on a Windows machine; discovery ordering is tested
+independently of the host operating system.
+
 
 `ApprovalCountdown` uses a controllable monotonic clock to check expiration, disabled
 countdowns, covered prompts, manual denial, settings round trips, and watermark

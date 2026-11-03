@@ -6,6 +6,13 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- Opt-in `powershell` MCP tool via `mux mcp serve --allow-powershell`, with
+  `--powershell-path` for an explicit executable. Prefers `pwsh`, with Windows
+  PowerShell fallback on Windows. Runs without profiles or interactive prompts,
+  preserves Unicode and script declarations, and reports the executable used.
+  Shares Bash's bounded stdout/stderr capture, deadline, and cancellation handling.
+  Includes real command and MCP HTTP tests, plus executable-discovery and validation tests.
+
 - Opt-in `bash` MCP tool via `mux mcp serve --allow-bash`, with an optional
   `--bash-path`, working-directory selection, bounded stdout/stderr capture,
   exit status, timeout reporting, and cancellation. Uses native Bash on macOS/Linux

@@ -10,7 +10,7 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>1.6.0: Opt-in Bash MCP execution with timeout and cancellation support; global and per-endpoint tool-approval countdowns; responsive idle MUX ASCII artwork. Includes provider, usage-chart, and test improvements. See CHANGELOG.md and docs/USAGE.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>1.6.0: Opt-in Bash and PowerShell MCP execution with timeout and cancellation support; global and per-endpoint tool-approval countdowns; responsive idle MUX ASCII artwork. Includes provider, usage-chart, and test improvements. See CHANGELOG.md and docs/USAGE.md.</PackageReleaseNotes>
     <NoWarn>$(NoWarn);NU5111</NoWarn>
   </PropertyGroup>
 

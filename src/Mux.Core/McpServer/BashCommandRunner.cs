@@ -2,10 +2,8 @@ namespace Mux.Core.McpServer
 {
     using System;
     using System.Collections.Generic;
-    using System.ComponentModel;
     using System.Diagnostics;
     using System.IO;
-    using System.Text;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
@@ -14,8 +12,6 @@ namespace Mux.Core.McpServer
     /// <summary>Runs one noninteractive Bash process, draining both streams with bounded capture.</summary>
     internal static class BashCommandRunner
     {
-        internal const int OutputLimit = 65536;
-
         internal static string ResolveExecutable(string? configured)
         {
             if (!string.IsNullOrWhiteSpace(configured))
@@ -65,44 +61,8 @@ namespace Mux.Core.McpServer
             // Explicit scripts only; do not source BASH_ENV or a parent shell's startup configuration.
             start.Environment.Remove("BASH_ENV");
             start.Environment.Remove("ENV");
-            using Process process = new Process { StartInfo = start };
-            try { process.Start(); }
-            catch (Exception ex) when (ex is Win32Exception || ex is InvalidOperationException)
-            { throw new McpToolException("Unable to start Bash: " + ex.Message); }
-            process.StandardInput.Close();
-            using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-            deadline.CancelAfter(timeoutMs);
-            StringBuilder stdout = new StringBuilder();
-            StringBuilder stderr = new StringBuilder();
-            bool truncated = false;
-            async Task DrainAsync(StreamReader reader, StringBuilder target)
-            {
-                char[] buffer = new char[4096];
-                while (true)
-                {
-                    int count = await reader.ReadAsync(buffer.AsMemory(), deadline.Token).ConfigureAwait(false);
-                    if (count == 0) return;
-                    int keep = Math.Min(count, OutputLimit - target.Length);
-                    target.Append(buffer, 0, keep);
-                    if (keep < count) truncated = true;
-                }
-            }
-            Task drains = Task.WhenAll(DrainAsync(process.StandardOutput, stdout), DrainAsync(process.StandardError, stderr));
-            bool timedOut = false;
-            try
-            {
-                await process.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
-                await drains.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                timedOut = !token.IsCancellationRequested;
-                try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } catch (Win32Exception) { }
-                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-                try { await drains.ConfigureAwait(false); } catch (OperationCanceledException) { }
-                token.ThrowIfCancellationRequested();
-            }
-            return JsonSerializer.Serialize(new { stdout = stdout.ToString(), stderr = stderr.ToString(), exit_code = process.ExitCode, timed_out = timedOut, output_truncated = truncated });
+            ShellCommandResult result = await ShellCommandRunner.RunAsync(start, "Bash", timeoutMs, token).ConfigureAwait(false);
+            return JsonSerializer.Serialize(new { stdout = result.Stdout, stderr = result.Stderr, exit_code = result.ExitCode, timed_out = result.TimedOut, output_truncated = result.OutputTruncated });
         }
     }
 }
