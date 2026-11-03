@@ -10,7 +10,7 @@ namespace Mux.Core.Skills
     /// <c>package.json</c>, <c>requirements*.txt</c>, or <c>**/*.csproj</c>). Rooted globs and globs that
     /// climb out of the root with <c>..</c> never match. A <c>**</c> search skips dependency and build
     /// directories (such as <c>node_modules</c>, <c>.git</c>, <c>bin</c>, and <c>obj</c>) and stops after
-    /// <see cref="MaxDirectoryVisits"/> directories so one broad glob cannot stall prompt assembly. Stateless
+    /// <see cref="MaxDirectoryVisits"/> directories to bound the number of filesystem reads during prompt assembly. Stateless
     /// apart from its configuration and safe to share across threads.
     /// </summary>
     public sealed class AppliesToMatcher
@@ -119,14 +119,16 @@ namespace Mux.Core.Skills
                 }
             }
 
-            // Finder/desktop launches can start at / (or a drive/UNC root on Windows).
-            // A bounded recursive search per skill still amounts to thousands of filesystem reads
-            // there. Root-level marker checks remain available; recursive project discovery does not.
-            string fullRoot = Path.GetFullPath(root);
-            if (string.Equals(Path.TrimEndingDirectorySeparator(fullRoot),
-                    Path.TrimEndingDirectorySeparator(Path.GetPathRoot(fullRoot)!),
-                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
-                && Array.IndexOf(segments, "**") >= 0)
+            // Filesystem roots and the user's home are launch locations, not project scopes.
+            // Recursive discovery there can traverse protected/cloud-backed folders and block in
+            // OS directory I/O even with a visit budget. Direct marker checks remain available.
+            string fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+            StringComparison comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            bool filesystemRoot = string.Equals(fullRoot, Path.TrimEndingDirectorySeparator(Path.GetPathRoot(fullRoot)!), comparison);
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            bool homeRoot = !string.IsNullOrWhiteSpace(home)
+                && string.Equals(fullRoot, Path.TrimEndingDirectorySeparator(Path.GetFullPath(home)), comparison);
+            if ((filesystemRoot || homeRoot) && Array.IndexOf(segments, "**") >= 0)
             {
                 return false;
             }

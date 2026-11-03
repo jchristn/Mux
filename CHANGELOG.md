@@ -50,7 +50,9 @@ All notable changes to mux are documented here.
 
 - Desktop conversations and tool execution default to the user's home directory (`~`),
   rather than inheriting a GUI launcher's working directory (often `/` on macOS).
-  `/cwd` still selects an explicit project directory.
+  `/cwd` still selects an explicit project directory. Recursive skill relevance discovery
+  also skips the home directory, avoiding stalls in protected or cloud-backed personal folders;
+  direct marker checks and explicit skill invocation remain available.
 
 - Desktop agent preparation runs off the UI thread, keeping Send/Stop and the window
   responsive while prompts, skills, and tool catalogs are assembled. Recursive skill

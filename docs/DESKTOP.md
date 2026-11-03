@@ -49,7 +49,8 @@ running process.
 
 Prompt and skill preparation runs on a worker thread so the window remains responsive before
 streaming starts. Recursive skill relevance searches are skipped when the working directory
-is a filesystem root such as `/` or `C:\`; select your project with `/cwd` for project discovery.
+is your home directory or a filesystem root such as `/` or `C:\`; select your project with
+`/cwd` for project discovery. Direct marker checks and explicit skill invocation still work at home.
 
 - **Turn info** — the response's info button shows, for example, `357,549 tokens processed · 4 model calls`.
   This is input plus output summed across the primary model calls in that turn, including input

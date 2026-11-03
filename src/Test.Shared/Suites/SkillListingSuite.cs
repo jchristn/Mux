@@ -53,7 +53,7 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
-                    Case("FilesystemRootsDoNotTriggerRecursiveDiscovery", "Recursive globs cannot scan filesystem roots; hidden skills stay callable", async (ProjectSkillsFixture f, CancellationToken ct) =>
+                    Case("FilesystemRootsDoNotTriggerRecursiveDiscovery", "Recursive globs cannot scan filesystem or home roots; hidden skills stay callable", async (ProjectSkillsFixture f, CancellationToken ct) =>
                     {
                         string root = Path.GetPathRoot(Path.GetFullPath(f.Project))!;
                         AppliesToMatcher matcher = new AppliesToMatcher();
@@ -61,6 +61,9 @@ namespace Test.Shared.Suites
                         MuxAssert.IsFalse(matcher.Matches(root, "**/*.csproj"), "recursive file discovery is rejected");
                         MuxAssert.IsTrue(matcher.Matches(root, "*"), "direct root entries can still match");
                         MuxAssert.IsTrue(matcher.Matches(f.Project, "**"), "ordinary project roots retain recursive matching");
+                        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                        MuxAssert.IsFalse(matcher.Matches(home, "**"), "home is not recursively searched as a project");
+                        MuxAssert.IsFalse(matcher.Matches(home, "**/*.csproj"), "home's nested folders are not traversed");
                         WriteGated(f.UserSkills, "recursive", "[**]");
                         ProjectSkillsSuite.WritePlaybook(f.UserSkills, "everywhere", "x");
                         using SkillRuntime runtime = f.CreateRuntime();
@@ -69,6 +72,11 @@ namespace Test.Shared.Suites
                         MuxAssert.DoesNotContain("- recursive:", section, "recursive skill hidden at filesystem root");
                         MuxAssert.Contains("- everywhere:", section, "ungated skill still listed");
                         MuxAssert.IsTrue(runtime.TryGetSkill("recursive", root, out _), "hidden skill remains callable explicitly");
+                        runtime.ProjectSkillsEnabled = false; // Keep the test independent of real home-level skills.
+                        string homeSection = runtime.BuildPromptSection(home);
+                        MuxAssert.DoesNotContain("- recursive:", homeSection, "recursive skill hidden at home");
+                        MuxAssert.Contains("- everywhere:", homeSection, "ungated skill listed at home");
+                        MuxAssert.IsTrue(runtime.TryGetSkill("recursive", home, out _), "skill remains explicitly callable from home");
                     }),
 
                     Case("RelevantModeHidesUnmatchedSkills", "Relevant mode lists matching and ungated skills and counts the rest", async (ProjectSkillsFixture f, CancellationToken ct) =>
