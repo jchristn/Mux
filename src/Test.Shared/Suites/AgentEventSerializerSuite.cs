@@ -90,6 +90,19 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("AgentEventSerializer", "OptionalModelCallCount", "Model-call counts are optional and obey stats suppression", (CancellationToken ct) =>
+                    {
+                        RunCompletedEvent completed = new RunCompletedEvent { ModelCallCount = 4, IterationsCompleted = 5 };
+                        using JsonDocument current = JsonDocument.Parse(AgentEventSerializer.ToEnvelopeLine(completed));
+                        MuxAssert.AreEqual(4, current.RootElement.GetProperty("modelCallCount").GetInt32(), "calls distinct from steps");
+                        using JsonDocument suppressed = JsonDocument.Parse(AgentEventSerializer.ToEnvelopeLine(completed, false));
+                        MuxAssert.IsFalse(suppressed.RootElement.TryGetProperty("modelCallCount", out _), "stats suppressed");
+                        completed.ModelCallCount = null;
+                        using JsonDocument legacy = JsonDocument.Parse(AgentEventSerializer.ToEnvelopeLine(completed));
+                        MuxAssert.IsFalse(legacy.RootElement.TryGetProperty("modelCallCount", out _), "unknown omitted, not reported as zero");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("AgentEventSerializer", "EmptyTextSerializesToEmpty", "An empty assistant text serializes to an empty string, not null", (CancellationToken ct) =>
                     {
                         JsonDocument json = JsonDocument.Parse(AgentEventSerializer.ToEnvelopeLine(new AssistantTextEvent { Text = string.Empty }));

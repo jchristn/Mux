@@ -34,8 +34,10 @@ namespace Test.Shared.Suites
                 {
                     new TestCaseDescriptor(SuiteId, "SummaryShowsTotalAndTokens", "The summary label shows the total time and total tokens", (CancellationToken ct) =>
                     {
-                        MuxAssert.AreEqual("ⓘ  1.5 s · 345 tokens", Sample().BuildSummary(), "seconds summary");
-                        MuxAssert.AreEqual("ⓘ  450 ms · 0 tokens", new TurnInfo { TotalMs = 450 }.BuildSummary(), "sub-second summary");
+                        MuxAssert.AreEqual("ⓘ  1.5 s · 345 tokens processed · 4 model calls", Sample().BuildSummary(), "seconds summary");
+                        MuxAssert.AreEqual("ⓘ  450 ms · 0 tokens processed", new TurnInfo { TotalMs = 450 }.BuildSummary(), "sub-second summary");
+                        MuxAssert.AreEqual("ⓘ  0 ms · 357,549 tokens processed · 1 model call", new TurnInfo { TotalTokens = 357549, ModelCalls = 1 }.BuildSummary(), "grouped count and singular call");
+                        MuxAssert.Contains("0 model calls", new TurnInfo { ModelCalls = 0 }.BuildSummary(), "known zero is distinct from unknown");
                         return Task.CompletedTask;
                     }),
 
@@ -107,6 +109,7 @@ namespace Test.Shared.Suites
                 OutputTokens = 45,
                 TotalTokens = 345,
                 Steps = 3,
+                ModelCalls = 4,
                 ToolCalls = 2,
                 Errors = 1,
                 ContextTokens = 4096,

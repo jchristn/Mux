@@ -48,6 +48,17 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- Desktop agent preparation runs off the UI thread, keeping Send/Stop and the window
+  responsive while prompts, skills, and tool catalogs are assembled. Recursive skill
+  relevance searches no longer traverse filesystem roots (`/`, Windows drive roots,
+  or UNC share roots); explicit skill invocation remains available.
+- MCP system-prompt listings include tool names without repeating their descriptions.
+  Full descriptions and parameter schemas remain in the callable tool definitions.
+- Desktop turn summaries show grouped **tokens processed** and the number of primary
+  model calls. Usage is summed across the turn's calls, including repeated input;
+  it is separate from the estimated context size. Completion events optionally expose
+  `modelCallCount`, excluding transport retries, compaction, and title generation.
+
 - macOS install/reinstall scripts now install Finder applications in `~/Applications`;
   desktop and agent run scripts refresh and launch their respective app bundles.
 

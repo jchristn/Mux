@@ -119,6 +119,18 @@ namespace Mux.Core.Skills
                 }
             }
 
+            // Finder/desktop launches can start at / (or a drive/UNC root on Windows).
+            // A bounded recursive search per skill still amounts to thousands of filesystem reads
+            // there. Root-level marker checks remain available; recursive project discovery does not.
+            string fullRoot = Path.GetFullPath(root);
+            if (string.Equals(Path.TrimEndingDirectorySeparator(fullRoot),
+                    Path.TrimEndingDirectorySeparator(Path.GetPathRoot(fullRoot)!),
+                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+                && Array.IndexOf(segments, "**") >= 0)
+            {
+                return false;
+            }
+
             int budget = _MaxDirectoryVisits;
             return MatchFrom(root, segments, 0, 0, ref budget);
         }

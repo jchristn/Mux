@@ -302,6 +302,13 @@ emits (`run_started`, `assistant_text`, `assistant_thinking`, `tool_call_propose
 socket when the run reaches a terminal state. A subscribe frame for an unknown **run** id returns an `error`
 frame with code `not_found`.
 
+The `run_completed` envelope can include `modelCallCount` when statistics are enabled:
+the number of primary model calls started by the run, excluding internal transport retries,
+compaction, and title generation. This is distinct from `iterationsCompleted`, since a budget
+check can stop an iteration before a model call. Older or synthetic events may omit the field;
+consumers should treat omission as unknown, not zero. Token usage totals accumulate across
+the run's primary calls and are distinct from `finalEstimatedTokens` (the estimated context size).
+
 **Subscribe to a session** (what "mirror on by default" uses). Name a `sessionId` instead of a `runId`:
 
 ```json

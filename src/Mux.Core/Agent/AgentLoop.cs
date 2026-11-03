@@ -218,6 +218,7 @@ namespace Mux.Core.Agent
         {
             Stopwatch stopwatch = Stopwatch.StartNew();
             int iterationCount = 0;
+            int modelCallCount = 0;
             int toolCallCount = 0;
             int errorCount = 0;
             int stopHookReentries = 0;
@@ -331,6 +332,7 @@ namespace Mux.Core.Agent
                 ErrorEvent? degenerateError = null;
                 long llmStageStart = Stopwatch.GetTimestamp();
 
+                modelCallCount++;
                 await foreach (AgentEvent streamEvent in _LlmClient
                     .StreamAsync(conversation, allTools, cancellationToken)
                     .ConfigureAwait(false))
@@ -849,6 +851,7 @@ namespace Mux.Core.Agent
                 SessionId = _Options.SessionId,
                 Status = ResolveRunStatus(budgetExceeded, maxIterationsReached, endedOnError, errorCount),
                 IterationsCompleted = iterationCount,
+                ModelCallCount = modelCallCount,
                 ToolCallCount = toolCallCount,
                 ErrorCount = errorCount,
                 AssistantTextChars = assistantTextChars,

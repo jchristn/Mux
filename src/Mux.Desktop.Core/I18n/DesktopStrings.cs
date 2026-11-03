@@ -860,7 +860,7 @@ namespace Mux.Desktop.I18n
                 { "main.nav.theme.light.tip", "Switch to the light theme." },
                 { "main.nav.theme.dark.tip", "Switch to the dark theme." },
                 { "main.nav.viewMenu.tip", "View options: sidebar and thinking display." },
-                { "main.turnInfo.tip", "Time to first token: {0} ms\nStreaming: {1} ms\nTotal: {2}\nTokens: input {3} · output {4} · total {5}" },
+                { "main.turnInfo.tip", "Time to first token: {0} ms\nStreaming: {1} ms\nTotal: {2}\nTokens processed across this turn: input {3} · output {4} · total {5}" },
                 { "main.turnInfo.more", "Steps: {0} · tool calls: {1} · errors: {2}\nContext: ~{3} tokens · status: {4}" },
                 { "copy.tip", "Copy to the clipboard." },
                 { "table.empty", "Nothing here yet." },

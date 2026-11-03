@@ -3759,6 +3759,7 @@ namespace Mux.Desktop.Shell
                 OutputTokens = completed.OutputTokens,
                 TotalTokens = completed.TotalTokens,
                 Steps = completed.IterationsCompleted,
+                ModelCalls = completed.ModelCallCount,
                 ToolCalls = completed.ToolCallCount,
                 Errors = completed.ErrorCount,
                 ContextTokens = completed.FinalEstimatedTokens,

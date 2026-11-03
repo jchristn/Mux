@@ -14,8 +14,10 @@ namespace Mux.Desktop.Services
     /// Default <see cref="IConversationService"/> driving a single thread's turns through an
     /// <see cref="ITurnRunner"/>. Appends the user message, streams the turn into a
     /// <see cref="TurnProjection"/> (raising <see cref="Event"/> per event), and appends the assistant reply
-    /// on completion. Genuinely asynchronous — no sync-over-async — so it is safe to await from a UI
-    /// dispatcher. Not reentrant: one turn at a time per conversation.
+    /// on completion. Enumerates the runner on a worker thread, including synchronous prompt preparation before its
+    /// first await, so it is safe to await from a UI dispatcher. Stream events are raised on the worker;
+    /// UI subscribers must dispatch them. Busy/history transitions remain on the caller context.
+    /// Not reentrant: one turn at a time per conversation.
     /// </summary>
     public sealed class ConversationService : IConversationService
     {
@@ -94,11 +96,19 @@ namespace Mux.Desktop.Services
 
             try
             {
-                await foreach (AgentEvent agentEvent in _Runner.RunAsync(prompt, priorHistory, token).ConfigureAwait(false))
+                // Async iterators execute synchronously until their first incomplete await. Keep even
+                // that initial preparation off the dispatcher, while reserving this turn above before
+                // scheduling it. Do not cancel scheduling: cleanup must also run for an already-stopped turn.
+                await Task.Run(async () =>
                 {
-                    projection.Apply(agentEvent);
-                    Event?.Invoke(this, agentEvent);
-                }
+                    token.ThrowIfCancellationRequested();
+                    await foreach (AgentEvent agentEvent in _Runner.RunAsync(prompt, priorHistory, token).ConfigureAwait(false))
+                    {
+                        token.ThrowIfCancellationRequested();
+                        projection.Apply(agentEvent);
+                        Event?.Invoke(this, agentEvent);
+                    }
+                });
             }
             catch (OperationCanceledException)
             {

@@ -82,6 +82,12 @@ namespace Mux.Core.Agent
         }
 
         /// <summary>
+        /// Primary model calls started during this run, excluding internal transport retries,
+        /// compaction, and title generation. Null for older events that did not report a count.
+        /// </summary>
+        public int? ModelCallCount { get; set; }
+
+        /// <summary>
         /// Total proposed tool calls handled during the run.
         /// </summary>
         public int ToolCallCount

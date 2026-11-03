@@ -42,6 +42,17 @@ On launch the About window shows as a splash for about 2.5 seconds, then closes 
 
 Type in the composer and press **Enter** to send (**Shift+Enter** inserts a newline). On launch, focus goes straight to the composer. While a turn is running the send button becomes a red **Stop** button that cancels the turn; a cancelled turn is dropped from the model-facing history so the next prompt is never mis-batched with an unanswered one. The transcript auto-scrolls to the newest content as it streams.
 
+Prompt and skill preparation runs on a worker thread so the window remains responsive before
+streaming starts. Recursive skill relevance searches are skipped when the working directory
+is a filesystem root such as `/` or `C:\`; select your project with `/cwd` for project discovery.
+
+- **Turn info** — the response's info button shows, for example, `357,549 tokens processed · 4 model calls`.
+  This is input plus output summed across the primary model calls in that turn, including input
+  resent on subsequent calls. It is not the size of the typed prompt or the current context window.
+  Click for input/output totals, timing, tool activity, and the separate estimated context size.
+  The call count excludes transport retries, compaction, and title generation; older completion
+  events without a count omit it. MCP tool descriptions and parameter schemas remain available
+  in tool definitions; the system prompt lists only their names to avoid repeating descriptions.
 - **Streaming & thinking** — assistant text streams token-by-token. Models that emit reasoning show a distinct thinking section.
 - **Markdown & code** — replies render as Markdown with syntax-highlighted code blocks.
 - **Copy** — hovering an assistant reply reveals a copy icon in its bottom-right corner; clicking it copies the raw text and briefly flips to a green checkmark.

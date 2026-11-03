@@ -27,6 +27,9 @@ namespace Mux.Desktop.Conversation
         /// <summary>Total tokens.</summary>
         public int TotalTokens { get; set; }
 
+        /// <summary>Primary model calls in this turn, or null for older events.</summary>
+        public int? ModelCalls { get; set; }
+
         /// <summary>Agent loop steps completed.</summary>
         public int Steps { get; set; }
 
@@ -52,12 +55,19 @@ namespace Mux.Desktop.Conversation
         #region Public-Methods
 
         /// <summary>
-        /// The compact label shown under the turn, for example <c>ⓘ  1.2 s · 345 tokens</c>.
+        /// The compact label shown under the turn, for example <c>ⓘ  1.2 s · 345 tokens processed · 2 model calls</c>.
         /// </summary>
         /// <returns>The summary label.</returns>
         public string BuildSummary()
         {
-            return "ⓘ  " + FormatMs(TotalMs) + " · " + TotalTokens.ToString(CultureInfo.InvariantCulture) + " tokens";
+            string summary = "ⓘ  " + FormatMs(TotalMs) + " · " + TotalTokens.ToString("N0", CultureInfo.InvariantCulture) + " tokens processed";
+            if (ModelCalls.HasValue)
+            {
+                summary += " · " + ModelCalls.Value.ToString(CultureInfo.InvariantCulture)
+                    + (ModelCalls.Value == 1 ? " model call" : " model calls");
+            }
+
+            return summary;
         }
 
         /// <summary>
@@ -95,7 +105,7 @@ namespace Mux.Desktop.Conversation
 
         #region Private-Members
 
-        private const string DefaultTimingFormat = "Time to first token: {0} ms\nStreaming: {1} ms\nTotal: {2}\nTokens: input {3} · output {4} · total {5}";
+        private const string DefaultTimingFormat = "Time to first token: {0} ms\nStreaming: {1} ms\nTotal: {2}\nTokens processed across this turn: input {3} · output {4} · total {5}";
         private const string DefaultActivityFormat = "Steps: {0} · tool calls: {1} · errors: {2}\nContext: ~{3} tokens · status: {4}";
 
         #endregion
