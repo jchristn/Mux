@@ -16,6 +16,6 @@ set "ARGS=%ARGS% %1"
 shift
 goto collect_args
 :args_ready
-if "%ARGS%"=="" set ARGS=list
+if not defined ARGS set "ARGS=list"
 dotnet run --project "%ROOT%src\Mux.Cli\Mux.Cli.csproj" --framework %TFM% -p:TargetFrameworks=%TFM% -- worktree %ARGS% --cwd "%CD%"
 endlocal

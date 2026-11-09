@@ -1248,6 +1248,8 @@ like `mux print`, so MCP-driven turns appear in `/usage` and the dashboard.
 To serve the build from a source checkout, use `scripts/macos/run-mcp-server.sh` (or the `linux` or `windows`
 equivalent). It builds quietly, then runs `mux mcp serve` with the arguments you pass, so it can be registered
 directly: `claude mcp add mux -- /path/to/mux/scripts/macos/run-mcp-server.sh --approval-policy auto-safe`.
+Under WSL, register `scripts/wsl2/run-mcp-server.sh` (`scripts/wsl/` on WSL 1) with a Claude Code installed inside
+the distro; from Claude Code on Windows, use `claude mcp add mux -- wsl.exe -d <distro> --exec /path/to/mux/scripts/wsl2/run-mcp-server.sh`.
 
 Client configuration:
 

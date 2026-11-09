@@ -27,5 +27,8 @@ if %errorlevel% neq 0 (
 echo Installing mux...
 dotnet tool install -g --source "%PACKAGE_SOURCE%" --framework %FRAMEWORK% --disable-parallel Mux.Cli
 if %errorlevel% neq 0 exit /b %errorlevel%
+REM dotnet tool install puts mux in %USERPROFILE%\.dotnet\tools, which may not be on this
+REM session's PATH yet (a new terminal picks it up).
+where mux >nul 2>nul || set "PATH=%USERPROFILE%\.dotnet\tools;%PATH%"
 mux -v
 exit /b %errorlevel%

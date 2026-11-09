@@ -32,7 +32,7 @@ while [ "$#" -gt 0 ]; do
     *) VERSION="$1"; shift ;;
   esac
 done
-if [ -n "$FRAMEWORK_SELECTION" ]; then resolve_framework --framework "$FRAMEWORK_SELECTION"; else resolve_framework; fi
+if [ -n "$FRAMEWORK_SELECTION" ]; then resolve_framework --framework "$FRAMEWORK_SELECTION" || exit 1; else resolve_framework || exit 1; fi
 
 # --- Resolve the version ---------------------------------------------------
 if [ -z "$VERSION" ]; then

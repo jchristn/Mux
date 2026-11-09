@@ -17,4 +17,15 @@ echo "Building mux for $FRAMEWORK..."
 dotnet pack src/Mux.Cli/Mux.Cli.csproj --configuration Release -p:TargetFrameworks="$FRAMEWORK" --output "$PACKAGE_SOURCE"
 echo "Installing mux..."
 dotnet tool install -g --source "$PACKAGE_SOURCE" --framework "$FRAMEWORK" --disable-parallel Mux.Cli
-mux -v
+# dotnet tool install puts mux in ~/.dotnet/tools, which is often not on PATH yet.
+if command -v mux >/dev/null 2>&1; then
+    mux -v
+elif [ -x "$HOME/.dotnet/tools/mux" ]; then
+    "$HOME/.dotnet/tools/mux" -v
+    echo "Note: $HOME/.dotnet/tools is not on PATH, so new shells will not find 'mux'." >&2
+    echo "Add this line to your shell profile (~/.profile, ~/.bashrc or ~/.zprofile):" >&2
+    echo '  export PATH="$PATH:$HOME/.dotnet/tools"' >&2
+else
+    echo "mux was installed, but it is not on PATH or in $HOME/.dotnet/tools." >&2
+    exit 1
+fi

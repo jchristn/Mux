@@ -36,7 +36,7 @@ if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/d
 Description=mux tray agent (hosts the local REST server)
 
 [Service]
-ExecStart=$AGENT_BIN
+ExecStart="$AGENT_BIN"
 Restart=on-failure
 
 [Install]
@@ -55,7 +55,7 @@ else
 Type=Application
 Name=mux Agent
 Comment=mux tray agent (hosts the local REST server)
-Exec=$AGENT_BIN
+Exec="$AGENT_BIN"
 X-GNOME-Autostart-enabled=true
 EOF
     echo "Installed $DESKTOP; the agent will start at your next desktop login."

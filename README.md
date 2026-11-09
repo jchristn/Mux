@@ -132,7 +132,17 @@ scripts\windows\install-tool.bat     # or: scripts\windows\install-tool.bat net8
 
 # Linux (use scripts/macos/ on macOS)
 ./scripts/linux/install-tool.sh       # or: ./scripts/linux/install-tool.sh net8.0
+
+# WSL 2 (use scripts/wsl/ on WSL 1)
+./scripts/wsl2/install-tool.sh
 ```
+
+Under WSL, use `scripts/wsl2/` (WSL 2) or `scripts/wsl/` (WSL 1). They hold the same scripts as
+`scripts/linux/`, but drop the Windows PATH (so a Windows `claude`, `node` or `dotnet` is never
+picked up), put `~/.dotnet` and `~/.dotnet/tools` on PATH, and stop early on CRLF checkouts.
+`run-at-startup.sh` registers a hidden launcher in the Windows Startup folder instead of a systemd
+or desktop autostart entry. The desktop app and agent need WSLg on WSL 2 (no tray icon) and do not
+run on WSL 1.
 
 On macOS, `scripts/macos/install-tool.sh` and `reinstall-tool.sh` also build and
 install self-contained `Mux.app` and `Mux Agent.app` in `~/Applications`, visible in

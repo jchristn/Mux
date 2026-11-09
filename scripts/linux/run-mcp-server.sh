@@ -6,6 +6,7 @@
 # Usage: ./scripts/linux/run-mcp-server.sh [--http <port>] [--host <name>] [--api-key <key>] [--allow-skills]
 #        [--log-messages] [--approval-policy deny|auto-safe|auto] [--endpoint <name>] [-w <dir>]
 # Example client registration: claude mcp add mux -- /path/to/mux/scripts/linux/run-mcp-server.sh
+# Under WSL, register scripts/wsl2/run-mcp-server.sh (scripts/wsl on WSL 1) instead; it drops the Windows PATH.
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
