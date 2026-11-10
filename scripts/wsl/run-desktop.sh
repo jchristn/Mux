@@ -26,10 +26,13 @@ shift "$FRAMEWORK_ARGS"
 if [ -z "${DISPLAY:-}" ]; then
     die "WSL 1 has no WSLg, so it cannot show the mux desktop app. Run the Windows script (scripts\\windows) instead, move this distro to WSL 2 (wsl --set-version ${WSL_DISTRO_NAME:-<distro>} 2) and use scripts/wsl2, or start an X server on Windows and set DISPLAY."
 fi
+wsl_check_libs error "The mux desktop app" "$WSL_AVALONIA_LIBS"
 # Running mux from source can start the agent (the TUI and desktop app launch it when none is running),
 # and the agent registers itself to start at login on its first run unless this marker exists. Login
 # startup is run-at-startup.sh's job, so write the marker to keep source runs from registering a build.
 MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
 mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
+# Give the app the Windows PATH entries back (clip.exe, explorer.exe, wslview) and BROWSER=wslview.
+wsl_prepare_app_env
 dotnet run --project "$REPO_ROOT/src/Mux.Desktop/Mux.Desktop.csproj" --framework "$TFM" -p:TargetFrameworks="$TFM"

@@ -17,10 +17,13 @@ fi
 if grep -qi microsoft /proc/version 2>/dev/null && { [ -n "${WSL_DISTRO_NAME:-}" ] || [ -d /run/WSL ] || ls /proc/sys/fs/binfmt_misc/WSLInterop* >/dev/null 2>&1; }; then
     die "This is WSL. Use the same script in scripts/wsl2 (WSL 2) or scripts/wsl (WSL 1); they handle the Windows PATH, line endings and Windows startup."
 fi
+# shellcheck source=../common/native-libs.sh
+. "$REPO_ROOT/scripts/common/native-libs.sh"
 
 ORIGINAL_DOTNET_ROOT="${DOTNET_ROOT:-}"
 ORIGINAL_PATH="$PATH"
 command -v dotnet >/dev/null 2>&1 || die "dotnet was not found on PATH. Install the .NET SDK: https://learn.microsoft.com/dotnet/core/install/linux"
+native_check_icu
 # shellcheck source=../common/framework.sh
 . "$REPO_ROOT/scripts/common/framework.sh"
 resolve_framework "$@"
@@ -72,4 +75,5 @@ if [ -z "$ORIGINAL_DOTNET_ROOT" ] && [ "$(command -v dotnet)" = "$HOME/.dotnet/d
     echo "Note: .NET is installed in ~/.dotnet, so 'mux' also needs DOTNET_ROOT. Add this line to ~/.bashrc (or ~/.profile):" >&2
     echo '  export DOTNET_ROOT="$HOME/.dotnet"' >&2
 fi
+native_check_clipboard "the mux TUI"
 echo "Done."

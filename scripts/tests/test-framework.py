@@ -35,6 +35,8 @@ if name == 'cmd.exe':
 if name == 'wslpath':
     print(os.environ['MOCK_APPDATA'] if args[0] == '-u' else 'C:\\\\fake\\\\' + pathlib.Path(args[1]).name); sys.exit(0)
 with open(os.environ['CALL_LOG'], 'a') as f: f.write(json.dumps([name, *args]) + '\\n')
+if name == 'dotnet' and os.environ.get('PATH_LOG'):
+    with open(os.environ['PATH_LOG'], 'a') as f: f.write(os.environ['PATH'] + '\\n')
 if name == 'dotnet':
     if args == ['--list-sdks']:
         print(os.environ.get('MOCK_SDKS', '8.0.425 [mock]')); sys.exit(0)
@@ -261,6 +263,47 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
                 assert '-u "$(id -u)"' in line, (path, line)
     p, _ = run('linux', 'run-tui', CDPATH='.')
     assert p.returncode == 0, p.stderr
+
+    # Native libraries (WSLg/minimal distros): GUI launchers stop before building when the Avalonia
+    # libraries are missing, the TUI and install only warn, and a missing ICU stops every dotnet script.
+    ICU = '\tlibicuuc.so.74 (libc6,x86-64) => /lib/x86_64-linux-gnu/libicuuc.so.74'
+    AVALONIA = ['libX11.so.6', 'libICE.so.6', 'libSM.so.6', 'libXext.so.6', 'libXrandr.so.2', 'libXi.so.6',
+                'libXcursor.so.1', 'libXfixes.so.3', 'libfontconfig.so.1']
+
+    def ldconfig(tag, lines):
+        f = temp / ('fake-ldconfig-' + tag)
+        f.write_text('#!/bin/sh\ncat <<"EOF"\n' + '\n'.join(lines) + '\nEOF\n')
+        f.chmod(0o755)
+        return str(f)
+    full = ldconfig('full', [ICU] + ['\t%s (libc6,x86-64) => /lib/x86_64-linux-gnu/%s' % (n, n) for n in AVALONIA])
+    no_gui = ldconfig('nogui', [ICU, '\tlibICE.so.6 (libc6) => /lib/i386-linux-gnu/libICE.so.6'])  # wrong arch only
+    no_icu = ldconfig('noicu', ['\t%s (libc6,x86-64) => /lib/x86_64-linux-gnu/%s' % (n, n) for n in AVALONIA])
+    for platform in ['linux', 'wsl', 'wsl2']:
+        for fake, script, ok, text in [
+                (full, 'run-agent', True, None), (no_gui, 'run-agent', False, 'cannot start without'),
+                (no_gui, 'run-desktop', False, 'libICE.so.6'), (no_gui, 'run-at-startup', False, 'libfontconfig1'),
+                (no_gui, 'run-tui', True, 'cannot start until'), (no_gui, 'install-tool', True, None),
+                (no_icu, 'run-tui', False, 'needs ICU'), (no_icu, 'install-tool', False, 'needs ICU')]:
+            p, calls = run(platform, script, MUX_LDCONFIG=fake, WSL_LDCONFIG=fake)
+            assert (p.returncode == 0) == ok, (platform, script, fake, p.stderr)
+            if text:
+                assert text in p.stderr, (platform, script, p.stderr)
+            if not ok:
+                assert not [c for c in calls if c[1] in ('run', 'build', 'pack')], (platform, script, calls)
+            count += 1
+        p, _ = run(platform, 'install-tool', MUX_LDCONFIG=full, WSL_LDCONFIG=full)
+        assert 'copy to clipboard will not work' in p.stderr and 'xclip' in p.stderr, p.stderr
+
+    # WSL apps get the Windows PATH entries back (clip.exe, explorer.exe, wslview).
+    path_log = temp / 'path.log'
+    for platform in ['wsl', 'wsl2']:
+        for script in ['run-tui', 'run-mcp-server']:
+            path_log.unlink(missing_ok=True)
+            p, _ = run(platform, script, PATH=base_env['PATH'] + ':/mnt/c/Windows/System32', PATH_LOG=str(path_log))
+            assert p.returncode == 0, p.stderr
+            assert '/mnt/c/Windows/System32' in path_log.read_text().splitlines()[-1], (platform, script)
+            if script == 'run-mcp-server':
+                assert p.stdout == '', 'run-mcp-server must not write to stdout'
 
     # Shell syntax for every script.
     for path in root.glob('scripts/**/*.sh'):

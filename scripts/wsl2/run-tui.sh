@@ -24,10 +24,14 @@ wsl_require_cmd dotnet "Install the .NET SDK inside WSL: https://learn.microsoft
 resolve_framework "$@"
 shift "$FRAMEWORK_ARGS"
 [ "$#" -eq 0 ] || die "Unexpected argument: $1"
+wsl_check_libs warning "The mux agent (which the TUI starts in the background)" "$WSL_AVALONIA_LIBS"
+wsl_check_clipboard "the mux TUI"
 # Running mux from source can start the agent (the TUI and desktop app launch it when none is running),
 # and the agent registers itself to start at login on its first run unless this marker exists. Login
 # startup is run-at-startup.sh's job, so write the marker to keep source runs from registering a build.
 MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
 mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
+# Give the app the Windows PATH entries back (clip.exe, explorer.exe, wslview) and BROWSER=wslview.
+wsl_prepare_app_env
 dotnet run --project "$REPO_ROOT/src/Mux.Cli/Mux.Cli.csproj" --framework "$TFM" -p:TargetFrameworks="$TFM"

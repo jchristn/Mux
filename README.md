@@ -161,6 +161,18 @@ Linux `dotnet` exists) to PATH, and explain how to recover from a CRLF checkout 
 Startup folder instead of a systemd or desktop autostart entry; each distro gets its own launcher. The desktop app and agent need WSLg on WSL 2 (no tray icon); on
 WSL 1 they need an X server on Windows with `DISPLAY` set.
 
+On Linux and WSL, the desktop app and the agent need the X11 client libraries Avalonia loads, and
+every .NET program needs ICU. Stock WSL images and minimal installs often lack them (WSLg provides only
+the display), and the failure shows up only at startup as `Unable to load shared library 'libICE.so.6'`
+or `Couldn't find a valid ICU package`. The scripts check for them and print the install command;
+on Ubuntu (including WSL) that is:
+
+```bash
+sudo apt install libx11-6 libice6 libsm6 libxext6 libxrandr2 libxi6 libxcursor1 libxfixes3 libfontconfig1 libicu74
+sudo apt install xclip           # copy to clipboard from the TUI
+sudo apt install wslu xdg-utils  # WSL: open links in the Windows browser
+```
+
 On macOS, `install-tool.sh` and `reinstall-tool.sh` also build and install self-contained `Mux.app`
 and `Mux Agent.app` in `~/Applications`, visible in Finder, and `remove-tool.sh` removes them.
 `run-desktop.sh`, `run-agent.sh` and `run-at-startup.sh` refresh and use those installed apps (quit a

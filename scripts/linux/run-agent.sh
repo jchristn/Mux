@@ -15,14 +15,18 @@ fi
 if grep -qi microsoft /proc/version 2>/dev/null && { [ -n "${WSL_DISTRO_NAME:-}" ] || [ -d /run/WSL ] || ls /proc/sys/fs/binfmt_misc/WSLInterop* >/dev/null 2>&1; }; then
     die "This is WSL. Use the same script in scripts/wsl2 (WSL 2) or scripts/wsl (WSL 1); they handle the Windows PATH, line endings and Windows startup."
 fi
+# shellcheck source=../common/native-libs.sh
+. "$REPO_ROOT/scripts/common/native-libs.sh"
 
 command -v dotnet >/dev/null 2>&1 || die "dotnet was not found on PATH. Install the .NET SDK: https://learn.microsoft.com/dotnet/core/install/linux"
+native_check_icu
 # shellcheck source=../common/framework.sh
 . "$REPO_ROOT/scripts/common/framework.sh"
 resolve_framework "$@"
 shift "$FRAMEWORK_ARGS"
 [ "$#" -eq 0 ] || die "Unexpected argument: $1"
 [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || die "No display found (DISPLAY and WAYLAND_DISPLAY are unset). The mux agent is a GUI app; run it from a desktop session."
+native_check_libs error "The mux agent" "$NATIVE_AVALONIA_LIBS"
 # Running mux from source can start the agent (the TUI and desktop app launch it when none is running),
 # and the agent registers itself to start at login on its first run unless this marker exists. Login
 # startup is run-at-startup.sh's job, so write the marker to keep source runs from registering a build.

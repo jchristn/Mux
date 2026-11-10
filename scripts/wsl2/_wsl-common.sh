@@ -79,7 +79,10 @@ wsl_sanitize_path() {
 # Fails with a helpful message when a Linux command is missing (after wsl_sanitize_path, Windows
 # copies no longer count). Usage: wsl_require_cmd <name> [install hint]
 wsl_require_cmd() {
-    command -v "$1" >/dev/null 2>&1 && return 0
+    if command -v "$1" >/dev/null 2>&1; then
+        if [ "$1" = dotnet ]; then wsl_check_icu; fi
+        return 0
+    fi
     _wsl_hint="${2:-Install it inside this WSL distro.}"
     if PATH="$WSL_ORIGINAL_PATH" command -v "$1" >/dev/null 2>&1 || PATH="$WSL_ORIGINAL_PATH" command -v "$1.exe" >/dev/null 2>&1; then
         wsl_die "'$1' is only installed on the Windows side. $_wsl_hint (Or run the scripts/windows version from Windows.)"
@@ -240,3 +243,143 @@ wsl_startup_exists() {
     [ -f "$_wsl_dir/$(wsl_launcher_file "$1")" ] && return 0
     grep -qF -- "-d \"\"${WSL_DISTRO_NAME:-}\"\"" "$_wsl_dir/$1-wsl.vbs" 2>/dev/null
 }
+
+# --- Native libraries -------------------------------------------------------------------------------
+# WSLg supplies only the display server. The distro still needs its own client libraries, and the
+# stock WSL images (like minimal and server images) often lack them. Building never loads them, so
+# without a check the failure only shows when the app starts, as "Unable to load shared library ...".
+
+# Libraries a .NET GUI app built on Avalonia 12 loads on Linux: the sonames inside Avalonia.X11.dll
+# (12.1.x) plus SkiaSharp's fontconfig. libGL, GTK 3 and Vulkan are optional (software rendering and
+# managed dialogs are the fallbacks). Each entry is soname:Debian/Ubuntu package:Fedora package.
+# shellcheck disable=SC2034 # used by the scripts that source this file
+WSL_AVALONIA_LIBS="libX11.so.6:libx11-6:libX11 libICE.so.6:libice6:libICE libSM.so.6:libsm6:libSM libXext.so.6:libxext6:libXext libXrandr.so.2:libxrandr2:libXrandr libXi.so.6:libxi6:libXi libXcursor.so.1:libxcursor1:libXcursor libXfixes.so.3:libxfixes3:libXfixes libfontconfig.so.1:libfontconfig1:fontconfig"
+
+# Prints the ldconfig cache (ldconfig -p), or nothing when there is no ldconfig to ask.
+# WSL_LDCONFIG overrides the ldconfig command (used by tests).
+wsl_ldconfig_cache() {
+    _wl_ldc="${WSL_LDCONFIG:-}"
+    if [ -z "$_wl_ldc" ]; then
+        for _wl_c in ldconfig /sbin/ldconfig /usr/sbin/ldconfig; do
+            if command -v "$_wl_c" >/dev/null 2>&1; then _wl_ldc="$_wl_c"; break; fi
+        done
+    fi
+    [ -n "$_wl_ldc" ] || return 0
+    "$_wl_ldc" -p 2>/dev/null || true
+}
+
+# True when the dynamic linker has <soname> (exact name, or a prefix ending in a dot such as
+# "libicuuc.so.") for this machine's architecture. Usage: wsl_have_lib <cache> <soname>
+wsl_have_lib() {
+    case "$(uname -m)" in
+        x86_64|amd64) _wl_arch=x86-64 ;;
+        aarch64|arm64) _wl_arch=AArch64 ;;
+        *) _wl_arch="" ;;
+    esac
+    printf '%s\n' "$1" | awk -v so="$2" -v arch="$_wl_arch" '
+        { name = $1 }
+        (name == so || (substr(so, length(so)) == "." && index(name, so) == 1)) && (arch == "" || index($0, arch)) { found = 1 }
+        END { exit !found }'
+}
+
+# Prints the install command for the given Debian and Fedora package lists.
+# Usage: wsl_install_hint "<deb packages>" "<rpm packages>"
+wsl_install_hint() {
+    if command -v apt-get >/dev/null 2>&1; then
+        printf '  sudo apt install %s\n' "$1"
+    elif command -v dnf >/dev/null 2>&1; then
+        printf '  sudo dnf install %s\n' "$2"
+    else
+        printf '  Debian/Ubuntu: sudo apt install %s\n  Fedora:        sudo dnf install %s\n' "$1" "$2"
+    fi
+}
+
+# Reports libraries from <list> that are missing, with the command that installs them. Does nothing
+# when they are all present or when there is no ldconfig to ask (it never guesses).
+# Usage: wsl_check_libs error|warning "<app name>" "<soname:deb:rpm list>"
+#   error   exits (use before launching the app)
+#   warning returns (use after installing it)
+wsl_check_libs() {
+    _wl_cache="$(wsl_ldconfig_cache)"
+    [ -n "$_wl_cache" ] || return 0
+    _wl_missing=""; _wl_deb=""; _wl_rpm=""
+    for _wl_e in $3; do
+        _wl_so="${_wl_e%%:*}"
+        wsl_have_lib "$_wl_cache" "$_wl_so" && continue
+        _wl_r="${_wl_e#*:}"
+        _wl_missing="$_wl_missing $_wl_so"; _wl_deb="$_wl_deb ${_wl_r%%:*}"; _wl_rpm="$_wl_rpm ${_wl_r#*:}"
+    done
+    [ -n "$_wl_missing" ] || return 0
+    if [ "$1" = error ]; then
+        wsl_log "Error: $2 cannot start without these shared libraries:$_wl_missing"
+    else
+        wsl_log "Warning: $2 is installed, but it cannot start until these shared libraries are installed:$_wl_missing"
+    fi
+    wsl_log "WSLg provides only the display; the distro needs its own copies. Without them the app fails with"
+    wsl_log "\"Unable to load shared library '...'\". Install them inside this distro with:"
+    wsl_log "$(wsl_install_hint "${_wl_deb# }" "${_wl_rpm# }")"
+    if [ "$1" = error ]; then exit 1; fi
+    return 0
+}
+
+# .NET needs ICU (libicu) for globalization: the SDK itself and every app that does not run with
+# invariant globalization. dotnet-install.sh and self-contained apps do not bring it. Exits with the
+# install command when it is missing; does nothing when DOTNET_SYSTEM_GLOBALIZATION_INVARIANT is set
+# to 1/true, or when there is no ldconfig to ask.
+wsl_check_icu() {
+    case "${DOTNET_SYSTEM_GLOBALIZATION_INVARIANT:-}" in 1|true|TRUE|True) return 0 ;; esac
+    _wl_cache="$(wsl_ldconfig_cache)"
+    [ -n "$_wl_cache" ] || return 0
+    wsl_have_lib "$_wl_cache" "libicuuc.so." && return 0
+    _wl_icu=""
+    if command -v apt-cache >/dev/null 2>&1; then
+        _wl_icu="$(apt-cache pkgnames libicu 2>/dev/null | awk '/^libicu[0-9]+(t64)?$/' | sort -V | tail -n 1 || true)"
+    fi
+    wsl_log "Error: .NET needs ICU (libicu), and this distro does not have it. Without it dotnet fails with"
+    wsl_log "\"Couldn't find a valid ICU package installed on the system\". Install it inside this distro with:"
+    wsl_log "$(wsl_install_hint "${_wl_icu:-libicu-dev}" libicu)"
+    exit 1
+}
+
+# Warns when no clipboard tool is installed: terminal apps (TUIKit and the apps built on it) copy by
+# running wl-copy, xclip or xsel, and none ships with the stock WSL images. Usage: wsl_check_clipboard "<app name>"
+wsl_check_clipboard() {
+    for _wl_t in wl-copy xclip xsel; do
+        command -v "$_wl_t" >/dev/null 2>&1 && return 0
+    done
+    wsl_log "Note: copy to clipboard will not work in $1 until a clipboard tool is installed:"
+    wsl_log "$(wsl_install_hint xclip xclip)"
+}
+
+# Prints the PATH to give an interactive app started from these scripts: the cleaned Linux PATH
+# first, then the Windows entries the cleanup removed, so clip.exe, explorer.exe, wslview and the
+# Windows browser stay reachable from inside the app (builds still use the cleaned PATH).
+wsl_app_path() {
+    _wl_path="$PATH"
+    _wl_ifs="$IFS"; IFS=:
+    for _wl_p in $WSL_ORIGINAL_PATH; do
+        case "$_wl_p" in
+            /mnt/[a-zA-Z]/*|/mnt/[a-zA-Z])
+                case ":$_wl_path:" in *":$_wl_p:"*) ;; *) _wl_path="$_wl_path:$_wl_p" ;; esac ;;
+        esac
+    done
+    IFS="$_wl_ifs"
+    printf '%s\n' "$_wl_path"
+}
+
+# Exports what an interactive app needs from Windows: the PATH from wsl_app_path, and, when wslview
+# (from the wslu package) exists and BROWSER is unset, BROWSER=wslview so xdg-open and the apps open
+# links in the Windows browser. Call it right before starting the app.
+wsl_prepare_app_env() {
+    PATH="$(wsl_app_path)"; export PATH
+    if [ -z "${BROWSER:-}" ] && command -v wslview >/dev/null 2>&1; then
+        BROWSER=wslview; export BROWSER
+    fi
+    # Under WSL the dependable way to open a link is wslview (it hands the URL to Windows); xdg-open
+    # alone usually finds no Linux browser.
+    if ! command -v wslview >/dev/null 2>&1; then
+        wsl_log "Note: links may not open from the app until wslview (and xdg-open) are installed:"
+        wsl_log "$(wsl_install_hint "wslu xdg-utils" "wslu xdg-utils")"
+    fi
+}
+

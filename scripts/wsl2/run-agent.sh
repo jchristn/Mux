@@ -26,7 +26,7 @@ shift "$FRAMEWORK_ARGS"
 if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
     die "No display found. The mux agent is a GUI app and needs WSLg (Windows 11, or Windows 10 with the Microsoft Store WSL). From Windows run: wsl --update, then wsl --shutdown, and reopen this shell."
 fi
-echo "Note: WSLg has no system tray, so the tray icon will not appear. Use scripts\\windows for the tray." >&2
+wsl_check_libs error "The mux agent" "$WSL_AVALONIA_LIBS"
 # Running mux from source can start the agent (the TUI and desktop app launch it when none is running),
 # and the agent registers itself to start at login on its first run unless this marker exists. Login
 # startup is run-at-startup.sh's job, so write the marker to keep source runs from registering a build.
@@ -36,4 +36,6 @@ mkdir -p "$MUX_CONFIG_HOME"
 # The agent registers itself to start at login on its first run unless MUX_AGENT_AUTOSTART=0. Login
 # startup is run-at-startup.sh's job, so keep a source run from registering this build.
 export MUX_AGENT_AUTOSTART=0
+# Give the app the Windows PATH entries back (clip.exe, explorer.exe, wslview) and BROWSER=wslview.
+wsl_prepare_app_env
 dotnet run --project "$REPO_ROOT/src/Mux.Agent/Mux.Agent.csproj" --framework "$TFM" -p:TargetFrameworks="$TFM"

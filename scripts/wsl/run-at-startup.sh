@@ -30,6 +30,7 @@ shift "$FRAMEWORK_ARGS"
 if [ -z "${DISPLAY:-}" ]; then
     die "WSL 1 has no WSLg, so it cannot show the mux agent. Run the Windows script (scripts\\windows) instead, move this distro to WSL 2 (wsl --set-version ${WSL_DISTRO_NAME:-<distro>} 2) and use scripts/wsl2, or start an X server on Windows and set DISPLAY."
 fi
+wsl_check_libs error "The mux agent" "$WSL_AVALONIA_LIBS"
 
 # Always register a fresh Release build of the agent for the selected framework.
 if pgrep -u "$(id -u)" -x Mux.Agent >/dev/null 2>&1; then

@@ -31,4 +31,6 @@ wsl_require_cmd dotnet "Install the .NET SDK inside WSL: https://learn.microsoft
 resolve_framework "$@"
 shift "$FRAMEWORK_ARGS"
 dotnet build "$REPO_ROOT/src/Mux.Cli/Mux.Cli.csproj" --framework "$TFM" -p:TargetFrameworks="$TFM" -nologo -v quiet >&2
+# Give mux (its tools run commands) the Windows PATH entries back (clip.exe, explorer.exe, wslview) and BROWSER=wslview.
+wsl_prepare_app_env
 exec dotnet "$REPO_ROOT/src/Mux.Cli/bin/Debug/$TFM/Mux.Cli.dll" mcp serve "$@"

@@ -30,6 +30,7 @@ shift "$FRAMEWORK_ARGS"
 if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
     die "No display found. The mux agent is a GUI app and needs WSLg (Windows 11, or Windows 10 with the Microsoft Store WSL). From Windows run: wsl --update, then wsl --shutdown, and reopen this shell."
 fi
+wsl_check_libs error "The mux agent" "$WSL_AVALONIA_LIBS"
 
 # Always register a fresh Release build of the agent for the selected framework.
 if pgrep -u "$(id -u)" -x Mux.Agent >/dev/null 2>&1; then

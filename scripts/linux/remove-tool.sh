@@ -16,9 +16,12 @@ fi
 if grep -qi microsoft /proc/version 2>/dev/null && { [ -n "${WSL_DISTRO_NAME:-}" ] || [ -d /run/WSL ] || ls /proc/sys/fs/binfmt_misc/WSLInterop* >/dev/null 2>&1; }; then
     die "This is WSL. Use the same script in scripts/wsl2 (WSL 2) or scripts/wsl (WSL 1); they handle the Windows PATH, line endings and Windows startup."
 fi
+# shellcheck source=../common/native-libs.sh
+. "$REPO_ROOT/scripts/common/native-libs.sh"
 
 [ "$#" -eq 0 ] || die "Unexpected argument: $1 (this script takes no arguments)"
 command -v dotnet >/dev/null 2>&1 || die "dotnet was not found on PATH. Install the .NET SDK: https://learn.microsoft.com/dotnet/core/install/linux"
+native_check_icu
 
 # True when a process named mux (the installed global tool) is running.
 mux_running() { pgrep -u "$(id -u)" -x mux >/dev/null 2>&1; }

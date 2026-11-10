@@ -76,4 +76,5 @@ if [ -z "$ORIGINAL_DOTNET_ROOT" ] && [ "$(command -v dotnet)" = "$HOME/.dotnet/d
     echo "Note: .NET is installed in ~/.dotnet, so 'mux' also needs DOTNET_ROOT. Add this line to ~/.bashrc (or ~/.profile):" >&2
     echo '  export DOTNET_ROOT="$HOME/.dotnet"' >&2
 fi
+wsl_check_clipboard "the mux TUI"
 echo "Done."
