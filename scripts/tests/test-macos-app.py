@@ -28,6 +28,8 @@ name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
 with open(os.environ['CALL_LOG'], 'a') as f: f.write(json.dumps([name, *args]) + '\\n')
 if name == 'uname': print('Darwin' if args == ['-s'] else os.environ.get('TEST_ARCH', 'arm64'))
+if name == 'pgrep': sys.exit(0 if os.environ.get('MOCK_RUNNING') else 1)
+if name == 'launchctl' and args[:1] == ['print']: sys.exit(1)
 if name == 'codesign' and os.environ.get('FAIL_SIGN'): sys.exit(8)
 if name == 'dotnet' and args == ['--list-sdks']: print('10.0.401 [mock]')
 if name == 'dotnet' and args[0] == 'publish':
@@ -38,7 +40,7 @@ if name == 'dotnet' and args[0] == 'publish':
     (out / '.playwright').mkdir()
     (out / '.playwright/driver').write_text('driver')
 '''
-    for name in ['dotnet', 'uname', 'codesign', 'open', 'mux', 'launchctl']:
+    for name in ['dotnet', 'uname', 'codesign', 'open', 'mux', 'launchctl', 'pgrep']:
         path = bin_dir / name
         path.write_text(tool)
         path.chmod(0o755)
@@ -48,9 +50,9 @@ if name == 'dotnet' and args[0] == 'publish':
 
     def run(script, tfm='net10.0', **updates):
         log.unlink(missing_ok=True)
-        result = subprocess.run(['bash', str(repo / f'scripts/macos/{script}.sh'), tfm],
+        result = subprocess.run(['bash', str(repo / f'scripts/macos/{script}.sh'), *([tfm] if tfm else [])],
                                 env=dict(env, **updates), capture_output=True, text=True)
-        calls = [json.loads(line) for line in log.read_text().splitlines()]
+        calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
         return result, calls
 
     for script, components in [('install-tool', ['desktop', 'agent']),
@@ -80,11 +82,19 @@ if name == 'dotnet' and args[0] == 'publish':
             opens = [c for c in calls if c[0] == 'open']
             assert len(opens) == int(script.startswith('run-')), calls
             if opens:
-                assert opens[0] == ['open', '-a', str(app)]
+                env_args = ['--env', 'MUX_AGENT_AUTOSTART=0'] if script == 'run-agent' else []
+                assert opens[0] == ['open', *env_args, '-a', str(app)], opens
     result, calls = run('run-at-startup')
     assert result.returncode == 0, result.stderr
     with (temp / 'home/Library/LaunchAgents/com.jchristn.mux.agent.plist').open('rb') as f:
-        assert plistlib.load(f)['ProgramArguments'] == [str(temp / 'home/Applications/Mux Agent.app/Contents/MacOS/Mux.Agent')]
+        plist = plistlib.load(f)
+        assert plist['ProgramArguments'] == [str(temp / 'home/Applications/Mux Agent.app/Contents/MacOS/Mux.Agent')]
+        assert plist['EnvironmentVariables'] == {'MUX_AGENT_AUTOSTART': '0'}
+    assert (temp / 'home/.mux/startup-registered').exists()
+    # A running app is never replaced: the publish is skipped and the installed copy kept.
+    result, calls = run('run-desktop', MOCK_RUNNING='1')
+    assert result.returncode != 0 and 'is running' in result.stderr
+    assert not any(c[:2] == ['dotnet', 'publish'] for c in calls)
     # A failed publish must preserve the previous installation and never launch it.
     marker = temp / 'home/Applications/Mux.app/keep-me'
     marker.write_text('installed version')
@@ -92,4 +102,10 @@ if name == 'dotnet' and args[0] == 'publish':
         result, calls = run('run-desktop', **{failure: '1'})
         assert result.returncode != 0 and marker.exists()
         assert not any(c[0] == 'open' for c in calls)
+    # remove-tool removes both apps (the fake dotnet reports the tool as not installed).
+    result, calls = run('remove-tool', tfm=None)
+    assert result.returncode == 0, result.stderr
+    assert not (temp / 'home/Applications/Mux.app').exists()
+    assert not (temp / 'home/Applications/Mux Agent.app').exists()
+    assert 'nothing to remove' in result.stdout and 'still registered to start at login' in result.stdout
     print('macOS install/reinstall/run: both architectures and frameworks passed; failed publish preserves installed app.')

@@ -17,12 +17,36 @@ REM script, so no separate build step is needed here.
 setlocal
 chcp 65001 >nul
 
+if /i "%~1"=="-h" goto usage
+if /i "%~1"=="--help" goto usage
+if /i "%~1"=="/?" goto usage
+set "FIRST=%~1"
+if defined FIRST if "%FIRST:~0,1%"=="-" (
+  echo Error: Unknown option: %1 1>&2
+  exit /b 1
+)
+if not "%~2"=="" (
+  echo Error: Unexpected argument: %2 1>&2
+  exit /b 1
+)
 set "TOKEN=%~1"
-if "%TOKEN%"=="" set /p "TOKEN=Enter your VS Code Marketplace token: "
+REM Read the token without echoing it.
+if not defined TOKEN for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "$s = Read-Host 'Enter your VS Code Marketplace token' -AsSecureString; [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))"`) do set "TOKEN=%%T"
 if "%TOKEN%"=="" (
-  echo.
-  echo No token provided. Aborting.
+  echo. 1>&2
+  echo Error: No token provided. Aborting. 1>&2
   endlocal
+  exit /b 1
+)
+
+where npm >nul 2>nul
+if errorlevel 1 (
+  echo Error: npm was not found on PATH. Install Node.js. 1>&2
+  exit /b 1
+)
+where npx >nul 2>nul
+if errorlevel 1 (
+  echo Error: npx was not found on PATH. Install Node.js. 1>&2
   exit /b 1
 )
 
@@ -64,3 +88,8 @@ echo.
 echo Done. Published to the VS Code Marketplace:
 echo   https://marketplace.visualstudio.com/items?itemName=usemux.mux-ai
 endlocal
+exit /b 0
+
+:usage
+echo Usage: scripts\windows\publish-vscode.bat [marketplace-token]
+exit /b 0

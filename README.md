@@ -137,22 +137,44 @@ scripts\windows\install-tool.bat     # or: scripts\windows\install-tool.bat net8
 ./scripts/wsl2/install-tool.sh
 ```
 
-Under WSL, use `scripts/wsl2/` (WSL 2) or `scripts/wsl/` (WSL 1). They hold the same scripts as
-`scripts/linux/`, but drop the Windows PATH (so a Windows `claude`, `node` or `dotnet` is never
-picked up), put `~/.dotnet` and `~/.dotnet/tools` on PATH, and stop early on CRLF checkouts.
-`run-at-startup.sh` registers a hidden launcher in the Windows Startup folder instead of a systemd
-or desktop autostart entry. The desktop app and agent need WSLg on WSL 2 (no tray icon) and do not
-run on WSL 1.
+`scripts/` has one folder per platform: `macos/`, `linux/`, `windows/`, `wsl/` (WSL 1) and `wsl2/`
+(WSL 2). Every folder has the same scripts, and each script is complete for its platform and refuses
+to run on the wrong one:
 
-On macOS, `scripts/macos/install-tool.sh` and `reinstall-tool.sh` also build and
-install self-contained `Mux.app` and `Mux Agent.app` in `~/Applications`, visible in
-Finder. `run-desktop.sh` and `run-agent.sh` refresh and launch their installed app;
-`run-tui.sh` runs the terminal UI from source. No administrator access is required.
+| Script | What it does |
+|---|---|
+| `install-tool` / `reinstall-tool` / `remove-tool` | Install, replace or uninstall the `mux` global tool (refuses while `mux` is running) |
+| `run-tui` / `run-desktop` / `run-agent` | Run the terminal UI, desktop app or tray agent from source |
+| `run-mcp-server` | Build and serve mux as an MCP server (stdio by default) |
+| `run-at-startup` / `remove-from-startup` | Start the agent at login, or stop doing so |
+| `kill-mux` | Stop every running mux process |
+| `worktrees` | List, prune or remove mux's subagent worktrees |
+| `publish-desktop` / `build-installers` | Self-contained desktop build / native installers for this OS |
+| `publish-nuget` / `publish-vscode` | Publish the NuGet libraries / the VS Code extension |
+| `generate-builtin-skills` | Regenerate `BUILTIN_SKILLS.md` |
+
+Under WSL, use `scripts/wsl2/` (WSL 2) or `scripts/wsl/` (WSL 1), not `scripts/linux/` (which
+refuses to run under WSL). The WSL scripts drop the Windows PATH (so a Windows `claude`, `node` or
+`dotnet` is never picked up), add `~/.dotnet/tools` (and a user-local `~/.dotnet` when no other
+Linux `dotnet` exists) to PATH, and explain how to recover from a CRLF checkout (it shows up as
+`bash\r: No such file or directory`). `run-at-startup.sh` registers a hidden launcher in the Windows
+Startup folder instead of a systemd or desktop autostart entry; each distro gets its own launcher. The desktop app and agent need WSLg on WSL 2 (no tray icon); on
+WSL 1 they need an X server on Windows with `DISPLAY` set.
+
+On macOS, `install-tool.sh` and `reinstall-tool.sh` also build and install self-contained `Mux.app`
+and `Mux Agent.app` in `~/Applications`, visible in Finder, and `remove-tool.sh` removes them.
+`run-desktop.sh`, `run-agent.sh` and `run-at-startup.sh` refresh and use those installed apps (quit a
+running copy first). No administrator access is required on any platform.
+
+`run-at-startup` builds the agent and registers it for login on every platform. `run-agent` runs it
+without registering it (it sets `MUX_AGENT_AUTOSTART=0`, which turns off the agent's own first-run
+login registration), and `kill-mux` stops a launchd- or systemd-managed agent through its supervisor
+so it does not come straight back.
 
 <details>
 <summary>Framework selection and packaging scripts</summary>
 
-All source run and tool-install scripts on Windows, Linux, and macOS accept a leading `net8.0`
+All source run and tool-install scripts on every platform accept a leading `net8.0`
 (or `--framework net8.0` / `-f net8.0`). Selection applies to restore, build, and execution,
 so a .NET 8 SDK can build without evaluating the .NET 10 target. Without a CLI selection,
 `MUX_TFM` is used; otherwise scripts choose `net10.0` when a .NET 10 SDK is installed and

@@ -1,36 +1,78 @@
-#!/usr/bin/env sh
-# Build and install the mux global tool (Mux.Cli). WSL 1 counterpart of scripts/linux/install-tool.sh.
-# Uses the Linux dotnet (never the Windows one), puts ~/.dotnet/tools on PATH for the post-install
-# 'mux -v' check, and prints what to add to your shell profile when new shells will not find mux.
-# Usage: ./scripts/wsl/install-tool.sh [net8.0|net10.0]
-set -eu
-SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+#!/usr/bin/env bash
+# Build and install the mux global tool (Mux.Cli) from this checkout. Fails if mux is already
+# installed; use reinstall-tool.sh to replace an existing install.
+# WSL 1 version: uses the Linux dotnet inside this distro (never the Windows one) and installs
+# into this distro only; use scripts\windows\install-tool.bat for the Windows install.
+# The package is built under artifacts/tool-packages/<framework>.
+# Usage: ./scripts/wsl/install-tool.sh [net8.0|net10.0]  (or --framework <tfm>; MUX_TFM is also honored)
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC2034 # not every script needs REPO_ROOT
 REPO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
+die() { echo "Error: $*" >&2; exit 1; }
+
 # shellcheck disable=SC2034 # read by _wsl-common.sh
-WSL_FLAVOR=wsl   # "wsl" in scripts/wsl, "wsl2" in scripts/wsl2
+WSL_FLAVOR=wsl
 # shellcheck source=_wsl-common.sh
 . "$SCRIPT_DIR/_wsl-common.sh"
 wsl_require
-ORIGINAL_DOTNET_ROOT="${DOTNET_ROOT:-}"
-# Create ~/.dotnet/tools first so wsl_sanitize_path puts it on PATH and the post-install
-# 'mux -v' check in the Linux script finds the new tool.
+# Create ~/.dotnet/tools first so wsl_sanitize_path puts it on PATH for the post-install check.
 mkdir -p "$HOME/.dotnet/tools"
 wsl_sanitize_path
 wsl_check_repo "$REPO_ROOT"
-wsl_require_cmd dotnet "Install the .NET SDK inside WSL: https://learn.microsoft.com/dotnet/core/install/linux"
-# Not exec: the PATH hint below runs after the Linux script.
-bash "$SCRIPT_DIR/../linux/install-tool.sh" "$@"
 
-# Tell the user what new shells need: 'dotnet tool install -g' puts mux in ~/.dotnet/tools, and a
-# user-local .NET (~/.dotnet) also needs DOTNET_ROOT so the mux launcher can find the runtime.
+ORIGINAL_DOTNET_ROOT="$WSL_ORIGINAL_DOTNET_ROOT"
+wsl_require_cmd dotnet "Install the .NET SDK inside WSL: https://learn.microsoft.com/dotnet/core/install/linux"
+# shellcheck source=../common/framework.sh
+. "$REPO_ROOT/scripts/common/framework.sh"
+resolve_framework "$@"
+shift "$FRAMEWORK_ARGS"
+[ "$#" -eq 0 ] || die "Unexpected argument: $1"
+
+# True when a process named mux (the installed global tool) is running.
+mux_running() { pgrep -u "$(id -u)" -x mux >/dev/null 2>&1; }
+# True when the Mux.Cli global tool is installed.
+tool_installed() {
+    dotnet tool list -g 2>/dev/null | awk 'tolower($1) == "mux.cli" { found = 1 } END { exit !found }'
+}
+
+PACKAGE_SOURCE="$REPO_ROOT/artifacts/tool-packages/$TFM"
+
+echo "mux tool install (WSL 1, $TFM)"
+echo "[1/5] Checking for running mux processes..."
+if mux_running; then
+    die "A running mux process is using the global tool. Exit all mux sessions (or run scripts/wsl/kill-mux.sh) and try again."
+fi
+echo "[2/5] Checking for an existing install..."
+if tool_installed; then
+    die "mux is already installed. Run scripts/wsl/reinstall-tool.sh to replace it."
+fi
+echo "[3/5] Building the mux package..."
+rm -rf "$PACKAGE_SOURCE"
+mkdir -p "$PACKAGE_SOURCE"
+dotnet pack "$REPO_ROOT/src/Mux.Cli/Mux.Cli.csproj" --configuration Release -p:TargetFrameworks="$TFM" --output "$PACKAGE_SOURCE"
+echo "[4/5] Installing the mux global tool..."
+dotnet tool install -g --source "$PACKAGE_SOURCE" --framework "$TFM" --disable-parallel Mux.Cli
+echo "[5/5] Verifying the mux command..."
+if command -v mux >/dev/null 2>&1; then
+    mux -v
+elif [ -x "$HOME/.dotnet/tools/mux" ]; then
+    "$HOME/.dotnet/tools/mux" -v
+else
+    die "mux was installed, but it is not on PATH or in $HOME/.dotnet/tools."
+fi
+# 'dotnet tool install -g' puts mux in ~/.dotnet/tools, and a user-local .NET in ~/.dotnet also
+# needs DOTNET_ROOT, or new shells cannot run mux.
 case ":$WSL_ORIGINAL_PATH:" in
     *":$HOME/.dotnet/tools:"*) ;;
     *)
-        wsl_log "Note: ~/.dotnet/tools is not on your PATH, so new WSL shells will not find 'mux'."
-        wsl_log "Add this line to ~/.bashrc (or ~/.profile):"
-        wsl_log '  export PATH="$PATH:$HOME/.dotnet/tools"' ;;
+        echo "Note: $HOME/.dotnet/tools is not on your PATH, so new shells will not find 'mux'." >&2
+        echo "Add this line to ~/.bashrc (or ~/.profile):" >&2
+        echo '  export PATH="$PATH:$HOME/.dotnet/tools"' >&2 ;;
 esac
-if [ -z "$ORIGINAL_DOTNET_ROOT" ] && [ "${DOTNET_ROOT:-}" = "$HOME/.dotnet" ]; then
-    wsl_log "Note: .NET is installed in ~/.dotnet, so 'mux' also needs DOTNET_ROOT. Add to ~/.bashrc:"
-    wsl_log '  export DOTNET_ROOT="$HOME/.dotnet"'
+if [ -z "$ORIGINAL_DOTNET_ROOT" ] && [ "$(command -v dotnet)" = "$HOME/.dotnet/dotnet" ]; then
+    echo "Note: .NET is installed in ~/.dotnet, so 'mux' also needs DOTNET_ROOT. Add this line to ~/.bashrc (or ~/.profile):" >&2
+    echo '  export DOTNET_ROOT="$HOME/.dotnet"' >&2
 fi
+echo "Done."

@@ -20,7 +20,12 @@ scripts\windows\install-tool.bat net8.0
 # Linux (use scripts/macos/ on macOS)
 ./scripts/linux/install-tool.sh
 ./scripts/linux/install-tool.sh net8.0
+
+# WSL 2 (use scripts/wsl/ on WSL 1)
+./scripts/wsl2/install-tool.sh
 ```
+
+If mux is already installed, use `reinstall-tool` instead; `remove-tool` uninstalls it.
 
 The install scripts accept an optional target framework argument. They default to `net10.0` when a .NET 10 SDK is installed and otherwise fall back to `net8.0`.
 

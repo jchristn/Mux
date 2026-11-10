@@ -18,6 +18,11 @@ install_macos_app() {
     stage="$REPO_ROOT/artifacts/macos-app/$rid/$TFM/$component"
     app="$stage/$name.app"
     destination="$HOME/Applications/$name.app"
+    # Never replace a bundle under a running copy: open -a would just bring the old build forward.
+    if pgrep -u "$(id -u)" -f "$destination/Contents/MacOS/" >/dev/null 2>&1; then
+        echo "$name is running. Quit it (or run scripts/macos/kill-mux.sh) and try again." >&2
+        return 1
+    fi
     rm -rf "$stage"
     mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
     echo "Publishing $name $version ($rid, $TFM)..."

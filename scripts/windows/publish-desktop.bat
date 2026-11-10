@@ -12,21 +12,41 @@ REM machine does NOT need the .NET runtime installed. Artifacts are UNSIGNED - s
 REM docs\DESKTOP.md ("Packaging") for the code-signing / notarization steps, which
 REM require your platform signing certificates.
 setlocal
+where dotnet >nul 2>nul
+if errorlevel 1 (
+    echo Error: dotnet was not found on PATH. Install the .NET SDK: https://dotnet.microsoft.com/download 1>&2
+    exit /b 1
+)
 chcp 65001 >nul
 for %%i in ("%~dp0..\..") do set "ROOT=%%~fi\"
 
 set "RID=win-x64"
 set "FIRST=%~1"
-if defined FIRST if /I not "%FIRST:~0,3%"=="net" if not "%FIRST:~0,1%"=="-" (
-  set "RID=%~1"
-  shift
+if not defined FIRST goto rid_done
+if "%FIRST%"=="/?" goto rid_done
+if /I "%FIRST:~0,3%"=="net" goto rid_done
+if /I "%FIRST%"=="--framework" goto rid_done
+if /I "%FIRST%"=="-f" goto rid_done
+if /I "%FIRST%"=="-h" goto rid_done
+if /I "%FIRST%"=="--help" goto rid_done
+if "%FIRST:~0,1%"=="-" (
+    echo Error: Unknown option: %1 1>&2
+    exit /b 1
+)
+set "RID=%~1"
+shift
+:rid_done
+REM "call x.bat /?" shows CALL's own help, so handle /? here.
+if "%~1"=="/?" (
+    call "%~dp0resolve-framework.bat" --help
+    exit /b 0
 )
 call "%~dp0resolve-framework.bat" %1 %2
 if errorlevel 2 exit /b 0
 if errorlevel 1 exit /b 1
 for /l %%i in (1,1,%FRAMEWORK_ARGS%) do shift
 if not "%~1"=="" (
-    echo Unexpected argument: %1. 1>&2
+    echo Error: Unexpected argument: %1 1>&2
     exit /b 1
 )
 set OUT=%ROOT%dist\desktop\%RID%

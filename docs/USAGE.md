@@ -1245,7 +1245,7 @@ those lines to the method, request id, and size (`Received: tools/call (id 2, 41
 stay out of client logs; `--log-messages` restores the full log for debugging. Each `run` records usage telemetry
 like `mux print`, so MCP-driven turns appear in `/usage` and the dashboard.
 
-To serve the build from a source checkout, use `scripts/macos/run-mcp-server.sh` (or the `linux` or `windows`
+To serve the build from a source checkout, use `scripts/macos/run-mcp-server.sh` (or the `linux`, `windows`, `wsl` or `wsl2`
 equivalent). It builds quietly, then runs `mux mcp serve` with the arguments you pass, so it can be registered
 directly: `claude mcp add mux -- /path/to/mux/scripts/macos/run-mcp-server.sh --approval-policy auto-safe`.
 Under WSL, register `scripts/wsl2/run-mcp-server.sh` (`scripts/wsl/` on WSL 1) with a Claude Code installed inside

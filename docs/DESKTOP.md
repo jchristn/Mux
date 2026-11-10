@@ -18,9 +18,12 @@ scripts\windows\run-desktop.bat net8.0
 # Linux (use scripts/macos/ on macOS)
 ./scripts/linux/run-desktop.sh           # selects net10.0 with a .NET 10 SDK, otherwise net8.0
 ./scripts/linux/run-desktop.sh net8.0
+
+# WSL 2 with WSLg (use scripts/wsl/ on WSL 1 with an X server)
+./scripts/wsl2/run-desktop.sh
 ```
 
-Both scripts run `dotnet run` against `src/Mux.Desktop`. You can also run the project directly:
+On Windows, Linux and WSL the scripts run `dotnet run` against `src/Mux.Desktop`; on macOS `run-desktop.sh` builds and opens `~/Applications/Mux.app`. You can also run the project directly:
 
 ```bash
 dotnet run --project src/Mux.Desktop/Mux.Desktop.csproj --framework net10.0

@@ -1,48 +1,53 @@
 #!/usr/bin/env bash
 # Publish a self-contained, single-file mux Desktop build for one runtime.
 #
-# Usage:
-#   ./scripts/linux/publish-desktop.sh [RID] [TFM]
-#
-# RID  defaults to a guess from the host OS/arch (linux-x64, osx-arm64, win-x64, ...).
+# RID  defaults to this machine (linux-x64 or linux-arm64). Pass another RID to cross-publish.
 # TFM  defaults to MUX_TFM, then net10.0 with a .NET 10 SDK, otherwise net8.0.
 #
-# Output lands in dist/desktop/<RID>/. The build is self-contained: the target
-# machine does NOT need the .NET runtime installed. Artifacts are UNSIGNED — see
-# docs/DESKTOP.md ("Packaging") for the code-signing / notarization steps, which
-# require your platform signing certificates.
+# Output lands in dist/desktop/<RID>/. The build is self-contained, so the target machine does NOT
+# need the .NET runtime. Artifacts are UNSIGNED; see docs/DESKTOP.md ("Packaging") for signing.
+# Usage: ./scripts/linux/publish-desktop.sh [RID] [net8.0|net10.0]
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC2034 # not every script needs REPO_ROOT
+REPO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
+die() { echo "Error: $*" >&2; exit 1; }
+
+if [ "$(uname -s)" != Linux ]; then
+    die "This script is for Linux. Use scripts/macos on macOS or scripts\\windows on Windows."
+fi
+# WSL, not just a Microsoft kernel: Docker Desktop containers on the WSL 2 backend have one too.
+if grep -qi microsoft /proc/version 2>/dev/null && { [ -n "${WSL_DISTRO_NAME:-}" ] || [ -d /run/WSL ] || ls /proc/sys/fs/binfmt_misc/WSLInterop* >/dev/null 2>&1; }; then
+    die "This is WSL. Use the same script in scripts/wsl2 (WSL 2) or scripts/wsl (WSL 1); they handle the Windows PATH, line endings and Windows startup."
+fi
+
+command -v dotnet >/dev/null 2>&1 || die "dotnet was not found on PATH. Install the .NET SDK: https://learn.microsoft.com/dotnet/core/install/linux"
 PROJECT="$REPO_ROOT/src/Mux.Desktop/Mux.Desktop.csproj"
 
-# --- Resolve the runtime identifier ---------------------------------------
 guess_rid() {
-  local os arch
-  case "$(uname -s)" in
-    Linux*)  os="linux" ;;
-    Darwin*) os="osx" ;;
-    MINGW*|MSYS*|CYGWIN*) os="win" ;;
-    *) os="linux" ;;
-  esac
-  case "$(uname -m)" in
-    x86_64|amd64) arch="x64" ;;
-    arm64|aarch64) arch="arm64" ;;
-    *) arch="x64" ;;
-  esac
-  echo "${os}-${arch}"
+    case "$(uname -m)" in
+        x86_64|amd64) echo "linux-x64" ;;
+        arm64|aarch64) echo "linux-arm64" ;;
+        *) die "Unsupported architecture $(uname -m); pass a RID explicitly." ;;
+    esac
 }
 
-RID="${1:-$(guess_rid)}"
-# Preserve the existing [RID] [TFM] syntax, and allow a leading framework.
-if [ "$#" -gt 0 ] && [ "$1" = "$RID" ]; then
-  case "$1" in net*|--framework|-f|-h|--help) RID="$(guess_rid)" ;; *) shift ;; esac
+RID=""
+# A first argument that is not a framework or an option is the RID.
+if [ "$#" -gt 0 ]; then
+    case "$1" in
+        net*|--framework|-f|-h|--help) ;;
+        -*) die "Unknown option: $1" ;;
+        *) RID="$1"; shift ;;
+    esac
 fi
-. "$SCRIPT_DIR/../common/framework.sh"
+[ -n "$RID" ] || RID="$(guess_rid)"
+# shellcheck source=../common/framework.sh
+. "$REPO_ROOT/scripts/common/framework.sh"
 resolve_framework "$@"
 shift "$FRAMEWORK_ARGS"
-[ "$#" -eq 0 ] || { echo "Unexpected argument: $1" >&2; exit 1; }
+[ "$#" -eq 0 ] || die "Unexpected argument: $1"
 OUT="$REPO_ROOT/dist/desktop/$RID"
 
 echo "Publishing mux Desktop"
@@ -53,16 +58,16 @@ echo "  output:  $OUT"
 echo
 
 dotnet publish "$PROJECT" \
-  -c Release \
-  -f "$TFM" \
-  -p:TargetFrameworks="$TFM" \
-  -r "$RID" \
-  --self-contained true \
-  -p:PublishSingleFile=true \
-  -p:IncludeNativeLibrariesForSelfExtract=true \
-  -p:DebugType=none \
-  -o "$OUT"
+    -c Release \
+    -f "$TFM" \
+    -p:TargetFrameworks="$TFM" \
+    -r "$RID" \
+    --self-contained true \
+    -p:PublishSingleFile=true \
+    -p:IncludeNativeLibrariesForSelfExtract=true \
+    -p:DebugType=none \
+    -o "$OUT"
 
 echo
 echo "Done. Self-contained (unsigned) build in: $OUT"
-echo "Distribute the whole folder; the launcher is 'Mux.Desktop' (or 'Mux.Desktop.exe' on Windows)."
+echo "Distribute the whole folder; the launcher is 'Mux.Desktop' ('Mux.Desktop.exe' for win-* runtimes)."

@@ -1,5 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
+where dotnet >nul 2>nul
+if errorlevel 1 (
+    echo Error: dotnet was not found on PATH. Install the .NET SDK: https://dotnet.microsoft.com/download 1>&2
+    exit /b 1
+)
 REM Build mux Windows installers and drop them under installers\<version>\. Native installer
 REM formats are OS-locked, so this builds the Windows channels only (Inno .exe, winget, choco,
 REM scoop). Run scripts/macos or scripts/linux build-installers.sh on macOS and Linux for their installers, or push a version
@@ -34,6 +39,8 @@ if /i "%~1"=="--dry-run" (
   goto usage
 ) else if /i "%~1"=="--help" (
   goto usage
+) else if "%FIRST:~0,1%"=="-" (
+  goto unknown_option
 ) else (
   set "VERSION=%~1"
 )
@@ -63,7 +70,7 @@ if not defined VERSION (
   )
 )
 if not defined VERSION (
-  echo error: could not determine version. Pass it explicitly: scripts\windows\build-installers.bat 0.10.0 1>&2
+  echo Error: could not determine version. Pass it explicitly: scripts\windows\build-installers.bat 0.10.0 1>&2
   exit /b 1
 )
 
@@ -85,13 +92,21 @@ REM --- Build the orchestrator once -------------------------------------------
 echo Building Mux.Publisher...
 dotnet build "%PUBLISHER%" -c Release -f %TFM% -p:TargetFrameworks=%TFM% -v quiet -nologo
 if errorlevel 1 (
-  echo error: failed to build Mux.Publisher. 1>&2
+  echo Error: failed to build Mux.Publisher. 1>&2
   exit /b 1
 )
 
 REM --- Enumerate and run the Windows channels, in dependency order -----------
 set "CHANNELS="
-for /f "usebackq delims=" %%c in (`dotnet "%PUB_DLL%" --channels-for windows --repo "%REPO_ROOT%"`) do set "CHANNELS=%%c"
+set "CHANNELS_FILE=%TEMP%\mux-channels-%RANDOM%%RANDOM%.txt"
+dotnet "%PUB_DLL%" --channels-for windows --repo "%REPO_ROOT%" > "%CHANNELS_FILE%"
+if errorlevel 1 (
+  del "%CHANNELS_FILE%" >nul 2>nul
+  echo Error: Mux.Publisher could not list the Windows channels. 1>&2
+  exit /b 1
+)
+for /f "usebackq delims=" %%c in ("%CHANNELS_FILE%") do set "CHANNELS=%%c"
+del "%CHANNELS_FILE%" >nul 2>nul
 if not defined CHANNELS (
   echo No enabled Windows channels in publisher.json.
   exit /b 0
@@ -112,12 +127,13 @@ for %%x in (%CHANNELS%) do (
 
 REM --- Summary ---------------------------------------------------------------
 echo -------------------------------------------------------------------
-if defined DRYRUN (
-  echo Dry run complete for windows ^(nothing built^).
-) else (
-  echo Done. Windows installers are under: %OUT%
-  dir /s /b "%OUT%" 2>nul | findstr /v /i "\\publish\\"
-)
+if defined DRYRUN goto summary_dryrun
+echo Done. Windows installers are under: %OUT%
+dir /s /b "%OUT%" 2>nul | findstr /v /i "\\publish\\"
+goto summary_failed
+:summary_dryrun
+echo Dry run complete for windows ^(nothing built^).
+:summary_failed
 if defined FAILED (
   echo.
   echo Channels that failed:%FAILED%
@@ -128,6 +144,10 @@ echo Note: this built only Windows installers. Run scripts/macos or scripts/linu
 echo their installers - or push a "v%VERSION%" tag to build all three via GitHub Actions.
 if defined FAILED exit /b 1
 exit /b 0
+
+:unknown_option
+echo Error: Unknown option: %1 1>&2
+exit /b 1
 
 :usage
 echo Usage: scripts\windows\build-installers.bat [VERSION] [--framework net8.0^|net10.0] [--dry-run]

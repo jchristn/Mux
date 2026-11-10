@@ -1,40 +1,84 @@
 #!/usr/bin/env bash
-set -e
+# Uninstall, rebuild and reinstall the mux global tool (Mux.Cli) from this checkout.
+# On macOS this also builds and installs ~/Applications/Mux.app and ~/Applications/Mux Agent.app.
+# The package is built under artifacts/tool-packages/<framework>.
+# Usage: ./scripts/macos/reinstall-tool.sh [net8.0|net10.0]  (or --framework <tfm>; MUX_TFM is also honored)
+set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-PACKAGE_SOURCE="$ROOT_DIR/artifacts/tool-packages"
-cd "$ROOT_DIR"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC2034 # not every script needs REPO_ROOT
+REPO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
+die() { echo "Error: $*" >&2; exit 1; }
 
-. "$ROOT_DIR/scripts/common/framework.sh"
+if [ "$(uname -s)" != Darwin ]; then
+    die "This script is for macOS. Use scripts/linux on Linux, scripts/wsl2 (or scripts/wsl) on WSL, or scripts\\windows on Windows."
+fi
+
+ORIGINAL_DOTNET_ROOT="${DOTNET_ROOT:-}"
+ORIGINAL_PATH="$PATH"
+command -v dotnet >/dev/null 2>&1 || die "dotnet was not found on PATH. Install the .NET SDK: https://dotnet.microsoft.com/download"
+# shellcheck source=../common/framework.sh
+. "$REPO_ROOT/scripts/common/framework.sh"
 resolve_framework "$@"
 shift "$FRAMEWORK_ARGS"
-FRAMEWORK="$TFM"
-[ "$#" -eq 0 ] || { echo "Unexpected argument: $1" >&2; exit 1; }
+[ "$#" -eq 0 ] || die "Unexpected argument: $1"
 
-echo "Removing mux..."
-dotnet tool uninstall -g Mux.Cli 2>/dev/null || true
+# True when a process named mux (the installed global tool) is running.
+mux_running() { pgrep -u "$(id -u)" -x mux >/dev/null 2>&1; }
+# True when the Mux.Cli global tool is installed.
+tool_installed() {
+    dotnet tool list -g 2>/dev/null | awk 'tolower($1) == "mux.cli" { found = 1 } END { exit !found }'
+}
+
+PACKAGE_SOURCE="$REPO_ROOT/artifacts/tool-packages/$TFM"
+
+echo "mux tool reinstall (macOS, $TFM)"
+echo "[1/6] Checking for running mux processes..."
+if mux_running; then
+    die "A running mux process is using the global tool. Exit all mux sessions (or run scripts/macos/kill-mux.sh) and try again."
+fi
+# The apps are replaced in the last step; check now so a running app cannot leave a half-done install.
+for app in "Mux" "Mux Agent"; do
+    if pgrep -u "$(id -u)" -f "$HOME/Applications/$app.app/Contents/MacOS/" >/dev/null 2>&1; then
+        die "$app is running. Quit it (or run scripts/macos/kill-mux.sh) and try again."
+    fi
+done
+echo "[2/6] Removing the existing mux global tool..."
+if tool_installed; then
+    dotnet tool uninstall -g Mux.Cli
+else
+    echo "mux is not installed; continuing."
+fi
+echo "[3/6] Building the mux package..."
 rm -rf "$PACKAGE_SOURCE"
 mkdir -p "$PACKAGE_SOURCE"
-echo "Building mux for $FRAMEWORK..."
-dotnet pack src/Mux.Cli/Mux.Cli.csproj --configuration Release -p:TargetFrameworks="$FRAMEWORK" --output "$PACKAGE_SOURCE"
-echo "Installing mux..."
-dotnet tool install -g --source "$PACKAGE_SOURCE" --framework "$FRAMEWORK" --disable-parallel Mux.Cli
-# dotnet tool install puts mux in ~/.dotnet/tools, which is often not on PATH yet.
+dotnet pack "$REPO_ROOT/src/Mux.Cli/Mux.Cli.csproj" --configuration Release -p:TargetFrameworks="$TFM" --output "$PACKAGE_SOURCE"
+echo "[4/6] Installing the mux global tool..."
+dotnet tool install -g --source "$PACKAGE_SOURCE" --framework "$TFM" --disable-parallel Mux.Cli
+echo "[5/6] Verifying the mux command..."
 if command -v mux >/dev/null 2>&1; then
     mux -v
 elif [ -x "$HOME/.dotnet/tools/mux" ]; then
     "$HOME/.dotnet/tools/mux" -v
-    echo "Note: $HOME/.dotnet/tools is not on PATH, so new shells will not find 'mux'." >&2
-    echo "Add this line to your shell profile (~/.profile, ~/.bashrc or ~/.zprofile):" >&2
-    echo '  export PATH="$PATH:$HOME/.dotnet/tools"' >&2
 else
-    echo "mux was installed, but it is not on PATH or in $HOME/.dotnet/tools." >&2
-    exit 1
+    die "mux was installed, but it is not on PATH or in $HOME/.dotnet/tools."
 fi
-
-if [ "$(uname -s)" = Darwin ]; then
-    REPO_ROOT="$ROOT_DIR"
-    . "$ROOT_DIR/scripts/macos/app-bundle.sh"
-    install_macos_app desktop
-    install_macos_app agent
+# 'dotnet tool install -g' puts mux in ~/.dotnet/tools, and a user-local .NET in ~/.dotnet also
+# needs DOTNET_ROOT, or new shells cannot run mux.
+case ":$ORIGINAL_PATH:" in
+    *":$HOME/.dotnet/tools:"*) ;;
+    *)
+        echo "Note: $HOME/.dotnet/tools is not on your PATH, so new shells will not find 'mux'." >&2
+        echo "Add this line to ~/.zprofile:" >&2
+        echo '  export PATH="$PATH:$HOME/.dotnet/tools"' >&2 ;;
+esac
+if [ -z "$ORIGINAL_DOTNET_ROOT" ] && [ "$(command -v dotnet)" = "$HOME/.dotnet/dotnet" ]; then
+    echo "Note: .NET is installed in ~/.dotnet, so 'mux' also needs DOTNET_ROOT. Add this line to ~/.zprofile:" >&2
+    echo '  export DOTNET_ROOT="$HOME/.dotnet"' >&2
 fi
+echo "[6/6] Installing the macOS apps..."
+# shellcheck source=app-bundle.sh
+. "$SCRIPT_DIR/app-bundle.sh"
+install_macos_app desktop
+install_macos_app agent
+echo "Done."

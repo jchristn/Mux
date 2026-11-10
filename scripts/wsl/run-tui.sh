@@ -1,16 +1,33 @@
-#!/usr/bin/env sh
-# Build and run the mux terminal UI from source. WSL 1 counterpart of scripts/linux/run-tui.sh.
-# The TUI runs against the directory you launch this script from.
+#!/usr/bin/env bash
+# Build and run the mux terminal UI (TUI) from source instead of the installed global 'mux' tool.
+# 'dotnet build' does NOT update the global tool; that needs reinstall-tool.sh. The TUI runs
+# against the directory you start this script from.
 # Usage: ./scripts/wsl/run-tui.sh [net8.0|net10.0]
-set -eu
-SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC2034 # not every script needs REPO_ROOT
 REPO_ROOT="$(CDPATH='' cd -- "$SCRIPT_DIR/../.." && pwd)"
+die() { echo "Error: $*" >&2; exit 1; }
+
 # shellcheck disable=SC2034 # read by _wsl-common.sh
-WSL_FLAVOR=wsl   # "wsl" in scripts/wsl, "wsl2" in scripts/wsl2
+WSL_FLAVOR=wsl
 # shellcheck source=_wsl-common.sh
 . "$SCRIPT_DIR/_wsl-common.sh"
 wsl_require
 wsl_sanitize_path
 wsl_check_repo "$REPO_ROOT"
+
 wsl_require_cmd dotnet "Install the .NET SDK inside WSL: https://learn.microsoft.com/dotnet/core/install/linux"
-wsl_run "$SCRIPT_DIR/../linux/run-tui.sh" "$@"
+# shellcheck source=../common/framework.sh
+. "$REPO_ROOT/scripts/common/framework.sh"
+resolve_framework "$@"
+shift "$FRAMEWORK_ARGS"
+[ "$#" -eq 0 ] || die "Unexpected argument: $1"
+# Running mux from source can start the agent (the TUI and desktop app launch it when none is running),
+# and the agent registers itself to start at login on its first run unless this marker exists. Login
+# startup is run-at-startup.sh's job, so write the marker to keep source runs from registering a build.
+MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
+mkdir -p "$MUX_CONFIG_HOME"
+[ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
+dotnet run --project "$REPO_ROOT/src/Mux.Cli/Mux.Cli.csproj" --framework "$TFM" -p:TargetFrameworks="$TFM"

@@ -1,6 +1,7 @@
 #!/bin/sh
 # Source this helper, then shift by FRAMEWORK_ARGS to preserve application arguments.
 # CLI selection takes precedence over MUX_TFM; otherwise prefer an installed .NET 10 SDK.
+# shellcheck disable=SC2034 # FRAMEWORK_ARGS and TFM are read by the scripts that source this file
 resolve_framework() {
     FRAMEWORK_ARGS=0
     TFM="${MUX_TFM:-}"
@@ -17,7 +18,15 @@ resolve_framework() {
     esac
     case "$TFM" in
         '')
-            if dotnet --list-sdks 2>/dev/null | grep -q '^10\.'; then TFM=net10.0; else TFM=net8.0; fi ;;
+            # Capture first: under 'set -o pipefail', 'dotnet --list-sdks | grep -q' can fail with SIGPIPE
+            # when grep exits early, which would silently pick net8.0 on a .NET 10 machine.
+            _mux_sdks="$(dotnet --list-sdks 2>/dev/null || true)"
+            case "
+$_mux_sdks" in
+                *"
+10."*) TFM=net10.0 ;;
+                *) TFM=net8.0 ;;
+            esac ;;
         net8|net8.0) TFM=net8.0 ;;
         net10|net10.0) TFM=net10.0 ;;
         *) echo "Unsupported framework '$TFM'. Supported frameworks: net8.0, net10.0." >&2; return 1 ;;
