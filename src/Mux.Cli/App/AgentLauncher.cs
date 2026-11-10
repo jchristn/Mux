@@ -45,12 +45,8 @@ namespace Mux.Cli.App
                     return;
                 }
 
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = executable,
-                    UseShellExecute = true, // detach as an independent tray/GUI process, not a child console
-                    WorkingDirectory = Path.GetDirectoryName(executable) ?? Environment.CurrentDirectory
-                });
+                // Detached, with the agent's console output kept off this terminal (see AgentProcessStarter).
+                Mux.Core.Startup.AgentProcessStarter.Start(executable);
             }
             catch (Exception)
             {
