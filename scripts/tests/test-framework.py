@@ -73,12 +73,12 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
     bin_dir.mkdir()
     for name in ['dotnet', 'uname', 'pgrep', 'pkill', 'mux', 'cmd.exe', 'wslpath', 'wscript.exe', 'launchctl', 'systemctl']:
         pass
-    (bin_dir / 'sudo').write_text('#!/bin/sh\nexec "$@"\n')
+    (bin_dir / 'sudo').write_text('#!/bin/sh\n[ "$1" = -v ] && exit 0\nexec "$@"\n')
     (bin_dir / 'apt-cache').write_text('#!/bin/sh\nprintf "libicu-dev\\nlibicu74\\nlibicu72\\n"\n')
     (bin_dir / 'apt-get').write_text(
         '#!/bin/sh\n'
         'printf "apt-get %s\\n" "$*" >> "$APT_LOG"\n'
-        'case "$1" in install) : > "$APT_DONE" ;; esac\n')
+        'case " $* " in *" install "*) : > "$APT_DONE" ;; esac\n')
     for name in ['sudo', 'apt-cache', 'apt-get']:
         (bin_dir / name).chmod(0o755)
     for name in ['dotnet', 'uname', 'pgrep', 'pkill', 'mux', 'cmd.exe', 'wslpath', 'wscript.exe', 'launchctl', 'systemctl']:
@@ -322,7 +322,7 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
             p, calls = run(platform, script, MUX_LDCONFIG=fake, WSL_LDCONFIG=fake)
             assert p.returncode == 0, (platform, script, p.stderr)
             log_text = apt_log()
-            assert 'apt-get update -qq' in log_text, log_text
+            assert 'update' in log_text and 'DPkg::Lock::Timeout' in log_text, log_text
             for pkg in want:
                 assert pkg in log_text, (platform, script, pkg, log_text)
             optional = 'xclip' in log_text, 'wslu' in log_text
