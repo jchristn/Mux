@@ -151,7 +151,7 @@ wsl_resolve_local_url() {
     [ "$(wsl_version)" = 2 ] || { printf '%s\n' "$_wsl_url"; return 0; }
     command -v curl >/dev/null 2>&1 || { printf '%s\n' "$_wsl_url"; return 0; }
     case "$_wsl_url" in
-        *://127.0.0.1:*|*://127.0.0.1/*|*://localhost:*|*://localhost/*) ;;
+        *://127.0.0.1|*://127.0.0.1:*|*://127.0.0.1/*|*://localhost|*://localhost:*|*://localhost/*) ;;
         *) printf '%s\n' "$_wsl_url"; return 0 ;;
     esac
     if curl -s -o /dev/null --max-time 2 "$_wsl_url" 2>/dev/null; then printf '%s\n' "$_wsl_url"; return 0; fi
