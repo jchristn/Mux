@@ -164,8 +164,10 @@ WSL 1 they need an X server on Windows with `DISPLAY` set.
 On Linux and WSL, the desktop app and the agent need the X11 client libraries Avalonia loads, and
 every .NET program needs ICU. Stock WSL images and minimal installs often lack them (WSLg provides only
 the display), and the failure shows up only at startup as `Unable to load shared library 'libICE.so.6'`
-or `Couldn't find a valid ICU package`. The scripts check for them and print the install command;
-on Ubuntu (including WSL) that is:
+or `Couldn't find a valid ICU package`. `install-tool`, `reinstall-tool` and `run-at-startup` install
+whatever is missing with apt-get (or dnf), through sudo; set `INSTALL_SYSTEM_PACKAGES=0` to have them
+print the command instead. The launchers (`run-agent`, `run-desktop`, `run-tui`) only check and say
+what is missing. On Ubuntu (including WSL) the packages are:
 
 ```bash
 sudo apt install libx11-6 libice6 libsm6 libxext6 libxrandr2 libxi6 libxcursor1 libxfixes3 libfontconfig1 libicu74

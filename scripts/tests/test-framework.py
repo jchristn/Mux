@@ -72,6 +72,16 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
     bin_dir = temp / 'bin'
     bin_dir.mkdir()
     for name in ['dotnet', 'uname', 'pgrep', 'pkill', 'mux', 'cmd.exe', 'wslpath', 'wscript.exe', 'launchctl', 'systemctl']:
+        pass
+    (bin_dir / 'sudo').write_text('#!/bin/sh\nexec "$@"\n')
+    (bin_dir / 'apt-cache').write_text('#!/bin/sh\nprintf "libicu-dev\\nlibicu74\\nlibicu72\\n"\n')
+    (bin_dir / 'apt-get').write_text(
+        '#!/bin/sh\n'
+        'printf "apt-get %s\\n" "$*" >> "$APT_LOG"\n'
+        'case "$1" in install) : > "$APT_DONE" ;; esac\n')
+    for name in ['sudo', 'apt-cache', 'apt-get']:
+        (bin_dir / name).chmod(0o755)
+    for name in ['dotnet', 'uname', 'pgrep', 'pkill', 'mux', 'cmd.exe', 'wslpath', 'wscript.exe', 'launchctl', 'systemctl']:
         (bin_dir / name).write_text(FAKE)
         (bin_dir / name).chmod(0o755)
     (bin_dir / 'host/fxr').mkdir(parents=True)  # the fake dotnet looks like a real .NET install root
@@ -79,7 +89,8 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
     home = temp / 'home'
     home.mkdir()
     base_env = dict(os.environ, PATH=f'{bin_dir}:/usr/bin:/bin', CALL_LOG=str(log), HOME=str(home),
-                    WSL_SKIP_CHECK='1', DISPLAY=':0', WSL_DISTRO_NAME='Test', MOCK_APPDATA=str(temp / 'appdata'))
+                    WSL_SKIP_CHECK='1', DISPLAY=':0', WSL_DISTRO_NAME='Test', MOCK_APPDATA=str(temp / 'appdata'),
+                    APT_LOG=str(temp / 'apt.log'), APT_DONE=str(temp / 'apt.done'))
     for key in ['MUX_TFM', 'DOTNET_ROOT', 'WAYLAND_DISPLAY']:
         base_env.pop(key, None)
 
@@ -270,29 +281,69 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
     AVALONIA = ['libX11.so.6', 'libICE.so.6', 'libSM.so.6', 'libXext.so.6', 'libXrandr.so.2', 'libXi.so.6',
                 'libXcursor.so.1', 'libXfixes.so.3', 'libfontconfig.so.1']
 
+    every = [ICU] + ['\t%s (libc6,x86-64) => /lib/x86_64-linux-gnu/%s' % (n, n) for n in AVALONIA]
+
     def ldconfig(tag, lines):
         f = temp / ('fake-ldconfig-' + tag)
-        f.write_text('#!/bin/sh\ncat <<"EOF"\n' + '\n'.join(lines) + '\nEOF\n')
+        f.write_text('#!/bin/sh\nif [ -f "$APT_DONE" ]; then cat <<"EOF"\n' + '\n'.join(every) + '\nEOF\nexit 0\nfi\n'
+                     'cat <<"EOF"\n' + '\n'.join(lines) + '\nEOF\n')
         f.chmod(0o755)
         return str(f)
+
+    def apt_reset():
+        (temp / 'apt.log').unlink(missing_ok=True)
+        (temp / 'apt.done').unlink(missing_ok=True)
+
+    def apt_log():
+        return (temp / 'apt.log').read_text() if (temp / 'apt.log').exists() else ''
     full = ldconfig('full', [ICU] + ['\t%s (libc6,x86-64) => /lib/x86_64-linux-gnu/%s' % (n, n) for n in AVALONIA])
     no_gui = ldconfig('nogui', [ICU, '\tlibICE.so.6 (libc6) => /lib/i386-linux-gnu/libICE.so.6'])  # wrong arch only
     no_icu = ldconfig('noicu', ['\t%s (libc6,x86-64) => /lib/x86_64-linux-gnu/%s' % (n, n) for n in AVALONIA])
     for platform in ['linux', 'wsl', 'wsl2']:
+        # Launchers only check: they stop before building and never install anything.
         for fake, script, ok, text in [
                 (full, 'run-agent', True, None), (no_gui, 'run-agent', False, 'cannot start without'),
-                (no_gui, 'run-desktop', False, 'libICE.so.6'), (no_gui, 'run-at-startup', False, 'libfontconfig1'),
-                (no_gui, 'run-tui', True, 'cannot start until'), (no_gui, 'install-tool', True, None),
-                (no_icu, 'run-tui', False, 'needs ICU'), (no_icu, 'install-tool', False, 'needs ICU')]:
+                (no_gui, 'run-desktop', False, 'libICE.so.6'),
+                (no_gui, 'run-tui', True, 'cannot start until'), (no_icu, 'run-tui', False, 'needs ICU')]:
+            apt_reset()
             p, calls = run(platform, script, MUX_LDCONFIG=fake, WSL_LDCONFIG=fake)
             assert (p.returncode == 0) == ok, (platform, script, fake, p.stderr)
             if text:
                 assert text in p.stderr, (platform, script, p.stderr)
             if not ok:
                 assert not [c for c in calls if c[1] in ('run', 'build', 'pack')], (platform, script, calls)
+            assert 'install' not in apt_log(), (platform, script, apt_log())
             count += 1
-        p, _ = run(platform, 'install-tool', MUX_LDCONFIG=full, WSL_LDCONFIG=full)
-        assert 'copy to clipboard will not work' in p.stderr and 'xclip' in p.stderr, p.stderr
+        # Install-type scripts install what is missing, then carry on.
+        for fake, script, want in [(no_gui, 'install-tool', ['libice6', 'libfontconfig1']),
+                                   (no_icu, 'reinstall-tool', ['libicu74']),
+                                   (no_gui, 'run-at-startup', ['libice6', 'libx11-6'])]:
+            apt_reset()
+            p, calls = run(platform, script, MUX_LDCONFIG=fake, WSL_LDCONFIG=fake)
+            assert p.returncode == 0, (platform, script, p.stderr)
+            log_text = apt_log()
+            assert 'apt-get update -qq' in log_text, log_text
+            for pkg in want:
+                assert pkg in log_text, (platform, script, pkg, log_text)
+            optional = 'xclip' in log_text, 'wslu' in log_text
+            if script != 'run-at-startup':
+                assert optional[0], log_text                      # clipboard for the TUI
+                assert optional[1] == (platform != 'linux'), log_text  # wslu only under WSL
+            count += 1
+        # Nothing missing: no package manager call at all.
+        apt_reset()
+        (temp / 'apt.done').write_text('')
+        p, _ = run(platform, 'run-at-startup', MUX_LDCONFIG=full, WSL_LDCONFIG=full)
+        assert p.returncode == 0 and apt_log() == '', apt_log()
+        # INSTALL_SYSTEM_PACKAGES=0: report and stop when required packages are missing.
+        apt_reset()
+        p, calls = run(platform, 'install-tool', MUX_LDCONFIG=no_gui, WSL_LDCONFIG=no_gui, INSTALL_SYSTEM_PACKAGES='0')
+        assert p.returncode != 0 and 'sudo apt install' in p.stderr and apt_log() == '', p.stderr
+        assert not [c for c in calls if c[1] == 'pack'], calls
+        # -h/--help never installs anything.
+        apt_reset()
+        p, _ = run(platform, 'install-tool', '--help', MUX_LDCONFIG=no_gui, WSL_LDCONFIG=no_gui)
+        assert p.returncode == 0 and apt_log() == '', apt_log()
 
     # WSL apps get the Windows PATH entries back (clip.exe, explorer.exe, wslview).
     path_log = temp / 'path.log'

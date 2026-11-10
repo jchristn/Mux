@@ -21,9 +21,13 @@ wsl_require
 wsl_sanitize_path
 wsl_check_repo "$REPO_ROOT"
 
-wsl_require_cmd dotnet "Install the .NET SDK inside WSL: https://learn.microsoft.com/dotnet/core/install/linux"
 # shellcheck source=../common/framework.sh
 . "$REPO_ROOT/scripts/common/framework.sh"
+# Print the help before touching the system.
+case "${1:-}" in -h|--help) resolve_framework "$1" ;; esac
+# Install the system packages mux needs when they are missing (INSTALL_SYSTEM_PACKAGES=0 to skip).
+wsl_install_deps "mux" icu gui
+wsl_require_cmd dotnet "Install the .NET SDK inside WSL: https://learn.microsoft.com/dotnet/core/install/linux"
 resolve_framework "$@"
 shift "$FRAMEWORK_ARGS"
 [ "$#" -eq 0 ] || die "Unexpected argument: $1"

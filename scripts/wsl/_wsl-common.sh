@@ -351,6 +351,87 @@ wsl_check_clipboard() {
     wsl_log "$(wsl_install_hint xclip xclip)"
 }
 
+# Installs the system packages an app needs, inside this distro, when they are missing: install
+# scripts call it so the app does not fail later at startup. Uses apt-get (Debian/Ubuntu) or dnf
+# (Fedora), through sudo unless running as root. INSTALL_SYSTEM_PACKAGES=0 turns it into a report.
+# Usage: wsl_install_deps "<app name>" [icu] [gui] [clipboard] [browser]
+#   icu        ICU for .NET (required)                 gui      the Avalonia libraries (required)
+#   clipboard  xclip when no clipboard tool exists    browser  wslu + xdg-utils, to open links in Windows
+# Required packages that cannot be installed are fatal; optional ones only warn.
+wsl_install_deps() {
+    _wd_app="$1"; shift
+    _wd_cache="$(wsl_ldconfig_cache)"
+    _wd_req_deb=""; _wd_req_rpm=""; _wd_opt_deb=""; _wd_opt_rpm=""; _wd_apt_icu=0
+    for _wd_want in "$@"; do
+        case "$_wd_want" in
+            icu)
+                case "${DOTNET_SYSTEM_GLOBALIZATION_INVARIANT:-}" in 1|true|TRUE|True) continue ;; esac
+                if [ -n "$_wd_cache" ] && ! wsl_have_lib "$_wd_cache" "libicuuc.so."; then
+                    _wd_apt_icu=1; _wd_req_rpm="$_wd_req_rpm libicu"
+                fi ;;
+            gui)
+                [ -n "$_wd_cache" ] || continue
+                for _wd_e in $WSL_AVALONIA_LIBS; do
+                    wsl_have_lib "$_wd_cache" "${_wd_e%%:*}" && continue
+                    _wd_r="${_wd_e#*:}"
+                    _wd_req_deb="$_wd_req_deb ${_wd_r%%:*}"; _wd_req_rpm="$_wd_req_rpm ${_wd_r#*:}"
+                done ;;
+            clipboard)
+                if ! command -v wl-copy >/dev/null 2>&1 && ! command -v xclip >/dev/null 2>&1 && ! command -v xsel >/dev/null 2>&1; then
+                    _wd_opt_deb="$_wd_opt_deb xclip"; _wd_opt_rpm="$_wd_opt_rpm xclip"
+                fi ;;
+            browser)
+                if ! command -v wslview >/dev/null 2>&1; then _wd_opt_deb="$_wd_opt_deb wslu"; _wd_opt_rpm="$_wd_opt_rpm wslu"; fi
+                if ! command -v xdg-open >/dev/null 2>&1; then _wd_opt_deb="$_wd_opt_deb xdg-utils"; _wd_opt_rpm="$_wd_opt_rpm xdg-utils"; fi ;;
+            *) wsl_die "wsl_install_deps: unknown package group: $_wd_want" ;;
+        esac
+    done
+    [ -n "$_wd_req_deb$_wd_req_rpm$_wd_opt_deb$_wd_opt_rpm" ] || [ "$_wd_apt_icu" = 1 ] || return 0
+
+    if command -v apt-get >/dev/null 2>&1; then _wd_pm=apt; elif command -v dnf >/dev/null 2>&1; then _wd_pm=dnf; else _wd_pm=""; fi
+    if [ "$(id -u)" = 0 ]; then _wd_sudo=""; elif command -v sudo >/dev/null 2>&1; then _wd_sudo=sudo; else _wd_sudo=none; fi
+    if [ "${INSTALL_SYSTEM_PACKAGES:-1}" = 0 ] || [ -z "$_wd_pm" ] || [ "$_wd_sudo" = none ]; then
+        _wd_icu_deb=""; [ "$_wd_apt_icu" = 1 ] && _wd_icu_deb=" libicu-dev"
+        wsl_log "$_wd_app needs system packages that are not installed, and they were not installed automatically"
+        wsl_log "(INSTALL_SYSTEM_PACKAGES=0, no apt-get/dnf, or no sudo). Install them with:"
+        wsl_log "$(wsl_install_hint "${_wd_req_deb# }$_wd_icu_deb$_wd_opt_deb" "${_wd_req_rpm# }$_wd_opt_rpm")"
+        if [ -n "$_wd_req_deb$_wd_req_rpm" ] || [ "$_wd_apt_icu" = 1 ]; then exit 1; fi
+        return 0
+    fi
+
+    if [ "$_wd_pm" = apt ]; then
+        wsl_log "Installing the system packages $_wd_app needs (apt-get; sudo may ask for your password)..."
+        # shellcheck disable=SC2086 # empty or "sudo"
+        $_wd_sudo apt-get update -qq || wsl_die "apt-get update failed."
+        if [ "$_wd_apt_icu" = 1 ]; then
+            _wd_icu="$(apt-cache pkgnames libicu 2>/dev/null | awk '/^libicu[0-9]+(t64)?$/' | sort -V | tail -n 1 || true)"
+            _wd_req_deb="$_wd_req_deb ${_wd_icu:-libicu-dev}"
+        fi
+        if [ -n "$_wd_req_deb" ]; then
+            # shellcheck disable=SC2086 # word-split package lists on purpose
+            DEBIAN_FRONTEND=noninteractive $_wd_sudo apt-get install -y -q $_wd_req_deb \
+                || wsl_die "Could not install the required packages:$_wd_req_deb"
+        fi
+        if [ -n "$_wd_opt_deb" ]; then
+            # shellcheck disable=SC2086 # word-split package lists on purpose
+            DEBIAN_FRONTEND=noninteractive $_wd_sudo apt-get install -y -q $_wd_opt_deb \
+                || wsl_log "Warning: could not install the optional packages:$_wd_opt_deb (copy to clipboard or opening links may not work)."
+        fi
+    else
+        wsl_log "Installing the system packages $_wd_app needs (dnf; sudo may ask for your password)..."
+        if [ -n "$_wd_req_rpm" ]; then
+            # shellcheck disable=SC2086 # word-split package lists on purpose
+            $_wd_sudo dnf install -y $_wd_req_rpm || wsl_die "Could not install the required packages:$_wd_req_rpm"
+        fi
+        if [ -n "$_wd_opt_rpm" ]; then
+            # shellcheck disable=SC2086 # word-split package lists on purpose
+            $_wd_sudo dnf install -y $_wd_opt_rpm \
+                || wsl_log "Warning: could not install the optional packages:$_wd_opt_rpm (copy to clipboard or opening links may not work)."
+        fi
+    fi
+    wsl_log "System packages for $_wd_app are installed."
+}
+
 # Prints the PATH to give an interactive app started from these scripts: the cleaned Linux PATH
 # first, then the Windows entries the cleanup removed, so clip.exe, explorer.exe, wslview and the
 # Windows browser stay reachable from inside the app (builds still use the cleaned PATH).
