@@ -437,7 +437,11 @@ namespace Mux.Cli.App
 
             if (showSplash)
             {
-                MuxBoxModal splash = new MuxBoxModal("mux", MuxBanner.SplashLines(Defaults.ProductVersion), "press any key to start", centered: true);
+                // Terminal.app draws block glyphs from the font with gaps between rows; there the wordmark is drawn
+                // as filled cells above the splash text instead.
+                MuxBoxModal splash = Mux.Core.Branding.BlockArt.TerminalMode() == Mux.Core.Branding.BlockArtMode.Cells
+                    ? new MuxBoxModal("mux", MuxBanner.SplashText(Defaults.ProductVersion), "press any key to start", centered: true, blockArt: MuxBanner.WordmarkLines())
+                    : new MuxBoxModal("mux", MuxBanner.SplashLines(Defaults.ProductVersion), "press any key to start", centered: true);
                 _SplashDuration = splashDuration ?? TimeSpan.FromSeconds(2.5);
                 _SplashModal = splash;
                 _App.Modals.Push(splash);

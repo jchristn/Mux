@@ -80,7 +80,9 @@ namespace Mux.Cli
                 // wordmark stays in the terminal scrollback after mux exits. Blank lines fence the art.
                 Console.WriteLine($"mux v{Defaults.ProductVersion} - AI agent for local and remote LLMs");
                 Console.WriteLine();
-                foreach (string row in MuxBanner.WordmarkLines())
+                // Terminal.app draws block glyphs from the font, leaving bands between rows, so there the
+                // wordmark is printed as reverse-video cells instead (MUX_BLOCK_ART overrides the choice).
+                foreach (string row in MuxBanner.ScrollbackLines(Mux.Core.Branding.BlockArt.TerminalMode()))
                 {
                     Console.WriteLine(row);
                 }

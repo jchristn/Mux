@@ -11,10 +11,16 @@ namespace Mux.Core.Branding
     /// columns. A terminal stretches the glyphs to fill each cell, which is why the TUI banner looks solid.
     /// Coordinates are in cells horizontally and half-rows vertically (a row is two half-rows); horizontally and
     /// vertically touching blocks are merged so rectangles share no internal edges.
+    /// Terminals that draw block elements from the font (macOS Terminal.app) show the same bands, so the TUI can
+    /// instead paint the art as background-coloured cells (<see cref="TerminalCells"/>, chosen by
+    /// <see cref="TerminalMode()"/>).
     /// </summary>
     public static class BlockArt
     {
         #region Public-Members
+
+        /// <summary>The environment variable that picks the terminal rendering: <c>cells</c> or <c>glyphs</c>.</summary>
+        public const string ModeVariable = "MUX_BLOCK_ART";
 
         /// <summary>The mux wordmark, as drawn by the TUI banner and the About windows.</summary>
         public static IReadOnlyList<string> Wordmark { get; } = new[]
@@ -60,6 +66,71 @@ namespace Mux.Core.Branding
             }
 
             return rectangles;
+        }
+
+        /// <summary>
+        /// The filled half-cells of block-character art, indexed [half-row, column].
+        /// </summary>
+        /// <param name="lines">The art, one string per row.</param>
+        /// <returns>True where a half-cell is filled.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="lines"/> is null.</exception>
+        public static bool[,] HalfCells(IReadOnlyList<string> lines)
+        {
+            ArgumentNullException.ThrowIfNull(lines);
+            return Grid(lines, out _, out _);
+        }
+
+        /// <summary>
+        /// The art as whole terminal cells at twice its size: each half-row becomes one terminal row and each column
+        /// two cells, so the shape keeps its proportions (the 19x3 wordmark becomes 38 columns by 6 rows). A terminal
+        /// paints a cell's background over the whole cell, so filling these cells never leaves the gaps that font
+        /// block glyphs do.
+        /// </summary>
+        /// <param name="lines">The art, one string per row.</param>
+        /// <returns>True where a cell is filled, indexed [row, column].</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="lines"/> is null.</exception>
+        public static bool[,] TerminalCells(IReadOnlyList<string> lines)
+        {
+            ArgumentNullException.ThrowIfNull(lines);
+            bool[,] half = Grid(lines, out int columns, out int halfRows);
+            bool[,] cells = new bool[halfRows, columns * 2];
+            for (int y = 0; y < halfRows; y++)
+            {
+                for (int x = 0; x < columns; x++)
+                {
+                    cells[y, x * 2] = half[y, x];
+                    cells[y, (x * 2) + 1] = half[y, x];
+                }
+            }
+
+            return cells;
+        }
+
+        /// <summary>
+        /// How this process's terminal should draw block art, from <see cref="ModeVariable"/> and <c>TERM_PROGRAM</c>.
+        /// </summary>
+        /// <returns>The rendering mode.</returns>
+        public static BlockArtMode TerminalMode()
+        {
+            return TerminalMode(Environment.GetEnvironmentVariable);
+        }
+
+        /// <summary>
+        /// How a terminal should draw block art. <see cref="ModeVariable"/> set to <c>cells</c> or <c>glyphs</c> wins;
+        /// otherwise macOS Terminal.app (<c>TERM_PROGRAM=Apple_Terminal</c>), which draws block elements from the font
+        /// and so shows bands between rows, gets cells, and every other terminal keeps glyphs. Exposed for tests.
+        /// </summary>
+        /// <param name="getEnvironment">Reads an environment variable (null when unset).</param>
+        /// <returns>The rendering mode.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="getEnvironment"/> is null.</exception>
+        public static BlockArtMode TerminalMode(Func<string, string?> getEnvironment)
+        {
+            ArgumentNullException.ThrowIfNull(getEnvironment);
+            string? chosen = getEnvironment(ModeVariable)?.Trim();
+            if (string.Equals(chosen, "cells", StringComparison.OrdinalIgnoreCase)) return BlockArtMode.Cells;
+            if (string.Equals(chosen, "glyphs", StringComparison.OrdinalIgnoreCase)) return BlockArtMode.Glyphs;
+            string? program = getEnvironment("TERM_PROGRAM")?.Trim();
+            return string.Equals(program, "Apple_Terminal", StringComparison.Ordinal) ? BlockArtMode.Cells : BlockArtMode.Glyphs;
         }
 
         /// <summary>The art's size: the widest row in cells, and the row count times two in half-rows.</summary>

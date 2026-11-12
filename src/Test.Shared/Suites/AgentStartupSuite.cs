@@ -179,6 +179,113 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual((0, 0, 2, 4), block[0], "one rectangle");
                         MuxAssert.AreEqual(0, BlockArt.Rectangles(new[] { "  ", "ab" }).Count, "other characters are blank");
                         return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "WordmarkTerminalCells", "Terminal cells are the wordmark at twice its size, 38x6, filled exactly where its rectangles are", (CancellationToken ct) =>
+                    {
+                        bool[,] cells = BlockArt.TerminalCells(BlockArt.Wordmark);
+                        MuxAssert.AreEqual(6, cells.GetLength(0), "one row per half-row");
+                        MuxAssert.AreEqual(38, cells.GetLength(1), "two cells per column");
+                        bool[,] covered = new bool[6, 38];
+                        foreach ((int x, int y, int w, int h) in BlockArt.Rectangles(BlockArt.Wordmark))
+                            for (int dy = 0; dy < h; dy++)
+                                for (int dx = 0; dx < w * 2; dx++) covered[y + dy, (x * 2) + dx] = true;
+                        for (int y = 0; y < 6; y++)
+                            for (int x = 0; x < 38; x++) MuxAssert.AreEqual(covered[y, x], cells[y, x], "cell " + x + "," + y);
+                        bool[,] half = BlockArt.HalfCells(new[] { "▀▄█ " });
+                        MuxAssert.IsTrue(half[0, 0] && !half[1, 0] && !half[0, 1] && half[1, 1] && half[0, 2] && half[1, 2] && !half[0, 3] && !half[1, 3], "half-cells of each glyph");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "DesktopInstalledLocationsPerOs", "Installed desktop paths match the install scripts on macOS, Linux/WSL, and Windows, per-user first", (CancellationToken ct) =>
+                    {
+                        IReadOnlyList<string> mac = DesktopLocator.InstalledLocations("macos", "/Users/u", _ => null);
+                        MuxAssert.AreEqual(2, mac.Count, "two mac paths");
+                        MuxAssert.AreEqual("/Users/u/Applications/Mux.app/Contents/MacOS/Mux.Desktop", Unix(mac[0]), "mac per-user");
+                        MuxAssert.AreEqual("/Applications/Mux.app/Contents/MacOS/Mux.Desktop", Unix(mac[1]), "mac system");
+                        IReadOnlyList<string> linux = DesktopLocator.InstalledLocations("linux", "/home/u", _ => null);
+                        MuxAssert.AreEqual("/home/u/.local/share/mux/apps/desktop/Mux.Desktop", Unix(linux[0]), "linux per-user");
+                        MuxAssert.AreEqual("/opt/mux/desktop/Mux.Desktop", Unix(linux[1]), "linux system");
+                        IReadOnlyList<string> xdg = DesktopLocator.InstalledLocations("linux", "/home/u", n => n == "XDG_DATA_HOME" ? "/data" : null);
+                        MuxAssert.AreEqual("/data/mux/apps/desktop/Mux.Desktop", Unix(xdg[0]), "XDG_DATA_HOME");
+                        Dictionary<string, string> env = new Dictionary<string, string> { ["LOCALAPPDATA"] = "C:/Users/u/AppData/Local", ["ProgramFiles"] = "C:/Program Files" };
+                        IReadOnlyList<string> windows = DesktopLocator.InstalledLocations("windows", "C:/Users/u", n => env.TryGetValue(n, out string? v) ? v : null);
+                        MuxAssert.AreEqual("C:/Users/u/AppData/Local/Programs/Mux/Desktop/Mux.Desktop.exe", Unix(windows[0]), "windows per-user");
+                        MuxAssert.AreEqual("C:/Program Files/Mux/Desktop/Mux.Desktop.exe", Unix(windows[1]), "windows system");
+                        MuxAssert.AreEqual(1, DesktopLocator.InstalledLocations("windows", "C:/Users/u", _ => null).Count, "no ProgramFiles, no system path");
+                        MuxAssert.AreEqual("C:/Users/u/AppData/Local/Programs/Mux/Desktop/Mux.Desktop.exe", Unix(DesktopLocator.InstalledLocations("windows", "C:/Users/u", _ => null)[0]), "LOCALAPPDATA defaults under home");
+                        MuxAssert.AreEqual(OperatingSystem.IsWindows() ? "Mux.Desktop.exe" : "Mux.Desktop", DesktopLocator.ExecutableName(), "executable name");
+                        MuxAssert.AreEqual("/Users/u/Applications/Mux Agent.app/Contents/MacOS/Mux.Agent", Unix(AgentLocator.InstalledLocations("macos", "/Users/u", _ => null)[0]), "the agent's paths are unchanged by the shared locator");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "DesktopSearchOrder", "MUX_DESKTOP, then beside the agent, then the same install, then per-user, then system", (CancellationToken ct) =>
+                    {
+                        // macOS: the agent in /Applications/Mux Agent.app opens /Applications/Mux.app first.
+                        string macAgent = "/Applications/Mux Agent.app/Contents/MacOS/";
+                        List<string> mac = DesktopLocator.Candidates("macos", "/Users/u", _ => null, macAgent).Select(Unix).ToList();
+                        MuxAssert.AreEqual(3, mac.Count, "beside plus two installs");
+                        MuxAssert.AreEqual("/Applications/Mux Agent.app/Contents/MacOS/Mux.Desktop", mac[0], "beside the agent");
+                        MuxAssert.AreEqual("/Applications/Mux.app/Contents/MacOS/Mux.Desktop", mac[1], "same install (system)");
+                        MuxAssert.AreEqual("/Users/u/Applications/Mux.app/Contents/MacOS/Mux.Desktop", mac[2], "then per-user");
+                        List<string> macUser = DesktopLocator.Candidates("macos", "/Users/u", _ => null, "/Users/u/Applications/Mux Agent.app/Contents/MacOS/").Select(Unix).ToList();
+                        MuxAssert.AreEqual("/Users/u/Applications/Mux.app/Contents/MacOS/Mux.Desktop", macUser[1], "per-user agent opens the per-user desktop");
+                        List<string> macCli = DesktopLocator.Candidates("macos", "/Users/u", _ => null, "/Users/u/.dotnet/tools/").Select(Unix).ToList();
+                        MuxAssert.AreEqual("/Users/u/Applications/Mux.app/Contents/MacOS/Mux.Desktop", macCli[1], "no shared install: per-user first");
+                        MuxAssert.AreEqual("/Applications/Mux.app/Contents/MacOS/Mux.Desktop", macCli[2], "then system");
+
+                        // Linux and WSL: the /opt agent opens the /opt desktop first.
+                        List<string> linux = DesktopLocator.Candidates("linux", "/home/u", _ => null, "/opt/mux/agent/").Select(Unix).ToList();
+                        MuxAssert.AreEqual("/opt/mux/desktop/Mux.Desktop", linux[1], "same install (system)");
+                        MuxAssert.AreEqual("/home/u/.local/share/mux/apps/desktop/Mux.Desktop", linux[2], "then per-user");
+                        List<string> linuxUser = DesktopLocator.Candidates("linux", "/home/u", _ => null, "/home/u/.local/share/mux/apps/agent/").Select(Unix).ToList();
+                        MuxAssert.AreEqual("/home/u/.local/share/mux/apps/desktop/Mux.Desktop", linuxUser[1], "per-user agent opens the per-user desktop");
+                        MuxAssert.AreEqual("/opt/mux/desktop/Mux.Desktop", linuxUser[2], "then system");
+
+                        // Windows: the Program Files agent opens the Program Files desktop first.
+                        Dictionary<string, string> env = new Dictionary<string, string> { ["LOCALAPPDATA"] = "C:/Users/u/AppData/Local", ["ProgramFiles"] = "C:/Program Files" };
+                        Func<string, string?> read = n => env.TryGetValue(n, out string? v) ? v : null;
+                        List<string> windows = DesktopLocator.Candidates("windows", "C:/Users/u", read, "C:/Program Files/Mux/Agent/").Select(Unix).ToList();
+                        MuxAssert.AreEqual("C:/Program Files/Mux/Agent/Mux.Desktop.exe", windows[0], "beside the agent");
+                        MuxAssert.AreEqual("C:/Program Files/Mux/Desktop/Mux.Desktop.exe", windows[1], "same install (system)");
+                        MuxAssert.AreEqual("C:/Users/u/AppData/Local/Programs/Mux/Desktop/Mux.Desktop.exe", windows[2], "then per-user");
+                        List<string> windowsUser = DesktopLocator.Candidates("windows", "C:/Users/u", read, "C:/Users/u/AppData/Local/Programs/Mux/Agent/").Select(Unix).ToList();
+                        MuxAssert.AreEqual("C:/Users/u/AppData/Local/Programs/Mux/Desktop/Mux.Desktop.exe", windowsUser[1], "per-user agent opens the per-user desktop");
+
+                        // MUX_DESKTOP comes before everything, as a file and then as a folder.
+                        List<string> overridden = DesktopLocator.Candidates("linux", "/home/u", n => n == DesktopLocator.OverrideVariable ? "/custom" : null, "/opt/mux/agent/").Select(Unix).ToList();
+                        MuxAssert.AreEqual("/custom", overridden[0], "override as a file");
+                        MuxAssert.AreEqual("/custom/Mux.Desktop", overridden[1], "override as a folder");
+                        MuxAssert.AreEqual("/opt/mux/agent/Mux.Desktop", overridden[2], "then beside the agent");
+                        MuxAssert.AreEqual(2, DesktopLocator.Candidates("linux", "/home/u", _ => null, null).Count, "no base directory: installs only");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "DesktopOverrideAndBundle", "MUX_DESKTOP finds the executable; a macOS copy is opened through its .app bundle", (CancellationToken ct) =>
+                    {
+                        string? previous = Environment.GetEnvironmentVariable(DesktopLocator.OverrideVariable);
+                        string dir = Path.Combine(Path.GetTempPath(), "mux-desktop-" + Guid.NewGuid().ToString("N"));
+                        try
+                        {
+                            Directory.CreateDirectory(dir);
+                            string exe = Path.Combine(dir, DesktopLocator.ExecutableName());
+                            File.WriteAllText(exe, string.Empty);
+                            Environment.SetEnvironmentVariable(DesktopLocator.OverrideVariable, exe);
+                            MuxAssert.AreEqual(exe, DesktopLocator.Locate(), "a file path");
+                            Environment.SetEnvironmentVariable(DesktopLocator.OverrideVariable, dir);
+                            MuxAssert.AreEqual(exe, DesktopLocator.Locate(), "a folder");
+                        }
+                        finally
+                        {
+                            Environment.SetEnvironmentVariable(DesktopLocator.OverrideVariable, previous);
+                            try { Directory.Delete(dir, true); } catch (Exception) { }
+                        }
+
+                        MuxAssert.AreEqual("/Applications/Mux.app", DesktopLocator.AppBundle("/Applications/Mux.app/Contents/MacOS/Mux.Desktop"), "system bundle");
+                        MuxAssert.AreEqual("/Users/u/Applications/Mux.app", DesktopLocator.AppBundle("/Users/u/Applications/Mux.app/Contents/MacOS/Mux.Desktop"), "per-user bundle");
+                        MuxAssert.IsNull(DesktopLocator.AppBundle("/opt/mux/desktop/Mux.Desktop"), "not a bundle");
+                        MuxAssert.IsNull(DesktopLocator.AppBundle(null), "null");
+                        return Task.CompletedTask;
                     })
                 });
         }

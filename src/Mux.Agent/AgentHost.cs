@@ -3,11 +3,11 @@ namespace Mux.Agent
     using System;
     using System.Diagnostics;
     using System.IO;
-    using System.Linq;
     using Mux.Core.Models;
     using Mux.Core.Sessions;
     using Mux.Core.Hosting;
     using Mux.Core.Settings;
+    using Mux.Core.Startup;
     using Mux.Server;
 
     /// <summary>
@@ -227,18 +227,28 @@ namespace Mux.Agent
         }
 
         /// <summary>
-        /// Launch the mux desktop application as an independent process. Best-effort; never throws. Locates
-        /// the desktop executable via the <c>MUX_DESKTOP</c> environment variable (a full path to the
-        /// executable or the directory containing it), then a copy alongside the running agent, then the
-        /// newest built <c>Mux.Desktop</c> under a repository checkout's <c>src/Mux.Desktop/bin</c>.
+        /// Launch the mux desktop application as an independent process. Best-effort; never throws. The executable is
+        /// found by <see cref="DesktopLocator"/>: <c>MUX_DESKTOP</c>, beside the agent, the installed copy from the same
+        /// install as the agent, the per-user then system-wide installs, then a source checkout's newest build. A copy
+        /// inside a macOS <c>.app</c> bundle is started with <c>open -a</c> so it launches as a proper app.
         /// </summary>
         public void LaunchDesktop()
         {
             try
             {
-                string? executable = LocateDesktopExecutable();
+                string? executable = DesktopLocator.Locate();
                 if (executable == null)
                 {
+                    return;
+                }
+
+                string? bundle = OperatingSystem.IsMacOS() ? DesktopLocator.AppBundle(executable) : null;
+                if (bundle != null)
+                {
+                    ProcessStartInfo open = new ProcessStartInfo { FileName = "/usr/bin/open", UseShellExecute = false };
+                    open.ArgumentList.Add("-a");
+                    open.ArgumentList.Add(bundle);
+                    Process.Start(open);
                     return;
                 }
 
@@ -253,72 +263,6 @@ namespace Mux.Agent
             {
                 // Best-effort; the tray stays up either way.
             }
-        }
-
-        private static string? LocateDesktopExecutable()
-        {
-            string exeName = OperatingSystem.IsWindows() ? "Mux.Desktop.exe" : "Mux.Desktop";
-
-            // 1) Explicit override: a full path to the executable, or a directory containing it.
-            string? overridePath = Environment.GetEnvironmentVariable("MUX_DESKTOP");
-            if (!string.IsNullOrWhiteSpace(overridePath))
-            {
-                if (File.Exists(overridePath))
-                {
-                    return overridePath;
-                }
-
-                string inDir = Path.Combine(overridePath, exeName);
-                if (File.Exists(inDir))
-                {
-                    return inDir;
-                }
-            }
-
-            // 2) Alongside the running agent binary (covers a side-by-side install).
-            try
-            {
-                string beside = Path.Combine(AppContext.BaseDirectory, exeName);
-                if (File.Exists(beside))
-                {
-                    return beside;
-                }
-            }
-            catch (Exception)
-            {
-            }
-
-            // 3) Developer layout: walk up from the working directory to a checkout (a directory containing
-            //    src/Mux.Desktop) and take the newest built desktop executable under its bin output.
-            try
-            {
-                DirectoryInfo? dir = new DirectoryInfo(Environment.CurrentDirectory);
-                for (int depth = 0; dir != null && depth < 8; depth++, dir = dir.Parent)
-                {
-                    string desktopDir = Path.Combine(dir.FullName, "src", "Mux.Desktop");
-                    if (!Directory.Exists(desktopDir))
-                    {
-                        continue;
-                    }
-
-                    string binDir = Path.Combine(desktopDir, "bin");
-                    if (!Directory.Exists(binDir))
-                    {
-                        break; // found the checkout, but nothing is built
-                    }
-
-                    FileInfo? newest = new DirectoryInfo(binDir)
-                        .EnumerateFiles(exeName, SearchOption.AllDirectories)
-                        .OrderByDescending(f => f.LastWriteTimeUtc)
-                        .FirstOrDefault();
-                    return newest?.FullName;
-                }
-            }
-            catch (Exception)
-            {
-            }
-
-            return null;
         }
 
         /// <summary>

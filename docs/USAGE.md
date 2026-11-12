@@ -354,6 +354,13 @@ allowed); the last entry, **Other**, lets you type your own answer, and cancelli
 print`, the web dashboard), the tool tells the model to choose a sensible default, state the assumption, and
 continue.
 
+### Block-character art
+
+The wordmark and the faint MUX artwork are drawn with block characters (`█ ▀ ▄`). Terminals that draw those
+characters themselves (iTerm2, and most others) show them as glyphs. macOS Terminal.app draws them from the
+font, which leaves thin gaps between rows, so there mux draws the art as filled cells at twice the size instead.
+Set `MUX_BLOCK_ART=cells` or `MUX_BLOCK_ART=glyphs` to choose for any terminal.
+
 ### Usage analytics
 
 Every model call — interactive, `print`, subagent, or dashboard chat — is recorded to a local SQLite

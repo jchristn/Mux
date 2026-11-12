@@ -76,6 +76,14 @@ All notable changes to mux are documented here.
 
 ### Fixed
 
+- In macOS Terminal.app the TUI's block-character art (the startup wordmark, the idle MUX artwork, the splash,
+  and the `mux serve` banner) showed horizontal bands, because Terminal.app draws block glyphs from the font and
+  they are shorter than a line. There the art is now drawn as filled cells (reverse-video spaces at twice the
+  size), which no font can leave gaps in; iTerm2 and other terminals that draw block elements themselves keep
+  the glyphs. `MUX_BLOCK_ART=cells` or `glyphs` overrides the choice.
+- The tray agent's "Launch Desktop" found the desktop app only beside the agent or in a source checkout, so it
+  did nothing from an installed agent; it now uses the same installed-app search as the agent locator
+  (`DesktopLocator`) and opens `Mux.app` as an app on macOS.
 - The docs said the tray agent starts the server only when `rest.enabled` is true and that the server never
   starts on its own. The agent always starts it, and every surface starts the agent. CONFIG.md and REST_API.md
   now say so.

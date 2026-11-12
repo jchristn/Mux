@@ -70,11 +70,11 @@ namespace Test.Shared.Suites
             Add("SqliteReadsAndRefusesWrites", "sql-sqlite reads a real database, refuses write statements and stacked statements, and -readonly blocks what gets past", async (SkillTestContext c) =>
             {
                 string db = Path.Combine(c.Project, "app.db");
-                Sqlite(db, "create table users(id integer primary key, name text); insert into users(name) values ('ada'), ('linus');");
+                Sqlite(db, "create table users(id integer primary key, name text); insert into users(name) values ('ada_lovelace'), ('linus');");
                 (await c.Run("sql-sqlite", "ping", db).ConfigureAwait(false)).Exit(0).Has("sqlite_version");
                 (await c.Run("sql-sqlite", "tables", db).ConfigureAwait(false)).Exit(0).Has("users");
                 (await c.Run("sql-sqlite", "describe", db, "users").ConfigureAwait(false)).Exit(0).Has("INTEGER").Has("TEXT");
-                (await c.Run("sql-sqlite", "query", db, "select name from users where name = 'a;b' or id = 2").ConfigureAwait(false)).Exit(0).Has("linus").Lacks("ada");
+                (await c.Run("sql-sqlite", "query", db, "select name from users where name = 'a;b' or id = 2").ConfigureAwait(false)).Exit(0).Has("linus").Lacks("ada_lovelace"); // not "ada": the temp path is a random hex GUID and can contain it
                 (await c.Run("sql-sqlite", "query", db, "-- leading comment\nselect count(*) from users").ConfigureAwait(false)).Exit(0).Has("2");
                 (await c.Run("sql-sqlite", "query", db, "delete from users").ConfigureAwait(false)).Exit(2).Has("DELETE is not one");
                 (await c.Run("sql-sqlite", "query", db, "/* hide */ drop table users").ConfigureAwait(false)).Exit(2).Has("DROP is not one");

@@ -22,6 +22,7 @@ namespace Mux.Cli.App
         private readonly IReadOnlyList<string> _Lines;
         private readonly string _Hint;
         private readonly bool _Centered;
+        private readonly bool[,]? _ArtCells;
 
         #endregion
 
@@ -34,13 +35,17 @@ namespace Mux.Cli.App
         /// <param name="lines">The content lines, rendered verbatim. Must not be null.</param>
         /// <param name="hint">An optional dimmed footer hint; empty to omit.</param>
         /// <param name="centered">When true, each content line and the hint are horizontally centered in the box.</param>
+        /// <param name="blockArt">Optional block-character art drawn above the lines as reverse-video cells, at twice its
+        /// size (see <see cref="Mux.Core.Branding.BlockArt.TerminalCells"/>), for terminals that draw block glyphs with
+        /// gaps. Null to omit.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="lines"/> is null.</exception>
-        public MuxBoxModal(string title, IReadOnlyList<string> lines, string hint = "Enter / Esc to close", bool centered = false)
+        public MuxBoxModal(string title, IReadOnlyList<string> lines, string hint = "Enter / Esc to close", bool centered = false, IReadOnlyList<string>? blockArt = null)
         {
             _Title = title ?? string.Empty;
             _Lines = lines ?? throw new ArgumentNullException(nameof(lines));
             _Hint = hint ?? string.Empty;
             _Centered = centered;
+            _ArtCells = blockArt == null ? null : Mux.Core.Branding.BlockArt.TerminalCells(blockArt);
         }
 
         #endregion
@@ -86,10 +91,14 @@ namespace Mux.Cli.App
                 contentWidth = Math.Max(contentWidth, Measure(_Hint));
             }
 
+            int artRows = _ArtCells?.GetLength(0) ?? 0;
+            int artColumns = _ArtCells?.GetLength(1) ?? 0;
+            contentWidth = Math.Max(contentWidth, artColumns);
+
             contentWidth = Math.Max(4, Math.Min(contentWidth, screenWidth - 2 - (2 * PadX)));
 
             int hintRows = _Hint.Length > 0 ? 2 : 0; // blank gap + hint
-            int contentHeight = _Lines.Count + hintRows;
+            int contentHeight = artRows + _Lines.Count + hintRows;
             int boxWidth = Math.Min(screenWidth, contentWidth + 2 + (2 * PadX));  // border + interior padding
             int boxHeight = Math.Min(screenHeight, contentHeight + 2 + (2 * PadY));
 
@@ -103,10 +112,25 @@ namespace Mux.Cli.App
             int contentX = boxX + 1 + PadX;
             int firstRow = boxY + 1 + PadY;
             int lastContentRow = boxY + boxHeight - 2 - PadY;
+            int contentRight = contentX + contentWidth;
+
+            if (_ArtCells != null)
+            {
+                // Spaces in reverse video take the text colour as their background, which fills the whole cell.
+                CellStyle filled = CellStyle.Default.WithAttribute(CellAttributes.Reverse, true);
+                int artX = _Centered ? contentX + Math.Max(0, (contentWidth - artColumns) / 2) : contentX;
+                for (int y = 0; y < artRows && firstRow + y <= lastContentRow; y++)
+                {
+                    for (int x = 0; x < artColumns && artX + x < contentRight; x++)
+                    {
+                        if (_ArtCells[y, x]) surface.Set(artX + x, firstRow + y, Cell.Glyph(" ", filled, 1));
+                    }
+                }
+            }
 
             for (int i = 0; i < _Lines.Count; i++)
             {
-                int row = firstRow + i;
+                int row = firstRow + artRows + i;
                 if (row > lastContentRow)
                 {
                     break;
@@ -118,7 +142,7 @@ namespace Mux.Cli.App
             if (_Hint.Length > 0)
             {
                 int hintRow = lastContentRow;
-                if (hintRow > firstRow + _Lines.Count - 1)
+                if (hintRow > firstRow + artRows + _Lines.Count - 1)
                 {
                     surface.DrawText(LineX(contentX, contentWidth, _Hint), hintRow, _Hint, CellStyle.Default.WithForeground(Color.FromPalette(8)));
                 }

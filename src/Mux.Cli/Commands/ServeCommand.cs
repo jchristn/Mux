@@ -121,7 +121,10 @@ namespace Mux.Cli.Commands
                 return 1;
             }
 
-            foreach (string line in MuxBanner.WordmarkLines()) Console.WriteLine(line);
+            IReadOnlyList<string> wordmark = Console.IsOutputRedirected
+                ? MuxBanner.WordmarkLines()
+                : MuxBanner.ScrollbackLines(Mux.Core.Branding.BlockArt.TerminalMode());
+            foreach (string line in wordmark) Console.WriteLine(line);
             Console.WriteLine();
             // Two-space indent, each label padded to the widest one ("dashboard"/"websocket") so every colon
             // lines up in the same column with a space on either side of it.
