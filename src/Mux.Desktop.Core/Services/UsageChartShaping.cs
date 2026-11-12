@@ -424,45 +424,46 @@ namespace Mux.Desktop.Services
             return ramp[Math.Min(level, ramp.Count) - 1];
         }
 
-        /// <summary>The shared catalog key naming a heatmap row ("us.hm.row.1d" = "day starting").</summary>
-        /// <param name="rowUnit">The layout's <see cref="UsageHeatmapLayout.RowUnit"/>.</param>
+        /// <summary>The shared catalog key naming the heatmap's x-axis ("us.hm.x.1h" = "hour of day").</summary>
+        /// <param name="columnUnit">The layout's <see cref="UsageHeatmapLayout.ColumnUnit"/>.</param>
         /// <returns>The key.</returns>
-        public static string HeatmapRowKey(string? rowUnit)
+        public static string HeatmapColumnKey(string? columnUnit)
         {
-            switch (rowUnit)
+            switch (columnUnit)
             {
-                case "15m":
+                case "5m":
                 case "1h":
-                case "6h":
                 case "1d":
+                case "halfday":
                 case "1w":
-                    return "us.hm.row." + rowUnit;
+                case "month":
+                    return "us.hm.x." + columnUnit;
                 default:
-                    return "us.hm.row.13w";
+                    return "us.hm.x.period";
             }
         }
 
-        /// <summary>The shared catalog key naming a heatmap column ("us.hm.col.clock" = "time of day").</summary>
-        /// <param name="columnKind">The layout's <see cref="UsageHeatmapLayout.ColumnKind"/>.</param>
+        /// <summary>The shared catalog key naming the heatmap's y-axis ("us.hm.y.minuteofhour" = "minute of the hour").</summary>
+        /// <param name="rowKind">The layout's <see cref="UsageHeatmapLayout.RowKind"/>.</param>
         /// <returns>The key.</returns>
-        public static string HeatmapColumnKey(string? columnKind)
+        public static string HeatmapRowKey(string? rowKind)
         {
-            switch (columnKind)
+            switch (rowKind)
             {
-                case UsageHeatmapLayout.ColumnKindMinute:
-                case UsageHeatmapLayout.ColumnKindMinuteOfHour:
-                case UsageHeatmapLayout.ColumnKindHours:
-                case UsageHeatmapLayout.ColumnKindClock:
-                case UsageHeatmapLayout.ColumnKindWeekday:
-                case UsageHeatmapLayout.ColumnKindHalfDay:
-                    return "us.hm.col." + columnKind;
+                case UsageHeatmapLayout.RowKindMinute:
+                case UsageHeatmapLayout.RowKindMinuteOfHour:
+                case UsageHeatmapLayout.RowKindHours:
+                case UsageHeatmapLayout.RowKindClock:
+                case UsageHeatmapLayout.RowKindWeekday:
+                case UsageHeatmapLayout.RowKindWeek:
+                    return "us.hm.y." + rowKind;
                 default:
-                    return "us.hm.col.weeks";
+                    return "us.hm.y.weeks";
             }
         }
 
         /// <summary>
-        /// The axis caption ("Rows: day starting · Columns: time of day") from the shared catalog's
+        /// The axis caption ("Columns: hour of day · Rows: minute of the hour") from the shared catalog's
         /// <c>us.hm.axes</c> template.
         /// </summary>
         /// <param name="layout">The layout. Required.</param>
@@ -474,32 +475,50 @@ namespace Mux.Desktop.Services
             if (layout == null) throw new ArgumentNullException(nameof(layout));
             if (translate == null) throw new ArgumentNullException(nameof(translate));
             return translate("us.hm.axes")
-                .Replace("{rows}", translate(HeatmapRowKey(layout.RowUnit)), StringComparison.Ordinal)
-                .Replace("{cols}", translate(HeatmapColumnKey(layout.ColumnKind)), StringComparison.Ordinal);
+                .Replace("{cols}", translate(HeatmapColumnKey(layout.ColumnUnit)), StringComparison.Ordinal)
+                .Replace("{rows}", translate(HeatmapRowKey(layout.RowKind)), StringComparison.Ordinal);
         }
 
         /// <summary>
-        /// The pixel height of one heatmap row: 26 for short grids, shrinking with the row count to a 12 pixel floor so
-        /// a long grid of rows stays compact.
+        /// The pixel height of one heatmap row, including the gap: about square with a column of a 900 pixel plot,
+        /// and short enough that every row fits in 260 pixels, clamped to 14..30 so a wide grid stays wide.
         /// </summary>
         /// <param name="rows">The row count.</param>
-        /// <returns>The row height in pixels, including the gap between rows.</returns>
-        public static double HeatmapRowHeight(int rows)
+        /// <param name="columns">The column count.</param>
+        /// <returns>The row height in pixels.</returns>
+        public static double HeatmapRowHeight(int rows, int columns)
         {
-            return Math.Clamp(Math.Floor(300.0 / Math.Max(1, rows)), 12, 26);
+            double square = Math.Floor(900.0 / Math.Max(1, columns));
+            double fit = Math.Floor(260.0 / Math.Max(1, rows));
+            return Math.Clamp(Math.Min(square, fit), 14, 30);
         }
 
         /// <summary>
-        /// Which rows get a label: all of them when rows are at least 16 pixels tall, otherwise every 2nd (the first
+        /// Which rows get a label: all of them when rows are at least 14 pixels tall, otherwise every 2nd (the first
         /// and last always labeled) so 11 pixel text never overlaps.
         /// </summary>
         /// <param name="rows">The row count.</param>
+        /// <param name="rowHeight">The row height in pixels.</param>
         /// <returns>The labeled row indices.</returns>
-        public static List<int> HeatmapLabeledRows(int rows)
+        public static List<int> HeatmapLabeledRows(int rows, double rowHeight)
         {
-            double height = HeatmapRowHeight(rows);
-            int fit = height >= 16 ? rows : (int)Math.Floor(rows * height / 16.0);
+            int fit = rowHeight >= 14 ? rows : (int)Math.Floor(rows * rowHeight / 14.0);
             return UsageHeatmapLayout.LabeledIndices(rows, Math.Max(2, fit), true);
+        }
+
+        /// <summary>
+        /// The columns one x-axis label needs on a plot: its width plus 6 pixels of spacing over the column pitch,
+        /// at least 1. Pass it to <see cref="UsageHeatmapLayout.LabeledColumns"/>.
+        /// </summary>
+        /// <param name="labelWidth">The widest label in pixels.</param>
+        /// <param name="plotWidth">The plot width in pixels.</param>
+        /// <param name="columns">The column count.</param>
+        /// <returns>The minimum gap in columns.</returns>
+        public static int HeatmapLabelGap(double labelWidth, double plotWidth, int columns)
+        {
+            double pitch = plotWidth / Math.Max(1, columns);
+            if (pitch <= 0) return Math.Max(1, columns);
+            return Math.Max(1, (int)Math.Ceiling((labelWidth + 6) / pitch));
         }
 
         /// <summary>

@@ -98,6 +98,7 @@ namespace Test.Shared
 
                     // Mux.Desktop.Core logic suites (localization, formatters, thread/usage/conversation services).
                     DesktopLocalizationSuite.Create(),
+                    I18nCatalogsSuite.Create(),
                     DesktopFormattersSuite.Create(),
                     DesktopTurnInfoSuite.Create(),
                     DesktopEndpointSelectionSuite.Create(),

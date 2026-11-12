@@ -1580,7 +1580,6 @@ namespace Mux.Core.Settings
             // clamped/normalized (port range, blank-host fallback) the same way a freshly loaded one is.
             return new RestServerSettings
             {
-                Enabled = settings.Enabled,
                 Hostname = settings.Hostname,
                 Port = settings.Port,
                 Ssl = settings.Ssl,

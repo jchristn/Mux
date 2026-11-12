@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build and run the mux terminal UI (TUI) from source instead of the installed global 'mux' tool.
 # 'dotnet build' does NOT update the global tool; that needs reinstall-tool.sh. The TUI runs
-# against the directory you start this script from.
+# against the directory you start this script from. First installs or refreshes ~/Applications/Mux Agent.app
+# when it is missing or out of date, and starts it unless one is running.
 # Usage: ./scripts/macos/run-tui.sh [net8.0|net10.0]
 set -euo pipefail
 
@@ -26,4 +27,12 @@ shift "$FRAMEWORK_ARGS"
 MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
 mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
+# shellcheck source=app-bundle.sh
+. "$SCRIPT_DIR/app-bundle.sh"
+# Every user surface starts the tray agent. Install or refresh ~/Applications/Mux Agent.app first, but only
+# when it is missing or its version differs from this checkout (MUX_REFRESH_AGENT=1 forces it); a running
+# copy is never replaced. MUX_AGENT_AUTOSTART=0 skips this and the start below, as it does in the TUI.
+macos_ensure_user_agent || die "Installing Mux Agent failed."
+# Start the agent unless one is running; the TUI then finds it running and leaves it be.
+macos_start_user_agent
 dotnet run --project "$REPO_ROOT/src/Mux.Cli/Mux.Cli.csproj" --framework "$TFM" -p:TargetFrameworks="$TFM"

@@ -372,7 +372,7 @@ charts:
 | Cost | US dollars per bucket |
 | Latency, TTFT, Streaming, Throughput | Box plots per bucket: min-max wick, avg-p95 box, avg mark, p99 tick |
 | Usage by | One bar per model, endpoint, provider, or call kind over the range (top 10), sorted by the chosen metric |
-| Heatmap | Token volume on a grid in your local time: each row is a period (an hour, a day, a week, labelled on the left) and each column a step within it (minutes, time of day, or weekday, labelled on top). Four shades of green each hold about a quarter of the used cells (the peak is always the darkest); cells with no usage are light grey (dark grey on a dark theme; a dim dot in the terminal) |
+| Heatmap | Token volume on a grid in your local time, with time running left to right: hours of the day across and quarter-hours down for a day, days across and two-hour steps down for a week, weeks across and weekdays down for a quarter or year (daily cells, like a contribution graph), and a calendar for a month (days across as AM/PM pairs, five or six weeks down). Four shades of green each hold about a quarter of the used cells (the peak is always the darkest); cells with no usage are light grey (dark grey on a dark theme; a dim dot in the terminal) |
 
 Ranges are Hour (60 x 1 minute), Day (96 x 15 minutes), Week (84 x 2 hours), Month (60 x 12 hours),
 Quarter (91 x 1 day), Year (52 x 1 week), and All (from the oldest call, about 90 buckets).

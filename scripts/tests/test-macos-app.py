@@ -1,4 +1,10 @@
-"""Exercise macOS entry points with isolated apps and fake platform/build tools."""
+"""Exercise macOS entry points with isolated apps and fake platform/build tools.
+
+Run with: python3 scripts/tests/test-macos-app.py
+
+Covers install/reinstall/run-desktop/run-agent bundles, the system-folder sudo fallback, run-at-startup,
+and the tray agent install/refresh/start that run-desktop and run-tui do before a surface starts.
+"""
 import json
 import os
 from pathlib import Path
@@ -28,7 +34,10 @@ name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
 with open(os.environ['CALL_LOG'], 'a') as f: f.write(json.dumps([name, *args]) + '\\n')
 if name == 'uname': print('Darwin' if args == ['-s'] else os.environ.get('TEST_ARCH', 'arm64'))
-if name == 'pgrep': sys.exit(0 if os.environ.get('MOCK_RUNNING') else 1)
+if name == 'pgrep':
+    # MOCK_RUNNING: every process check matches; MOCK_RUNNING_MATCH: only checks naming one of its |-separated texts.
+    match = [m for m in os.environ.get('MOCK_RUNNING_MATCH', '').split('|') if m]
+    sys.exit(0 if os.environ.get('MOCK_RUNNING') or any(m in a for m in match for a in args) else 1)
 if name == 'launchctl' and args[:1] == ['print']: sys.exit(1)
 if name == 'codesign' and os.environ.get('FAIL_SIGN'): sys.exit(8)
 if name == 'sudo':
@@ -38,7 +47,7 @@ if name == 'sudo':
     sys.exit(sp.call(args))
 if name == 'dotnet' and args == ['--list-sdks']: print('10.0.401 [mock]')
 if name == 'dotnet' and args[0] == 'publish':
-    if os.environ.get('FAIL_PUBLISH'): sys.exit(7)
+    if os.environ.get('FAIL_PUBLISH') or (os.environ.get('FAIL_AGENT_PUBLISH') and 'Mux.Agent' in args[1]): sys.exit(7)
     out = pathlib.Path(args[args.index('--output') + 1])
     out.mkdir(parents=True, exist_ok=True)
     (out / pathlib.Path(args[1]).stem).write_text('fake executable')
@@ -96,10 +105,15 @@ if name == 'dotnet' and args[0] == 'publish':
                 installed = (system / f'{name}.app/Contents/MacOS/{executable}').is_file()
                 assert installed == script.endswith('-tool'), (script, name, installed)
             opens = [c for c in calls if c[0] == 'open']
-            assert len(opens) == int(script.startswith('run-')), calls
-            if opens:
-                env_args = ['--env', 'MUX_AGENT_AUTOSTART=0'] if script == 'run-agent' else []
-                assert opens[0] == ['open', *env_args, '-a', str(app)], opens
+            agent_app = str(temp / 'home/Applications/Mux Agent.app')
+            if script == 'run-agent':
+                assert opens == [['open', '--env', 'MUX_AGENT_AUTOSTART=0', '-a', agent_app]], opens
+            elif script == 'run-desktop':
+                # The agent installed by install-tool is current, so it is started, not rebuilt.
+                assert opens == [['open', '-g', '--env', 'MUX_AGENT_AUTOSTART=0', '-a', agent_app],
+                                 ['open', '-a', str(app)]], opens
+            else:
+                assert not opens, opens
     # A system folder the user cannot write: sudo is used; when it fails the per-user install still succeeds
     # with a warning, and MUX_SYSTEM_INSTALL=0 skips the system folder without one.
     for leftover in system.iterdir():
@@ -164,4 +178,72 @@ if name == 'dotnet' and args[0] == 'publish':
     assert not (temp / 'home/Applications/Mux Agent.app').exists()
     assert not (system / 'Mux.app').exists() and not (system / 'Mux Agent.app').exists()
     assert 'nothing to remove' in result.stdout and 'still registered to start at login' in result.stdout
-    print('macOS install/reinstall/run: both architectures and frameworks passed; per-user and system installs; sudo fallback and opt-out; run-at-startup per-user agent; failed publish preserves installed app.')
+    # Every user surface (run-desktop, run-tui) makes sure ~/Applications/Mux Agent.app is installed and current,
+    # then opens it in the background unless an agent is running. run-mcp-server is not a user surface.
+    agent_app = temp / 'home/Applications/Mux Agent.app'
+    agent_plist = agent_app / 'Contents/Info.plist'
+    agent_open = ['open', '-g', '--env', 'MUX_AGENT_AUTOSTART=0', '-a', str(agent_app)]
+    with (repo / 'src/Mux.Agent/Mux.Agent.csproj').open() as f:
+        agent_version = next(l.split('<Version>')[1].split('</Version>')[0] for l in f if '<Version>' in l)
+
+    def plist_version():
+        with agent_plist.open('rb') as f:
+            return plistlib.load(f)['CFBundleShortVersionString']
+
+    def set_plist_version(version):
+        with agent_plist.open('rb') as f:
+            plist = plistlib.load(f)
+        plist['CFBundleShortVersionString'] = version
+        with agent_plist.open('wb') as f:
+            plistlib.dump(plist, f)  # a different layout (key and value on their own lines) than the scripts write
+
+    def surface(script, **updates):
+        result, calls = run(script, **updates)
+        publishes = [Path(c[2]).stem for c in calls if c[:2] == ['dotnet', 'publish']]
+        opens = [c for c in calls if c[0] == 'open']
+        ran = [c for c in calls if c[:2] == ['dotnet', 'run']]
+        return result, publishes, opens, ran, calls
+    # Missing (remove-tool above removed it): installed per-user only, then opened after the desktop app's install.
+    result, publishes, opens, ran, calls = surface('run-desktop')
+    assert result.returncode == 0 and publishes == ['Mux.Agent', 'Mux.Desktop'], (result.stderr, publishes)
+    assert opens == [agent_open, ['open', '-a', str(temp / 'home/Applications/Mux.app')]], opens
+    assert calls.index(opens[0]) > max(i for i, c in enumerate(calls) if c[:2] == ['dotnet', 'publish']), calls
+    assert plist_version() == agent_version and not any(system.iterdir())
+    for script in ['run-desktop', 'run-tui']:
+        # Current: no rebuild of the agent, still started.
+        result, publishes, opens, ran, _ = surface(script)
+        assert result.returncode == 0 and 'Mux.Agent' not in publishes and opens[0] == agent_open, (script, result.stderr, opens)
+        assert (len(ran) == 1) == (script == 'run-tui'), ran
+        # Stale (the plist is read in either layout): refreshed.
+        set_plist_version('0.0.1')
+        result, publishes, opens, _, _ = surface(script)
+        assert result.returncode == 0 and publishes[:1] == ['Mux.Agent'] and plist_version() == agent_version, (script, result.stderr)
+        # MUX_REFRESH_AGENT=1 forces it.
+        result, publishes, _, _, _ = surface(script, MUX_REFRESH_AGENT='1')
+        assert result.returncode == 0 and publishes[:1] == ['Mux.Agent'], (script, result.stderr)
+        # Running from ~/Applications and stale: one note, no replacement, no second agent.
+        set_plist_version('0.0.1')
+        running = 'Mux Agent.app/Contents/MacOS/|Mux.Agent'
+        result, publishes, opens, ran, _ = surface(script, MOCK_RUNNING_MATCH=running)
+        notes = [l for l in result.stderr.splitlines() if 'older version' in l]
+        assert result.returncode == 0 and 'Mux.Agent' not in publishes and agent_open not in opens, (script, result.stderr)
+        assert len(notes) == 1 and '0.0.1' in notes[0] and agent_version in notes[0] and 'kill-mux.sh' in notes[0], result.stderr
+        assert plist_version() == '0.0.1'
+        assert (len(ran) == 1) == (script == 'run-tui') and (len(opens) == 1) == (script == 'run-desktop'), (ran, opens)
+        # Running and current: nothing to say.
+        set_plist_version(agent_version)
+        result, publishes, opens, _, _ = surface(script, MOCK_RUNNING_MATCH=running)
+        assert result.returncode == 0 and 'Mux.Agent' not in publishes and agent_open not in opens, (script, result.stderr)
+        assert 'older version' not in result.stderr, result.stderr
+        # MUX_AGENT_AUTOSTART=0: neither installed nor started; the surface still starts.
+        shutil.rmtree(agent_app)
+        result, publishes, opens, ran, _ = surface(script, MUX_AGENT_AUTOSTART='0')
+        assert result.returncode == 0 and 'Mux.Agent' not in publishes and agent_open not in opens, (script, result.stderr)
+        assert not agent_app.exists() and (len(ran) == 1 or opens == [['open', '-a', str(temp / 'home/Applications/Mux.app')]]), (ran, opens)
+        # A failed agent install stops before the surface starts.
+        result, publishes, opens, ran, _ = surface(script, FAIL_AGENT_PUBLISH='1')
+        assert result.returncode != 0 and 'Installing Mux Agent failed' in result.stderr and not opens and not ran, (script, result.stderr)
+        result, _, _, _, _ = surface(script)  # reinstalled for the next round
+        assert result.returncode == 0 and plist_version() == agent_version, result.stderr
+    assert not any(system.iterdir()), 'the run scripts never install system-wide'
+    print('macOS install/reinstall/run: both architectures and frameworks passed; per-user and system installs; sudo fallback and opt-out; run-at-startup per-user agent; failed publish preserves installed app; run-desktop and run-tui install, refresh and start the tray agent.')

@@ -175,21 +175,32 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor(SuiteId, "Heatmap", "One row per past cell with tokens and calls; future cells are skipped", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "Heatmap", "One row per cell inside the window, oldest first whatever the grid's display order; cells outside the window are skipped", (CancellationToken ct) =>
                     {
                         TimeZoneInfo zone = Fixed();
                         UsageHeatmapLayout layout = UsageHeatmapLayout.Compute(UsageRange.Hour, T0 + 7 * MinuteMs, zone);
                         UsageHeatmap heatmap = new UsageHeatmap(layout);
-                        heatmap.Add(layout.CellStartUnixMs(0), 42, 2);
+                        long first = layout.CellStartUnixMs(layout.CellsInTimeOrder().First());
+                        heatmap.Add(first, 42, 2);
+                        heatmap.Add(first + MinuteMs, 7, 1);
                         string csv = UsageCsv.Heatmap(heatmap, zone);
                         string[] lines = csv.Split('\n');
-                        int past = Enumerable.Range(0, layout.CellCount).Count(i => !layout.IsFuture(i));
+                        int inside = Enumerable.Range(0, layout.CellCount).Count(i => !layout.IsOutsideWindow(i));
                         MuxAssert.AreEqual("cell_start,cell_end,tokens,calls", lines[0], "header");
-                        MuxAssert.AreEqual(past + 2, lines.Length, "one line per past cell plus header and trailing newline");
-                        MuxAssert.AreEqual(
-                            UsageCsv.FormatTime(layout.CellStartUnixMs(0), zone) + "," + UsageCsv.FormatTime(layout.CellStartUnixMs(0) + layout.BucketMs, zone) + ",42,2",
-                            lines[1], "first cell");
-                        MuxAssert.IsTrue(past < layout.CellCount, "the fixture has future cells");
+                        MuxAssert.AreEqual(inside + 2, lines.Length, "one line per cell in the window plus header and trailing newline");
+                        MuxAssert.AreEqual(UsageCsv.FormatTime(first, zone) + "," + UsageCsv.FormatTime(first + layout.BucketMs, zone) + ",42,2", lines[1], "first cell");
+                        MuxAssert.AreEqual(UsageCsv.FormatTime(first + MinuteMs, zone) + "," + UsageCsv.FormatTime(first + 2 * MinuteMs, zone) + ",7,1", lines[2], "the next minute, though it is the next row of the grid");
+                        MuxAssert.AreEqual(layout.Columns, layout.IndexAt(1, 0), "the second minute is a row down in display order");
+                        for (int i = 2; i < lines.Length - 1; i++)
+                        {
+                            MuxAssert.IsTrue(string.CompareOrdinal(lines[i - 1], lines[i]) < 0, "chronological");
+                        }
+
+                        MuxAssert.IsTrue(inside < layout.CellCount, "the fixture has future cells");
+
+                        // The year skips the days before its 364-day window as well as the future.
+                        UsageHeatmapLayout year = UsageHeatmapLayout.Compute(UsageRange.Year, new DateTimeOffset(2026, 11, 11, 15, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds(), 0);
+                        MuxAssert.AreEqual(364 + 2, UsageCsv.Heatmap(new UsageHeatmap(year), TimeZoneInfo.Utc).Split('\n').Length, "a year exports its 364 days");
                         MuxAssert.AreEqual("cell_start,cell_end,tokens,calls\n", UsageCsv.Heatmap(null, zone), "no heatmap");
                         return Task.CompletedTask;
                     })

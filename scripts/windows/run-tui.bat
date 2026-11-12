@@ -4,6 +4,8 @@ REM global 'mux' tool. IMPORTANT: 'dotnet build' does NOT update the global 'mux
 REM requires reinstall-tool.bat. Use this script to test terminal changes against the current
 REM build without reinstalling, so the TUI always matches the freshly built desktop/agent/web.
 REM The TUI runs against the directory you launch this script from (its working directory).
+REM First installs or refreshes the per-user tray agent when it is missing or out of date, and starts it
+REM unless one is running.
 REM Usage: scripts\windows\run-tui.bat [net8.0^|net10.0]
 setlocal
 where dotnet >nul 2>nul
@@ -33,5 +35,28 @@ set "MUX_CONFIG_HOME=%MUX_CONFIG_DIR%"
 if not defined MUX_CONFIG_HOME set "MUX_CONFIG_HOME=%USERPROFILE%\.mux"
 if not exist "%MUX_CONFIG_HOME%" mkdir "%MUX_CONFIG_HOME%"
 if not exist "%MUX_CONFIG_HOME%\startup-registered" echo registered by scripts\windows> "%MUX_CONFIG_HOME%\startup-registered"
+REM Every user surface starts the tray agent. Install or refresh the per-user agent first, but only when it
+REM is missing or its version differs from this checkout (MUX_REFRESH_AGENT=1 forces it); a running copy is
+REM never replaced. mux-apps.ps1 exits 2 when MUX_AGENT_AUTOSTART turns automatic agent starts off (as the
+REM TUI does); then this script does not start the agent either.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0mux-apps.ps1" -Action EnsureUserAgent -Framework %TFM%
+set "AGENT_STATUS=%errorlevel%"
+if "%AGENT_STATUS%"=="2" goto start_surface
+if not "%AGENT_STATUS%"=="0" (
+    echo Error: Installing the tray agent failed. 1>&2
+    exit /b 1
+)
+REM Start the installed agent unless one is running; the TUI then finds it running and leaves it be.
+REM MUX_AGENT_AUTOSTART=0 for the agent only keeps it from registering itself at login (run-at-startup.bat's job).
+tasklist /FI "IMAGENAME eq Mux.Agent.exe" /FI "USERNAME eq %USERDOMAIN%\%USERNAME%" 2>nul | find /I "Mux.Agent.exe" >nul
+if not errorlevel 1 goto start_surface
+if not defined LOCALAPPDATA goto start_surface
+if not exist "%LOCALAPPDATA%\Programs\Mux\Agent\Mux.Agent.exe" goto start_surface
+setlocal
+set "MUX_AGENT_AUTOSTART=0"
+start "" "%LOCALAPPDATA%\Programs\Mux\Agent\Mux.Agent.exe"
+endlocal
+echo Started the tray agent.
+:start_surface
 dotnet run --project "%ROOT%src\Mux.Cli\Mux.Cli.csproj" --framework %TFM% -p:TargetFrameworks=%TFM%
 endlocal & exit /b %errorlevel%

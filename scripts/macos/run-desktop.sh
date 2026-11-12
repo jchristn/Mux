@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Launch the mux desktop application (Avalonia).
-# On macOS this builds and installs ~/Applications/Mux.app, then opens it.
+# On macOS this builds and installs ~/Applications/Mux.app, then opens it. It first installs or refreshes
+# ~/Applications/Mux Agent.app when it is missing or out of date, and starts it unless one is running.
 # Usage: ./scripts/macos/run-desktop.sh [net8.0|net10.0]
 set -euo pipefail
 
@@ -27,5 +28,11 @@ shift "$FRAMEWORK_ARGS"
 MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
 mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
+# Every user surface starts the tray agent. Install or refresh ~/Applications/Mux Agent.app first, but only
+# when it is missing or its version differs from this checkout (MUX_REFRESH_AGENT=1 forces it); a running
+# copy is never replaced. MUX_AGENT_AUTOSTART=0 skips this and the start below, as it does in the app.
+macos_ensure_user_agent || die "Installing Mux Agent failed."
 install_macos_app desktop --user-only
+# Start the agent unless one is running; Mux.app then finds it running and leaves it be.
+macos_start_user_agent
 open -a "$HOME/Applications/Mux.app"

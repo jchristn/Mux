@@ -170,7 +170,7 @@ namespace Test.Shared.Suites
                         MuxAssert.IsNotNull(all.Heatmap, "all-time heatmap loaded");
                         MuxAssert.AreEqual(7L, all.Heatmap!.Calls.Sum(), "every call in the all-time heatmap");
                         MuxAssert.AreEqual(7L, quarter.Heatmap!.Calls.Sum(), "every call in the quarter heatmap");
-                        MuxAssert.AreEqual(13, quarter.Heatmap.Layout.Rows, "quarter heatmap has week rows");
+                        MuxAssert.AreEqual(13, quarter.Heatmap.Layout.Columns, "quarter heatmap has week columns");
 
                         UsageSummary legacy = await service.GetSummaryAsync(UsageRange.All, null, null, ct);
                         MuxAssert.AreEqual(7L, legacy.Metrics.Calls, "the range-based summary also honors all time");

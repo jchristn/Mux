@@ -9,6 +9,8 @@ namespace Mux.Desktop.I18n
     /// Covers every desktop window/form/dialog label; keys named after dashboard keys override the
     /// shared pack for the desktop. Merged over <see cref="DashboardStrings"/> by
     /// <see cref="LocalizationService"/>; any locale missing a key falls back to English.
+    /// Regenerate with <c>node tools/i18n/gen.js</c>; <c>node tools/i18n/gen.js --check</c> fails when
+    /// this file no longer matches its source.
     /// </summary>
     internal static class DesktopStrings
     {

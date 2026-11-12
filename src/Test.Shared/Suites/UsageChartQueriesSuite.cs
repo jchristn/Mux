@@ -154,7 +154,7 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual("wip_error", data.ErrorCounts[0].ErrorCode, "wip reason");
                         MuxAssert.AreEqual(450L, data.Heatmap!.TotalTokens.Sum(), "heatmap scoped");
                         MuxAssert.AreEqual(3L, data.Heatmap.Calls.Sum(), "heatmap calls scoped");
-                        MuxAssert.AreEqual(24, data.Heatmap.Layout.Rows, "day heatmap has hour rows");
+                        MuxAssert.AreEqual(24, data.Heatmap.Layout.Columns, "day heatmap has hour columns");
                         MuxAssert.IsTrue(data.Buckets.Any(b => b.TotalMsDist.Count > 0), "distributions carried for box plots");
 
                         UsageDimensionData models = scoped.LoadDimension(data, "model");

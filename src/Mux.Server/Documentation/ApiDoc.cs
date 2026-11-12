@@ -810,7 +810,7 @@ namespace Mux.Server.Documentation
         /// <summary>Metadata for <c>GET /v1.0/api/usage/heatmap</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> UsageHeatmap = m => Sec(Init(m, TagUsage,
             "Usage token heatmap",
-            "Returns the token heatmap for a range on the clock-aligned grid every mux surface draws: each row is one period in the viewer's local time and each column one bucket within it. hour = 4 quarter-hour rows x 15 one-minute columns; day = 24 hour rows x 4 quarter-hour columns; week = 7 day rows x 12 two-hour columns; month = a 5-week calendar of 5 week rows (Monday start) x 14 half-day columns (Mon AM, Mon PM, ... Sun PM), of which only the last 30 days (from `WindowFromUnixMs`) are in the window and the earlier cells are blank; quarter = 13 week rows (Monday start) x 7 weekday columns; year = 4 rows of 13 weeks x 13 weekly columns; `all` picks the shape from its bucket width and adds rows back to the oldest matching event. The last row holds now, so its later cells are in the future. `Layout` carries the window, row starts, label kinds, `ColumnGroup` (columns sharing one label: 2 for half-days), and invariant-culture labels; `TotalTokens` and `Calls` hold one value per cell, row-major.",
+            "Returns the token heatmap for a range on the clock-aligned grid every mux surface draws. `Columns` are the x-axis and `Rows` the y-axis; cell index i is row-major in display order (row x Columns + column). Time runs left to right: each column is one period in the viewer's local time (labeled along the x-axis) and each row one step within it (labeled on the left). hour = 12 five-minute columns x 5 one-minute rows; day = 24 hour columns x 4 quarter-hour rows; week = 7 day columns x 12 two-hour rows; quarter = 13 Monday-start week columns x 7 weekday rows; year = 52 or 53 Monday-start week columns x 7 weekday rows of daily cells covering the last 364 days, labeled by month; `all` picks the shape from its bucket width (2 to 7 rows) and adds columns back to the oldest matching event. month is a calendar instead: 14 half-day columns (Mon AM, Mon PM, ... Sun PM) x 5 or 6 Monday-start week rows, with a 6th row whenever the last 30 days do not fit in 5 weeks, so the whole window is always shown. `Layout` carries every cell's start (`CellStartsUnixMs`) and whether it is outside the window (`OutsideWindow`: in the future, or before `WindowFromUnixMs`), the label kinds, the instants and invariant-culture labels of every row and column, the columns that may carry a label (`ColumnLabelAnchors`), and `ColumnGroup` (columns sharing one label: 2 for half-days); `TotalTokens` and `Calls` hold one value per cell in the same display order. Changed in 1.7.0: the axes were transposed (rows used to be periods), and `RowMs`, `RowUnit`, and `RowStartsUnixMs` were replaced by `ColumnUnit`, `RowTimesUnixMs`, `ColumnTimesUnixMs`, `ColumnLabelAnchors`, `CellStartsUnixMs`, and `OutsideWindow`.",
             operationId: "getUsageHeatmap"))
             .WithParameter(Query("range", "`hour`, `day` (default), `week`, `month`, `quarter`, `year`, or `all`.", false, M.String()))
             .WithParameter(Query("tzOffsetMinutes", "The viewer's UTC offset with JavaScript's sign (`new Date().getTimezoneOffset()`: minutes to add to local time to get UTC, so UTC-5 is `300`). Clamped to -840..840; default 0 (UTC).", false, M.Integer("int32")))
@@ -1477,7 +1477,6 @@ namespace Mux.Server.Documentation
 
             s["RestSettingsDto"] = Obj(new Dictionary<string, M>
             {
-                ["Enabled"] = Pbool("Whether the tray agent auto-starts the server."),
                 ["Hostname"] = Pstr("Bind host."),
                 ["Port"] = Pint("Bind port."),
                 ["Ssl"] = Pbool("Bind with SSL."),
@@ -1731,33 +1730,36 @@ namespace Mux.Server.Documentation
                 ["Range"] = Pstr("The range key."),
                 ["NowUnixMs"] = Pint("The server time the layout was computed for (Unix ms); cells starting later are in the future.", "int64"),
                 ["UtcOffsetMinutes"] = Pint("The viewer's offset from UTC in minutes, east positive (the negated `tzOffsetMinutes`)."),
-                ["FromUnixMs"] = Pint("Start of the first cell (Unix ms, inclusive).", "int64"),
-                ["WindowFromUnixMs"] = Pint("Start of the first cell inside the range's window (Unix ms, inclusive). Equals `FromUnixMs` except for `month`, whose 5-week calendar starts before its last 30 days; earlier cells are blank and hold no usage.", "int64"),
-                ["ToUnixMs"] = Pint("End of the last cell (Unix ms, exclusive).", "int64"),
+                ["FromUnixMs"] = Pint("Start of the earliest cell (Unix ms, inclusive).", "int64"),
+                ["WindowFromUnixMs"] = Pint("Start of the range's window (Unix ms, inclusive). Equals `FromUnixMs` except for `month` (its last 30 days) and `year` (its last 364 days), whose first week starts earlier; earlier cells are outside the window and hold no usage.", "int64"),
+                ["ToUnixMs"] = Pint("End of the latest cell (Unix ms, exclusive).", "int64"),
                 ["BucketMs"] = Pint("Cell width in milliseconds.", "int64"),
-                ["RowMs"] = Pint("Row span in milliseconds (Columns x BucketMs).", "int64"),
-                ["Rows"] = Pint("Row count, oldest first."),
-                ["Columns"] = Pint("Columns per row."),
+                ["Rows"] = Pint("Row count: the y-axis, top to bottom."),
+                ["Columns"] = Pint("Column count: the x-axis, left to right, oldest first."),
                 ["ColumnGroup"] = Pint("Consecutive columns sharing one label: 2 for `halfday` (a weekday's AM and PM), else 1."),
                 ["CellCount"] = Pint("Rows x Columns."),
-                ["RowKind"] = Pstr("Row label format: `time` (HH:mm), `datetime` (MM-dd HH:mm), `weekdate` (ddd MM-dd), or `date` (yyyy-MM-dd), all in local time."),
-                ["RowUnit"] = Pstr("What a row spans: `15m`, `1h`, `6h`, `1d`, `1w`, or `13w`."),
-                ["ColumnKind"] = Pstr("What a column means: `minute` (+Nm), `minuteofhour` (:mm), `hours` (+Nh), `clock` (HH:mm), `weekday` (Monday first), `halfday` (two per weekday, Monday AM first, each labeled with its weekday), or `weeks` (+Nw)."),
-                ["RowStartsUnixMs"] = Parr(Pint("A row start (Unix ms).", "int64"), "Each row's start."),
-                ["RowLabels"] = Parr(Pstr("A row label."), "Each row's label in the invariant culture."),
+                ["ColumnKind"] = Pstr("Column (x) label format, in local time: `minuteofhour` (:05), `hour` (14), `time` (14:30), `datetime` (11/5 14:00), `weekdate` (Thu 11/5), `halfday` (two per weekday, Monday AM first, each pair labeled with its weekday), `date` (a week's start, 11/2), `month` (Nov, where a month starts), or `fulldate` (2026-11-02)."),
+                ["RowKind"] = Pstr("Row (y) label format: `minute` (+2m), `minuteofhour` (:15), `hours` (+2h), `clock` (02:00), `weekday` (Monday first), `week` (a week's start date), or `weeks` (+2w)."),
+                ["ColumnUnit"] = Pstr("What a column is, for the x caption: `5m`, `1h`, `1d`, `halfday`, `1w`, `month`, or `period`."),
+                ["ColumnTimesUnixMs"] = Parr(Pint("An instant (Unix ms).", "int64"), "The instant each column's label describes (its period start; for `month` columns, the day a month starts)."),
+                ["RowTimesUnixMs"] = Parr(Pint("An instant (Unix ms).", "int64"), "The instant each row's label describes (the row's cell in the first column)."),
                 ["ColumnLabels"] = Parr(Pstr("A column label."), "Each column's label in the invariant culture."),
-                ["Caption"] = Pstr("The English axis caption, for example `Rows: day starting · Columns: time of day`.")
+                ["RowLabels"] = Parr(Pstr("A row label."), "Each row's label in the invariant culture."),
+                ["ColumnLabelAnchors"] = Parr(Pint("A column index."), "The columns that may carry a label, ascending: every column, each weekday's AM column for half-days, or for `year` the first column, each column where a month starts, and the last. Thin them so labels never collide, keeping the first and last."),
+                ["CellStartsUnixMs"] = Parr(Pint("A cell start (Unix ms).", "int64"), "Each cell's start in display order (CellCount entries)."),
+                ["OutsideWindow"] = Parr(Pbool("Whether the cell is outside the window."), "Whether each cell, in display order, is in the future or before `WindowFromUnixMs`: drawn blank and not clickable."),
+                ["Caption"] = Pstr("The English axis caption, for example `Columns: hour of day · Rows: minute of the hour`.")
             }, new Dictionary<string, object?>
             {
-                ["Range"] = "week", ["UtcOffsetMinutes"] = -300, ["BucketMs"] = 7200000, ["Rows"] = 7, ["Columns"] = 12,
-                ["RowKind"] = "weekdate", ["RowUnit"] = "1d", ["ColumnKind"] = "clock", ["Caption"] = "Rows: day starting · Columns: time of day"
+                ["Range"] = "day", ["UtcOffsetMinutes"] = -300, ["BucketMs"] = 900000, ["Rows"] = 4, ["Columns"] = 24,
+                ["ColumnKind"] = "hour", ["RowKind"] = "minuteofhour", ["ColumnUnit"] = "1h", ["Caption"] = "Columns: hour of day · Rows: minute of the hour"
             }, description: "The clock-aligned token heatmap grid.");
 
             s["UsageHeatmap"] = Obj(new Dictionary<string, M>
             {
                 ["Layout"] = Ref("UsageHeatmapLayout"),
-                ["TotalTokens"] = Parr(Pint("Total tokens in a cell.", "int64"), "Total tokens per cell, row-major (CellCount entries)."),
-                ["Calls"] = Parr(Pint("Calls in a cell.", "int64"), "Calls per cell, row-major (CellCount entries).")
+                ["TotalTokens"] = Parr(Pint("Total tokens in a cell.", "int64"), "Total tokens per cell in display order, row-major (CellCount entries)."),
+                ["Calls"] = Parr(Pint("Calls in a cell.", "int64"), "Calls per cell in display order, row-major (CellCount entries).")
             }, description: "A token heatmap: the layout and one value per cell.");
 
             s["UsageBreakdownRow"] = Obj(new Dictionary<string, M>

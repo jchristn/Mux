@@ -8,9 +8,6 @@ namespace Mux.Server.Models
     /// </summary>
     public class RestSettingsDto
     {
-        /// <summary>Whether the tray agent auto-starts the server.</summary>
-        public bool Enabled { get; set; }
-
         /// <summary>Bind host.</summary>
         public string Hostname { get; set; } = "127.0.0.1";
 
@@ -142,7 +139,6 @@ namespace Mux.Server.Models
                 SummaryCacheRetentionDays = settings.Context.SummaryCacheRetentionDays,
                 Rest = new RestSettingsDto
                 {
-                    Enabled = settings.Rest.Enabled,
                     Hostname = settings.Rest.Hostname,
                     Port = settings.Rest.Port,
                     Ssl = settings.Rest.Ssl,
@@ -186,7 +182,6 @@ namespace Mux.Server.Models
 
             if (Rest != null)
             {
-                settings.Rest.Enabled = Rest.Enabled;
                 settings.Rest.Hostname = Rest.Hostname;
                 settings.Rest.Port = Rest.Port;
                 settings.Rest.Ssl = Rest.Ssl;

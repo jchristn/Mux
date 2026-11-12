@@ -199,7 +199,10 @@ app that is running from either location. On macOS, `run-desktop.sh`, `run-agent
 
 Every user surface starts the tray agent when it is not already running: the terminal UI and the desktop app
 at startup, and the VS Code extension through `mux agent start` when it connects. An agent from an older
-version is replaced. They look for it in `MUX_AGENT` (a path to the executable or its folder), beside the
+version is replaced, but only by a copy of the current version. The `run-desktop` and `run-tui` scripts on
+every OS first install or refresh the per-user agent when it is missing or from another version (set
+`MUX_REFRESH_AGENT=1` to force a rebuild) and start it, so launching from source always brings up a current
+agent too. They look for it in `MUX_AGENT` (a path to the executable or its folder), beside the
 running program, in the install that program came from, then in the per-user and all-users installs above,
 and finally in a source checkout's build output. `mux agent status` shows whether it runs and which
 executable would be started. Set `MUX_AGENT_AUTOSTART=0` to stop the terminal UI and desktop app from

@@ -99,6 +99,10 @@ namespace Test.Shared.Suites
                             MuxAssert.IsTrue(heat.FromUnixMs <= now && now < heat.ToUnixMs, "now included for " + range);
                         }
 
+                        UsageHeatmapLayout year = UsageHeatmapLayout.Compute(UsageRange.Year, now, 0);
+                        MuxAssert.AreEqual(DayMs, year.BucketMs, "the year heatmap has daily cells");
+                        MuxAssert.AreEqual(now / DayMs * DayMs - 363L * DayMs, year.WindowFromUnixMs, "the year heatmap covers the last 364 days");
+
                         long earliest = now - (30L * DayMs);
                         UsageHeatmapLayout allHeat = UsageHeatmapLayout.Compute(UsageRange.All, now, 0, earliest);
                         MuxAssert.IsTrue(allHeat.IndexOf(earliest) >= 0, "all time holds the oldest event");

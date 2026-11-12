@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Desktop app and tray agent installs for the Linux, WSL and WSL 2 install, reinstall and remove
-# scripts. Source it; don't run it. The caller supplies REPO_ROOT, TFM (for publishing) and
+# Desktop app and tray agent installs for the Linux, WSL and WSL 2 install, reinstall, remove, run and
+# run-at-startup scripts. Source it; don't run it. The caller supplies REPO_ROOT, TFM (for publishing) and
 # LINUX_APPS_KILL_MUX (the kill-mux script to name in messages, such as scripts/linux/kill-mux.sh).
 #
 # Each app (desktop: "Mux", Mux.Desktop; agent: "Mux Agent", Mux.Agent) is published once as a
 # self-contained build under artifacts/linux-app/<rid>/<tfm>/<component>, then the whole publish
-# folder is copied to both install locations, with a launcher (.desktop entry) and the mux icon:
+# folder (with a mux-version.txt marker) is copied to both install locations, with a launcher (.desktop
+# entry) and the mux icon:
 #   per-user:    ${XDG_DATA_HOME:-~/.local/share}/mux/apps/{desktop,agent}/
 #                ${XDG_DATA_HOME:-~/.local/share}/applications/{mux,mux-agent}.desktop
 #                ${XDG_DATA_HOME:-~/.local/share}/icons/hicolor/256x256/apps/mux.png
@@ -163,6 +164,8 @@ linux_publish_app() {
         --output "$stage" || return
     [ -f "$stage/$exe" ] || { echo "$exe was not found in $stage after publishing." >&2; return 1; }
     chmod +x "$stage/$exe" || return 1
+    # The version marker the run scripts compare with the checkout (linux_installed_version).
+    printf '%s\n' "$version" > "$stage/mux-version.txt" || return 1
     # The launchers differ only in the absolute path of the installed executable.
     for scope in user system; do
         dir="$(linux_app_dir "$component" "$scope")"
@@ -239,13 +242,92 @@ linux_install_apps() {
 
 # Publishes one component and installs it per-user only, with its launcher and the icon. It never
 # touches the system-wide copy (so it never needs sudo): the run-at-startup scripts use it to install
-# or refresh the agent they register. Fails before building when the component runs from the per-user
+# or refresh the agent they register, and linux_ensure_user_agent (run-desktop, run-tui) to install or
+# refresh the agent a surface starts. Fails before building when the component runs from the per-user
 # folder. The installed executable is "$(linux_app_dir <component> user)/$(linux_app_exe <component>)".
 # Usage: linux_install_user_app desktop|agent
 linux_install_user_app() {
     linux_app_not_running "$1" user || return 1
     linux_publish_app "$1" || return 1
     linux_copy_app "$1" user
+}
+
+# Prints this checkout's version of a component (the <Version> in its project file).
+linux_app_version() {
+    local exe version
+    exe="$(linux_app_exe "$1")" || return 1
+    version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$REPO_ROOT/src/$exe/$exe.csproj" 2>/dev/null | head -n 1)"
+    [ -n "$version" ] || { echo "Cannot determine the $exe version." >&2; return 1; }
+    echo "$version"
+}
+
+# Prints the version recorded in an installed component (its mux-version.txt), or nothing when it is
+# not installed or has no marker (an install from before the marker existed).
+# Usage: linux_installed_version <component> [user|system]
+linux_installed_version() {
+    local marker
+    marker="$(linux_app_dir "$1" "${2:-user}")/mux-version.txt"
+    [ -f "$marker" ] || return 0
+    head -n 1 "$marker" | tr -d '\r'
+}
+
+# True unless MUX_AGENT_AUTOSTART turns automatic agent starts off (0, false, no or off, any case), as
+# the surfaces themselves read it.
+linux_agent_autostart_enabled() {
+    case "$(printf '%s' "${MUX_AGENT_AUTOSTART:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')" in
+        0|false|no|off) return 1 ;;
+    esac
+    return 0
+}
+
+# Before a user surface starts (run-desktop, run-tui): makes sure the per-user tray agent is installed
+# and matches this checkout's version, so the surface (and linux_start_user_agent) start a current
+# agent. Installs or refreshes it with linux_install_user_app only when it is missing, its version
+# differs, or MUX_REFRESH_AGENT=1, so the common case adds no build. Never replaces a copy running
+# from the per-user folder: a current one is left alone, a stale one gets a one-line note. Does nothing
+# when MUX_AGENT_AUTOSTART turns automatic starts off. Fails only when the install fails.
+linux_ensure_user_agent() {
+    local want have dir
+    linux_agent_autostart_enabled || return 0
+    want="$(linux_app_version agent)" || return 1
+    have="$(linux_installed_version agent user)"
+    dir="$(linux_app_dir agent user)"
+    if pgrep -u "$(id -u)" -f "$dir/Mux.Agent" >/dev/null 2>&1; then
+        if [ "$have" != "$want" ]; then
+            echo "Note: the running tray agent is an older version (${have:-unknown}, this checkout is $want). Quit it (or run ${LINUX_APPS_KILL_MUX:-kill-mux}) to update it." >&2
+        elif [ "${MUX_REFRESH_AGENT:-0}" = 1 ]; then
+            echo "Note: the tray agent is running, so MUX_REFRESH_AGENT=1 cannot refresh it. Quit it (or run ${LINUX_APPS_KILL_MUX:-kill-mux}) first." >&2
+        fi
+        return 0
+    fi
+    if [ -x "$dir/Mux.Agent" ] && [ "$have" = "$want" ] && [ "${MUX_REFRESH_AGENT:-0}" != 1 ]; then
+        return 0
+    fi
+    if [ ! -x "$dir/Mux.Agent" ]; then
+        echo "The tray agent is not installed; installing it per-user ($want)..."
+    elif [ "$have" != "$want" ]; then
+        echo "Updating the per-user tray agent (${have:-unknown} -> $want)..."
+    else
+        echo "Refreshing the per-user tray agent (MUX_REFRESH_AGENT=1)..."
+    fi
+    linux_install_user_app agent
+}
+
+# Starts the per-user tray agent detached from this terminal, unless an agent is already running (from
+# anywhere), it is not installed, or MUX_AGENT_AUTOSTART turns automatic starts off. It runs with
+# MUX_AGENT_AUTOSTART=0 so it never registers itself at login (that is run-at-startup's job).
+linux_start_user_agent() {
+    local bin
+    linux_agent_autostart_enabled || return 0
+    pgrep -u "$(id -u)" -x Mux.Agent >/dev/null 2>&1 && return 0
+    bin="$(linux_app_dir agent user)/Mux.Agent"
+    [ -x "$bin" ] || return 0
+    if command -v setsid >/dev/null 2>&1; then
+        MUX_AGENT_AUTOSTART=0 setsid nohup "$bin" </dev/null >/dev/null 2>&1 &
+    else
+        MUX_AGENT_AUTOSTART=0 nohup "$bin" </dev/null >/dev/null 2>&1 &
+    fi
+    echo "Started the tray agent ($bin)."
 }
 
 # Removes everything an install created in one scope (directly, else with sudo). Warns, naming what is

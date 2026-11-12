@@ -16,9 +16,47 @@ namespace Test.Shared.Suites
     {
         private const long MinuteMs = 60_000L;
 
+        private const long DayMs = 24L * 60L * MinuteMs;
+
         private static IEnumerable<int> Cells(UsageHeatmapLayout layout)
         {
             return System.Linq.Enumerable.Range(0, layout.CellCount);
+        }
+
+        private static long Utc(int year, int month, int day, int hour, int minute)
+        {
+            return new DateTimeOffset(year, month, day, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        }
+
+        // Invariants every layout keeps: cells tile [From, To) once each in bucket steps, chronological order matches
+        // the cell starts, IndexOf round-trips every cell inside the window, the out-of-window flags match the window,
+        // and every axis has one label and one instant per row and column.
+        private static void CheckLayout(UsageHeatmapLayout layout, string name)
+        {
+            MuxAssert.AreEqual(layout.CellCount, layout.CellStartsUnixMs.Count, name + " one start per cell");
+            List<int> order = layout.CellsInTimeOrder().ToList();
+            MuxAssert.AreEqual(layout.CellCount, order.Distinct().Count(), name + " time order visits each cell once");
+            for (int k = 0; k < order.Count; k++)
+            {
+                MuxAssert.AreEqual(layout.FromUnixMs + (k * layout.BucketMs), layout.CellStartUnixMs(order[k]), name + " cells tile the grid in time order");
+            }
+
+            MuxAssert.AreEqual(layout.ToUnixMs, layout.FromUnixMs + (layout.CellCount * layout.BucketMs), name + " grid end");
+            for (int i = 0; i < layout.CellCount; i++)
+            {
+                long start = layout.CellStartUnixMs(i);
+                bool outside = start < layout.WindowFromUnixMs || start > layout.NowUnixMs;
+                MuxAssert.AreEqual(outside, layout.IsOutsideWindow(i), name + " outside flag of cell " + i);
+                MuxAssert.AreEqual(outside, layout.OutsideWindow[i], name + " serialized outside flag of cell " + i);
+                if (start >= layout.WindowFromUnixMs) MuxAssert.AreEqual(i, layout.IndexOf(start + layout.BucketMs - 1), name + " IndexOf round-trips cell " + i);
+            }
+
+            MuxAssert.AreEqual(layout.Columns, layout.ColumnLabels.Count, name + " column labels");
+            MuxAssert.AreEqual(layout.Columns, layout.ColumnTimesUnixMs.Count, name + " column instants");
+            MuxAssert.AreEqual(layout.Rows, layout.RowLabels.Count, name + " row labels");
+            MuxAssert.AreEqual(layout.Rows, layout.RowTimesUnixMs.Count, name + " row instants");
+            MuxAssert.AreEqual(0, layout.ColumnLabelAnchors[0], name + " the first column is an anchor");
+            MuxAssert.IsTrue(layout.IndexOf(layout.NowUnixMs) >= 0, name + " now is on the grid");
         }
 
         /// <summary>
@@ -75,98 +113,95 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor("UsageWindow", "HeatmapRowsAreClockAligned", "Heatmap layouts start and end on row boundaries, include the current row, and stay put within it", (CancellationToken ct) =>
+                    new TestCaseDescriptor("UsageWindow", "HeatmapLayoutShapes", "Every range has its heatmap shape: time runs left to right along the x-axis, steps down the y-axis, month a calendar", (CancellationToken ct) =>
                     {
-                        long now = new DateTimeOffset(2026, 10, 13, 12, 6, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                        UsageRange[] ranges = { UsageRange.Hour, UsageRange.Day, UsageRange.Week, UsageRange.Month };
-                        long[] rowWidths = { 15 * MinuteMs, 60 * MinuteMs, 1440 * MinuteMs, 7 * 1440 * MinuteMs };
-                        int[] counts = { 60, 96, 84, 70 };
-                        for (int i = 0; i < ranges.Length; i++)
+                        long now = Utc(2026, 11, 11, 15, 30); // a Wednesday
+                        (UsageRange Range, int Columns, int Rows, long BucketMs, string ColumnKind, string RowKind, string ColumnUnit, string FirstColumn, string LastColumn, string FirstRow, string LastRow)[] shapes =
                         {
-                            UsageHeatmapLayout layout = UsageHeatmapLayout.Compute(ranges[i], now, 0);
-                            MuxAssert.AreEqual(rowWidths[i], layout.RowMs, "row span for " + ranges[i]);
-                            MuxAssert.AreEqual(counts[i], layout.CellCount, "fixed spots for " + ranges[i]);
-                            MuxAssert.IsTrue(layout.FromUnixMs <= now && now < layout.ToUnixMs, "current partial row included");
-                            MuxAssert.AreEqual(0L, (layout.ToUnixMs - layout.FromUnixMs) % rowWidths[i], "whole rows for " + ranges[i]);
-                            UsageHeatmapLayout sameRow = UsageHeatmapLayout.Compute(ranges[i], now + MinuteMs, 0);
-                            MuxAssert.AreEqual(layout.FromUnixMs, sameRow.FromUnixMs, "axes stable within clock row");
-                        }
-                        return Task.CompletedTask;
-                    }),
-
-                    new TestCaseDescriptor("UsageWindow", "HeatmapLayoutShapes", "Every range has its clock-aligned heatmap shape, row starts, and column labels", (CancellationToken ct) =>
-                    {
-                        long now = new DateTimeOffset(2026, 11, 11, 15, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds(); // a Wednesday
-                        (UsageRange Range, int Rows, int Columns, long BucketMs, string RowKind, string ColumnKind, string FirstColumn, string SecondColumn)[] shapes =
-                        {
-                            (UsageRange.Hour, 4, 15, MinuteMs, "time", "minute", "+0m", "+1m"),
-                            (UsageRange.Day, 24, 4, 15 * MinuteMs, "time", "minuteofhour", ":00", ":15"),
-                            (UsageRange.Week, 7, 12, 120 * MinuteMs, "weekdate", "clock", "00:00", "02:00"),
-                            (UsageRange.Month, 5, 14, 720 * MinuteMs, "date", "halfday", "Mon", "Mon"),
-                            (UsageRange.Quarter, 13, 7, 1440 * MinuteMs, "date", "weekday", "Mon", "Tue"),
-                            (UsageRange.Year, 4, 13, 7 * 1440 * MinuteMs, "date", "weeks", "+0w", "+1w")
+                            (UsageRange.Hour, 12, 5, MinuteMs, "minuteofhour", "minute", "5m", ":35", ":30", "+0m", "+4m"),
+                            (UsageRange.Day, 24, 4, 15 * MinuteMs, "hour", "minuteofhour", "1h", "16", "15", ":00", ":45"),
+                            (UsageRange.Week, 7, 12, 120 * MinuteMs, "weekdate", "clock", "1d", "Thu 11/5", "Wed 11/11", "00:00", "22:00"),
+                            (UsageRange.Month, 14, 5, 720 * MinuteMs, "halfday", "week", "halfday", "Mon", "Sun", "2026-10-12", "2026-11-09"),
+                            (UsageRange.Quarter, 13, 7, DayMs, "date", "weekday", "1w", "8/17", "11/9", "Mon", "Sun"),
+                            (UsageRange.Year, 53, 7, DayMs, "month", "weekday", "month", "Nov", "Nov", "Mon", "Sun")
                         };
                         foreach (var shape in shapes)
                         {
                             UsageHeatmapLayout layout = UsageHeatmapLayout.Compute(shape.Range, now, 0);
                             string name = shape.Range.ToString();
-                            MuxAssert.AreEqual(shape.Rows, layout.Rows, name + " rows");
-                            MuxAssert.AreEqual(shape.Columns, layout.Columns, name + " columns");
+                            MuxAssert.AreEqual(shape.Columns, layout.Columns, name + " columns (x)");
+                            MuxAssert.AreEqual(shape.Rows, layout.Rows, name + " rows (y)");
                             MuxAssert.AreEqual(shape.BucketMs, layout.BucketMs, name + " bucket");
-                            MuxAssert.AreEqual(shape.RowKind, layout.RowKind, name + " row kind");
                             MuxAssert.AreEqual(shape.ColumnKind, layout.ColumnKind, name + " column kind");
+                            MuxAssert.AreEqual(shape.RowKind, layout.RowKind, name + " row kind");
+                            MuxAssert.AreEqual(shape.ColumnUnit, layout.ColumnUnit, name + " column unit");
                             MuxAssert.AreEqual(shape.FirstColumn, layout.ColumnLabels[0], name + " first column label");
-                            MuxAssert.AreEqual(shape.SecondColumn, layout.ColumnLabels[1], name + " second column label");
-                            MuxAssert.AreEqual(shape.Rows, layout.RowStartsUnixMs.Count, name + " row starts");
-                            MuxAssert.AreEqual(shape.Rows, layout.RowLabels.Count, name + " row labels");
-                            MuxAssert.AreEqual(layout.FromUnixMs + (long)layout.CellCount * layout.BucketMs, layout.ToUnixMs, name + " window holds every cell");
-                            MuxAssert.AreEqual(layout.FromUnixMs + layout.RowMs, layout.RowStartsUnixMs.Count > 1 ? layout.RowStartsUnixMs[1] : layout.FromUnixMs + layout.RowMs, name + " rows are one row span apart");
-                            int nowCell = layout.IndexOf(now);
-                            MuxAssert.IsTrue(nowCell >= (layout.Rows - 1) * layout.Columns, name + ": now is in the last row");
-                            MuxAssert.IsFalse(layout.IsFuture(nowCell), name + ": the cell holding now is not future");
-                            MuxAssert.IsTrue(nowCell == layout.CellCount - 1 || layout.IsFuture(nowCell + 1), name + ": cells after now are future");
-                            MuxAssert.Contains("Rows: ", layout.Caption, name + " caption");
+                            MuxAssert.AreEqual(shape.LastColumn, layout.ColumnLabels[layout.Columns - 1], name + " last column label");
+                            MuxAssert.AreEqual(shape.FirstRow, layout.RowLabels[0], name + " first row label");
+                            MuxAssert.AreEqual(shape.LastRow, layout.RowLabels[layout.Rows - 1], name + " last row label");
+                            MuxAssert.IsTrue(layout.Columns > layout.Rows || shape.Range == UsageRange.Week, name + " is wider than tall (week is 7 days of 12 two-hour steps)");
+                            CheckLayout(layout, name);
                         }
 
-                        UsageHeatmapLayout hour = UsageHeatmapLayout.Compute(UsageRange.Hour, now, 0);
-                        MuxAssert.AreEqual("14:45,15:00,15:15,15:30", string.Join(",", hour.RowLabels), "hour rows are local quarter-hours");
-                        UsageHeatmapLayout month = UsageHeatmapLayout.Compute(UsageRange.Month, now, 0);
-                        MuxAssert.AreEqual("2026-10-12,2026-10-19,2026-10-26,2026-11-02,2026-11-09", string.Join(",", month.RowLabels), "month rows are the weeks starting Monday");
-                        MuxAssert.AreEqual(4 * 14 + 2 * 2 + 1, month.IndexOf(now), "Wednesday PM of the last week");
+                        MuxAssert.AreEqual("Columns: hour of day · Rows: minute of the hour", UsageHeatmapLayout.Compute(UsageRange.Day, now, 0).Caption, "day caption");
+                        MuxAssert.AreEqual("Columns: 5 minutes starting · Rows: minutes after the column start", UsageHeatmapLayout.Compute(UsageRange.Hour, now, 0).Caption, "hour caption");
+                        MuxAssert.AreEqual("Columns: day · Rows: time of day", UsageHeatmapLayout.Compute(UsageRange.Week, now, 0).Caption, "week caption");
+                        MuxAssert.AreEqual("Columns: day of the week (AM, PM) · Rows: week starting", UsageHeatmapLayout.Compute(UsageRange.Month, now, 0).Caption, "month caption");
+                        MuxAssert.AreEqual("Columns: week starting · Rows: day of the week", UsageHeatmapLayout.Compute(UsageRange.Quarter, now, 0).Caption, "quarter caption");
+                        MuxAssert.AreEqual("Columns: week (by month) · Rows: day of the week", UsageHeatmapLayout.Compute(UsageRange.Year, now, 0).Caption, "year caption");
+
+                        // Display order is row-major; time runs down a column, then to the next column.
+                        UsageHeatmapLayout day = UsageHeatmapLayout.Compute(UsageRange.Day, now, 0);
+                        MuxAssert.AreEqual(day.FromUnixMs + 15 * MinuteMs, day.CellStartUnixMs(day.IndexAt(1, 0)), "row 1 of the first hour is its :15");
+                        MuxAssert.AreEqual(day.FromUnixMs + 60 * MinuteMs, day.CellStartUnixMs(day.IndexAt(0, 1)), "column 1 is the next hour");
+                        MuxAssert.AreEqual(day.IndexAt(2, 23), day.IndexOf(Utc(2026, 11, 11, 15, 30)), "now lands in the last column's :30 row");
+                        MuxAssert.AreEqual(-1, day.IndexOf(day.FromUnixMs - 1), "before the grid");
+                        MuxAssert.AreEqual(-1, day.IndexOf(day.ToUnixMs), "after the grid");
                         UsageHeatmapLayout quarter = UsageHeatmapLayout.Compute(UsageRange.Quarter, now, 0);
-                        MuxAssert.AreEqual("2026-08-17", quarter.RowLabels[0], "quarter rows start on a Monday");
-                        MuxAssert.AreEqual("2026-11-09", quarter.RowLabels[12], "quarter last row is this week");
-                        MuxAssert.AreEqual("Mon,Tue,Wed,Thu,Fri,Sat,Sun", string.Join(",", quarter.ColumnLabels), "weekday columns, Monday first");
-                        MuxAssert.AreEqual(12 * 7 + 2, quarter.IndexOf(now), "Wednesday of the last week");
-                        UsageHeatmapLayout year = UsageHeatmapLayout.Compute(UsageRange.Year, now, 0);
-                        MuxAssert.AreEqual("2025-11-17,2026-02-16,2026-05-18,2026-08-17", string.Join(",", year.RowLabels), "year rows of 13 weeks");
+                        MuxAssert.AreEqual(quarter.IndexAt(2, 12), quarter.IndexOf(now), "quarter: Wednesday of the last week");
+
+                        // Hour: twelve five-minute columns of 1-minute rows, ending with the one holding now.
+                        UsageHeatmapLayout hour = UsageHeatmapLayout.Compute(UsageRange.Hour, now, 0);
+                        MuxAssert.AreEqual(Utc(2026, 11, 11, 15, 35), hour.ToUnixMs, "hour ends after the 5-minute period holding now");
+                        MuxAssert.AreEqual(hour.IndexAt(0, 11), hour.IndexOf(now), "now is the first minute of the last column");
+                        MuxAssert.AreEqual(4, Cells(hour).Count(i => hour.IsOutsideWindow(i)), "the rest of the last column is in the future");
+
+                        // Out-of-window flags and cell starts are exposed per cell, in display order.
+                        MuxAssert.AreEqual(hour.CellCount, hour.CellStartsUnixMs.Count, "cell starts");
+                        MuxAssert.AreEqual(hour.CellCount, hour.OutsideWindow.Count, "outside flags");
                         MuxAssert.Throws<ArgumentOutOfRangeException>(() => UsageHeatmapLayout.Compute((UsageRange)999, now, 0), "unknown range");
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor("UsageWindow", "HeatmapLayoutLocalAlignment", "Heatmap rows align to local time at negative, half-hour, and 45-minute offsets, and to a fixed-offset zone", (CancellationToken ct) =>
+                    new TestCaseDescriptor("UsageWindow", "HeatmapLayoutLocalAlignment", "Heatmap columns align to local time at negative, half-hour, and 45-minute offsets, and to a fixed-offset zone", (CancellationToken ct) =>
                     {
-                        long now = new DateTimeOffset(2026, 11, 11, 15, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                        long hourMs = 60 * MinuteMs, dayMs = 24 * hourMs;
+                        long now = Utc(2026, 11, 11, 15, 30);
+                        long hourMs = 60 * MinuteMs;
 
                         // UTC-5: the week ends at local midnight after Wednesday the 11th (05:00 UTC on the 12th).
                         UsageHeatmapLayout week = UsageHeatmapLayout.Compute(UsageRange.Week, now, -300);
-                        MuxAssert.AreEqual(new DateTimeOffset(2026, 11, 12, 5, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds(), week.ToUnixMs, "UTC-5 week ends at local midnight");
-                        MuxAssert.AreEqual("Thu 11-05", week.RowLabels[0], "UTC-5 first day row");
-                        MuxAssert.AreEqual("Wed 11-11", week.RowLabels[6], "UTC-5 last day row is local today");
-                        foreach (long start in week.RowStartsUnixMs) MuxAssert.AreEqual(5 * hourMs, start % dayMs, "UTC-5 rows start at local midnight");
+                        MuxAssert.AreEqual(Utc(2026, 11, 12, 5, 0), week.ToUnixMs, "UTC-5 week ends at local midnight");
+                        MuxAssert.AreEqual("Thu 11/5", week.ColumnLabels[0], "UTC-5 first day column");
+                        MuxAssert.AreEqual("Wed 11/11", week.ColumnLabels[6], "UTC-5 last day column is local today");
+                        foreach (long start in week.ColumnTimesUnixMs) MuxAssert.AreEqual(5 * hourMs, start % DayMs, "UTC-5 columns start at local midnight");
+                        MuxAssert.AreEqual("10:00", week.RowLabels[5], "rows are local times of day");
+                        CheckLayout(week, "UTC-5 week");
 
-                        // UTC+5:30: hour rows start on the local hour, which is half past in UTC.
+                        // UTC+5:30: hour columns start on the local hour, which is half past in UTC.
                         UsageHeatmapLayout day = UsageHeatmapLayout.Compute(UsageRange.Day, now, 330);
-                        foreach (long start in day.RowStartsUnixMs) MuxAssert.AreEqual(30 * MinuteMs, start % hourMs, "UTC+5:30 rows start on the local hour");
-                        MuxAssert.AreEqual("21:00", day.RowLabels[23], "UTC+5:30 last row is the local hour holding now");
-                        MuxAssert.AreEqual("22:00", day.RowLabels[0], "UTC+5:30 first row");
+                        foreach (long start in day.ColumnTimesUnixMs) MuxAssert.AreEqual(30 * MinuteMs, start % hourMs, "UTC+5:30 columns start on the local hour");
+                        MuxAssert.AreEqual("21", day.ColumnLabels[23], "UTC+5:30 last column is the local hour holding now");
+                        MuxAssert.AreEqual("22", day.ColumnLabels[0], "UTC+5:30 first column");
+                        CheckLayout(day, "UTC+5:30 day");
 
-                        // UTC+5:45: a Monday-start quarter in local time.
+                        // UTC+5:45: a Monday-start quarter in local time, weekday rows Monday first.
                         UsageHeatmapLayout quarter = UsageHeatmapLayout.Compute(UsageRange.Quarter, now, 345);
                         long localMonday = quarter.FromUnixMs + 345 * MinuteMs;
-                        MuxAssert.AreEqual(0L, localMonday % dayMs, "UTC+5:45 rows start at local midnight");
-                        MuxAssert.AreEqual(DayOfWeek.Monday, DateTimeOffset.FromUnixTimeMilliseconds(localMonday).UtcDateTime.DayOfWeek, "UTC+5:45 rows start on Monday");
+                        MuxAssert.AreEqual(0L, localMonday % DayMs, "UTC+5:45 columns start at local midnight");
+                        MuxAssert.AreEqual(DayOfWeek.Monday, DateTimeOffset.FromUnixTimeMilliseconds(localMonday).UtcDateTime.DayOfWeek, "UTC+5:45 columns start on Monday");
+                        MuxAssert.AreEqual("Mo", quarter.FormatRowLabel(0, new System.Globalization.CultureInfo("de-DE")), "weekday rows localize");
+                        MuxAssert.AreEqual("09.11", quarter.FormatColumnLabel(12, new System.Globalization.CultureInfo("de-DE")), "week start dates localize the month-day order");
+                        CheckLayout(quarter, "UTC+5:45 quarter");
 
                         // A fixed-offset zone (no daylight saving) matches the explicit offset.
                         TimeZoneInfo tokyo = TimeZoneInfo.CreateCustomTimeZone("mux-test-utc9", TimeSpan.FromHours(9), "UTC+9", "UTC+9");
@@ -174,124 +209,186 @@ namespace Test.Shared.Suites
                         UsageHeatmapLayout offset = UsageHeatmapLayout.Compute(UsageRange.Month, now, 540);
                         MuxAssert.AreEqual(offset.FromUnixMs, zoned.FromUnixMs, "zone and offset agree");
                         MuxAssert.AreEqual(540, zoned.UtcOffsetMinutes, "zone offset");
-                        MuxAssert.AreEqual(540, UsageHeatmapLayout.OffsetMinutesOf(tokyo, now - 180L * dayMs), "no daylight saving half a year earlier");
+                        MuxAssert.AreEqual(540, UsageHeatmapLayout.OffsetMinutesOf(tokyo, now - 180L * DayMs), "no daylight saving half a year earlier");
                         MuxAssert.AreEqual(-300, UsageHeatmapLayout.FromJavaScriptOffset(300), "JavaScript sign is inverted");
                         MuxAssert.AreEqual(-840, UsageHeatmapLayout.FromJavaScriptOffset(5000), "offset clamped");
                         MuxAssert.AreEqual(840, UsageHeatmapLayout.Compute(UsageRange.Day, now, 9999).UtcOffsetMinutes, "layout offset clamped");
-                        UsageHeatmapLayout sameRow = UsageHeatmapLayout.Compute(UsageRange.Day, now + MinuteMs, 330);
-                        MuxAssert.AreEqual(day.FromUnixMs, sameRow.FromUnixMs, "grid stable within a row");
+                        UsageHeatmapLayout sameColumn = UsageHeatmapLayout.Compute(UsageRange.Day, now + MinuteMs, 330);
+                        MuxAssert.AreEqual(day.FromUnixMs, sameColumn.FromUnixMs, "grid stable within a period");
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor("UsageWindow", "HeatmapLayoutMonthCalendar", "The month is a 5-week calendar of half-days from a local Monday, with only its last 30 days in the window", (CancellationToken ct) =>
+                    new TestCaseDescriptor("UsageWindow", "HeatmapLayoutMonthCalendar", "The month calendar always holds its 30-day window: 5 weeks, or 6 on a Monday or a Tuesday before noon, at any offset", (CancellationToken ct) =>
                     {
-                        long hourMs = 60 * MinuteMs, halfDayMs = 12 * hourMs, dayMs = 24 * hourMs, weekMs = 7 * dayMs;
-                        long wednesday = new DateTimeOffset(2026, 11, 11, 15, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                        foreach (int offset in new[] { 0, -300, 330, 540, -570 })
+                        int[] offsets = { 0, -300, 330, -570 };
+                        // (local day of November 2026, hour, minute, expected rows)
+                        (int Day, int Hour, int Minute, int Rows, string Name)[] cases =
                         {
-                            string name = "UTC" + (offset >= 0 ? "+" : "") + (offset / 60) + ":" + Math.Abs(offset % 60).ToString("00");
-                            UsageHeatmapLayout month = UsageHeatmapLayout.Compute(UsageRange.Month, wednesday, offset);
-                            MuxAssert.AreEqual(5, month.Rows, name + " rows");
-                            MuxAssert.AreEqual(14, month.Columns, name + " columns");
-                            MuxAssert.AreEqual(halfDayMs, month.BucketMs, name + " half-day cells");
-                            MuxAssert.AreEqual(weekMs, month.RowMs, name + " week rows");
-                            MuxAssert.AreEqual("1w", month.RowUnit, name + " row unit");
-                            MuxAssert.AreEqual(UsageHeatmapLayout.ColumnKindHalfDay, month.ColumnKind, name + " column kind");
-                            MuxAssert.AreEqual(UsageHeatmapLayout.RowKindDate, month.RowKind, name + " row kind");
-                            MuxAssert.AreEqual(2, month.ColumnGroup, name + " two columns per weekday");
-                            foreach (long start in month.RowStartsUnixMs)
+                            (9, 0, 0, 6, "Monday midnight"),
+                            (9, 8, 0, 6, "Monday morning"),
+                            (9, 18, 0, 6, "Monday evening"),
+                            (10, 11, 59, 6, "Tuesday before noon"),
+                            (10, 12, 0, 5, "Tuesday noon"),
+                            (11, 15, 30, 5, "Wednesday"),
+                            (15, 21, 0, 5, "Sunday evening")
+                        };
+                        foreach (int offset in offsets)
+                        {
+                            foreach (var c in cases)
                             {
-                                DateTime local = DateTimeOffset.FromUnixTimeMilliseconds(start + offset * MinuteMs).UtcDateTime;
-                                MuxAssert.AreEqual(DayOfWeek.Monday, local.DayOfWeek, name + " rows start on a local Monday");
-                                MuxAssert.AreEqual(TimeSpan.Zero, local.TimeOfDay, name + " rows start at local midnight");
+                                long now = Utc(2026, 11, c.Day, c.Hour, c.Minute) - offset * MinuteMs;
+                                string name = c.Name + " at " + offset;
+                                UsageHeatmapLayout month = UsageHeatmapLayout.Compute(UsageRange.Month, now, offset);
+                                MuxAssert.AreEqual(c.Rows, month.Rows, name + " rows");
+                                MuxAssert.AreEqual(14, month.Columns, name + " columns");
+                                MuxAssert.AreEqual(2, month.ColumnGroup, name + " half-days share a label");
+                                MuxAssert.AreEqual(UsageHeatmapLayout.RowKindWeek, month.RowKind, name + " row kind");
+                                DateTime localFrom = DateTimeOffset.FromUnixTimeMilliseconds(month.FromUnixMs + offset * MinuteMs).UtcDateTime;
+                                MuxAssert.AreEqual(DayOfWeek.Monday, localFrom.DayOfWeek, name + " starts on a local Monday");
+                                MuxAssert.AreEqual(TimeSpan.Zero, localFrom.TimeOfDay, name + " starts at local midnight");
+                                MuxAssert.IsTrue(month.WindowFromUnixMs >= month.FromUnixMs, name + " the window fits the grid");
+                                int inWindow = Cells(month).Count(i => !month.IsOutsideWindow(i));
+                                MuxAssert.AreEqual(60, inWindow, name + " the whole 30-day window is drawn");
+                                MuxAssert.IsTrue(month.WindowFromUnixMs - month.FromUnixMs < 7 * DayMs, name + " no wasted first week");
+                                MuxAssert.IsTrue(month.ToUnixMs > now, name + " the last row holds now");
+                                MuxAssert.AreEqual(month.IndexAt(month.Rows - 1, 0), month.IndexOf(month.FromUnixMs + (month.Rows - 1) * 7 * DayMs), name + " the last row is the current week");
+                                CheckLayout(month, name);
                             }
-
-                            long localNow = wednesday + offset * MinuteMs;
-                            long localStart = month.RowStartsUnixMs[4] + offset * MinuteMs;
-                            MuxAssert.IsTrue(localStart <= localNow && localNow < localStart + weekMs, name + " last row is this local week");
-                            int nowCell = month.IndexOf(wednesday);
-                            MuxAssert.IsTrue(nowCell >= 4 * 14, name + " now is in the last row");
-                            MuxAssert.IsFalse(month.IsOutsideWindow(nowCell), name + " the cell holding now is in the window");
-                            MuxAssert.AreEqual(nowCell + 1, month.CellCount - Cells(month).Count(i => month.IsFuture(i)), name + " cells after now are future");
-
-                            // The window is the last 30 days: 60 half-days ending with the one holding now.
-                            int inWindow = Cells(month).Count(i => !month.IsOutsideWindow(i));
-                            MuxAssert.AreEqual(60, inWindow, name + " 60 half-days in the window");
-                            MuxAssert.AreEqual(month.CellStartUnixMs(nowCell) - 59 * halfDayMs, month.WindowFromUnixMs, name + " window start");
-                            int first = month.IndexOf(month.WindowFromUnixMs);
-                            MuxAssert.AreEqual(nowCell - 59, first, name + " first in-window cell");
-                            for (int i = 0; i < first; i++) MuxAssert.IsTrue(month.IsOutsideWindow(i) && !month.IsFuture(i), name + " cells before the window are outside it");
-                            MuxAssert.AreEqual(-1, month.IndexOf(month.WindowFromUnixMs - 1), name + " a call before the window has no cell");
-                            UsageHeatmap heat = new UsageHeatmap(month);
-                            heat.Add(month.FromUnixMs, 500, 1);
-                            heat.Add(wednesday, 7, 1);
-                            MuxAssert.AreEqual(0L, heat.TotalTokens[0], name + " usage before the window is not drawn");
-                            MuxAssert.AreEqual(7L, heat.TotalTokens[nowCell], name + " usage now is drawn");
                         }
 
-                        // Monday morning: the 30-day window starts before the 5-week calendar, so it holds what fits.
-                        long monday = new DateTimeOffset(2026, 11, 9, 9, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                        UsageHeatmapLayout early = UsageHeatmapLayout.Compute(UsageRange.Month, monday, 0);
-                        MuxAssert.AreEqual(early.FromUnixMs, early.WindowFromUnixMs, "window clipped to the calendar");
-                        MuxAssert.AreEqual(4 * 14, early.IndexOf(monday), "Monday AM opens the last row");
-                        MuxAssert.AreEqual(57, Cells(early).Count(i => !early.IsOutsideWindow(i)), "every cell up to now is in the window");
-                        MuxAssert.AreEqual("2026-10-12", early.RowLabels[0], "first week");
-                        MuxAssert.AreEqual("2026-11-09", early.RowLabels[4], "this week");
-
-                        // Sunday evening: the whole last row is in the past.
-                        long sunday = new DateTimeOffset(2026, 11, 15, 20, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                        UsageHeatmapLayout late = UsageHeatmapLayout.Compute(UsageRange.Month, sunday, 0);
-                        MuxAssert.AreEqual(69, late.IndexOf(sunday), "Sunday PM is the last cell");
-                        MuxAssert.AreEqual(10, late.IndexOf(late.WindowFromUnixMs), "the first 10 half-days are before the window");
-
-                        // Labels: each weekday names its AM and PM column and is labeled once, over the AM column.
+                        long wednesday = Utc(2026, 11, 11, 15, 30);
                         UsageHeatmapLayout labels = UsageHeatmapLayout.Compute(UsageRange.Month, wednesday, 0);
-                        MuxAssert.AreEqual("Mon,Mon,Tue,Tue,Wed,Wed,Thu,Thu,Fri,Fri,Sat,Sat,Sun,Sun", string.Join(",", labels.ColumnLabels), "half-day column labels");
-                        MuxAssert.AreEqual("0,2,4,6,8,10,12", string.Join(",", labels.LabeledColumns(14)), "one label per day");
-                        MuxAssert.AreEqual("0,4,8,12", string.Join(",", labels.LabeledColumns(4)), "thinned by whole days");
-                        MuxAssert.AreEqual("Rows: week starting · Columns: day (AM, PM)", labels.Caption, "caption");
-                        MuxAssert.AreEqual(1, UsageHeatmapLayout.Compute(UsageRange.Quarter, wednesday, 0).ColumnGroup, "other ranges label every column");
-                        UsageHeatmapLayout quarter = UsageHeatmapLayout.Compute(UsageRange.Quarter, wednesday, 0);
-                        MuxAssert.AreEqual(quarter.FromUnixMs, quarter.WindowFromUnixMs, "other ranges use the whole grid");
-                        MuxAssert.AreEqual(labels.RowStartsUnixMs[4], quarter.RowStartsUnixMs[12], "month and quarter share the Monday week start");
+                        MuxAssert.AreEqual("0,2,4,6,8,10,12", string.Join(",", labels.ColumnLabelAnchors), "each weekday labeled once, over its AM column");
+                        MuxAssert.AreEqual("0,2,4,6,8,10,12", string.Join(",", labels.LabeledColumns(2)), "all seven weekdays fit");
+                        MuxAssert.AreEqual("Mon", labels.ColumnLabels[1], "the PM column repeats its weekday");
+                        MuxAssert.AreEqual("0,1", string.Join(",", Cells(labels).Where(i => labels.IsOutsideWindow(i) && !labels.IsFuture(i))), "Wednesday PM: Monday 10-12 is before the window");
+                        UsageHeatmap heat = new UsageHeatmap(labels);
+                        heat.Add(labels.FromUnixMs + MinuteMs, 5, 1);
+                        heat.Add(labels.WindowFromUnixMs, 7, 1);
+                        MuxAssert.AreEqual(0L, heat.TotalTokens[0], "usage before the window is not counted");
+                        MuxAssert.AreEqual(7L, heat.TotalTokens[2], "the window's first half-day");
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor("UsageWindow", "HeatmapLayoutAllTime", "All time sizes its rows from the oldest event and picks the shape from its bucket width", (CancellationToken ct) =>
+                    new TestCaseDescriptor("UsageWindow", "HeatmapLayoutYear", "The year is daily cells for the last 364 days in 52 or 53 Monday-start week columns, labeled where months start", (CancellationToken ct) =>
                     {
-                        long now = new DateTimeOffset(2026, 11, 11, 15, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                        long hourMs = 60 * MinuteMs, dayMs = 24 * hourMs;
+                        long wednesday = Utc(2026, 11, 11, 15, 30);
+                        UsageHeatmapLayout year = UsageHeatmapLayout.Compute(UsageRange.Year, wednesday, 0);
+                        MuxAssert.AreEqual(53, year.Columns, "a Wednesday needs 53 weeks");
+                        MuxAssert.AreEqual(7, year.Rows, "weekday rows");
+                        MuxAssert.AreEqual(DayMs, year.BucketMs, "daily cells, not the year chart's weekly buckets");
+                        MuxAssert.AreEqual(Utc(2025, 11, 10, 0, 0), year.FromUnixMs, "the first column is the Monday of the week holding the window start");
+                        MuxAssert.AreEqual(Utc(2025, 11, 13, 0, 0), year.WindowFromUnixMs, "the window is the last 364 days, from local midnight");
+                        MuxAssert.AreEqual(364, Cells(year).Count(i => !year.IsOutsideWindow(i)), "364 days in the window");
+                        MuxAssert.AreEqual("0,53,106", string.Join(",", Cells(year).Where(i => year.IsOutsideWindow(i) && !year.IsFuture(i))), "Mon-Wed of the first week are before the window");
+                        MuxAssert.AreEqual(4, Cells(year).Count(i => year.IsFuture(i)), "Thu-Sun of this week are in the future");
+                        MuxAssert.AreEqual(year.IndexAt(2, 52), year.IndexOf(wednesday), "today is Wednesday of the last column");
+                        MuxAssert.AreEqual(14, year.ColumnLabelAnchors.Count, "the first and last column plus 12 month starts");
+                        MuxAssert.AreEqual("Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Nov", string.Join(",", year.ColumnLabelAnchors.Select(c => year.ColumnLabels[c])), "month labels where months start");
+                        MuxAssert.AreEqual(3, year.ColumnLabelAnchors[1], "December 1st 2025 (a Monday) starts column 3");
+                        List<int> picked = year.LabeledColumns(3);
+                        MuxAssert.AreEqual(0, picked[0], "first labeled");
+                        MuxAssert.AreEqual(52, picked[picked.Count - 1], "last labeled");
+                        for (int i = 1; i < picked.Count - 1; i++) MuxAssert.IsTrue(picked[i] - picked[i - 1] >= 3, "month labels never collide");
+                        MuxAssert.IsTrue(52 - picked[picked.Count - 2] >= 5, "room for the right-aligned last label");
+                        CheckLayout(year, "year");
 
-                        long longAgo = now - 200 * dayMs;
-                        UsageHeatmapLayout weeks = UsageHeatmapLayout.Compute(UsageRange.All, now, 0, longAgo);
-                        MuxAssert.AreEqual("all", weeks.Range, "range key");
-                        MuxAssert.AreEqual(7 * dayMs, weeks.BucketMs, "weekly buckets for 200 days");
-                        MuxAssert.AreEqual(13, weeks.Columns, "13 weekly columns");
-                        MuxAssert.AreEqual(3, weeks.Rows, "rows sized from the count");
-                        MuxAssert.IsTrue(weeks.FromUnixMs <= longAgo && longAgo - weeks.FromUnixMs < weeks.RowMs, "first row holds the oldest event");
+                        long sunday = Utc(2026, 11, 15, 21, 0);
+                        UsageHeatmapLayout full = UsageHeatmapLayout.Compute(UsageRange.Year, sunday, 0);
+                        MuxAssert.AreEqual(52, full.Columns, "a Sunday's 364 days are exactly 52 weeks");
+                        MuxAssert.AreEqual(0, Cells(full).Count(i => full.IsOutsideWindow(i)), "every cell in the window");
+                        CheckLayout(full, "year on a Sunday");
 
-                        long recent = now - 89 * hourMs;
-                        UsageHeatmapLayout days = UsageHeatmapLayout.Compute(UsageRange.All, now, 0, recent);
-                        MuxAssert.AreEqual(hourMs, days.BucketMs, "hourly buckets");
-                        MuxAssert.AreEqual(24, days.Columns, "hour-of-day columns");
-                        MuxAssert.AreEqual("clock", days.ColumnKind, "clock columns");
-                        MuxAssert.AreEqual(5, days.Rows, "five day rows from the 7th to the 11th");
-                        MuxAssert.AreEqual("Sat 11-07", days.RowLabels[0], "first day row");
+                        UsageHeatmapLayout tokyo = UsageHeatmapLayout.Compute(UsageRange.Year, wednesday, 540);
+                        MuxAssert.AreEqual(364, Cells(tokyo).Count(i => !tokyo.IsOutsideWindow(i)), "UTC+9 keeps 364 days");
+                        CheckLayout(tokyo, "UTC+9 year");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("UsageWindow", "HeatmapLayoutAllTime", "All time adds columns back to the oldest event, picks the rows from its bucket width, and stays wider than tall", (CancellationToken ct) =>
+                    {
+                        long now = Utc(2026, 11, 11, 15, 30);
+                        long hourMs = 60 * MinuteMs;
+
+                        UsageHeatmapLayout weeks = UsageHeatmapLayout.Compute(UsageRange.All, now, 0, now - 400 * DayMs);
+                        MuxAssert.AreEqual(7 * DayMs, weeks.BucketMs, "weekly buckets for a long history");
+                        MuxAssert.AreEqual(4, weeks.Rows, "four weeks per column");
+                        MuxAssert.AreEqual(UsageHeatmapLayout.RowKindWeeks, weeks.RowKind, "rows are weeks after the column start");
+                        MuxAssert.AreEqual(UsageHeatmapLayout.ColumnKindFullDate, weeks.ColumnKind, "columns carry the year");
+                        MuxAssert.IsTrue(weeks.FromUnixMs <= now - 400 * DayMs, "covers the oldest event");
+                        MuxAssert.AreEqual("+3w", weeks.RowLabels[3], "week offsets");
+
+                        UsageHeatmapLayout days = UsageHeatmapLayout.Compute(UsageRange.All, now, 0, now - 20 * DayMs);
+                        MuxAssert.AreEqual(6 * hourMs, days.BucketMs, "6-hour buckets");
+                        MuxAssert.AreEqual(UsageHeatmapLayout.ColumnKindWeekDate, days.ColumnKind, "day columns");
+                        MuxAssert.AreEqual("18:00", days.RowLabels[3], "clock rows");
 
                         UsageHeatmapLayout halfHours = UsageHeatmapLayout.Compute(UsageRange.All, now, 0, now - 40 * hourMs);
                         MuxAssert.AreEqual(30 * MinuteMs, halfHours.BucketMs, "half-hour buckets");
-                        MuxAssert.AreEqual("6h", halfHours.RowUnit, "six-hour rows");
-                        MuxAssert.AreEqual("datetime", halfHours.RowKind, "rows spanning days show the date");
-                        MuxAssert.AreEqual("+1h", halfHours.ColumnLabels[2], "hour offsets");
+                        MuxAssert.AreEqual("+1h30m", halfHours.RowLabels[3], "hour offsets");
+                        MuxAssert.AreEqual(UsageHeatmapLayout.ColumnKindDateTime, halfHours.ColumnKind, "a span over a day shows the date");
+
+                        UsageHeatmapLayout minutes = UsageHeatmapLayout.Compute(UsageRange.All, now, 0, now - 50 * MinuteMs);
+                        MuxAssert.AreEqual(MinuteMs, minutes.BucketMs, "minute buckets");
+                        MuxAssert.AreEqual(UsageHeatmapLayout.ColumnKindTime, minutes.ColumnKind, "a span within a day shows times");
+                        MuxAssert.AreEqual(5, minutes.Rows, "five minutes per column");
+
+                        UsageHeatmapLayout daily = UsageHeatmapLayout.Compute(UsageRange.All, now, 0, now - 80 * DayMs);
+                        MuxAssert.AreEqual(DayMs, daily.BucketMs, "daily buckets");
+                        MuxAssert.AreEqual(UsageHeatmapLayout.RowKindWeekday, daily.RowKind, "weekday rows");
+                        MuxAssert.AreEqual(UsageHeatmapLayout.ColumnKindDate, daily.ColumnKind, "week start columns");
+
+                        foreach (long span in new[] { hourMs, 5 * hourMs, DayMs, 3 * DayMs, 10 * DayMs, 40 * DayMs, 80 * DayMs, 200 * DayMs, 1100 * DayMs })
+                        {
+                            UsageHeatmapLayout all = UsageHeatmapLayout.Compute(UsageRange.All, now, 0, now - span);
+                            string name = "all over " + (span / hourMs) + "h";
+                            MuxAssert.IsTrue(all.Rows <= 7, name + " has at most 7 rows");
+                            MuxAssert.IsTrue(all.Columns >= all.Rows, name + " is wider than tall");
+                            MuxAssert.IsTrue(all.FromUnixMs <= now - span && all.ToUnixMs > now, name + " covers the history and now");
+                            MuxAssert.AreEqual("all", all.Range, name + " range key");
+                            CheckLayout(all, name);
+                        }
 
                         UsageHeatmapLayout none = UsageHeatmapLayout.Compute(UsageRange.All, now, 0, 0);
                         UsageHeatmapLayout dayLayout = UsageHeatmapLayout.Compute(UsageRange.Day, now, 0);
-                        MuxAssert.AreEqual(dayLayout.FromUnixMs, none.FromUnixMs, "no events falls back to the day layout");
-                        MuxAssert.AreEqual(dayLayout.CellCount, none.CellCount, "fallback cell count");
+                        MuxAssert.AreEqual(dayLayout.FromUnixMs, none.FromUnixMs, "no events falls back to the day grid");
+                        MuxAssert.AreEqual(dayLayout.CellCount, none.CellCount, "same shape as day");
+                        MuxAssert.AreEqual("all", none.Range, "but keeps its range key");
+                        return Task.CompletedTask;
+                    }),
 
+                    new TestCaseDescriptor("UsageWindow", "HeatmapLabelThinning", "x-axis labels thin so they never collide, the first and last always labeled", (CancellationToken ct) =>
+                    {
+                        long now = Utc(2026, 11, 11, 15, 30);
+                        UsageHeatmapLayout day = UsageHeatmapLayout.Compute(UsageRange.Day, now, 0);
+                        MuxAssert.AreEqual(24, day.LabeledColumns(1).Count, "room for every hour");
+                        MuxAssert.AreEqual("0,3,6,9,12,15,18,23", string.Join(",", day.LabeledColumns(3)), "every 3rd hour, the right-aligned last replacing the one before it");
+                        MuxAssert.AreEqual("0", string.Join(",", day.LabeledColumns(30)), "too narrow for two labels: only the first");
+                        foreach (UsageRange range in new[] { UsageRange.Hour, UsageRange.Day, UsageRange.Week, UsageRange.Month, UsageRange.Quarter, UsageRange.Year })
+                        {
+                            UsageHeatmapLayout layout = UsageHeatmapLayout.Compute(range, now, 0);
+                            int end = layout.ColumnLabelAnchors[layout.ColumnLabelAnchors.Count - 1];
+                            for (int gap = 1; gap <= 8; gap++)
+                            {
+                                List<int> picked = layout.LabeledColumns(gap);
+                                string name = range + " gap " + gap;
+                                MuxAssert.AreEqual(0, picked[0], name + " first labeled");
+                                for (int i = 1; i < picked.Count; i++)
+                                {
+                                    bool last = picked[i] == end;
+                                    int need = last ? (2 * gap) - layout.ColumnGroup : gap;
+                                    MuxAssert.IsTrue(picked[i] - picked[i - 1] >= need, name + " labels " + picked[i - 1] + " and " + picked[i] + " do not collide");
+                                }
+
+                                if (end >= (2 * gap) - layout.ColumnGroup) MuxAssert.AreEqual(end, picked[picked.Count - 1], name + " last labeled");
+                            }
+                        }
+
+                        MuxAssert.AreEqual("0,4,8,12", string.Join(",", UsageHeatmapLayout.ThinLabels(new[] { 0, 2, 4, 6, 8, 10, 12 }, 14, 2, 3, true)), "half-day groups");
+                        MuxAssert.AreEqual("0,2,4,6,8,12", string.Join(",", UsageHeatmapLayout.ThinLabels(Enumerable.Range(0, 13).ToList(), 13, 1, 2, true)), "the same as VS Code and the web dashboard");
+                        MuxAssert.AreEqual(0, UsageHeatmapLayout.ThinLabels(Array.Empty<int>(), 0, 1, 1, true).Count, "no anchors");
                         MuxAssert.AreEqual("0,3,6,9,12,15,18,23", string.Join(",", UsageHeatmapLayout.LabeledIndices(24, 8, true)), "dense rows thin out but keep the last");
                         MuxAssert.AreEqual("0,1,2,3,4,5,6", string.Join(",", UsageHeatmapLayout.LabeledIndices(7, 10, true)), "sparse rows all labeled");
-                        MuxAssert.AreEqual("0,4,8", string.Join(",", UsageHeatmapLayout.LabeledIndices(12, 3, false)), "columns thin without forcing the last");
                         return Task.CompletedTask;
                     }),
 

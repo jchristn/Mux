@@ -1,7 +1,7 @@
 <#
 Install, check and remove the mux desktop app ("Mux", src\Mux.Desktop) and tray agent ("Mux Agent",
-src\Mux.Agent) on Windows. Called by install-tool.bat, reinstall-tool.bat, remove-tool.bat and
-run-at-startup.bat.
+src\Mux.Agent) on Windows. Called by install-tool.bat, reinstall-tool.bat, remove-tool.bat,
+run-at-startup.bat, run-desktop.bat and run-tui.bat.
 Runs in Windows PowerShell 5.1 and PowerShell 7.
 
   -Action Check                    Fail when an app that would be replaced or removed is running.
@@ -12,6 +12,15 @@ Runs in Windows PowerShell 5.1 and PowerShell 7.
                                    Publish only the tray agent and install it per-user only (never system-wide,
                                    so no elevation), with its Start Menu shortcut. run-at-startup.bat uses it,
                                    then registers %LOCALAPPDATA%\Programs\Mux\Agent\Mux.Agent.exe.
+  -Action EnsureUserAgent -Framework <tfm>
+                                   Before a user surface starts (run-desktop.bat, run-tui.bat): run InstallUserAgent
+                                   only when the per-user agent is missing, its mux-version.txt differs from
+                                   src\Mux.Agent's <Version>, or MUX_REFRESH_AGENT=1. Never replaces a copy running
+                                   from the per-user folder (a stale one gets a one-line note). Exit code 2 when
+                                   MUX_AGENT_AUTOSTART turns automatic agent starts off (nothing is done), so the
+                                   caller does not start the agent either.
+
+Every publish writes mux-version.txt (the project's <Version>) beside the executable.
 
 Per-user:    %LOCALAPPDATA%\Programs\Mux\Desktop\Mux.Desktop.exe and ...\Mux\Agent\Mux.Agent.exe,
              shortcuts "Mux.lnk" and "Mux Agent.lnk" in %APPDATA%\Microsoft\Windows\Start Menu\Programs\Mux.
@@ -20,7 +29,7 @@ System-wide: %ProgramFiles%\Mux\Desktop and ...\Mux\Agent, shortcuts in
              script prints a warning and continues. MUX_SYSTEM_INSTALL=0 skips it quietly.
 These paths are fixed: Mux.Core's agent locator searches exactly them.
 
-Exit code 0 on success, 1 on failure (with an "Error: ..." line on stderr).
+Exit code 0 on success, 1 on failure (with an "Error: ..." line on stderr), 2 as noted for EnsureUserAgent.
 #>
 [CmdletBinding()]
 param(
@@ -214,6 +223,30 @@ function Remove-MuxEmptyDir([string]$Path) {
 # ---------------------------------------------------------------------------------------------------------
 # Actions.
 
+# The <Version> of a project file, or $null when it has none.
+function Get-MuxProjectVersion([string]$Project) {
+    if (-not (Test-Path -LiteralPath $Project -PathType Leaf)) { return $null }
+    $match = [regex]::Match([IO.File]::ReadAllText($Project), '<Version>\s*([^<]+?)\s*</Version>')
+    if ($match.Success) { return $match.Groups[1].Value }
+    return $null
+}
+
+# The version recorded in an installed app folder (mux-version.txt), or $null when there is none.
+function Get-MuxInstalledVersion([string]$Dir) {
+    $marker = [IO.Path]::Combine($Dir, 'mux-version.txt')
+    if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) { return $null }
+    $line = @(Get-Content -LiteralPath $marker -TotalCount 1)
+    if ($line.Count -eq 0) { return $null }
+    return ([string]$line[0]).Trim()
+}
+
+# Whether a MUX_AGENT_AUTOSTART value allows automatic agent starts: anything except 0, false, no or off
+# (any case), as the surfaces themselves read it.
+function Test-MuxAutostartEnabled([string]$Value) {
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $true }
+    return @('0', 'false', 'no', 'off') -notcontains $Value.Trim().ToLowerInvariant()
+}
+
 # Publish one app self-contained into its stage folder; returns the stage folder.
 function Publish-MuxApp([string]$RepoRoot, $App, [string]$Rid, [string]$Framework) {
     $project = [IO.Path]::Combine($RepoRoot, 'src', $App.Executable, $App.Executable + '.csproj')
@@ -229,6 +262,9 @@ function Publish-MuxApp([string]$RepoRoot, $App, [string]$Rid, [string]$Framewor
     $exe = [IO.Path]::Combine($stage, $App.Executable + '.exe')
     if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "$($App.Executable).exe was not found in $stage after publishing." }
     Copy-Item -LiteralPath $icon -Destination ([IO.Path]::Combine($stage, 'mux.ico')) -Force
+    # The version marker EnsureUserAgent compares with the checkout.
+    $version = Get-MuxProjectVersion $project
+    if ($version) { [IO.File]::WriteAllText([IO.Path]::Combine($stage, 'mux-version.txt'), "$version`r`n") }
     return $stage
 }
 
@@ -278,6 +314,44 @@ function Install-MuxUserAgent([string]$RepoRoot, [string]$Framework) {
     $stage = Publish-MuxApp $RepoRoot $agent (Get-MuxRid) $Framework
     Assert-MuxNotRunning @($user) @($agent)
     Install-MuxAppCopy $stage $agent $user
+}
+
+# Before a user surface starts: install or refresh the per-user agent only when it is missing, stale or
+# MUX_REFRESH_AGENT=1, never under a copy running from the per-user folder. Returns 2 when MUX_AGENT_AUTOSTART
+# turns automatic starts off (nothing is done), otherwise 0.
+function Update-MuxUserAgent([string]$RepoRoot, [string]$Framework) {
+    if (-not (Test-MuxAutostartEnabled $env:MUX_AGENT_AUTOSTART)) { return 2 }
+    if ([string]::IsNullOrEmpty($Framework)) { throw 'EnsureUserAgent needs -Framework <tfm>.' }
+    $user = (Get-MuxInstallTargets)[0]
+    $agent = @($script:MuxApps | Where-Object { $_.Component -eq 'agent' })[0]
+    $want = Get-MuxProjectVersion ([IO.Path]::Combine($RepoRoot, 'src', $agent.Executable, $agent.Executable + '.csproj'))
+    if (-not $want) { throw "Cannot determine the $($agent.Executable) version." }
+    $dir = Get-MuxAppDir $user $agent
+    $have = Get-MuxInstalledVersion $dir
+    $force = $env:MUX_REFRESH_AGENT -eq '1'
+    if (@(Get-MuxRunningApps @($user) @($agent)).Count -gt 0) {
+        $shown = $have
+        if (-not $shown) { $shown = 'unknown' }
+        if ($have -ne $want) {
+            Write-MuxWarning "the running tray agent is an older version ($shown, this checkout is $want). Quit it (or run $script:KillHint) to update it."
+        } elseif ($force) {
+            Write-MuxWarning "the tray agent is running, so MUX_REFRESH_AGENT=1 cannot refresh it. Quit it (or run $script:KillHint) first."
+        }
+        return 0
+    }
+    $exists = Test-Path -LiteralPath ([IO.Path]::Combine($dir, $agent.Executable + '.exe')) -PathType Leaf
+    if ($exists -and $have -eq $want -and -not $force) { return 0 }
+    if (-not $exists) {
+        Write-MuxInfo "The tray agent is not installed; installing it per-user ($want)..."
+    } elseif ($have -ne $want) {
+        $shown = $have
+        if (-not $shown) { $shown = 'unknown' }
+        Write-MuxInfo "Updating the per-user tray agent ($shown -> $want)..."
+    } else {
+        Write-MuxInfo 'Refreshing the per-user tray agent (MUX_REFRESH_AGENT=1)...'
+    }
+    $null = Install-MuxUserAgent $RepoRoot $Framework
+    return 0
 }
 
 # Installed folders and shortcuts that exist for one target.
@@ -332,11 +406,12 @@ function Remove-MuxApps {
 function Invoke-MuxApps([string]$Action, [string]$Framework, [string]$RepoRoot) {
     try {
         switch ($Action) {
+            'EnsureUserAgent' { return [int](Update-MuxUserAgent $RepoRoot $Framework) }
             'Check' { $null = Assert-MuxNotRunning (Get-MuxPlan).Targets }
             'Install' { $null = Install-MuxApps $RepoRoot $Framework }
             'Remove' { $null = Remove-MuxApps }
             'InstallUserAgent' { $null = Install-MuxUserAgent $RepoRoot $Framework }
-            default { throw "Unknown action: '$Action'. Use -Action Check, Install, Remove or InstallUserAgent." }
+            default { throw "Unknown action: '$Action'. Use -Action Check, Install, Remove, InstallUserAgent or EnsureUserAgent." }
         }
         return 0
     } catch {

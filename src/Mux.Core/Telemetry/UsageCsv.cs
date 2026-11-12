@@ -27,7 +27,7 @@ namespace Mux.Core.Telemetry
     /// <c>cost_usd</c>; the four box plots <c>min,avg,p95,p99,max,count</c> (stats empty when count is 0);
     /// "&lt;Metric&gt; by &lt;dimension&gt;" one column per series named by its value (an empty value is
     /// <c>unknown</c>), with <c>Other</c> last; "Usage by" (a blank value is also <c>unknown</c>) <c>&lt;dimension&gt;,calls,failed,uncached_input,cached_input,output,total_tokens,cost_usd</c>
-    /// with the whole window as its bucket; heatmap <c>tokens,calls</c> for every cell that is not in the future.
+    /// with the whole window as its bucket; heatmap <c>tokens,calls</c> for every cell inside the window, oldest first.
     /// File names come from <see cref="FileName"/>.
     /// </summary>
     public static class UsageCsv
@@ -423,8 +423,9 @@ namespace Mux.Core.Telemetry
         }
 
         /// <summary>
-        /// The heatmap: <c>cell_start,cell_end,tokens,calls</c>, one row per cell in row-major order (oldest first),
-        /// skipping cells that start in the future (<see cref="UsageHeatmapLayout.IsFuture"/>).
+        /// The heatmap: <c>cell_start,cell_end,tokens,calls</c>, one row per cell in chronological order (oldest first,
+        /// whatever the grid's display order), skipping cells outside the window (<see cref="UsageHeatmapLayout.IsOutsideWindow"/>:
+        /// in the future, or before the month's last 30 days or the year's last 364 days).
         /// </summary>
         /// <param name="heatmap">The heatmap, or null (header only).</param>
         /// <param name="zone">The time zone; null uses <see cref="TimeZoneInfo.Local"/>.</param>
@@ -435,9 +436,9 @@ namespace Mux.Core.Telemetry
             if (heatmap != null)
             {
                 UsageHeatmapLayout layout = heatmap.Layout;
-                for (int i = 0; i < layout.CellCount; i++)
+                foreach (int i in layout.CellsInTimeOrder())
                 {
-                    if (layout.IsFuture(i)) continue;
+                    if (layout.IsOutsideWindow(i)) continue;
                     long start = layout.CellStartUnixMs(i);
                     rows.Add(new[]
                     {

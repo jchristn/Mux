@@ -90,11 +90,14 @@ function fakeClient(calls: string[]) {
         getUsageBreakdown: async () => { throw new Error('400'); },
         getUsageHeatmap: async (range: string, tz: number) => {
             calls.push('heatmap:' + range + ':' + tz);
+            // A day of four 6-hour cells in one column, as Mux.Core lays out all time: rows are steps down the column.
             return {
                 Layout: {
-                    Range: range, NowUnixMs: t0 + 17 * HOUR, UtcOffsetMinutes: 0, FromUnixMs: t0, ToUnixMs: t0 + 24 * HOUR, BucketMs: 6 * HOUR, RowMs: 24 * HOUR,
-                    Rows: 1, Columns: 4, CellCount: 4, RowKind: 'weekdate', RowUnit: '1d', ColumnKind: 'clock', RowStartsUnixMs: [t0], RowLabels: ['Thu 01-01'],
-                    ColumnLabels: ['00:00', '06:00', '12:00', '18:00'], Caption: 'Rows: day starting · Columns: time of day',
+                    Range: range, NowUnixMs: t0 + 17 * HOUR, UtcOffsetMinutes: 0, FromUnixMs: t0, WindowFromUnixMs: t0, ToUnixMs: t0 + 24 * HOUR, BucketMs: 6 * HOUR,
+                    Rows: 4, Columns: 1, ColumnGroup: 1, CellCount: 4, ColumnKind: 'weekdate', RowKind: 'clock', ColumnUnit: 'period',
+                    ColumnTimesUnixMs: [t0], RowTimesUnixMs: [0, 1, 2, 3].map((r) => t0 + r * 6 * HOUR), ColumnLabels: ['Thu 1/1'], RowLabels: ['00:00', '06:00', '12:00', '18:00'],
+                    ColumnLabelAnchors: [0], CellStartsUnixMs: [0, 1, 2, 3].map((r) => t0 + r * 6 * HOUR), OutsideWindow: [false, false, false, true],
+                    Caption: 'Columns: period starting · Rows: time of day',
                 },
                 TotalTokens: [0, 100, 200, 0], Calls: [0, 1, 2, 0],
             };
@@ -135,12 +138,15 @@ test('usage panel posts an All series with derived bucket windows, failure reaso
     assert.ok(calls.includes('heatmap:all:' + new Date().getTimezoneOffset()), 'heatmap route with the JavaScript UTC offset');
     assert.equal(payload.heatmap.cells.length, 4);
     assert.deepEqual(payload.heatmap.cells.map((c: any) => c.level), [0, 1, 4, 0], "quartile shades: the smaller used cell is the lowest step, the peak the highest");
-    assert.deepEqual(payload.heatmap.cells.map((c: any) => c.future), [false, false, false, true], 'the rest of the current row is future');
+    assert.deepEqual(payload.heatmap.cells.map((c: any) => c.future), [false, false, false, true], 'cells after now are future');
     assert.deepEqual(payload.heatmap.cells.map((c: any) => c.blank), [false, false, false, true], 'only future cells are blank in a full window');
     assert.equal(payload.heatmap.colGroup, 1, 'one label per column without a column group');
-    assert.equal(payload.heatmap.caption, 'Rows: day starting · Columns: time of day');
-    assert.deepEqual(payload.heatmap.colLabels, ['00:00', '06:00', '12:00', '18:00']);
-    assert.equal(payload.heatmap.rowLabels.length, 1);
+    assert.equal(payload.heatmap.caption, 'Columns: period starting · Rows: time of day');
+    assert.deepEqual(payload.heatmap.rowLabels, ['00:00', '06:00', '12:00', '18:00'], 'every row labeled on the y-axis');
+    assert.deepEqual(payload.heatmap.colLabels, ['Thu 1/1'], 'the column is localized from its instant');
+    assert.deepEqual(payload.heatmap.anchors, [0]);
+    assert.equal(payload.heatmap.evenAnchors, true);
+    assert.deepEqual(payload.heatmap.cells.map((c: any) => [c.row, c.col]), [[0, 0], [1, 0], [2, 0], [3, 0]], 'rows x columns from the layout');
     assert.deepEqual([payload.heatmap.cells[1].from, payload.heatmap.cells[1].to], [t0 + 6 * HOUR, t0 + 12 * HOUR - 1], 'a cell drills into its window');
     assert.match(payload.heatmap.cells[2].label, /200 tokens · 2 calls/);
 });
@@ -181,8 +187,11 @@ test('usage panel webview script parses and lists all seven ranges and ten tabs'
     assert.match(panel.html, /--hm0: #e3e7eb/, 'light no-usage grey');
     assert.match(panel.html, /--hm0: #2e3640/, 'dark no-usage grey');
     assert.match(scripts[0], /openDrillWindow\(c\.from, c\.to, c\.label\)/, 'heatmap cells drill into their window');
-    assert.match(scripts[0], /className = 'hm-x'/, 'column labels');
-    assert.match(scripts[0], /'hm-y mid' : 'hm-y'/, 'row labels');
+    assert.match(scripts[0], /'hm-x end' : 'hm-x'/, 'column labels, the last right-aligned');
+    assert.match(scripts[0], /className = 'hm-y'/, 'row labels');
+    assert.match(scripts[0], /function thinLabels\(/, "the host's label thinning runs in the webview");
+    assert.match(scripts[0], /function heatmapSizes\(/, "the host's cell sizing runs in the webview");
+    assert.match(scripts[0], /addEventListener\('resize'/, 'the heatmap redraws on resize');
     assert.match(panel.html, /<select id="splitMetric"><\/select>\s*<select id="dimension"><\/select>/, 'the metric picker sits next to the dimension picker');
     assert.match(panel.html, /<div class="seg" id="mode" role="group"><\/div>/, 'lines/bars toggle');
     assert.match(panel.html, /id="exportCsv"/);

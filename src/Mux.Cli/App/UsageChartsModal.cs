@@ -176,9 +176,10 @@ namespace Mux.Cli.App
         private int _ListOffset;
         private int _ListVisibleRows = 1;
         private int _ListRows;
-        private int _HeatmapRowOffset;
-        private int _HeatmapVisibleRows = 1;
-        private int _HeatmapRows = 1;
+        // The heatmap's first visible column when it scrolls sideways (int.MaxValue: scrolled to the newest).
+        private int _HeatmapColumnOffset = int.MaxValue;
+        private int _HeatmapVisibleColumns = 1;
+        private int _HeatmapColumns = 1;
         private UsageChartData _Data = new UsageChartData();
         private UsageDimensionData _Dim = new UsageDimensionData();
         private double[][] _DimValues = Array.Empty<double[]>();
@@ -297,8 +298,10 @@ namespace Mux.Cli.App
 
             if (_Page == PageHeatmap && (key.Code == KeyCode.PageDown || key.Code == KeyCode.PageUp))
             {
-                int step = key.Code == KeyCode.PageDown ? _HeatmapVisibleRows : -_HeatmapVisibleRows;
-                _HeatmapRowOffset = Math.Clamp(_HeatmapRowOffset + step, 0, Math.Max(0, _HeatmapRows - _HeatmapVisibleRows));
+                // PgUp scrolls to older columns (left), PgDn to newer (right).
+                int step = key.Code == KeyCode.PageDown ? _HeatmapVisibleColumns : -_HeatmapVisibleColumns;
+                int limit = Math.Max(0, _HeatmapColumns - _HeatmapVisibleColumns);
+                _HeatmapColumnOffset = Math.Clamp(Math.Min(_HeatmapColumnOffset, limit) + step, 0, limit);
                 return true;
             }
 
@@ -340,7 +343,7 @@ namespace Mux.Cli.App
             if (key.Rune >= '1' && key.Rune < '1' + _Ranges.Length)
             {
                 _Range = _Ranges[key.Rune - '1'];
-                _HeatmapRowOffset = 0;
+                _HeatmapColumnOffset = int.MaxValue;
                 _BarBucketOffset = 0;
                 _ListOffset = 0;
                 Load();
@@ -581,7 +584,7 @@ namespace Mux.Cli.App
 
             if (IsStackedPage(_Page)) parts.Add((4, new[] { "l " + (_Lines ? "bars" : "lines") }));
             parts.Add((5, new[] { "e export CSV", "e export" }));
-            if (_Page == PageHeatmap) parts.Add((4, new[] { "PgUp/PgDn rows", "PgUp/PgDn" }));
+            if (_Page == PageHeatmap && _HeatmapVisibleColumns < _HeatmapColumns) parts.Add((4, new[] { "PgUp/PgDn scroll", "PgUp/PgDn" }));
             if (_Page == PageCalls || _Page == PageTokensBy || _Page == PageUsageBy) parts.Add((6, new[] { "↑/↓ list", "↑/↓" }));
             parts.Add((0, new[] { "Esc close", "Esc" }));
 
@@ -1346,57 +1349,52 @@ namespace Mux.Cli.App
                 return;
             }
 
-            if (h < 8 || w < 18)
+            UsageHeatmapLayout layout = heatmap.Layout;
+            int rows = layout.Rows, columns = layout.Columns, count = layout.CellCount;
+            int axisWidth = Math.Min(12, layout.RowLabels.Max(l => l.Length)) + 1;
+            int plotX = x + axisWidth, plotWidth = w - axisWidth, plotHeight = h - 6;
+            if (plotHeight < rows || plotWidth < 8)
             {
                 surface.DrawText(x, y, Trim("Enlarge the terminal to see the heatmap.", w), muted);
                 return;
             }
 
-            // The shared clock-aligned grid: each row is one local period (labeled on the left with its start), each
-            // column one bucket within it (labeled on top), so both axes read as clock time.
-            UsageHeatmapLayout layout = heatmap.Layout;
-            int rows = layout.Rows, columns = layout.Columns, count = layout.CellCount;
-            int axisWidth = Math.Min(12, layout.RowLabels.Max(l => l.Length)) + 1;
-            int plotX = x + axisWidth, plotWidth = w - axisWidth, plotHeight = h - 6;
-            // A label covers its column group (a weekday's AM and PM half-days share one), so each column needs only
-            // its share of the label's width.
-            int group = layout.ColumnGroup;
-            int labelWidth = layout.ColumnLabels.Max(l => l.Length) + 1;
-            HeatmapCellSize(columns, rows, plotWidth, plotHeight, (labelWidth - 1) / group, out int cellWidth, out int cellHeight);
-            int pitchX = cellWidth + 1, pitchY = cellHeight + 1;
-            _HeatmapRows = rows;
-            _HeatmapVisibleRows = Math.Min(rows, Math.Max(1, (plotHeight + 1) / pitchY));
-            _HeatmapRowOffset = Math.Clamp(_HeatmapRowOffset, 0, rows - _HeatmapVisibleRows);
+            // The shared clock-aligned grid: time runs left to right, each column one local period (labeled along the
+            // top), each row one step within it (labeled on the left); the month is a calendar of half-day columns
+            // and week rows. Cells stretch to the terminal's width; when even one-character cells without gaps do
+            // not fit, the grid scrolls sideways (PgUp/PgDn), starting at the newest columns.
+            HeatmapCellSize(columns, rows, plotWidth, plotHeight, out int cellWidth, out int cellHeight, out int gapX, out int gapY);
+            int pitchX = cellWidth + gapX, pitchY = cellHeight + gapY;
+            int visible = Math.Min(columns, Math.Max(1, (plotWidth + gapX) / pitchX));
+            _HeatmapColumns = columns;
+            _HeatmapVisibleColumns = visible;
+            _HeatmapColumnOffset = Math.Clamp(_HeatmapColumnOffset, 0, columns - visible);
+            int offset = _HeatmapColumnOffset;
             double[] values = heatmap.TotalTokens.Select(v => (double)v).ToArray();
             double max = values.Length > 0 ? values.Max() : 0;
             UsageHeatmapScale scale = UsageHeatmapScale.FromValues(values);
             surface.DrawText(x, y, Trim(layout.Caption + " (local time)", w), muted);
 
-            // Column labels: every stride-th column, where a stride's width holds the longest label plus a space and
-            // a stride is whole column groups (each weekday labeled once, over its AM column).
-            int stride = group;
-            foreach (int step in new[] { 1, 2, 3, 4, 6, 8, 12, 16, 24 })
+            // Column labels, thinned so they never collide: the first and last visible column always labeled, the last
+            // right-aligned to the grid's end.
+            int span = (visible * pitchX) - gapX;
+            int widest = layout.ColumnLabels.Max(l => l.Length);
+            foreach ((int column, bool last) in HeatmapLabeledColumns(layout, offset, visible, (widest + 1 + pitchX - 1) / pitchX))
             {
-                stride = step * group;
-                if (stride * pitchX >= labelWidth) break;
+                string label = Trim(layout.ColumnLabels[column], span);
+                int left = last ? span - label.Length : (column - offset) * pitchX;
+                surface.DrawText(plotX + Math.Max(0, left), y + 1, label, muted);
             }
 
-            for (int c = 0; c < columns && c * pitchX < plotWidth; c += stride)
+            for (int row = 0; row < rows; row++)
             {
-                surface.DrawText(plotX + c * pitchX, y + 1, Trim(layout.ColumnLabels[c], Math.Min(stride * pitchX - 1, plotWidth - c * pitchX)), muted);
-            }
-
-            for (int visibleRow = 0; visibleRow < _HeatmapVisibleRows; visibleRow++)
-            {
-                int row = visibleRow + _HeatmapRowOffset, index = row * columns;
-                int top = y + 2 + visibleRow * pitchY;
+                int top = y + 2 + row * pitchY;
                 surface.DrawText(x, top + (cellHeight - 1) / 2, Trim(layout.RowLabels[row], axisWidth - 1), muted);
-                for (int c = 0; c < columns; c++)
+                for (int v = 0; v < visible; v++)
                 {
-                    int i = index + c;
-                    int left = plotX + c * pitchX;
-                    if (left + cellWidth > plotX + plotWidth) break;
-                    if (layout.IsOutsideWindow(i)) continue; // After now, or (month) before its last 30 days: no data.
+                    int i = layout.IndexAt(row, offset + v);
+                    int left = plotX + v * pitchX;
+                    if (layout.IsOutsideWindow(i)) continue; // After now, or before the month's or year's window: no data.
                     double value = values[i];
                     int level = scale.LevelOf(value);
                     if (level == 0)
@@ -1417,9 +1415,11 @@ namespace Mux.Cli.App
                 }
             }
 
-            string navigation = _HeatmapVisibleRows < rows ? " · PgUp/PgDn scroll" : string.Empty;
-            surface.DrawText(x, y + h - 4, Trim(count + " spots · " + UsageChartFormat.Interval(layout.BucketMs) + "/spot · rows " + (_HeatmapRowOffset + 1) + "–" + (_HeatmapRowOffset + _HeatmapVisibleRows) + "/" + rows + navigation, w), muted);
-            surface.DrawText(x, y + h - 3, Trim("Oldest at the top-left, newest at the bottom-right · peak " + UsageChartFormat.Tokens(max) + " tokens", w), muted);
+            // When the grid scrolls, the visible columns lead the line so they survive a narrow terminal.
+            string navigation = visible < columns ? "columns " + (offset + 1) + "–" + (offset + visible) + "/" + columns + " · PgUp/PgDn · " : string.Empty;
+            surface.DrawText(x, y + h - 4, Trim(navigation + count + " spots · " + UsageChartFormat.Interval(layout.BucketMs) + "/spot", w), muted);
+            string order = layout.ColumnKind == UsageHeatmapLayout.ColumnKindHalfDay ? "Oldest at the top-left, newest at the bottom-right" : "Oldest at the left, newest at the right";
+            surface.DrawText(x, y + h - 3, Trim(order + " · peak " + UsageChartFormat.Tokens(max) + " tokens", w), muted);
             // Legend: "· none  less ▇▇ ▇▇ ▇▇ ▇▇ more (quartiles) · peak".
             surface.DrawText(x, y + h - 2, Trim("· none  less", w), muted);
             for (int i = 0; i < _HeatColors.Length; i++)
@@ -1432,23 +1432,52 @@ namespace Mux.Cli.App
             if (w > 26) surface.DrawText(x + 25, y + h - 2, Trim("more (quartiles) · peak " + UsageChartFormat.Tokens(max), w - 25), muted);
         }
 
-        // The largest square cell (2 characters wide per line of height, since terminal cells are about twice as tall as
-        // wide) that fits every column with a one-character gap, and every row with a one-line gap when it can (rows
-        // that still do not fit scroll). A cell widens to its column label (up to 5 characters) when the row has room,
-        // so every column can be labeled; with no room for two characters a column is one character wide.
-        private static void HeatmapCellSize(int columns, int rows, int width, int height, int labelLength, out int cellWidth, out int cellHeight)
+        // The columns to label in the visible part of the grid (absolute indices), and whether each is the last one,
+        // drawn right-aligned. The whole grid uses the layout's thinning; a scrolled part thins its own anchors
+        // greedily, keeping its first and last column.
+        private static List<(int Column, bool Last)> HeatmapLabeledColumns(UsageHeatmapLayout layout, int offset, int visible, int minGap)
         {
-            cellHeight = 1;
-            for (int size = 2; size <= 12; size++)
+            List<int> picked;
+            int end;
+            if (offset == 0 && visible == layout.Columns)
             {
-                if (columns * (2 * size + 1) - 1 > width || rows * (size + 1) - 1 > height) break;
-                cellHeight = size;
+                picked = layout.LabeledColumns(minGap);
+                end = layout.ColumnLabelAnchors[layout.ColumnLabelAnchors.Count - 1];
+            }
+            else
+            {
+                List<int> anchors = new List<int> { 0 };
+                anchors.AddRange(layout.ColumnLabelAnchors.Where(a => a > offset && a < offset + visible - 1).Select(a => a - offset));
+                anchors.Add(visible - 1);
+                picked = UsageHeatmapLayout.ThinLabels(anchors.Distinct().ToList(), visible, 1, minGap, false).Select(c => c + offset).ToList();
+                end = offset + visible - 1;
             }
 
-            cellWidth = 2 * cellHeight;
-            int labeled = Math.Min(5, labelLength);
-            if (labeled > cellWidth && columns * (labeled + 1) - 1 <= width) cellWidth = labeled;
-            if (columns * (cellWidth + 1) - 1 > width) cellWidth = 1;
+            return picked.Select((c, i) => (c, i > 0 && c == end)).ToList();
+        }
+
+        // The cell size that fills the plot's width: cells up to 8 characters wide and about half as tall (terminal
+        // cells are about twice as tall as wide, up to 3 lines), with a one-character gap between columns and a
+        // one-line gap between rows when they fit. When one-character cells with gaps do not fit, the gaps go; when
+        // even that does not fit, cells stay one character wide and the grid scrolls sideways.
+        private static void HeatmapCellSize(int columns, int rows, int width, int height, out int cellWidth, out int cellHeight, out int gapX, out int gapY)
+        {
+            gapX = 1;
+            cellWidth = Math.Min(8, ((width + 1) / Math.Max(1, columns)) - 1);
+            if (cellWidth < 1)
+            {
+                gapX = 0;
+                cellWidth = Math.Max(1, width / Math.Max(1, columns));
+                cellWidth = Math.Min(cellWidth, 1);
+            }
+
+            cellHeight = 1;
+            gapY = rows * 2 - 1 <= height ? 1 : 0;
+            for (int size = 2; size <= Math.Min(3, cellWidth / 2); size++)
+            {
+                if (rows * (size + gapY) - gapY > height) break;
+                cellHeight = size;
+            }
         }
 
         private static void DrawSegment(ISurface surface, int x, int bottom, int width, int lower, int upper, Color color, Color previousColor, Color? tint)

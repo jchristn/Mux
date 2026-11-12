@@ -809,8 +809,9 @@ namespace Mux.Desktop.Views
             }.Tip(tip);
         }
 
-        // The token heatmap on the shared clock-aligned grid: each row one local period (its start labeled on the
-        // left), each column one bucket within it (labeled on top), an axis caption naming both, and a legend.
+        // The token heatmap on the shared clock-aligned grid: time runs left to right, each column one local period
+        // (labeled along the top), each row one step within it (labeled on the left); the month is a calendar of
+        // half-day columns and week rows. Columns stretch to the window; an axis caption names both axes.
         private Control BuildTokenHeatmap(AppTheme theme)
         {
             UsageHeatmap heatmap = _Data!.Heatmap!;
@@ -820,7 +821,7 @@ namespace Mux.Desktop.Views
             host.Children.Add(new TextBlock { Text = Localizer.T("usage.heatmap.title"), Foreground = theme.Text, FontSize = 14 });
             host.Children.Add(new TextBlock { Text = UsageChartShaping.HeatmapCaption(layout, Localizer.T), Foreground = theme.Muted, FontSize = 12 });
 
-            double rowHeight = UsageChartShaping.HeatmapRowHeight(layout.Rows);
+            double rowHeight = UsageChartShaping.HeatmapRowHeight(layout.Rows, layout.Columns);
             Grid grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
             for (int c = 0; c < layout.Columns; c++)
@@ -834,23 +835,19 @@ namespace Mux.Desktop.Views
                 grid.RowDefinitions.Add(new RowDefinition(new GridLength(rowHeight, GridUnitType.Pixel)));
             }
 
-            // Column labels, thinned so they never crowd (about one per 44 pixels of a 640 pixel plot); a half-day
-            // grid labels each weekday once, spanning its AM and PM columns.
-            foreach (int c in layout.LabeledColumns(14))
-            {
-                TextBlock label = new TextBlock { Text = layout.FormatColumnLabel(c, culture), Foreground = theme.Muted, FontSize = 10, Margin = new Thickness(2, 0, 0, 2) };
-                Grid.SetRow(label, 0);
-                Grid.SetColumn(label, c + 1);
-                Grid.SetColumnSpan(label, Math.Min(layout.ColumnGroup > 1 ? layout.ColumnGroup : 3, layout.Columns - c));
-                grid.Children.Add(label);
-            }
+            // Column labels along the x-axis, thinned to the width the grid gets so they never collide (the first
+            // and last always labeled, the last right-aligned to the grid's end).
+            List<string> columnLabels = Enumerable.Range(0, layout.Columns).Select(c => layout.FormatColumnLabel(c, culture)).ToList();
+            HeatmapXAxis axis = new HeatmapXAxis(layout, columnLabels, theme.Muted) { Height = 14, Margin = new Thickness(0, 0, 0, 2) };
+            Grid.SetRow(axis, 0);
+            Grid.SetColumn(axis, 1);
+            Grid.SetColumnSpan(axis, layout.Columns);
+            grid.Children.Add(axis);
 
-            List<int> labeledRows = UsageChartShaping.HeatmapLabeledRows(layout.Rows);
-            foreach (int r in labeledRows)
+            foreach (int r in UsageChartShaping.HeatmapLabeledRows(layout.Rows, rowHeight))
             {
-                TextBlock label = new TextBlock { Text = layout.FormatRowLabel(r, culture), Foreground = theme.Muted, FontSize = 11, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = rowHeight >= 16 ? VerticalAlignment.Center : VerticalAlignment.Top };
+                TextBlock label = new TextBlock { Text = layout.FormatRowLabel(r, culture), Foreground = theme.Muted, FontSize = 11, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
                 Grid.SetRow(label, r + 1);
-                Grid.SetRowSpan(label, rowHeight >= 16 ? 1 : Math.Min(2, layout.Rows - r));
                 Grid.SetColumn(label, 0);
                 grid.Children.Add(label);
             }
@@ -904,8 +901,8 @@ namespace Mux.Desktop.Views
                 return 340;
             }
 
-            int rows = _Data.Heatmap.Layout.Rows;
-            return Math.Max(340, (rows * UsageChartShaping.HeatmapRowHeight(rows)) + 120);
+            UsageHeatmapLayout layout = _Data.Heatmap.Layout;
+            return Math.Max(340, (layout.Rows * UsageChartShaping.HeatmapRowHeight(layout.Rows, layout.Columns)) + 120);
         }
 
         // A grey swatch for no usage, then the four shades from less to more, then the order and the peak.
@@ -1788,6 +1785,47 @@ namespace Mux.Desktop.Views
         {
             Grid.SetRow(child, row);
             grid.Children.Add(child);
+        }
+
+        // The heatmap's x-axis labels, laid out for the width it is given: labels thinned by
+        // UsageHeatmapLayout.LabeledColumns so none collide, each drawn from its column's left edge, the last
+        // right-aligned to the end. It redraws on resize, so labels thin and return as the window narrows and widens.
+        private sealed class HeatmapXAxis : Control
+        {
+            private readonly UsageHeatmapLayout _Layout;
+            private readonly List<string> _Labels;
+            private readonly IBrush _Brush;
+
+            public HeatmapXAxis(UsageHeatmapLayout layout, List<string> labels, IBrush brush)
+            {
+                _Layout = layout;
+                _Labels = labels;
+                _Brush = brush;
+            }
+
+            public override void Render(DrawingContext context)
+            {
+                double width = Bounds.Width;
+                if (width <= 0 || _Labels.Count == 0)
+                {
+                    return;
+                }
+
+                Typeface face = new Typeface(FontFamily.Default);
+                FormattedText Text(string text) => new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, face, 10, _Brush);
+                double widest = _Labels.Max(l => Text(l).Width);
+                double pitch = width / _Layout.Columns;
+                List<int> picked = _Layout.LabeledColumns(UsageChartShaping.HeatmapLabelGap(widest, width, _Layout.Columns));
+                int end = _Layout.ColumnLabelAnchors[_Layout.ColumnLabelAnchors.Count - 1];
+                for (int i = 0; i < picked.Count; i++)
+                {
+                    int c = picked[i];
+                    FormattedText text = Text(_Labels[c]);
+                    bool last = i > 0 && c == end;
+                    double x = last ? width - text.Width - 1.5 : (c * pitch) + 1.5;
+                    context.DrawText(text, new Point(Math.Max(0, x), 0));
+                }
+            }
         }
 
         // Lines mode: one 2px line per series through the bucket centers (see UsageChartShaping.LinePoints), in the

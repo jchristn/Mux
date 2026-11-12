@@ -208,37 +208,57 @@ namespace Test.Shared.Suites
                         long now = new DateTimeOffset(2026, 11, 11, 15, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
                         Dictionary<string, string> en = DashboardStrings.Build()["en"];
                         Dictionary<string, string> de = DashboardStrings.Build()["de"];
-                        UsageHeatmapLayout week = UsageHeatmapLayout.Compute(UsageRange.Week, now, 0);
-                        MuxAssert.AreEqual(week.Caption, UsageChartShaping.HeatmapCaption(week, k => en[k]), "English caption matches Mux.Core's");
-                        MuxAssert.AreEqual("Zeilen: Tag (Beginn) · Spalten: Uhrzeit", UsageChartShaping.HeatmapCaption(week, k => de[k]), "German caption");
+                        UsageHeatmapLayout day = UsageHeatmapLayout.Compute(UsageRange.Day, now, 0);
+                        MuxAssert.AreEqual(day.Caption, UsageChartShaping.HeatmapCaption(day, k => en[k]), "English caption matches Mux.Core's");
+                        MuxAssert.AreEqual("Columns: hour of day · Rows: minute of the hour", UsageChartShaping.HeatmapCaption(day, k => en[k]), "x first, then y");
+                        MuxAssert.AreEqual("Spalten: Stunde des Tages · Zeilen: Minute der Stunde", UsageChartShaping.HeatmapCaption(day, k => de[k]), "German caption");
                         foreach (UsageRange range in new[] { UsageRange.Hour, UsageRange.Day, UsageRange.Week, UsageRange.Month, UsageRange.Quarter, UsageRange.Year })
                         {
                             UsageHeatmapLayout layout = UsageHeatmapLayout.Compute(range, now, 0);
                             MuxAssert.AreEqual(layout.Caption, UsageChartShaping.HeatmapCaption(layout, k => en[k]), "caption for " + range);
-                            List<int> labeled = UsageChartShaping.HeatmapLabeledRows(layout.Rows);
-                            MuxAssert.AreEqual(0, labeled[0], "first row labeled for " + range);
-                            MuxAssert.AreEqual(layout.Rows - 1, labeled[labeled.Count - 1], "last row labeled for " + range);
-                            double height = UsageChartShaping.HeatmapRowHeight(layout.Rows);
-                            for (int i = 1; i < labeled.Count; i++) MuxAssert.IsTrue((labeled[i] - labeled[i - 1]) * height >= 16, "row labels never overlap for " + range);
+                            double height = UsageChartShaping.HeatmapRowHeight(layout.Rows, layout.Columns);
+                            MuxAssert.IsTrue(height >= 14 && height <= 30, "row height in range for " + range);
+                            MuxAssert.IsTrue(layout.Rows * height <= 360, "the grid stays short for " + range);
+                            List<int> labeled = UsageChartShaping.HeatmapLabeledRows(layout.Rows, height);
+                            MuxAssert.AreEqual(layout.Rows, labeled.Count, "every row labeled for " + range);
+                            foreach (KeyValuePair<string, Dictionary<string, string>> pack in DashboardStrings.Build())
+                            {
+                                MuxAssert.IsTrue(pack.Value.ContainsKey(UsageChartShaping.HeatmapColumnKey(layout.ColumnUnit)), "x caption for " + range + " in " + pack.Key);
+                                MuxAssert.IsTrue(pack.Value.ContainsKey(UsageChartShaping.HeatmapRowKey(layout.RowKind)), "y caption for " + range + " in " + pack.Key);
+                            }
                         }
 
-                        UsageHeatmapLayout all = UsageHeatmapLayout.Compute(UsageRange.All, now, 0, now - 40L * DayMs);
-                        MuxAssert.AreEqual(all.Caption, UsageChartShaping.HeatmapCaption(all, k => en[k]), "all-time caption");
-                        UsageHeatmapLayout month = UsageHeatmapLayout.Compute(UsageRange.Month, now, 0);
-                        MuxAssert.AreEqual(5, month.Rows, "month week rows");
-                        MuxAssert.AreEqual(14, month.Columns, "month half-day columns");
-                        MuxAssert.AreEqual(5, UsageChartShaping.HeatmapLabeledRows(month.Rows).Count, "every month week is labeled");
-                        MuxAssert.AreEqual("us.hm.col.halfday", UsageChartShaping.HeatmapColumnKey(month.ColumnKind), "half-day column key");
-                        MuxAssert.AreEqual("Rows: week starting · Columns: day (AM, PM)", UsageChartShaping.HeatmapCaption(month, k => en[k]), "English month caption");
-                        MuxAssert.AreEqual("Zeilen: Woche (Beginn) · Spalten: Tag (vormittags, nachmittags)", UsageChartShaping.HeatmapCaption(month, k => de[k]), "German month caption");
-                        foreach (KeyValuePair<string, Dictionary<string, string>> pack in DashboardStrings.Build())
+                        foreach (long span in new[] { 50 * MinuteMs, DayMs, 40L * DayMs, 400L * DayMs })
                         {
-                            MuxAssert.IsTrue(pack.Value.ContainsKey("us.hm.col.halfday"), "half-day caption in " + pack.Key);
+                            UsageHeatmapLayout all = UsageHeatmapLayout.Compute(UsageRange.All, now, 0, now - span);
+                            MuxAssert.AreEqual(all.Caption, UsageChartShaping.HeatmapCaption(all, k => en[k]), "all-time caption");
+                            MuxAssert.IsTrue(DashboardStrings.Build()["de"].ContainsKey(UsageChartShaping.HeatmapRowKey(all.RowKind)), "all-time y caption in German");
                         }
 
-                        MuxAssert.IsTrue(UsageChartShaping.HeatmapLabeledRows(30).Count < 30, "a tall grid thins its row labels");
-                        MuxAssert.AreEqual(4, UsageChartShaping.HeatmapLabeledRows(4).Count, "short grids label every row");
-                        MuxAssert.AreEqual("Mo", UsageHeatmapLayout.Compute(UsageRange.Quarter, now, 0).FormatColumnLabel(0, new System.Globalization.CultureInfo("de-DE")), "weekday columns follow the culture");
+                        UsageHeatmapLayout month = UsageHeatmapLayout.Compute(UsageRange.Month, now, 0);
+                        MuxAssert.AreEqual("us.hm.x.halfday", UsageChartShaping.HeatmapColumnKey(month.ColumnUnit), "half-day column key");
+                        MuxAssert.AreEqual("us.hm.y.week", UsageChartShaping.HeatmapRowKey(month.RowKind), "week row key");
+                        MuxAssert.AreEqual("Columns: day of the week (AM, PM) · Rows: week starting", UsageChartShaping.HeatmapCaption(month, k => en[k]), "English month caption");
+                        MuxAssert.AreEqual("Spalten: Wochentag (vormittags, nachmittags) · Zeilen: Woche (Beginn)", UsageChartShaping.HeatmapCaption(month, k => de[k]), "German month caption");
+                        MuxAssert.AreEqual("us.hm.x.period", UsageChartShaping.HeatmapColumnKey("bogus"), "unknown column unit");
+                        MuxAssert.AreEqual("us.hm.y.weeks", UsageChartShaping.HeatmapRowKey(null), "unknown row kind");
+
+                        // Rows of a wide grid are short; row labels thin only when rows are under 14 pixels.
+                        MuxAssert.AreEqual(16.0, UsageChartShaping.HeatmapRowHeight(7, 53), "a year's rows are about square with its 53 columns");
+                        MuxAssert.AreEqual(30.0, UsageChartShaping.HeatmapRowHeight(4, 24), "a day's rows are capped at 30 pixels");
+                        MuxAssert.IsTrue(UsageChartShaping.HeatmapLabeledRows(12, 10).Count < 12, "short rows thin their labels");
+                        MuxAssert.AreEqual(11, UsageChartShaping.HeatmapLabeledRows(12, 10)[UsageChartShaping.HeatmapLabeledRows(12, 10).Count - 1], "the last row keeps its label");
+
+                        // x labels: how many columns one label needs, fed to the layout's thinning.
+                        MuxAssert.AreEqual(1, UsageChartShaping.HeatmapLabelGap(14, 900, 24), "two-digit hours fit one 37 pixel column");
+                        MuxAssert.AreEqual(3, UsageChartShaping.HeatmapLabelGap(20, 900, 100), "a 20 pixel label over 9 pixel columns needs 3");
+                        MuxAssert.AreEqual(5, UsageChartShaping.HeatmapLabelGap(10, 0, 5), "no width: one label");
+                        UsageHeatmapLayout year = UsageHeatmapLayout.Compute(UsageRange.Year, now, 0);
+                        List<int> picked = year.LabeledColumns(UsageChartShaping.HeatmapLabelGap(22, 800, year.Columns));
+                        MuxAssert.AreEqual(0, picked[0], "year: first month labeled");
+                        MuxAssert.AreEqual(year.Columns - 1, picked[picked.Count - 1], "year: last column labeled");
+                        MuxAssert.AreEqual("Mo", UsageHeatmapLayout.Compute(UsageRange.Quarter, now, 0).FormatRowLabel(0, new System.Globalization.CultureInfo("de-DE")), "weekday rows follow the culture");
+                        MuxAssert.AreEqual("Do 05.11", UsageHeatmapLayout.Compute(UsageRange.Week, now, 0).FormatColumnLabel(0, new System.Globalization.CultureInfo("de-DE")), "weekday and date columns follow the culture");
                         return Task.CompletedTask;
                     }),
 

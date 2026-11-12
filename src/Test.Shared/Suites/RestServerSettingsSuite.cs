@@ -1,5 +1,6 @@
 namespace Test.Shared.Suites
 {
+    using System;
     using System.Collections.Generic;
     using System.Text.Json;
     using System.Threading;
@@ -27,7 +28,6 @@ namespace Test.Shared.Suites
                     new TestCaseDescriptor("RestServerSettings", "Defaults", "Defaults are loopback and opt-in", (CancellationToken ct) =>
                     {
                         RestServerSettings settings = new RestServerSettings();
-                        MuxAssert.IsFalse(settings.Enabled, "Enabled");
                         MuxAssert.AreEqual("127.0.0.1", settings.Hostname, "Hostname");
                         MuxAssert.AreEqual(8710, settings.Port, "Port");
                         MuxAssert.IsFalse(settings.Ssl, "Ssl");
@@ -64,10 +64,19 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("RestServerSettings", "LegacyEnabledFieldIsIgnored", "A settings file from before rest.enabled was removed still loads, and saving drops the field", (CancellationToken ct) =>
+                    {
+                        string legacy = "{\"rest\":{\"enabled\":true,\"hostname\":\"127.0.0.1\",\"port\":9124}}";
+                        MuxSettings? loaded = JsonSerializer.Deserialize<MuxSettings>(legacy);
+                        MuxAssert.IsNotNull(loaded, "loaded");
+                        MuxAssert.AreEqual(9124, loaded!.Rest.Port, "other rest fields still read");
+                        MuxAssert.IsFalse(JsonSerializer.Serialize(loaded.Rest).Contains("enabled", StringComparison.OrdinalIgnoreCase), "rest.enabled is not written back");
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor("RestServerSettings", "RoundTripThroughMuxSettings", "MuxSettings.Rest round-trips through JSON", (CancellationToken ct) =>
                     {
                         MuxSettings original = new MuxSettings();
-                        original.Rest.Enabled = true;
                         original.Rest.Hostname = "127.0.0.1";
                         original.Rest.Port = 9123;
                         original.Rest.ApiKey = "mux_secret";
@@ -77,8 +86,7 @@ namespace Test.Shared.Suites
                         MuxSettings? restored = JsonSerializer.Deserialize<MuxSettings>(json);
 
                         MuxAssert.IsNotNull(restored, "restored");
-                        MuxAssert.IsTrue(restored!.Rest.Enabled, "Enabled");
-                        MuxAssert.AreEqual(9123, restored.Rest.Port, "Port");
+                        MuxAssert.AreEqual(9123, restored!.Rest.Port, "Port");
                         MuxAssert.AreEqual("mux_secret", restored.Rest.ApiKey, "ApiKey");
                         MuxAssert.AreEqual("https://example.test", restored.Rest.CorsAllowOrigin, "CorsAllowOrigin");
                         return Task.CompletedTask;

@@ -12,7 +12,6 @@ namespace Mux.Core.Models
     {
         #region Private-Members
 
-        private bool _Enabled = false;
         private string _Hostname = "127.0.0.1";
         private int _Port = 8710;
         private bool _Ssl = false;
@@ -33,17 +32,6 @@ namespace Mux.Core.Models
         #endregion
 
         #region Public-Members
-
-        /// <summary>
-        /// Not used: the tray agent always starts the REST server, and <c>mux serve</c> always does. Kept so existing
-        /// settings files load and round-trip unchanged. Defaults to false.
-        /// </summary>
-        [JsonPropertyName("enabled")]
-        public bool Enabled
-        {
-            get => _Enabled;
-            set => _Enabled = value;
-        }
 
         /// <summary>
         /// The hostname the server binds to. Defaults to <c>127.0.0.1</c> (loopback). Pinning IPv4 loopback

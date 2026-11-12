@@ -39,6 +39,13 @@ All notable changes to mux are documented here.
   shortcuts. Previously only macOS installed the apps, and only per-user. The all-users copy uses sudo or an
   elevated prompt when needed and is skipped with a warning without those rights; `MUX_SYSTEM_INSTALL=0`
   skips it. `remove-tool` removes both copies.
+- `run-desktop` and `run-tui` on every OS install or refresh the per-user tray agent when it is missing or from
+  another version (`MUX_REFRESH_AGENT=1` forces it; installs record the version in `mux-version.txt` or the
+  macOS `Info.plist`) and start it before the surface, so a fresh checkout also gets the agent. A surface replaces
+  a running agent of another version only with a copy of its own version, never the same stale copy.
+- `node tools/i18n/gen.js` generates both the desktop and dashboard string catalogs again (the desktop source had
+  drifted by 127 keys and the dashboard catalog had no generator); `--check` and the `I18nCatalogs` suite fail on
+  drift.
 - `run-at-startup` behaves the same on every OS: it installs or refreshes the per-user agent and registers that
   installed copy to start at login. Linux, WSL, and Windows previously registered a build from the source tree.
   `remove-from-startup` leaves the app installed.
@@ -68,8 +75,8 @@ All notable changes to mux are documented here.
 
 - The docs said the tray agent starts the server only when `rest.enabled` is true and that the server never
   starts on its own. The agent always starts it, and every surface starts the agent. CONFIG.md and REST_API.md
-  now say so, and the web dashboard's settings page drops the "Tray auto-start" checkbox, which did nothing
-  (`rest.enabled` still loads and saves unchanged).
+  now say so.
+
 - The wordmark in the desktop app's startup splash (its About window) and the tray agent's About window was
   broken into bands. It was text, and a font's block glyphs are shorter than its line height (Menlo's full block
   covers 2088 of 2384 units), so each row left a gap; a terminal stretches the glyphs, which is why the TUI
@@ -87,13 +94,21 @@ All notable changes to mux are documented here.
   local time (the terminal's rows were aligned to UTC): rows are periods labelled with their start (hours,
   days, or Monday-start weeks) and columns are steps within them labelled with minutes, time of day, or
   weekdays, with a caption naming both. New route `GET /v1.0/api/usage/heatmap?range=..&tzOffsetMinutes=..`.
-  Clicking a cell lists its calls on the web, desktop, and (newly) VS Code. The month view is a calendar of five Monday-start
-  weeks by half-days. `UsageWindow.ComputeHeatmap` is removed.
+  Clicking a cell lists its calls on the web, desktop, and (newly) VS Code. Time runs along the x-axis (periods across, steps within
+  each period down; year is a contribution-style grid of daily cells), cells stretch to the available width, and
+  the month view is a calendar of days (AM/PM) across by five or six Monday-start weeks down, so the whole 30-day
+  window always shows. `UsageWindow.ComputeHeatmap` is removed.
 - `range=all` time series fell back to the last 24 hours, so VS Code's All range showed all-time KPIs over
   a one-day chart.
 - The OpenAPI schema for `UsageBreakdownRow` documented a `Key` property; it is `Dimension` and `Value`.
 - Two MCP prompt-section tests still expected tool descriptions that the prompt intentionally stopped
   repeating in 1.6.0.
+
+### Removed
+
+- The `rest.enabled` setting and the web dashboard's "Tray auto-start" checkbox, which did nothing: the tray agent
+  always starts the server. Settings files that still contain it load normally, and the field is dropped on
+  the next save.
 
 ## 1.6.0 (unreleased)
 

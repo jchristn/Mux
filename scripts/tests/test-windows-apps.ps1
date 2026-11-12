@@ -6,7 +6,9 @@ Run with: pwsh -NoProfile -File scripts/tests/test-windows-apps.ps1   (any OS; W
 
 Covers parsing of every scripts/**/*.ps1, install-path resolution, the elevated / non-elevated /
 MUX_SYSTEM_INSTALL=0 branches, the running-process guard, RID selection, publish staging, install
-replacement and removal, and the per-user agent-only install used by run-at-startup.bat. Nothing real is
+replacement and removal, the per-user agent-only install used by run-at-startup.bat, the mux-version.txt
+marker, and EnsureUserAgent (run-desktop.bat and run-tui.bat: install or refresh the agent only when it is
+missing or stale, never under a running copy, and exit 2 when MUX_AGENT_AUTOSTART turns automatic starts off). Nothing real is
 built or installed: dotnet, elevation, the process list, shortcut creation and the console messages are
 fakes, and every path lives under a temporary directory. The .bat callers are not run here.
 #>
@@ -29,7 +31,7 @@ $temp = Join-Path ([IO.Path]::GetTempPath()) ('mux windows ' + [guid]::NewGuid()
 New-Item -ItemType Directory -Path $temp | Out-Null
 $savedEnv = @{}
 foreach ($name in 'LOCALAPPDATA', 'APPDATA', 'ProgramFiles', 'ProgramW6432', 'ProgramData', 'MUX_SYSTEM_INSTALL',
-    'PROCESSOR_ARCHITECTURE', 'PROCESSOR_ARCHITEW6432') {
+    'PROCESSOR_ARCHITECTURE', 'PROCESSOR_ARCHITEW6432', 'MUX_AGENT_AUTOSTART', 'MUX_REFRESH_AGENT') {
     $savedEnv[$name] = [Environment]::GetEnvironmentVariable($name)
 }
 function Set-Env([string]$Name, [string]$Value) { [Environment]::SetEnvironmentVariable($Name, $Value) }
@@ -43,7 +45,7 @@ try {
     $repo = J $temp 'repo'
     foreach ($exe in 'Mux.Desktop', 'Mux.Agent') {
         New-Item -ItemType Directory -Path (J $repo 'src' $exe) -Force | Out-Null
-        Set-Content -LiteralPath (J $repo 'src' $exe "$exe.csproj") -Value '<Project />'
+        Set-Content -LiteralPath (J $repo 'src' $exe "$exe.csproj") -Value '<Project><PropertyGroup><Version>1.2.3</Version></PropertyGroup></Project>'
     }
     New-Item -ItemType Directory -Path (J $repo 'assets' 'icons') -Force | Out-Null
     Copy-Item -LiteralPath (J $root 'assets' 'icons' 'icon-green.ico') -Destination (J $repo 'assets' 'icons' 'icon-green.ico')
@@ -56,6 +58,8 @@ try {
     Set-Env 'MUX_SYSTEM_INSTALL' $null
     Set-Env 'PROCESSOR_ARCHITECTURE' 'AMD64'
     Set-Env 'PROCESSOR_ARCHITEW6432' $null
+    Set-Env 'MUX_AGENT_AUTOSTART' $null
+    Set-Env 'MUX_REFRESH_AGENT' $null
 
     # Fakes for the Windows-only calls.
     $script:MockElevated = $false
@@ -174,6 +178,7 @@ try {
             Check (Test-Path -LiteralPath (J $dir 'mux.ico') -PathType Leaf) "$Label $($pair[0]) icon"
             Check ((Get-Content -LiteralPath (J $dir '.playwright' 'driver')) -eq 'driver') "$Label $($pair[0]) .playwright copied"
             Check (-not (Test-Path -LiteralPath "$dir.new")) "$Label no leftover $($pair[0]).new"
+            Check ((Get-MuxInstalledVersion $dir) -eq '1.2.3') "$Label $($pair[0]) mux-version.txt"
             $link = @($script:Shortcuts | Where-Object { $_.Path -eq (J $Links "$($pair[2]).lnk") })
             Check ($link.Count -eq 1) "$Label shortcut $($pair[2]).lnk"
             Check ($link[0].Target -eq (J $dir "$($pair[1]).exe") -and $link[0].WorkingDirectory -eq $dir -and $link[0].Icon -eq (J $dir 'mux.ico')) "$Label shortcut fields"
@@ -252,6 +257,68 @@ try {
     Check ((Run 'InstallUserAgent').Code -eq 1 -and (Test-Path -LiteralPath (J $userRoot 'Agent' 'keep.dll'))) 'failed publish keeps the installed agent'
     Check ((Run 'InstallUserAgent' '').Code -eq 1) 'InstallUserAgent without a framework fails'
 
+    # EnsureUserAgent (run-desktop.bat, run-tui.bat): install or refresh only when needed.
+    foreach ($pair in @(@($null, $true), @('', $true), @('1', $true), @('yes', $true), @('0', $false), @(' Off ', $false),
+            @('FALSE', $false), @('no', $false))) {
+        Check ((Test-MuxAutostartEnabled $pair[0]) -eq $pair[1]) "autostart '$($pair[0])'"
+    }
+    Check ((Get-MuxProjectVersion (J $repo 'src' 'Mux.Agent' 'Mux.Agent.csproj')) -eq '1.2.3') 'project version'
+    Check ($null -eq (Get-MuxProjectVersion (J $temp 'missing.csproj'))) 'missing project has no version'
+    $agentDir = J $userRoot 'Agent'
+    $agentMarker = J $agentDir 'mux-version.txt'
+    Reset-Mocks -Elevated $true
+    Check ((Run 'Remove').Code -eq 0) 'clean slate for EnsureUserAgent'
+    $r = Run 'EnsureUserAgent' 'net8.0'
+    Check ($r.Code -eq 0 -and $script:Calls.Count -eq 1 -and $script:Calls[0][1] -eq (J $repo 'src' 'Mux.Agent' 'Mux.Agent.csproj')) "missing agent installed: $($r.Err)"
+    Check ((Get-MuxInstalledVersion $agentDir) -eq '1.2.3') 'marker written'
+    Check (-not (Test-Path -LiteralPath (J $userRoot 'Desktop')) -and -not (Test-Path -LiteralPath $systemRoot)) 'agent only, per-user only'
+    Reset-Mocks
+    $r = Run 'EnsureUserAgent'
+    Check ($r.Code -eq 0 -and $script:Calls.Count -eq 0 -and $script:Warnings.Count -eq 0) 'current agent: no rebuild'
+    Set-Content -LiteralPath $agentMarker -Value '0.0.1'
+    $r = Run 'EnsureUserAgent'
+    Check ($r.Code -eq 0 -and $script:Calls.Count -eq 1 -and (Get-MuxInstalledVersion $agentDir) -eq '1.2.3') 'stale agent refreshed'
+    Reset-Mocks
+    Remove-Item -LiteralPath $agentMarker
+    Check ((Run 'EnsureUserAgent').Code -eq 0 -and $script:Calls.Count -eq 1) 'agent without a marker refreshed'
+    Reset-Mocks
+    Set-Env 'MUX_REFRESH_AGENT' '1'
+    Check ((Run 'EnsureUserAgent').Code -eq 0 -and $script:Calls.Count -eq 1) 'MUX_REFRESH_AGENT=1 forces a refresh'
+    Set-Env 'MUX_REFRESH_AGENT' $null
+    # Running from the per-user folder: never replaced; a stale one gets one note naming kill-mux.
+    Reset-Mocks
+    Set-Content -LiteralPath $agentMarker -Value '0.0.1'
+    Running (J $agentDir 'Mux.Agent.exe')
+    $r = Run 'EnsureUserAgent'
+    Check ($r.Code -eq 0 -and $script:Calls.Count -eq 0 -and (Get-MuxInstalledVersion $agentDir) -eq '0.0.1') "running stale agent not replaced: $($r.Err)"
+    Check ($script:Warnings.Count -eq 1 -and $script:Warnings[0] -match 'older version \(0\.0\.1, this checkout is 1\.2\.3\)\. Quit it \(or run scripts\\windows\\kill-mux\.bat\) to update it\.') "stale note: $($script:Warnings)"
+    Reset-Mocks
+    Set-Content -LiteralPath $agentMarker -Value '1.2.3'
+    Running (J $agentDir 'Mux.Agent.exe')
+    Check ((Run 'EnsureUserAgent').Code -eq 0 -and $script:Calls.Count -eq 0 -and $script:Warnings.Count -eq 0) 'running current agent: nothing to do'
+    Set-Env 'MUX_REFRESH_AGENT' '1'
+    Check ((Run 'EnsureUserAgent').Code -eq 0 -and $script:Calls.Count -eq 0 -and $script:Warnings[0] -match 'cannot refresh') 'running agent: MUX_REFRESH_AGENT=1 only notes it'
+    Set-Env 'MUX_REFRESH_AGENT' $null
+    # An agent running from elsewhere does not lock the per-user copy, so a stale one is refreshed.
+    Reset-Mocks
+    Set-Content -LiteralPath $agentMarker -Value '0.0.1'
+    Running (J $temp 'elsewhere' 'Mux.Agent.exe')
+    Check ((Run 'EnsureUserAgent').Code -eq 0 -and $script:Calls.Count -eq 1) 'agent running elsewhere: per-user copy refreshed'
+    # MUX_AGENT_AUTOSTART=0 / off: nothing is installed and the caller is told (exit 2) not to start it.
+    Reset-Mocks
+    Check ((Run 'Remove').Code -eq 0) 'clean slate for MUX_AGENT_AUTOSTART'
+    foreach ($off in '0', 'OFF') {
+        Set-Env 'MUX_AGENT_AUTOSTART' $off
+        $r = Run 'EnsureUserAgent'
+        Check ($r.Code -eq 2 -and $script:Calls.Count -eq 0 -and -not (Test-Path -LiteralPath $agentDir)) "MUX_AGENT_AUTOSTART=$($off): exit 2, nothing installed"
+    }
+    Set-Env 'MUX_AGENT_AUTOSTART' $null
+    $script:MockPublishFail = $true
+    $r = Run 'EnsureUserAgent'
+    Check ($r.Code -eq 1 -and $r.Err -match 'Error: Publishing Mux Agent failed') "failed agent install fails: $($r.Err)"
+    $script:MockPublishFail = $false
+    Check ((Run 'EnsureUserAgent' '').Code -eq 1) 'EnsureUserAgent without a framework fails'
+
     # Remove, not elevated: user copy goes, the system copy is named in a warning.
     Reset-Mocks -Elevated $true
     Check ((Run 'Install').Code -eq 0) 'reinstall both for the remove tests'
@@ -284,6 +351,11 @@ try {
     Check ($LASTEXITCODE -eq 1 -and ($out -join "`n") -match "Error: Unknown action: 'Bogus'") "entry point error: $out"
     $out = & $exe -NoProfile -File $helper -Action Check 2>&1
     Check ($LASTEXITCODE -eq 0) "entry point check: $out"
+    # The .bat callers tell "automatic starts are off" (2) from a failure (1) by the exit code.
+    Set-Env 'MUX_AGENT_AUTOSTART' '0'
+    $out = & $exe -NoProfile -File $helper -Action EnsureUserAgent -Framework net8.0 2>&1
+    Check ($LASTEXITCODE -eq 2) "entry point EnsureUserAgent with MUX_AGENT_AUTOSTART=0 exits 2: $LASTEXITCODE $out"
+    Set-Env 'MUX_AGENT_AUTOSTART' $null
 } finally {
     [Console]::SetError($savedError)
     foreach ($name in $savedEnv.Keys) { Set-Env $name $savedEnv[$name] }

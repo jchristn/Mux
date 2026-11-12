@@ -108,6 +108,47 @@ namespace Mux.Core.Startup
         }
 
         /// <summary>
+        /// The mux version of an installed agent, read from the marker the install scripts write: <c>mux-version.txt</c>
+        /// beside the executable (Linux, WSL, Windows) or <c>CFBundleShortVersionString</c> in the bundle's
+        /// <c>Info.plist</c> (macOS). Null when there is no marker (for example a build from source).
+        /// </summary>
+        /// <param name="executable">The agent executable.</param>
+        /// <returns>The version, or null.</returns>
+        public static string? InstalledVersion(string? executable)
+        {
+            if (string.IsNullOrWhiteSpace(executable)) return null;
+            try
+            {
+                string? directory = Path.GetDirectoryName(executable);
+                if (directory == null) return null;
+                string marker = Path.Combine(directory, "mux-version.txt");
+                if (File.Exists(marker))
+                {
+                    string version = File.ReadAllText(marker).Trim();
+                    return version.Length > 0 ? version : null;
+                }
+
+                string plist = Path.Combine(directory, "..", "Info.plist");
+                if (File.Exists(plist))
+                {
+                    string text = File.ReadAllText(plist);
+                    int key = text.IndexOf("<key>CFBundleShortVersionString</key>", StringComparison.Ordinal);
+                    if (key >= 0)
+                    {
+                        int open = text.IndexOf("<string>", key, StringComparison.Ordinal);
+                        int close = open < 0 ? -1 : text.IndexOf("</string>", open, StringComparison.Ordinal);
+                        if (open >= 0 && close > open) return text.Substring(open + 8, close - open - 8).Trim();
+                    }
+                }
+            }
+            catch (Exception)
+            {
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Finds the agent executable, or null when there is none (see the class remarks for the order).
         /// </summary>
         /// <returns>The full path, or null.</returns>

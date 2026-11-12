@@ -64,10 +64,18 @@ namespace Mux.Core.Startup
                     return AgentStartResult.AlreadyRunning;
                 }
 
+                // Replace it only with a copy of this version: restarting the same stale installed copy would just
+                // stop and start the old agent. A copy without a version marker (a build from source) is trusted.
+                executable = AgentLocator.Locate();
+                if (!ShouldReplace(version, AgentLocator.InstalledVersion(executable)))
+                {
+                    return AgentStartResult.AlreadyRunning;
+                }
+
                 StopAgents();
             }
 
-            executable = AgentLocator.Locate();
+            executable ??= AgentLocator.Locate();
             if (executable == null)
             {
                 return AgentStartResult.NotFound;
@@ -98,6 +106,24 @@ namespace Mux.Core.Startup
                 // If processes cannot be listed, assume it is running so a duplicate is never started.
                 return true;
             }
+        }
+
+        /// <summary>
+        /// Whether to replace a running agent of <paramref name="runningVersion"/> with the located copy of
+        /// <paramref name="locatedVersion"/>: only when the running one is another version than this build and the
+        /// located copy is this build's version, or has no version marker (a build from source).
+        /// </summary>
+        /// <param name="runningVersion">The running agent's version, or null when unknown.</param>
+        /// <param name="locatedVersion">The located copy's version marker, or null when it has none.</param>
+        /// <returns>True to stop the running agent and start the located copy.</returns>
+        public static bool ShouldReplace(string? runningVersion, string? locatedVersion)
+        {
+            if (runningVersion == null || string.Equals(runningVersion, Defaults.ProductVersion, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return locatedVersion == null || string.Equals(locatedVersion, Defaults.ProductVersion, StringComparison.Ordinal);
         }
 
         /// <summary>

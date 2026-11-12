@@ -374,19 +374,25 @@ export interface HeatmapLike {
     Layout: {
         NowUnixMs: number;
         UtcOffsetMinutes: number;
-        FromUnixMs: number;
-        /** The first cell inside the window (older servers omit it: the whole grid). */
-        WindowFromUnixMs?: number;
         BucketMs: number;
+        /** The y-axis count. */
         Rows: number;
+        /** The x-axis count, oldest first. */
         Columns: number;
-        /** Consecutive columns sharing one label (older servers omit it: 1). */
+        /** Consecutive columns sharing one label (2 for half-days). */
         ColumnGroup?: number;
-        RowKind: string;
-        RowUnit: string;
         ColumnKind: string;
-        RowStartsUnixMs: number[];
+        RowKind: string;
+        ColumnUnit: string;
+        ColumnTimesUnixMs: number[];
+        RowTimesUnixMs: number[];
         ColumnLabels: string[];
+        RowLabels: string[];
+        ColumnLabelAnchors?: number[];
+        /** Each cell's start in display order (row-major). */
+        CellStartsUnixMs: number[];
+        /** Whether each cell is outside the window (future, or before the month's or year's window). */
+        OutsideWindow: boolean[];
     };
     TotalTokens: number[];
     Calls: number[];
@@ -403,21 +409,17 @@ export interface HeatmapCell {
     /** Inclusive window start and end, Unix ms (the drill-down window). */
     from: number;
     to: number;
-    /** True for the rest of the current row, after now. */
+    /** True for a cell that starts after now. */
     future: boolean;
-    /** True outside the window (after now, or before the month calendar's last 30 days): drawn blank, not clickable. */
+    /** True outside the window (after now, or before the month's or year's window): drawn blank, not clickable. */
     blank: boolean;
 }
 
-/** The token heatmap on the shared clock-aligned grid. */
+/** The token heatmap on the shared clock-aligned grid: rows x columns, cells in display order (row-major). */
 export interface HeatmapGrid {
     rows: number;
     cols: number;
     max: number;
-    /** Row height in pixels, including the gap. */
-    rowHeight: number;
-    /** The rows that get a label (all when rows are tall enough, else every 2nd with the first and last). */
-    labeledRows: number[];
     cells: HeatmapCell[];
 }
 /**
@@ -449,7 +451,7 @@ export function heatmapScale(values: readonly number[]): (value: number) => numb
 /**
  * Picks which of `count` labels to draw so at most about `maxLabels` show: every 1st, 2nd, 3rd, 4th, 6th, 8th, ...
  * label, plus the last when `includeLast` (dropping the stride label just before it when they would crowd). Mirrors
- * Mux.Core's `UsageHeatmapLayout.LabeledIndices` and the web dashboard.
+ * Mux.Core's `UsageHeatmapLayout.LabeledIndices` and the web dashboard; used for the y-axis.
  */
 export function labeledIndices(count: number, maxLabels: number, includeLast: boolean): number[] {
     const out: number[] = [];
@@ -477,41 +479,101 @@ export function labeledIndices(count: number, maxLabels: number, includeLast: bo
     return out;
 }
 
-/** The heatmap row height in pixels: 24 for up to 13 rows, then shrinking to a 12 pixel floor (as on the web). */
-export function heatmapRowHeight(rows: number): number {
-    return rows <= 13 ? 24 : Math.max(12, Math.min(24, Math.floor(440 / Math.max(1, rows))));
+/**
+ * Thins x-axis labels so none collide, keeping the first and last; mirrors Mux.Core's
+ * `UsageHeatmapLayout.ThinLabels` and the web dashboard. A label needs `gap` columns from its anchor; evenly spaced
+ * anchors keep every 1st, 2nd, 3rd, 4th, 6th, ... anchor, uneven ones (month starts) are kept greedily; the last label
+ * is right-aligned to the grid's end, so it needs room for itself and the label before it. Self-contained (no outer
+ * references) so the webview runs the same function.
+ */
+export function thinLabels(anchors: readonly number[], columns: number, group: number, gap: number, even: boolean): number[] {
+    const strides = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
+    const out: number[] = [];
+    if (!anchors || anchors.length === 0 || columns <= 0) {
+        return out;
+    }
+    gap = Math.max(1, gap);
+    group = Math.max(1, group);
+    const last = anchors[anchors.length - 1];
+    if (even) {
+        const spacing = anchors.length > 1 ? anchors[1] - anchors[0] : 1;
+        let stride = strides[strides.length - 1];
+        for (const s of strides) {
+            if (s * spacing >= gap) {
+                stride = s;
+                break;
+            }
+        }
+        for (let i = 0; i < anchors.length; i += stride) {
+            out.push(anchors[i]);
+        }
+    } else {
+        out.push(anchors[0]);
+        for (let i = 1; i < anchors.length; i++) {
+            if (anchors[i] - out[out.length - 1] >= gap) {
+                out.push(anchors[i]);
+            }
+        }
+    }
+    if (last === anchors[0]) {
+        return out;
+    }
+    if (out.length > 1 && out[out.length - 1] === last) {
+        out.pop();
+    }
+    const need = 2 * gap - group;
+    while (out.length > 1 && last - out[out.length - 1] < need) {
+        out.pop();
+    }
+    if (last - out[out.length - 1] >= need) {
+        out.push(last);
+    }
+    return out;
+}
+
+/**
+ * Cell sizes for a container width, as on the web dashboard: columns share the width left of the row labels (with
+ * 3 pixel gaps), clamped to 10-96 pixels; rows are as tall as a column is wide, clamped to 12-28 pixels, so the grid
+ * reads wide rather than tall; `gap` is the columns one x label needs (its estimated width plus 8 pixels).
+ * Self-contained so the webview runs the same function.
+ */
+export function heatmapSizes(width: number, columns: number, rowLabelChars: number, colLabelChars: number): { colW: number; rowH: number; gap: number } {
+    const axis = Math.ceil(rowLabelChars * 6.6) + 10;
+    const cols = Math.max(1, columns);
+    const colW = Math.max(10, Math.min(96, Math.floor((Math.max(100, width - 32 - axis) + 3) / cols) - 3));
+    const rowH = Math.max(12, Math.min(28, colW));
+    const gap = Math.max(1, Math.ceil((colLabelChars * 6.6 + 8) / (colW + 3)));
+    return { colW, rowH, gap };
 }
 
 /**
  * Shapes a heatmap response into the drawn grid: each cell's level by {@link heatmapScale} on total tokens, its
- * drill-down window, and whether it is still in the future; plus the row height and which rows are labeled
- * (11 pixel labels need 16 pixels, so short rows label every 2nd, always keeping the first and last).
+ * position, its drill-down window, and whether it is outside the window, all from the server's layout (nothing here
+ * recomputes a cell's time).
  */
 export function heatmapGrid(heatmap: HeatmapLike | undefined | null): HeatmapGrid {
     if (!heatmap || !heatmap.Layout) {
-        return { rows: 0, cols: 0, max: 0, rowHeight: 24, labeledRows: [], cells: [] };
+        return { rows: 0, cols: 0, max: 0, cells: [] };
     }
     const lay = heatmap.Layout;
     const rows = lay.Rows;
     const cols = lay.Columns;
     const tokens = heatmap.TotalTokens ?? [];
     const calls = heatmap.Calls ?? [];
+    const starts = lay.CellStartsUnixMs ?? [];
+    const outside = lay.OutsideWindow ?? [];
     const max = tokens.reduce((a, v) => Math.max(a, v || 0), 0);
     const levelOf = heatmapScale(tokens.map((v) => Math.max(0, v || 0)));
     const cells: HeatmapCell[] = [];
-    const first = lay.WindowFromUnixMs ?? lay.FromUnixMs;
     for (let index = 0; index < rows * cols; index++) {
-        const from = lay.FromUnixMs + index * lay.BucketMs;
+        const from = starts[index] ?? 0;
         const value = Math.max(0, tokens[index] || 0);
-        const future = from > lay.NowUnixMs;
         cells.push({
             index, row: Math.floor(index / cols), col: index % cols, tokens: value, calls: Math.max(0, calls[index] || 0),
-            level: levelOf(value), from, to: from + lay.BucketMs - 1, future, blank: future || from < first,
+            level: levelOf(value), from, to: from + lay.BucketMs - 1, future: from > lay.NowUnixMs, blank: outside[index] === true || starts[index] === undefined,
         });
     }
-    const rowHeight = heatmapRowHeight(rows);
-    const labeledRows = labeledIndices(rows, rowHeight >= 16 ? rows : Math.floor((rows * rowHeight) / 16), true);
-    return { rows, cols, max, rowHeight, labeledRows, cells };
+    return { rows, cols, max, cells };
 }
 
 const HM_TIME: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
@@ -521,32 +583,46 @@ function localFormat(unixMs: number, offsetMinutes: number, options: Intl.DateTi
     return new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' }).format(new Date(unixMs + offsetMinutes * 60_000));
 }
 
-/** A heatmap row's label in local time: a time, date and time, weekday and date, or date by the layout's row kind. */
+/** A heatmap row's (y) label: a localized weekday or week start date, else the server's label (+2m, :15, 02:00, +2h). */
 export function heatmapRowLabel(layout: HeatmapLike['Layout'], row: number, locale?: string): string {
-    const ms = layout.RowStartsUnixMs[row];
+    const ms = layout.RowTimesUnixMs?.[row];
     const off = layout.UtcOffsetMinutes || 0;
-    switch (layout.RowKind) {
-        case 'time':
-            return localFormat(ms, off, HM_TIME, locale);
-        case 'datetime':
-            return `${localFormat(ms, off, { month: '2-digit', day: '2-digit' }, locale)} ${localFormat(ms, off, HM_TIME, locale)}`;
-        case 'weekdate':
-            return localFormat(ms, off, { weekday: 'short', month: 'numeric', day: 'numeric' }, locale);
-        default:
-            return localFormat(ms, off, { year: 'numeric', month: 'short', day: 'numeric' }, locale);
+    if (ms !== undefined && layout.RowKind === 'weekday') {
+        return localFormat(ms, off, { weekday: 'short' }, locale);
     }
+    if (ms !== undefined && layout.RowKind === 'week') {
+        return localFormat(ms, off, { year: 'numeric', month: 'short', day: 'numeric' }, locale);
+    }
+    return layout.RowLabels?.[row] ?? '';
 }
 
 /**
- * A heatmap column's label: a localized weekday (Monday first) for weekday columns and for both half-day columns of
- * a weekday, else the server's label.
+ * A heatmap column's (x) label, localized from the instant it describes: weekday and date, weekday (half-days),
+ * date, month, date and time, or full date; numeric kinds (:05, 14, 14:30) use the server's label.
  */
 export function heatmapColumnLabel(layout: HeatmapLike['Layout'], col: number, locale?: string): string {
-    if (layout.ColumnKind === 'weekday' || layout.ColumnKind === 'halfday') {
-        const day = layout.ColumnKind === 'halfday' ? Math.floor(col / 2) : col;
-        return new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(2024, 0, 1 + day)));
+    const ms = layout.ColumnTimesUnixMs?.[col];
+    const off = layout.UtcOffsetMinutes || 0;
+    if (ms === undefined) {
+        return layout.ColumnLabels?.[col] ?? '';
     }
-    return layout.ColumnLabels[col] ?? '';
+    const monthDay = (): string => localFormat(ms, off, { month: 'numeric', day: 'numeric' }, locale);
+    switch (layout.ColumnKind) {
+        case 'weekdate':
+            return `${localFormat(ms, off, { weekday: 'short' }, locale)} ${monthDay()}`;
+        case 'halfday':
+            return localFormat(ms, off, { weekday: 'short' }, locale);
+        case 'date':
+            return monthDay();
+        case 'month':
+            return localFormat(ms, off, { month: 'short' }, locale);
+        case 'datetime':
+            return `${monthDay()} ${localFormat(ms, off, HM_TIME, locale)}`;
+        case 'fulldate':
+            return localFormat(ms, off, { year: 'numeric', month: 'short', day: 'numeric' }, locale);
+        default:
+            return layout.ColumnLabels?.[col] ?? '';
+    }
 }
 
 /** A heatmap cell's window in local time: "date HH:mm–HH:mm" for sub-day cells, the date or "date – date" otherwise. */
@@ -745,7 +821,7 @@ export interface UsageCsvInput {
  * each after `bucket_start` and `bucket_end` (the next bucket's start);
  * - breakdown: one row per value in the chart's order with the range window, then the dimension key, `calls`,
  *   `failed`, `uncached_input`, `cached_input`, `output`, `total_tokens`, `cost_usd`;
- * - heatmap: one row per cell up to now, `cell_start`, `cell_end`, `tokens`, `calls`.
+ * - heatmap: one row per cell inside the window, oldest first, `cell_start`, `cell_end`, `tokens`, `calls`.
  */
 export function usageCsvTable(tab: string, input: UsageCsvInput): CsvTable | null {
     const time = (ms: number): string => (input.offsetMinutes === undefined ? csvTime(ms) : csvTime(ms, input.offsetMinutes));
@@ -759,7 +835,8 @@ export function usageCsvTable(tab: string, input: UsageCsvInput): CsvTable | nul
         if (!(grid.max > 0)) {
             return null;
         }
-        const rows = grid.cells.filter((c) => !c.future).map((c) => [time(c.from), time(c.to + 1), c.tokens, c.calls]);
+        // One row per cell inside the window, oldest first (the grid's display order is not chronological).
+        const rows = grid.cells.filter((c) => !c.blank).sort((a, b) => a.from - b.from).map((c) => [time(c.from), time(c.to + 1), c.tokens, c.calls]);
         return { header: ['cell_start', 'cell_end', 'tokens', 'calls'], rows };
     }
     if (tab === 'breakdown') {

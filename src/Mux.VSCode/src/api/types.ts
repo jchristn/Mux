@@ -286,37 +286,52 @@ export interface UsageBucket {
 }
 
 /**
- * The clock-aligned grid of `GET /v1.0/api/usage/heatmap`, shared by every mux surface: each row is one period in the
- * viewer's local time (at `UtcOffsetMinutes`, east positive) and each column one bucket within it.
+ * The clock-aligned grid of `GET /v1.0/api/usage/heatmap`, shared by every mux surface. `Columns` are the x-axis and
+ * `Rows` the y-axis; cell index i is row-major in display order (row x Columns + column). Time runs left to right:
+ * each column is one period in the viewer's local time (at `UtcOffsetMinutes`, east positive) and each row one step
+ * within it; the month is a calendar of 14 half-day columns x 5 or 6 Monday-start week rows. Every cell's start and
+ * out-of-window flag come from the server. Changed in 1.7.0: the axes were transposed, and `RowMs`, `RowUnit`, and
+ * `RowStartsUnixMs` were replaced by `ColumnUnit`, `RowTimesUnixMs`, `ColumnTimesUnixMs`, `ColumnLabelAnchors`,
+ * `CellStartsUnixMs`, and `OutsideWindow`.
  */
 export interface UsageHeatmapLayout {
     Range: string;
     NowUnixMs: number;
     UtcOffsetMinutes: number;
     FromUnixMs: number;
-    /** The first cell inside the range's window; the month calendar's earlier cells are outside its last 30 days. */
-    WindowFromUnixMs?: number;
+    /** The start of the range's window; earlier cells (the month's and year's first week) are outside it. */
+    WindowFromUnixMs: number;
     ToUnixMs: number;
     BucketMs: number;
-    RowMs: number;
+    /** The y-axis count, top to bottom. */
     Rows: number;
+    /** The x-axis count, left to right (oldest first). */
     Columns: number;
     /** Consecutive columns sharing one label: 2 for `halfday` (a weekday's AM and PM), else 1. */
-    ColumnGroup?: number;
+    ColumnGroup: number;
     CellCount: number;
-    /** Row label format: `time`, `datetime`, `weekdate`, or `date`. */
-    RowKind: string;
-    /** What a row spans: `15m`, `1h`, `6h`, `1d`, `1w`, or `13w`. */
-    RowUnit: string;
-    /** What a column means: `minute`, `minuteofhour`, `hours`, `clock`, `weekday`, `halfday`, or `weeks`. */
+    /** Column (x) label format: `minuteofhour`, `hour`, `time`, `datetime`, `weekdate`, `halfday`, `date`, `month`, or `fulldate`. */
     ColumnKind: string;
-    RowStartsUnixMs: number[];
-    RowLabels: string[];
+    /** Row (y) label format: `minute`, `minuteofhour`, `hours`, `clock`, `weekday`, `week`, or `weeks`. */
+    RowKind: string;
+    /** What a column is, for the x caption: `5m`, `1h`, `1d`, `halfday`, `1w`, `month`, or `period`. */
+    ColumnUnit: string;
+    /** The instant each column's label describes. */
+    ColumnTimesUnixMs: number[];
+    /** The instant each row's label describes (its cell in the first column). */
+    RowTimesUnixMs: number[];
     ColumnLabels: string[];
+    RowLabels: string[];
+    /** The columns that may carry a label, ascending (thin them so labels never collide). */
+    ColumnLabelAnchors: number[];
+    /** Each cell's start in display order. */
+    CellStartsUnixMs: number[];
+    /** Whether each cell, in display order, is outside the window (future, or before `WindowFromUnixMs`). */
+    OutsideWindow: boolean[];
     Caption: string;
 }
 
-/** `GET /v1.0/api/usage/heatmap`: the layout and one value per cell, row-major. */
+/** `GET /v1.0/api/usage/heatmap`: the layout and one value per cell, in display order (row-major). */
 export interface UsageHeatmap {
     Layout: UsageHeatmapLayout;
     TotalTokens: number[];

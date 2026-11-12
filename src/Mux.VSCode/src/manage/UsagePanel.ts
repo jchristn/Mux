@@ -29,11 +29,13 @@ import {
     heatmapColumnLabel,
     heatmapGrid,
     heatmapRowLabel,
+    heatmapSizes,
     normalizeChartMode,
     normalizeDimension,
     normalizeRange,
     normalizeSplitMetric,
     stackSplitSeries,
+    thinLabels,
     tokenParts,
     usageCsv,
     usageCsvTable,
@@ -92,15 +94,17 @@ interface BreakdownPayload {
     text: string;
 }
 
-/** The token heatmap: the clock-aligned grid, its axis labels, and its captions. */
+/** The token heatmap: the clock-aligned grid (columns the x-axis, rows the y-axis), its axis labels, and its captions. */
 interface HeatmapPayload {
     rows: number;
     cols: number;
-    rowHeight: number;
-    /** Labeled rows only (dense grids label every 2nd row, always the first and last). */
-    rowLabels: { row: number; label: string }[];
-    /** One label per column; the webview thins them to the width it has. */
+    /** One label per row (the y-axis). */
+    rowLabels: string[];
+    /** One label per column (the x-axis); the webview thins them to the width it has. */
     colLabels: string[];
+    /** The columns that may carry a label; whether they are evenly spaced (thinned by stride) or not (month starts). */
+    anchors: number[];
+    evenAnchors: boolean;
     /** Consecutive columns sharing one label (2 for half-days: each weekday labeled once, over its AM column). */
     colGroup: number;
     cells: { row: number; col: number; level: number; label: string; from: number; to: number; future: boolean; blank: boolean }[];
@@ -424,39 +428,43 @@ export class UsagePanel {
     private static heatmap(heat: UsageHeatmap | null): HeatmapPayload {
         const grid = heatmapGrid(heat);
         if (!heat || grid.rows === 0) {
-            return { rows: 0, cols: 0, rowHeight: 24, rowLabels: [], colLabels: [], colGroup: 1, cells: [], max: 0, caption: '', note: '' };
+            return { rows: 0, cols: 0, rowLabels: [], colLabels: [], anchors: [], evenAnchors: true, colGroup: 1, cells: [], max: 0, caption: '', note: '' };
         }
         const lay = heat.Layout;
-        const rowNames: Record<string, string> = {
-            '15m': vscode.l10n.t('15 minutes starting'),
-            '1h': vscode.l10n.t('hour starting'),
-            '6h': vscode.l10n.t('6 hours starting'),
-            '1d': vscode.l10n.t('day starting'),
-            '1w': vscode.l10n.t('week starting'),
-            '13w': vscode.l10n.t('13 weeks starting'),
-        };
         const columnNames: Record<string, string> = {
-            minute: vscode.l10n.t('minutes after the row start'),
+            '5m': vscode.l10n.t('5 minutes starting'),
+            '1h': vscode.l10n.t('hour of day'),
+            '1d': vscode.l10n.t('day'),
+            halfday: vscode.l10n.t('day of the week (AM, PM)'),
+            '1w': vscode.l10n.t('week starting'),
+            month: vscode.l10n.t('week (by month)'),
+            period: vscode.l10n.t('period starting'),
+        };
+        const rowNames: Record<string, string> = {
+            minute: vscode.l10n.t('minutes after the column start'),
             minuteofhour: vscode.l10n.t('minute of the hour'),
-            hours: vscode.l10n.t('hours after the row start'),
+            hours: vscode.l10n.t('hours after the column start'),
             clock: vscode.l10n.t('time of day'),
             weekday: vscode.l10n.t('day of the week'),
-            halfday: vscode.l10n.t('day (AM, PM)'),
-            weeks: vscode.l10n.t('weeks after the row start'),
+            week: vscode.l10n.t('week starting'),
+            weeks: vscode.l10n.t('weeks after the column start'),
         };
+        const group = Math.max(1, lay.ColumnGroup || 1);
+        const anchors = lay.ColumnLabelAnchors?.length ? lay.ColumnLabelAnchors : Array.from({ length: Math.ceil(grid.cols / group) }, (_, i) => i * group);
         return {
             rows: grid.rows,
             cols: grid.cols,
-            rowHeight: grid.rowHeight,
-            rowLabels: grid.labeledRows.map((row) => ({ row, label: heatmapRowLabel(lay, row) })),
+            rowLabels: Array.from({ length: grid.rows }, (_, r) => heatmapRowLabel(lay, r)),
             colLabels: Array.from({ length: grid.cols }, (_, c) => heatmapColumnLabel(lay, c)),
-            colGroup: Math.max(1, lay.ColumnGroup || 1),
+            anchors,
+            evenAnchors: lay.ColumnKind !== 'month',
+            colGroup: group,
             cells: grid.cells.map((c) => ({
                 row: c.row, col: c.col, level: c.level, from: c.from, to: c.to, future: c.future, blank: c.blank,
                 label: vscode.l10n.t('{0}: {1} tokens · {2} calls', heatmapCellWindow(lay, c.from), formatCount(c.tokens), formatCount(c.calls)),
             })),
             max: grid.max,
-            caption: vscode.l10n.t('Rows: {0} · Columns: {1}', rowNames[lay.RowUnit] ?? rowNames['13w'], columnNames[lay.ColumnKind] ?? columnNames.weeks),
+            caption: vscode.l10n.t('Columns: {0} · Rows: {1}', columnNames[lay.ColumnUnit] ?? columnNames.period, rowNames[lay.RowKind] ?? rowNames.weeks),
             note: vscode.l10n.t('peak {0} tokens', formatCount(grid.max)),
         };
     }
@@ -634,9 +642,9 @@ export class UsagePanel {
   .brow-text { font-size: 0.78em; color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
   .heatmap { display: grid; gap: 3px; margin: 10px 0 6px; align-items: center; justify-content: start; max-width: 100%; overflow-x: auto; }
   .hm-cap { font-size: 0.85em; color: var(--vscode-descriptionForeground); margin-top: 2px; }
-  .hm-y { font-size: 11px; color: var(--vscode-descriptionForeground); white-space: nowrap; padding-inline-end: 8px; line-height: 1; align-self: start; font-variant-numeric: tabular-nums; }
-  .hm-y.mid { align-self: center; }
+  .hm-y { font-size: 11px; color: var(--vscode-descriptionForeground); white-space: nowrap; padding-inline-end: 8px; line-height: 1; align-self: center; font-variant-numeric: tabular-nums; }
   .hm-x { font-size: 11px; color: var(--vscode-descriptionForeground); white-space: nowrap; line-height: 1; padding-bottom: 3px; font-variant-numeric: tabular-nums; }
+  .hm-x.end { text-align: end; }
   .heatmap .hm { height: calc(100% - 1px); cursor: pointer; }
   /* Heatmap shades 1-4 (low to high): one green hue, validated for monotone lightness, visible steps, and >= 2:1
      contrast for the step nearest the background. Light themes go light to dark, dark themes dark to bright. No
@@ -914,6 +922,13 @@ export class UsagePanel {
     return p.label + ' — min ' + Math.round(d.min) + ' · avg ' + Math.round(d.avg) + ' · p95 ' + Math.round(d.p95) + ' · p99 ' + Math.round(d.p99) + ' · max ' + Math.round(d.max);
   }
 
+  // The heatmap redraws on resize so its cells keep filling the width and its labels re-thin.
+  let heatmapResize = null;
+  window.addEventListener('resize', function(){
+    if (metric !== 'heatmap' || !current) return;
+    clearTimeout(heatmapResize); heatmapResize = setTimeout(function(){ if (metric === 'heatmap') draw(); }, 150);
+  });
+
   function draw(){
     const chart = document.getElementById('chart'); chart.textContent = ''; setLegend([]);
     document.getElementById('aside').textContent = '';
@@ -1126,42 +1141,38 @@ export class UsagePanel {
     setExportable(true);
   }
 
-  // Token heatmap on the shared clock-aligned grid: each row one local period (its start labeled on the left), each
-  // column one bucket within it (labeled on top, thinned to the width), cells outside the window (after now, or before
-  // the month's last 30 days) blank. A cell lists its calls.
-  function pickLabels(count, max){
-    const steps = [1,2,3,4,6,8,12,16,24]; let stride = 1;
-    for (const st of steps){ stride = st; if (Math.ceil(count / st) <= Math.max(1, max)) break; }
-    const out = []; for (let i = 0; i < count; i += stride) out.push(i);
-    return { out: out, stride: stride };
-  }
+  // Token heatmap on the shared clock-aligned grid: time runs left to right, each column one local period (labeled
+  // along the top) and each row one step within it (labeled on the left); the month is a calendar of half-day
+  // columns and week rows. Cells stretch to the panel's width (10-96 pixels); x labels thin so they never collide,
+  // the first and last always labeled (the last right-aligned to the end). Cells outside the window (after now, or
+  // before the month's or year's window) are blank. A cell lists its calls. thinLabels and heatmapSizes are the
+  // host's own functions (usageCharts.ts), so the panel and its unit tests share one implementation.
+  ${thinLabels.toString()}
+  ${heatmapSizes.toString()}
   function drawHeatmap(){
     const chart = document.getElementById('chart');
     const hm = current.heatmap || { cells: [], max: 0, rows: 0, cols: 0 };
     if (!(hm.max > 0)){ return muted(chart, S.empty); }
     const head = document.createElement('strong'); head.textContent = S.heatmapTitle; chart.appendChild(head);
     const cap = document.createElement('div'); cap.className = 'hm-cap'; cap.textContent = hm.caption; chart.appendChild(cap);
-    const width = chart.clientWidth || 800;
-    const colW = Math.max(12, Math.min(46, Math.floor((width - 130) / hm.cols) - 3));
+    const longest = function(list){ return list.reduce(function(m, l){ return Math.max(m, String(l).length); }, 0); };
+    const z = heatmapSizes(chart.clientWidth || 800, hm.cols, longest(hm.rowLabels), longest(hm.colLabels));
     const grid = document.createElement('div'); grid.className = 'heatmap';
     grid.setAttribute('role', 'grid'); grid.setAttribute('aria-label', hm.caption);
-    grid.style.gridTemplateColumns = 'auto repeat(' + hm.cols + ', ' + colW + 'px)';
-    grid.style.gridTemplateRows = 'auto repeat(' + hm.rows + ', ' + hm.rowHeight + 'px)';
-    let longest = 0; hm.colLabels.forEach(function(l){ longest = Math.max(longest, l.length); });
-    // Labels go on whole column groups: a half-day grid labels each weekday once, spanning its AM and PM columns.
-    const group = Math.max(1, hm.colGroup || 1), groups = Math.ceil(hm.cols / group);
-    const perLabel = Math.max(1, Math.ceil((longest * 6.6 + 8) / (group * (colW + 3))));
-    const cols = pickLabels(groups, Math.ceil(groups / perLabel));
-    cols.out.forEach(function(g){
-      const c = g * group;
-      const x = document.createElement('div'); x.className = 'hm-x'; x.textContent = hm.colLabels[c];
-      x.style.gridRow = '1'; x.style.gridColumn = (c + 2) + ' / span ' + Math.max(1, Math.min(cols.stride * group, hm.cols - c));
+    grid.style.gridTemplateColumns = 'auto repeat(' + hm.cols + ', ' + z.colW + 'px)';
+    grid.style.gridTemplateRows = 'auto repeat(' + hm.rows + ', ' + z.rowH + 'px)';
+    const anchors = hm.anchors && hm.anchors.length ? hm.anchors : [0];
+    const end = anchors[anchors.length - 1];
+    thinLabels(anchors, hm.cols, hm.colGroup || 1, z.gap, hm.evenAnchors !== false).forEach(function(c, k){
+      const last = k > 0 && c === end, span = Math.max(1, Math.min(Math.max(hm.colGroup || 1, z.gap), last ? hm.cols : hm.cols - c));
+      const x = document.createElement('div'); x.className = last ? 'hm-x end' : 'hm-x'; x.textContent = hm.colLabels[c];
+      x.style.gridRow = '1'; x.style.gridColumn = (last ? hm.cols + 2 - span : c + 2) + ' / span ' + span;
       grid.appendChild(x);
     });
-    const tall = hm.rowHeight >= 16;
-    hm.rowLabels.forEach(function(r){
-      const y = document.createElement('div'); y.className = tall ? 'hm-y mid' : 'hm-y'; y.textContent = r.label;
-      y.style.gridRow = (r.row + 2) + ' / span ' + (tall ? 1 : Math.min(2, hm.rows - r.row)); y.style.gridColumn = '1';
+    hm.rowLabels.forEach(function(label, r){
+      if (z.rowH < 14 && r % 2 === 1 && r !== hm.rows - 1) return;
+      const y = document.createElement('div'); y.className = 'hm-y'; y.textContent = label;
+      y.style.gridRow = String(r + 2); y.style.gridColumn = '1';
       grid.appendChild(y);
     });
     hm.cells.forEach(function(c){

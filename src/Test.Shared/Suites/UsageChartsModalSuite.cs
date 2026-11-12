@@ -5,6 +5,7 @@ namespace Test.Shared.Suites
     using System.IO;
     using System.Linq;
     using System.Text;
+    using System.Text.RegularExpressions;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Cli.App;
@@ -412,59 +413,80 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor(SuiteId, "HeatmapSquaresGrowWithTerminal", "Heatmap squares scale with terminal space and draw every past cell of each fixed range", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "HeatmapCellsFillTheWidth", "Heatmap cells stretch to the terminal's width, time runs left to right, and every cell in the window is drawn once", (CancellationToken ct) =>
                     {
                         foreach (UsageRange range in new[] { UsageRange.Hour, UsageRange.Day, UsageRange.Week, UsageRange.Month, UsageRange.Quarter, UsageRange.Year })
                         {
-                            int previousHeight = 0;
                             UsageHeatmapLayout layout = UsageHeatmapLayout.Compute(range, HeatNow, 0);
-                            foreach (var size in new[] { (Width: 80, Height: 30), (Width: 160, Height: 50), (Width: 240, Height: 80) })
+                            int previousWidth = 0;
+                            foreach (var size in new[] { (Width: 80, Height: 40), (Width: 140, Height: 50), (Width: 240, Height: 60) })
                             {
                                 UsageChartsModal modal = new UsageChartsModal("Usage", _ => HeatmapData(layout), range);
                                 modal.HandleKey(KeyEvent.Special(KeyCode.Left));
                                 CellBuffer buffer = RenderBuffer(modal, size.Width, size.Height);
+                                string text = Flatten(buffer);
+                                string at = " for " + range + " at " + size.Width + "x" + size.Height;
+                                MuxAssert.IsFalse(Scrolls(text), "fits without scrolling" + at);
                                 (int left, int top) = FirstPeak(buffer);
-                                MuxAssert.IsTrue(left >= 0, "a cell is drawn for " + range);
-                                int cellWidth = 0, cellHeight = 0;
-                                while (buffer.Get(left + cellWidth, top).Style.Background == Peak) cellWidth++;
+                                MuxAssert.IsTrue(left >= 0, "a cell is drawn" + at);
+                                int runWidth = 0, cellHeight = 0;
+                                while (buffer.Get(left + runWidth, top).Style.Background == Peak) runWidth++;
                                 while (buffer.Get(left, top + cellHeight).Style.Background == Peak) cellHeight++;
-                                MuxAssert.IsTrue(cellWidth >= cellHeight * 2 && cellWidth <= Math.Max(cellHeight * 2, 5), "cells are square (twice as wide as tall), or as wide as a column label, for " + range + ": " + cellWidth + "x" + cellHeight);
-                                MuxAssert.IsTrue(cellHeight >= previousHeight && cellHeight > 0, "larger terminal never shrinks cells for " + range);
-                                if (range == UsageRange.Hour || range == UsageRange.Week || range == UsageRange.Year) MuxAssert.IsTrue(cellHeight > previousHeight, "larger terminal grows cells for " + range);
-                                previousHeight = cellHeight;
-                                if (!Flatten(buffer).Contains("PgUp/PgDn scroll", StringComparison.Ordinal))
-                                {
-                                    MuxAssert.AreEqual(PastCells(layout), CountSpots(buffer, size.Width, size.Height), "every past cell is drawn once for " + range + " at " + size.Width + "x" + size.Height);
-                                }
+                                // Each cell is drawn once: peak characters = cells in the window x cell area (cells with a gap
+                                // between columns; a year at 80 columns has none, one character per cell).
+                                int cellWidth = range == UsageRange.Year && size.Width == 80 ? 1 : runWidth;
+                                MuxAssert.AreEqual(PastCells(layout) * cellWidth * cellHeight, CountPeak(buffer), "every cell in the window is drawn once" + at);
+                                MuxAssert.IsTrue(cellWidth >= previousWidth, "a wider terminal never narrows cells" + at);
+                                if (range == UsageRange.Day || range == UsageRange.Quarter) MuxAssert.IsTrue(cellWidth > previousWidth || cellWidth == 8, "a wider terminal widens cells up to 8" + at);
+                                MuxAssert.IsTrue(cellWidth <= 8 && cellHeight <= 3, "cells stay within 8x3" + at);
+                                previousWidth = cellWidth;
                             }
                         }
 
+                        // Time runs left to right: the oldest cell is in the first column, now in the last.
+                        UsageHeatmapLayout day = UsageHeatmapLayout.Compute(UsageRange.Day, HeatNow, 0);
+                        UsageHeatmap single = new UsageHeatmap(day);
+                        single.TotalTokens[day.IndexOf(HeatNow)] = 100;
+                        UsageChartsModal one = new UsageChartsModal("Usage", _ => new UsageChartData { Heatmap = single }, UsageRange.Day);
+                        one.HandleKey(KeyEvent.Special(KeyCode.Left));
+                        CellBuffer oneBuffer = RenderBuffer(one, 160, 40);
+                        (int nowLeft, _) = FirstPeak(oneBuffer);
+                        MuxAssert.IsTrue(nowLeft > 100, "now is drawn at the right end: " + nowLeft);
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor(SuiteId, "HeatmapAxesLabelRowsAndColumns", "Both axes are labeled for every range: local row starts on the left and column meanings on top", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "HeatmapAxesLabelRowsAndColumns", "Both axes are labeled for every range: periods along the top (thinned, never colliding, first and last kept) and steps on the left", (CancellationToken ct) =>
                     {
-                        (UsageRange Range, string Spots, string Interval, string[] Columns)[] cases =
+                        (UsageRange Range, string Spots, string Interval, string Caption, string FirstRow, string LastRow)[] cases =
                         {
-                            (UsageRange.Hour, "60 spots", "1 min/spot", new[] { "+0m", "+5m" }),
-                            (UsageRange.Day, "96 spots", "15 min/spot", new[] { ":00", ":15", ":30", ":45" }),
-                            (UsageRange.Week, "84 spots", "2 hour/spot", new[] { "00:00", "04:00" }),
-                            (UsageRange.Month, "70 spots", "12 hour/spot", new[] { "Mon", "Tue", "Sun" }),
-                            (UsageRange.Quarter, "91 spots", "1 day/spot", new[] { "Mon", "Tue", "Sun" }),
-                            (UsageRange.Year, "52 spots", "1 week/spot", new[] { "+0w", "+12w" })
+                            (UsageRange.Hour, "60 spots", "1 min/spot", "Columns: 5 minutes starting · Rows: minutes after the column start", "+0m", "+4m"),
+                            (UsageRange.Day, "96 spots", "15 min/spot", "Columns: hour of day · Rows: minute of the hour", ":00", ":45"),
+                            (UsageRange.Week, "84 spots", "2 hour/spot", "Columns: day · Rows: time of day", "00:00", "22:00"),
+                            (UsageRange.Month, "84 spots", "12 hour/spot", "Columns: day of the week (AM, PM) · Rows: week starting", "2026-09-14", "2026-10-12"),
+                            (UsageRange.Quarter, "91 spots", "1 day/spot", "Columns: week starting · Rows: day of the week", "Mon", "Sun"),
+                            (UsageRange.Year, "371 spots", "1 day/spot", "Columns: week (by month) · Rows: day of the week", "Mon", "Sun")
                         };
                         foreach (var c in cases)
                         {
                             UsageHeatmapLayout layout = UsageHeatmapLayout.Compute(c.Range, HeatNow, 0);
-                            UsageChartsModal modal = new UsageChartsModal("Usage", _ => HeatmapData(layout), c.Range);
-                            modal.HandleKey(KeyEvent.Special(KeyCode.Left));
-                            string text = Render(modal, 160, 60);
-                            MuxAssert.Contains(c.Spots, text, "spot count for " + c.Range);
-                            MuxAssert.Contains(c.Interval, text, "interval for " + c.Range);
-                            MuxAssert.Contains(layout.Caption, text, "axis caption for " + c.Range);
-                            MuxAssert.Contains(layout.RowLabels[0], text, "first row label for " + c.Range);
-                            foreach (string column in c.Columns) MuxAssert.Contains(column, text, "column label " + column + " for " + c.Range);
-                            if (!text.Contains("PgUp/PgDn scroll", StringComparison.Ordinal)) MuxAssert.Contains(layout.RowLabels[layout.Rows - 1], text, "last row label for " + c.Range);
+                            foreach (int width in new[] { 80, 160 })
+                            {
+                                UsageChartsModal modal = new UsageChartsModal("Usage", _ => HeatmapData(layout), c.Range);
+                                modal.HandleKey(KeyEvent.Special(KeyCode.Left));
+                                string text = Render(modal, width, 50);
+                                string at = " for " + c.Range + " at " + width;
+                                MuxAssert.Contains(c.Spots, text, "spot count" + at);
+                                MuxAssert.Contains(c.Interval, text, "interval" + at);
+                                if (width >= 160) MuxAssert.Contains(c.Caption, text, "axis caption" + at);
+                                MuxAssert.Contains(c.FirstRow, text, "first row label" + at);
+                                MuxAssert.Contains(c.LastRow, text, "last row label" + at);
+                                string header = HeaderLine(text);
+                                MuxAssert.IsTrue(header.StartsWith(layout.ColumnLabels[0], StringComparison.Ordinal), "first column labeled" + at + ": " + header);
+                                MuxAssert.IsTrue(header.EndsWith(layout.ColumnLabels[layout.ColumnLabelAnchors[layout.ColumnLabelAnchors.Count - 1]], StringComparison.Ordinal), "last column labeled" + at + ": " + header);
+                                // Labels never run into each other: the line splits back into whole labels.
+                                HashSet<string> words = new HashSet<string>(layout.ColumnLabels.SelectMany(l => l.Split(' ')));
+                                foreach (string word in header.Split(' ', StringSplitOptions.RemoveEmptyEntries)) MuxAssert.IsTrue(words.Contains(word), "label '" + word + "' is whole, not run into a neighbour" + at + ": " + header);
+                            }
                         }
 
                         UsageHeatmapLayout all = UsageHeatmapLayout.Compute(UsageRange.All, HeatNow, 0, HeatNow - 200L * 24L * HourMs);
@@ -474,32 +496,43 @@ namespace Test.Shared.Suites
                         string allText = Flatten(allBuffer);
                         MuxAssert.Contains(all.CellCount + " spots", allText, "all-time spot count");
                         MuxAssert.Contains("1 week/spot", allText, "all-time interval");
-                        MuxAssert.Contains(all.RowLabels[0], allText, "all-time date rows");
+                        MuxAssert.Contains(all.ColumnLabels[0], allText, "all-time date columns");
+                        MuxAssert.Contains("+3w", allText, "all-time week rows");
                         MuxAssert.AreEqual(PastCells(all), CountSpots(allBuffer, 160, 60), "every past all-time cell drawn once");
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor(SuiteId, "HeatmapRangesAndScrolling", "Number keys switch the heatmap range and tall grids scroll with PgUp/PgDn", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "HeatmapRangesAndScrolling", "Number keys switch the heatmap range, and a grid too wide for the terminal scrolls sideways with PgUp/PgDn from the newest columns", (CancellationToken ct) =>
                     {
                         UsageChartsModal modal = new UsageChartsModal("Usage", range => HeatmapData(UsageHeatmapLayout.Compute(range, HeatNow, 0)), UsageRange.Day);
                         modal.HandleKey(KeyEvent.Special(KeyCode.Left));
-                        string[] expected = { "60 spots", "96 spots", "84 spots", "70 spots", "91 spots", "52 spots" };
+                        string[] expected = { "60 spots", "96 spots", "84 spots", "84 spots", "91 spots", "371 spots" };
                         for (int i = 0; i < expected.Length; i++)
                         {
                             modal.HandleKey(KeyEvent.Char('1' + i));
-                            string rendered = Render(modal, 120, 40);
+                            string rendered = Render(modal, 160, 40);
                             MuxAssert.Contains(expected[i], rendered, "fixed spot count for range " + i);
-                            MuxAssert.Contains("Rows: ", rendered, "Y axis caption");
-                            MuxAssert.Contains("Columns: ", rendered, "X axis caption");
+                            MuxAssert.Contains("Columns: ", rendered, "x axis caption");
+                            MuxAssert.Contains(" · Rows: ", rendered, "y axis caption");
                         }
 
-                        modal.HandleKey(KeyEvent.Char('5'));
-                        string firstPage = Render(modal, 40, 20);
-                        modal.HandleKey(KeyEvent.Special(KeyCode.PageDown));
-                        string secondPage = Render(modal, 40, 20);
-                        MuxAssert.IsTrue(firstPage != secondPage, "quarter rows scroll on short screens");
+                        // The year at 44 columns: one-character cells without gaps still do not fit 53 weeks.
+                        modal.HandleKey(KeyEvent.Char('6'));
+                        string newest = Render(modal, 44, 30);
+                        MuxAssert.IsTrue(Scrolls(newest), "a too-wide grid scrolls");
+                        MuxAssert.Contains("PgUp/PgDn", newest, "the scroll keys are named");
+                        MuxAssert.IsTrue(Regex.IsMatch(newest, "columns \\d+–53/53"), "starts at the newest weeks");
                         modal.HandleKey(KeyEvent.Special(KeyCode.PageUp));
-                        MuxAssert.AreEqual(firstPage, Render(modal, 40, 20), "PageUp returns to first rows");
+                        string older = Render(modal, 44, 30);
+                        MuxAssert.IsTrue(older != newest, "PgUp scrolls to older weeks");
+                        for (int i = 0; i < 5; i++) modal.HandleKey(KeyEvent.Special(KeyCode.PageUp));
+                        MuxAssert.IsTrue(Regex.IsMatch(Render(modal, 44, 30), "columns 1–\\d+/53"), "stops at the oldest week");
+                        for (int i = 0; i < 10; i++) modal.HandleKey(KeyEvent.Special(KeyCode.PageDown));
+                        MuxAssert.AreEqual(newest, Render(modal, 44, 30), "PgDn returns to the newest weeks");
+                        string header = HeaderLine(newest);
+                        MuxAssert.IsTrue(header.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2, "a scrolled grid labels its first and last visible column");
+                        modal.HandleKey(KeyEvent.Char('2'));
+                        MuxAssert.IsFalse(Scrolls(Render(modal, 80, 30)), "a day fits 80 columns");
                         return Task.CompletedTask;
                     }),
 
@@ -517,36 +550,45 @@ namespace Test.Shared.Suites
                         UsageChartsModal modal = new UsageChartsModal("Usage", r => data, UsageRange.Day);
                         modal.HandleKey(KeyEvent.Special(KeyCode.Left));
                         string rendered = Render(modal, 160, 60);
-                        MuxAssert.Contains("17:00", rendered, "rows start on the local hour at UTC+5:30 (12:06 UTC is 17:36 local)");
+                        string[] header = HeaderLine(rendered).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        MuxAssert.AreEqual("18", header[0], "columns start on the local hour at UTC+5:30 (12:06 UTC is 17:36 local)");
+                        MuxAssert.AreEqual("17", header[header.Length - 1], "the last column is the local hour holding now");
                         MuxAssert.Contains("peak 100", rendered, "heatmap values, not the rolling series");
                         MuxAssert.IsTrue(!rendered.Contains(":06"), "off-boundary rolling timestamps do not label the heatmap");
-                        MuxAssert.IsTrue(PastCells(layout) < layout.CellCount, "the current row has future cells");
+                        MuxAssert.IsTrue(PastCells(layout) < layout.CellCount, "the current column has future cells");
+                        MuxAssert.Contains("Oldest at the left, newest at the right", rendered, "reading order");
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor(SuiteId, "HeatmapMonthCalendar", "The month heatmap is 5 week rows of 14 half-days, labels each weekday once, and leaves cells outside its 30 days blank", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "HeatmapMonthCalendar", "The month heatmap is a calendar of 14 half-day columns and 5 or 6 week rows, labels each weekday once, and draws exactly its 30 days", (CancellationToken ct) =>
                     {
                         long wednesday = new DateTimeOffset(2026, 11, 11, 15, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                        UsageHeatmapLayout layout = UsageHeatmapLayout.Compute(UsageRange.Month, wednesday, 0);
-                        UsageHeatmap heatmap = new UsageHeatmap(layout);
-                        for (int i = 0; i < layout.CellCount; i++) heatmap.TotalTokens[i] = 100; // Even the cells outside the window.
-                        foreach (var size in new[] { (Width: 60, Height: 24), (Width: 160, Height: 60) })
+                        long monday = new DateTimeOffset(2026, 11, 9, 8, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                        foreach ((long now, int rows) in new[] { (wednesday, 5), (monday, 6), (HeatNow, 6) })
                         {
-                            UsageChartsModal modal = new UsageChartsModal("Usage", _ => new UsageChartData { Heatmap = heatmap }, UsageRange.Month);
-                            modal.HandleKey(KeyEvent.Special(KeyCode.Left));
-                            CellBuffer buffer = RenderBuffer(modal, size.Width, size.Height);
-                            string text = Flatten(buffer);
-                            string at = " at " + size.Width + "x" + size.Height;
-                            if (size.Width >= 100) MuxAssert.Contains("Rows: week starting · Columns: day (AM, PM)", text, "caption" + at);
-                            MuxAssert.IsFalse(text.Contains("PgUp/PgDn scroll", StringComparison.Ordinal), "five weeks fit without scrolling" + at);
-                            MuxAssert.AreEqual(60, CountSpots(buffer, size.Width, size.Height), "only the 60 half-days in the window are drawn" + at);
-                            string header = text.Split('\n').First(l => l.Contains("Mon", StringComparison.Ordinal) && l.Contains("Sun", StringComparison.Ordinal));
-                            foreach (string day in new[] { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" })
+                            UsageHeatmapLayout layout = UsageHeatmapLayout.Compute(UsageRange.Month, now, 0);
+                            MuxAssert.AreEqual(rows, layout.Rows, "week rows");
+                            UsageHeatmap heatmap = new UsageHeatmap(layout);
+                            for (int i = 0; i < layout.CellCount; i++) heatmap.TotalTokens[i] = 100; // Even the cells outside the window.
+                            foreach (var size in new[] { (Width: 60, Height: 24), (Width: 160, Height: 60) })
                             {
-                                MuxAssert.AreEqual(1, header.Split(day).Length - 1, day + " labeled once" + at);
-                            }
+                                UsageChartsModal modal = new UsageChartsModal("Usage", _ => new UsageChartData { Heatmap = heatmap }, UsageRange.Month);
+                                modal.HandleKey(KeyEvent.Special(KeyCode.Left));
+                                CellBuffer buffer = RenderBuffer(modal, size.Width, size.Height);
+                                string text = Flatten(buffer);
+                                string at = " with " + rows + " rows at " + size.Width + "x" + size.Height;
+                                if (size.Width >= 100) MuxAssert.Contains("Columns: day of the week (AM, PM) · Rows: week starting", text, "caption" + at);
+                                MuxAssert.IsFalse(Scrolls(text), "the calendar fits without scrolling" + at);
+                                MuxAssert.AreEqual(60, CountSpots(buffer, size.Width, size.Height), "only the 60 half-days in the window are drawn" + at);
+                                MuxAssert.Contains("Oldest at the top-left, newest at the bottom-right", text, "calendar reading order" + at);
+                                string header = HeaderLine(text);
+                                foreach (string day in new[] { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" })
+                                {
+                                    MuxAssert.AreEqual(1, header.Split(day).Length - 1, day + " labeled once" + at);
+                                }
 
-                            foreach (string week in layout.RowLabels) MuxAssert.Contains(week, text, "week row " + week + at);
+                                foreach (string week in layout.RowLabels) MuxAssert.Contains(week, text, "week row " + week + at);
+                            }
                         }
 
                         return Task.CompletedTask;
@@ -872,6 +914,31 @@ namespace Test.Shared.Suites
                 for (int x = 0; x < buffer.Width; x++)
                     if (buffer.Get(x, y).Style.Background == Peak) return (x, y);
             return (-1, -1);
+        }
+
+        // Whether the heatmap footer says the grid scrolls sideways ("columns 20–53/53").
+        private static bool Scrolls(string text)
+        {
+            return Regex.IsMatch(text, "columns \\d+–\\d+/\\d+");
+        }
+
+        // Counts the peak-colored characters above the footer.
+        private static int CountPeak(CellBuffer buffer)
+        {
+            int count = 0;
+            for (int y = 0; y < buffer.Height - 5; y++)
+                for (int x = 0; x < buffer.Width; x++)
+                    if (buffer.Get(x, y).Style.Background == Peak) count++;
+            return count;
+        }
+
+        // The heatmap's x-axis label line: the line after the axis caption (or after the first line holding "Columns:").
+        private static string HeaderLine(string text)
+        {
+            string[] lines = text.Split('\n');
+            int caption = Array.FindIndex(lines, l => l.Contains("Columns:", StringComparison.Ordinal));
+            string line = caption >= 0 && caption + 1 < lines.Length ? lines[caption + 1] : string.Empty;
+            return line.Replace("│", " ", StringComparison.Ordinal).Replace("║", " ", StringComparison.Ordinal).Trim();
         }
 
         // Counts the top-left corners of peak cells, excluding the legend at the bottom.

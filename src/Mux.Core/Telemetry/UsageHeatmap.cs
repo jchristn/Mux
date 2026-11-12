@@ -12,13 +12,13 @@ namespace Mux.Core.Telemetry
     {
         #region Public-Members
 
-        /// <summary>The grid: window, bucket width, rows, columns, row starts, and axis labels.</summary>
+        /// <summary>The grid: window, bucket width, rows, columns, cell starts, and axis labels.</summary>
         public UsageHeatmapLayout Layout { get; }
 
-        /// <summary>Total tokens per cell, row-major; <see cref="UsageHeatmapLayout.CellCount"/> entries.</summary>
+        /// <summary>Total tokens per cell in display order (row-major); <see cref="UsageHeatmapLayout.CellCount"/> entries.</summary>
         public long[] TotalTokens { get; }
 
-        /// <summary>Calls per cell, row-major; <see cref="UsageHeatmapLayout.CellCount"/> entries.</summary>
+        /// <summary>Calls per cell in display order (row-major); <see cref="UsageHeatmapLayout.CellCount"/> entries.</summary>
         public long[] Calls { get; }
 
         #endregion

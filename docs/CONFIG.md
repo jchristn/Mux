@@ -504,7 +504,6 @@ turn that off. `mux serve` runs the server without the agent. Configure the serv
 ```json
 {
   "rest": {
-    "enabled": false,
     "hostname": "127.0.0.1",
     "port": 8710,
     "ssl": false,
@@ -516,7 +515,6 @@ turn that off. `mux serve` runs the server without the agent. Configure the serv
 
 | Field | Type | Notes |
 |---|---|---|
-| `enabled` | bool | Not used: the tray agent always starts the server, and `mux serve` always does. Kept so existing files still load. Default false. |
 | `hostname` | string | Bind host. Default `127.0.0.1` (loopback). |
 | `port` | int | Bind port, clamped 1-65535. Default 8710. |
 | `ssl` | bool | Bind with SSL. Default false. |

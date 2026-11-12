@@ -139,6 +139,19 @@ namespace Test.Shared.Suites
                                     MuxAssert.AreEqual(cells, heat.RootElement.GetProperty("Calls").GetArrayLength(), "a call count per cell for " + range);
                                     MuxAssert.AreEqual(layout.GetProperty("Rows").GetInt32(), layout.GetProperty("RowLabels").GetArrayLength(), "row labels for " + range);
                                     MuxAssert.AreEqual(layout.GetProperty("Columns").GetInt32(), layout.GetProperty("ColumnLabels").GetArrayLength(), "column labels for " + range);
+                                    MuxAssert.AreEqual(layout.GetProperty("Columns").GetInt32(), layout.GetProperty("ColumnTimesUnixMs").GetArrayLength(), "column instants for " + range);
+                                    MuxAssert.AreEqual(layout.GetProperty("Rows").GetInt32(), layout.GetProperty("RowTimesUnixMs").GetArrayLength(), "row instants for " + range);
+                                    MuxAssert.AreEqual(cells, layout.GetProperty("CellStartsUnixMs").GetArrayLength(), "a start per cell for " + range);
+                                    MuxAssert.AreEqual(cells, layout.GetProperty("OutsideWindow").GetArrayLength(), "an outside flag per cell for " + range);
+                                    MuxAssert.AreEqual(0, layout.GetProperty("ColumnLabelAnchors")[0].GetInt32(), "the first column is a label anchor for " + range);
+                                    MuxAssert.IsTrue(layout.GetProperty("Columns").GetInt32() > layout.GetProperty("Rows").GetInt32() || range == "week" || range == "all", "time runs along the x-axis, wider than tall, for " + range);
+                                    MuxAssert.IsFalse(layout.TryGetProperty("RowStartsUnixMs", out _), "the transposed layout drops row starts for " + range);
+                                    // Every counted call sits in a cell inside the window, and the cells read chronologically by start.
+                                    List<long> starts = layout.GetProperty("CellStartsUnixMs").EnumerateArray().Select(e => e.GetInt64()).ToList();
+                                    List<bool> outside = layout.GetProperty("OutsideWindow").EnumerateArray().Select(e => e.GetBoolean()).ToList();
+                                    List<long> callsPerCell = heat.RootElement.GetProperty("Calls").EnumerateArray().Select(e => e.GetInt64()).ToList();
+                                    for (int i = 0; i < cells; i++) if (callsPerCell[i] > 0) MuxAssert.IsFalse(outside[i], "calls only in cells inside the window for " + range);
+                                    MuxAssert.AreEqual(cells, starts.Distinct().Count(), "distinct cell starts for " + range);
                                     long heatCalls = 0, heatTokens = 0;
                                     foreach (JsonElement v in heat.RootElement.GetProperty("Calls").EnumerateArray()) heatCalls += v.GetInt64();
                                     foreach (JsonElement v in heat.RootElement.GetProperty("TotalTokens").EnumerateArray()) heatTokens += v.GetInt64();
@@ -148,18 +161,21 @@ namespace Test.Shared.Suites
 
                                 using (JsonDocument monthHeat = JsonDocument.Parse(GetWithRetry(http, baseUrl + "/v1.0/api/usage/heatmap?range=month&tzOffsetMinutes=-330")))
                                 {
-                                    // Month: a 5-week calendar of half-days from a local Monday, covering the last 30 days.
+                                    // Month: a calendar of 14 half-day columns x 5 or 6 week rows from a local Monday, holding the last 30 days.
                                     JsonElement layout = monthHeat.RootElement.GetProperty("Layout");
-                                    MuxAssert.AreEqual(5, layout.GetProperty("Rows").GetInt32(), "month week rows");
+                                    int monthRows = layout.GetProperty("Rows").GetInt32();
+                                    MuxAssert.IsTrue(monthRows == 5 || monthRows == 6, "month week rows");
                                     MuxAssert.AreEqual(14, layout.GetProperty("Columns").GetInt32(), "month half-day columns");
                                     MuxAssert.AreEqual(12L * 3_600_000L, layout.GetProperty("BucketMs").GetInt64(), "month half-day cells");
                                     MuxAssert.AreEqual("halfday", layout.GetProperty("ColumnKind").GetString(), "month column kind");
-                                    MuxAssert.AreEqual("1w", layout.GetProperty("RowUnit").GetString(), "month row unit");
+                                    MuxAssert.AreEqual("week", layout.GetProperty("RowKind").GetString(), "month row kind");
+                                    MuxAssert.AreEqual("halfday", layout.GetProperty("ColumnUnit").GetString(), "month column unit");
                                     MuxAssert.AreEqual(2, layout.GetProperty("ColumnGroup").GetInt32(), "two columns per weekday");
                                     MuxAssert.AreEqual("Mon", layout.GetProperty("ColumnLabels")[0].GetString(), "Monday AM");
                                     MuxAssert.AreEqual("Mon", layout.GetProperty("ColumnLabels")[1].GetString(), "Monday PM");
                                     MuxAssert.AreEqual("Sun", layout.GetProperty("ColumnLabels")[13].GetString(), "Sunday PM");
-                                    MuxAssert.AreEqual("Rows: week starting · Columns: day (AM, PM)", layout.GetProperty("Caption").GetString(), "month caption");
+                                    MuxAssert.AreEqual("Columns: day of the week (AM, PM) · Rows: week starting", layout.GetProperty("Caption").GetString(), "month caption");
+                                    MuxAssert.AreEqual(60, layout.GetProperty("OutsideWindow").EnumerateArray().Count(e => !e.GetBoolean()), "the whole 30-day window is in the grid");
                                     long from = layout.GetProperty("FromUnixMs").GetInt64();
                                     long windowFrom = layout.GetProperty("WindowFromUnixMs").GetInt64();
                                     long nowMs = layout.GetProperty("NowUnixMs").GetInt64();
@@ -172,8 +188,9 @@ namespace Test.Shared.Suites
                                 using (JsonDocument quarterHeat = JsonDocument.Parse(GetWithRetry(http, baseUrl + "/v1.0/api/usage/heatmap?range=quarter&model=gpt-4o")))
                                 {
                                     JsonElement layout = quarterHeat.RootElement.GetProperty("Layout");
-                                    MuxAssert.AreEqual(13, layout.GetProperty("Rows").GetInt32(), "quarter week rows");
-                                    MuxAssert.AreEqual("Mon", layout.GetProperty("ColumnLabels")[0].GetString(), "quarter weekday columns");
+                                    MuxAssert.AreEqual(13, layout.GetProperty("Columns").GetInt32(), "quarter week columns");
+                                    MuxAssert.AreEqual(7, layout.GetProperty("Rows").GetInt32(), "quarter weekday rows");
+                                    MuxAssert.AreEqual("Mon", layout.GetProperty("RowLabels")[0].GetString(), "quarter weekday rows start on Monday");
                                     long calls = 0;
                                     foreach (JsonElement v in quarterHeat.RootElement.GetProperty("Calls").EnumerateArray()) calls += v.GetInt64();
                                     MuxAssert.AreEqual(2L, calls, "model filter applies to the heatmap");

@@ -43,8 +43,8 @@ namespace Test.Shared.Suites
             "us.errorRate", "us.total", "us.calls", "us.failures", "us.noFailures", "us.empty", "us.bd.line",
             "us.drill", "us.drill.clear", "us.drill.hint", "us.chart.aria",
             "us.hm.none", "us.hm.less", "us.hm.more", "us.hm.quartile",
-            "us.hm.axes", "us.hm.row.15m", "us.hm.row.1h", "us.hm.row.6h", "us.hm.row.1d", "us.hm.row.1w", "us.hm.row.13w",
-            "us.hm.col.minute", "us.hm.col.minuteofhour", "us.hm.col.hours", "us.hm.col.clock", "us.hm.col.weekday", "us.hm.col.halfday", "us.hm.col.weeks", "us.hm.hint",
+            "us.hm.axes", "us.hm.x.5m", "us.hm.x.1h", "us.hm.x.1d", "us.hm.x.halfday", "us.hm.x.1w", "us.hm.x.month", "us.hm.x.period",
+            "us.hm.y.minute", "us.hm.y.minuteofhour", "us.hm.y.hours", "us.hm.y.clock", "us.hm.y.weekday", "us.hm.y.week", "us.hm.y.weeks", "us.hm.hint",
             "us.t.by", "us.metric", "us.metric.tip", "us.m.tokens", "us.m.calls", "us.m.cost",
             "us.mode.tip", "us.mode.bars", "us.mode.lines",
             "us.exp.csv", "us.exp.csv.tip", "us.exp.png", "us.exp.png.tip", "us.exp.none", "us.exp.saved"
@@ -254,60 +254,106 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor(SuiteId, "HeatmapDrawsBothAxes", "The heatmap draws labeled rows and columns, an axis caption, future cells blank, and thins dense row labels (skipped without node)", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "HeatmapDrawsBothAxes", "The heatmap runs time left to right with steps down the y-axis (month a calendar), fills the width, thins x labels so they never collide, and blanks cells outside the window (skipped without node)", (CancellationToken ct) =>
                     {
                         string html = DashboardPage.Render(null, "9.9.9-test");
                         MuxAssert.Contains("class=\"uhm-y\"", html, "row labels");
                         MuxAssert.Contains("class=\"uhm-x\"", html, "column labels");
-                        MuxAssert.Contains("t(\"us.hm.axes\",{rows:t(\"us.hm.row.\"+lay.RowUnit),cols:t(\"us.hm.col.\"+lay.ColumnKind)})", html, "localized axis caption");
+                        MuxAssert.Contains("class=\"uhm-x end\"", html, "the last column label is right-aligned");
+                        MuxAssert.Contains("t(\"us.hm.axes\",{cols:t(\"us.hm.x.\"+lay.ColumnUnit),rows:t(\"us.hm.y.\"+lay.RowKind)})", html, "localized axis caption, x first");
+                        MuxAssert.Contains("starts=lay.CellStartsUnixMs||[],outside=lay.OutsideWindow||[]", html, "cell starts and window flags come from the server");
+                        MuxAssert.IsFalse(html.Contains("lay.FromUnixMs+i*lay.BucketMs"), "no cell time is recomputed from its index");
+                        MuxAssert.Contains("window.addEventListener(\"resize\",function(){if(usageState.tab!==\"heatmap\"", html, "the heatmap redraws on resize");
                         string? node = FindOnPath("node");
                         if (node == null) return Task.CompletedTask;
                         string js = Between(html, "function heatmapScale(values){", "\nfunction niceMax(");
                         long now = new DateTimeOffset(2026, 11, 11, 15, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                        long monday = new DateTimeOffset(2026, 11, 9, 8, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
                         string dir = Path.Combine(Path.GetTempPath(), "mux_dashhm_" + Guid.NewGuid().ToString("N"));
                         Directory.CreateDirectory(dir);
                         try
                         {
-                            List<string> outputs = new List<string>();
-                            foreach ((UsageRange range, int offset) in new[] { (UsageRange.Week, -300), (UsageRange.Month, 0), (UsageRange.Quarter, 330) })
+                            Dictionary<string, string> outputs = new Dictionary<string, string>();
+                            (string Name, UsageRange Range, long Now, int Offset, long Earliest)[] cases =
                             {
-                                UsageHeatmap heatmap = new UsageHeatmap(UsageHeatmapLayout.Compute(range, now, offset));
-                                for (int i = 0; i < heatmap.TotalTokens.Length; i++) heatmap.TotalTokens[i] = (i * 37) % 11 * 100;
+                                ("hour", UsageRange.Hour, now, 0, 0), ("day", UsageRange.Day, now, 0, 0), ("week", UsageRange.Week, now, -300, 0),
+                                ("month", UsageRange.Month, now, 0, 0), ("month-monday", UsageRange.Month, monday, 0, 0), ("quarter", UsageRange.Quarter, now, 330, 0),
+                                ("year", UsageRange.Year, now, 0, 0), ("all", UsageRange.All, now, 0, now - 400L * 86_400_000L), ("all-day", UsageRange.All, now, 0, now - 86_400_000L)
+                            };
+                            foreach (var c in cases)
+                            {
+                                UsageHeatmap heatmap = new UsageHeatmap(UsageHeatmapLayout.Compute(c.Range, c.Now, c.Offset, c.Earliest));
+                                UsageHeatmapLayout lay = heatmap.Layout;
+                                for (int i = 0; i < heatmap.TotalTokens.Length; i++) heatmap.TotalTokens[i] = lay.IsOutsideWindow(i) ? 0 : (i * 37) % 11 * 100;
                                 string file = Path.Combine(dir, "hm.js");
-                                File.WriteAllText(file, "var LOCALE='en',usageState={drill:null};function t(k,p){var s={'us.hm.axes':'Rows: {rows} · Columns: {cols}'}[k]||k;if(p)for(var x in p)s=s.split('{'+x+'}').join(p[x]);return s;}"
+                                File.WriteAllText(file, "var LOCALE='en',usageState={drill:null};window={addEventListener:function(){}};function el(){return null;}function t(k,p){var s={'us.hm.axes':'Columns: {cols} · Rows: {rows}'}[k]||k;if(p)for(var x in p)s=s.split('{'+x+'}').join(p[x]);return s;}"
                                     + "function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}function usAttr(s){return esc(''+s).replace(/\"/g,'&quot;');}\n"
-                                    + js + "\nconsole.log(tokenHeatmap(" + JsonSerializer.Serialize(heatmap) + ",900));");
+                                    + js + "\nconsole.log(tokenHeatmap(" + JsonSerializer.Serialize(heatmap) + ",1000));");
                                 ProcessStartInfo info = new ProcessStartInfo(node) { RedirectStandardError = true, RedirectStandardOutput = true, UseShellExecute = false };
                                 info.ArgumentList.Add(file);
                                 using Process process = Process.Start(info)!;
                                 string output = process.StandardOutput.ReadToEnd();
                                 string error = process.StandardError.ReadToEnd();
                                 process.WaitForExit(30000);
-                                MuxAssert.AreEqual(0, process.ExitCode, "heatmap renders for " + range + ": " + error);
-                                outputs.Add(output);
-                                MuxAssert.Contains("Rows: us.hm.row." + heatmap.Layout.RowUnit + " · Columns: us.hm.col." + heatmap.Layout.ColumnKind, output, "caption for " + range);
-                                MuxAssert.AreEqual(heatmap.Layout.Rows * heatmap.Layout.Columns, Regex.Matches(output, "class=\"uhm-(cell|future)").Count, "one grid cell per layout cell for " + range);
-                                MuxAssert.IsTrue(Regex.Matches(output, "class=\"uhm-y\"").Count >= 2, "row labels for " + range);
-                                MuxAssert.IsTrue(Regex.Matches(output, "class=\"uhm-x\"").Count >= 2, "column labels for " + range);
+                                MuxAssert.AreEqual(0, process.ExitCode, "heatmap renders for " + c.Name + ": " + error);
+                                outputs[c.Name] = output;
+                                MuxAssert.Contains("Columns: us.hm.x." + lay.ColumnUnit + " · Rows: us.hm.y." + lay.RowKind, output, "caption for " + c.Name);
+                                MuxAssert.AreEqual(lay.CellCount, Regex.Matches(output, "class=\"uhm-(cell|future)").Count, "one grid cell per layout cell for " + c.Name);
+                                MuxAssert.AreEqual(Enumerable.Range(0, lay.CellCount).Count(i => lay.IsOutsideWindow(i)), Regex.Matches(output, "class=\"uhm-future\"").Count, "cells outside the window are blank for " + c.Name);
+                                MuxAssert.AreEqual(lay.Rows, Regex.Matches(output, "class=\"uhm-y\"").Count, "every row labeled for " + c.Name);
+
+                                // Cells fill the 1000 pixel container (10-96 pixels) and the grid is wider than tall.
+                                Match size = Regex.Match(output, "grid-template-columns:auto repeat\\((\\d+),(\\d+)px\\);grid-template-rows:auto repeat\\((\\d+),(\\d+)px\\)");
+                                MuxAssert.IsTrue(size.Success, "grid template for " + c.Name);
+                                int cols = int.Parse(size.Groups[1].Value), colW = int.Parse(size.Groups[2].Value), rows = int.Parse(size.Groups[3].Value), rowH = int.Parse(size.Groups[4].Value);
+                                MuxAssert.AreEqual(lay.Columns, cols, "x-axis columns for " + c.Name);
+                                MuxAssert.AreEqual(lay.Rows, rows, "y-axis rows for " + c.Name);
+                                MuxAssert.IsTrue(colW >= 10 && colW <= 96, "cell width clamped for " + c.Name);
+                                MuxAssert.IsTrue(colW == 96 || cols * (colW + 3) >= 820, "cells stretch to the width for " + c.Name);
+                                MuxAssert.IsTrue(cols * (colW + 3) > rows * (rowH + 3) || c.Range == UsageRange.Week, "wider than tall for " + c.Name);
+
+                                // x labels: the first and last column labeled, none overlapping (about 6.6 pixels a character).
+                                List<(int Col, string Text, bool End)> labels = Regex.Matches(output, "class=\"uhm-x( end)?\" data-col=\"(\\d+)\"[^>]*>([^<]*)<")
+                                    .Select(m => (int.Parse(m.Groups[2].Value), m.Groups[3].Value, m.Groups[1].Success)).ToList();
+                                MuxAssert.IsTrue(labels.Count >= 2, "x labels for " + c.Name);
+                                MuxAssert.AreEqual(0, labels[0].Col, "first column labeled for " + c.Name);
+                                MuxAssert.AreEqual(lay.ColumnLabelAnchors[lay.ColumnLabelAnchors.Count - 1], labels[labels.Count - 1].Col, "last column labeled for " + c.Name);
+                                MuxAssert.IsTrue(labels[labels.Count - 1].End, "the last label is right-aligned for " + c.Name);
+                                double pitch = colW + 3;
+                                for (int i = 1; i < labels.Count; i++)
+                                {
+                                    double prevEnd = labels[i - 1].Col * pitch + labels[i - 1].Text.Length * 6.6;
+                                    double start = labels[i].End ? (lay.Columns * pitch) - labels[i].Text.Length * 6.6 : labels[i].Col * pitch;
+                                    MuxAssert.IsTrue(start >= prevEnd, "x labels '" + labels[i - 1].Text + "' and '" + labels[i].Text + "' do not collide for " + c.Name);
+                                }
                             }
 
-                            MuxAssert.Contains(">Thu, 11/5<", outputs[0], "week rows start at local midnight in UTC-5 (Thursday the 5th)");
-                            MuxAssert.Contains(">Wed, 11/11<", outputs[0], "the last week row is local today");
-                            MuxAssert.Contains(">00:00<", outputs[0], "week columns are times of day");
-                            MuxAssert.Contains(">22:00<", outputs[0], "every two-hour column labeled at 900 pixels");
-                            // Month: a 5-week calendar from Monday the 12th, each weekday labeled once over its two half-days,
+                            MuxAssert.Contains(">Thu 11/5<", outputs["week"], "week columns start at local midnight in UTC-5 (Thursday the 5th)");
+                            MuxAssert.Contains(">Wed 11/11<", outputs["week"], "the last week column is local today");
+                            MuxAssert.Contains(">00:00<", outputs["week"], "week rows are times of day");
+                            MuxAssert.Contains(">22:00<", outputs["week"], "every two-hour row labeled");
+                            MuxAssert.Contains(">:35<", outputs["hour"], "hour columns are five-minute periods");
+                            MuxAssert.Contains(">+4m<", outputs["hour"], "hour rows are minutes");
+                            MuxAssert.Contains(">16<", outputs["day"], "day columns are local hours");
+                            MuxAssert.Contains(">:45<", outputs["day"], "day rows are quarter-hours");
+                            // Month: a calendar from Monday the 12th, each weekday labeled once over its two half-days,
                             // and the cells before the last 30 days (Monday the 12th) and after now blank and not clickable.
-                            MuxAssert.AreEqual(5, Regex.Matches(outputs[1], "class=\"uhm-y\"").Count, "every month week labeled");
-                            MuxAssert.Contains(">Oct 12, 2026<", outputs[1], "the first month row is the week starting Monday the 12th");
-                            MuxAssert.Contains(">Nov 9, 2026<", outputs[1], "the last month row is this week");
-                            MuxAssert.AreEqual(7, Regex.Matches(outputs[1], "class=\"uhm-x\"").Count, "one column label per weekday");
-                            MuxAssert.AreEqual(7, Regex.Matches(outputs[1], "class=\"uhm-x\" style=\"grid-row:1;grid-column:\\d+ / span 2\"").Count, "each weekday label spans its AM and PM");
-                            foreach (string day in new[] { ">Mon<", ">Wed<", ">Sun<" }) MuxAssert.Contains(day, outputs[1], "month columns are weekdays: " + day);
-                            MuxAssert.AreEqual(60, Regex.Matches(outputs[1], "class=\"uhm-cell ").Count, "60 half-days in the window");
-                            MuxAssert.AreEqual(10, Regex.Matches(outputs[1], "class=\"uhm-future\"").Count, "2 half-days before the window and 8 after now are blank");
-                            MuxAssert.IsFalse(Regex.IsMatch(outputs[1], "data-idx=\"[01]\""), "cells before the window are not clickable");
-                            foreach (string day in new[] { ">Mon<", ">Tue<", ">Sun<" }) MuxAssert.Contains(day, outputs[2], "quarter columns are weekdays: " + day);
-                            MuxAssert.Contains("class=\"uhm-future\"", outputs[2], "days after today are blank");
+                            MuxAssert.Contains(">Oct 12, 2026<", outputs["month"], "the first month row is the week starting Monday the 12th");
+                            MuxAssert.Contains(">Nov 9, 2026<", outputs["month"], "the last month row is this week");
+                            MuxAssert.AreEqual(7, Regex.Matches(outputs["month"], "class=\"uhm-x( end)?\"").Count, "one column label per weekday");
+                            MuxAssert.AreEqual(6, Regex.Matches(outputs["month"], "class=\"uhm-x\" data-col=\"\\d+\" style=\"grid-row:1;grid-column:\\d+ / span 2\"").Count, "each weekday label spans its AM and PM");
+                            foreach (string day in new[] { ">Mon<", ">Wed<", ">Sun<" }) MuxAssert.Contains(day, outputs["month"], "month columns are weekdays: " + day);
+                            MuxAssert.AreEqual(60, Regex.Matches(outputs["month"], "class=\"uhm-cell ").Count, "60 half-days in the window");
+                            MuxAssert.AreEqual(10, Regex.Matches(outputs["month"], "class=\"uhm-future\"").Count, "2 half-days before the window and 8 after now are blank");
+                            MuxAssert.IsFalse(Regex.IsMatch(outputs["month"], "data-idx=\"[01]\""), "cells before the window are not clickable");
+                            MuxAssert.Contains("grid-template-rows:auto repeat(6,", outputs["month-monday"], "a Monday adds a 6th week row");
+                            MuxAssert.AreEqual(60, Regex.Matches(outputs["month-monday"], "class=\"uhm-cell ").Count, "the whole 30-day window on a Monday");
+                            MuxAssert.Contains(">Oct 5, 2026<", outputs["month-monday"], "the 6th row is the week starting Monday the 5th");
+                            foreach (string day in new[] { ">Mon<", ">Tue<", ">Sun<" }) MuxAssert.Contains(day, outputs["quarter"], "quarter rows are weekdays: " + day);
+                            MuxAssert.Contains("class=\"uhm-future\"", outputs["quarter"], "days after today are blank");
+                            MuxAssert.Contains("grid-template-columns:auto repeat(53,", outputs["year"], "the year is 53 week columns");
+                            MuxAssert.Contains(">Dec<", outputs["year"], "the year labels months where they start");
+                            MuxAssert.AreEqual(364, Regex.Matches(outputs["year"], "class=\"uhm-cell ").Count, "364 daily cells");
                         }
                         finally
                         {
@@ -538,7 +584,8 @@ namespace Test.Shared.Suites
                                 {
                                     JsonElement layout = heat.RootElement.GetProperty("Layout");
                                     MuxAssert.AreEqual(-300, layout.GetProperty("UtcOffsetMinutes").GetInt32(), "JavaScript offset applied");
-                                    MuxAssert.AreEqual(7, layout.GetProperty("Rows").GetInt32(), "week day rows");
+                                    MuxAssert.AreEqual(7, layout.GetProperty("Columns").GetInt32(), "week day columns");
+                                    MuxAssert.AreEqual(12, layout.GetProperty("Rows").GetInt32(), "week two-hour rows");
                                     long calls = 0;
                                     foreach (JsonElement v in heat.RootElement.GetProperty("Calls").EnumerateArray()) calls += v.GetInt64();
                                     MuxAssert.AreEqual(1L, calls, "endpoint filter applies to the heatmap");

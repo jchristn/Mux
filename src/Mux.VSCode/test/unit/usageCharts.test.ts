@@ -20,8 +20,8 @@ import {
     heatmapCellWindow,
     heatmapColumnLabel,
     heatmapGrid,
-    heatmapRowHeight,
     heatmapRowLabel,
+    heatmapSizes,
     labeledIndices,
     heatmapScale,
     isUsageRange,
@@ -33,6 +33,7 @@ import {
     normalizeSplitMetric,
     stackSplitSeries,
     stackedMax,
+    thinLabels,
     tokenParts,
     usageCsv,
     usageCsvTable,
@@ -182,69 +183,109 @@ test('breakdown bars sort by cost then tokens and cap at ten rows', () => {
     assert.deepEqual(breakdownBars([{ Value: '', Metrics: { Calls: 0 } }, { Value: ' ', Metrics: { Calls: 2 } }]).map((b) => b.value), ['unknown']);
 });
 
-function layout(over: Record<string, unknown> = {}) {
-    const from = Date.UTC(2026, 10, 9, 5, 0); // Monday 00:00 at UTC-5
+// A layout shaped like Mux.Core's: `cols` columns of local periods, each `rows` cells of `bucket` (time runs down a
+// column, then to the next), cells row-major in display order; or with `across: false` the month calendar's order
+// (time runs along a row, then to the next).
+function layout(over: Record<string, unknown> = {}, shape: { from?: number; rows?: number; cols?: number; bucket?: number; now?: number; windowFrom?: number; across?: boolean } = {}) {
+    const from = shape.from ?? Date.UTC(2026, 10, 9, 5, 0); // Monday 00:00 at UTC-5
+    const rows = shape.rows ?? 7;
+    const cols = shape.cols ?? 2;
+    const bucket = shape.bucket ?? DAY;
+    const now = shape.now ?? from + 9 * DAY + HOUR;
+    const windowFrom = shape.windowFrom ?? from;
+    const across = shape.across ?? true;
+    const starts: number[] = [];
+    for (let i = 0; i < rows * cols; i++) {
+        const r = Math.floor(i / cols), c = i % cols;
+        starts.push(from + (across ? c * rows + r : i) * bucket);
+    }
     return {
-        NowUnixMs: from + 2 * DAY + 10 * HOUR, UtcOffsetMinutes: -300, FromUnixMs: from, BucketMs: DAY, Rows: 2, Columns: 7,
-        RowKind: 'date', RowUnit: '1w', ColumnKind: 'weekday', RowStartsUnixMs: [from, from + 7 * DAY],
-        ColumnLabels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], ...over,
+        NowUnixMs: now, UtcOffsetMinutes: -300, FromUnixMs: from, WindowFromUnixMs: windowFrom, BucketMs: bucket, Rows: rows, Columns: cols, ColumnGroup: 1,
+        ColumnKind: 'date', RowKind: 'weekday', ColumnUnit: '1w',
+        ColumnTimesUnixMs: starts.slice(0, cols), RowTimesUnixMs: Array.from({ length: rows }, (_, r) => starts[r * cols]),
+        ColumnLabels: Array.from({ length: cols }, (_, c) => 'c' + c), RowLabels: Array.from({ length: rows }, (_, r) => 'r' + r),
+        ColumnLabelAnchors: Array.from({ length: cols }, (_, c) => c), CellStartsUnixMs: starts, OutsideWindow: starts.map((t) => t > now || t < windowFrom),
+        ...over,
     };
 }
 
-test('heatmap grid places cells row-major on the shared layout, shades by quartile, and blanks future cells', () => {
-    const lay = layout({ NowUnixMs: Date.UTC(2026, 10, 9, 5, 0) + 9 * DAY + HOUR });
+test('heatmap grid takes positions, windows, and blanks from the layout and shades by quartile', () => {
+    const lay = layout();
+    const from = lay.FromUnixMs;
+    // Display order: row 0 is Mon of week 1, Mon of week 2; row 1 is Tue, Tue; ...
     const tokens = [0, 100, 50, 1, 33, 67, 99, 100, 0, 0, 0, 0, 0, 0];
     const grid = heatmapGrid({ Layout: lay, TotalTokens: tokens, Calls: tokens.map((t) => (t > 0 ? 1 : 0)) });
-    assert.equal(grid.rows, 2);
-    assert.equal(grid.cols, 7);
+    assert.equal(grid.rows, 7);
+    assert.equal(grid.cols, 2);
     assert.equal(grid.max, 100);
-    assert.deepEqual(grid.cells.slice(6, 9).map((c) => [c.row, c.col]), [[0, 6], [1, 0], [1, 1]]);
+    assert.deepEqual(grid.cells.slice(0, 4).map((c) => [c.row, c.col]), [[0, 0], [0, 1], [1, 0], [1, 1]]);
+    assert.deepEqual(grid.cells.slice(0, 4).map((c) => c.from), [from, from + 7 * DAY, from + DAY, from + 8 * DAY], 'time runs down each column, then across');
     // Quartiles of the used cells [1, 33, 50, 67, 99, 100, 100]: bounds 33, 67, 100; the peak is level 4.
     assert.deepEqual(grid.cells.slice(0, 9).map((c) => c.level), [0, 4, 2, 1, 1, 2, 3, 4, 0]);
-    assert.deepEqual([grid.cells[1].from, grid.cells[1].to], [lay.FromUnixMs + DAY, lay.FromUnixMs + 2 * DAY - 1], 'drill window');
-    assert.deepEqual(grid.cells.map((c) => c.future), [false, false, false, false, false, false, false, false, false, false, true, true, true, true]);
-    assert.deepEqual(grid.labeledRows, [0, 1]);
-    assert.deepEqual(heatmapGrid(null), { rows: 0, cols: 0, max: 0, rowHeight: 24, labeledRows: [], cells: [] });
+    assert.deepEqual([grid.cells[1].from, grid.cells[1].to], [from + 7 * DAY, from + 8 * DAY - 1], 'drill window');
+    // Now is Wednesday of week 2 at 01:00: Thursday on in column 1 is in the future.
+    assert.deepEqual(grid.cells.filter((c) => c.blank).map((c) => c.index), [7, 9, 11, 13]);
+    assert.deepEqual(grid.cells.filter((c) => c.future).map((c) => c.index), [7, 9, 11, 13]);
+    assert.deepEqual(heatmapGrid(null), { rows: 0, cols: 0, max: 0, cells: [] });
 });
 
-test('heatmap labels both axes in local time and thins dense rows', () => {
+test('heatmap labels both axes in local time, localized from the layout instants', () => {
     const lay = layout();
-    assert.equal(heatmapColumnLabel(lay, 0, 'en-US'), 'Mon');
-    assert.equal(heatmapColumnLabel(lay, 6, 'en-US'), 'Sun');
-    assert.equal(heatmapColumnLabel(lay, 0, 'de-DE'), 'Mo', 'weekdays are localized');
-    assert.equal(heatmapColumnLabel(layout({ ColumnKind: 'clock', ColumnLabels: ['00:00', '02:00'] }), 1, 'en-US'), '02:00');
+    assert.equal(heatmapColumnLabel(lay, 0, 'en-US'), '11/9', 'week start dates along the x-axis at local midnight, not UTC');
+    assert.equal(heatmapColumnLabel(lay, 1, 'de-DE'), '16.11.', 'localized month-day');
+    assert.equal(heatmapColumnLabel(layout({ ColumnKind: 'weekdate' }), 0, 'en-US'), 'Mon 11/9');
+    assert.equal(heatmapColumnLabel(layout({ ColumnKind: 'month' }), 1, 'en-US'), 'Nov');
+    assert.equal(heatmapColumnLabel(layout({ ColumnKind: 'halfday' }), 0, 'de-DE'), 'Mo');
+    assert.equal(heatmapColumnLabel(layout({ ColumnKind: 'datetime' }), 0, 'en-US'), '11/9 00:00');
+    assert.equal(heatmapColumnLabel(layout({ ColumnKind: 'fulldate' }), 0, 'en-US'), 'Nov 9, 2026');
+    assert.equal(heatmapColumnLabel(layout({ ColumnKind: 'hour' }), 1, 'en-US'), 'c1', 'numeric kinds use the server label');
+    assert.equal(heatmapRowLabel(lay, 0, 'en-US'), 'Mon');
+    assert.equal(heatmapRowLabel(lay, 6, 'de-DE'), 'So', 'weekdays are localized');
+    assert.equal(heatmapRowLabel(layout({ RowKind: 'week' }), 1, 'en-US'), 'Nov 10, 2026');
+    assert.equal(heatmapRowLabel(layout({ RowKind: 'clock' }), 2, 'en-US'), 'r2');
     const start = Date.UTC(2026, 10, 11, 15, 0); // 10:00 on Wednesday the 11th at UTC-5
-    const at = (kind: string) => heatmapRowLabel(layout({ RowKind: kind, RowStartsUnixMs: [start] }), 0, 'en-US');
-    assert.equal(at('time'), '10:00');
-    assert.equal(at('datetime'), '11/11 10:00');
-    assert.equal(at('weekdate'), 'Wed, 11/11');
-    assert.equal(at('date'), 'Nov 11, 2026');
-    assert.equal(heatmapRowLabel(lay, 0, 'en-US'), 'Nov 9, 2026', 'rows start at local midnight, not UTC');
     assert.equal(heatmapCellWindow(layout({ BucketMs: 2 * HOUR }), start, 'en-US'), 'Nov 11, 2026 10:00–12:00');
     assert.equal(heatmapCellWindow(lay, lay.FromUnixMs, 'en-US'), 'Nov 9, 2026');
-    assert.deepEqual(labeledIndices(24, 8, true), [0, 3, 6, 9, 12, 15, 18, 23]);
-    assert.deepEqual(labeledIndices(12, 3, false), [0, 4, 8]);
-    assert.equal(heatmapRowHeight(7), 24);
-    assert.equal(heatmapRowHeight(30), 14);
-    const tall = heatmapGrid({ Layout: layout({ Rows: 30, Columns: 2, RowStartsUnixMs: Array.from({ length: 30 }, (_, i) => i) }), TotalTokens: [], Calls: [] });
-    assert.ok(tall.labeledRows.length < 30, 'a tall grid thins its row labels');
-    assert.equal(tall.labeledRows[0], 0);
-    assert.equal(tall.labeledRows[tall.labeledRows.length - 1], 29, 'the last row keeps its label');
+    assert.deepEqual(labeledIndices(12, 6, true), [0, 2, 4, 6, 8, 11]);
 });
 
-test('month heatmap is a 5-week calendar of half-days with cells outside its 30-day window blank', () => {
+test('x-axis labels thin so they never collide, keeping the first and last', () => {
+    const all = (n: number) => Array.from({ length: n }, (_, i) => i);
+    assert.deepEqual(thinLabels(all(24), 24, 1, 1, true), all(24), 'room for every label');
+    assert.deepEqual(thinLabels(all(24), 24, 1, 3, true), [0, 3, 6, 9, 12, 15, 18, 23], 'every 3rd, the right-aligned last replacing the one before it');
+    assert.deepEqual(thinLabels(all(13), 13, 1, 2, true), [0, 2, 4, 6, 8, 12], 'the right-aligned last needs room for the label before it');
+    assert.deepEqual(thinLabels([0, 2, 4, 6, 8, 10, 12], 14, 2, 2, true), [0, 2, 4, 6, 8, 10, 12], 'every weekday of a half-day grid');
+    assert.deepEqual(thinLabels([0, 2, 4, 6, 8, 10, 12], 14, 2, 3, true), [0, 4, 8, 12]);
+    assert.deepEqual(thinLabels(all(5), 5, 1, 9, true), [0], 'too narrow for two labels: only the first');
+    // A year: month starts (uneven) plus the first and last column.
+    const year = [0, 3, 7, 12, 16, 20, 25, 29, 34, 38, 42, 47, 51, 52];
+    const picked = thinLabels(year, 53, 1, 3, false);
+    assert.equal(picked[0], 0);
+    assert.equal(picked[picked.length - 1], 52);
+    for (let i = 1; i < picked.length - 1; i++) {
+        assert.ok(picked[i] - picked[i - 1] >= 3, 'labels never overlap');
+    }
+    assert.ok(52 - picked[picked.length - 2] >= 5, 'the right-aligned last label has room');
+    assert.deepEqual(thinLabels([], 0, 1, 1, true), []);
+});
+
+test('heatmap cells stretch to the width within 10-96 pixels and rows stay short', () => {
+    assert.deepEqual(heatmapSizes(1000, 24, 3, 2), { colW: 36, rowH: 28, gap: 1 });
+    assert.deepEqual(heatmapSizes(1000, 12, 3, 3), { colW: 75, rowH: 28, gap: 1 }, 'twelve columns fill the width');
+    assert.deepEqual(heatmapSizes(1400, 7, 5, 9), { colW: 96, rowH: 28, gap: 1 }, 'capped at 96 pixels');
+    assert.deepEqual(heatmapSizes(900, 53, 3, 3), { colW: 12, rowH: 12, gap: 2 }, 'a year of weeks fits 900 pixels');
+    assert.equal(heatmapSizes(300, 53, 3, 3).colW, 10, 'never below 10 pixels');
+});
+
+test('month heatmap is a calendar of half-days with cells outside its 30-day window blank', () => {
     const from = Date.UTC(2026, 9, 12, 5, 0); // Monday 2026-10-12 00:00 at UTC-5
     const now = Date.UTC(2026, 10, 11, 20, 30); // Wednesday 2026-11-11 15:30 at UTC-5, a PM half-day
     const nowCell = 4 * 14 + 2 * 2 + 1;
-    const lay = layout({
-        NowUnixMs: now, FromUnixMs: from, WindowFromUnixMs: from + (nowCell - 59) * 12 * HOUR, BucketMs: 12 * HOUR, Rows: 5, Columns: 14,
-        ColumnGroup: 2, RowKind: 'date', RowUnit: '1w', ColumnKind: 'halfday', RowStartsUnixMs: [0, 1, 2, 3, 4].map((r) => from + r * 7 * DAY),
-        ColumnLabels: ['Mon', 'Mon', 'Tue', 'Tue', 'Wed', 'Wed', 'Thu', 'Thu', 'Fri', 'Fri', 'Sat', 'Sat', 'Sun', 'Sun'],
-    });
+    const lay = layout({ ColumnGroup: 2, ColumnKind: 'halfday', RowKind: 'week', ColumnUnit: 'halfday', ColumnLabelAnchors: [0, 2, 4, 6, 8, 10, 12] },
+        { from, rows: 5, cols: 14, bucket: 12 * HOUR, now, windowFrom: from + (nowCell - 59) * 12 * HOUR, across: false });
     const grid = heatmapGrid({ Layout: lay, TotalTokens: Array.from({ length: 70 }, () => 5), Calls: [] });
     assert.equal(grid.rows, 5);
     assert.equal(grid.cols, 14);
-    assert.equal(grid.labeledRows.length, 5, 'every week row is labeled');
     const blank = grid.cells.filter((c) => c.blank).map((c) => c.index);
     assert.deepEqual(blank.filter((i) => i < nowCell), [0, 1], 'the half-days before the last 30 days are blank');
     assert.deepEqual(blank.filter((i) => i > nowCell), Array.from({ length: 69 - nowCell }, (_, i) => nowCell + 1 + i), 'the cells after now are blank');
@@ -254,8 +295,6 @@ test('month heatmap is a 5-week calendar of half-days with cells outside its 30-
     assert.equal(heatmapColumnLabel(lay, 1, 'en-US'), 'Mon', 'the PM column shares its weekday');
     assert.equal(heatmapColumnLabel(lay, 13, 'de-DE'), 'So', 'localized');
     assert.equal(heatmapRowLabel(lay, 4, 'en-US'), 'Nov 9, 2026', 'rows are the local Monday each week starts');
-    const legacy = heatmapGrid({ Layout: layout(), TotalTokens: [], Calls: [] });
-    assert.deepEqual(legacy.cells.map((c) => c.blank), legacy.cells.map((c) => c.future), 'without a window start only future cells are blank');
 });
 
 test('number formatting helpers', () => {
@@ -345,9 +384,10 @@ test('CSV tables: one row per bucket with named series columns, and null when th
     const breakdown = [{ Value: 'e1', Metrics: { Calls: 6, Errors: 1, InputTokens: 200, CachedTokens: 80, OutputTokens: 14, TotalTokens: 214, CostUsd: 0.25 } }];
     assert.equal(csv('breakdown', { breakdown, fromUnixMs: t0, toUnixMs: t0 + DAY }),
         'bucket_start,bucket_end,endpoint,calls,failed,uncached_input,cached_input,output,total_tokens,cost_usd\n2026-01-01T00:00:00+00:00,2026-01-02T00:00:00+00:00,e1,6,1,120,80,14,214,0.25\n');
-    const heatmap = { Layout: layout({ Rows: 1, Columns: 4, NowUnixMs: t0 + 13 * HOUR, FromUnixMs: t0, BucketMs: 6 * HOUR }), TotalTokens: [0, 5, 9, 0], Calls: [0, 1, 2, 0] };
-    assert.equal(csv('heatmap', { heatmap }), 'cell_start,cell_end,tokens,calls\n2026-01-01T00:00:00+00:00,2026-01-01T06:00:00+00:00,0,0\n'
-        + '2026-01-01T06:00:00+00:00,2026-01-01T12:00:00+00:00,5,1\n2026-01-01T12:00:00+00:00,2026-01-01T18:00:00+00:00,9,2\n', 'future cells are left out');
+    // Two 12-hour columns of two 6-hour rows: display order is [00:00, 12:00, 06:00, 18:00]; the CSV is chronological.
+    const heatmap = { Layout: layout({ UtcOffsetMinutes: 0 }, { from: t0, rows: 2, cols: 2, bucket: 6 * HOUR, now: t0 + 13 * HOUR }), TotalTokens: [1, 9, 5, 0], Calls: [1, 2, 1, 0] };
+    assert.equal(csv('heatmap', { heatmap }), 'cell_start,cell_end,tokens,calls\n2026-01-01T00:00:00+00:00,2026-01-01T06:00:00+00:00,1,1\n'
+        + '2026-01-01T06:00:00+00:00,2026-01-01T12:00:00+00:00,5,1\n2026-01-01T12:00:00+00:00,2026-01-01T18:00:00+00:00,9,2\n', 'oldest first; cells outside the window are left out');
 
     assert.equal(csv('calls', { buckets: [] }), null);
     assert.equal(csv('tokens', { buckets: buckets.map((b) => ({ ...b, Metrics: { Calls: 0 } })) }), null, 'no calls: nothing to export');

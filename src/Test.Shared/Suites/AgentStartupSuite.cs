@@ -88,6 +88,42 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor(SuiteId, "ReplaceOnlyWithCurrentCopy", "A running agent of another version is replaced only by a copy of this version (or an unmarked build), never by the same stale copy", (CancellationToken ct) =>
+                    {
+                        string current = Mux.Core.Settings.Defaults.ProductVersion;
+                        MuxAssert.IsFalse(AgentLauncher.ShouldReplace(current, current), "running current: keep");
+                        MuxAssert.IsFalse(AgentLauncher.ShouldReplace(null, current), "unknown running version: keep");
+                        MuxAssert.IsTrue(AgentLauncher.ShouldReplace("0.0.1", current), "stale running, current copy: replace");
+                        MuxAssert.IsTrue(AgentLauncher.ShouldReplace("0.0.1", null), "stale running, unmarked build: replace");
+                        MuxAssert.IsFalse(AgentLauncher.ShouldReplace("0.0.1", "0.0.1"), "stale running, same stale copy: keep");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "InstalledVersionMarkers", "Installed versions are read from mux-version.txt or the macOS Info.plist", (CancellationToken ct) =>
+                    {
+                        string dir = Path.Combine(Path.GetTempPath(), "mux_agentver_" + Guid.NewGuid().ToString("N"));
+                        try
+                        {
+                            string flat = Path.Combine(dir, "agent");
+                            Directory.CreateDirectory(flat);
+                            File.WriteAllText(Path.Combine(flat, "mux-version.txt"), "1.2.3\n");
+                            MuxAssert.AreEqual("1.2.3", AgentLocator.InstalledVersion(Path.Combine(flat, "Mux.Agent")), "marker file");
+                            string macos = Path.Combine(dir, "Mux Agent.app", "Contents", "MacOS");
+                            Directory.CreateDirectory(macos);
+                            File.WriteAllText(Path.Combine(dir, "Mux Agent.app", "Contents", "Info.plist"),
+                                "<plist><dict><key>CFBundleVersion</key><string>9</string><key>CFBundleShortVersionString</key><string>4.5.6</string></dict></plist>");
+                            MuxAssert.AreEqual("4.5.6", AgentLocator.InstalledVersion(Path.Combine(macos, "Mux.Agent")), "Info.plist");
+                            MuxAssert.IsNull(AgentLocator.InstalledVersion(Path.Combine(dir, "none", "Mux.Agent")), "no marker");
+                            MuxAssert.IsNull(AgentLocator.InstalledVersion(null), "null");
+                        }
+                        finally
+                        {
+                            try { Directory.Delete(dir, true); } catch (Exception) { }
+                        }
+
+                        return Task.CompletedTask;
+                    }),
+
                     new TestCaseDescriptor(SuiteId, "AutostartSwitch", "MUX_AGENT_AUTOSTART turns automatic starts off with 0, false, no, or off", (CancellationToken ct) =>
                     {
                         foreach (string? on in new string?[] { null, "", " ", "1", "true", "yes", "anything" })

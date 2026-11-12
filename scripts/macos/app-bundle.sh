@@ -3,6 +3,8 @@
 # install_macos_app builds one app bundle and installs it in ~/Applications and, unless MUX_SYSTEM_INSTALL=0,
 # in /Applications (directly when writable, which it is for admin users, otherwise with sudo; when that is not
 # possible it warns and keeps the per-user copy). Pass --user-only to skip /Applications (the run scripts do).
+# macos_ensure_user_agent and macos_start_user_agent install (when missing or stale) and start the agent before a
+# user surface (run-desktop.sh, run-tui.sh).
 # MUX_SYSTEM_APPLICATIONS_DIR overrides the system folder (tests use it to stay out of the real /Applications).
 
 # The system-wide application folder.
@@ -109,14 +111,14 @@ install_macos_app() {
     else
         macos_app_not_running "$name" || return 1
     fi
-    rm -rf "$stage"
-    mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+    rm -rf "$stage" || return 1
+    mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" || return 1
     echo "Publishing $name $version ($rid, $TFM)..."
     dotnet publish "$project" --configuration Release --framework "$TFM" \
         -p:TargetFrameworks="$TFM" --runtime "$rid" --self-contained true \
         --output "$app/Contents/MacOS" || return
-    cp "$REPO_ROOT/assets/icons/icon-macos.icns" "$app/Contents/Resources/mux.icns"
-    cat > "$app/Contents/Info.plist" <<PLIST
+    cp "$REPO_ROOT/assets/icons/icon-macos.icns" "$app/Contents/Resources/mux.icns" || return 1
+    cat > "$app/Contents/Info.plist" <<PLIST || return 1
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -133,17 +135,17 @@ install_macos_app() {
     <key>NSHighResolutionCapable</key><true/>
 PLIST
     if [ "$component" = agent ]; then
-        echo '    <key>LSUIElement</key><true/>' >> "$app/Contents/Info.plist"
+        echo '    <key>LSUIElement</key><true/>' >> "$app/Contents/Info.plist" || return 1
     fi
-    printf '</dict>\n</plist>\n' >> "$app/Contents/Info.plist"
+    printf '</dict>\n</plist>\n' >> "$app/Contents/Info.plist" || return 1
     # Playwright is data plus a Node driver, not a nested app bundle. Keep it
     # under Resources so codesign does not interpret .playwright as a bundle;
     # the relative link preserves Playwright's lookup beside the managed DLL.
     if [ -d "$app/Contents/MacOS/.playwright" ]; then
-        mv "$app/Contents/MacOS/.playwright" "$app/Contents/Resources/playwright"
-        ln -s ../Resources/playwright "$app/Contents/MacOS/.playwright"
+        mv "$app/Contents/MacOS/.playwright" "$app/Contents/Resources/playwright" || return 1
+        ln -s ../Resources/playwright "$app/Contents/MacOS/.playwright" || return 1
     fi
-    chmod +x "$app/Contents/MacOS/$executable"
+    chmod +x "$app/Contents/MacOS/$executable" || return 1
     codesign --force --deep --sign - "$app" || return
     # Only replace the installed apps after publishing and signing succeed.
     macos_copy_app "$app" "$HOME/Applications" || return 1
@@ -155,4 +157,72 @@ PLIST
         echo "Warning: skipped the system-wide install of $name in $folder; the per-user install in ~/Applications is done." >&2
         echo "Re-run with administrator rights, or set MUX_SYSTEM_INSTALL=0 to skip it quietly." >&2
     fi
+}
+
+# Prints the version of an app installed in ~/Applications (its Info.plist CFBundleShortVersionString), or
+# nothing when it is not installed.
+macos_installed_version() {
+    local plist version
+    plist="$HOME/Applications/$(macos_app_name "$1").app/Contents/Info.plist"
+    [ -f "$plist" ] || return 0
+    version="$(sed -n 's:.*<key>CFBundleShortVersionString</key>[[:space:]]*<string>\([^<]*\)</string>.*:\1:p' "$plist" | head -n 1)"
+    if [ -z "$version" ] && [ -x /usr/libexec/PlistBuddy ]; then
+        version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist" 2>/dev/null || true)"
+    fi
+    echo "$version"
+}
+
+# True unless MUX_AGENT_AUTOSTART turns automatic agent starts off (0, false, no or off, any case), as the
+# surfaces themselves read it.
+macos_agent_autostart_enabled() {
+    case "$(printf '%s' "${MUX_AGENT_AUTOSTART:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')" in
+        0|false|no|off) return 1 ;;
+    esac
+    return 0
+}
+
+# Before a user surface starts (run-desktop, run-tui): makes sure ~/Applications/Mux Agent.app is installed
+# and matches this checkout's version, so the surface (and macos_start_user_agent) start a current agent.
+# Installs or refreshes it with install_macos_app agent --user-only only when it is missing, its version
+# differs, or MUX_REFRESH_AGENT=1, so the common case adds no build. Never replaces a copy running from
+# ~/Applications: a current one is left alone, a stale one gets a one-line note. Does nothing when
+# MUX_AGENT_AUTOSTART turns automatic starts off. Fails only when the install fails.
+macos_ensure_user_agent() {
+    local want have app
+    macos_agent_autostart_enabled || return 0
+    want="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$REPO_ROOT/src/Mux.Agent/Mux.Agent.csproj" | head -n 1)"
+    [ -n "$want" ] || { echo "Cannot determine Mux.Agent version." >&2; return 1; }
+    have="$(macos_installed_version agent)"
+    app="$HOME/Applications/Mux Agent.app"
+    if pgrep -u "$(id -u)" -f "$app/Contents/MacOS/" >/dev/null 2>&1; then
+        if [ "$have" != "$want" ]; then
+            echo "Note: the running Mux Agent is an older version (${have:-unknown}, this checkout is $want). Quit it (or run scripts/macos/kill-mux.sh) to update it." >&2
+        elif [ "${MUX_REFRESH_AGENT:-0}" = 1 ]; then
+            echo "Note: Mux Agent is running, so MUX_REFRESH_AGENT=1 cannot refresh it. Quit it (or run scripts/macos/kill-mux.sh) first." >&2
+        fi
+        return 0
+    fi
+    if [ -x "$app/Contents/MacOS/Mux.Agent" ] && [ "$have" = "$want" ] && [ "${MUX_REFRESH_AGENT:-0}" != 1 ]; then
+        return 0
+    fi
+    if [ ! -x "$app/Contents/MacOS/Mux.Agent" ]; then
+        echo "Mux Agent is not installed; installing it in ~/Applications ($want)..."
+    elif [ "$have" != "$want" ]; then
+        echo "Updating Mux Agent in ~/Applications (${have:-unknown} -> $want)..."
+    else
+        echo "Refreshing Mux Agent in ~/Applications (MUX_REFRESH_AGENT=1)..."
+    fi
+    install_macos_app agent --user-only
+}
+
+# Opens ~/Applications/Mux Agent.app in the background unless an agent is already running (from anywhere),
+# it is not installed, or MUX_AGENT_AUTOSTART turns automatic starts off. It runs with MUX_AGENT_AUTOSTART=0
+# so it never registers itself at login (that is run-at-startup.sh's job).
+macos_start_user_agent() {
+    local app="$HOME/Applications/Mux Agent.app"
+    macos_agent_autostart_enabled || return 0
+    pgrep -u "$(id -u)" -x Mux.Agent >/dev/null 2>&1 && return 0
+    [ -x "$app/Contents/MacOS/Mux.Agent" ] || return 0
+    open -g --env MUX_AGENT_AUTOSTART=0 -a "$app" || return 0
+    echo "Started Mux Agent."
 }

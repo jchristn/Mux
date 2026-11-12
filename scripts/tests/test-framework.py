@@ -3,7 +3,8 @@
 Run with: python3 scripts/tests/test-framework.py
 
 Covers framework selection and forwarding, the OS guards, the install/reinstall/remove tool flows,
-kill-mux, publish-nuget, build-installers and the Linux start-at-login registration. Nothing real is
+kill-mux, publish-nuget, build-installers, the Linux start-at-login registration, and the tray agent
+install/refresh/start that run-desktop and run-tui do on Linux, WSL and WSL 2. Nothing real is
 built or installed: dotnet, uname, pgrep, pkill and mux are fakes that log their arguments, and the
 scripts run against a temporary copy of the repository. The WSL scripts run with WSL_SKIP_CHECK=1;
 the Windows interop parts (Startup-folder launcher) are covered by shellcheck and bash -n only.
@@ -13,6 +14,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
@@ -25,7 +27,9 @@ args = sys.argv[1:]
 if name == 'uname':
     print(os.environ['MOCK_UNAME'] if args == ['-s'] else 'x86_64'); sys.exit(0)
 if name == 'pgrep':
-    sys.exit(0 if os.environ.get('MOCK_RUNNING') else 1)
+    # MOCK_RUNNING: every process check matches; MOCK_RUNNING_MATCH: only checks naming that text.
+    match = os.environ.get('MOCK_RUNNING_MATCH')
+    sys.exit(0 if os.environ.get('MOCK_RUNNING') or (match and any(match in a for a in args)) else 1)
 if name in ('launchctl', 'systemctl'):
     # Never touch the real launchd/systemd: report "not loaded / no user manager", or with MOCK_SYSTEMD
     # a user manager whose graphical session is up and whose mux-agent unit is not running.
@@ -55,11 +59,14 @@ if name == 'dotnet':
         agent = out / 'Mux.Agent'
         agent.write_text('#!/bin/sh\\nexit 0\\n'); agent.chmod(0o755)
     if args[:1] == ['publish'] and '--output' in args:
-        # A self-contained publish: the output folder holds the apphost named after the project.
+        if os.environ.get('MOCK_PUBLISH_FAIL'): sys.exit(7)
+        # A self-contained publish: the output folder holds the apphost named after the project. When run,
+        # it records its path and MUX_AGENT_AUTOSTART in LAUNCH_LOG (when set).
         out = pathlib.Path(args[args.index('--output') + 1])
         out.mkdir(parents=True, exist_ok=True)
         exe = out / pathlib.Path(args[1]).stem
-        exe.write_text('#!/bin/sh\\nexit 0\\n'); exe.chmod(0o755)
+        exe.write_text('#!/bin/sh\\n[ -z "$LAUNCH_LOG" ] || echo "$0|${MUX_AGENT_AUTOSTART-unset}" >> "$LAUNCH_LOG"\\nexit 0\\n')
+        exe.chmod(0o755)
 '''
 
 
@@ -68,6 +75,7 @@ def make_repo(temp):
     shutil.copytree(root / 'scripts', repo / 'scripts', ignore=shutil.ignore_patterns('__pycache__'))
     (repo / 'assets/icons').mkdir(parents=True)
     shutil.copy(root / 'assets/icons/icon-green.png', repo / 'assets/icons/icon-green.png')
+    shutil.copy(root / 'assets/icons/icon-macos.icns', repo / 'assets/icons/icon-macos.icns')
     for project in ['Mux.Cli', 'Mux.Agent', 'Mux.Desktop', 'Mux.Publisher', 'Mux.Search', 'Mux.Core',
                     'Mux.Server', 'Mux.Desktop.Core']:
         csproj = repo / 'src' / project / f'{project}.csproj'
@@ -82,8 +90,6 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
     repo = make_repo(temp)
     bin_dir = temp / 'bin'
     bin_dir.mkdir()
-    for name in ['dotnet', 'uname', 'pgrep', 'pkill', 'mux', 'cmd.exe', 'wslpath', 'wscript.exe', 'launchctl', 'systemctl']:
-        pass
     (bin_dir / 'sudo').write_text('#!/bin/sh\n[ -n "$SUDO_LOG" ] && { echo "$*" >> "$SUDO_LOG"; exit 1; }\n'
                                   '[ "$1" = -v ] && exit 0\nexec "$@"\n')
     (bin_dir / 'apt-cache').write_text('#!/bin/sh\nprintf "libicu-dev\\nlibicu74\\nlibicu72\\n"\n')
@@ -93,7 +99,9 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
         'case " $* " in *" install "*) : > "$APT_DONE" ;; esac\n')
     for name in ['sudo', 'apt-cache', 'apt-get']:
         (bin_dir / name).chmod(0o755)
-    for name in ['dotnet', 'uname', 'pgrep', 'pkill', 'mux', 'cmd.exe', 'wslpath', 'wscript.exe', 'launchctl', 'systemctl']:
+    # open and codesign: the macOS run-tui installs and opens the agent app (test-macos-app.py checks that).
+    for name in ['dotnet', 'uname', 'pgrep', 'pkill', 'mux', 'cmd.exe', 'wslpath', 'wscript.exe', 'launchctl', 'systemctl',
+                 'open', 'codesign']:
         (bin_dir / name).write_text(FAKE)
         (bin_dir / name).chmod(0o755)
     (bin_dir / 'host/fxr').mkdir(parents=True)  # the fake dotnet looks like a real .NET install root
@@ -298,6 +306,109 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
     shutil.rmtree(share / 'mux')
     for leftover in ['applications/mux-agent.desktop', 'icons/hicolor/256x256/apps/mux.png']:
         (share / leftover).unlink()
+
+    # Every user surface (run-desktop, run-tui) makes sure the per-user agent is installed and current, then
+    # starts it unless one is running, on Linux, WSL and WSL 2 alike. run-mcp-server is not a user surface
+    # (mux mcp serve never starts the agent) and stays as it was.
+    launch_log = temp / 'launch.log'
+    agent_version = next(line.split('<Version>')[1].split('</Version>')[0]
+                         for line in (repo / 'src/Mux.Agent/Mux.Agent.csproj').read_text().splitlines() if '<Version>' in line)
+    marker = share / 'mux/apps/agent/mux-version.txt'
+
+    def launches(expect):
+        # The agent starts detached, so give it a moment to record itself.
+        for _ in range(50):
+            if expect and launch_log.exists():
+                break
+            time.sleep(0.1 if expect else 0.01)
+        lines = launch_log.read_text().splitlines() if launch_log.exists() else []
+        launch_log.unlink(missing_ok=True)
+        return lines
+
+    def surface(platform, script, **env):
+        launch_log.unlink(missing_ok=True)
+        p, calls = run(platform, script, LAUNCH_LOG=str(launch_log), **env)
+        publishes = [c for c in calls if c[1] == 'publish']
+        assert all(c[2].endswith('Mux.Agent.csproj') for c in publishes), publishes
+        ran = [c for c in calls if c[1] == 'run']
+        return p, publishes, ran, calls
+    for platform in ['linux', 'wsl', 'wsl2']:
+        for script in ['run-desktop', 'run-tui']:
+            shutil.rmtree(share / 'mux', ignore_errors=True)
+            where = (platform, script)
+            # Missing: installed per-user (agent only, never sudo), then started with MUX_AGENT_AUTOSTART=0,
+            # then the surface runs from source.
+            p, publishes, ran, calls = surface(platform, script, MUX_SYSTEM_INSTALL='1', SUDO_LOG=str(sudo_log))
+            assert p.returncode == 0 and len(publishes) == 1 and len(ran) == 1, (where, p.stderr, calls)
+            assert calls.index(publishes[0]) < calls.index(ran[0]), calls
+            assert installed.is_file() and marker.read_text().strip() == agent_version, where
+            assert not (share / 'mux/apps/desktop').exists() and not sudo_log.exists(), where
+            assert launches(True) == [f'{installed}|0'], where
+            # Current: no rebuild, started again (nothing is running).
+            p, publishes, ran, _ = surface(platform, script)
+            assert p.returncode == 0 and not publishes and len(ran) == 1, (where, p.stderr)
+            assert launches(True) == [f'{installed}|0'], where
+            # Stale (or from before the marker): refreshed.
+            marker.write_text('0.0.0-old\n')
+            p, publishes, _, _ = surface(platform, script)
+            assert p.returncode == 0 and len(publishes) == 1 and marker.read_text().strip() == agent_version, (where, p.stderr)
+            launches(True)
+            marker.unlink()
+            p, publishes, _, _ = surface(platform, script)
+            assert p.returncode == 0 and len(publishes) == 1 and marker.exists(), (where, p.stderr)
+            launches(True)
+            # MUX_REFRESH_AGENT=1 forces a refresh of a current agent.
+            p, publishes, _, _ = surface(platform, script, MUX_REFRESH_AGENT='1')
+            assert p.returncode == 0 and len(publishes) == 1, (where, p.stderr)
+            launches(True)
+            # Running from the per-user folder and stale: one note, no replacement, no second agent.
+            marker.write_text('0.0.0-old\n')
+            p, publishes, ran, _ = surface(platform, script, MOCK_RUNNING_MATCH='Mux.Agent')
+            assert p.returncode == 0 and not publishes and len(ran) == 1, (where, p.stderr)
+            notes = [line for line in p.stderr.splitlines() if 'older version' in line]
+            assert len(notes) == 1 and '0.0.0-old' in notes[0] and agent_version in notes[0], p.stderr
+            assert f'scripts/{platform}/kill-mux.sh' in notes[0], notes
+            assert marker.read_text() == '0.0.0-old\n' and launches(False) == [], where
+            # Running and current: nothing to say or do, even with MUX_REFRESH_AGENT=1 (it only notes it cannot).
+            marker.write_text(agent_version + '\n')
+            p, publishes, _, _ = surface(platform, script, MOCK_RUNNING_MATCH='Mux.Agent')
+            assert p.returncode == 0 and not publishes and 'older version' not in p.stderr, (where, p.stderr)
+            assert launches(False) == [], where
+            p, publishes, _, _ = surface(platform, script, MOCK_RUNNING_MATCH='Mux.Agent', MUX_REFRESH_AGENT='1')
+            assert p.returncode == 0 and not publishes and 'cannot refresh' in p.stderr, (where, p.stderr)
+            # MUX_AGENT_AUTOSTART=0 (or off): the script neither installs nor starts the agent; the surface still runs.
+            shutil.rmtree(share / 'mux')
+            for off in ['0', 'Off']:
+                p, publishes, ran, _ = surface(platform, script, MUX_AGENT_AUTOSTART=off)
+                assert p.returncode == 0 and not publishes and len(ran) == 1 and not installed.exists(), (where, off, p.stderr)
+                assert launches(False) == [], where
+            # A failed agent install stops before the surface runs.
+            p, publishes, ran, _ = surface(platform, script, MOCK_PUBLISH_FAIL='1')
+            assert p.returncode != 0 and 'Installing the tray agent failed' in p.stderr and not ran, (where, p.stderr)
+            count += 10
+    shutil.rmtree(share / 'mux', ignore_errors=True)
+    for leftover in ['applications/mux-agent.desktop', 'icons/hicolor/256x256/apps/mux.png']:
+        (share / leftover).unlink(missing_ok=True)
+    # The script never passes MUX_AGENT_AUTOSTART=0 to the surface (that would stop it starting the agent).
+    for path in [*root.glob('scripts/*/run-desktop.sh'), *root.glob('scripts/*/run-tui.sh')]:
+        assert 'export MUX_AGENT_AUTOSTART' not in path.read_text(), path
+    # Parity: every user-surface launcher on every OS makes sure of the agent before starting the surface.
+    for platform in PLATFORMS:
+        prefix = 'macos' if platform == 'macos' else 'linux'
+        for script in ['run-desktop', 'run-tui']:
+            text = (root / f'scripts/{platform}/{script}.sh').read_text()
+            ensure, start = text.index(f'{prefix}_ensure_user_agent ||'), text.index(f'\n{prefix}_start_user_agent\n')
+            launch = text.index('open -a "$HOME/Applications/Mux.app"' if (platform, script) == ('macos', 'run-desktop') else 'dotnet run')
+            assert ensure < start < launch, (platform, script)
+    for script in ['run-desktop', 'run-tui']:
+        raw = (root / f'scripts/windows/{script}.bat').read_bytes()
+        assert raw.count(b'\r\n') == raw.count(b'\n'), f'{script}.bat must keep CRLF line endings'
+        text = raw.decode()
+        ensure = text.index('-Action EnsureUserAgent -Framework %TFM%')
+        start = text.index('start "" "%LOCALAPPDATA%\\Programs\\Mux\\Agent\\Mux.Agent.exe"')
+        assert ensure < text.index('if "%AGENT_STATUS%"=="2" goto start_surface') < start < text.index(':start_surface') < text.index('dotnet run'), script
+        # MUX_AGENT_AUTOSTART=0 is set for the agent only, inside its own setlocal.
+        assert 'setlocal\r\nset "MUX_AGENT_AUTOSTART=0"\r\nstart ""' in text and text.index('endlocal', start) < text.index('dotnet run'), script
 
     # Source runs write the first-run marker so the agent they may start never registers itself at login.
     for platform in ['linux', 'wsl', 'wsl2']:

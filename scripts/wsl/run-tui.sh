@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build and run the mux terminal UI (TUI) from source instead of the installed global 'mux' tool.
 # 'dotnet build' does NOT update the global tool; that needs reinstall-tool.sh. The TUI runs
-# against the directory you start this script from.
+# against the directory you start this script from. First installs or refreshes the per-user tray agent
+# when it is missing or out of date, and starts it unless one is running.
 # Usage: ./scripts/wsl/run-tui.sh [net8.0|net10.0]
 set -euo pipefail
 
@@ -21,6 +22,10 @@ wsl_check_repo "$REPO_ROOT"
 wsl_require_cmd dotnet "Install the .NET SDK inside WSL: https://learn.microsoft.com/dotnet/core/install/linux"
 # shellcheck source=../common/framework.sh
 . "$REPO_ROOT/scripts/common/framework.sh"
+# shellcheck source=../common/linux-apps.sh
+. "$REPO_ROOT/scripts/common/linux-apps.sh"
+# shellcheck disable=SC2034 # read by linux-apps.sh
+LINUX_APPS_KILL_MUX="scripts/wsl/kill-mux.sh"
 resolve_framework "$@"
 shift "$FRAMEWORK_ARGS"
 [ "$#" -eq 0 ] || die "Unexpected argument: $1"
@@ -32,6 +37,13 @@ wsl_check_clipboard "the mux TUI"
 MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
 mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
+# Every user surface starts the tray agent. Install or refresh the per-user agent first, but only when it
+# is missing or its version differs from this checkout (MUX_REFRESH_AGENT=1 forces it); a running copy
+# is never replaced. MUX_AGENT_AUTOSTART=0 skips this and the start below, as it does in the TUI.
+linux_ensure_user_agent || die "Installing the tray agent failed."
 # Give the app the Windows PATH entries back (clip.exe, explorer.exe, wslview) and BROWSER=wslview.
 wsl_prepare_app_env
+# Start the installed agent (with the app environment above) unless one is running; the surface then
+# finds it running and leaves it be.
+linux_start_user_agent
 dotnet run --project "$REPO_ROOT/src/Mux.Cli/Mux.Cli.csproj" --framework "$TFM" -p:TargetFrameworks="$TFM"
