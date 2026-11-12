@@ -26,12 +26,19 @@ namespace Mux.Server
   --bg:#f6f7f8; --panel:#ffffff; --panel-2:#eef2f5; --line:#d7dde3;
   --text:#1f252b; --muted:#65717d; --accent:#167a5b; --accent-2:#0f6248;
   --danger:#c2413a; --sidebar:#20242a; --sidebar-text:#e7edf2; --sidebar-muted:#8b97a3;
+  /* Token heatmap shades 1-4 (low to high): one green hue, light to dark, validated for monotone lightness,
+     visible steps, and >= 2:1 contrast for the lightest step on the panel. No usage is a neutral light grey
+     (--heat-0, OKLab L 0.926 vs 0.755 for the first green), never white and never a colored border. */
+  --heat-0:#e3e7eb; --heat-1:#6cc596; --heat-2:#35a571; --heat-3:#17784f; --heat-4:#0a4d33;
   --radius:8px; font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
 }
 :root[data-theme="dark"]{
   --bg:#101418; --panel:#171d23; --panel-2:#202832; --line:#303a45;
   --text:#eef3f8; --muted:#9aa7b4; --accent:#39a37f; --accent-2:#2b8567;
   --danger:#f26b61; --sidebar:#0c0f13; --sidebar-text:#e7edf2; --sidebar-muted:#7d8894;
+  /* Dark theme: the same hue, dark to bright; the darkest step clears 2:1 on the dark panel. No usage is a dark
+     grey (OKLab L 0.330 vs 0.472 for the first green). */
+  --heat-0:#2e3640; --heat-1:#1f6b48; --heat-2:#2f9a66; --heat-3:#4fc98a; --heat-4:#9be8bd;
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
@@ -340,6 +347,52 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 .chartlegend span{display:inline-flex;align-items:center;gap:6px}
 .chartlegend i{width:10px;height:10px;border-radius:2px;display:inline-block}
 .chartnote{font-size:11px;color:var(--muted);margin:9px 2px 0}
+.uplot{outline:none;cursor:pointer}
+.uplot:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+.uplot .ucur,.uplot .usel{position:absolute;top:0;bottom:0;pointer-events:none;display:none}
+.uplot .ucur{background:color-mix(in srgb,var(--text) 9%,transparent)}
+.uplot .usel{background:color-mix(in srgb,var(--accent) 16%,transparent);border-left:1px solid var(--accent);border-right:1px solid var(--accent)}
+.uplot .ucur.on,.uplot .usel.on{display:block}
+.usr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.usdim{margin-left:auto;display:inline-flex;align-items:center;gap:8px;padding:0 4px 6px}
+.usdim label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.usdim select{padding:4px 8px;font-size:13px}
+.ufail{margin:16px 2px 2px;border-top:1px solid var(--line);padding-top:12px}
+/* chart toolbar: lines/bars toggle and the export buttons; lines mode draws 2px unstacked lines with dot markers */
+.ustool{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end;padding:10px 18px 0}
+.ustool .useg button{padding:4px 11px;font-size:12.5px}
+.ustool .btn{padding:4px 11px;font-size:12.5px}
+.ustool .btn:disabled{opacity:.45;cursor:default;pointer-events:none}
+.uplot .uline{fill:none;stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round}
+.uplot .udot{fill:none;stroke-width:7;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.ufail h4{margin:0 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.ufail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.ufail li{display:grid;grid-template-columns:minmax(120px,220px) 1fr auto;gap:10px;align-items:center;font-size:12.5px}
+.ufail li .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ufail li .bar{height:8px;border-radius:4px;background:color-mix(in srgb,var(--danger) 70%,transparent)}
+.ufail li b{font-variant-numeric:tabular-nums}
+.ufail .none{color:var(--muted);font-size:12.5px}
+.ubd{display:flex;flex-direction:column;gap:12px;padding:4px 0}
+.ubd .row1{display:flex;justify-content:space-between;gap:12px;font-size:12.5px;margin-bottom:4px}
+.ubd .row1 .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ubd .row1 .meta{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ubd .track{height:14px;border-radius:4px;background:var(--panel-2);overflow:hidden;display:flex}
+.ubd .track i{display:block;height:100%}
+.udrill{display:flex;align-items:center}
+.uchip{display:inline-flex;align-items:center;gap:6px;padding:3px 4px 3px 11px;border-radius:999px;font-size:12.5px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);font-weight:600;white-space:nowrap}
+.uchip button{border:none;background:none;color:inherit;cursor:pointer;font-size:15px;line-height:1;padding:1px 6px;border-radius:999px;font-family:inherit}
+.uchip button:hover,.uchip button:focus-visible{background:color-mix(in srgb,var(--accent) 24%,transparent);outline:none}
+.uhm{display:grid;gap:3px;margin:12px 0 4px;align-items:center;justify-content:start;max-width:100%;overflow-x:auto}
+.uhm-cell{cursor:pointer;outline:none;border-radius:3px;height:calc(100% - 1px)}
+.uhm-cell.sel{box-shadow:0 0 0 2px var(--text)}
+.uhm-y{font-size:11px;color:var(--muted);white-space:nowrap;padding-inline-end:8px;line-height:1;align-self:start;font-variant-numeric:tabular-nums}
+.uhm-x{font-size:11px;color:var(--muted);white-space:nowrap;overflow:visible;line-height:1;padding-bottom:3px;font-variant-numeric:tabular-nums}
+.uhm-cap{font-size:12px;color:var(--muted);margin-top:2px}
+.uhm-cell.l0,.uhm-key.l0{background:var(--heat-0)}
+.uhm-cell.l1,.uhm-key.l1{background:var(--heat-1)}.uhm-cell.l2,.uhm-key.l2{background:var(--heat-2)}
+.uhm-cell.l3,.uhm-key.l3{background:var(--heat-3)}.uhm-cell.l4,.uhm-key.l4{background:var(--heat-4)}
+.uhm-key{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;margin:0 1px}
+.uhm-cell:focus-visible{box-shadow:0 0 0 2px var(--accent)}
 .ubadge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600}
 .ubadge.ok{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
 .ubadge.err{background:color-mix(in srgb,var(--danger) 18%,transparent);color:var(--danger)}
@@ -584,12 +637,15 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
       <div class="pagehead"><div class="desc">Token usage, cost, latency, and time-to-first-token across your model calls. Reads the shared usage database (<code>~/.mux/usage.db</code>) written by every mux instance.</div>
         <div class="row"><button class="btn secondary" id="usage_refresh" title="Reload usage data for the current window">Refresh</button></div></div>
       <div class="usebar">
-        <label>Range</label>
-        <div class="useg" id="us_range">
-          <button data-range="hour" title="Last hour">Hour</button>
-          <button data-range="day" class="active" title="Last 24 hours">Day</button>
-          <button data-range="week" title="Last 7 days">Week</button>
-          <button data-range="month" title="Last 30 days">Month</button>
+        <label data-i18n="us.range">Range</label>
+        <div class="useg" id="us_range" role="group">
+          <button data-range="hour" data-i18n="us.r.hour" data-i18n-title="us.r.hour.tip" title="Last hour">Hour</button>
+          <button data-range="day" class="active" data-i18n="us.r.day" data-i18n-title="us.r.day.tip" title="Last 24 hours">Day</button>
+          <button data-range="week" data-i18n="us.r.week" data-i18n-title="us.r.week.tip" title="Last 7 days">Week</button>
+          <button data-range="month" data-i18n="us.r.month" data-i18n-title="us.r.month.tip" title="Last 30 days">Month</button>
+          <button data-range="quarter" data-i18n="us.r.quarter" data-i18n-title="us.r.quarter.tip" title="Last 13 weeks">Quarter</button>
+          <button data-range="year" data-i18n="us.r.year" data-i18n-title="us.r.year.tip" title="Last 52 weeks">Year</button>
+          <button data-range="all" data-i18n="us.r.all" data-i18n-title="us.r.all.tip" title="Everything recorded">All</button>
         </div>
         <label data-i18n="us.endpoint">Endpoint</label><select id="us_endpoint" data-i18n-title="us.endpoint.tip" title="Filter to one endpoint"><option value="">All endpoints</option></select>
         <label data-i18n="us.model">Model</label><select id="us_model" data-i18n-title="us.model.tip" title="Filter to one model"><option value="">All models</option></select>
@@ -600,17 +656,25 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
       <div class="kpis" id="us_kpis"></div>
       <div class="chartpanel">
         <div class="ustabs" id="us_tabs">
-          <button data-tab="tokens" class="active">Tokens</button>
-          <button data-tab="heatmap">Heatmap</button>
-          <button data-tab="cost">Cost</button>
-          <button data-tab="latency">Latency</button>
-          <button data-tab="ttft">TTFT</button>
-          <button data-tab="stream">Streaming</button>
-          <button data-tab="throughput">Throughput</button>
+          <button data-tab="calls" data-i18n="us.t.calls">Calls</button>
+          <button data-tab="tokens" class="active" data-i18n="us.t.tokens">Tokens</button>
+          <button data-tab="split" id="us_tab_split">Tokens by Model</button>
+          <button data-tab="cost" data-i18n="us.t.cost">Cost</button>
+          <button data-tab="latency" data-i18n="us.t.latency">Latency</button>
+          <button data-tab="ttft" data-i18n="us.t.ttft">TTFT</button>
+          <button data-tab="stream" data-i18n="us.t.stream">Streaming</button>
+          <button data-tab="throughput" data-i18n="us.t.throughput">Throughput</button>
+          <button data-tab="breakdown" id="us_tab_breakdown">Usage by Model</button>
+          <button data-tab="heatmap" data-i18n="us.t.heatmap">Heatmap</button>
+          <span class="usdim" id="us_dimbar" style="display:none"><label for="us_metric" data-i18n="us.metric">Metric</label><select id="us_metric" data-i18n-title="us.metric.tip" title="What the by-dimension charts measure: tokens, calls, or cost">
+            <option value="tokens" data-i18n="us.m.tokens">Tokens</option><option value="calls" data-i18n="us.m.calls">Calls</option><option value="cost" data-i18n="us.m.cost">Cost</option></select><label for="us_dim" data-i18n="us.dim">Group by</label><select id="us_dim" data-i18n-title="us.dim.tip" title="Dimension for the Tokens by and Usage by charts">
+            <option value="model" data-i18n="us.dim.model">Model</option><option value="endpoint" data-i18n="us.dim.endpoint">Endpoint</option><option value="provider" data-i18n="us.dim.provider">Provider</option><option value="callkind" data-i18n="us.dim.callkind">Call kind</option></select></span>
         </div>
+        <div class="ustool" id="us_tool"><span class="useg" id="us_mode" role="group" data-i18n-title="us.mode.tip" title="Draw stacked bars or one line per series"><button type="button" data-mode="bars" class="active" aria-pressed="true" data-i18n="us.mode.bars">Bars</button><button type="button" data-mode="lines" aria-pressed="false" data-i18n="us.mode.lines">Lines</button></span>
+          <button type="button" class="btn secondary" id="us_csv" data-i18n="us.exp.csv" data-i18n-title="us.exp.csv.tip" title="Download this chart's data as a CSV file">Export CSV</button><button type="button" class="btn secondary" id="us_png" data-i18n="us.exp.png" data-i18n-title="us.exp.png.tip" title="Download this chart as a PNG image">Save PNG</button></div>
         <div class="chartbody" id="us_chart"></div>
       </div>
-      <div class="pagehead" style="margin-top:28px"><div class="desc">Per-call history for the selected window. Click a row to inspect it; sort, filter, and choose columns from the table controls.</div></div>
+      <div class="pagehead" id="us_histhead" style="margin-top:28px"><div class="desc">Per-call history for the selected window. Click a row to inspect it; sort, filter, and choose columns from the table controls.</div><div class="udrill" id="us_drill"></div></div>
       <div id="usage_history_list"></div>
     </div></div>
 
@@ -662,7 +726,6 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
         <div class="card">
           <h2><span data-i18n="set.rest">REST server</span> <span class="pill" data-i18n="set.restReq">restart required</span></h2>
           <p class="hint">Host/port/SSL changes take effect on the next <code>mux serve</code>. The API key is masked; leave blank to keep the current key.</p>
-          <div class="field"><label>Tray auto-start</label><input type="checkbox" id="s_rest_enabled" title="Whether the tray agent auto-starts this REST server. 'mux serve' starts it regardless."></div>
           <div class="field"><label>Hostname</label><input type="text" id="s_rest_hostname" title="The address the REST server binds to. 127.0.0.1 keeps it local-only. Restart required."></div>
           <div class="field"><label>Port</label><input type="number" id="s_rest_port" title="The TCP port the REST server listens on (1-65535). Restart required." min="1" max="65535"></div>
           <div class="field"><label>SSL</label><input type="checkbox" id="s_rest_ssl" title="Serve over HTTPS instead of HTTP. Restart required."></div>
@@ -705,6 +768,7 @@ en:{
 "col.category":"Category","act.setcategory":"Set category…","sk.allcategories":"All categories","sk.categoryhelp":"Pick a category or type your own (kebab-case). Leave blank to use the category in SKILL.md.","toast.categorySaved":"Category updated.","col.name":"Name","col.adapter":"Adapter","col.model":"Model","col.auth":"Auth","col.transport":"Transport","col.target":"Target","col.systemPrompt":"System prompt","col.description":"Description","col.tools":"Tools","col.event":"Event","col.command":"Command","col.blocking":"Blocking","col.commandId":"Command id","col.chord":"Chord","col.cmds":"Cmds","col.state":"State","col.title":"Title","col.updated":"Updated",
 "tag.default":"default","tag.active":"active","tag.enabled":"enabled","tag.disabled":"disabled","tag.invalid":"invalid","tag.yes":"yes","tag.no":"no",
 "set.agent":"Agent","set.context":"Context","set.features":"Features","set.rest":"REST server","set.restReq":"restart required",
+"us.range":"Range","us.r.hour":"Hour","us.r.day":"Day","us.r.week":"Week","us.r.month":"Month","us.r.quarter":"Quarter","us.r.year":"Year","us.r.all":"All","us.r.hour.tip":"Last hour","us.r.day.tip":"Last 24 hours","us.r.week.tip":"Last 7 days","us.r.month.tip":"Last 30 days","us.r.quarter.tip":"Last 13 weeks","us.r.year.tip":"Last 52 weeks","us.r.all.tip":"Everything recorded","us.t.calls":"Calls","us.t.tokens":"Tokens","us.t.split":"Tokens by {dim}","us.t.cost":"Cost","us.t.latency":"Latency","us.t.ttft":"TTFT","us.t.stream":"Streaming","us.t.throughput":"Throughput","us.t.breakdown":"Usage by {dim}","us.t.heatmap":"Heatmap","us.dim":"Group by","us.dim.tip":"Dimension for the Tokens by and Usage by charts","us.dim.model":"Model","us.dim.endpoint":"Endpoint","us.dim.provider":"Provider","us.dim.callkind":"Call kind","us.other":"Other","us.s.succeeded":"Succeeded","us.s.failed":"Failed","us.s.prompt":"Prompt","us.s.cached":"Cached","us.s.output":"Output","us.s.cost":"Cost","us.errorRate":"Error rate","us.total":"Total","us.calls":"Calls","us.failures":"Failure reasons","us.hm.none":"No usage","us.hm.less":"Less","us.hm.more":"More","us.hm.quartile":"shades by quartile","us.hm.axes":"Rows: {rows} · Columns: {cols}","us.hm.row.15m":"15 minutes starting","us.hm.row.1h":"hour starting","us.hm.row.6h":"6 hours starting","us.hm.row.1d":"day starting","us.hm.row.1w":"week starting","us.hm.row.13w":"13 weeks starting","us.hm.col.minute":"minutes after the row start","us.hm.col.minuteofhour":"minute of the hour","us.hm.col.hours":"hours after the row start","us.hm.col.clock":"time of day","us.hm.col.weekday":"day of the week","us.hm.col.halfday":"day (AM, PM)","us.hm.col.weeks":"weeks after the row start","us.hm.hint":"Click a cell to list its calls below.","us.noFailures":"No failures in this range.","us.empty":"No usage in this range.","us.bd.line":"{tok} tokens · {cost} · {calls} calls","us.drill":"Calls {range}","us.drill.clear":"Clear the bucket filter","us.drill.hint":"Click a column to list its calls below.","us.chart.aria":"{chart}: use Left and Right to pick a column, Enter to list its calls.","us.t.by":"{metric} by {dim}","us.metric":"Metric","us.metric.tip":"What the by-dimension charts measure: tokens, calls, or cost","us.m.tokens":"Tokens","us.m.calls":"Calls","us.m.cost":"Cost","us.mode.tip":"Draw stacked bars or one line per series","us.mode.bars":"Bars","us.mode.lines":"Lines","us.exp.csv":"Export CSV","us.exp.csv.tip":"Download this chart's data as a CSV file","us.exp.png":"Save PNG","us.exp.png.tip":"Download this chart as a PNG image","us.exp.none":"This chart has no data to export.","us.exp.saved":"Downloaded {file}",
 "lang.label":"Language"
 },
 es:{
@@ -725,6 +789,7 @@ es:{
 "col.category":"Categoría","act.setcategory":"Asignar categoría…","sk.allcategories":"Todas las categorías","sk.categoryhelp":"Elija una categoría o escriba la suya (kebab-case). Déjela vacía para usar la categoría de SKILL.md.","toast.categorySaved":"Categoría actualizada.","col.name":"Nombre","col.adapter":"Adaptador","col.model":"Modelo","col.auth":"Autenticación","col.transport":"Transporte","col.target":"Destino","col.systemPrompt":"Prompt del sistema","col.description":"Descripción","col.tools":"Herramientas","col.event":"Evento","col.command":"Comando","col.blocking":"Bloqueante","col.commandId":"ID de comando","col.chord":"Combinación","col.cmds":"Cmds","col.state":"Estado","col.title":"Título","col.updated":"Actualizado",
 "tag.default":"predeterminado","tag.active":"activo","tag.enabled":"activado","tag.disabled":"desactivado","tag.invalid":"no válido","tag.yes":"sí","tag.no":"no",
 "set.agent":"Agente","set.context":"Contexto","set.features":"Funciones","set.rest":"Servidor REST","set.restReq":"requiere reinicio",
+"us.range":"Rango","us.r.hour":"Hora","us.r.day":"Día","us.r.week":"Semana","us.r.month":"Mes","us.r.quarter":"Trimestre","us.r.year":"Año","us.r.all":"Todo","us.r.hour.tip":"Última hora","us.r.day.tip":"Últimas 24 horas","us.r.week.tip":"Últimos 7 días","us.r.month.tip":"Últimos 30 días","us.r.quarter.tip":"Últimas 13 semanas","us.r.year.tip":"Últimas 52 semanas","us.r.all.tip":"Todo lo registrado","us.t.calls":"Llamadas","us.t.tokens":"Tokens","us.t.split":"Tokens por {dim}","us.t.cost":"Coste","us.t.latency":"Latencia","us.t.ttft":"TTFT","us.t.stream":"Transmisión","us.t.throughput":"Rendimiento","us.t.breakdown":"Uso por {dim}","us.t.heatmap":"Mapa de calor","us.dim":"Agrupar por","us.dim.tip":"Dimensión de los gráficos Tokens por y Uso por","us.dim.model":"Modelo","us.dim.endpoint":"Endpoint","us.dim.provider":"Proveedor","us.dim.callkind":"Tipo de llamada","us.other":"Otros","us.s.succeeded":"Correctas","us.s.failed":"Fallidas","us.s.prompt":"Prompt","us.s.cached":"En caché","us.s.output":"Salida","us.s.cost":"Coste","us.errorRate":"Tasa de error","us.total":"Total","us.calls":"Llamadas","us.failures":"Motivos de fallo","us.hm.none":"Sin uso","us.hm.less":"Menos","us.hm.more":"Más","us.hm.quartile":"tonos por cuartil","us.hm.axes":"Filas: {rows} · Columnas: {cols}","us.hm.row.15m":"15 minutos (inicio)","us.hm.row.1h":"hora (inicio)","us.hm.row.6h":"6 horas (inicio)","us.hm.row.1d":"día (inicio)","us.hm.row.1w":"semana (inicio)","us.hm.row.13w":"13 semanas (inicio)","us.hm.col.minute":"minutos desde el inicio de la fila","us.hm.col.minuteofhour":"minuto de la hora","us.hm.col.hours":"horas desde el inicio de la fila","us.hm.col.clock":"hora del día","us.hm.col.weekday":"día de la semana","us.hm.col.halfday":"día (a. m., p. m.)","us.hm.col.weeks":"semanas desde el inicio de la fila","us.hm.hint":"Haz clic en una celda para ver sus llamadas abajo.","us.noFailures":"No hay fallos en este rango.","us.empty":"No hay uso en este rango.","us.bd.line":"{tok} tokens · {cost} · {calls} llamadas","us.drill":"Llamadas {range}","us.drill.clear":"Quitar el filtro del intervalo","us.drill.hint":"Haz clic en una columna para ver sus llamadas abajo.","us.chart.aria":"{chart}: usa Izquierda y Derecha para elegir una columna e Intro para ver sus llamadas.","us.t.by":"{metric} por {dim}","us.metric":"Métrica","us.metric.tip":"Qué miden los gráficos por dimensión: tokens, llamadas o coste","us.m.tokens":"Tokens","us.m.calls":"Llamadas","us.m.cost":"Coste","us.mode.tip":"Dibujar barras apiladas o una línea por serie","us.mode.bars":"Barras","us.mode.lines":"Líneas","us.exp.csv":"Exportar CSV","us.exp.csv.tip":"Descargar los datos de este gráfico como archivo CSV","us.exp.png":"Guardar PNG","us.exp.png.tip":"Descargar este gráfico como imagen PNG","us.exp.none":"Este gráfico no tiene datos para exportar.","us.exp.saved":"Descargado {file}",
 "lang.label":"Idioma"
 },
 pt:{
@@ -745,6 +810,7 @@ pt:{
 "col.category":"Categoria","act.setcategory":"Definir categoria…","sk.allcategories":"Todas as categorias","sk.categoryhelp":"Escolha uma categoria ou digite a sua (kebab-case). Deixe em branco para usar a categoria do SKILL.md.","toast.categorySaved":"Categoria atualizada.","col.name":"Nome","col.adapter":"Adaptador","col.model":"Modelo","col.auth":"Autenticação","col.transport":"Transporte","col.target":"Destino","col.systemPrompt":"Prompt do sistema","col.description":"Descrição","col.tools":"Ferramentas","col.event":"Evento","col.command":"Comando","col.blocking":"Bloqueante","col.commandId":"ID do comando","col.chord":"Combinação","col.cmds":"Cmds","col.state":"Estado","col.title":"Título","col.updated":"Atualizado",
 "tag.default":"padrão","tag.active":"ativo","tag.enabled":"ativado","tag.disabled":"desativado","tag.invalid":"inválido","tag.yes":"sim","tag.no":"não",
 "set.agent":"Agente","set.context":"Contexto","set.features":"Recursos","set.rest":"Servidor REST","set.restReq":"requer reinício",
+"us.range":"Intervalo","us.r.hour":"Hora","us.r.day":"Dia","us.r.week":"Semana","us.r.month":"Mês","us.r.quarter":"Trimestre","us.r.year":"Ano","us.r.all":"Tudo","us.r.hour.tip":"Última hora","us.r.day.tip":"Últimas 24 horas","us.r.week.tip":"Últimos 7 dias","us.r.month.tip":"Últimos 30 dias","us.r.quarter.tip":"Últimas 13 semanas","us.r.year.tip":"Últimas 52 semanas","us.r.all.tip":"Tudo o que foi registrado","us.t.calls":"Chamadas","us.t.tokens":"Tokens","us.t.split":"Tokens por {dim}","us.t.cost":"Custo","us.t.latency":"Latência","us.t.ttft":"TTFT","us.t.stream":"Streaming","us.t.throughput":"Vazão","us.t.breakdown":"Uso por {dim}","us.t.heatmap":"Mapa de calor","us.dim":"Agrupar por","us.dim.tip":"Dimensão dos gráficos Tokens por e Uso por","us.dim.model":"Modelo","us.dim.endpoint":"Endpoint","us.dim.provider":"Provedor","us.dim.callkind":"Tipo de chamada","us.other":"Outros","us.s.succeeded":"Bem-sucedidas","us.s.failed":"Com falha","us.s.prompt":"Prompt","us.s.cached":"Em cache","us.s.output":"Saída","us.s.cost":"Custo","us.errorRate":"Taxa de erro","us.total":"Total","us.calls":"Chamadas","us.failures":"Motivos de falha","us.hm.none":"Sem uso","us.hm.less":"Menos","us.hm.more":"Mais","us.hm.quartile":"tons por quartil","us.hm.axes":"Linhas: {rows} · Colunas: {cols}","us.hm.row.15m":"15 minutos (início)","us.hm.row.1h":"hora (início)","us.hm.row.6h":"6 horas (início)","us.hm.row.1d":"dia (início)","us.hm.row.1w":"semana (início)","us.hm.row.13w":"13 semanas (início)","us.hm.col.minute":"minutos desde o início da linha","us.hm.col.minuteofhour":"minuto da hora","us.hm.col.hours":"horas desde o início da linha","us.hm.col.clock":"hora do dia","us.hm.col.weekday":"dia da semana","us.hm.col.halfday":"dia (manhã, tarde)","us.hm.col.weeks":"semanas desde o início da linha","us.hm.hint":"Clique em uma célula para ver as chamadas abaixo.","us.noFailures":"Nenhuma falha neste intervalo.","us.empty":"Nenhum uso neste intervalo.","us.bd.line":"{tok} tokens · {cost} · {calls} chamadas","us.drill":"Chamadas {range}","us.drill.clear":"Limpar o filtro do intervalo","us.drill.hint":"Clique em uma coluna para ver as chamadas abaixo.","us.chart.aria":"{chart}: use Esquerda e Direita para escolher uma coluna e Enter para ver as chamadas.","us.t.by":"{metric} por {dim}","us.metric":"Métrica","us.metric.tip":"O que os gráficos por dimensão medem: tokens, chamadas ou custo","us.m.tokens":"Tokens","us.m.calls":"Chamadas","us.m.cost":"Custo","us.mode.tip":"Desenhar barras empilhadas ou uma linha por série","us.mode.bars":"Barras","us.mode.lines":"Linhas","us.exp.csv":"Exportar CSV","us.exp.csv.tip":"Baixar os dados deste gráfico como arquivo CSV","us.exp.png":"Salvar PNG","us.exp.png.tip":"Baixar este gráfico como imagem PNG","us.exp.none":"Este gráfico não tem dados para exportar.","us.exp.saved":"Baixado {file}",
 "lang.label":"Idioma"
 },
 fr:{
@@ -765,6 +831,7 @@ fr:{
 "col.category":"Catégorie","act.setcategory":"Définir la catégorie…","sk.allcategories":"Toutes les catégories","sk.categoryhelp":"Choisissez une catégorie ou saisissez la vôtre (kebab-case). Laissez vide pour utiliser la catégorie de SKILL.md.","toast.categorySaved":"Catégorie mise à jour.","col.name":"Nom","col.adapter":"Adaptateur","col.model":"Modèle","col.auth":"Auth","col.transport":"Transport","col.target":"Cible","col.systemPrompt":"Prompt système","col.description":"Description","col.tools":"Outils","col.event":"Événement","col.command":"Commande","col.blocking":"Bloquant","col.commandId":"ID de commande","col.chord":"Combinaison","col.cmds":"Cmds","col.state":"État","col.title":"Titre","col.updated":"Mis à jour",
 "tag.default":"par défaut","tag.active":"actif","tag.enabled":"activé","tag.disabled":"désactivé","tag.invalid":"non valide","tag.yes":"oui","tag.no":"non",
 "set.agent":"Agent","set.context":"Contexte","set.features":"Fonctionnalités","set.rest":"Serveur REST","set.restReq":"redémarrage requis",
+"us.range":"Période","us.r.hour":"Heure","us.r.day":"Jour","us.r.week":"Semaine","us.r.month":"Mois","us.r.quarter":"Trimestre","us.r.year":"Année","us.r.all":"Tout","us.r.hour.tip":"Dernière heure","us.r.day.tip":"Dernières 24 heures","us.r.week.tip":"7 derniers jours","us.r.month.tip":"30 derniers jours","us.r.quarter.tip":"13 dernières semaines","us.r.year.tip":"52 dernières semaines","us.r.all.tip":"Tout l'historique","us.t.calls":"Appels","us.t.tokens":"Jetons","us.t.split":"Jetons par {dim}","us.t.cost":"Coût","us.t.latency":"Latence","us.t.ttft":"TTFT","us.t.stream":"Streaming","us.t.throughput":"Débit","us.t.breakdown":"Utilisation par {dim}","us.t.heatmap":"Carte de chaleur","us.dim":"Grouper par","us.dim.tip":"Dimension des graphiques Jetons par et Utilisation par","us.dim.model":"Modèle","us.dim.endpoint":"Endpoint","us.dim.provider":"Fournisseur","us.dim.callkind":"Type d'appel","us.other":"Autres","us.s.succeeded":"Réussis","us.s.failed":"Échoués","us.s.prompt":"Prompt","us.s.cached":"En cache","us.s.output":"Sortie","us.s.cost":"Coût","us.errorRate":"Taux d'erreur","us.total":"Total","us.calls":"Appels","us.failures":"Causes d'échec","us.hm.none":"Aucune utilisation","us.hm.less":"Moins","us.hm.more":"Plus","us.hm.quartile":"teintes par quartile","us.hm.axes":"Lignes : {rows} · Colonnes : {cols}","us.hm.row.15m":"15 minutes (début)","us.hm.row.1h":"heure (début)","us.hm.row.6h":"6 heures (début)","us.hm.row.1d":"jour (début)","us.hm.row.1w":"semaine (début)","us.hm.row.13w":"13 semaines (début)","us.hm.col.minute":"minutes depuis le début de la ligne","us.hm.col.minuteofhour":"minute de l'heure","us.hm.col.hours":"heures depuis le début de la ligne","us.hm.col.clock":"heure de la journée","us.hm.col.weekday":"jour de la semaine","us.hm.col.halfday":"jour (matin, après-midi)","us.hm.col.weeks":"semaines depuis le début de la ligne","us.hm.hint":"Cliquez sur une case pour lister ses appels ci-dessous.","us.noFailures":"Aucun échec sur cette période.","us.empty":"Aucune utilisation sur cette période.","us.bd.line":"{tok} jetons · {cost} · {calls} appels","us.drill":"Appels {range}","us.drill.clear":"Retirer le filtre de tranche","us.drill.hint":"Cliquez sur une colonne pour lister ses appels ci-dessous.","us.chart.aria":"{chart} : Gauche et Droite pour choisir une colonne, Entrée pour lister ses appels.","us.t.by":"{metric} par {dim}","us.metric":"Mesure","us.metric.tip":"Ce que mesurent les graphiques par dimension : jetons, appels ou coût","us.m.tokens":"Jetons","us.m.calls":"Appels","us.m.cost":"Coût","us.mode.tip":"Barres empilées ou une ligne par série","us.mode.bars":"Barres","us.mode.lines":"Lignes","us.exp.csv":"Exporter en CSV","us.exp.csv.tip":"Télécharger les données de ce graphique au format CSV","us.exp.png":"Enregistrer en PNG","us.exp.png.tip":"Télécharger ce graphique en image PNG","us.exp.none":"Ce graphique n'a aucune donnée à exporter.","us.exp.saved":"{file} téléchargé",
 "lang.label":"Langue"
 },
 it:{
@@ -785,6 +852,7 @@ it:{
 "col.category":"Categoria","act.setcategory":"Imposta categoria…","sk.allcategories":"Tutte le categorie","sk.categoryhelp":"Scegli una categoria o scrivine una (kebab-case). Lascia vuoto per usare la categoria di SKILL.md.","toast.categorySaved":"Categoria aggiornata.","col.name":"Nome","col.adapter":"Adattatore","col.model":"Modello","col.auth":"Auth","col.transport":"Trasporto","col.target":"Destinazione","col.systemPrompt":"Prompt di sistema","col.description":"Descrizione","col.tools":"Strumenti","col.event":"Evento","col.command":"Comando","col.blocking":"Bloccante","col.commandId":"ID comando","col.chord":"Combinazione","col.cmds":"Cmd","col.state":"Stato","col.title":"Titolo","col.updated":"Aggiornato",
 "tag.default":"predefinito","tag.active":"attivo","tag.enabled":"abilitato","tag.disabled":"disabilitato","tag.invalid":"non valido","tag.yes":"sì","tag.no":"no",
 "set.agent":"Agente","set.context":"Contesto","set.features":"Funzioni","set.rest":"Server REST","set.restReq":"riavvio richiesto",
+"us.range":"Intervallo","us.r.hour":"Ora","us.r.day":"Giorno","us.r.week":"Settimana","us.r.month":"Mese","us.r.quarter":"Trimestre","us.r.year":"Anno","us.r.all":"Tutto","us.r.hour.tip":"Ultima ora","us.r.day.tip":"Ultime 24 ore","us.r.week.tip":"Ultimi 7 giorni","us.r.month.tip":"Ultimi 30 giorni","us.r.quarter.tip":"Ultime 13 settimane","us.r.year.tip":"Ultime 52 settimane","us.r.all.tip":"Tutto lo storico","us.t.calls":"Chiamate","us.t.tokens":"Token","us.t.split":"Token per {dim}","us.t.cost":"Costo","us.t.latency":"Latenza","us.t.ttft":"TTFT","us.t.stream":"Streaming","us.t.throughput":"Velocità","us.t.breakdown":"Utilizzo per {dim}","us.t.heatmap":"Mappa di calore","us.dim":"Raggruppa per","us.dim.tip":"Dimensione dei grafici Token per e Utilizzo per","us.dim.model":"Modello","us.dim.endpoint":"Endpoint","us.dim.provider":"Fornitore","us.dim.callkind":"Tipo di chiamata","us.other":"Altro","us.s.succeeded":"Riuscite","us.s.failed":"Non riuscite","us.s.prompt":"Prompt","us.s.cached":"In cache","us.s.output":"Output","us.s.cost":"Costo","us.errorRate":"Tasso di errore","us.total":"Totale","us.calls":"Chiamate","us.failures":"Cause di errore","us.hm.none":"Nessun utilizzo","us.hm.less":"Meno","us.hm.more":"Più","us.hm.quartile":"tonalità per quartile","us.hm.axes":"Righe: {rows} · Colonne: {cols}","us.hm.row.15m":"15 minuti (inizio)","us.hm.row.1h":"ora (inizio)","us.hm.row.6h":"6 ore (inizio)","us.hm.row.1d":"giorno (inizio)","us.hm.row.1w":"settimana (inizio)","us.hm.row.13w":"13 settimane (inizio)","us.hm.col.minute":"minuti dall'inizio della riga","us.hm.col.minuteofhour":"minuto dell'ora","us.hm.col.hours":"ore dall'inizio della riga","us.hm.col.clock":"ora del giorno","us.hm.col.weekday":"giorno della settimana","us.hm.col.halfday":"giorno (mattina, pomeriggio)","us.hm.col.weeks":"settimane dall'inizio della riga","us.hm.hint":"Fai clic su una cella per elencarne le chiamate qui sotto.","us.noFailures":"Nessun errore in questo intervallo.","us.empty":"Nessun utilizzo in questo intervallo.","us.bd.line":"{tok} token · {cost} · {calls} chiamate","us.drill":"Chiamate {range}","us.drill.clear":"Rimuovi il filtro dell'intervallo","us.drill.hint":"Fai clic su una colonna per elencarne le chiamate qui sotto.","us.chart.aria":"{chart}: usa Sinistra e Destra per scegliere una colonna e Invio per elencarne le chiamate.","us.t.by":"{metric} per {dim}","us.metric":"Metrica","us.metric.tip":"Cosa misurano i grafici per dimensione: token, chiamate o costo","us.m.tokens":"Token","us.m.calls":"Chiamate","us.m.cost":"Costo","us.mode.tip":"Barre impilate o una linea per serie","us.mode.bars":"Barre","us.mode.lines":"Linee","us.exp.csv":"Esporta CSV","us.exp.csv.tip":"Scarica i dati di questo grafico come file CSV","us.exp.png":"Salva PNG","us.exp.png.tip":"Scarica questo grafico come immagine PNG","us.exp.none":"Questo grafico non ha dati da esportare.","us.exp.saved":"Scaricato {file}",
 "lang.label":"Lingua"
 },
 de:{
@@ -805,6 +873,7 @@ de:{
 "col.category":"Kategorie","act.setcategory":"Kategorie festlegen…","sk.allcategories":"Alle Kategorien","sk.categoryhelp":"Wähle eine Kategorie oder gib eine eigene ein (kebab-case). Leer lassen, um die Kategorie aus SKILL.md zu verwenden.","toast.categorySaved":"Kategorie aktualisiert.","col.name":"Name","col.adapter":"Adapter","col.model":"Modell","col.auth":"Auth","col.transport":"Transport","col.target":"Ziel","col.systemPrompt":"System-Prompt","col.description":"Beschreibung","col.tools":"Werkzeuge","col.event":"Ereignis","col.command":"Befehl","col.blocking":"Blockierend","col.commandId":"Befehls-ID","col.chord":"Tastenkombi","col.cmds":"Befehle","col.state":"Status","col.title":"Titel","col.updated":"Aktualisiert",
 "tag.default":"Standard","tag.active":"aktiv","tag.enabled":"aktiviert","tag.disabled":"deaktiviert","tag.invalid":"ungültig","tag.yes":"ja","tag.no":"nein",
 "set.agent":"Agent","set.context":"Kontext","set.features":"Funktionen","set.rest":"REST-Server","set.restReq":"Neustart erforderlich",
+"us.range":"Zeitraum","us.r.hour":"Stunde","us.r.day":"Tag","us.r.week":"Woche","us.r.month":"Monat","us.r.quarter":"Quartal","us.r.year":"Jahr","us.r.all":"Alle","us.r.hour.tip":"Letzte Stunde","us.r.day.tip":"Letzte 24 Stunden","us.r.week.tip":"Letzte 7 Tage","us.r.month.tip":"Letzte 30 Tage","us.r.quarter.tip":"Letzte 13 Wochen","us.r.year.tip":"Letzte 52 Wochen","us.r.all.tip":"Alles Aufgezeichnete","us.t.calls":"Aufrufe","us.t.tokens":"Tokens","us.t.split":"Tokens nach {dim}","us.t.cost":"Kosten","us.t.latency":"Latenz","us.t.ttft":"TTFT","us.t.stream":"Streaming","us.t.throughput":"Durchsatz","us.t.breakdown":"Nutzung nach {dim}","us.t.heatmap":"Heatmap","us.dim":"Gruppieren nach","us.dim.tip":"Dimension für die Diagramme Tokens nach und Nutzung nach","us.dim.model":"Modell","us.dim.endpoint":"Endpunkt","us.dim.provider":"Anbieter","us.dim.callkind":"Aufrufart","us.other":"Sonstige","us.s.succeeded":"Erfolgreich","us.s.failed":"Fehlgeschlagen","us.s.prompt":"Prompt","us.s.cached":"Zwischengespeichert","us.s.output":"Ausgabe","us.s.cost":"Kosten","us.errorRate":"Fehlerquote","us.total":"Gesamt","us.calls":"Aufrufe","us.failures":"Fehlerursachen","us.hm.none":"Keine Nutzung","us.hm.less":"Weniger","us.hm.more":"Mehr","us.hm.quartile":"Abstufung nach Quartil","us.hm.axes":"Zeilen: {rows} · Spalten: {cols}","us.hm.row.15m":"15 Minuten (Beginn)","us.hm.row.1h":"Stunde (Beginn)","us.hm.row.6h":"6 Stunden (Beginn)","us.hm.row.1d":"Tag (Beginn)","us.hm.row.1w":"Woche (Beginn)","us.hm.row.13w":"13 Wochen (Beginn)","us.hm.col.minute":"Minuten ab Zeilenbeginn","us.hm.col.minuteofhour":"Minute der Stunde","us.hm.col.hours":"Stunden ab Zeilenbeginn","us.hm.col.clock":"Uhrzeit","us.hm.col.weekday":"Wochentag","us.hm.col.halfday":"Tag (vormittags, nachmittags)","us.hm.col.weeks":"Wochen ab Zeilenbeginn","us.hm.hint":"Klicken Sie auf eine Zelle, um ihre Aufrufe unten aufzulisten.","us.noFailures":"Keine Fehler in diesem Zeitraum.","us.empty":"Keine Nutzung in diesem Zeitraum.","us.bd.line":"{tok} Tokens · {cost} · {calls} Aufrufe","us.drill":"Aufrufe {range}","us.drill.clear":"Intervallfilter entfernen","us.drill.hint":"Klicken Sie auf eine Spalte, um ihre Aufrufe unten aufzulisten.","us.chart.aria":"{chart}: Mit Links und Rechts eine Spalte wählen, mit Eingabe ihre Aufrufe auflisten.","us.t.by":"{metric} nach {dim}","us.metric":"Kennzahl","us.metric.tip":"Was die Diagramme nach Dimension messen: Tokens, Aufrufe oder Kosten","us.m.tokens":"Tokens","us.m.calls":"Aufrufe","us.m.cost":"Kosten","us.mode.tip":"Gestapelte Balken oder eine Linie pro Reihe","us.mode.bars":"Balken","us.mode.lines":"Linien","us.exp.csv":"CSV exportieren","us.exp.csv.tip":"Die Daten dieses Diagramms als CSV-Datei herunterladen","us.exp.png":"PNG speichern","us.exp.png.tip":"Dieses Diagramm als PNG-Bild herunterladen","us.exp.none":"Dieses Diagramm hat keine Daten zum Exportieren.","us.exp.saved":"{file} heruntergeladen",
 "lang.label":"Sprache"
 },
 zh:{
@@ -825,6 +894,7 @@ zh:{
 "col.category":"类别","act.setcategory":"设置类别…","sk.allcategories":"所有类别","sk.categoryhelp":"选择一个类别或输入自定义类别（kebab-case）。留空则使用 SKILL.md 中的类别。","toast.categorySaved":"类别已更新。","col.name":"名称","col.adapter":"适配器","col.model":"模型","col.auth":"认证","col.transport":"传输","col.target":"目标","col.systemPrompt":"系统提示词","col.description":"描述","col.tools":"工具","col.event":"事件","col.command":"命令","col.blocking":"阻断","col.commandId":"命令 ID","col.chord":"组合键","col.cmds":"命令数","col.state":"状态","col.title":"标题","col.updated":"更新时间",
 "tag.default":"默认","tag.active":"活动","tag.enabled":"已启用","tag.disabled":"已停用","tag.invalid":"无效","tag.yes":"是","tag.no":"否",
 "set.agent":"代理","set.context":"上下文","set.features":"功能","set.rest":"REST 服务器","set.restReq":"需要重启",
+"us.range":"范围","us.r.hour":"小时","us.r.day":"天","us.r.week":"周","us.r.month":"月","us.r.quarter":"季度","us.r.year":"年","us.r.all":"全部","us.r.hour.tip":"最近一小时","us.r.day.tip":"最近 24 小时","us.r.week.tip":"最近 7 天","us.r.month.tip":"最近 30 天","us.r.quarter.tip":"最近 13 周","us.r.year.tip":"最近 52 周","us.r.all.tip":"全部记录","us.t.calls":"调用","us.t.tokens":"令牌","us.t.split":"按{dim}的令牌","us.t.cost":"成本","us.t.latency":"延迟","us.t.ttft":"TTFT","us.t.stream":"流式传输","us.t.throughput":"吞吐量","us.t.breakdown":"按{dim}的用量","us.t.heatmap":"热力图","us.dim":"分组依据","us.dim.tip":"“按…的令牌”和“按…的用量”图表使用的维度","us.dim.model":"模型","us.dim.endpoint":"端点","us.dim.provider":"提供商","us.dim.callkind":"调用类型","us.other":"其他","us.s.succeeded":"成功","us.s.failed":"失败","us.s.prompt":"提示","us.s.cached":"缓存","us.s.output":"输出","us.s.cost":"成本","us.errorRate":"错误率","us.total":"合计","us.calls":"调用","us.failures":"失败原因","us.hm.none":"无使用","us.hm.less":"较少","us.hm.more":"较多","us.hm.quartile":"按四分位着色","us.hm.axes":"行：{rows} · 列：{cols}","us.hm.row.15m":"15 分钟（起始）","us.hm.row.1h":"小时（起始）","us.hm.row.6h":"6 小时（起始）","us.hm.row.1d":"天（起始）","us.hm.row.1w":"周（起始）","us.hm.row.13w":"13 周（起始）","us.hm.col.minute":"距行起始的分钟数","us.hm.col.minuteofhour":"小时内的分钟","us.hm.col.hours":"距行起始的小时数","us.hm.col.clock":"一天中的时间","us.hm.col.weekday":"星期几","us.hm.col.halfday":"日（上午、下午）","us.hm.col.weeks":"距行起始的周数","us.hm.hint":"点击某个单元格，在下方列出其调用。","us.noFailures":"此范围内没有失败。","us.empty":"此范围内没有用量。","us.bd.line":"{tok} 令牌 · {cost} · {calls} 次调用","us.drill":"调用 {range}","us.drill.clear":"清除时段筛选","us.drill.hint":"点击某一列，在下方列出其调用。","us.chart.aria":"{chart}：用左右方向键选择列，按 Enter 列出其调用。","us.t.by":"按{dim}的{metric}","us.metric":"指标","us.metric.tip":"按维度图表衡量的内容：令牌、调用或成本","us.m.tokens":"令牌","us.m.calls":"调用","us.m.cost":"成本","us.mode.tip":"绘制堆叠柱状图或每个系列一条折线","us.mode.bars":"柱状","us.mode.lines":"折线","us.exp.csv":"导出 CSV","us.exp.csv.tip":"将此图表的数据下载为 CSV 文件","us.exp.png":"保存 PNG","us.exp.png.tip":"将此图表下载为 PNG 图片","us.exp.none":"此图表没有可导出的数据。","us.exp.saved":"已下载 {file}",
 "lang.label":"语言"
 },
 ar:{
@@ -845,6 +915,7 @@ ar:{
 "col.category":"الفئة","act.setcategory":"تعيين الفئة…","sk.allcategories":"كل الفئات","sk.categoryhelp":"اختر فئة أو اكتب فئتك (kebab-case). اتركها فارغة لاستخدام الفئة في SKILL.md.","toast.categorySaved":"تم تحديث الفئة.","col.name":"الاسم","col.adapter":"المحوّل","col.model":"النموذج","col.auth":"المصادقة","col.transport":"النقل","col.target":"الهدف","col.systemPrompt":"توجيه النظام","col.description":"الوصف","col.tools":"الأدوات","col.event":"الحدث","col.command":"الأمر","col.blocking":"حاجب","col.commandId":"معرّف الأمر","col.chord":"تركيبة المفاتيح","col.cmds":"الأوامر","col.state":"الحالة","col.title":"العنوان","col.updated":"آخر تحديث",
 "tag.default":"افتراضي","tag.active":"نشط","tag.enabled":"مُفعّل","tag.disabled":"مُعطّل","tag.invalid":"غير صالح","tag.yes":"نعم","tag.no":"لا",
 "set.agent":"الوكيل","set.context":"السياق","set.features":"الميزات","set.rest":"خادم REST","set.restReq":"يتطلب إعادة تشغيل",
+"us.range":"النطاق","us.r.hour":"ساعة","us.r.day":"يوم","us.r.week":"أسبوع","us.r.month":"شهر","us.r.quarter":"ربع سنة","us.r.year":"سنة","us.r.all":"الكل","us.r.hour.tip":"آخر ساعة","us.r.day.tip":"آخر 24 ساعة","us.r.week.tip":"آخر 7 أيام","us.r.month.tip":"آخر 30 يومًا","us.r.quarter.tip":"آخر 13 أسبوعًا","us.r.year.tip":"آخر 52 أسبوعًا","us.r.all.tip":"كل ما سُجّل","us.t.calls":"الاستدعاءات","us.t.tokens":"الرموز","us.t.split":"الرموز حسب {dim}","us.t.cost":"التكلفة","us.t.latency":"زمن الاستجابة","us.t.ttft":"TTFT","us.t.stream":"البث","us.t.throughput":"الإنتاجية","us.t.breakdown":"الاستخدام حسب {dim}","us.t.heatmap":"خريطة حرارية","us.dim":"التجميع حسب","us.dim.tip":"البُعد المستخدم في مخططي الرموز حسب والاستخدام حسب","us.dim.model":"النموذج","us.dim.endpoint":"نقطة النهاية","us.dim.provider":"المزوّد","us.dim.callkind":"نوع الاستدعاء","us.other":"أخرى","us.s.succeeded":"ناجحة","us.s.failed":"فاشلة","us.s.prompt":"الموجّه","us.s.cached":"مخزّنة مؤقتًا","us.s.output":"المخرجات","us.s.cost":"التكلفة","us.errorRate":"معدل الأخطاء","us.total":"الإجمالي","us.calls":"الاستدعاءات","us.failures":"أسباب الفشل","us.hm.none":"لا استخدام","us.hm.less":"أقل","us.hm.more":"أكثر","us.hm.quartile":"درجات حسب الربيع","us.hm.axes":"الصفوف: {rows} · الأعمدة: {cols}","us.hm.row.15m":"15 دقيقة (البداية)","us.hm.row.1h":"ساعة (البداية)","us.hm.row.6h":"6 ساعات (البداية)","us.hm.row.1d":"يوم (البداية)","us.hm.row.1w":"أسبوع (البداية)","us.hm.row.13w":"13 أسبوعًا (البداية)","us.hm.col.minute":"دقائق منذ بداية الصف","us.hm.col.minuteofhour":"دقيقة من الساعة","us.hm.col.hours":"ساعات منذ بداية الصف","us.hm.col.clock":"وقت اليوم","us.hm.col.weekday":"يوم الأسبوع","us.hm.col.halfday":"اليوم (ص، م)","us.hm.col.weeks":"أسابيع منذ بداية الصف","us.hm.hint":"انقر على خلية لعرض استدعاءاتها أدناه.","us.noFailures":"لا توجد حالات فشل في هذا النطاق.","us.empty":"لا يوجد استخدام في هذا النطاق.","us.bd.line":"{tok} رمز · {cost} · {calls} استدعاء","us.drill":"الاستدعاءات {range}","us.drill.clear":"إزالة عامل تصفية الفترة","us.drill.hint":"انقر على عمود لعرض استدعاءاته أدناه.","us.chart.aria":"{chart}: استخدم السهمين الأيسر والأيمن لاختيار عمود وEnter لعرض استدعاءاته.","us.t.by":"{metric} حسب {dim}","us.metric":"المقياس","us.metric.tip":"ما تقيسه المخططات حسب البُعد: الرموز أو الاستدعاءات أو التكلفة","us.m.tokens":"الرموز","us.m.calls":"الاستدعاءات","us.m.cost":"التكلفة","us.mode.tip":"رسم أعمدة مكدسة أو خط لكل سلسلة","us.mode.bars":"أعمدة","us.mode.lines":"خطوط","us.exp.csv":"تصدير CSV","us.exp.csv.tip":"تنزيل بيانات هذا المخطط كملف CSV","us.exp.png":"حفظ PNG","us.exp.png.tip":"تنزيل هذا المخطط كصورة PNG","us.exp.none":"لا توجد بيانات لتصديرها في هذا المخطط.","us.exp.saved":"تم تنزيل {file}",
 "lang.label":"اللغة"
 },
 ru:{
@@ -865,6 +936,7 @@ ru:{
 "col.category":"Категория","act.setcategory":"Задать категорию…","sk.allcategories":"Все категории","sk.categoryhelp":"Выберите категорию или введите свою (kebab-case). Оставьте пустым, чтобы использовать категорию из SKILL.md.","toast.categorySaved":"Категория обновлена.","col.name":"Имя","col.adapter":"Адаптер","col.model":"Модель","col.auth":"Аутент.","col.transport":"Транспорт","col.target":"Цель","col.systemPrompt":"Системный промпт","col.description":"Описание","col.tools":"Инструменты","col.event":"Событие","col.command":"Команда","col.blocking":"Блокирующий","col.commandId":"ID команды","col.chord":"Сочетание","col.cmds":"Команды","col.state":"Состояние","col.title":"Заголовок","col.updated":"Обновлено",
 "tag.default":"по умолчанию","tag.active":"активный","tag.enabled":"включён","tag.disabled":"выключен","tag.invalid":"недопустимый","tag.yes":"да","tag.no":"нет",
 "set.agent":"Агент","set.context":"Контекст","set.features":"Функции","set.rest":"REST-сервер","set.restReq":"требуется перезапуск",
+"us.range":"Период","us.r.hour":"Час","us.r.day":"День","us.r.week":"Неделя","us.r.month":"Месяц","us.r.quarter":"Квартал","us.r.year":"Год","us.r.all":"Всё","us.r.hour.tip":"Последний час","us.r.day.tip":"Последние 24 часа","us.r.week.tip":"Последние 7 дней","us.r.month.tip":"Последние 30 дней","us.r.quarter.tip":"Последние 13 недель","us.r.year.tip":"Последние 52 недели","us.r.all.tip":"Всё записанное","us.t.calls":"Вызовы","us.t.tokens":"Токены","us.t.split":"Токены: {dim}","us.t.cost":"Стоимость","us.t.latency":"Задержка","us.t.ttft":"TTFT","us.t.stream":"Потоковая передача","us.t.throughput":"Пропускная способность","us.t.breakdown":"Использование: {dim}","us.t.heatmap":"Тепловая карта","us.dim":"Группировать по","us.dim.tip":"Измерение для графиков токенов и использования по группам","us.dim.model":"Модель","us.dim.endpoint":"Конечная точка","us.dim.provider":"Провайдер","us.dim.callkind":"Тип вызова","us.other":"Другое","us.s.succeeded":"Успешные","us.s.failed":"Неудачные","us.s.prompt":"Промпт","us.s.cached":"Из кэша","us.s.output":"Вывод","us.s.cost":"Стоимость","us.errorRate":"Доля ошибок","us.total":"Итого","us.calls":"Вызовы","us.failures":"Причины сбоев","us.hm.none":"Нет использования","us.hm.less":"Меньше","us.hm.more":"Больше","us.hm.quartile":"оттенки по квартилям","us.hm.axes":"Строки: {rows} · Столбцы: {cols}","us.hm.row.15m":"15 минут (начало)","us.hm.row.1h":"час (начало)","us.hm.row.6h":"6 часов (начало)","us.hm.row.1d":"день (начало)","us.hm.row.1w":"неделя (начало)","us.hm.row.13w":"13 недель (начало)","us.hm.col.minute":"минуты от начала строки","us.hm.col.minuteofhour":"минута часа","us.hm.col.hours":"часы от начала строки","us.hm.col.clock":"время суток","us.hm.col.weekday":"день недели","us.hm.col.halfday":"день (до полудня, после полудня)","us.hm.col.weeks":"недели от начала строки","us.hm.hint":"Нажмите на ячейку, чтобы показать её вызовы ниже.","us.noFailures":"В этом периоде сбоев нет.","us.empty":"В этом периоде нет использования.","us.bd.line":"{tok} токенов · {cost} · {calls} вызовов","us.drill":"Вызовы {range}","us.drill.clear":"Снять фильтр интервала","us.drill.hint":"Нажмите на столбец, чтобы показать его вызовы ниже.","us.chart.aria":"{chart}: стрелки влево и вправо выбирают столбец, Enter показывает его вызовы.","us.t.by":"{metric}: {dim}","us.metric":"Показатель","us.metric.tip":"Что измеряют графики по группам: токены, вызовы или стоимость","us.m.tokens":"Токены","us.m.calls":"Вызовы","us.m.cost":"Стоимость","us.mode.tip":"Столбцы с накоплением или по линии на ряд","us.mode.bars":"Столбцы","us.mode.lines":"Линии","us.exp.csv":"Экспорт CSV","us.exp.csv.tip":"Скачать данные этого графика в файле CSV","us.exp.png":"Сохранить PNG","us.exp.png.tip":"Скачать этот график как изображение PNG","us.exp.none":"На этом графике нет данных для экспорта.","us.exp.saved":"Скачано: {file}",
 "lang.label":"Язык"
 },
 ms:{
@@ -885,6 +957,7 @@ ms:{
 "col.category":"Kategori","act.setcategory":"Tetapkan kategori…","sk.allcategories":"Semua kategori","sk.categoryhelp":"Pilih kategori atau taip kategori sendiri (kebab-case). Biarkan kosong untuk guna kategori dalam SKILL.md.","toast.categorySaved":"Kategori dikemas kini.","col.name":"Nama","col.adapter":"Penyesuai","col.model":"Model","col.auth":"Auth","col.transport":"Pengangkutan","col.target":"Sasaran","col.systemPrompt":"Gesaan sistem","col.description":"Perihalan","col.tools":"Alat","col.event":"Peristiwa","col.command":"Perintah","col.blocking":"Menyekat","col.commandId":"ID perintah","col.chord":"Gabungan kekunci","col.cmds":"Perintah","col.state":"Keadaan","col.title":"Tajuk","col.updated":"Dikemas kini",
 "tag.default":"lalai","tag.active":"aktif","tag.enabled":"didayakan","tag.disabled":"dilumpuhkan","tag.invalid":"tidak sah","tag.yes":"ya","tag.no":"tidak",
 "set.agent":"Ejen","set.context":"Konteks","set.features":"Ciri","set.rest":"Pelayan REST","set.restReq":"perlu dimulakan semula",
+"us.range":"Julat","us.r.hour":"Jam","us.r.day":"Hari","us.r.week":"Minggu","us.r.month":"Bulan","us.r.quarter":"Suku tahun","us.r.year":"Tahun","us.r.all":"Semua","us.r.hour.tip":"Satu jam terakhir","us.r.day.tip":"24 jam terakhir","us.r.week.tip":"7 hari terakhir","us.r.month.tip":"30 hari terakhir","us.r.quarter.tip":"13 minggu terakhir","us.r.year.tip":"52 minggu terakhir","us.r.all.tip":"Semua yang direkodkan","us.t.calls":"Panggilan","us.t.tokens":"Token","us.t.split":"Token mengikut {dim}","us.t.cost":"Kos","us.t.latency":"Kependaman","us.t.ttft":"TTFT","us.t.stream":"Penstriman","us.t.throughput":"Daya pemprosesan","us.t.breakdown":"Penggunaan mengikut {dim}","us.t.heatmap":"Peta haba","us.dim":"Kumpulkan mengikut","us.dim.tip":"Dimensi untuk carta Token mengikut dan Penggunaan mengikut","us.dim.model":"Model","us.dim.endpoint":"Titik akhir","us.dim.provider":"Penyedia","us.dim.callkind":"Jenis panggilan","us.other":"Lain-lain","us.s.succeeded":"Berjaya","us.s.failed":"Gagal","us.s.prompt":"Prompt","us.s.cached":"Dicache","us.s.output":"Output","us.s.cost":"Kos","us.errorRate":"Kadar ralat","us.total":"Jumlah","us.calls":"Panggilan","us.failures":"Punca kegagalan","us.hm.none":"Tiada penggunaan","us.hm.less":"Kurang","us.hm.more":"Lebih","us.hm.quartile":"warna mengikut kuartil","us.hm.axes":"Baris: {rows} · Lajur: {cols}","us.hm.row.15m":"15 minit (mula)","us.hm.row.1h":"jam (mula)","us.hm.row.6h":"6 jam (mula)","us.hm.row.1d":"hari (mula)","us.hm.row.1w":"minggu (mula)","us.hm.row.13w":"13 minggu (mula)","us.hm.col.minute":"minit dari permulaan baris","us.hm.col.minuteofhour":"minit dalam jam","us.hm.col.hours":"jam dari permulaan baris","us.hm.col.clock":"masa dalam hari","us.hm.col.weekday":"hari dalam minggu","us.hm.col.halfday":"hari (PG, PTG)","us.hm.col.weeks":"minggu dari permulaan baris","us.hm.hint":"Klik sel untuk menyenaraikan panggilannya di bawah.","us.noFailures":"Tiada kegagalan dalam julat ini.","us.empty":"Tiada penggunaan dalam julat ini.","us.bd.line":"{tok} token · {cost} · {calls} panggilan","us.drill":"Panggilan {range}","us.drill.clear":"Kosongkan penapis selang","us.drill.hint":"Klik lajur untuk menyenaraikan panggilannya di bawah.","us.chart.aria":"{chart}: gunakan Kiri dan Kanan untuk memilih lajur, Enter untuk menyenaraikan panggilannya.","us.t.by":"{metric} mengikut {dim}","us.metric":"Metrik","us.metric.tip":"Apa yang diukur oleh carta mengikut dimensi: token, panggilan atau kos","us.m.tokens":"Token","us.m.calls":"Panggilan","us.m.cost":"Kos","us.mode.tip":"Lukis bar bertindan atau satu garisan bagi setiap siri","us.mode.bars":"Bar","us.mode.lines":"Garisan","us.exp.csv":"Eksport CSV","us.exp.csv.tip":"Muat turun data carta ini sebagai fail CSV","us.exp.png":"Simpan PNG","us.exp.png.tip":"Muat turun carta ini sebagai imej PNG","us.exp.none":"Carta ini tiada data untuk dieksport.","us.exp.saved":"{file} dimuat turun",
 "lang.label":"Bahasa"
 },
 hi:{
@@ -905,11 +978,13 @@ hi:{
 "col.category":"श्रेणी","act.setcategory":"श्रेणी सेट करें…","sk.allcategories":"सभी श्रेणियाँ","sk.categoryhelp":"कोई श्रेणी चुनें या अपनी लिखें (kebab-case)। SKILL.md की श्रेणी इस्तेमाल करने के लिए खाली छोड़ें।","toast.categorySaved":"श्रेणी अपडेट हुई।","col.name":"नाम","col.adapter":"अडैप्टर","col.model":"मॉडल","col.auth":"प्रमाणीकरण","col.transport":"ट्रांसपोर्ट","col.target":"लक्ष्य","col.systemPrompt":"सिस्टम प्रॉम्प्ट","col.description":"विवरण","col.tools":"टूल","col.event":"इवेंट","col.command":"कमांड","col.blocking":"अवरोधक","col.commandId":"कमांड आईडी","col.chord":"कुंजी संयोजन","col.cmds":"कमांड","col.state":"स्थिति","col.title":"शीर्षक","col.updated":"अपडेट किया गया",
 "tag.default":"डिफ़ॉल्ट","tag.active":"सक्रिय","tag.enabled":"सक्षम","tag.disabled":"अक्षम","tag.invalid":"अमान्य","tag.yes":"हाँ","tag.no":"नहीं",
 "set.agent":"एजेंट","set.context":"संदर्भ","set.features":"विशेषताएँ","set.rest":"REST सर्वर","set.restReq":"पुनरारंभ आवश्यक",
+"us.range":"अवधि","us.r.hour":"घंटा","us.r.day":"दिन","us.r.week":"सप्ताह","us.r.month":"महीना","us.r.quarter":"तिमाही","us.r.year":"वर्ष","us.r.all":"सभी","us.r.hour.tip":"पिछला घंटा","us.r.day.tip":"पिछले 24 घंटे","us.r.week.tip":"पिछले 7 दिन","us.r.month.tip":"पिछले 30 दिन","us.r.quarter.tip":"पिछले 13 सप्ताह","us.r.year.tip":"पिछले 52 सप्ताह","us.r.all.tip":"सारा रिकॉर्ड","us.t.calls":"कॉल","us.t.tokens":"टोकन","us.t.split":"{dim} के अनुसार टोकन","us.t.cost":"लागत","us.t.latency":"विलंबता","us.t.ttft":"TTFT","us.t.stream":"स्ट्रीमिंग","us.t.throughput":"थ्रूपुट","us.t.breakdown":"{dim} के अनुसार उपयोग","us.t.heatmap":"हीटमैप","us.dim":"समूह आधार","us.dim.tip":"टोकन और उपयोग चार्ट के समूह का आयाम","us.dim.model":"मॉडल","us.dim.endpoint":"एंडपॉइंट","us.dim.provider":"प्रदाता","us.dim.callkind":"कॉल प्रकार","us.other":"अन्य","us.s.succeeded":"सफल","us.s.failed":"विफल","us.s.prompt":"प्रॉम्प्ट","us.s.cached":"कैश्ड","us.s.output":"आउटपुट","us.s.cost":"लागत","us.errorRate":"त्रुटि दर","us.total":"कुल","us.calls":"कॉल","us.failures":"विफलता के कारण","us.hm.none":"कोई उपयोग नहीं","us.hm.less":"कम","us.hm.more":"अधिक","us.hm.quartile":"चतुर्थक के अनुसार रंग","us.hm.axes":"पंक्तियाँ: {rows} · कॉलम: {cols}","us.hm.row.15m":"15 मिनट (आरंभ)","us.hm.row.1h":"घंटा (आरंभ)","us.hm.row.6h":"6 घंटे (आरंभ)","us.hm.row.1d":"दिन (आरंभ)","us.hm.row.1w":"सप्ताह (आरंभ)","us.hm.row.13w":"13 सप्ताह (आरंभ)","us.hm.col.minute":"पंक्ति के आरंभ से मिनट","us.hm.col.minuteofhour":"घंटे का मिनट","us.hm.col.hours":"पंक्ति के आरंभ से घंटे","us.hm.col.clock":"दिन का समय","us.hm.col.weekday":"सप्ताह का दिन","us.hm.col.halfday":"दिन (पूर्वाह्न, अपराह्न)","us.hm.col.weeks":"पंक्ति के आरंभ से सप्ताह","us.hm.hint":"किसी सेल की कॉल नीचे देखने के लिए उस पर क्लिक करें।","us.noFailures":"इस अवधि में कोई विफलता नहीं।","us.empty":"इस अवधि में कोई उपयोग नहीं।","us.bd.line":"{tok} टोकन · {cost} · {calls} कॉल","us.drill":"कॉल {range}","us.drill.clear":"अंतराल फ़िल्टर हटाएँ","us.drill.hint":"किसी कॉलम की कॉल नीचे देखने के लिए उस पर क्लिक करें।","us.chart.aria":"{chart}: कॉलम चुनने के लिए बाएँ और दाएँ, उसकी कॉल देखने के लिए Enter दबाएँ।","us.t.by":"{dim} के अनुसार {metric}","us.metric":"मीट्रिक","us.metric.tip":"आयाम वाले चार्ट क्या मापते हैं: टोकन, कॉल या लागत","us.m.tokens":"टोकन","us.m.calls":"कॉल","us.m.cost":"लागत","us.mode.tip":"स्टैक्ड बार या हर सीरीज़ के लिए एक रेखा बनाएँ","us.mode.bars":"बार","us.mode.lines":"रेखाएँ","us.exp.csv":"CSV निर्यात करें","us.exp.csv.tip":"इस चार्ट का डेटा CSV फ़ाइल के रूप में डाउनलोड करें","us.exp.png":"PNG सहेजें","us.exp.png.tip":"इस चार्ट को PNG छवि के रूप में डाउनलोड करें","us.exp.none":"इस चार्ट में निर्यात करने के लिए कोई डेटा नहीं है।","us.exp.saved":"{file} डाउनलोड हुई",
 "lang.label":"भाषा"
 }
 };
 var LOCALE=(function(){try{return localStorage.getItem("mux.lang")||"en";}catch(e){return "en";}})();
 if(!I18N[LOCALE])LOCALE="en";
+var restEnabledKept=false;
 function t(k,p){var s=(I18N[LOCALE]&&I18N[LOCALE][k]!=null)?I18N[LOCALE][k]:(I18N.en[k]!=null?I18N.en[k]:k);if(p)for(var x in p)s=(""+s).split("{"+x+"}").join(p[x]);return s;}
 function viewTitle(v){var m={mcp:"vt.mcp",hooks:"vt.hooks",commands:"vt.commands"};return t(m[v]||("nav."+v));}
 function applyI18n(){
@@ -1504,7 +1579,7 @@ function loadSettings(){
     el("s_taskParallelismEnabled").checked=s.TaskParallelismEnabled;
     el("s_ignoreCertErrors").checked=s.IgnoreCertErrors;
     el("s_showBoundaryLines").checked=s.ShowBoundaryLines;
-    el("s_rest_enabled").checked=s.Rest.Enabled;
+    restEnabledKept=!!s.Rest.Enabled; /* rest.enabled is unused; round-trip it unchanged */
     el("s_rest_hostname").value=s.Rest.Hostname;
     el("s_rest_port").value=s.Rest.Port;
     el("s_rest_ssl").checked=s.Rest.Ssl;
@@ -1539,7 +1614,7 @@ function saveSettings(){
     IgnoreCertErrors:el("s_ignoreCertErrors").checked,
     ShowBoundaryLines:el("s_showBoundaryLines").checked,
     Rest:{
-      Enabled:el("s_rest_enabled").checked,
+      Enabled:restEnabledKept,
       Hostname:el("s_rest_hostname").value,
       Port:parseInt(el("s_rest_port").value,10),
       Ssl:el("s_rest_ssl").checked,
@@ -2135,15 +2210,36 @@ function renderExternalServices(ob){
   el("home_ext").innerHTML=st+(rows?'<table class="info" style="margin-top:10px"><tbody>'+rows+'</tbody></table>':'');
 }
 /* ================= Usage analytics ================= */
-var usageState={range:"day",endpoint:"",model:"",label:"",tag:"",tab:"tokens",buckets:[],summary:null,wired:false};
+/* State: range key, filters, the chart tab, the shared <Metric>-by / Usage-by dimension and metric (tokens, calls,
+   cost), the lines/bars mode of the stacked over-time charts, the loaded series, and the drill-down window (a bucket's [from, to] that narrows the per-call history grid; null = whole range). */
+var usageState={range:"day",endpoint:"",model:"",label:"",tag:"",tab:"tokens",dim:"model",metric:"tokens",mode:"bars",buckets:[],split:[],errors:[],breakdown:[],heatmap:null,summary:null,drill:null,seq:0,loaded:{},wired:false};
+var USAGE_RANGE_MS={hour:60000,day:900000,week:7200000,month:43200000,quarter:86400000,year:604800000};
+var USAGE_SPLIT_COLORS=["#2563eb","#16a34a","#d97706","#7c3aed","#0891b2","#db2777"],USAGE_OTHER_COLOR="#9ca3af";
 function fmtTok(n){n=n||0;if(n>=1e6)return (n/1e6).toFixed(n>=1e7?0:1)+"M";if(n>=1e3)return (n/1e3).toFixed(n>=1e4?0:1)+"k";return ""+Math.round(n);}
 function fmtUsd(n){n=n||0;if(n===0)return "$0";if(n<0.01)return "$"+n.toFixed(4);if(n<1)return "$"+n.toFixed(3);return "$"+n.toFixed(2);}
 function fmtMsCompact(n){n=Math.round(n||0);if(n>=1000)return (n/1000).toFixed(2)+"s";return n+"ms";}
 function fmtPct(n){return ((n||0)*100).toFixed(1)+"%";}
 function fmtWhenAbs(ms){try{return new Date(ms).toLocaleString();}catch(e){return ""+ms;}}
-function usageQuery(extra){var p="range="+usageState.range;if(usageState.endpoint)p+="&endpoint="+encodeURIComponent(usageState.endpoint);if(usageState.model)p+="&model="+encodeURIComponent(usageState.model);if(usageState.label)p+="&label="+encodeURIComponent(usageState.label);if(usageState.tag)p+="&tag="+encodeURIComponent(usageState.tag);if(extra)p+=extra;return p;}
+/* Filters shared by every usage query. The window is the range keyword, or an explicit from/to when a
+   drill-down window is passed (the API lets explicit from/to win). */
+function usageFilterQuery(){var p="";if(usageState.endpoint)p+="&endpoint="+encodeURIComponent(usageState.endpoint);if(usageState.model)p+="&model="+encodeURIComponent(usageState.model);if(usageState.label)p+="&label="+encodeURIComponent(usageState.label);if(usageState.tag)p+="&tag="+encodeURIComponent(usageState.tag);return p;}
+function usageQuery(extra,win){var p=win?("from="+win.from+"&to="+win.to):("range="+usageState.range);p+=usageFilterQuery();if(extra)p+=extra;return p;}
+function usAttr(s){return esc(""+(s==null?"":s)).replace(/"/g,"&quot;");}
+function usageDimLabel(d){return t("us.dim."+(d||usageState.dim));}
+function usageMetricLabel(m){return t("us.m."+(m||usageState.metric));}
+var USAGE_STACK_TABS={calls:1,tokens:1,split:1,cost:1};
+function relabelUsageTabs(){
+  var s=el("us_tab_split"),b=el("us_tab_breakdown"),dim=usageDimLabel();
+  if(s)s.textContent=t("us.t.by",{metric:usageMetricLabel(),dim:dim});if(b)b.textContent=t("us.t.breakdown",{dim:dim});
+  var dimSel=el("us_dim");if(dimSel)dimSel.value=usageState.dim;
+  var metSel=el("us_metric");if(metSel)metSel.value=usageState.metric;
+  var bar=el("us_dimbar");if(bar)bar.style.display=(usageState.tab==="split"||usageState.tab==="breakdown")?"":"none";
+  var mode=el("us_mode");if(mode){mode.style.display=USAGE_STACK_TABS[usageState.tab]?"":"none";mode.setAttribute("aria-label",t("us.mode.tip"));
+    Array.prototype.forEach.call(mode.querySelectorAll("button"),function(x){var on=x.getAttribute("data-mode")===usageState.mode;x.classList.toggle("active",on);x.setAttribute("aria-pressed",on?"true":"false");});}
+}
 function loadUsage(){
   if(!usageState.wired){wireUsage();usageState.wired=true;}
+  relabelUsageTabs();
   api("/v1.0/api/usage/filters").then(function(f){
     el("us_disabled").style.display=f.Enabled?"none":"";
     fillUsageSelect("us_endpoint",f.Endpoints,usageState.endpoint,t("us.allEndpoints"));
@@ -2157,72 +2253,255 @@ function fillUsageSelect(id,vals,cur,allLabel){var s=el(id);if(!s)return;var o='
 /* Tags arrive as {Key,Value}; the option value is the wire form "key:value" and the label is "key: value". */
 function fillUsageTagSelect(id,tags,cur,allLabel){var s=el(id);if(!s)return;var o='<option value="">'+esc(allLabel)+'</option>';(tags||[]).forEach(function(tg){var v=tg.Key+":"+tg.Value;o+='<option value="'+esc(v)+'"'+(v===cur?" selected":"")+'>'+esc(tg.Key+": "+tg.Value)+'</option>';});s.innerHTML=o;s.value=cur||"";}
 function wireUsage(){
-  Array.prototype.forEach.call(document.querySelectorAll("#us_range button"),function(b){b.addEventListener("click",function(){usageState.range=b.dataset.range;Array.prototype.forEach.call(document.querySelectorAll("#us_range button"),function(x){x.classList.toggle("active",x===b);});refreshUsage();});});
-  Array.prototype.forEach.call(document.querySelectorAll("#us_tabs button"),function(b){b.addEventListener("click",function(){usageState.tab=b.dataset.tab;Array.prototype.forEach.call(document.querySelectorAll("#us_tabs button"),function(x){x.classList.toggle("active",x===b);});drawUsageChart();renderUsageKpis();});});
-  el("us_endpoint").addEventListener("change",function(){usageState.endpoint=this.value;refreshUsage();});
-  el("us_model").addEventListener("change",function(){usageState.model=this.value;refreshUsage();});
-  el("us_label").addEventListener("change",function(){usageState.label=this.value;refreshUsage();});
-  el("us_tag").addEventListener("change",function(){usageState.tag=this.value;refreshUsage();});
+  Array.prototype.forEach.call(document.querySelectorAll("#us_range button"),function(b){b.addEventListener("click",function(){usageState.range=b.dataset.range;Array.prototype.forEach.call(document.querySelectorAll("#us_range button"),function(x){x.classList.toggle("active",x===b);});usageState.drill=null;refreshUsage();});});
+  Array.prototype.forEach.call(document.querySelectorAll("#us_tabs button"),function(b){b.addEventListener("click",function(){usageState.tab=b.dataset.tab;Array.prototype.forEach.call(document.querySelectorAll("#us_tabs button"),function(x){x.classList.toggle("active",x===b);});relabelUsageTabs();drawUsageChart();renderUsageKpis();});});
+  el("us_dim").addEventListener("change",function(){usageState.dim=this.value;usageState.loaded.split=false;usageState.loaded.breakdown=false;relabelUsageTabs();drawUsageChart();loadUsageDimension(usageState.seq);});
+  el("us_metric").addEventListener("change",function(){usageState.metric=this.value;relabelUsageTabs();drawUsageChart();});
+  Array.prototype.forEach.call(document.querySelectorAll("#us_mode button"),function(b){b.addEventListener("click",function(){usageState.mode=b.getAttribute("data-mode");relabelUsageTabs();drawUsageChart();});});
+  el("us_csv").addEventListener("click",exportUsageCsv);
+  el("us_png").addEventListener("click",exportUsagePng);
+  function filt(id,key){el(id).addEventListener("change",function(){usageState[key]=this.value;usageState.drill=null;refreshUsage();});}
+  filt("us_endpoint","endpoint");filt("us_model","model");filt("us_label","label");filt("us_tag","tag");
 }
+/* Every query carries a sequence number so a slow response for an old range or filter never overwrites the
+   current one. */
 function refreshUsage(){
+  var seq=++usageState.seq;
   el("us_kpis").innerHTML='<div class="empty"><div class="spinner"></div></div>';
   el("us_chart").innerHTML='<div class="chartempty"><div class="spinner"></div></div>';
-  api("/v1.0/api/usage/summary?"+usageQuery()).then(function(s){usageState.summary=s;renderUsageKpis();}).catch(function(){usageState.summary=null;el("us_kpis").innerHTML="";});
-  api("/v1.0/api/usage/timeseries?"+usageQuery()).then(function(r){usageState.buckets=r.Items||[];drawUsageChart();}).catch(function(){usageState.buckets=[];drawUsageChart();});
+  usageState.buckets=[];usageState.split=[];usageState.errors=[];usageState.breakdown=[];usageState.heatmap=null;usageState.loaded={};syncUsageTools();
+  function done(part){if(seq!==usageState.seq)return false;usageState.loaded[part]=true;return true;}
+  api("/v1.0/api/usage/summary?"+usageQuery()).then(function(s){if(seq!==usageState.seq)return;usageState.summary=s;renderUsageKpis();}).catch(function(){if(seq!==usageState.seq)return;usageState.summary=null;el("us_kpis").innerHTML="";});
+  api("/v1.0/api/usage/timeseries?"+usageQuery()).then(function(r){if(!done("buckets"))return;usageState.buckets=r.Items||[];drawUsageChart();}).catch(function(){if(!done("buckets"))return;usageState.buckets=[];drawUsageChart();});
+  api("/v1.0/api/usage/heatmap?"+usageQuery("&tzOffsetMinutes="+new Date().getTimezoneOffset())).then(function(r){if(!done("heatmap"))return;usageState.heatmap=r;if(usageState.tab==="heatmap")drawUsageChart();}).catch(function(){if(!done("heatmap"))return;usageState.heatmap=null;if(usageState.tab==="heatmap")drawUsageChart();});
+  api("/v1.0/api/usage/errors?"+usageQuery()).then(function(r){if(!done("errors"))return;usageState.errors=r.Items||[];if(usageState.tab==="calls")drawUsageChart();}).catch(function(){if(!done("errors"))return;usageState.errors=[];});
+  loadUsageDimension(seq);
+  renderUsageDrill();
   loadUsageHistory();
 }
+/* The split series (Tokens by <dimension>) and the breakdown (Usage by <dimension>) share the picker. */
+function loadUsageDimension(seq){
+  var dim="&dimension="+encodeURIComponent(usageState.dim);
+  function ok(){return seq===usageState.seq;}
+  api("/v1.0/api/usage/timeseries/split?"+usageQuery(dim+"&top=6")).then(function(r){if(!ok())return;usageState.split=r.Items||[];usageState.loaded.split=true;if(usageState.tab==="split")drawUsageChart();}).catch(function(){if(!ok())return;usageState.split=[];usageState.loaded.split=true;if(usageState.tab==="split")drawUsageChart();});
+  api("/v1.0/api/usage/breakdown?"+usageQuery(dim)).then(function(r){if(!ok())return;usageState.breakdown=r.Items||[];usageState.loaded.breakdown=true;if(usageState.tab==="breakdown")drawUsageChart();}).catch(function(){if(!ok())return;usageState.breakdown=[];usageState.loaded.breakdown=true;if(usageState.tab==="breakdown")drawUsageChart();});
+}
 /* KPI cards track the selected chart: distribution tabs (latency/ttft/stream/throughput) show that
-   metric's min/avg/p95/p99/max; the tokens and cost tabs show their own summaries. */
+   metric's min/avg/p95/p99/max; the calls, tokens, and cost tabs show their own summaries. */
 function renderUsageKpis(){
   var s=usageState.summary;if(!s){el("us_kpis").innerHTML="";return;}
   var m=s.Metrics||{},cfg=CHART_TABS[usageState.tab]||CHART_TABS.tokens,cards;
   if(cfg.kind==="dist"){
     var d=cfg.d(m)||{},f=cfg.fmt;
-    cards=[["Min",f(d.Min||0)],["Avg",f(d.Avg||0)],["p95",f(d.P95||0)],["p99",f(d.P99||0)],["Max",f(d.Max||0)],["Samples",""+(d.Count||0)]];
+    cards=[["Min",f(d.Min||0)],["Avg",f(d.Avg||0)],["p95",f(d.P95||0)],["p99",f(d.P99||0)],["Max",f(d.Max||0)],["Samples",""+(d.Count||0)],[t("us.errorRate"),fmtPct(m.ErrorRate)]];
+  }else if(usageState.tab==="calls"){
+    cards=[[t("us.calls"),""+(m.Calls||0)],[t("us.s.succeeded"),""+Math.max(0,(m.Calls||0)-(m.Errors||0))],[t("us.s.failed"),""+(m.Errors||0)],[t("us.errorRate"),fmtPct(m.ErrorRate)]];
   }else if(usageState.tab==="cost"){
-    cards=[["Cost",fmtUsd(m.CostUsd)],["Calls",""+(m.Calls||0)],["Avg cost/call",fmtUsd(m.Calls>0?(m.CostUsd/m.Calls):0)],["Error rate",fmtPct(m.ErrorRate)]];
+    cards=[["Cost",fmtUsd(m.CostUsd)],["Calls",""+(m.Calls||0)],["Avg cost/call",fmtUsd(m.Calls>0?(m.CostUsd/m.Calls):0)],[t("us.errorRate"),fmtPct(m.ErrorRate)]];
   }else{
-    cards=[["Total tokens",fmtTok(m.TotalTokens)],["Prompt",fmtTok(Math.max(0,(m.InputTokens||0)-(m.CachedTokens||0)))],["Cached",fmtTok(m.CachedTokens)],["Output",fmtTok(m.OutputTokens)],["Cost",fmtUsd(m.CostUsd)],["Calls",""+(m.Calls||0)],["Cache hit",fmtPct(m.CacheHitRate)],["Error rate",fmtPct(m.ErrorRate)]];
+    cards=[["Total tokens",fmtTok(m.TotalTokens)],[t("us.s.prompt"),fmtTok(Math.max(0,(m.InputTokens||0)-(m.CachedTokens||0)))],[t("us.s.cached"),fmtTok(m.CachedTokens)],[t("us.s.output"),fmtTok(m.OutputTokens)],["Cost",fmtUsd(m.CostUsd)],["Calls",""+(m.Calls||0)],["Cache hit",fmtPct(m.CacheHitRate)],[t("us.errorRate"),fmtPct(m.ErrorRate)]];
   }
   el("us_kpis").innerHTML=cards.map(function(c){return '<div class="kpi"><span class="kv">'+esc(c[1])+'</span><span class="kl">'+esc(c[0])+'</span></div>';}).join("");
 }
-/* Tokens and cost are additive totals, drawn as stacked/solid bars. Latency, TTFT, streaming, and
-   throughput are distributions, drawn as candlestick/box marks: a min–max wick, an avg–p95 box, and an
-   avg line plus a p99 tick, so each time slice shows the spread of its calls rather than one number. */
+/* Calls, tokens, the split series, and cost are additive totals, drawn as stacked/solid bars. Latency, TTFT,
+   streaming, and throughput are distributions, drawn as candlestick/box marks: a min–max wick, an avg–p95
+   box, and an avg line plus a p99 tick, so each time slice shows the spread of its calls rather than one
+   number. Series colors are CSS values (hex or var(--token)) applied through style, so they follow the theme. */
 var CHART_TABS={
-  tokens:{kind:"bar",fmt:fmtTok,note:cachedNote,series:[
-    {n:"Prompt",c:"#2563eb",g:function(m){var v=(m.InputTokens||0)-(m.CachedTokens||0);return v<0?0:v;}},
-    {n:"Cached",c:"#16a34a",g:function(m){return m.CachedTokens||0;}},
-    {n:"Output",c:"#d97706",g:function(m){return m.OutputTokens||0;}}]},
-  cost:{kind:"bar",fmt:fmtUsd,series:[{n:"Cost",c:"#7c3aed",g:function(m){return m.CostUsd||0;}}]},
-  latency:{kind:"dist",fmt:fmtMsCompact,c:"#2563eb",d:function(m){return m.TotalMsDist||{};}},
-  ttft:{kind:"dist",fmt:fmtMsCompact,c:"#7c3aed",d:function(m){return m.TtftMsDist||{};}},
-  stream:{kind:"dist",fmt:fmtMsCompact,c:"#0891b2",d:function(m){return m.StreamMsDist||{};}},
-  throughput:{kind:"dist",fmt:function(v){return (v||0).toFixed(0)+" tok/s";},c:"#16a34a",d:function(m){return m.ThroughputDist||{};}}
+  calls:{kind:"bar",fmt:function(v){return ""+Math.round(v||0);},name:"us.t.calls",tipExtra:function(m){return [[t("us.errorRate"),fmtPct(m.ErrorRate)]];},series:[
+    {k:"us.s.succeeded",csv:"succeeded",c:"var(--accent)",g:function(m){var v=(m.Calls||0)-(m.Errors||0);return v<0?0:v;}},
+    {k:"us.s.failed",csv:"failed",csvg:function(m){return m.Errors||0;},c:"var(--danger)",g:function(m){return m.Errors||0;}}]},
+  tokens:{kind:"bar",fmt:fmtTok,note:cachedNote,name:"us.t.tokens",series:[
+    {k:"us.s.prompt",csv:"uncached_input",c:"#2563eb",g:function(m){var v=(m.InputTokens||0)-(m.CachedTokens||0);return v<0?0:v;}},
+    {k:"us.s.cached",csv:"cached_input",c:"#16a34a",g:function(m){return m.CachedTokens||0;}},
+    {k:"us.s.output",csv:"output",c:"#d97706",g:function(m){return m.OutputTokens||0;}}]},
+  cost:{kind:"bar",fmt:fmtUsd,name:"us.t.cost",series:[{k:"us.s.cost",csv:"cost_usd",csvg:function(m){return m.CostUsd||0;},c:"#7c3aed",g:function(m){return m.CostUsd||0;}}]},
+  latency:{kind:"dist",fmt:fmtMsCompact,name:"us.t.latency",c:"#2563eb",d:function(m){return m.TotalMsDist||{};}},
+  ttft:{kind:"dist",fmt:fmtMsCompact,name:"us.t.ttft",c:"#7c3aed",d:function(m){return m.TtftMsDist||{};}},
+  stream:{kind:"dist",fmt:fmtMsCompact,name:"us.t.stream",c:"#0891b2",d:function(m){return m.StreamMsDist||{};}},
+  throughput:{kind:"dist",fmt:function(v){return (v||0).toFixed(0)+" tok/s";},name:"us.t.throughput",c:"#16a34a",d:function(m){return m.ThroughputDist||{};}}
 };
+function seriesName(sr){return sr.n!=null?sr.n:t(sr.k);}
 function cachedNote(buckets){var any=buckets.some(function(b){return (b.Metrics&&b.Metrics.CachedTokens)>0;});return any?"":"Prompt shows the uncached portion; cached tokens stack on top. Cache metrics populate when the provider reports them.";}
-function drawUsageChart(){
-  var host=el("us_chart"),buckets=usageState.buckets;
-  if(!buckets||!buckets.length){host.innerHTML='<div class="chartempty"><div class="empty"><div class="eicon">📉</div><div>No usage recorded in this window yet.</div></div></div>';return;}
-  if(usageState.tab==="heatmap"){host.innerHTML=tokenHeatmap(buckets);return;}
-  var cfg=CHART_TABS[usageState.tab]||CHART_TABS.tokens;
-  var note=(typeof cfg.note==="function")?cfg.note(buckets):(cfg.note||"");
-  var body=(cfg.kind==="dist")?distChart(buckets,cfg,usageState.range):barChart(buckets,cfg,usageState.range);
-  host.innerHTML=body+legendHtml(cfg)+(note?'<div class="chartnote">'+esc(note)+'</div>':"");
-  wireUsageHover(buckets,cfg,usageState.range);
+/* <Metric> by <dimension>: one stacked series per split value (top 6 by rank colors, then a grey "Other") holding
+   the chosen metric (total tokens, calls, or cost), folded into synthetic buckets aligned with the total series so
+   the bar and line charts, tooltip, and drill-down reuse the same code. */
+function usageMetricOf(m,metric){m=m||{};metric=metric||usageState.metric;return Math.max(0,metric==="calls"?(m.Calls||0):(metric==="cost"?(m.CostUsd||0):(m.TotalTokens||0)));}
+function usageMetricFmt(metric){metric=metric||usageState.metric;return metric==="calls"?function(v){return ""+Math.round(v||0);}:(metric==="cost"?fmtUsd:fmtTok);}
+function splitChartData(){
+  var series=usageState.split||[],n=0;series.forEach(function(sr){n=Math.max(n,(sr.Buckets||[]).length);});
+  var rank=0,cfgSeries=series.map(function(sr,si){
+    var other=!!sr.IsOther,c=other?USAGE_OTHER_COLOR:USAGE_SPLIT_COLORS[(rank++)%USAGE_SPLIT_COLORS.length];
+    var name=other?t("us.other"):(sr.Key||"unknown");
+    return {n:name,csv:other?"Other":(sr.Key||"unknown"),c:c,g:function(m){return (m._split&&m._split[si])||0;}};});
+  var buckets=[];
+  for(var i=0;i<n;i++){var start=0,vals=[];
+    series.forEach(function(sr){var b=(sr.Buckets||[])[i];if(b&&!start)start=b.BucketStartUnixMs;vals.push(b&&b.Metrics?usageMetricOf(b.Metrics):0);});
+    if(!start&&usageState.buckets[i])start=usageState.buckets[i].BucketStartUnixMs;
+    buckets.push({BucketStartUnixMs:start,Metrics:{_split:vals}});}
+  return {buckets:buckets,cfg:{kind:"bar",fmt:usageMetricFmt(),name:"us.t.by",series:cfgSeries}};
 }
-function tokenHeatmap(buckets){
-  var max=0,colors=["#2d3034","#0e4429","#006d32","#26a641","#39d353"];
-  buckets.forEach(function(b){max=Math.max(max,b.Metrics.TotalTokens||0);});
-  var h='<div style="padding:16px"><strong>Token activity heatmap</strong><div style="display:grid;grid-template-rows:repeat(7,24px);grid-auto-flow:column;grid-auto-columns:minmax(12px,1fr);gap:4px;margin:16px 0;overflow-x:auto">';
-  buckets.forEach(function(b){var v=b.Metrics.TotalTokens||0,level=v<=0?0:Math.min(4,1+Math.floor(v/Math.max(1,max)*3));var label=fmtBucketLabel(b.BucketStartUnixMs,usageState.range)+": "+v.toLocaleString()+" tokens";h+='<div tabindex="0" role="img" aria-label="'+esc(label)+'" title="'+esc(label)+'" style="border-radius:3px;background:'+colors[level]+'"></div>';});
-  return h+'</div><div class="chartnote">'+esc(fmtBucketLabel(buckets[0].BucketStartUnixMs,usageState.range))+' → '+esc(fmtBucketLabel(buckets[buckets.length-1].BucketStartUnixMs,usageState.range))+' · Oldest → newest · Less ░▒▓█ More · peak '+max.toLocaleString()+' tokens</div></div>';
+function usageEmptyHtml(icon){return '<div class="chartempty"><div class="empty"><div class="eicon">'+(icon||"📉")+'</div><div>'+esc(t("us.empty"))+'</div></div></div>';}
+function usageHasCalls(buckets){return (buckets||[]).some(function(b){return ((b.Metrics||{}).Calls||0)>0;});}
+function drawUsageChart(){drawUsageChartBody();syncUsageTools();}
+function drawUsageChartBody(){
+  var host=el("us_chart"),buckets=usageState.buckets,tab=usageState.tab,loaded=usageState.loaded||{};
+  var part=tab==="breakdown"?"breakdown":(tab==="split"?"split":(tab==="heatmap"?"heatmap":"buckets"));
+  if(!loaded[part]){host.innerHTML='<div class="chartempty"><div class="spinner"></div></div>';return;}
+  if(tab==="heatmap"){var hm=usageState.heatmap;if(!heatmapHasUsage(hm)){host.innerHTML=usageEmptyHtml();return;}host.innerHTML=tokenHeatmap(hm,host.clientWidth||800);wireHeatmap(hm);return;}
+  if(tab==="breakdown"){host.innerHTML=breakdownChart(usageState.breakdown);return;}
+  if(tab==="split"){
+    var sd=splitChartData(),anyTok=sd.buckets.some(function(b){return b.Metrics._split.some(function(v){return v>0;});});
+    if(!sd.buckets.length||!anyTok){host.innerHTML=usageEmptyHtml();return;}
+    drawBucketChart(host,sd.buckets,sd.cfg);return;}
+  if(!buckets||!buckets.length||!usageHasCalls(buckets)){host.innerHTML=usageEmptyHtml()+(tab==="calls"?failureReasonsHtml():"");return;}
+  drawBucketChart(host,buckets,CHART_TABS[tab]||CHART_TABS.tokens);
+}
+function drawBucketChart(host,buckets,cfg){
+  var note=(typeof cfg.note==="function")?cfg.note(buckets):(cfg.note||"");
+  var body=(cfg.kind==="dist")?distChart(buckets,cfg,usageState.range):(usageState.mode==="lines"?lineChart(buckets,cfg,usageState.range):barChart(buckets,cfg,usageState.range));
+  host.innerHTML=body+legendHtml(cfg)+'<div class="chartnote">'+esc(t("us.drill.hint"))+(note?' '+esc(note):'')+'</div>'+(usageState.tab==="calls"?failureReasonsHtml():"");
+  wireUsagePlot(buckets,cfg,usageState.range);
+}
+/* Failure reasons: error codes with counts for the range and filters, most frequent first. */
+function failureReasonsHtml(){
+  var rows=usageState.errors||[],h='<div class="ufail" id="us_failures"><h4>'+esc(t("us.failures"))+'</h4>';
+  if(!rows.length)return h+'<div class="none">'+esc(t("us.noFailures"))+'</div></div>';
+  var max=1;rows.forEach(function(r){max=Math.max(max,r.Count||0);});
+  h+='<ol>';rows.forEach(function(r){var w=Math.max(2,Math.round((r.Count||0)/max*100));
+    h+='<li><span class="code" title="'+usAttr(r.ErrorCode||"unknown")+'">'+esc(r.ErrorCode||"unknown")+'</span><span><span class="bar" style="display:block;width:'+w+'%"></span></span><b>'+(r.Count||0).toLocaleString()+'</b></li>';});
+  return h+'</ol></div>';
+}
+/* Usage by <dimension>: one horizontal bar per value over the whole range, sorted by the chosen metric (tokens then
+   cost, calls then tokens, or cost then tokens), at most 10 rows. With Tokens the bar is total tokens stacked as
+   uncached input, cached, output; with Calls or Cost it is one bar of that metric. Every row still lists tokens,
+   cost, and calls. */
+function breakdownRows(rows){
+  var metric=usageState.metric,second=metric==="tokens"?"cost":"tokens";
+  rows=(rows||[]).filter(function(r){var m=r.Metrics||{};return (m.Calls||0)>0||(m.TotalTokens||0)>0;}).slice();
+  rows.sort(function(a,b){return (usageMetricOf(b.Metrics,metric)-usageMetricOf(a.Metrics,metric))||(usageMetricOf(b.Metrics,second)-usageMetricOf(a.Metrics,second))||((a.Value||"")<(b.Value||"")?-1:((a.Value||"")>(b.Value||"")?1:0));});
+  return rows.slice(0,10);
+}
+function breakdownChart(rows){
+  rows=breakdownRows(rows);
+  if(!rows.length)return usageEmptyHtml("📊");
+  var metric=usageState.metric,segs=metric==="tokens"?CHART_TABS.tokens.series:[{k:"us.m."+metric,c:"#2563eb",g:function(m){return usageMetricOf(m,metric);}}],sfmt=usageMetricFmt(metric),max=1;
+  rows.forEach(function(r){var m=r.Metrics||{},s=0;segs.forEach(function(sr){s+=Math.max(0,sr.g(m)||0);});max=Math.max(max,s);});
+  var h='<div class="ubd" id="us_breakdown">';
+  rows.forEach(function(r){var m=r.Metrics||{},name=r.Value||"unknown",track='';
+    segs.forEach(function(sr){var v=Math.max(0,sr.g(m)||0);if(v>0)track+='<i title="'+usAttr(seriesName(sr)+": "+sfmt(v))+'" style="width:'+(v/max*100).toFixed(2)+'%;background:'+sr.c+'"></i>';});
+    var line=t("us.bd.line",{tok:fmtTok(m.TotalTokens),cost:fmtUsd(m.CostUsd),calls:(m.Calls||0).toLocaleString()});
+    h+='<div role="img" aria-label="'+usAttr(name+": "+line)+'"><div class="row1"><span class="name" title="'+usAttr(name)+'">'+esc(name)+'</span><span class="meta">'+esc(line)+'</span></div><div class="track">'+track+'</div></div>';});
+  return h+'</div>'+legendHtml({kind:"bar",series:segs});
+}
+/* Heatmap shade levels, mirroring Mux.Core's UsageHeatmapScale: 0 for no usage, the peak (and equal values) at 4,
+   otherwise 1-4 by quartile (nearest rank) of the used cells, so one busy bucket cannot flatten the rest. */
+function heatmapScale(values){
+  var used=values.filter(function(v){return v>0&&isFinite(v);}).sort(function(a,b){return a-b;});
+  var peak=used.length?used[used.length-1]:0,bounds=[];
+  for(var i=1;i<4&&used.length;i++){var r=Math.ceil(i/4*used.length)-1;bounds.push(used[Math.min(Math.max(r,0),used.length-1)]);}
+  return {peak:peak,bounds:bounds,level:function(v){if(!(v>0))return 0;if(!bounds.length||v>=peak)return 4;for(var j=0;j<bounds.length;j++){if(v<=bounds[j])return j+1;}return 4;}};
+}
+/* The token heatmap on the clock-aligned grid every mux surface shares (GET /usage/heatmap): each row is one
+   period in local time, labeled on the left with its start; each column is one bucket within the row, labeled on
+   top with what it means (time of day, weekday, minute, or an offset). Labels thin out when rows or columns are
+   dense (the first and last row always keep theirs). Cells outside the window (after now, or before the month
+   calendar's last 30 days) are left blank. Half-day columns label each weekday once, spanning its AM and PM. */
+function heatmapHasUsage(hm){return !!(hm&&hm.Layout&&(hm.TotalTokens||[]).some(function(v){return v>0;}));}
+function hmPick(count,max,last){var steps=[1,2,3,4,6,8,12,16,24,32,48,64],st=1,i,out=[];if(count<=0)return out;max=Math.max(1,max);
+  for(i=0;i<steps.length;i++){st=steps[i];if(Math.ceil(count/st)<=max)break;}
+  for(i=0;i<count;i+=st)out.push(i);
+  if(last&&out[out.length-1]!==count-1){if(out.length>1&&(count-1)-out[out.length-1]<st)out.pop();out.push(count-1);}
+  return out;}
+/* Local wall-clock parts of an instant at the layout's fixed offset (UTC getters on a shifted Date). */
+function hmLocal(ms,lay){return new Date(ms+(lay.UtcOffsetMinutes||0)*60000);}
+function hmFmt(ms,lay,opts){var o={timeZone:"UTC"};for(var k in opts)o[k]=opts[k];try{return new Intl.DateTimeFormat(LOCALE,o).format(hmLocal(ms,lay));}catch(e){return hmLocal(ms,lay).toISOString().slice(0,16).replace("T"," ");}}
+var HM_TIME={hour:"2-digit",minute:"2-digit",hourCycle:"h23"};
+function hmRowLabel(lay,r){var ms=lay.RowStartsUnixMs[r];
+  if(lay.RowKind==="time")return hmFmt(ms,lay,HM_TIME);
+  if(lay.RowKind==="datetime")return hmFmt(ms,lay,{month:"2-digit",day:"2-digit"})+" "+hmFmt(ms,lay,HM_TIME);
+  if(lay.RowKind==="weekdate")return hmFmt(ms,lay,{weekday:"short",month:"numeric",day:"numeric"});
+  return hmFmt(ms,lay,{year:"numeric",month:"short",day:"numeric"});}
+function hmColLabel(lay,c){if(lay.ColumnKind==="weekday"||lay.ColumnKind==="halfday"){var d=lay.ColumnKind==="halfday"?Math.floor(c/2):c;return hmFmt(Date.UTC(2024,0,1+d)-(lay.UtcOffsetMinutes||0)*60000,lay,{weekday:"short"});}return lay.ColumnLabels[c];}
+function hmCellWindow(lay,start){var w=lay.BucketMs,end=start+w,D=86400000,date={year:"numeric",month:"short",day:"numeric"};
+  if(w>=D){var first=hmFmt(start,lay,date);return w===D?first:first+" – "+hmFmt(end-1,lay,date);}
+  return hmFmt(start,lay,date)+" "+hmFmt(start,lay,HM_TIME)+"–"+hmFmt(end,lay,HM_TIME);}
+function tokenHeatmap(hm,width){
+  var lay=hm.Layout,R=lay.Rows,C=lay.Columns,tok=hm.TotalTokens||[],calls=hm.Calls||[],max=0,i;
+  tok.forEach(function(v){max=Math.max(max,v||0);});
+  var scale=heatmapScale(tok.map(function(v){return v||0;}));
+  var rowH=R<=13?24:Math.max(12,Math.min(24,Math.floor(440/R)));
+  var caption=t("us.hm.axes",{rows:t("us.hm.row."+lay.RowUnit),cols:t("us.hm.col."+lay.ColumnKind)});
+  var colW=Math.max(12,Math.min(46,Math.floor((width-130)/C)-3));
+  var colLabels=[];for(i=0;i<C;i++)colLabels.push(hmColLabel(lay,i));
+  var longest=0;colLabels.forEach(function(l){longest=Math.max(longest,(""+l).length);});
+  var grp=Math.max(1,lay.ColumnGroup||1),groups=Math.ceil(C/grp);
+  var perLabel=Math.max(1,Math.ceil((longest*6.6+8)/(grp*(colW+3))));
+  var cols=hmPick(groups,Math.ceil(groups/perLabel),false).map(function(g){return g*grp;}),rows=hmPick(R,rowH>=16?R:Math.floor(R*rowH/16),true);
+  var h='<div style="padding:16px"><strong>'+esc(t("us.t.heatmap"))+'</strong><div class="uhm-cap" id="us_heatmap_axes">'+esc(caption)+'</div>';
+  h+='<div id="us_heatmap" class="uhm" role="grid" aria-label="'+usAttr(caption)+'" style="grid-template-columns:auto repeat('+C+','+colW+'px);grid-template-rows:auto repeat('+R+','+rowH+'px)">';
+  var stride=cols.length>1?cols[1]-cols[0]:C;
+  cols.forEach(function(c){h+='<div class="uhm-x" style="grid-row:1;grid-column:'+(c+2)+' / span '+Math.max(1,Math.min(stride,C-c))+'">'+esc(colLabels[c])+'</div>';});
+  rows.forEach(function(r){h+='<div class="uhm-y" style="grid-row:'+(r+2)+' / span '+(rowH>=16?1:Math.min(2,R-r))+';grid-column:1'+(rowH>=16?';align-self:center':'')+'">'+esc(hmRowLabel(lay,r))+'</div>';});
+  var now=lay.NowUnixMs,first=lay.WindowFromUnixMs||lay.FromUnixMs,sel=usageState.drill;
+  for(i=0;i<R*C;i++){var start=lay.FromUnixMs+i*lay.BucketMs,pos='grid-row:'+(Math.floor(i/C)+2)+';grid-column:'+((i%C)+2);
+    if(start>now||start<first){h+='<div class="uhm-future" style="'+pos+'"></div>';continue;}
+    var v=tok[i]||0,level=scale.level(v),label=hmCellWindow(lay,start)+": "+v.toLocaleString()+" tokens · "+(calls[i]||0).toLocaleString()+" calls";
+    h+='<div class="uhm-cell l'+level+(sel&&sel.from===start?' sel':'')+'" data-idx="'+i+'" tabindex="0" role="button" aria-label="'+usAttr(label)+'" title="'+usAttr(label)+'" style="'+pos+'"></div>';}
+  return h+'</div><div class="chartnote">'+esc(t("us.hm.hint"))+' · <span class="uhm-key l0"></span> '+esc(t("us.hm.none"))+' · '+esc(t("us.hm.less"))+' <span class="uhm-key l1"></span><span class="uhm-key l2"></span><span class="uhm-key l3"></span><span class="uhm-key l4"></span> '+esc(t("us.hm.more"))+' ('+esc(t("us.hm.quartile"))+') · peak '+max.toLocaleString()+' tokens</div></div>';
+}
+function wireHeatmap(hm){
+  var grid=el("us_heatmap");if(!grid)return;
+  function pick(ev){var c=ev.target.closest?ev.target.closest(".uhm-cell"):null;if(!c)return;var i=parseInt(c.getAttribute("data-idx"),10);drillHeatmapCell(hm,i);}
+  grid.addEventListener("click",pick);
+  grid.addEventListener("keydown",function(ev){if(ev.key==="Enter"||ev.key===" "){ev.preventDefault();pick(ev);}});
+}
+/* A heatmap cell narrows the per-call grid to its window, like a column of the over-time charts. */
+function drillHeatmapCell(hm,i){
+  var lay=hm&&hm.Layout;if(!lay||!(i>=0&&i<lay.Rows*lay.Columns))return;
+  var from=lay.FromUnixMs+i*lay.BucketMs;
+  usageState.drill={from:from,to:from+lay.BucketMs-1};
+  renderUsageDrill();loadUsageHistory();
+  Array.prototype.forEach.call(document.querySelectorAll("#us_heatmap .uhm-cell"),function(c){c.classList.toggle("sel",parseInt(c.getAttribute("data-idx"),10)===i);});
+  var head=el("us_histhead");if(head&&head.scrollIntoView)head.scrollIntoView({behavior:"smooth",block:"start"});
 }
 function niceMax(v){if(v<=0)return 1;var p=Math.pow(10,Math.floor(Math.log(v)/Math.LN10));var f=v/p;var nf=f<=1?1:(f<=2?2:(f<=5?5:10));return nf*p;}
-function fmtBucketLabel(ms,rangeId){var d=new Date(ms);
+/* Bucket width: fixed for the named ranges; for "all" it is the spacing of the first two buckets (or, with a
+   single bucket, the time from that bucket to now). */
+function usageBucketMs(buckets){
+  buckets=buckets||usageState.buckets;
+  if(buckets&&buckets.length>=2&&buckets[1].BucketStartUnixMs>buckets[0].BucketStartUnixMs)return buckets[1].BucketStartUnixMs-buckets[0].BucketStartUnixMs;
+  if(USAGE_RANGE_MS[usageState.range])return USAGE_RANGE_MS[usageState.range];
+  if(buckets&&buckets.length===1)return Math.max(60000,Date.now()-buckets[0].BucketStartUnixMs);
+  return 86400000;
+}
+function usageSpanMs(){var b=usageState.buckets||[];return b.length?(b[b.length-1].BucketStartUnixMs-b[0].BucketStartUnixMs+usageBucketMs(b)):0;}
+var DAY_MS=86400000;
+/* Axis labels: times for short ranges, weekday and hour for the week, dates for month and quarter, and
+   month and year for the year. "All" picks by its bucket width and span. */
+function fmtBucketLabel(ms,rangeId){var d=new Date(ms),w=usageBucketMs(),span=usageSpanMs();
+  if(rangeId==="all"){
+    if(w>=DAY_MS)return span>300*DAY_MS?d.toLocaleDateString([],{month:"short",year:"numeric"}):d.toLocaleDateString([],{month:"short",day:"numeric"});
+    if(span<=DAY_MS)return d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+    if(span<=7*DAY_MS)return d.toLocaleDateString([],{weekday:"short"})+" "+d.toLocaleTimeString([],{hour:"numeric"});
+    return d.toLocaleDateString([],{month:"short",day:"numeric"});}
   if(rangeId==="hour"||rangeId==="day")return d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
   if(rangeId==="week")return d.toLocaleDateString([],{weekday:"short"})+" "+d.toLocaleTimeString([],{hour:"numeric"});
+  if(rangeId==="year")return d.toLocaleDateString([],{month:"short",year:"numeric"});
   return d.toLocaleDateString([],{month:"short",day:"numeric"});}
+/* Long label for tooltips, the heatmap, and the drill-down chip: always precise to the bucket (a date for
+   day-or-wider buckets, plus the time for narrower ones once the range spans more than a day). */
+function fmtBucketLong(ms){var d=new Date(ms),w=usageBucketMs(),span=usageSpanMs();
+  var dateOpts=span>300*DAY_MS?{month:"short",day:"numeric",year:"numeric"}:{month:"short",day:"numeric"};
+  if(w>=DAY_MS)return d.toLocaleDateString([],dateOpts);
+  var time=d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+  return span>DAY_MS?(d.toLocaleDateString([],dateOpts)+" "+time):time;}
+function fmtBucketRange(from,to){
+  var w=to-from+1,a=new Date(from),b=new Date(to+1);
+  if(w>=DAY_MS){if(w<=DAY_MS)return fmtBucketLong(from);return fmtBucketLong(from)+"–"+fmtBucketLong(to);}
+  var sameDay=a.toDateString()===b.toDateString();
+  return fmtBucketLong(from)+"–"+(sameDay?b.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):fmtBucketLong(to+1));
+}
 function legendHtml(cfg){
   var h='<div class="chartlegend">';
   if(cfg.kind==="dist"){
@@ -2231,9 +2510,20 @@ function legendHtml(cfg){
     h+='<span><i class="line avgl"></i>avg</span>';
     h+='<span><i class="line" style="background:#dc2626"></i>p99</span>';
   }else{
-    cfg.series.forEach(function(sr){h+='<span><i style="background:'+sr.c+'"></i>'+esc(sr.n)+'</span>';});
+    cfg.series.forEach(function(sr){h+='<span><i style="background:'+sr.c+'"></i>'+esc(seriesName(sr))+'</span>';});
   }
   return h+'</div>';
+}
+function axisLabelsHtml(buckets,rangeId){
+  var n=buckets.length,step=Math.max(1,Math.ceil(n/8)),xl='',i;
+  for(i=0;i<n;i+=step){var pct=(n<=1?50:((i+0.5)/n)*100);xl+='<span style="left:'+pct.toFixed(2)+'%">'+esc(fmtBucketLabel(buckets[i].BucketStartUnixMs,rangeId))+'</span>';}
+  return xl;
+}
+/* The plot is one keyboard stop: Left/Right/Home/End move the column cursor (with its tooltip), Enter or
+   Space drills into that column, and a polite live region announces the focused column. */
+function plotFrameHtml(svg,cfg,yl,buckets,rangeId){
+  var aria=t("us.chart.aria",{chart:cfg.name?t(cfg.name,{dim:usageDimLabel(),metric:usageMetricLabel()}):""});
+  return '<div class="uframe"><div class="uy">'+yl+'</div><div class="uplot" id="us_plot" tabindex="0" role="group" aria-label="'+usAttr(aria)+'">'+svg+'<div class="usel" id="us_sel"></div><div class="ucur" id="us_cur"></div><div class="utip" id="us_tip"></div><div class="usr" id="us_live" aria-live="polite"></div></div><div class="ux">'+axisLabelsHtml(buckets,rangeId)+'</div></div>';
 }
 /* SVG draws only bars + gridlines in a 1000x100 stretched viewBox; axis labels are crisp HTML positioned
    around the plot (so their size is fixed regardless of chart width). */
@@ -2246,12 +2536,28 @@ function barChart(buckets,cfg,rangeId){
   for(i=1;i<4;i++){var gy=VH-(i/4)*VH;svg+='<line class="ugrid" x1="0" y1="'+gy.toFixed(2)+'" x2="'+VW+'" y2="'+gy.toFixed(2)+'"/>';}
   buckets.forEach(function(b,bi){var m=b.Metrics||{},bx=bi*slot+(slot-bw)/2,acc=0;
     cfg.series.forEach(function(sr){var v=Math.max(0,sr.g(m)||0);if(v<=0)return;var hh=(v/ymax)*VH,by=VH-acc-hh;acc+=hh;
-      svg+='<rect class="ubar" x="'+bx.toFixed(2)+'" y="'+by.toFixed(2)+'" width="'+bw.toFixed(2)+'" height="'+hh.toFixed(2)+'" fill="'+sr.c+'"/>';});});
+      svg+='<rect class="ubar" x="'+bx.toFixed(2)+'" y="'+by.toFixed(2)+'" width="'+bw.toFixed(2)+'" height="'+hh.toFixed(2)+'" style="fill:'+sr.c+'"/>';});});
   svg+='</svg>';
   var yl='';for(i=4;i>=0;i--)yl+='<span>'+esc(cfg.fmt(ymax*i/4))+'</span>';
-  var step=Math.max(1,Math.ceil(n/8)),xl='';
-  for(i=0;i<n;i+=step){var pct=(n<=1?50:((i+0.5)/n)*100);xl+='<span style="left:'+pct.toFixed(2)+'%">'+esc(fmtBucketLabel(buckets[i].BucketStartUnixMs,rangeId))+'</span>';}
-  return '<div class="uframe"><div class="uy">'+yl+'</div><div class="uplot">'+svg+'<div class="utip" id="us_tip"></div></div><div class="ux">'+xl+'</div></div>';
+  return plotFrameHtml(svg,cfg,yl,buckets,rangeId);
+}
+/* Lines mode of the stacked charts: one 2px line per series through the bucket centers, not stacked (the y-axis tops
+   out at the largest single value), in the series colors, with round dot markers when there are at most 48 buckets
+   (a zero-length path with a round cap, so the dot stays round in the stretched viewBox). The column cursor,
+   tooltip, and drill-down are the plot's, so they work the same as with bars. */
+function lineChart(buckets,cfg,rangeId){
+  var n=buckets.length,mx=0,i;
+  buckets.forEach(function(b){var m=b.Metrics||{};cfg.series.forEach(function(sr){var v=Math.max(0,sr.g(m)||0);if(v>mx)mx=v;});});
+  var ymax=niceMax(mx),VW=1000,VH=100,slot=VW/Math.max(1,n);
+  var svg='<svg viewBox="0 0 '+VW+' '+VH+'" preserveAspectRatio="none">';
+  for(i=1;i<4;i++){var gy=VH-(i/4)*VH;svg+='<line class="ugrid" x1="0" y1="'+gy.toFixed(2)+'" x2="'+VW+'" y2="'+gy.toFixed(2)+'"/>';}
+  cfg.series.forEach(function(sr){
+    var pts=buckets.map(function(b,bi){var v=Math.max(0,sr.g(b.Metrics||{})||0);return [(bi+0.5)*slot,VH-(v/ymax)*VH];});
+    svg+='<path class="uline" d="'+pts.map(function(p,j){return (j?"L":"M")+p[0].toFixed(2)+" "+p[1].toFixed(2);}).join(" ")+'" style="stroke:'+sr.c+'"/>';
+    if(n<=48)pts.forEach(function(p){svg+='<path class="udot" d="M'+p[0].toFixed(2)+' '+p[1].toFixed(2)+'h0" style="stroke:'+sr.c+'"/>';});});
+  svg+='</svg>';
+  var yl='';for(i=4;i>=0;i--)yl+='<span>'+esc(cfg.fmt(ymax*i/4))+'</span>';
+  return plotFrameHtml(svg,cfg,yl,buckets,rangeId);
 }
 /* Distribution ("candlestick") chart: one mark per bucket — a thin min–max wick with end caps, a filled
    avg–p95 box, an avg line, and a p99 tick — so the spread of each time slice's calls is visible. Same
@@ -2277,14 +2583,12 @@ function distChart(buckets,cfg,rangeId){
     svg+='<line class="ucp99" x1="'+bx.toFixed(2)+'" y1="'+yP99.toFixed(2)+'" x2="'+xr.toFixed(2)+'" y2="'+yP99.toFixed(2)+'"/>';});
   svg+='</svg>';
   var yl='';for(i=4;i>=0;i--)yl+='<span>'+esc(cfg.fmt(ymax*i/4))+'</span>';
-  var step=Math.max(1,Math.ceil(n/8)),xl='';
-  for(i=0;i<n;i+=step){var pct=(n<=1?50:((i+0.5)/n)*100);xl+='<span style="left:'+pct.toFixed(2)+'%">'+esc(fmtBucketLabel(buckets[i].BucketStartUnixMs,rangeId))+'</span>';}
-  return '<div class="uframe"><div class="uy">'+yl+'</div><div class="uplot">'+svg+'<div class="utip" id="us_tip"></div></div><div class="ux">'+xl+'</div></div>';
+  return plotFrameHtml(svg,cfg,yl,buckets,rangeId);
 }
-/* Custom hover tooltip: maps the cursor's x-fraction to a bucket, lists its values, and is clamped so the
-   box always stays fully inside the plot area (never spilling outside the chart). */
+/* Tooltip content for one bucket: its time, then the series values (with a total for stacked charts) or
+   the distribution's max/p99/p95/avg/min and sample count. */
 function usageTipHtml(b,cfg,rangeId){
-  var m=b.Metrics||{},h='<div class="tt">'+esc(fmtBucketLabel(b.BucketStartUnixMs,rangeId))+'</div>';
+  var m=b.Metrics||{},h='<div class="tt">'+esc(fmtBucketLong(b.BucketStartUnixMs))+'</div>';
   if(cfg.kind==="dist"){
     var d=cfg.d(m)||{},f=cfg.fmt;
     if(!(d.Count>0)){h+='<div class="tr"><span class="tk">No calls</span></div>';return h;}
@@ -2297,32 +2601,153 @@ function usageTipHtml(b,cfg,rangeId){
   cfg.series.forEach(function(sr){
     var seg=Math.max(0,sr.g(m)||0);total+=seg;if(sr.tg)additive=false;
     var val=sr.tg?sr.tg(m):seg;
-    h+='<div class="tr"><span class="tk"><i style="background:'+sr.c+'"></i>'+esc(sr.n)+'</span><b>'+esc(cfg.fmt(val))+'</b></div>';});
-  if(additive)h+='<div class="tr tot"><span class="tk">Total</span><b>'+esc(cfg.fmt(total))+'</b></div>';
+    h+='<div class="tr"><span class="tk"><i style="background:'+sr.c+'"></i>'+esc(seriesName(sr))+'</span><b>'+esc(cfg.fmt(val))+'</b></div>';});
+  if(additive)h+='<div class="tr tot"><span class="tk">'+esc(t("us.total"))+'</span><b>'+esc(cfg.fmt(total))+'</b></div>';
+  if(cfg.tipExtra)cfg.tipExtra(m).forEach(function(r){h+='<div class="tr"><span class="tk">'+esc(r[0])+'</span><b>'+esc(r[1])+'</b></div>';});
   return h;
 }
-function wireUsageHover(buckets,cfg,rangeId){
-  var host=el("us_chart"),plot=host?host.querySelector(".uplot"):null,tip=el("us_tip"),n=buckets.length;
+function usageTipText(b,cfg){var d=document.createElement("div");d.innerHTML=usageTipHtml(b,cfg);return Array.prototype.map.call(d.querySelectorAll(".tt,.tr"),function(x){var k=x.querySelector(".tk"),v=x.querySelector("b");return (k&&v)?(k.textContent+": "+v.textContent):x.textContent;}).join(", ");}
+/* Hover and keyboard on the plot: the cursor's x-fraction (or the keyboard cursor) maps to a bucket, its
+   column is highlighted, and the tooltip is clamped so it always stays inside the plot. A click, Enter, or
+   Space drills into that bucket. The drilled bucket stays highlighted while its chip is shown. */
+function wireUsagePlot(buckets,cfg,rangeId){
+  var plot=el("us_plot"),tip=el("us_tip"),cur=el("us_cur"),sel=el("us_sel"),live=el("us_live"),n=buckets.length,kIdx=-1;
   if(!plot||!tip||!n)return;
-  function hide(){tip.classList.remove("on");}
+  function place(node,idx){node.style.left=(idx/n*100).toFixed(3)+"%";node.style.width=(100/n).toFixed(3)+"%";node.classList.add("on");}
+  function hide(){tip.classList.remove("on");cur.classList.remove("on");}
+  function show(idx,x,y){
+    var r=plot.getBoundingClientRect();
+    tip.innerHTML=usageTipHtml(buckets[idx],cfg,rangeId);tip.classList.add("on");place(cur,idx);
+    var pad=8,tw=tip.offsetWidth,th=tip.offsetHeight;
+    var tx=x+14;if(tx+tw>r.width-pad)tx=x-14-tw;if(tx<pad)tx=pad;if(tx+tw>r.width-pad)tx=Math.max(pad,r.width-pad-tw);
+    var ty=y-th-12;if(ty<pad)ty=y+16;if(ty+th>r.height-pad)ty=Math.max(pad,r.height-pad-th);
+    tip.style.left=Math.round(tx)+"px";tip.style.top=Math.round(ty)+"px";}
+  function idxAt(ev){var r=plot.getBoundingClientRect(),x=ev.clientX-r.left;var idx=Math.floor((x/r.width)*n);return idx<0?0:(idx>=n?n-1:idx);}
+  var dr=usageState.drill;
+  if(dr){for(var i=0;i<n;i++){if(buckets[i].BucketStartUnixMs===dr.from){place(sel,i);kIdx=i;break;}}}
   plot.addEventListener("mouseleave",hide);
   plot.addEventListener("mousemove",function(ev){
     var r=plot.getBoundingClientRect(),x=ev.clientX-r.left,y=ev.clientY-r.top;
     if(x<0||y<0||x>r.width||y>r.height){hide();return;}
-    var idx=Math.floor((x/r.width)*n);if(idx<0)idx=0;if(idx>=n)idx=n-1;
-    tip.innerHTML=usageTipHtml(buckets[idx],cfg,rangeId);tip.classList.add("on");
-    var pad=8,tw=tip.offsetWidth,th=tip.offsetHeight;
-    var tx=x+14;if(tx+tw>r.width-pad)tx=x-14-tw;if(tx<pad)tx=pad;if(tx+tw>r.width-pad)tx=Math.max(pad,r.width-pad-tw);
-    var ty=y-th-12;if(ty<pad)ty=y+16;if(ty+th>r.height-pad)ty=Math.max(pad,r.height-pad-th);
-    tip.style.left=Math.round(tx)+"px";tip.style.top=Math.round(ty)+"px";});
+    show(idxAt(ev),x,y);});
+  plot.addEventListener("click",function(ev){drillUsageBucket(buckets,idxAt(ev));});
+  function keyShow(){var r=plot.getBoundingClientRect();show(kIdx,(kIdx+0.5)/n*r.width,r.height*0.35);if(live)live.textContent=usageTipText(buckets[kIdx],cfg);}
+  plot.addEventListener("focus",function(){var kb=true;try{kb=plot.matches(":focus-visible");}catch(e){}if(!kb)return;if(kIdx<0)kIdx=n-1;keyShow();});
+  plot.addEventListener("blur",hide);
+  plot.addEventListener("keydown",function(ev){
+    var k=ev.key,next=kIdx<0?n-1:kIdx;
+    if(k==="ArrowLeft")next=Math.max(0,next-1);else if(k==="ArrowRight")next=Math.min(n-1,next+1);
+    else if(k==="Home")next=0;else if(k==="End")next=n-1;
+    else if(k==="Enter"||k===" "){ev.preventDefault();if(kIdx>=0)drillUsageBucket(buckets,kIdx);return;}
+    else return;
+    ev.preventDefault();kIdx=next;keyShow();});
 }
-/* History table — the shared data grid (sort/filter/paginate/columns), row-click opens a detail modal. */
+/* Drill-down: narrow the per-call history grid to one bucket's window [start, start + width - 1] with the
+   current filters, show a removable chip, and scroll the grid into view. */
+function drillUsageBucket(buckets,idx){
+  var b=buckets[idx];if(!b)return;
+  var w=usageBucketMs(buckets),from=b.BucketStartUnixMs;
+  usageState.drill={from:from,to:from+w-1};
+  renderUsageDrill();loadUsageHistory();
+  var sel=el("us_sel");if(sel){sel.style.left=(idx/buckets.length*100).toFixed(3)+"%";sel.style.width=(100/buckets.length).toFixed(3)+"%";sel.classList.add("on");}
+  var head=el("us_histhead");if(head&&head.scrollIntoView)head.scrollIntoView({behavior:"smooth",block:"start"});
+}
+/* ---- Export: CSV (every over-time chart, Usage by, and the heatmap) and PNG ----
+   CSV format, shared with Mux.Core's UsageCsv and the VS Code panel (a Touchstone case and a unit test compare them):
+   a header row, then one row per bucket (value for Usage by, cell for the heatmap); every line, the last included,
+   ends in LF; numbers invariant (. decimal, no thousands separators, no exponent, rounded to six decimals with halves
+   away from zero, trailing zeros dropped; NaN and infinity are empty); a cell is quoted (inner quotes doubled) when it
+   holds a comma, quote, CR, or LF or starts or ends with a space or tab, after a leading apostrophe on text a
+   spreadsheet would run as a formula (starting with =, +, @, tab, CR, or a - that does not begin a number); times in ISO 8601 local time with the UTC
+   offset in effect then (2026-11-11T10:15:00-05:00), bucket_end being the next bucket's start. */
+function csvNum(v){if(typeof v!=="number"||!isFinite(v))return "";var r=Math.round(Math.abs(v)*1e6)/1e6;if(r===0)return "0";var sg=v<0?"-":"";if(r===Math.floor(r))return sg+r.toFixed(0);return sg+r.toFixed(6).replace(/0+$/,"").replace(/\.$/,"");}
+function csvFormulaLike(s){if(!s)return false;var f=s.charAt(0);if(f==="="||f==="+"||f==="@"||f==="\t"||f==="\r")return true;return f==="-"&&(s.length===1||!/^[\p{Nd}.]/u.test(s.slice(1)));}
+function csvField(v){if(typeof v==="number")return csvNum(v);var s=v==null?"":""+v;if(csvFormulaLike(s))s="'"+s;return /[",\r\n]|^[ \t]|[ \t]$/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
+function csvTime(ms,off){if(off==null)off=-new Date(ms).getTimezoneOffset();off=Math.round(off);var d=new Date(ms+off*60000),a=Math.abs(off);
+  function p(n,w){n=""+n;while(n.length<(w||2))n="0"+n;return n;}
+  return p(d.getUTCFullYear(),4)+"-"+p(d.getUTCMonth()+1)+"-"+p(d.getUTCDate())+"T"+p(d.getUTCHours())+":"+p(d.getUTCMinutes())+":"+p(d.getUTCSeconds())+(off<0?"-":"+")+p(Math.floor(a/60))+":"+p(a%60);}
+function usageCsv(header,rows){return [header].concat(rows).map(function(r){return r.map(csvField).join(",")+"\n";}).join("");}
+/* The current chart's CSV table, or null when it has nothing to export (the buttons are then disabled). */
+var USAGE_CSV_DIST={latency:"TotalMsDist",ttft:"TtftMsDist",stream:"StreamMsDist",throughput:"ThroughputDist"};
+function usageCsvTable(){
+  var tab=usageState.tab,loaded=usageState.loaded||{},buckets=usageState.buckets||[],w=usageBucketMs(buckets);
+  function span(ms){return [csvTime(ms),csvTime(ms+w)];}
+  if(tab==="heatmap"){var hm=usageState.heatmap;if(!loaded.heatmap||!heatmapHasUsage(hm))return null;var lay=hm.Layout,rows=[];
+    for(var i=0;i<lay.Rows*lay.Columns;i++){var st=lay.FromUnixMs+i*lay.BucketMs;if(st>lay.NowUnixMs)continue;rows.push([csvTime(st),csvTime(st+lay.BucketMs),hm.TotalTokens[i]||0,(hm.Calls||[])[i]||0]);}
+    return {header:["cell_start","cell_end","tokens","calls"],rows:rows};}
+  if(tab==="breakdown"){if(!loaded.breakdown)return null;var bd=breakdownRows(usageState.breakdown);if(!bd.length)return null;var sm=usageState.summary||{};
+    var from=sm.FromUnixMs!=null?sm.FromUnixMs:(buckets.length?buckets[0].BucketStartUnixMs:0),to=sm.ToUnixMs!=null?sm.ToUnixMs:(buckets.length?buckets[buckets.length-1].BucketStartUnixMs+w:from);
+    return {header:["bucket_start","bucket_end",usageState.dim,"calls","failed","uncached_input","cached_input","output","total_tokens","cost_usd"],rows:bd.map(function(r){var m=r.Metrics||{};
+      return [csvTime(from),csvTime(to),(r.Value==null||!String(r.Value).trim())?"unknown":r.Value,m.Calls||0,m.Errors||0,Math.max(0,(m.InputTokens||0)-(m.CachedTokens||0)),m.CachedTokens||0,m.OutputTokens||0,m.TotalTokens||0,m.CostUsd||0];})};}
+  if(tab==="split"){if(!loaded.split)return null;var sd=splitChartData();if(!sd.buckets.length||!sd.cfg.series.length||!sd.buckets.some(function(b){return b.Metrics._split.some(function(v){return v>0;});}))return null;
+    return {header:["bucket_start","bucket_end"].concat(sd.cfg.series.map(function(sr){return sr.csv;})),rows:sd.buckets.map(function(b){return span(b.BucketStartUnixMs).concat(sd.cfg.series.map(function(sr){return Math.max(0,sr.g(b.Metrics)||0);}));})};}
+  if(!loaded.buckets||!buckets.length||!usageHasCalls(buckets))return null;
+  if(USAGE_CSV_DIST[tab]){var f=USAGE_CSV_DIST[tab];return {header:["bucket_start","bucket_end","min","avg","p95","p99","max","count"],rows:buckets.map(function(b){var d=(b.Metrics||{})[f]||{},n=Math.max(0,d.Count||0);
+    return span(b.BucketStartUnixMs).concat(n>0?[d.Min||0,d.Avg||0,d.P95||0,d.P99||0,d.Max||0,n]:["","","","","",0]);})};}
+  var cfg=CHART_TABS[tab];if(!cfg||cfg.kind!=="bar")return null;
+  return {header:["bucket_start","bucket_end"].concat(cfg.series.map(function(sr){return sr.csv;})),rows:buckets.map(function(b){var m=b.Metrics||{};return span(b.BucketStartUnixMs).concat(cfg.series.map(function(sr){return sr.csvg?sr.csvg(m):Math.max(0,sr.g(m)||0);}));})};
+}
+/* mux-usage-<chart>-<range>-<yyyyMMdd-HHmmss>.<ext>, stamped in local time; <chart> is calls, tokens,
+   <metric>-by-<dimension>, cost, latency, ttft, streaming, throughput, usage-by-<dimension>, or heatmap. */
+function usageExportName(ext){var d=new Date(),tab=usageState.tab;function p(n){return (n<10?"0":"")+n;}
+  var chart=tab==="split"?(usageState.metric+"-by-"+usageState.dim):(tab==="breakdown"?("usage-by-"+usageState.dim):(tab==="stream"?"streaming":tab));
+  return "mux-usage-"+chart+"-"+usageState.range+"-"+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds())+"."+ext;}
+function syncUsageTools(){var ok=!!usageCsvTable();["us_csv","us_png"].forEach(function(id){var b=el(id);if(b){b.disabled=!ok;b.setAttribute("aria-disabled",ok?"false":"true");}});}
+function usageDownload(blob,name){var a=document.createElement("a"),url=URL.createObjectURL(blob);a.href=url;a.download=name;a.style.display="none";document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1500);toast(t("us.exp.saved",{file:name}));}
+function exportUsageCsv(){var tb=usageCsvTable();if(!tb){toast(t("us.exp.none"),true);return;}usageDownload(new Blob([usageCsv(tb.header,tb.rows)],{type:"text/csv;charset=utf-8"}),usageExportName("csv"));}
+/* Save PNG: the chart is SVG plus HTML axis labels and legend, so the whole chart body is redrawn as one standalone
+   SVG (each box, border, and text run at its on-screen position, and each chart SVG embedded with its computed
+   colors written in, since an image cannot see the page's CSS variables), drawn onto a canvas at 2x. The tooltip,
+   cursor, hint line, and failure list are left out. */
+var USAGE_PNG_SKIP=".utip,.ucur,.usr,.chartnote,.ufail";
+function usageCaptureSvg(root,title){
+  var NS="http://www.w3.org/2000/svg",box=root.getBoundingClientRect(),head=title?30:0,W=Math.ceil(box.width),H=Math.ceil(box.height)+head+8;
+  var out=document.createElementNS(NS,"svg");
+  function add(name,attrs){var e=document.createElementNS(NS,name);for(var k in attrs)e.setAttribute(k,attrs[k]);out.appendChild(e);return e;}
+  function solid(c){return !!c&&c!=="transparent"&&!(c.indexOf("rgba(")===0&&parseFloat(c.slice(c.lastIndexOf(",")+1))===0);}
+  out.setAttribute("xmlns",NS);out.setAttribute("width",""+W);out.setAttribute("height",""+H);out.setAttribute("viewBox","0 0 "+W+" "+H);
+  var panel=root.closest(".chartpanel")||root,pcs=getComputedStyle(panel),bcs=getComputedStyle(document.body);
+  add("rect",{x:0,y:0,width:W,height:H,fill:solid(pcs.backgroundColor)?pcs.backgroundColor:(solid(bcs.backgroundColor)?bcs.backgroundColor:"#ffffff")});
+  if(title){var tt=add("text",{x:18,y:22,fill:pcs.color,"font-family":pcs.fontFamily,"font-size":14,"font-weight":600});tt.textContent=title;}
+  var dx=-box.left,dy=head-box.top,PROPS=["fill","stroke","stroke-width","stroke-opacity","fill-opacity","opacity","visibility","vector-effect","stroke-linecap","stroke-linejoin"];
+  function text(node,cs){var str=node.textContent.trim();if(!str)return;var rg=document.createRange();rg.selectNodeContents(node);var r=rg.getBoundingClientRect();if(!(r.width>0))return;
+    var e=add("text",{x:(r.left+dx).toFixed(1),y:(r.top+dy+r.height/2).toFixed(1),"dominant-baseline":"central",fill:cs.color,"font-family":cs.fontFamily,"font-size":cs.fontSize,"font-weight":cs.fontWeight});e.textContent=str;}
+  function embed(svg,r){var copy=svg.cloneNode(true),src=[svg].concat(Array.prototype.slice.call(svg.querySelectorAll("*"))),dst=[copy].concat(Array.prototype.slice.call(copy.querySelectorAll("*")));
+    src.forEach(function(e,i){var cs=getComputedStyle(e),d=dst[i];PROPS.forEach(function(p){var v=cs.getPropertyValue(p);if(v)d.setAttribute(p,v);});d.removeAttribute("class");d.removeAttribute("style");if(cs.display==="none")d.setAttribute("display","none");});
+    copy.setAttribute("x",(r.left+dx).toFixed(1));copy.setAttribute("y",(r.top+dy).toFixed(1));copy.setAttribute("width",r.width.toFixed(1));copy.setAttribute("height",r.height.toFixed(1));out.appendChild(copy);}
+  function walk(node){var cs=getComputedStyle(node);if(node!==root&&node.matches(USAGE_PNG_SKIP))return;if(cs.display==="none"||cs.visibility==="hidden"||parseFloat(cs.opacity)===0)return;
+    var r=node.getBoundingClientRect();if(node.tagName.toLowerCase()==="svg"){if(r.width>0)embed(node,r);return;}
+    if(r.width>0&&r.height>0){if(solid(cs.backgroundColor))add("rect",{x:(r.left+dx).toFixed(1),y:(r.top+dy).toFixed(1),width:r.width.toFixed(1),height:r.height.toFixed(1),rx:parseFloat(cs.borderTopLeftRadius)||0,fill:cs.backgroundColor,"fill-opacity":cs.opacity});
+      [["Top",0,0,r.width,0],["Bottom",0,r.height,r.width,r.height],["Left",0,0,0,r.height],["Right",r.width,0,r.width,r.height]].forEach(function(b){var bw=parseFloat(cs["border"+b[0]+"Width"])||0;
+        if(bw>0&&cs["border"+b[0]+"Style"]!=="none"&&solid(cs["border"+b[0]+"Color"]))add("line",{x1:(r.left+dx+b[1]).toFixed(1),y1:(r.top+dy+b[2]).toFixed(1),x2:(r.left+dx+b[3]).toFixed(1),y2:(r.top+dy+b[4]).toFixed(1),stroke:cs["border"+b[0]+"Color"],"stroke-width":bw});});}
+    Array.prototype.forEach.call(node.childNodes,function(c){if(c.nodeType===3)text(c,cs);else if(c.nodeType===1)walk(c);});}
+  walk(root);
+  return {svg:out,width:W,height:H};
+}
+function usageRasterize(cap,done){var img=new Image();img.onload=function(){var c=document.createElement("canvas");c.width=cap.width*2;c.height=cap.height*2;var g=c.getContext("2d");g.scale(2,2);g.drawImage(img,0,0,cap.width,cap.height);
+  try{c.toBlob(function(b){done(b);},"image/png");}catch(e){done(null);}};img.onerror=function(){done(null);};
+  img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(new XMLSerializer().serializeToString(cap.svg));}
+function exportUsagePng(){if(!usageCsvTable()){toast(t("us.exp.none"),true);return;}
+  var tabBtn=document.querySelector('#us_tabs button[data-tab="'+usageState.tab+'"]'),rb=document.querySelector("#us_range button.active");
+  var title="mux · "+(tabBtn?tabBtn.textContent:usageState.tab)+" · "+(rb?rb.textContent:usageState.range),name=usageExportName("png");
+  usageRasterize(usageCaptureSvg(el("us_chart"),title),function(blob){if(!blob){toast(t("us.exp.none"),true);return;}usageDownload(blob,name);});}
+function clearUsageDrill(){usageState.drill=null;renderUsageDrill();loadUsageHistory();var sel=el("us_sel");if(sel)sel.classList.remove("on");}
+function renderUsageDrill(){
+  var host=el("us_drill");if(!host)return;var dr=usageState.drill;
+  if(!dr){host.innerHTML="";return;}
+  var label=t("us.drill",{range:fmtBucketRange(dr.from,dr.to)});
+  host.innerHTML='<span class="uchip" id="us_drill_chip">'+esc(label)+'<button type="button" id="us_drill_clear" title="'+usAttr(t("us.drill.clear"))+'" aria-label="'+usAttr(t("us.drill.clear"))+'">×</button></span>';
+  el("us_drill_clear").addEventListener("click",clearUsageDrill);
+}
+/* History table — the shared data grid (sort/filter/paginate/columns), row-click opens a detail modal.
+   With a drill-down window it lists only that bucket's calls (explicit from/to plus the current filters). */
 var _uhist=[],_uhistTotal=0,_sessTitles={};
 function sessName(id){if(!id)return "—";return _sessTitles[id]||(id.length>8?id.slice(0,8):id);}
 function loadUsageHistory(){_reload["usage_history_list"]=loadUsageHistory;gridLoading("usage_history_list");
+  var q=usageQuery("&page=1&pageSize=500",usageState.drill);
   api("/v1.0/api/sessions").then(function(r){var it=(r&&r.Items)||[];_sessTitles={};it.forEach(function(s){_sessTitles[s.Id]=s.Title||s.Id;});}).catch(function(){}).then(function(){
-    return api("/v1.0/api/usage/events?"+usageQuery("&page=1&pageSize=500"));
-  }).then(function(pg){_uhist=(pg&&pg.Items)||[];_uhistTotal=(pg&&pg.TotalCount)||0;renderUsageHistory();}).catch(function(e){gridError("usage_history_list",e.message);});}
+    return api("/v1.0/api/usage/events?"+q);
+  }).then(function(pg){if(q!==usageQuery("&page=1&pageSize=500",usageState.drill))return;_uhist=(pg&&pg.Items)||[];_uhistTotal=(pg&&pg.TotalCount)||0;renderUsageHistory();}).catch(function(e){gridError("usage_history_list",e.message);});}
 function renderUsageHistory(){
   renderGrid("usage_history_list",[
     {h:"When",tip:"Call completion time",get:function(r){return esc(fmtWhenAbs(r.TimestampUnixMs));}},

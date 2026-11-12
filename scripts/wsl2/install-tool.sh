@@ -3,7 +3,13 @@
 # installed; use reinstall-tool.sh to replace an existing install.
 # WSL 2 version: uses the Linux dotnet inside this distro (never the Windows one) and installs
 # into this distro only; use scripts\windows\install-tool.bat for the Windows install.
-# The package is built under artifacts/tool-packages/<framework>.
+# It also builds the desktop app (Mux) and the tray agent (Mux Agent) as self-contained apps and installs
+# them per-user in ${XDG_DATA_HOME:-~/.local/share}/mux/apps/{desktop,agent} (launchers in
+# .../applications, icon in .../icons/hicolor/256x256/apps) and system-wide in /opt/mux/{desktop,agent}
+# (launchers in /usr/share/applications, icon in /usr/share/icons). The system-wide copy is written
+# directly when the folders are writable (root), otherwise with sudo; without sudo rights it warns and
+# keeps the per-user install. MUX_SYSTEM_INSTALL=0 skips the system-wide install.
+# The package is built under artifacts/tool-packages/<framework>, the apps under artifacts/linux-app.
 # Usage: ./scripts/wsl2/install-tool.sh [net8.0|net10.0]  (or --framework <tfm>; MUX_TFM is also honored)
 set -euo pipefail
 
@@ -25,6 +31,10 @@ wsl_check_repo "$REPO_ROOT"
 ORIGINAL_DOTNET_ROOT="$WSL_ORIGINAL_DOTNET_ROOT"
 # shellcheck source=../common/framework.sh
 . "$REPO_ROOT/scripts/common/framework.sh"
+# shellcheck source=../common/linux-apps.sh
+. "$REPO_ROOT/scripts/common/linux-apps.sh"
+# shellcheck disable=SC2034 # read by linux-apps.sh
+LINUX_APPS_KILL_MUX="scripts/wsl2/kill-mux.sh"
 # Print the help before touching the system.
 case "${1:-}" in -h|--help) resolve_framework "$1" ;; esac
 # Install the system packages mux needs when they are missing (INSTALL_SYSTEM_PACKAGES=0 to skip).
@@ -44,21 +54,30 @@ tool_installed() {
 PACKAGE_SOURCE="$REPO_ROOT/artifacts/tool-packages/$TFM"
 
 echo "mux tool install (WSL 2, $TFM)"
-echo "[1/5] Checking for running mux processes..."
+echo "[1/7] Checking for running mux processes..."
 if mux_running; then
     die "A running mux process is using the global tool. Exit all mux sessions (or run scripts/wsl2/kill-mux.sh) and try again."
 fi
-echo "[2/5] Checking for an existing install..."
+# The apps are replaced in a later step; check both install locations now so a running app cannot
+# leave a half-done install.
+for component in desktop agent; do
+    linux_app_not_running "$component" || exit 1
+done
+echo "[2/7] Checking for an existing install..."
 if tool_installed; then
     die "mux is already installed. Run scripts/wsl2/reinstall-tool.sh to replace it."
 fi
-echo "[3/5] Building the mux package..."
+echo "[3/7] Building the mux package..."
 rm -rf "$PACKAGE_SOURCE"
 mkdir -p "$PACKAGE_SOURCE"
 dotnet pack "$REPO_ROOT/src/Mux.Cli/Mux.Cli.csproj" --configuration Release -p:TargetFrameworks="$TFM" --output "$PACKAGE_SOURCE"
-echo "[4/5] Installing the mux global tool..."
+echo "[4/7] Building the desktop app and tray agent..."
+# Only the last step replaces the installed apps, so a failed build leaves them unchanged.
+linux_publish_app desktop || die "Building the desktop app failed."
+linux_publish_app agent || die "Building the tray agent failed."
+echo "[5/7] Installing the mux global tool..."
 dotnet tool install -g --source "$PACKAGE_SOURCE" --framework "$TFM" --disable-parallel Mux.Cli
-echo "[5/5] Verifying the mux command..."
+echo "[6/7] Verifying the mux command..."
 if command -v mux >/dev/null 2>&1; then
     mux -v
 elif [ -x "$HOME/.dotnet/tools/mux" ]; then
@@ -79,4 +98,6 @@ if [ -z "$ORIGINAL_DOTNET_ROOT" ] && [ "$(command -v dotnet)" = "$HOME/.dotnet/d
     echo "Note: .NET is installed in ~/.dotnet, so 'mux' also needs DOTNET_ROOT. Add this line to ~/.bashrc (or ~/.profile):" >&2
     echo '  export DOTNET_ROOT="$HOME/.dotnet"' >&2
 fi
+echo "[7/7] Installing the desktop app and tray agent..."
+linux_install_apps || die "Installing the desktop app and tray agent failed."
 echo "Done."

@@ -185,6 +185,209 @@ namespace Mux.Core.Telemetry
         }
 
         /// <summary>
+        /// The dimensions a time series can be split by (see <see cref="GetSplitTimeseriesAsync"/>).
+        /// </summary>
+        public static IReadOnlyList<string> SplitDimensions { get; } = new[] { "model", "endpoint", "provider", "command", "callkind" };
+
+        /// <summary>
+        /// Splits the time series by a dimension: one series per value, ranked by total tokens over the window
+        /// (ties by cost, then name), keeping the top <paramref name="top"/> and folding the rest into one series
+        /// keyed "Other" (<see cref="UsageSeries.IsOther"/>). Every series has the same buckets as
+        /// <see cref="GetTimeseriesAsync"/> for the same filter and width (dense in a bounded window), so the
+        /// series stack. Buckets carry totals and timing means, not percentiles.
+        /// </summary>
+        /// <param name="dimension">One of <see cref="SplitDimensions"/> (case-insensitive; "adapter" means provider,
+        /// "call_kind" means callkind).</param>
+        /// <param name="filter">The filter/window. Null covers everything.</param>
+        /// <param name="bucketMs">The bucket width in ms. Floored at 1.</param>
+        /// <param name="top">How many values to keep before folding the rest into "Other"; clamped to 1-20.</param>
+        /// <param name="token">A token to cancel the operation.</param>
+        /// <returns>The series, ranked, with "Other" (when present) last.</returns>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="dimension"/> is not a split dimension.</exception>
+        public async Task<List<UsageSeries>> GetSplitTimeseriesAsync(string dimension, UsageFilter? filter, long bucketMs, int top, CancellationToken token)
+        {
+            string requested = (dimension ?? string.Empty).Trim().ToLowerInvariant();
+            string dim = NormalizeDimension(requested);
+            if (requested.Length > 0 && dim == "model" && requested != "model")
+            {
+                throw new ArgumentException("Unknown split dimension '" + dimension + "'. Use one of: " + string.Join(", ", SplitDimensions) + ".", nameof(dimension));
+            }
+
+            if (dim == "label" || dim == "tag")
+            {
+                throw new ArgumentException("Usage cannot be split over time by " + dim + "; a session can carry several. Use one of: " + string.Join(", ", SplitDimensions) + ".", nameof(dimension));
+            }
+
+            int keep = Math.Clamp(top, 1, 20);
+            filter = await ResolveFilterAsync(filter, token).ConfigureAwait(false);
+            long width = Math.Max(1, bucketMs);
+            PricingTable pricing = _PricingProvider();
+            List<UsageAggregateRow> rows = await _Store.FetchAggregatesAsync(filter, width, token).ConfigureAwait(false);
+
+            List<IGrouping<string, UsageAggregateRow>> ranked = rows
+                .GroupBy(r => KeyForDimension(dim, r), StringComparer.Ordinal)
+                .Select(g => new { Group = g, Metrics = RollUp(g, pricing) })
+                .OrderByDescending(x => x.Metrics.TotalTokens)
+                .ThenByDescending(x => x.Metrics.CostUsd)
+                .ThenBy(x => x.Group.Key, StringComparer.Ordinal)
+                .Select(x => x.Group)
+                .ToList();
+
+            // Fold everything past the top N into one series, but only when that leaves at least two values to fold:
+            // an "Other" holding a single value would just hide its name.
+            bool fold = ranked.Count > keep + 1;
+            List<(string Key, bool IsOther, List<UsageAggregateRow> Rows)> groups = new List<(string, bool, List<UsageAggregateRow>)>();
+            for (int i = 0; i < ranked.Count && (!fold || i < keep); i++)
+            {
+                groups.Add((ranked[i].Key, false, ranked[i].ToList()));
+            }
+
+            if (fold)
+            {
+                groups.Add(("Other", true, ranked.Skip(keep).SelectMany(g => g).ToList()));
+            }
+
+            List<long> starts = new List<long>();
+            if (filter != null && filter.FromUnixMs > 0 && filter.ToUnixMs > 0)
+            {
+                long start = (filter.FromUnixMs / width) * width;
+                for (int guard = 0; start <= filter.ToUnixMs && guard < 100000; guard++, start += width)
+                {
+                    starts.Add(start);
+                }
+            }
+            else
+            {
+                starts = rows.Select(r => r.BucketStartUnixMs).Distinct().OrderBy(s => s).ToList();
+            }
+
+            List<UsageSeries> result = new List<UsageSeries>();
+            foreach ((string key, bool isOther, List<UsageAggregateRow> groupRows) in groups)
+            {
+                Dictionary<long, UsageMetrics> byBucket = groupRows
+                    .GroupBy(r => r.BucketStartUnixMs)
+                    .ToDictionary(g => g.Key, g => RollUp(g, pricing));
+                UsageSeries series = new UsageSeries { Key = key, IsOther = isOther };
+                foreach (long start in starts)
+                {
+                    series.Buckets.Add(new UsageBucket
+                    {
+                        BucketStartUnixMs = start,
+                        Metrics = byBucket.TryGetValue(start, out UsageMetrics? metrics) ? metrics : new UsageMetrics()
+                    });
+                }
+
+                result.Add(series);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Counts the failed calls in the window by error code, most frequent first. Failures with no recorded
+        /// code are counted under "unknown".
+        /// </summary>
+        /// <param name="filter">The filter/window. Null covers everything.</param>
+        /// <param name="token">A token to cancel the operation.</param>
+        /// <returns>The error counts.</returns>
+        public async Task<List<UsageErrorCount>> GetErrorCountsAsync(UsageFilter? filter, CancellationToken token)
+        {
+            filter = await ResolveFilterAsync(filter, token).ConfigureAwait(false);
+            List<KeyValuePair<string, long>> counts = await _Store.FetchErrorCodeCountsAsync(filter, token).ConfigureAwait(false);
+            return counts.Select(c => new UsageErrorCount { ErrorCode = c.Key, Count = c.Value }).ToList();
+        }
+
+        /// <summary>
+        /// Returns the timestamp of the oldest event matching the filter's non-time constraints (its window is
+        /// ignored), or 0 when nothing matches. Sizes the <see cref="UsageRange.All"/> window.
+        /// </summary>
+        /// <param name="filter">The filter. Null matches everything.</param>
+        /// <param name="token">A token to cancel the operation.</param>
+        /// <returns>The oldest event's Unix-ms timestamp, or 0.</returns>
+        public async Task<long> GetEarliestEventUnixMsAsync(UsageFilter? filter, CancellationToken token)
+        {
+            UsageFilter? unbounded = null;
+            if (filter != null)
+            {
+                unbounded = new UsageFilter
+                {
+                    EndpointName = filter.EndpointName,
+                    Model = filter.Model,
+                    SessionId = filter.SessionId,
+                    Labels = filter.Labels,
+                    Tags = filter.Tags,
+                    SessionIds = filter.SessionIds,
+                    CallKind = filter.CallKind,
+                    Success = filter.Success
+                };
+            }
+
+            unbounded = await ResolveFilterAsync(unbounded, token).ConfigureAwait(false);
+            return await _Store.FetchEarliestTimestampAsync(unbounded, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Resolves a range to its window at <paramref name="nowUnixMs"/>. For <see cref="UsageRange.All"/> this looks
+        /// up the oldest event matching the filter's non-time constraints; other ranges need no query.
+        /// </summary>
+        /// <param name="range">The range.</param>
+        /// <param name="filter">The filter whose non-time constraints scope the "all time" lookup. Null matches everything.</param>
+        /// <param name="nowUnixMs">The current time in Unix epoch milliseconds.</param>
+        /// <param name="token">A token to cancel the operation.</param>
+        /// <returns>The window.</returns>
+        public async Task<UsageWindow> ResolveWindowAsync(UsageRange range, UsageFilter? filter, long nowUnixMs, CancellationToken token)
+        {
+            long earliest = range == UsageRange.All ? await GetEarliestEventUnixMsAsync(filter, token).ConfigureAwait(false) : 0;
+            return UsageWindow.Compute(range, nowUnixMs, earliest);
+        }
+
+        /// <summary>
+        /// Builds the token heatmap for a range: the shared clock-aligned <see cref="UsageHeatmapLayout"/> at the
+        /// viewer's UTC offset (for <see cref="UsageRange.All"/> sized from the oldest event matching the filter's
+        /// non-time constraints) and the tokens and calls per cell.
+        /// </summary>
+        /// <param name="range">The range.</param>
+        /// <param name="filter">The non-time constraints (its window is replaced by the layout's). Null matches everything.</param>
+        /// <param name="nowUnixMs">The current time in Unix epoch milliseconds.</param>
+        /// <param name="utcOffsetMinutes">The viewer's offset from UTC in minutes, east positive.</param>
+        /// <param name="token">A token to cancel the operation.</param>
+        /// <returns>The heatmap.</returns>
+        public async Task<UsageHeatmap> GetHeatmapAsync(UsageRange range, UsageFilter? filter, long nowUnixMs, int utcOffsetMinutes, CancellationToken token)
+        {
+            long earliest = range == UsageRange.All ? await GetEarliestEventUnixMsAsync(filter, token).ConfigureAwait(false) : 0;
+            UsageHeatmapLayout layout = UsageHeatmapLayout.Compute(range, nowUnixMs, utcOffsetMinutes, earliest);
+            return await GetHeatmapAsync(layout, filter, token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Fills a heatmap layout with the tokens and calls per cell. Cells start on local boundaries (local midnight,
+        /// a Monday, a half-hour zone's hour), which the store's epoch-aligned buckets do not, so the rows are read at
+        /// the largest width that divides both the cell width and the grid start, then summed into cells.
+        /// </summary>
+        /// <param name="layout">The layout. Required.</param>
+        /// <param name="filter">The non-time constraints (its window is replaced by the layout's). Null matches everything.</param>
+        /// <param name="token">A token to cancel the operation.</param>
+        /// <returns>The heatmap.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="layout"/> is null.</exception>
+        public async Task<UsageHeatmap> GetHeatmapAsync(UsageHeatmapLayout layout, UsageFilter? filter, CancellationToken token)
+        {
+            if (layout == null) throw new ArgumentNullException(nameof(layout));
+            UsageFilter windowed = CloneWithSessionIds(filter, filter?.SessionIds);
+            windowed.FromUnixMs = layout.FromUnixMs;
+            windowed.ToUnixMs = layout.ToUnixMs - 1;
+            UsageFilter? resolved = await ResolveFilterAsync(windowed, token).ConfigureAwait(false);
+            long grain = Gcd(layout.BucketMs, Math.Abs(layout.FromUnixMs));
+            List<UsageAggregateRow> rows = await _Store.FetchAggregatesAsync(resolved, Math.Max(1, grain), token).ConfigureAwait(false);
+            UsageHeatmap heatmap = new UsageHeatmap(layout);
+            foreach (UsageAggregateRow row in rows)
+            {
+                heatmap.Add(row.BucketStartUnixMs, row.TotalTokens, row.Calls);
+            }
+
+            return heatmap;
+        }
+
+        /// <summary>
         /// Computes a breakdown of the window grouped by a dimension.
         /// </summary>
         /// <param name="dimension">One of "model", "endpoint", "provider", "command", "callkind", "label", "tag".</param>
@@ -519,6 +722,18 @@ namespace Mux.Core.Telemetry
                 Tags = source?.Tags,
                 SessionIds = sessionIds
             };
+        }
+
+        private static long Gcd(long a, long b)
+        {
+            while (b != 0)
+            {
+                long t = a % b;
+                a = b;
+                b = t;
+            }
+
+            return a;
         }
 
         private static UsageMetrics RollUp(IEnumerable<UsageAggregateRow> rows, PricingTable pricing)

@@ -35,8 +35,8 @@ namespace Mux.Core.Models
         #region Public-Members
 
         /// <summary>
-        /// Whether the tray agent should start the REST server automatically. The <c>mux serve</c> command
-        /// starts the server regardless of this flag. Defaults to false.
+        /// Not used: the tray agent always starts the REST server, and <c>mux serve</c> always does. Kept so existing
+        /// settings files load and round-trip unchanged. Defaults to false.
         /// </summary>
         [JsonPropertyName("enabled")]
         public bool Enabled

@@ -44,7 +44,7 @@ namespace Test.Shared.Suites
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
             void Add(string id, string name, Action body)
             {
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => { body(); return Task.CompletedTask; }, skip: !haveTree, skipReason: "the source tree is not next to the test build"));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => { body(); return Task.CompletedTask; }, skipReason: (!haveTree) ? "the source tree is not next to the test build" : null));
             }
 
             void AddFixture(string id, string name, Action<string> body)

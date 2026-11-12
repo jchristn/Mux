@@ -28,7 +28,6 @@ namespace Test.Shared.Suites
                         "AutoApproveExecutesTools",
                         "AutoApprove policy executes tools without prompting",
                         (CancellationToken ct) => Task.CompletedTask,
-                        skip: true,
                         skipReason: "Not yet implemented; covered by the v0.3.0 per-job approval routing work."),
 
                     new TestCaseDescriptor(
@@ -36,7 +35,6 @@ namespace Test.Shared.Suites
                         "DenyRejectsTools",
                         "Deny policy rejects all tool calls",
                         (CancellationToken ct) => Task.CompletedTask,
-                        skip: true,
                         skipReason: "Not yet implemented; covered by the v0.3.0 per-job approval routing work.")
                 });
         }

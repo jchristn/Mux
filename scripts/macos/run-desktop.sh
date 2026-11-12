@@ -27,5 +27,5 @@ shift "$FRAMEWORK_ARGS"
 MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
 mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
-install_macos_app desktop
+install_macos_app desktop --user-only
 open -a "$HOME/Applications/Mux.app"

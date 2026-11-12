@@ -1,7 +1,6 @@
 namespace Test.Nunit
 {
-    using System.Collections;
-    using System.Threading;
+    using System.Collections.Generic;
     using System.Threading.Tasks;
     using NUnit.Framework;
     using Test.Shared;
@@ -10,14 +9,14 @@ namespace Test.Nunit
 
     /// <summary>
     /// Runs each MUX Touchstone case as an individual NUnit test, giving per-case visibility in the
-    /// test explorer.
+    /// test explorer. Skipped cases are reported as NUnit ignores with their skip reason.
     /// </summary>
     [TestFixture]
     public sealed class MuxNunitTests
     {
-        private static IEnumerable TestCases()
+        private static IEnumerable<TestCaseData> TestCases()
         {
-            return new TouchstoneTestCaseSource(MuxSuites.All);
+            return TouchstoneNunitCases.From(MuxSuites.All);
         }
 
         /// <summary>
@@ -27,9 +26,9 @@ namespace Test.Nunit
         /// <returns>A task representing the asynchronous test run.</returns>
         [Test]
         [TestCaseSource(nameof(TestCases))]
-        public async Task RunTest(TestCaseDescriptor testCase)
+        public Task RunTest(TestCaseDescriptor testCase)
         {
-            await testCase.ExecuteAsync(CancellationToken.None).ConfigureAwait(false);
+            return TouchstoneNunit.ExecuteAsync(testCase, null, null, TestContext.CurrentContext.CancellationToken);
         }
     }
 }

@@ -1398,7 +1398,7 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/v1.0/api/usage/timeseries?range=day&bucket=hour",
+							"raw": "{{baseUrl}}/v1.0/api/usage/timeseries?range=day",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -1411,12 +1411,8 @@
 							"query": [
 								{
 									"key": "range",
-									"value": "day"
-								},
-								{
-									"key": "bucket",
-									"value": "hour",
-									"description": "hour or day"
+									"value": "day",
+									"description": "hour, day, week, month, quarter, year, or all"
 								},
 								{
 									"key": "endpoint",
@@ -1449,6 +1445,187 @@
 							]
 						},
 						"description": "Bucketed series for charting: `{ Items: [ { BucketStartUnixMs, Metrics } ], Count }`."
+					}
+				},
+				{
+					"name": "Time series split by dimension",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/usage/timeseries/split?dimension=model&top=6&range=day",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"usage",
+								"timeseries",
+								"split"
+							],
+							"query": [
+								{
+									"key": "dimension",
+									"value": "model",
+									"description": "model, endpoint, provider, command, or callkind"
+								},
+								{
+									"key": "top",
+									"value": "6",
+									"description": "Values kept before the rest fold into Other (1-20)."
+								},
+								{
+									"key": "range",
+									"value": "day",
+									"description": "hour, day, week, month, quarter, year, or all"
+								},
+								{
+									"key": "endpoint",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "model",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "session",
+									"value": "",
+									"description": "Scope to one session id.",
+									"disabled": true
+								},
+								{
+									"key": "label",
+									"value": "",
+									"description": "Comma-separated labels; matches sessions carrying them (AND).",
+									"disabled": true
+								},
+								{
+									"key": "tag",
+									"value": "",
+									"description": "Comma-separated key:value tags; matches sessions carrying them (AND).",
+									"disabled": true
+								}
+							]
+						},
+						"description": "One series per dimension value on the same buckets as the time series, top N plus Other."
+					}
+				},
+				{
+					"name": "Failures by error code",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/usage/errors?range=day",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"usage",
+								"errors"
+							],
+							"query": [
+								{
+									"key": "range",
+									"value": "day",
+									"description": "hour, day, week, month, quarter, year, or all"
+								},
+								{
+									"key": "endpoint",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "model",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "session",
+									"value": "",
+									"description": "Scope to one session id.",
+									"disabled": true
+								},
+								{
+									"key": "label",
+									"value": "",
+									"description": "Comma-separated labels; matches sessions carrying them (AND).",
+									"disabled": true
+								},
+								{
+									"key": "tag",
+									"value": "",
+									"description": "Comma-separated key:value tags; matches sessions carrying them (AND).",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Failed calls in the window counted by error code, most frequent first."
+					}
+				},
+				{
+					"name": "Heatmap",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/usage/heatmap?tzOffsetMinutes=0&range=day",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"usage",
+								"heatmap"
+							],
+							"query": [
+								{
+									"key": "tzOffsetMinutes",
+									"value": "0",
+									"description": "The viewer's JavaScript getTimezoneOffset() (minutes; UTC+1 is -60)."
+								},
+								{
+									"key": "range",
+									"value": "day",
+									"description": "hour, day, week, month, quarter, year, or all"
+								},
+								{
+									"key": "endpoint",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "model",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "session",
+									"value": "",
+									"description": "Scope to one session id.",
+									"disabled": true
+								},
+								{
+									"key": "label",
+									"value": "",
+									"description": "Comma-separated labels; matches sessions carrying them (AND).",
+									"disabled": true
+								},
+								{
+									"key": "tag",
+									"value": "",
+									"description": "Comma-separated key:value tags; matches sessions carrying them (AND).",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Token heatmap on a clock-aligned grid in the viewer's local time: the layout (rows, columns, row starts, column labels) and one value per cell."
 					}
 				},
 				{

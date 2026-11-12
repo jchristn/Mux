@@ -55,7 +55,7 @@ ValueError: bad payload
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
             void Add(string id, string name, Func<SkillTestContext, Task> body, bool skip = false, string reason = "")
             {
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithContextAsync(body, ct), skip: !ready || skip, skipReason: !ready ? "pwsh is not on PATH" : reason));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithContextAsync(body, ct), skipReason: (!ready || skip) ? (!ready ? "pwsh is not on PATH" : reason) : null));
             }
 
             cases.Add(new TestCaseDescriptor(SuiteId, "SkillsDefined", "log-triage, port-inspect, and bench are read-only debugging skills listed everywhere", (CancellationToken ct) =>

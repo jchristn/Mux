@@ -27,8 +27,11 @@ if name == 'uname':
 if name == 'pgrep':
     sys.exit(0 if os.environ.get('MOCK_RUNNING') else 1)
 if name in ('launchctl', 'systemctl'):
-    # Never touch the real launchd/systemd: report "not loaded / no user manager".
+    # Never touch the real launchd/systemd: report "not loaded / no user manager", or with MOCK_SYSTEMD
+    # a user manager whose graphical session is up and whose mux-agent unit is not running.
     with open(os.environ['CALL_LOG'], 'a') as f: f.write(json.dumps([name, *args]) + '\\n')
+    if name == 'systemctl' and os.environ.get('MOCK_SYSTEMD'):
+        sys.exit(1 if 'is-active' in args and args[-1] == 'mux-agent' else 0)
     sys.exit(1)
 if name == 'cmd.exe':
     print('C:\\\\Users\\\\test\\\\AppData\\\\Roaming\\r'); sys.exit(0)
@@ -51,12 +54,20 @@ if name == 'dotnet':
         out.mkdir(parents=True, exist_ok=True)
         agent = out / 'Mux.Agent'
         agent.write_text('#!/bin/sh\\nexit 0\\n'); agent.chmod(0o755)
+    if args[:1] == ['publish'] and '--output' in args:
+        # A self-contained publish: the output folder holds the apphost named after the project.
+        out = pathlib.Path(args[args.index('--output') + 1])
+        out.mkdir(parents=True, exist_ok=True)
+        exe = out / pathlib.Path(args[1]).stem
+        exe.write_text('#!/bin/sh\\nexit 0\\n'); exe.chmod(0o755)
 '''
 
 
 def make_repo(temp):
     repo = temp / 'repo'
     shutil.copytree(root / 'scripts', repo / 'scripts', ignore=shutil.ignore_patterns('__pycache__'))
+    (repo / 'assets/icons').mkdir(parents=True)
+    shutil.copy(root / 'assets/icons/icon-green.png', repo / 'assets/icons/icon-green.png')
     for project in ['Mux.Cli', 'Mux.Agent', 'Mux.Desktop', 'Mux.Publisher', 'Mux.Search', 'Mux.Core',
                     'Mux.Server', 'Mux.Desktop.Core']:
         csproj = repo / 'src' / project / f'{project}.csproj'
@@ -73,7 +84,8 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
     bin_dir.mkdir()
     for name in ['dotnet', 'uname', 'pgrep', 'pkill', 'mux', 'cmd.exe', 'wslpath', 'wscript.exe', 'launchctl', 'systemctl']:
         pass
-    (bin_dir / 'sudo').write_text('#!/bin/sh\n[ "$1" = -v ] && exit 0\nexec "$@"\n')
+    (bin_dir / 'sudo').write_text('#!/bin/sh\n[ -n "$SUDO_LOG" ] && { echo "$*" >> "$SUDO_LOG"; exit 1; }\n'
+                                  '[ "$1" = -v ] && exit 0\nexec "$@"\n')
     (bin_dir / 'apt-cache').write_text('#!/bin/sh\nprintf "libicu-dev\\nlibicu74\\nlibicu72\\n"\n')
     (bin_dir / 'apt-get').write_text(
         '#!/bin/sh\n'
@@ -90,8 +102,9 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
     home.mkdir()
     base_env = dict(os.environ, PATH=f'{bin_dir}:/usr/bin:/bin', CALL_LOG=str(log), HOME=str(home),
                     WSL_SKIP_CHECK='1', DISPLAY=':0', WSL_DISTRO_NAME='Test', MOCK_APPDATA=str(temp / 'appdata'),
-                    APT_LOG=str(temp / 'apt.log'), APT_DONE=str(temp / 'apt.done'))
-    for key in ['MUX_TFM', 'DOTNET_ROOT', 'WAYLAND_DISPLAY']:
+                    APT_LOG=str(temp / 'apt.log'), APT_DONE=str(temp / 'apt.done'),
+                    MUX_SYSTEM_INSTALL='0')  # never write to /opt or /usr/share from the tests
+    for key in ['MUX_TFM', 'DOTNET_ROOT', 'WAYLAND_DISPLAY', 'XDG_DATA_HOME']:
         base_env.pop(key, None)
 
     def run(platform, script, *args, **env):
@@ -169,6 +182,18 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
         pack = next(c for c in calls if c[1] == 'pack')
         assert '-p:TargetFrameworks=net10.0' in pack and pack[pack.index('--output') + 1].endswith('tool-packages/net10.0'), pack
         assert any(c[1:3] == ['tool', 'install'] for c in calls), calls
+        # The desktop app and tray agent: self-contained publishes, installed per-user with launchers and icon.
+        share = home / '.local/share'
+        for component, exe, launcher, name in [('desktop', 'Mux.Desktop', 'mux.desktop', 'Mux'),
+                                               ('agent', 'Mux.Agent', 'mux-agent.desktop', 'Mux Agent')]:
+            publish = next(c for c in calls if c[1] == 'publish' and c[2].endswith(f'{exe}.csproj'))
+            assert '--self-contained' in publish and publish[publish.index('--runtime') + 1] == 'linux-x64', publish
+            assert publish[publish.index('--output') + 1].endswith(f'artifacts/linux-app/linux-x64/net10.0/{component}'), publish
+            assert (share / f'mux/apps/{component}/{exe}').exists(), component
+            entry = (share / 'applications' / launcher).read_text()
+            assert f'Name={name}\n' in entry and f'Exec="{share}/mux/apps/{component}/{exe}"\n' in entry and 'Icon=mux\n' in entry, entry
+        assert (share / 'icons/hicolor/256x256/apps/mux.png').exists()
+        assert 'system-wide' not in p.stderr, p.stderr  # MUX_SYSTEM_INSTALL=0 skips it quietly
         p, calls = run(platform, 'install-tool', MOCK_INSTALLED='1')
         assert p.returncode != 0 and 'reinstall-tool' in p.stderr and not any(c[1] == 'pack' for c in calls), p.stderr
         p, calls = run(platform, 'install-tool', MOCK_RUNNING='1')
@@ -181,6 +206,8 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
         assert p.returncode == 0 and 'not installed; continuing' in p.stdout and not any(c[1:3] == ['tool', 'uninstall'] for c in calls)
         p, calls = run(platform, 'remove-tool', MOCK_INSTALLED='1')
         assert p.returncode == 0 and any(c[1:3] == ['tool', 'uninstall'] for c in calls), p.stderr
+        assert not (share / 'mux').exists() and not (share / 'applications/mux.desktop').exists(), p.stdout
+        assert not (share / 'icons/hicolor/256x256/apps/mux.png').exists(), p.stdout
         p, calls = run(platform, 'remove-tool')
         assert p.returncode == 0 and 'nothing to remove' in p.stdout and not any(c[1:3] == ['tool', 'uninstall'] for c in calls)
         p, calls = run(platform, 'remove-tool', 'extra')
@@ -215,18 +242,62 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
         p, calls = run(platform, 'build-installers', '--bogus')
         assert p.returncode != 0
 
-    # Linux run-at-startup without systemd: builds the agent and writes the autostart entry.
-    p, calls = run('linux', 'run-at-startup', 'net8.0')
+    # Linux run-at-startup: installs (or refreshes) the per-user agent only, with the shared helper, and
+    # registers that copy; remove-from-startup unregisters it and leaves the installed app alone.
+    sudo_log = temp / 'sudo.log'
+    share = home / '.local/share'
+    installed = share / 'mux/apps/agent/Mux.Agent'
+
+    def check_user_agent_install(calls, tfm):
+        publishes = [c for c in calls if c[1] == 'publish']
+        assert len(publishes) == 1 and publishes[0][2].endswith('Mux.Agent.csproj'), calls
+        assert publishes[0][publishes[0].index('--framework') + 1] == tfm and '--self-contained' in publishes[0], publishes
+        assert not any(c[1] == 'build' for c in calls), calls  # no source build any more
+        assert installed.is_file() and (share / 'applications/mux-agent.desktop').is_file()
+        assert not (share / 'applications/mux.desktop').exists(), 'run-at-startup installs the agent only'
+        assert not sudo_log.exists(), sudo_log.read_text()  # never system-wide, never sudo
+    p, calls = run('linux', 'run-at-startup', 'net8.0', MUX_SYSTEM_INSTALL='1', SUDO_LOG=str(sudo_log))
     assert p.returncode == 0, p.stderr
+    check_user_agent_install(calls, 'net8.0')
     desktop = (home / '.config/autostart/mux-agent.desktop').read_text()
-    assert f'Exec=env "DOTNET_ROOT={bin_dir.resolve()}" MUX_AGENT_AUTOSTART=0 "{repo}/src/Mux.Agent/bin/Release/net8.0/Mux.Agent"' in desktop, desktop
+    assert f'Exec=env MUX_AGENT_AUTOSTART=0 "{installed}"\n' in desktop, desktop
+    assert 'DOTNET_ROOT' not in desktop, desktop
     assert (home / '.mux/startup-registered').exists()
     (home / '.mux/startup-registered').unlink()
     p, _ = run('linux', 'remove-from-startup')
     assert p.returncode == 0 and not (home / '.config/autostart/mux-agent.desktop').exists()
+    assert installed.is_file(), 'remove-from-startup leaves the installed agent alone'
     assert (home / '.mux/startup-registered').exists()  # the agent must not re-register itself afterwards
     p, _ = run('linux', 'remove-from-startup')
     assert p.returncode == 0 and 'nothing to do' in p.stdout
+    # With a systemd graphical session: a user service whose ExecStart is the installed agent. An install
+    # folder with a space, % and $ checks the escaping of both registrations.
+    odd = temp / 'data 50%$HOME'
+    odd_bin = odd / 'mux/apps/agent/Mux.Agent'
+    p, calls = run('linux', 'run-at-startup', 'net10.0', MOCK_SYSTEMD='1', XDG_DATA_HOME=str(odd))
+    assert p.returncode == 0, p.stderr
+    service = (home / '.config/systemd/user/mux-agent.service').read_text()
+    systemd_path = str(odd_bin).replace('%', '%%').replace('$', '$$')
+    assert f'ExecStart="{systemd_path}"\n' in service and 'Environment=MUX_AGENT_AUTOSTART=0\n' in service, service
+    assert 'DOTNET_ROOT' not in service and odd_bin.is_file(), service
+    ran = [json.loads(x) for x in log.read_text().splitlines()]
+    assert ['systemctl', '--user', 'enable', 'mux-agent'] in ran and ['systemctl', '--user', 'restart', 'mux-agent'] in ran, ran
+    p, _ = run('linux', 'run-at-startup', 'net10.0', XDG_DATA_HOME=str(odd))  # no systemd: autostart entry
+    assert p.returncode == 0 and not (home / '.config/systemd/user/mux-agent.service').exists(), p.stderr
+    desktop = (home / '.config/autostart/mux-agent.desktop').read_text()
+    assert 'Exec=env MUX_AGENT_AUTOSTART=0 "%s"\n' % str(odd_bin).replace('$', '\\\\$').replace('%', '%%') in desktop, desktop
+    p, _ = run('linux', 'remove-from-startup', MOCK_SYSTEMD='1')
+    assert p.returncode == 0 and odd_bin.is_file() and not (home / '.config/autostart/mux-agent.desktop').exists()
+    shutil.rmtree(odd)
+    # A running agent is never replaced: nothing is built, installed or registered.
+    for platform in ['linux', 'wsl', 'wsl2']:
+        p, calls = run(platform, 'run-at-startup', MOCK_RUNNING='1')
+        assert p.returncode != 0 and 'Another mux agent is running' in p.stderr and f'scripts/{platform}/kill-mux.sh' in p.stderr, p.stderr
+        assert not [c for c in calls if c[1] in ('publish', 'build')], calls
+        assert not (home / '.config/autostart/mux-agent.desktop').exists()
+    shutil.rmtree(share / 'mux')
+    for leftover in ['applications/mux-agent.desktop', 'icons/hicolor/256x256/apps/mux.png']:
+        (share / leftover).unlink()
 
     # Source runs write the first-run marker so the agent they may start never registers itself at login.
     for platform in ['linux', 'wsl', 'wsl2']:
@@ -240,30 +311,39 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
     startup_dir = temp / 'appdata/Microsoft/Windows/Start Menu/Programs/Startup'
     startup_dir.mkdir(parents=True, exist_ok=True)
 
-    # WSL run-at-startup: writes a hidden Startup-folder launcher for this distro and starts it now.
+    # WSL run-at-startup: installs the per-user agent, writes a hidden Startup-folder launcher for this
+    # distro that runs it, and starts it now. remove-from-startup removes the launcher only.
     startup = temp / 'appdata/Microsoft/Windows/Start Menu/Programs/Startup/mux-agent-wsl-Test.vbs'
     for platform in ['wsl', 'wsl2']:
-        log.unlink(missing_ok=True)
-        e = dict(base_env, MOCK_UNAME='Linux', DOTNET_ROOT=str(bin_dir))
+        e = dict(base_env, MOCK_UNAME='Linux', DOTNET_ROOT=str(bin_dir), MUX_SYSTEM_INSTALL='1', SUDO_LOG=str(sudo_log))
+
+        def wsl(script):
+            log.unlink(missing_ok=True)
+            r = subprocess.run(['bash', str(repo / f'scripts/{platform}/{script}.sh'), *(['net10.0'] if script == 'run-at-startup' else [])],
+                               env=e, capture_output=True, text=True)
+            return r, [json.loads(x) for x in log.read_text().splitlines()] if log.exists() else []
         legacy = startup_dir / 'mux-agent-wsl.vbs'
         legacy.write_bytes(b'CreateObject("WScript.Shell").Run "wsl.exe -d ""Test"" --exec x", 0, False\r\n')
-        p = subprocess.run(['bash', str(repo / f'scripts/{platform}/run-at-startup.sh'), 'net10.0'], env=e,
-                           capture_output=True, text=True)
+        p, calls = wsl('run-at-startup')
         assert p.returncode == 0, (platform, p.stderr)
+        check_user_agent_install([c for c in calls if c[0] == 'dotnet'], 'net10.0')
         assert not legacy.exists(), 'the older launcher for this distro must be removed'
         vbs = startup.read_bytes().decode()
-        agent = f'{repo}/src/Mux.Agent/bin/Release/net10.0/Mux.Agent'
         assert vbs.startswith('CreateObject("WScript.Shell").Run "wsl.exe -d ""Test"" --cd ~ --exec /bin/sh -lc ""exec'), vbs
-        assert f"'{agent}'" in vbs and f"'DOTNET_ROOT={bin_dir}'" in vbs and vbs.endswith(', 0, False\r\n'), vbs
+        assert f"'{installed}'" in vbs and 'DOTNET_ROOT' not in vbs and vbs.endswith(', 0, False\r\n'), vbs
         assert ("'DISPLAY=:0'" in vbs) == (platform == 'wsl'), vbs
         assert "'MUX_AGENT_AUTOSTART=0'" in vbs, vbs
-        calls = [json.loads(x) for x in log.read_text().splitlines()]
         assert ['wscript.exe', 'C:\\fake\\mux-agent-wsl-Test.vbs'] in calls, calls
-        p = subprocess.run(['bash', str(repo / f'scripts/{platform}/remove-tool.sh')], env=e, capture_output=True, text=True)
+        p, _ = wsl('remove-from-startup')
+        assert p.returncode == 0 and not startup.exists() and installed.is_file(), p.stderr
+        p, _ = wsl('run-at-startup')  # re-running refreshes the install and the launcher
+        assert p.returncode == 0 and startup.exists(), p.stderr
+        e['MUX_SYSTEM_INSTALL'] = '0'  # remove-tool would otherwise try /opt/mux
+        p, _ = wsl('remove-tool')
         assert p.returncode == 0 and 'still registered to start at Windows login' in p.stdout, p.stdout
-        p = subprocess.run(['bash', str(repo / f'scripts/{platform}/remove-from-startup.sh')], env=e, capture_output=True, text=True)
+        p, _ = wsl('remove-from-startup')
         assert p.returncode == 0 and not startup.exists(), p.stderr
-        p = subprocess.run(['bash', str(repo / f'scripts/{platform}/remove-from-startup.sh')], env=e, capture_output=True, text=True)
+        p, _ = wsl('remove-from-startup')
         assert p.returncode == 0 and 'nothing to do' in p.stdout
 
     # Process checks only look at this user's processes, and an exported CDPATH does not break SCRIPT_DIR.

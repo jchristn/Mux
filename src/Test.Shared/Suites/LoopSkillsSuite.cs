@@ -57,7 +57,7 @@ Write-Output 'ok'
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
             void Add(string id, string name, Func<SkillTestContext, Task> body)
             {
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithContextAsync(body, ct), skip: !ready, skipReason: "pwsh is not on PATH"));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithContextAsync(body, ct), skipReason: (!ready) ? "pwsh is not on PATH" : null));
             }
 
             // --- definitions ---
@@ -181,7 +181,7 @@ Write-Output 'ok'
                     .Exit(1).Has("== build: FAIL").Has("TYPE_ERROR").Has("tests: skipped because the build failed").Has("RESULT: red (build failed)");
                 Write(c, "package.json", "{\"name\":\"x\",\"scripts\":{\"build\":\"node -e \\\"0\\\"\",\"test\":\"node -e \\\"0\\\"\"}}");
                 (await c.Run("fix-until-green", "check").ConfigureAwait(false)).Exit(0).Has("RESULT: green");
-            }, ct), skip: !npmReady, skipReason: "pwsh, node, or npm is not on PATH"));
+            }, ct), skipReason: (!npmReady) ? "pwsh, node, or npm is not on PATH" : null));
 
             // --- ci-watch ---
             Add("CiStatusFromFile", "ci-watch status lists runs newest first and exits 1 when the newest failed", async (SkillTestContext c) =>
@@ -211,7 +211,7 @@ Write-Output 'ok'
                     .Exit(0).Has("DRYRUN: gh run list --limit 10 --json").Has("--branch trunk");
                 (await c.Run(true, "ci-watch", "watch").ConfigureAwait(false)).Exit(0).Has("DRYRUN: gh run view <latest>");
                 (await c.Run(true, "ci-watch", "failed-logs", "55").ConfigureAwait(false)).Exit(0).Has("DRYRUN: gh run view 55 --log-failed");
-            }, ct), skip: !gitReady, skipReason: "pwsh or git is not on PATH"));
+            }, ct), skipReason: (!gitReady) ? "pwsh or git is not on PATH" : null));
             Add("CiWatchReportsResult", "ci-watch watch prints the result, failed jobs, and the next step", async (SkillTestContext c) =>
             {
                 string failed = Write(c, "failed.json", "{\"databaseId\":42,\"status\":\"completed\",\"conclusion\":\"failure\",\"workflowName\":\"CI\",\"jobs\":[{\"name\":\"build\",\"status\":\"completed\",\"conclusion\":\"success\"},{\"name\":\"test\",\"status\":\"completed\",\"conclusion\":\"failure\"}]}");

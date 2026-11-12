@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deregister the mux agent from starting at login: unloads (which also stops) the launchd-managed
 # agent and removes its plist. Any other running copy keeps running; quit it from the menu bar or
-# run scripts/macos/kill-mux.sh.
+# run scripts/macos/kill-mux.sh. ~/Applications/Mux Agent.app stays in place; remove-tool.sh removes it.
 # Usage: ./scripts/macos/remove-from-startup.sh
 set -euo pipefail
 

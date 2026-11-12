@@ -36,7 +36,7 @@ namespace Test.Shared.Suites
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
             void Add(string id, string name, Func<SkillTestContext, Task> body, bool skip = false, string reason = "")
             {
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithContextAsync(body, ct), skip: !ready || skip, skipReason: !ready ? "pwsh is not on PATH" : reason));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithContextAsync(body, ct), skipReason: (!ready || skip) ? (!ready ? "pwsh is not on PATH" : reason) : null));
             }
 
             cases.Add(new TestCaseDescriptor(SuiteId, "SkillsDefined", "openapi is a read-only review skill and openapi-client a mutating scaffolding skill, both gated on spec files", (CancellationToken ct) =>

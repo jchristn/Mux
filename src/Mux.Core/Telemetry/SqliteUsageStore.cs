@@ -347,6 +347,60 @@ WHERE id IN (
         }
 
         /// <summary>
+        /// Counts the failed calls matching a filter, grouped by error code. Failures with no recorded code are
+        /// counted under "unknown".
+        /// </summary>
+        /// <param name="filter">The filter to apply. Null applies no constraints.</param>
+        /// <param name="token">A token to cancel the operation.</param>
+        /// <returns>Error codes mapped to failure counts, most frequent first.</returns>
+        /// <exception cref="SqliteException">Thrown when the query fails.</exception>
+        public async Task<List<KeyValuePair<string, long>>> FetchErrorCodeCountsAsync(UsageFilter? filter, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            System.Text.StringBuilder sql = new System.Text.StringBuilder();
+            sql.Append("SELECT IFNULL(NULLIF(error_code,''),'unknown') AS code, COUNT(*) AS n FROM usage_events");
+
+            await using SqliteConnection connection = await OpenConnectionAsync(token).ConfigureAwait(false);
+            await using SqliteCommand command = connection.CreateCommand();
+            AppendWhere(sql, command, filter, "success=0");
+            sql.Append(" GROUP BY code ORDER BY n DESC, code ASC");
+            command.CommandText = sql.ToString();
+
+            List<KeyValuePair<string, long>> counts = new List<KeyValuePair<string, long>>();
+            await using SqliteDataReader reader = (SqliteDataReader)await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+            while (await reader.ReadAsync(token).ConfigureAwait(false))
+            {
+                counts.Add(new KeyValuePair<string, long>(reader.GetString(0), reader.GetInt64(1)));
+            }
+
+            return counts;
+        }
+
+        /// <summary>
+        /// Returns the timestamp of the oldest event matching a filter, used to size the "all time" window.
+        /// </summary>
+        /// <param name="filter">The filter to apply. Null applies no constraints.</param>
+        /// <param name="token">A token to cancel the operation.</param>
+        /// <returns>The oldest event's Unix-ms timestamp, or 0 when nothing matches.</returns>
+        /// <exception cref="SqliteException">Thrown when the query fails.</exception>
+        public async Task<long> FetchEarliestTimestampAsync(UsageFilter? filter, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            System.Text.StringBuilder sql = new System.Text.StringBuilder();
+            sql.Append("SELECT MIN(ts_utc) FROM usage_events");
+
+            await using SqliteConnection connection = await OpenConnectionAsync(token).ConfigureAwait(false);
+            await using SqliteCommand command = connection.CreateCommand();
+            AppendWhere(sql, command, filter);
+            command.CommandText = sql.ToString();
+
+            object? result = await command.ExecuteScalarAsync(token).ConfigureAwait(false);
+            return result == null || result == DBNull.Value ? 0L : Convert.ToInt64(result, CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
         /// Fetches per-call latency samples (time-to-first-token and total runtime) for a filter, tagged with
         /// their bucket, for percentile computation. Rows with both timings null are omitted.
         /// </summary>

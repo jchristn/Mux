@@ -72,7 +72,7 @@ namespace Mux.Desktop
         {
             // Bring up the tray agent (background REST server, telemetry, dashboard), like the interactive
             // TUI does. Best-effort and opt-out via MUX_AGENT_AUTOSTART=0.
-            AgentLauncher.EnsureRunning();
+            Mux.Core.Startup.AgentLauncher.EnsureRunning();
 
             // Outside an .app bundle macOS shows a generic Dock icon for the dotnet host; use the mux tile.
             if (OperatingSystem.IsMacOS() && !MacDockIcon.IsRunningFromBundle())

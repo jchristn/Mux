@@ -2,6 +2,99 @@
 
 All notable changes to mux are documented here.
 
+## 1.7.0 (unreleased)
+
+### Added
+
+- The same usage charts on every surface (terminal, desktop app, web dashboard, and VS Code), computed by
+  one shared query service so the numbers match:
+  - **Calls**: succeeded and failed calls per bucket, with a failure-reasons list of error codes by count.
+  - **Tokens by** model, endpoint, provider, or call kind: the top 6 values plus a grey "Other", with one
+    picker shared with **Usage by**, which draws one bar per value (top 10) with tokens, cost, and calls.
+  - Box plots (min-max wick, avg-p95 box, avg mark, p99 tick) for latency, TTFT, streaming time, and
+    throughput everywhere; the terminal previously showed per-model means and had no throughput page.
+  - A token heatmap in VS Code, which had none.
+  - Error rate in the KPIs on every surface.
+- A metric picker (tokens, calls, cost) for the "by dimension" charts on every surface, so "Calls by call kind"
+  shows interactive, subagent, and chat activity over time, and "Usage by" sorts by the chosen metric.
+- Export on every surface: CSV for every chart (one shared format, `UsageCsv` in Mux.Core, mirrored by the web
+  and VS Code scripts and tested byte for byte; ISO local times with offsets; cells a spreadsheet would run as
+  formulas get a leading `'`), plus PNG on the web dashboard, desktop app, and VS Code. The terminal writes CSV to
+  `~/.mux/exports/` (`e`).
+- A bars or lines toggle for the stacked over-time charts (calls, tokens, metric by dimension, cost) on every
+  surface; the terminal draws lines in braille (`l`).
+- Quarter (91 x 1 day), Year (52 x 1 week), and All (from the oldest matching call, about 90 buckets) ranges
+  on every surface, with date axis labels for long ranges.
+- Drill-down from any bucket to the calls behind it: clicking a column filters the web dashboard's call
+  history and the desktop's call table (with a removable chip), VS Code opens a calls table under the chart,
+  and the terminal has a bucket cursor (`[` / `]`) with `Enter` opening the calls in that bucket. Charts are
+  keyboard-operable on the web dashboard and in VS Code.
+- `GET /v1.0/api/usage/timeseries/split` (series split by `model`, `endpoint`, `provider`, `command`, or
+  `callkind`, top N plus `Other`) and `GET /v1.0/api/usage/errors` (failures by error code); `range=quarter`
+  and `range=year` on every usage route. Documented in the OpenAPI document, docs/REST_API.md, and the
+  Postman collection.
+- `install-tool` and `reinstall-tool` install the desktop app and the tray agent for the user and for all users
+  on every OS: macOS `~/Applications` and `/Applications`; Linux and WSL `~/.local/share/mux/apps` and
+  `/opt/mux` with menu entries; Windows `%LOCALAPPDATA%\Programs\Mux` and `%ProgramFiles%\Mux` with Start Menu
+  shortcuts. Previously only macOS installed the apps, and only per-user. The all-users copy uses sudo or an
+  elevated prompt when needed and is skipped with a warning without those rights; `MUX_SYSTEM_INSTALL=0`
+  skips it. `remove-tool` removes both copies.
+- `run-at-startup` behaves the same on every OS: it installs or refreshes the per-user agent and registers that
+  installed copy to start at login. Linux, WSL, and Windows previously registered a build from the source tree.
+  `remove-from-startup` leaves the app installed.
+- Every user surface starts the tray agent: the terminal UI and desktop app found it only in a source checkout
+  or beside themselves, so an installed agent never started; they now also look in the installed locations,
+  preferring the copy from the same install. The VS Code extension runs the new `mux agent start` when it
+  connects and uses the agent's server, falling back to `mux serve`. `mux agent status` reports the agent. The
+  launch logic is one shared `AgentLauncher`/`AgentLocator` in Mux.Core instead of two copies.
+- Tests: the `AgentStartup` suite, macOS (`test-macos-app.py`), Linux (`test-framework.py`), and Windows
+  (`test-windows-apps.ps1`) install-script tests, and VS Code tests for starting the agent.
+- Tests: the `UsageReporting`, `UsageChartQueries`, `UsageDesktopCharts`, and `DashboardUsageCharts` suites,
+  expanded `UsageChartsModal`, `UsageAnalytics`, and `UsageRoutes` suites, and VS Code unit tests for the
+  chart logic and the usage panel.
+
+### Changed
+
+- The terminal's Tokens page is stacked by token type and its Cost page shows totals; per-model stacking
+  moved to the Tokens by page. `Enter` no longer closes the charts (it opens the drill-down); `Esc` closes.
+- The desktop usage window reads time series, splits, breakdowns, and failure counts from the shared query
+  service instead of rolling up at most 20,000 raw calls on the client, so long ranges are complete and p50s
+  are filled. Its endpoint and conversation text boxes keep "contains" matching.
+- Dependencies: TUIKit 1.13.0, PolyPrompt 3.7.0, Avalonia 12.1.6, Microsoft.Playwright 1.64.1,
+  Microsoft.NET.Test.Sdk 18.12.0, and Touchstone 1.1.0 (the test hosts moved to the 1.x adapter API;
+  `Touchstone.XunitAdapter` is now `Touchstone.Xunit2Adapter`).
+
+### Fixed
+
+- The docs said the tray agent starts the server only when `rest.enabled` is true and that the server never
+  starts on its own. The agent always starts it, and every surface starts the agent. CONFIG.md and REST_API.md
+  now say so, and the web dashboard's settings page drops the "Tray auto-start" checkbox, which did nothing
+  (`rest.enabled` still loads and saves unchanged).
+- The wordmark in the desktop app's startup splash (its About window) and the tray agent's About window was
+  broken into bands. It was text, and a font's block glyphs are shorter than its line height (Menlo's full block
+  covers 2088 of 2384 units), so each row left a gap; a terminal stretches the glyphs, which is why the TUI
+  looked right. It is now drawn as rectangles on whole pixels (`BlockArt` in Mux.Core, `BlockArtView`).
+- Token heatmap colors on every surface. Empty cells were a near-black grey almost indistinguishable from the
+  first green, the same dark colors were used on the light theme, and shades were linear in the peak, so one
+  busy bucket put nearly every other cell in that faint first green. Shades now split the used cells into
+  quartiles (`UsageHeatmapScale` in Mux.Core, mirrored by the web and VS Code scripts and tested to match) and
+  use one green hue with separate light-theme and dark-theme steps validated for monotone lightness, visible
+  steps, and at least 2:1 contrast against the panel. No usage is a neutral grey clearly lighter (light theme,
+  `#e3e7eb`) or darker (dark theme, `#2e3640`) than the first green, a dim dot in the terminal, and no cell has a
+  border. The legends show the real swatches.
+- The heatmap had no axis labels on the web, desktop, or VS Code, and its 7-row grid gave the axes no meaning.
+  Every surface now draws the same clock-aligned grid from `UsageHeatmapLayout` in Mux.Core, in the viewer's
+  local time (the terminal's rows were aligned to UTC): rows are periods labelled with their start (hours,
+  days, or Monday-start weeks) and columns are steps within them labelled with minutes, time of day, or
+  weekdays, with a caption naming both. New route `GET /v1.0/api/usage/heatmap?range=..&tzOffsetMinutes=..`.
+  Clicking a cell lists its calls on the web, desktop, and (newly) VS Code. The month view is a calendar of five Monday-start
+  weeks by half-days. `UsageWindow.ComputeHeatmap` is removed.
+- `range=all` time series fell back to the last 24 hours, so VS Code's All range showed all-time KPIs over
+  a one-day chart.
+- The OpenAPI schema for `UsageBreakdownRow` documented a `Key` property; it is `Dimension` and `Value`.
+- Two MCP prompt-section tests still expected tool descriptions that the prompt intentionally stopped
+  repeating in 1.6.0.
+
 ## 1.6.0 (unreleased)
 
 ### Added

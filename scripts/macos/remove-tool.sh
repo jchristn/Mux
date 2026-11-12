@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Uninstall the mux global tool (Mux.Cli). Succeeds with a message when mux is not installed.
-# On macOS this also removes ~/Applications/Mux.app and ~/Applications/Mux Agent.app.
+# On macOS this also removes Mux.app and Mux Agent.app from ~/Applications and /Applications (with sudo when
+# /Applications is not writable).
 # Login registration (run-at-startup.sh) is separate; remove it with remove-from-startup.sh.
 # Usage: ./scripts/macos/remove-tool.sh
 set -euo pipefail
@@ -35,15 +36,20 @@ if tool_installed; then
 else
     echo "mux is not installed; nothing to remove."
 fi
-echo "[3/3] Removing the macOS apps..."
+echo "[3/3] Removing the macOS apps (~/Applications and /Applications)..."
+# shellcheck source=app-bundle.sh
+. "$SCRIPT_DIR/app-bundle.sh"
 for app in "Mux" "Mux Agent"; do
-    path="$HOME/Applications/$app.app"
-    [ -d "$path" ] || { echo "$path is not installed."; continue; }
-    if pgrep -u "$(id -u)" -f "$path/Contents/MacOS/" >/dev/null 2>&1; then
-        die "$app is running. Quit it (or run scripts/macos/kill-mux.sh) and try again."
-    fi
-    rm -rf "$path"
-    echo "Removed $path"
+    macos_app_not_running "$app" || exit 1
+done
+for app in "Mux" "Mux Agent"; do
+    for folder in "$HOME/Applications" "$(macos_system_apps_dir)"; do
+        if [ -d "$folder/$app.app" ]; then
+            macos_remove_app "$app" "$folder" || true
+        else
+            echo "$folder/$app.app is not installed."
+        fi
+    done
 done
 if [ -f "$HOME/Library/LaunchAgents/com.jchristn.mux.agent.plist" ]; then
     echo "Note: the agent is still registered to start at login. Run scripts/macos/remove-from-startup.sh to remove that."

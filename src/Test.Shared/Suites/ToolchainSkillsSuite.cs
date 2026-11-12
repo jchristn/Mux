@@ -137,7 +137,7 @@ namespace Test.Shared.Suites
                             MuxAssert.Contains("vitest", text, "vitest detected");
                         }
                     }).ConfigureAwait(false);
-                }, skip: !pwsh, skipReason: "pwsh is not on PATH")
+                }, skipReason: (!pwsh) ? "pwsh is not on PATH" : null)
 ,
                 new TestCaseDescriptor(SuiteId, "ScaffoldsWriteFilesAndRefuseOverwrite", "react-new-component and java-new-class write files and refuse to overwrite", async (CancellationToken ct) =>
                 {
@@ -168,7 +168,7 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("package com.example;", File.ReadAllText(orders), "package line");
                         MuxAssert.Contains("org.junit.jupiter.api.Test", File.ReadAllText(ordersTest), "JUnit 5 test");
                     }).ConfigureAwait(false);
-                }, skip: !pwsh, skipReason: "pwsh is not on PATH")            };
+                }, skipReason: (!pwsh) ? "pwsh is not on PATH" : null)            };
 
             List<ToolchainCase> all = new List<ToolchainCase>(Cases());
             all.AddRange(MoreCases());
@@ -176,7 +176,7 @@ namespace Test.Shared.Suites
             foreach (ToolchainCase toolchainCase in all)
             {
                 ToolchainCase captured = toolchainCase;
-                cases.Add(new TestCaseDescriptor(SuiteId, captured.Id, captured.Name, (CancellationToken ct) => RunCaseAsync(captured, ct), skip: !pwsh, skipReason: "pwsh is not on PATH"));
+                cases.Add(new TestCaseDescriptor(SuiteId, captured.Id, captured.Name, (CancellationToken ct) => RunCaseAsync(captured, ct), skipReason: (!pwsh) ? "pwsh is not on PATH" : null));
             }
 
             return new TestSuiteDescriptor(SuiteId, "Toolchain and infrastructure skills in dry-run mode", cases);

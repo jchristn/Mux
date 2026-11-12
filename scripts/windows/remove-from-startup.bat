@@ -1,7 +1,8 @@
 @echo off
 REM Deregister the mux agent from starting at login (deletes the MuxAgent value from the current
 REM user's Run registry key). A running agent keeps running; exit it from the tray menu or run
-REM scripts\windows\kill-mux.bat.
+REM scripts\windows\kill-mux.bat. The installed agent (%LOCALAPPDATA%\Programs\Mux\Agent) stays in
+REM place; remove-tool.bat removes it.
 REM Usage: scripts\windows\remove-from-startup.bat
 setlocal
 if not "%~1"=="" (

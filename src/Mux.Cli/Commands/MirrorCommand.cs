@@ -95,7 +95,7 @@ namespace Mux.Cli.Commands
                 // Ensure a hub is running: if nothing answers at the target, start the tray agent (best-effort)
                 // and retry the connect while it boots. A ClientWebSocket cannot be reconnected after a failed
                 // attempt, so each retry uses a fresh socket.
-                Mux.Cli.App.AgentLauncher.EnsureRunning();
+                Mux.Core.Startup.AgentLauncher.EnsureRunning();
 
                 ClientWebSocket? socket = null;
                 Exception? lastError = null;

@@ -20,11 +20,6 @@ namespace Mux.Desktop.Views
     {
         private const string RepositoryUrl = "https://github.com/jchristn/Mux";
 
-        // The mux ASCII-art wordmark (matches the TUI splash and the tray agent).
-        private const string Wordmark =
-            "▄▄   ▄▄ ▄▄ ▄▄ ▄▄ ▄▄\n" +
-            "██▀▄▀██ ██ ██ ▀█▄█▀\n" +
-            "██   ██ ▀███▀ ██ ██";
 
         /// <summary>
         /// Instantiate the About window.
@@ -46,8 +41,6 @@ namespace Mux.Desktop.Views
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = theme.Surface;
 
-            FontFamily mono = new FontFamily("Cascadia Mono,Consolas,Menlo,monospace");
-
             StackPanel panel = new StackPanel
             {
                 Margin = new Thickness(28, 14),
@@ -56,15 +49,14 @@ namespace Mux.Desktop.Views
                 VerticalAlignment = VerticalAlignment.Center
             };
 
-            panel.Children.Add(new TextBlock
+            // Drawn as shapes, not text: block glyphs are shorter than a font's line height, which left bands
+            // between the rows (see BlockArt).
+            panel.Children.Add(new Mux.Desktop.Controls.BlockArtView
             {
-                Text = Wordmark,
-                FontFamily = mono,
-                FontSize = 18,
-                FontWeight = FontWeight.Bold,
-                Foreground = theme.Accent,
-                TextAlignment = TextAlignment.Left,
-                HorizontalAlignment = HorizontalAlignment.Center
+                Fill = theme.Accent,
+                PixelSize = 8,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 4)
             });
 
             panel.Children.Add(new TextBlock

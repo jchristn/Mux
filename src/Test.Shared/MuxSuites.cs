@@ -85,6 +85,8 @@ namespace Test.Shared
                     EndpointConfigSuite.Create(),
                     EndpointAuthPlacementSuite.Create(),
                     UsageChartsModalSuite.Create(),
+                    UsageChartQueriesSuite.Create(),
+                    UsageCsvSuite.Create(),
                     SetupStateSuite.Create(),
                     SettingsLoaderSuite.Create(),
 
@@ -102,6 +104,7 @@ namespace Test.Shared
                     ThreadServiceSuite.Create(),
                     UsageWindowSuite.Create(),
                     UsageAnalyticsSuite.Create(),
+                    UsageDesktopChartsSuite.Create(),
                     TurnProjectionSuite.Create(),
                     ConversationStatsSuite.Create(),
                     ConversationControllerSuite.Create(),
@@ -326,6 +329,15 @@ namespace Test.Shared
 
                     // Usage telemetry: live REST endpoints over a seeded store.
                     UsageRoutesSuite.Create(),
+
+                    // Web dashboard usage view: ranges, tabs, dimension picker, failure reasons, drill-down.
+                    DashboardUsageChartsSuite.Create(),
+
+                    // Usage reporting: long ranges, split series, failure reasons, and the all-time window.
+                    UsageReportingSuite.Create(),
+
+                    // Tray agent startup from every surface, install locations, and the wordmark geometry.
+                    AgentStartupSuite.Create(),
 
                     // Mux.Publisher: manifest parsing/validation, publish args + checksums, channel
                     // driver rendering/command plans, and first-run startup registration recipes.

@@ -285,6 +285,91 @@ export interface UsageBucket {
     Metrics: UsageMetrics;
 }
 
+/**
+ * The clock-aligned grid of `GET /v1.0/api/usage/heatmap`, shared by every mux surface: each row is one period in the
+ * viewer's local time (at `UtcOffsetMinutes`, east positive) and each column one bucket within it.
+ */
+export interface UsageHeatmapLayout {
+    Range: string;
+    NowUnixMs: number;
+    UtcOffsetMinutes: number;
+    FromUnixMs: number;
+    /** The first cell inside the range's window; the month calendar's earlier cells are outside its last 30 days. */
+    WindowFromUnixMs?: number;
+    ToUnixMs: number;
+    BucketMs: number;
+    RowMs: number;
+    Rows: number;
+    Columns: number;
+    /** Consecutive columns sharing one label: 2 for `halfday` (a weekday's AM and PM), else 1. */
+    ColumnGroup?: number;
+    CellCount: number;
+    /** Row label format: `time`, `datetime`, `weekdate`, or `date`. */
+    RowKind: string;
+    /** What a row spans: `15m`, `1h`, `6h`, `1d`, `1w`, or `13w`. */
+    RowUnit: string;
+    /** What a column means: `minute`, `minuteofhour`, `hours`, `clock`, `weekday`, `halfday`, or `weeks`. */
+    ColumnKind: string;
+    RowStartsUnixMs: number[];
+    RowLabels: string[];
+    ColumnLabels: string[];
+    Caption: string;
+}
+
+/** `GET /v1.0/api/usage/heatmap`: the layout and one value per cell, row-major. */
+export interface UsageHeatmap {
+    Layout: UsageHeatmapLayout;
+    TotalTokens: number[];
+    Calls: number[];
+}
+
+/** One series of `GET /v1.0/api/usage/timeseries/split`: a dimension value's buckets, aligned with the timeseries. */
+export interface UsageSeries {
+    Key: string;
+    IsOther: boolean;
+    Buckets: UsageBucket[];
+}
+
+/** One error code and its count from `GET /v1.0/api/usage/errors`. */
+export interface UsageErrorCount {
+    ErrorCode: string;
+    Count: number;
+}
+
+/** One row of `GET /v1.0/api/usage/breakdown`: a dimension value's totals over the window. */
+export interface UsageBreakdownRow {
+    Dimension: string;
+    Value: string;
+    Metrics: UsageMetrics;
+}
+
+/** One raw call from `GET /v1.0/api/usage/events`. */
+export interface UsageEventRow {
+    Id: number;
+    TimestampUnixMs: number;
+    CallKind: string;
+    EndpointName: string;
+    Model: string;
+    InputTokens: number;
+    CachedTokens: number;
+    OutputTokens: number;
+    TotalTokens: number;
+    TimeToFirstTokenMs?: number | null;
+    TotalMs?: number | null;
+    Success: boolean;
+    ErrorCode?: string | null;
+    CostUsd: number;
+    [key: string]: unknown;
+}
+
+/** A page of raw calls from `GET /v1.0/api/usage/events`, newest first. */
+export interface UsageEventPage {
+    Items: UsageEventRow[];
+    TotalCount: number;
+    PageNumber: number;
+    PageSize: number;
+}
+
 /** Distinct endpoints/models for usage filter controls, from `GET /v1.0/api/usage/filters`. */
 export interface UsageFilters {
     Enabled: boolean;

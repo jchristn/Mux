@@ -39,7 +39,7 @@ namespace Test.Shared.Suites
             void Add(string id, string name, Func<SkillTestContext, Task> body, Func<bool>? skip = null, string reason = "")
             {
                 bool skipped = !ready || (skip != null && skip());
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithContextAsync(body, ct), skip: skipped, skipReason: !ready ? "pwsh is not on PATH" : reason));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithContextAsync(body, ct), skipReason: (skipped) ? (!ready ? "pwsh is not on PATH" : reason) : null));
             }
 
             cases.Add(new TestCaseDescriptor(SuiteId, "SkillDefined", "shell-lint is a read-only hygiene skill gated on shell and PowerShell files", (CancellationToken ct) =>

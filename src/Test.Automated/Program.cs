@@ -82,7 +82,7 @@ namespace Test.Automated
                 return 2;
             }
 
-            return await ConsoleRunner.RunAsync(suites, resultsPath: resultsPath, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+            return await ConsoleRunner.RunAsync(suites, new ConsoleRunnerOptions { JsonResultsPath = resultsPath }, CancellationToken.None).ConfigureAwait(false);
         }
     }
 }

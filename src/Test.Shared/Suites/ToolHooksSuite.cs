@@ -45,7 +45,7 @@ namespace Test.Shared.Suites
 
             void AddRun(string id, string name, Func<string, CancellationToken, Task> body)
             {
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => WithTempAsync((string dir) => body(dir, ct)), skip: !ready, skipReason: "pwsh is not on PATH"));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => WithTempAsync((string dir) => body(dir, ct)), skipReason: (!ready) ? "pwsh is not on PATH" : null));
             }
 
             // --- parsing, matcher, payloads ---

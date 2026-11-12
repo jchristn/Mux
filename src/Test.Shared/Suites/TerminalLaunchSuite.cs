@@ -139,7 +139,7 @@ namespace Test.Shared.Suites
                     MuxAssert.IsFalse(File.Exists(script), "the script removed itself");
                 });
                 return Task.CompletedTask;
-            }, skip: !File.Exists("/bin/zsh") || OperatingSystem.IsWindows(), skipReason: "zsh is not available"));
+            }, skipReason: (!File.Exists("/bin/zsh") || OperatingSystem.IsWindows()) ? "zsh is not available" : null));
             Add("WindowsCommand", "Windows opens a titled console in the working directory that stays open", (string dir) =>
             {
                 TerminalCommand command = TerminalLaunchPlanner.BuildWindowsCommand(new MuxCliLocation { Executable = @"C:\Program Files\mux\mux.exe" }, @"C:\Users\me");

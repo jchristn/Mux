@@ -63,12 +63,41 @@ namespace Mux.Core.Telemetry
         /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="range"/> is not a known value.</exception>
         public static UsageWindow Compute(UsageRange range, long nowUnixMs)
         {
-            if (range != UsageRange.Hour && range != UsageRange.Day && range != UsageRange.Week && range != UsageRange.Month)
+            return Compute(range, nowUnixMs, 0);
+        }
+
+        /// <summary>
+        /// Computes the window for a range. <see cref="UsageRange.All"/> spans from the oldest event
+        /// (<paramref name="earliestUnixMs"/>) to now in about ninety buckets of a "nice" width (see
+        /// <see cref="NiceBucketMs"/>); with no events (earliest 0 or not before now) it falls back to the day window.
+        /// Every other range ignores <paramref name="earliestUnixMs"/>.
+        /// </summary>
+        /// <param name="range">The range.</param>
+        /// <param name="nowUnixMs">The current time in Unix epoch milliseconds.</param>
+        /// <param name="earliestUnixMs">The oldest matching event's timestamp, or 0 when unknown or none.</param>
+        /// <returns>The window, snapped to the bucket grid.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="range"/> is not a defined range.</exception>
+        public static UsageWindow Compute(UsageRange range, long nowUnixMs, long earliestUnixMs)
+        {
+            if (!Enum.IsDefined(typeof(UsageRange), range))
             {
                 throw new ArgumentOutOfRangeException(nameof(range), range, "Unknown usage range.");
             }
 
-            Bucketing(RangeToKey(range), out long bucketMs, out int count);
+            if (range == UsageRange.All)
+            {
+                if (earliestUnixMs <= 0 || earliestUnixMs >= nowUnixMs)
+                {
+                    return Compute(UsageRange.Day, nowUnixMs, 0);
+                }
+
+                long width = NiceBucketMs((nowUnixMs - earliestUnixMs + 89L) / 90L);
+                long allTo = ((nowUnixMs + width) / width) * width;
+                long allFrom = (earliestUnixMs / width) * width;
+                return new UsageWindow(allFrom, allTo, width, (int)((allTo - allFrom) / width));
+            }
+
+            Bucketing(KeyOf(range), out long bucketMs, out int count);
 
             // Snap the upper bound up to the next bucket boundary so buckets align to a stable grid.
             long to = ((nowUnixMs + bucketMs - 1) / bucketMs) * bucketMs;
@@ -77,24 +106,9 @@ namespace Mux.Core.Telemetry
         }
 
         /// <summary>
-        /// Aligns a heatmap to whole clock rows: quarters of an hour, hours, or days.
-        /// Keeps the range's fixed bucket count and includes the current partial row.
-        /// </summary>
-        /// <param name="range">The selected range.</param>
-        /// <param name="nowUnixMs">The reference UTC time.</param>
-        /// <returns>The aligned heatmap window.</returns>
-        public static UsageWindow ComputeHeatmap(UsageRange range, long nowUnixMs)
-        {
-            UsageWindow window = Compute(range, nowUnixMs);
-            long rowMs = range == UsageRange.Hour ? 15L * MinuteMs
-                : range == UsageRange.Day ? 60L * MinuteMs : 1440L * MinuteMs;
-            long to = ((nowUnixMs + rowMs - 1) / rowMs) * rowMs;
-            return new UsageWindow(to - window.BucketMs * window.BucketCount, to, window.BucketMs, window.BucketCount);
-        }
-
-        /// <summary>
-        /// The timeseries bucket size and count for a range keyword (hour/day/week/month). Unrecognized
-        /// values fall back to the day grid (96 × 15 minutes).
+        /// The timeseries bucket size and count for a range keyword (hour/day/week/month/quarter/year). Unrecognized
+        /// values, and "all" (whose grid depends on the oldest event; see <see cref="Compute(UsageRange, long, long)"/>),
+        /// fall back to the day grid (96 × 15 minutes).
         /// </summary>
         /// <param name="range">The range keyword (case-insensitive), or null.</param>
         /// <param name="bucketMs">The bucket size in milliseconds.</param>
@@ -114,6 +128,14 @@ namespace Mux.Core.Telemetry
                 case "month":
                     bucketMs = 720L * MinuteMs;
                     count = 60;
+                    break;
+                case "quarter":
+                    bucketMs = 1440L * MinuteMs;
+                    count = 91;
+                    break;
+                case "year":
+                    bucketMs = 7L * 1440L * MinuteMs;
+                    count = 52;
                     break;
                 case "day":
                 default:
@@ -137,6 +159,8 @@ namespace Mux.Core.Telemetry
                 case "day": return 24L * 60L * 60L * 1000L;
                 case "week": return 7L * 24L * 60L * 60L * 1000L;
                 case "month": return 30L * 24L * 60L * 60L * 1000L;
+                case "quarter": return 91L * 24L * 60L * 60L * 1000L;
+                case "year": return 364L * 24L * 60L * 60L * 1000L;
                 default: return 0L;
             }
         }
@@ -153,7 +177,7 @@ namespace Mux.Core.Telemetry
             {
                 60L * 1000L, 5L * 60L * 1000L, 15L * 60L * 1000L, 30L * 60L * 1000L,
                 60L * 60L * 1000L, 2L * 60L * 60L * 1000L, 6L * 60L * 60L * 1000L,
-                12L * 60L * 60L * 1000L, 24L * 60L * 60L * 1000L
+                12L * 60L * 60L * 1000L, 24L * 60L * 60L * 1000L, 7L * 24L * 60L * 60L * 1000L
             };
 
             foreach (long step in steps)
@@ -167,14 +191,44 @@ namespace Mux.Core.Telemetry
             return steps[steps.Length - 1];
         }
 
-        private static string RangeToKey(UsageRange range)
+        /// <summary>
+        /// Returns the query-string key for a range ("hour", "day", "week", "month", "quarter", "year", "all").
+        /// </summary>
+        /// <param name="range">The range.</param>
+        /// <returns>The lower-case key.</returns>
+        public static string KeyOf(UsageRange range)
         {
             switch (range)
             {
                 case UsageRange.Hour: return "hour";
                 case UsageRange.Week: return "week";
                 case UsageRange.Month: return "month";
+                case UsageRange.Quarter: return "quarter";
+                case UsageRange.Year: return "year";
+                case UsageRange.All: return "all";
                 default: return "day";
+            }
+        }
+
+        /// <summary>
+        /// Parses a range key (case-insensitive; see <see cref="KeyOf"/>), returning <paramref name="fallback"/> when it is
+        /// blank or unknown.
+        /// </summary>
+        /// <param name="key">The key, for example from a query string.</param>
+        /// <param name="fallback">The range used when the key is blank or unknown.</param>
+        /// <returns>The parsed range.</returns>
+        public static UsageRange ParseRange(string? key, UsageRange fallback)
+        {
+            switch ((key ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "hour": return UsageRange.Hour;
+                case "day": return UsageRange.Day;
+                case "week": return UsageRange.Week;
+                case "month": return UsageRange.Month;
+                case "quarter": return UsageRange.Quarter;
+                case "year": return UsageRange.Year;
+                case "all": return UsageRange.All;
+                default: return fallback;
             }
         }
     }

@@ -43,7 +43,7 @@ namespace Test.Shared.Suites
             void Add(string id, string name, Func<SkillTestContext, CancellationToken, Task> body, bool skip = false, string extraReason = "")
             {
                 cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithContextAsync((SkillTestContext c) => body(c, ct), ct),
-                    skip: !enabled || skip, skipReason: !enabled ? reason : extraReason));
+                    skipReason: (!enabled || skip) ? (!enabled ? reason : extraReason) : null));
             }
 
             Add("Postgres", "sql-postgres against PostgreSQL 16: version, tables, columns, rows, and the server rejecting a write hidden in a SELECT", PostgresAsync);

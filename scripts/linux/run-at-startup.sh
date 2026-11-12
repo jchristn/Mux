@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Register the mux agent (the tray host that runs the local REST server) to start at login, and
 # start it now. Uses a systemd --user service tied to graphical-session.target when the desktop
-# provides one (restarts on failure); otherwise a desktop autostart entry. No root needed. Builds Mux.Agent (Release) for the selected framework
-# first, so stop a running agent beforehand.
+# provides one (restarts on failure); otherwise a desktop autostart entry. No root needed.
+# Stops a systemd-managed agent, then builds and installs (or refreshes) the per-user agent in
+# ${XDG_DATA_HOME:-~/.local/share}/mux/apps/agent, the same copy install-tool.sh installs, and
+# registers that copy (quit any other running agent first). Never touches the system-wide copy.
 # Usage: ./scripts/linux/run-at-startup.sh [net8.0|net10.0]
 set -euo pipefail
 
@@ -23,6 +25,10 @@ fi
 
 # shellcheck source=../common/framework.sh
 . "$REPO_ROOT/scripts/common/framework.sh"
+# shellcheck source=../common/linux-apps.sh
+. "$REPO_ROOT/scripts/common/linux-apps.sh"
+# shellcheck disable=SC2034 # read by linux-apps.sh
+LINUX_APPS_KILL_MUX="scripts/linux/kill-mux.sh"
 # Print the help before touching the system.
 case "${1:-}" in -h|--help) resolve_framework "$1" ;; esac
 # Install the system packages mux needs when they are missing (INSTALL_SYSTEM_PACKAGES=0 to skip).
@@ -33,25 +39,18 @@ resolve_framework "$@"
 shift "$FRAMEWORK_ARGS"
 [ "$#" -eq 0 ] || die "Unexpected argument: $1"
 
-# Stop a systemd-managed agent first so the build can replace it (re-running is a refresh).
+# Stop a systemd-managed agent first so the install can replace it (re-running is a refresh).
 if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet mux-agent 2>/dev/null; then
     systemctl --user stop mux-agent
 fi
 native_check_libs error "The mux agent" "$NATIVE_AVALONIA_LIBS"
-# Always register a fresh Release build of the agent for the selected framework.
 if pgrep -u "$(id -u)" -x Mux.Agent >/dev/null 2>&1; then
-    die "The mux agent is running. Stop it (scripts/linux/kill-mux.sh) and try again, so the build can replace it."
+    die "Another mux agent is running (for example from /opt/mux or a source build). Quit it (or run scripts/linux/kill-mux.sh) and try again."
 fi
-echo "Building Mux.Agent (Release, $TFM)..."
-dotnet build "$REPO_ROOT/src/Mux.Agent/Mux.Agent.csproj" -c Release -f "$TFM" -p:TargetFrameworks="$TFM" -nologo -v quiet
-AGENT_BIN="$REPO_ROOT/src/Mux.Agent/bin/Release/$TFM/Mux.Agent"
-[ -f "$AGENT_BIN" ] || die "Mux.Agent was not found at $AGENT_BIN after the build."
-# A framework-dependent agent started at login needs to find .NET: pass the root of the dotnet in use.
-if [ -z "${DOTNET_ROOT:-}" ]; then
-    DOTNET_ROOT="$(dirname "$(readlink -f "$(command -v dotnet)")")"
-fi
-# Only a directory that really holds a .NET install (host/fxr) is useful; snap's /usr/bin is not.
-[ -d "$DOTNET_ROOT/host/fxr" ] || die "Could not find the .NET install behind $(command -v dotnet) (no host/fxr under $DOTNET_ROOT). Set DOTNET_ROOT to your .NET directory and try again."
+# Install or refresh the per-user agent (a self-contained publish, so it needs no DOTNET_ROOT at login).
+linux_install_user_app agent || die "Installing the tray agent failed."
+AGENT_BIN="$(linux_app_dir agent user)/Mux.Agent"
+[ -x "$AGENT_BIN" ] || die "Mux.Agent was not found at $AGENT_BIN after the install."
 
 # The agent registers itself at login on its first run unless this marker exists. Login startup is
 # managed by these scripts, so write the marker: the agent must not re-register after this script.
@@ -65,6 +64,9 @@ DESKTOP="$HOME/.config/autostart/mux-agent.desktop"
 # systemd only when this desktop actually starts graphical-session.target (GNOME and KDE do; XFCE,
 # MATE, Cinnamon, LXQt and bare window managers usually don't). Otherwise use a desktop autostart entry.
 if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet graphical-session.target 2>/dev/null; then
+    # systemd expands % specifiers and $VARIABLES in ExecStart; double them to keep the path literal.
+    SYSTEMD_BIN="${AGENT_BIN//%/%%}"
+    SYSTEMD_BIN="${SYSTEMD_BIN//\$/\$\$}"
     # Drop links from an older unit (WantedBy=default.target) before rewriting it.
     systemctl --user disable mux-agent >/dev/null 2>&1 || true
     rm -f "$DESKTOP"
@@ -77,8 +79,7 @@ if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet gr
         echo "PartOf=graphical-session.target"
         echo
         echo "[Service]"
-        echo "ExecStart=\"$AGENT_BIN\""
-        echo "Environment=\"DOTNET_ROOT=$DOTNET_ROOT\""
+        echo "ExecStart=\"$SYSTEMD_BIN\""
         echo "Environment=MUX_AGENT_AUTOSTART=0"
         echo "Restart=on-failure"
         echo "RestartSec=5"
@@ -105,14 +106,14 @@ else
 Type=Application
 Name=mux Agent
 Comment=mux tray agent (hosts the local REST server)
-Exec=env "DOTNET_ROOT=$DOTNET_ROOT" MUX_AGENT_AUTOSTART=0 "$AGENT_BIN"
+Exec=env MUX_AGENT_AUTOSTART=0 $(linux_desktop_exec "$AGENT_BIN")
 X-GNOME-Autostart-enabled=true
 EOF
     echo "Installed $DESKTOP; the agent starts at each desktop login."
     if pgrep -u "$(id -u)" -x Mux.Agent >/dev/null 2>&1; then
         echo "The agent is already running."
     else
-        DOTNET_ROOT="$DOTNET_ROOT" MUX_AGENT_AUTOSTART=0 nohup "$AGENT_BIN" >/dev/null 2>&1 &
+        MUX_AGENT_AUTOSTART=0 nohup "$AGENT_BIN" >/dev/null 2>&1 &
         echo "Started the agent now (it runs the REST server)."
     fi
 fi

@@ -34,7 +34,7 @@ namespace Test.Shared.Suites
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
             void Add(string id, string name, Func<SkillTestContext, Task> body)
             {
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithContextAsync(body, ct), skip: !ready, skipReason: "pwsh is not on PATH"));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithContextAsync(body, ct), skipReason: (!ready) ? "pwsh is not on PATH" : null));
             }
 
             cases.Add(new TestCaseDescriptor(SuiteId, "SkillsDefined", "ansible and bicep are guarded infrastructure skills, and aws-deploy validates and lints templates", (CancellationToken ct) =>

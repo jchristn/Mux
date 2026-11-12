@@ -30,7 +30,12 @@ import {
     SkillSummary,
     StreamEvent,
     Subagent,
+    UsageBreakdownRow,
     UsageBucket,
+    UsageHeatmap,
+    UsageErrorCount,
+    UsageEventPage,
+    UsageSeries,
     UsageFilters,
     UsageSummary,
 } from './types';
@@ -297,6 +302,46 @@ export class ApiClient {
     public async getUsageTimeseries(range: string, endpoint?: string, model?: string, signal?: AbortSignal): Promise<UsageBucket[]> {
         const response = await this.getJson<{ Items: UsageBucket[] }>(`/v1.0/api/usage/timeseries?${this.usageQuery(range, endpoint, model)}`, signal);
         return response.Items ?? [];
+    }
+
+    /** Reads the per-bucket token series split by a dimension (top values plus Other), aligned with the timeseries. */
+    public async getUsageSplit(range: string, dimension: string, endpoint?: string, model?: string, top: number = 6, signal?: AbortSignal): Promise<UsageSeries[]> {
+        const query = `${this.usageQuery(range, endpoint, model)}&dimension=${encodeURIComponent(dimension)}&top=${top}`;
+        const response = await this.getJson<{ Items: UsageSeries[] }>(`/v1.0/api/usage/timeseries/split?${query}`, signal);
+        return response.Items ?? [];
+    }
+
+    /**
+     * Reads the token heatmap for a range on the shared clock-aligned grid.
+     *
+     * @param tzOffsetMinutes The viewer's offset with JavaScript's sign (`new Date().getTimezoneOffset()`).
+     */
+    public getUsageHeatmap(range: string, tzOffsetMinutes: number, endpoint?: string, model?: string, signal?: AbortSignal): Promise<UsageHeatmap> {
+        return this.getJson<UsageHeatmap>(`/v1.0/api/usage/heatmap?${this.usageQuery(range, endpoint, model)}&tzOffsetMinutes=${Math.round(tzOffsetMinutes)}`, signal);
+    }
+
+    /** Reads the failure counts by error code for a range, most frequent first. */
+    public async getUsageErrors(range: string, endpoint?: string, model?: string, signal?: AbortSignal): Promise<UsageErrorCount[]> {
+        const response = await this.getJson<{ Items: UsageErrorCount[] }>(`/v1.0/api/usage/errors?${this.usageQuery(range, endpoint, model)}`, signal);
+        return response.Items ?? [];
+    }
+
+    /** Reads the per-value totals of a dimension over a range. */
+    public async getUsageBreakdown(range: string, dimension: string, endpoint?: string, model?: string, signal?: AbortSignal): Promise<UsageBreakdownRow[]> {
+        const query = `${this.usageQuery(range, endpoint, model)}&dimension=${encodeURIComponent(dimension)}`;
+        const response = await this.getJson<{ Items: UsageBreakdownRow[] }>(`/v1.0/api/usage/breakdown?${query}`, signal);
+        return response.Items ?? [];
+    }
+
+    /**
+     * Reads one page of raw calls, newest first.
+     *
+     * @param query A prebuilt events query string (`from=..&to=..&page=1&pageSize=50`, plus filters).
+     * @param signal Optional abort signal.
+     */
+    public async getUsageEvents(query: string, signal?: AbortSignal): Promise<UsageEventPage> {
+        const response = await this.getJson<UsageEventPage>(`/v1.0/api/usage/events?${query}`, signal);
+        return { Items: response.Items ?? [], TotalCount: response.TotalCount ?? 0, PageNumber: response.PageNumber ?? 1, PageSize: response.PageSize ?? 0 };
     }
 
     /** Reads the distinct endpoints/models for the usage filter controls. */

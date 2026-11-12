@@ -797,14 +797,57 @@ namespace Mux.Server.Documentation
         /// <summary>Metadata for <c>GET /v1.0/api/usage/timeseries</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> UsageTimeseries = m => Sec(Init(m, TagUsage,
             "Usage time series",
-            "Returns an evenly-spaced series of usage buckets for charting a window (60×1-min for the hour, 96×15-min for the day, 84×2-hour for the week, 60×12-hour for the month), optionally filtered by endpoint and/or model.",
+            "Returns an evenly-spaced series of usage buckets for charting a window (60×1-min for the hour, 96×15-min for the day, 84×2-hour for the week, 60×12-hour for the month, 91×1-day for the quarter, 52×1-week for the year; `all` spans from the oldest matching event in about 90 buckets), optionally filtered by endpoint and/or model. Each bucket's `Calls` and `Errors` give the calls-by-outcome chart.",
             operationId: "getUsageTimeseries"))
-            .WithParameter(Query("range", "Convenience window: `hour`, `day`, `week`, `month`, or `all`.", false, M.String()))
+            .WithParameter(Query("range", "Convenience window: `hour`, `day`, `week`, `month`, `quarter` (91 days), `year` (52 weeks), or `all`.", false, M.String()))
             .WithParameter(Query("from", "Window start (Unix ms). Overrides `range`.", false, M.Integer("int64")))
             .WithParameter(Query("to", "Window end (Unix ms). Overrides `range`.", false, M.Integer("int64")))
             .WithParameter(Query("endpoint", "Filter to a single endpoint name.", false, M.String()))
             .WithParameter(Query("model", "Filter to a single model.", false, M.String()))
             .WithResponse(200, OkList("UsageBucket"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/usage/heatmap</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> UsageHeatmap = m => Sec(Init(m, TagUsage,
+            "Usage token heatmap",
+            "Returns the token heatmap for a range on the clock-aligned grid every mux surface draws: each row is one period in the viewer's local time and each column one bucket within it. hour = 4 quarter-hour rows x 15 one-minute columns; day = 24 hour rows x 4 quarter-hour columns; week = 7 day rows x 12 two-hour columns; month = a 5-week calendar of 5 week rows (Monday start) x 14 half-day columns (Mon AM, Mon PM, ... Sun PM), of which only the last 30 days (from `WindowFromUnixMs`) are in the window and the earlier cells are blank; quarter = 13 week rows (Monday start) x 7 weekday columns; year = 4 rows of 13 weeks x 13 weekly columns; `all` picks the shape from its bucket width and adds rows back to the oldest matching event. The last row holds now, so its later cells are in the future. `Layout` carries the window, row starts, label kinds, `ColumnGroup` (columns sharing one label: 2 for half-days), and invariant-culture labels; `TotalTokens` and `Calls` hold one value per cell, row-major.",
+            operationId: "getUsageHeatmap"))
+            .WithParameter(Query("range", "`hour`, `day` (default), `week`, `month`, `quarter`, `year`, or `all`.", false, M.String()))
+            .WithParameter(Query("tzOffsetMinutes", "The viewer's UTC offset with JavaScript's sign (`new Date().getTimezoneOffset()`: minutes to add to local time to get UTC, so UTC-5 is `300`). Clamped to -840..840; default 0 (UTC).", false, M.Integer("int32")))
+            .WithParameter(Query("endpoint", "Filter to a single endpoint name.", false, M.String()))
+            .WithParameter(Query("model", "Filter to a single model.", false, M.String()))
+            .WithParameter(Query("label", "Comma-separated session labels; a call matches when its session has every label.", false, M.String()))
+            .WithParameter(Query("tag", "Comma-separated `key:value` session tags; a call matches when its session has every tag.", false, M.String()))
+            .WithResponse(200, Ok("UsageHeatmap"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/usage/timeseries/split</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> UsageTimeseriesSplit = m => Sec(Init(m, TagUsage,
+            "Usage time series split by a dimension",
+            "Returns one series per dimension value on the same buckets as `/usage/timeseries`, ranked by total tokens over the window. The top `top` values are kept and the rest are folded into one series keyed `Other` (`IsOther` true). Buckets carry totals and timing means, not percentiles.",
+            operationId: "getUsageTimeseriesSplit"))
+            .WithParameter(Query("dimension", "Split dimension: `model` (default), `endpoint`, `provider`, `command`, or `callkind`.", false, M.String()))
+            .WithParameter(Query("top", "How many values to keep before folding the rest into `Other` (1-20, default 6).", false, M.Integer("int32")))
+            .WithParameter(Query("range", "Convenience window: `hour`, `day`, `week`, `month`, `quarter` (91 days), `year` (52 weeks), or `all`.", false, M.String()))
+            .WithParameter(Query("from", "Window start (Unix ms). Overrides `range`.", false, M.Integer("int64")))
+            .WithParameter(Query("to", "Window end (Unix ms). Overrides `range`.", false, M.Integer("int64")))
+            .WithParameter(Query("endpoint", "Filter to a single endpoint name.", false, M.String()))
+            .WithParameter(Query("model", "Filter to a single model.", false, M.String()))
+            .WithResponse(200, OkList("UsageSeries"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/usage/errors</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> UsageErrors = m => Sec(Init(m, TagUsage,
+            "Usage failures by error code",
+            "Counts the failed calls in a window by error code, most frequent first. Failures with no recorded code are counted under `unknown`.",
+            operationId: "getUsageErrors"))
+            .WithParameter(Query("range", "Convenience window: `hour`, `day`, `week`, `month`, `quarter` (91 days), `year` (52 weeks), or `all`.", false, M.String()))
+            .WithParameter(Query("from", "Window start (Unix ms). Overrides `range`.", false, M.Integer("int64")))
+            .WithParameter(Query("to", "Window end (Unix ms). Overrides `range`.", false, M.Integer("int64")))
+            .WithParameter(Query("endpoint", "Filter to a single endpoint name.", false, M.String()))
+            .WithParameter(Query("model", "Filter to a single model.", false, M.String()))
+            .WithResponse(200, OkList("UsageErrorCount"))
             .WithResponse(401, Unauthorized());
 
         /// <summary>Metadata for <c>GET /v1.0/api/usage/breakdown</c>.</summary>
@@ -813,7 +856,7 @@ namespace Mux.Server.Documentation
             "Returns usage grouped by a dimension (`model`, `endpoint`, `callKind`, …) for a window.",
             operationId: "getUsageBreakdown"))
             .WithParameter(Query("dimension", "Group-by dimension: `model` (default), `endpoint`, or `callKind`.", false, M.String()))
-            .WithParameter(Query("range", "Convenience window: `hour`, `day`, `week`, `month`, or `all`.", false, M.String()))
+            .WithParameter(Query("range", "Convenience window: `hour`, `day`, `week`, `month`, `quarter` (91 days), `year` (52 weeks), or `all`.", false, M.String()))
             .WithParameter(Query("endpoint", "Filter to a single endpoint name.", false, M.String()))
             .WithParameter(Query("model", "Filter to a single model.", false, M.String()))
             .WithResponse(200, OkList("UsageBreakdownRow"))
@@ -824,7 +867,7 @@ namespace Mux.Server.Documentation
             "Usage event history",
             "Returns the paginated raw usage events for a window.",
             operationId: "getUsageEvents"))
-            .WithParameter(Query("range", "Convenience window: `hour`, `day`, `week`, `month`, or `all`.", false, M.String()))
+            .WithParameter(Query("range", "Convenience window: `hour`, `day`, `week`, `month`, `quarter` (91 days), `year` (52 weeks), or `all`.", false, M.String()))
             .WithParameter(Query("page", "1-based page number (default 1).", false, M.Integer()))
             .WithParameter(Query("pageSize", "Rows per page (default 25).", false, M.Integer()))
             .WithResponse(200, Ok("UsageEventPage"))
@@ -1683,11 +1726,59 @@ namespace Mux.Server.Documentation
                 ["Metrics"] = Ref("UsageMetrics")
             }, new Dictionary<string, object?> { ["BucketStartUnixMs"] = 1757836800000 }, description: "One time bucket in a usage series.");
 
+            s["UsageHeatmapLayout"] = Obj(new Dictionary<string, M>
+            {
+                ["Range"] = Pstr("The range key."),
+                ["NowUnixMs"] = Pint("The server time the layout was computed for (Unix ms); cells starting later are in the future.", "int64"),
+                ["UtcOffsetMinutes"] = Pint("The viewer's offset from UTC in minutes, east positive (the negated `tzOffsetMinutes`)."),
+                ["FromUnixMs"] = Pint("Start of the first cell (Unix ms, inclusive).", "int64"),
+                ["WindowFromUnixMs"] = Pint("Start of the first cell inside the range's window (Unix ms, inclusive). Equals `FromUnixMs` except for `month`, whose 5-week calendar starts before its last 30 days; earlier cells are blank and hold no usage.", "int64"),
+                ["ToUnixMs"] = Pint("End of the last cell (Unix ms, exclusive).", "int64"),
+                ["BucketMs"] = Pint("Cell width in milliseconds.", "int64"),
+                ["RowMs"] = Pint("Row span in milliseconds (Columns x BucketMs).", "int64"),
+                ["Rows"] = Pint("Row count, oldest first."),
+                ["Columns"] = Pint("Columns per row."),
+                ["ColumnGroup"] = Pint("Consecutive columns sharing one label: 2 for `halfday` (a weekday's AM and PM), else 1."),
+                ["CellCount"] = Pint("Rows x Columns."),
+                ["RowKind"] = Pstr("Row label format: `time` (HH:mm), `datetime` (MM-dd HH:mm), `weekdate` (ddd MM-dd), or `date` (yyyy-MM-dd), all in local time."),
+                ["RowUnit"] = Pstr("What a row spans: `15m`, `1h`, `6h`, `1d`, `1w`, or `13w`."),
+                ["ColumnKind"] = Pstr("What a column means: `minute` (+Nm), `minuteofhour` (:mm), `hours` (+Nh), `clock` (HH:mm), `weekday` (Monday first), `halfday` (two per weekday, Monday AM first, each labeled with its weekday), or `weeks` (+Nw)."),
+                ["RowStartsUnixMs"] = Parr(Pint("A row start (Unix ms).", "int64"), "Each row's start."),
+                ["RowLabels"] = Parr(Pstr("A row label."), "Each row's label in the invariant culture."),
+                ["ColumnLabels"] = Parr(Pstr("A column label."), "Each column's label in the invariant culture."),
+                ["Caption"] = Pstr("The English axis caption, for example `Rows: day starting · Columns: time of day`.")
+            }, new Dictionary<string, object?>
+            {
+                ["Range"] = "week", ["UtcOffsetMinutes"] = -300, ["BucketMs"] = 7200000, ["Rows"] = 7, ["Columns"] = 12,
+                ["RowKind"] = "weekdate", ["RowUnit"] = "1d", ["ColumnKind"] = "clock", ["Caption"] = "Rows: day starting · Columns: time of day"
+            }, description: "The clock-aligned token heatmap grid.");
+
+            s["UsageHeatmap"] = Obj(new Dictionary<string, M>
+            {
+                ["Layout"] = Ref("UsageHeatmapLayout"),
+                ["TotalTokens"] = Parr(Pint("Total tokens in a cell.", "int64"), "Total tokens per cell, row-major (CellCount entries)."),
+                ["Calls"] = Parr(Pint("Calls in a cell.", "int64"), "Calls per cell, row-major (CellCount entries).")
+            }, description: "A token heatmap: the layout and one value per cell.");
+
             s["UsageBreakdownRow"] = Obj(new Dictionary<string, M>
             {
-                ["Key"] = Pstr("The dimension value (e.g. a model or endpoint name)."),
+                ["Dimension"] = Pstr("The dimension grouped by (e.g. `model` or `endpoint`)."),
+                ["Value"] = Pstr("The dimension value (e.g. a model or endpoint name)."),
                 ["Metrics"] = Ref("UsageMetrics")
-            }, new Dictionary<string, object?> { ["Key"] = "gpt-4o" }, description: "One row of a usage breakdown by dimension.");
+            }, new Dictionary<string, object?> { ["Dimension"] = "model", ["Value"] = "gpt-4o" }, description: "One row of a usage breakdown by dimension.");
+
+            s["UsageSeries"] = Obj(new Dictionary<string, M>
+            {
+                ["Key"] = Pstr("The dimension value (e.g. a model id), or `Other` for the folded remainder."),
+                ["IsOther"] = Pbool("True for the series that folds every value outside the top N."),
+                ["Buckets"] = Parr(Ref("UsageBucket"), "The buckets, ascending, aligned with the total series.")
+            }, new Dictionary<string, object?> { ["Key"] = "gpt-4o", ["IsOther"] = false }, description: "One series of a usage time series split by a dimension.");
+
+            s["UsageErrorCount"] = Obj(new Dictionary<string, M>
+            {
+                ["ErrorCode"] = Pstr("The error code, or `unknown` when none was recorded."),
+                ["Count"] = Pint("Failed calls with this code.", "int64")
+            }, new Dictionary<string, object?> { ["ErrorCode"] = "http_429", ["Count"] = 3 }, description: "Failed calls that share an error code.");
 
             s["UsageEvent"] = Obj(new Dictionary<string, M>
             {

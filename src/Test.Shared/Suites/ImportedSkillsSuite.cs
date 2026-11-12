@@ -161,7 +161,7 @@ namespace Test.Shared.Suites
                 {
                     MuxAssert.Contains(letter + "=" + skillDir.Replace("\\", "\\\\"), result.Content, letter + " set: " + result.Content);
                 }
-            }), skip: !pwsh, skipReason: "pwsh is not on PATH"));
+            }), skipReason: (!pwsh) ? "pwsh is not on PATH" : null));
             AddSync("SkillShowResolvesBody", "mux skill show prints the folder, the files, and the body with placeholders resolved", (string dir) =>
             {
                 string config = Path.Combine(dir, "cfg");
@@ -508,7 +508,7 @@ namespace Test.Shared.Suites
                 MuxAssert.Contains("#tools/lint-helper", md, "path recorded");
                 MuxAssert.Throws<InvalidOperationException>(() => new SkillImporter().Import(Path.Combine(dir, "nope.git"), skills, null, false, false, false, ct), "a failed clone is reported");
                 return Task.CompletedTask;
-            }), skip: !git, skipReason: "git is not on PATH"));
+            }), skipReason: (!git) ? "git is not on PATH" : null));
 
             // --- surfaces ---
             AddSync("CliPackCommands", "mux skill pack list, show, install, and remove work, and bad usage fails", (string dir) =>

@@ -31,6 +31,11 @@ if name == 'uname': print('Darwin' if args == ['-s'] else os.environ.get('TEST_A
 if name == 'pgrep': sys.exit(0 if os.environ.get('MOCK_RUNNING') else 1)
 if name == 'launchctl' and args[:1] == ['print']: sys.exit(1)
 if name == 'codesign' and os.environ.get('FAIL_SIGN'): sys.exit(8)
+if name == 'sudo':
+    # A fake sudo: run the command when SUDO_OK is set (like an admin who entered a password), else refuse.
+    if not os.environ.get('SUDO_OK'): sys.exit(1)
+    import subprocess as sp
+    sys.exit(sp.call(args))
 if name == 'dotnet' and args == ['--list-sdks']: print('10.0.401 [mock]')
 if name == 'dotnet' and args[0] == 'publish':
     if os.environ.get('FAIL_PUBLISH'): sys.exit(7)
@@ -40,12 +45,15 @@ if name == 'dotnet' and args[0] == 'publish':
     (out / '.playwright').mkdir()
     (out / '.playwright/driver').write_text('driver')
 '''
-    for name in ['dotnet', 'uname', 'codesign', 'open', 'mux', 'launchctl', 'pgrep']:
+    for name in ['dotnet', 'uname', 'codesign', 'open', 'mux', 'launchctl', 'pgrep', 'sudo']:
         path = bin_dir / name
         path.write_text(tool)
         path.chmod(0o755)
+    system = temp / 'system-apps'
+    system.mkdir()
     env = dict(os.environ, PATH=f'{bin_dir}:{os.environ["PATH"]}',
-               HOME=str(temp / 'home'), CALL_LOG=str(log))
+               HOME=str(temp / 'home'), CALL_LOG=str(log), MUX_SYSTEM_APPLICATIONS_DIR=str(system))
+    env.pop('MUX_SYSTEM_INSTALL', None)
     env.pop('MUX_TFM', None)
 
     def run(script, tfm='net10.0', **updates):
@@ -59,6 +67,8 @@ if name == 'dotnet' and args[0] == 'publish':
                                 ('reinstall-tool', ['desktop', 'agent']),
                                 ('run-desktop', ['desktop']), ('run-agent', ['agent'])]:
         for tfm, arch in [('net10.0', 'arm64'), ('net8.0', 'x86_64')]:
+            for leftover in system.iterdir():
+                shutil.rmtree(leftover)
             result, calls = run(script, tfm, TEST_ARCH=arch)
             assert result.returncode == 0, result.stderr
             publishes = [c for c in calls if c[:2] == ['dotnet', 'publish']]
@@ -79,18 +89,63 @@ if name == 'dotnet' and args[0] == 'publish':
                 assert publish[publish.index('--framework') + 1] == tfm
                 assert publish[publish.index('--runtime') + 1] == ('osx-arm64' if arch == 'arm64' else 'osx-x64')
                 assert publish[publish.index('--self-contained') + 1] == 'true'
+            # install and reinstall also put a copy in the system folder; the run scripts never do.
+            for component in components:
+                name = 'Mux' if component == 'desktop' else 'Mux Agent'
+                executable = 'Mux.Desktop' if component == 'desktop' else 'Mux.Agent'
+                installed = (system / f'{name}.app/Contents/MacOS/{executable}').is_file()
+                assert installed == script.endswith('-tool'), (script, name, installed)
             opens = [c for c in calls if c[0] == 'open']
             assert len(opens) == int(script.startswith('run-')), calls
             if opens:
                 env_args = ['--env', 'MUX_AGENT_AUTOSTART=0'] if script == 'run-agent' else []
                 assert opens[0] == ['open', *env_args, '-a', str(app)], opens
-    result, calls = run('run-at-startup')
+    # A system folder the user cannot write: sudo is used; when it fails the per-user install still succeeds
+    # with a warning, and MUX_SYSTEM_INSTALL=0 skips the system folder without one.
+    for leftover in system.iterdir():
+        shutil.rmtree(leftover)
+    system.chmod(0o555)
+    try:
+        result, calls = run('reinstall-tool', SUDO_OK='1')
+        assert result.returncode == 0, result.stderr
+        assert any(c[0] == 'sudo' for c in calls), calls
+        result, calls = run('reinstall-tool')
+        assert result.returncode == 0, result.stderr
+        assert 'skipped the system-wide install' in result.stderr, result.stderr
+        assert (temp / 'home/Applications/Mux.app/Contents/MacOS/Mux.Desktop').is_file()
+        result, calls = run('reinstall-tool', MUX_SYSTEM_INSTALL='0')
+        assert result.returncode == 0, result.stderr
+        assert 'skipped' not in result.stderr and not any(c[0] == 'sudo' for c in calls), calls
+    finally:
+        system.chmod(0o755)
+    # run-at-startup installs or refreshes only the per-user agent (never /Applications, never sudo) and
+    # registers that copy; remove-from-startup unregisters it and leaves the app alone.
+    for leftover in system.iterdir():
+        shutil.rmtree(leftover)
+    plist_path = temp / 'home/Library/LaunchAgents/com.jchristn.mux.agent.plist'
+    agent_bin = temp / 'home/Applications/Mux Agent.app/Contents/MacOS/Mux.Agent'
+    result, calls = run('run-at-startup', 'net8.0', SUDO_OK='1')
     assert result.returncode == 0, result.stderr
-    with (temp / 'home/Library/LaunchAgents/com.jchristn.mux.agent.plist').open('rb') as f:
+    publishes = [c for c in calls if c[:2] == ['dotnet', 'publish']]
+    assert len(publishes) == 1 and publishes[0][2].endswith('Mux.Agent.csproj'), publishes
+    assert publishes[0][publishes[0].index('--framework') + 1] == 'net8.0', publishes
+    assert not any(c[0] == 'sudo' for c in calls) and not any(system.iterdir()), calls
+    with plist_path.open('rb') as f:
         plist = plistlib.load(f)
-        assert plist['ProgramArguments'] == [str(temp / 'home/Applications/Mux Agent.app/Contents/MacOS/Mux.Agent')]
+        assert plist['ProgramArguments'] == [str(agent_bin)]
         assert plist['EnvironmentVariables'] == {'MUX_AGENT_AUTOSTART': '0'}
+    assert any(c[:2] == ['launchctl', 'bootstrap'] for c in calls), calls
     assert (temp / 'home/.mux/startup-registered').exists()
+    result, calls = run('run-at-startup', MOCK_RUNNING='1')
+    assert result.returncode != 0 and 'Another mux agent is running' in result.stderr, result.stderr
+    assert not any(c[:2] == ['dotnet', 'publish'] for c in calls) and agent_bin.is_file()
+    result, calls = run('remove-from-startup', tfm=None)
+    assert result.returncode == 0 and not plist_path.exists() and agent_bin.is_file(), result.stderr
+    assert any(c[:2] == ['launchctl', 'bootout'] for c in calls), calls
+    result, calls = run('remove-from-startup', tfm=None)
+    assert result.returncode == 0 and 'nothing to do' in result.stdout, result.stdout
+    result, calls = run('run-at-startup')  # registered again for the remove-tool check below
+    assert result.returncode == 0 and plist_path.exists(), result.stderr
     # A running app is never replaced: the publish is skipped and the installed copy kept.
     result, calls = run('run-desktop', MOCK_RUNNING='1')
     assert result.returncode != 0 and 'is running' in result.stderr
@@ -107,5 +162,6 @@ if name == 'dotnet' and args[0] == 'publish':
     assert result.returncode == 0, result.stderr
     assert not (temp / 'home/Applications/Mux.app').exists()
     assert not (temp / 'home/Applications/Mux Agent.app').exists()
+    assert not (system / 'Mux.app').exists() and not (system / 'Mux Agent.app').exists()
     assert 'nothing to remove' in result.stdout and 'still registered to start at login' in result.stdout
-    print('macOS install/reinstall/run: both architectures and frameworks passed; failed publish preserves installed app.')
+    print('macOS install/reinstall/run: both architectures and frameworks passed; per-user and system installs; sudo fallback and opt-out; run-at-startup per-user agent; failed publish preserves installed app.')

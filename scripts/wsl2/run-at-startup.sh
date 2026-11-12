@@ -3,7 +3,9 @@
 # and start it now. systemd user services and desktop autostart entries do not run at Windows
 # login, so this installs a hidden launcher in the Windows Startup folder that runs the agent in
 # this distro through wsl.exe (no admin rights needed); the launcher keeps the distro running.
-# Builds Mux.Agent (Release) for the selected framework first, so stop a running agent beforehand.
+# Builds and installs (or refreshes) the per-user agent in ${XDG_DATA_HOME:-~/.local/share}/mux/apps/agent,
+# the same copy install-tool.sh installs, and registers that copy (quit any running agent first). Never
+# touches the system-wide copy.
 # The agent is a GUI app and needs WSLg. WSLg has no system tray, so no tray icon appears.
 # Usage: ./scripts/wsl2/run-at-startup.sh [net8.0|net10.0]
 set -euo pipefail
@@ -23,6 +25,10 @@ wsl_check_repo "$REPO_ROOT"
 
 # shellcheck source=../common/framework.sh
 . "$REPO_ROOT/scripts/common/framework.sh"
+# shellcheck source=../common/linux-apps.sh
+. "$REPO_ROOT/scripts/common/linux-apps.sh"
+# shellcheck disable=SC2034 # read by linux-apps.sh
+LINUX_APPS_KILL_MUX="scripts/wsl2/kill-mux.sh"
 # Print the help before touching the system.
 case "${1:-}" in -h|--help) resolve_framework "$1" ;; esac
 # Install the system packages mux needs when they are missing (INSTALL_SYSTEM_PACKAGES=0 to skip).
@@ -36,20 +42,13 @@ if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
 fi
 wsl_check_libs error "The mux agent" "$WSL_AVALONIA_LIBS"
 
-# Always register a fresh Release build of the agent for the selected framework.
 if pgrep -u "$(id -u)" -x Mux.Agent >/dev/null 2>&1; then
-    die "The mux agent is running. Stop it (scripts/wsl2/kill-mux.sh) and try again, so the build can replace it."
+    die "Another mux agent is running (for example from /opt/mux or a source build). Quit it (or run scripts/wsl2/kill-mux.sh) and try again."
 fi
-echo "Building Mux.Agent (Release, $TFM)..."
-dotnet build "$REPO_ROOT/src/Mux.Agent/Mux.Agent.csproj" -c Release -f "$TFM" -p:TargetFrameworks="$TFM" -nologo -v quiet
-AGENT_BIN="$REPO_ROOT/src/Mux.Agent/bin/Release/$TFM/Mux.Agent"
-[ -f "$AGENT_BIN" ] || die "Mux.Agent was not found at $AGENT_BIN after the build."
-# A framework-dependent agent started at login needs to find .NET: pass the root of the dotnet in use.
-if [ -z "${DOTNET_ROOT:-}" ]; then
-    DOTNET_ROOT="$(dirname "$(readlink -f "$(command -v dotnet)")")"
-fi
-# Only a directory that really holds a .NET install (host/fxr) is useful; snap's /usr/bin is not.
-[ -d "$DOTNET_ROOT/host/fxr" ] || die "Could not find the .NET install behind $(command -v dotnet) (no host/fxr under $DOTNET_ROOT). Set DOTNET_ROOT to your .NET directory and try again."
+# Install or refresh the per-user agent (a self-contained publish, so it needs no DOTNET_ROOT at login).
+linux_install_user_app agent || die "Installing the tray agent failed."
+AGENT_BIN="$(linux_app_dir agent user)/Mux.Agent"
+[ -x "$AGENT_BIN" ] || die "Mux.Agent was not found at $AGENT_BIN after the install."
 
 # The agent registers itself at login on its first run unless this marker exists. Login startup is
 # managed by these scripts, so write the marker: the agent must not re-register after this script.
@@ -72,7 +71,7 @@ if [ -f "$DESKTOP" ]; then
 fi
 
 # The launcher starts from a fresh wsl.exe login, so pass the environment the agent needs explicitly.
-set -- env "DOTNET_ROOT=$DOTNET_ROOT" MUX_AGENT_AUTOSTART=0
+set -- env MUX_AGENT_AUTOSTART=0
 wsl_startup_install mux-agent "$@" "$AGENT_BIN"
 echo "Registered $AGENT_BIN to start in WSL ($WSL_DISTRO_NAME) at Windows login."
 

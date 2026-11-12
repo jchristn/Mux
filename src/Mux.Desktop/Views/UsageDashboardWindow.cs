@@ -2,33 +2,60 @@ namespace Mux.Desktop.Views
 {
     using System;
     using System.Collections.Generic;
+    using System.Globalization;
+    using System.IO;
+    using System.Linq;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Avalonia;
     using Avalonia.Controls;
+    using Avalonia.Input;
     using Avalonia.Layout;
     using Avalonia.Media;
+    using Avalonia.Media.Imaging;
+    using Avalonia.Platform.Storage;
+    using Avalonia.Threading;
     using Mux.Core.Telemetry;
     using Mux.Desktop.I18n;
     using Mux.Desktop.Services;
 
     /// <summary>
-    /// A usage/monitoring window mirroring the mux serve dashboard's Usage page: a range selector, a KPI
-    /// strip, metric tabs (tokens/cost/latency/TTFT/streaming/throughput) driving a timeseries chart with
-    /// X/Y axis labels, and a sortable recent per-call events table. Only the events table scrolls; the
-    /// header, KPIs, tabs, and chart stay pinned.
+    /// A usage/monitoring window mirroring the mux serve dashboard's Usage page: a range selector (hour through
+    /// all), a KPI strip, chart tabs (calls with failure reasons, tokens, tokens by a dimension, cost, the
+    /// latency/TTFT/streaming/throughput box plots, usage by a dimension, and a heatmap) with one shared
+    /// dimension picker and one shared metric picker (tokens, calls, or cost) for the "&lt;Metric&gt; by" and
+    /// "Usage by" charts, a chart toolbar (bars or lines for the stacked over-time charts, Export CSV, and Save
+    /// PNG), and a sortable per-call table. All chart data comes from the shared usage query service through
+    /// <see cref="IUsageAnalyticsService"/>; export shaping lives in <see cref="UsageChartExport"/>. Clicking a
+    /// bucket in an over-time chart (bars or lines) narrows the call table to that bucket's window, shown by a
+    /// clearable indicator. Only the call table scrolls.
     /// </summary>
     public sealed class UsageDashboardWindow : Window
     {
         private const string TableColumns = "150,1.2*,1.6*,66,66,86,86,72";
 
-        // Upper bound on events pulled for client-side filtering/aggregation. Generous for a desktop view.
-        private const int MaxEvents = 20000;
+        // Rows loaded into the call table (the store clamps pages at 500); the status line shows the total.
+        private const int TablePageSize = 500;
         private const double PlotHeight = 270;
         private static readonly IBrush PromptColor = new SolidColorBrush(Color.Parse("#4c8bf5"));
         private static readonly IBrush CachedColor = new SolidColorBrush(Color.Parse("#3fb950"));
         private static readonly IBrush OutputColor = new SolidColorBrush(Color.Parse("#d29922"));
         private static readonly IBrush P99Color = new SolidColorBrush(Color.Parse("#dc2626"));
+        private static readonly Cursor HandCursor = new Cursor(StandardCursorType.Hand);
+        private static readonly IBrush OtherColor = new SolidColorBrush(Color.Parse("#8b949e"));
+
+        // Stable "Tokens by" series colors, by rank; "Other" is always OtherColor.
+        private static readonly IBrush[] SeriesPalette =
+        {
+            new SolidColorBrush(Color.Parse("#4c8bf5")),
+            new SolidColorBrush(Color.Parse("#3fb950")),
+            new SolidColorBrush(Color.Parse("#d29922")),
+            new SolidColorBrush(Color.Parse("#a371f7")),
+            new SolidColorBrush(Color.Parse("#0891b2")),
+            new SolidColorBrush(Color.Parse("#db61a2"))
+        };
+
         // Resolved per render (not cached) so a live locale change is reflected on the next open.
         private static string[] Headers()
         {
@@ -62,23 +89,43 @@ namespace Mux.Desktop.Views
 
         private readonly IUsageAnalyticsService _Analytics;
         private readonly WrapPanel _KpiStrip = new WrapPanel { Orientation = Orientation.Horizontal };
-        private readonly StackPanel _MetricTabs = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(0, 0, 0, 18) };
+        private readonly WrapPanel _MetricTabs = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 18) };
         private readonly Border _ChartHost = new Border { Height = 340, Margin = new Thickness(0, 0, 0, 8) };
         private readonly Grid _EventsHeader = new Grid { ColumnDefinitions = new ColumnDefinitions(TableColumns), Margin = new Thickness(2, 8, 2, 4) };
         private readonly StackPanel _EventsList = new StackPanel { Spacing = 0 };
-        private readonly TextBlock _Status = new TextBlock { FontSize = 12 };
+        private readonly TextBlock _Status = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
         private readonly Dictionary<UsageRange, Button> _RangeButtons = new Dictionary<UsageRange, Button>();
         private readonly Dictionary<ChartMetric, Button> _MetricButtons = new Dictionary<ChartMetric, Button>();
-        private readonly List<UsageBucket> _Series = new List<UsageBucket>();
-        private readonly List<UsageEventRow> _AllEvents = new List<UsageEventRow>();
         private readonly List<UsageEventRow> _Events = new List<UsageEventRow>();
         private readonly TextBox _EndpointFilter = new TextBox { Width = 210, PlaceholderText = Localizer.T("usage.endpointFilter.placeholder") };
         private readonly TextBox _ConversationFilter = new TextBox { Width = 230, PlaceholderText = Localizer.T("usage.conversationFilter.placeholder") };
+        private readonly ComboBox _DimensionPicker = new ComboBox { MinWidth = 130, VerticalAlignment = VerticalAlignment.Center };
+        private readonly ComboBox _SplitMetricPicker = new ComboBox { MinWidth = 110, VerticalAlignment = VerticalAlignment.Center };
+        private readonly StackPanel _StyleToggle = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 0, VerticalAlignment = VerticalAlignment.Center };
+        private readonly Button _BarsButton = new Button { Padding = new Thickness(10, 3, 10, 3) };
+        private readonly Button _LinesButton = new Button { Padding = new Thickness(10, 3, 10, 3) };
+        private readonly Button _ExportCsvButton = new Button { Padding = new Thickness(10, 3, 10, 3), Margin = new Thickness(0, 0, 6, 0) };
+        private readonly Button _SavePngButton = new Button { Padding = new Thickness(10, 3, 10, 3) };
+        private readonly TextBlock _ExportStatus = new TextBlock { FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis };
+        private readonly Border _DrillChip = new Border { IsVisible = false, CornerRadius = new CornerRadius(12), Padding = new Thickness(10, 2, 4, 2), VerticalAlignment = VerticalAlignment.Center };
+        private readonly TextBlock _DrillText = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+        private readonly DispatcherTimer _FilterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        private readonly IReadOnlyDictionary<string, string> _Conversations;
+        private readonly Func<string?, string?>? _ConversationName;
 
         private UsageRange _Range = UsageRange.Day;
-        private ChartMetric _Metric = ChartMetric.Tokens;
-        private readonly Func<string?, string?>? _ConversationName;
-        private bool _LoadTruncated;
+        private ChartMetric _Metric = ChartMetric.Calls;
+        private string _Dimension = "model";
+        private string _SplitMetric = UsageCsv.MetricTokens;
+        private bool _Lines;
+        private UsageDashboardData? _Data;
+        private UsageScope _Scope = UsageScope.Any;
+        private List<string> _KnownEndpoints = new List<string>();
+        private long _EventsTotal;
+        private long? _DrillStart;
+        private long _DrillWidth;
+        private int _LoadVersion;
+        private int _EventsVersion;
         private int _SortColumn;
         private bool _SortDescending = true;
 
@@ -87,12 +134,15 @@ namespace Mux.Desktop.Views
         /// </summary>
         /// <param name="analytics">The usage analytics service. Required.</param>
         /// <param name="conversationNameResolver">Optional map from a session id to a conversation title.</param>
+        /// <param name="conversations">Optional known conversations (session id to title), used to resolve the
+        /// conversation filter into session ids for the shared queries.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="analytics"/> is null.</exception>
-        public UsageDashboardWindow(IUsageAnalyticsService analytics, Func<string?, string?>? conversationNameResolver = null)
+        public UsageDashboardWindow(IUsageAnalyticsService analytics, Func<string?, string?>? conversationNameResolver = null, IReadOnlyDictionary<string, string>? conversations = null)
         {
             ArgumentNullException.ThrowIfNull(analytics);
             _Analytics = analytics;
             _ConversationName = conversationNameResolver;
+            _Conversations = conversations ?? new Dictionary<string, string>();
 
             AppTheme theme = AppTheme.Current;
 
@@ -106,8 +156,25 @@ namespace Mux.Desktop.Views
             WindowState = WindowState.Maximized;
             Background = theme.Surface;
 
+            _FilterTimer.Tick += (sender, args) =>
+            {
+                _FilterTimer.Stop();
+                _ = ReloadAsync();
+            };
+            Closed += (sender, args) => _FilterTimer.Stop();
+
             Content = BuildLayout(theme);
             _ = ReloadAsync();
+        }
+
+        private List<UsageBucket> Buckets
+        {
+            get => _Data?.Timeseries ?? new List<UsageBucket>();
+        }
+
+        private long BucketWidth
+        {
+            get => UsageChartShaping.BucketWidthMs(Buckets, _Data?.Window);
         }
 
         private Control BuildLayout(AppTheme theme)
@@ -126,7 +193,12 @@ namespace Mux.Desktop.Views
             BuildMetricTabs(theme);
             AddRow(grid, 2, _MetricTabs);
 
-            AddRow(grid, 3, _ChartHost);
+            // The chart toolbar sits directly above the chart it acts on.
+            _ChartHost.Background = theme.Surface;
+            StackPanel chartArea = new StackPanel { Spacing = 6 };
+            chartArea.Children.Add(BuildChartToolbar(theme));
+            chartArea.Children.Add(_ChartHost);
+            AddRow(grid, 3, chartArea);
 
             AddRow(grid, 4, BuildFilterBar(theme));
 
@@ -145,18 +217,20 @@ namespace Mux.Desktop.Views
 
         private Control BuildFilterBar(AppTheme theme)
         {
-            StackPanel bar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 10, 0, 0) };
-            bar.Children.Add(new TextBlock { Text = Localizer.T("usage.filter"), VerticalAlignment = VerticalAlignment.Center, Foreground = theme.Muted, FontSize = 12, FontWeight = FontWeight.SemiBold });
+            WrapPanel bar = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+            bar.Children.Add(new TextBlock { Text = Localizer.T("usage.filter"), VerticalAlignment = VerticalAlignment.Center, Foreground = theme.Muted, FontSize = 12, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 0, 8, 0) });
 
             _EndpointFilter.Tip(Localizer.T("usage.endpointFilter.tip"));
-            _EndpointFilter.TextChanged += (sender, args) => ApplyFilters(AppTheme.Current);
+            _EndpointFilter.Margin = new Thickness(0, 0, 8, 0);
+            _EndpointFilter.TextChanged += (sender, args) => ScheduleReload();
             bar.Children.Add(_EndpointFilter);
 
             _ConversationFilter.Tip(Localizer.T("usage.conversationFilter.tip"));
-            _ConversationFilter.TextChanged += (sender, args) => ApplyFilters(AppTheme.Current);
+            _ConversationFilter.Margin = new Thickness(0, 0, 8, 0);
+            _ConversationFilter.TextChanged += (sender, args) => ScheduleReload();
             bar.Children.Add(_ConversationFilter);
 
-            Button clear = new Button { Content = Localizer.T("usage.clear"), Padding = new Thickness(10, 4, 10, 4) };
+            Button clear = new Button { Content = Localizer.T("usage.clear"), Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(0, 0, 12, 0) };
             clear.Tip(Localizer.T("usage.clear.tip"));
             clear.Click += (sender, args) =>
             {
@@ -164,6 +238,25 @@ namespace Mux.Desktop.Views
                 _ConversationFilter.Text = string.Empty;
             };
             bar.Children.Add(clear);
+
+            // Drill-down indicator: "Calls <bucket window> ×", visible while the table is narrowed to one bucket.
+            _DrillText.Foreground = theme.AccentText;
+            _DrillChip.Background = theme.AccentButton;
+            Button close = new Button
+            {
+                Content = new TextBlock { Text = "×", Foreground = theme.AccentText, FontSize = 13, FontWeight = FontWeight.SemiBold },
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(6, 0, 6, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            close.Tip(Localizer.T("usage.drill.clear.tip"));
+            close.Click += (sender, args) => ClearDrill();
+            StackPanel chip = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+            chip.Children.Add(_DrillText);
+            chip.Children.Add(close);
+            _DrillChip.Child = chip;
+            bar.Children.Add(_DrillChip);
             return bar;
         }
 
@@ -176,10 +269,11 @@ namespace Mux.Desktop.Views
             header.Children.Add(title);
 
             StackPanel ranges = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Right };
-            ranges.Children.Add(RangeButton(Localizer.T("usage.range.hour"), UsageRange.Hour, theme).Tip(Localizer.T("usage.range.hour.tip")));
-            ranges.Children.Add(RangeButton(Localizer.T("usage.range.day"), UsageRange.Day, theme).Tip(Localizer.T("usage.range.day.tip")));
-            ranges.Children.Add(RangeButton(Localizer.T("usage.range.week"), UsageRange.Week, theme).Tip(Localizer.T("usage.range.week.tip")));
-            ranges.Children.Add(RangeButton(Localizer.T("usage.range.month"), UsageRange.Month, theme).Tip(Localizer.T("usage.range.month.tip")));
+            foreach (UsageRange range in UsageChartShaping.Ranges)
+            {
+                ranges.Children.Add(RangeButton(Localizer.T(UsageChartShaping.RangeLabelKey(range)), range, theme).Tip(Localizer.T(UsageChartShaping.RangeTipKey(range))));
+            }
+
             DockPanel.SetDock(ranges, Dock.Right);
             header.Children.Add(ranges);
             return header;
@@ -198,6 +292,8 @@ namespace Mux.Desktop.Views
                     ApplyTabStyle(entry.Value, entry.Key == _Range, theme);
                 }
 
+                // A bucket from the old grid has no meaning in the new one.
+                SetDrill(null, 0);
                 _ = ReloadAsync();
             };
             return button;
@@ -205,20 +301,239 @@ namespace Mux.Desktop.Views
 
         private void BuildMetricTabs(AppTheme theme)
         {
-            _MetricTabs.Children.Clear();
-            _MetricButtons.Clear();
-            AddMetricTab("Heatmap", ChartMetric.Heatmap, theme, "Token activity over time");
+            AddMetricTab(Localizer.T("usage.metric.calls"), ChartMetric.Calls, theme, Localizer.T("usage.metric.calls.tip"));
             AddMetricTab(Localizer.T("usage.metric.tokens"), ChartMetric.Tokens, theme, Localizer.T("usage.metric.tokens.tip"));
+            AddMetricTab(SplitLabel(), ChartMetric.TokensBy, theme, Localizer.T("usage.metric.tokensBy.tip"));
             AddMetricTab(Localizer.T("usage.metric.cost"), ChartMetric.Cost, theme, Localizer.T("usage.metric.cost.tip"));
             AddMetricTab(Localizer.T("usage.metric.latency"), ChartMetric.Latency, theme, Localizer.T("usage.metric.latency.tip"));
             AddMetricTab(Localizer.T("usage.metric.ttft"), ChartMetric.Ttft, theme, Localizer.T("usage.metric.ttft.tip"));
             AddMetricTab(Localizer.T("usage.metric.streaming"), ChartMetric.Streaming, theme, Localizer.T("usage.metric.streaming.tip"));
             AddMetricTab(Localizer.T("usage.metric.throughput"), ChartMetric.Throughput, theme, Localizer.T("usage.metric.throughput.tip"));
+            AddMetricTab(ByLabel("usage.metric.usageBy"), ChartMetric.UsageBy, theme, Localizer.T("usage.metric.usageBy.tip"));
+            AddMetricTab(Localizer.T("usage.metric.heatmap"), ChartMetric.Heatmap, theme, Localizer.T("usage.metric.heatmap.tip"));
+
+            // One dimension picker shared by "Tokens by" and "Usage by".
+            foreach (string dimension in UsageChartShaping.Dimensions)
+            {
+                _DimensionPicker.Items.Add(new ComboBoxItem { Content = Localizer.T(UsageChartShaping.DimensionLabelKey(dimension)), Tag = dimension });
+            }
+
+            _DimensionPicker.SelectedIndex = 0;
+            _DimensionPicker.Tip(Localizer.T("usage.dim.tip"));
+            _DimensionPicker.SelectionChanged += (sender, args) =>
+            {
+                if (_DimensionPicker.SelectedItem is ComboBoxItem item && item.Tag is string dimension && dimension != _Dimension)
+                {
+                    _Dimension = dimension;
+                    _MetricButtons[ChartMetric.TokensBy].Content = SplitLabel();
+                    _MetricButtons[ChartMetric.UsageBy].Content = ByLabel("usage.metric.usageBy");
+                    _ = ReloadAsync();
+                }
+            };
+
+            // One metric picker shared by "<Metric> by" and "Usage by" (which ranks by it). The split series and
+            // breakdown rows already carry tokens, calls, and cost, so a change only redraws.
+            foreach (string metric in UsageChartShaping.SplitMetrics)
+            {
+                _SplitMetricPicker.Items.Add(new ComboBoxItem { Content = Localizer.T(UsageChartShaping.SplitMetricLabelKey(metric)), Tag = metric });
+            }
+
+            _SplitMetricPicker.SelectedIndex = 0;
+            _SplitMetricPicker.Tip(Localizer.T("usage.splitMetric.tip"));
+            _SplitMetricPicker.SelectionChanged += (sender, args) =>
+            {
+                if (_SplitMetricPicker.SelectedItem is ComboBoxItem item && item.Tag is string metric && metric != _SplitMetric)
+                {
+                    _SplitMetric = metric;
+                    _MetricButtons[ChartMetric.TokensBy].Content = SplitLabel();
+                    _ChartHost.Child = BuildChart(AppTheme.Current);
+                }
+            };
+
+            StackPanel picker = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(12, 0, 0, 6), VerticalAlignment = VerticalAlignment.Center };
+            picker.Children.Add(new TextBlock { Text = Localizer.T("usage.splitMetric.label"), Foreground = theme.Muted, FontSize = 12, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+            picker.Children.Add(_SplitMetricPicker);
+            picker.Children.Add(new TextBlock { Text = Localizer.T("usage.dim.label"), Foreground = theme.Muted, FontSize = 12, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            picker.Children.Add(_DimensionPicker);
+            _MetricTabs.Children.Add(picker);
+        }
+
+        // "<Metric> by <dimension>", for example "Calls by Call kind".
+        private string SplitLabel()
+        {
+            return string.Format(
+                CultureInfo.CurrentCulture,
+                Localizer.T("usage.metric.metricBy"),
+                Localizer.T(UsageChartShaping.SplitMetricLabelKey(_SplitMetric)),
+                Localizer.T(UsageChartShaping.DimensionLabelKey(_Dimension)));
+        }
+
+        // Bars/Lines on the left (stacked over-time charts only); Export CSV and Save PNG on the right with the last
+        // export's result beside them.
+        private Control BuildChartToolbar(AppTheme theme)
+        {
+            _BarsButton.Content = Localizer.T("usage.chart.bars");
+            _BarsButton.Tip(Localizer.T("usage.chart.bars.tip"));
+            _BarsButton.BorderBrush = theme.Border;
+            _BarsButton.CornerRadius = new CornerRadius(6, 0, 0, 6);
+            _BarsButton.Click += (sender, args) => SetLines(false);
+            _LinesButton.Content = Localizer.T("usage.chart.lines");
+            _LinesButton.Tip(Localizer.T("usage.chart.lines.tip"));
+            _LinesButton.BorderBrush = theme.Border;
+            _LinesButton.CornerRadius = new CornerRadius(0, 6, 6, 0);
+            _LinesButton.Click += (sender, args) => SetLines(true);
+            _StyleToggle.Children.Add(_BarsButton);
+            _StyleToggle.Children.Add(_LinesButton);
+
+            _ExportCsvButton.Content = Localizer.T("usage.export.csv");
+            _ExportCsvButton.Tip(Localizer.T("usage.export.csv.tip"));
+            _ExportCsvButton.Click += (sender, args) => _ = ExportCsvAsync();
+            _SavePngButton.Content = Localizer.T("usage.export.png");
+            _SavePngButton.Tip(Localizer.T("usage.export.png.tip"));
+            _SavePngButton.Click += (sender, args) => _ = SavePngAsync();
+            _ExportStatus.Foreground = theme.Muted;
+
+            StackPanel actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            actions.Children.Add(_ExportStatus);
+            actions.Children.Add(new Border { Width = 10 });
+            actions.Children.Add(_ExportCsvButton);
+            actions.Children.Add(_SavePngButton);
+
+            DockPanel bar = new DockPanel { LastChildFill = false };
+            DockPanel.SetDock(_StyleToggle, Dock.Left);
+            bar.Children.Add(_StyleToggle);
+            DockPanel.SetDock(actions, Dock.Right);
+            bar.Children.Add(actions);
+            UpdateToolbar(theme);
+            return bar;
+        }
+
+        private void SetLines(bool lines)
+        {
+            if (_Lines == lines)
+            {
+                return;
+            }
+
+            _Lines = lines;
+            _ChartHost.Child = BuildChart(AppTheme.Current);
+        }
+
+        // Shows the bars/lines toggle on the stacked charts and enables export only when the chart has data.
+        private void UpdateToolbar(AppTheme theme)
+        {
+            string kind = ChartKind(_Metric);
+            _StyleToggle.IsVisible = UsageChartExport.IsStacked(kind);
+            ApplyTabStyle(_BarsButton, !_Lines, theme);
+            ApplyTabStyle(_LinesButton, _Lines, theme);
+            bool exportable = _Analytics.IsEnabled && UsageChartExport.HasData(_Data, kind);
+            _ExportCsvButton.IsEnabled = exportable;
+            _SavePngButton.IsEnabled = exportable;
+        }
+
+        private static string ChartKind(ChartMetric metric)
+        {
+            switch (metric)
+            {
+                case ChartMetric.Tokens: return UsageChartExport.Tokens;
+                case ChartMetric.TokensBy: return UsageChartExport.Split;
+                case ChartMetric.Cost: return UsageChartExport.Cost;
+                case ChartMetric.Latency: return UsageChartExport.Latency;
+                case ChartMetric.Ttft: return UsageChartExport.Ttft;
+                case ChartMetric.Streaming: return UsageChartExport.Streaming;
+                case ChartMetric.Throughput: return UsageChartExport.Throughput;
+                case ChartMetric.UsageBy: return UsageChartExport.UsageBy;
+                case ChartMetric.Heatmap: return UsageChartExport.Heatmap;
+                default: return UsageChartExport.Calls;
+            }
+        }
+
+        private async Task ExportCsvAsync()
+        {
+            string kind = ChartKind(_Metric);
+            string? csv = UsageChartExport.BuildCsv(_Data, kind, _SplitMetric);
+            if (csv == null)
+            {
+                return;
+            }
+
+            byte[] bytes = new UTF8Encoding(false).GetBytes(csv);
+            await SaveAsync(kind, "csv", Localizer.T("usage.export.csvType"), "text/csv", "public.comma-separated-values-text", stream => stream.WriteAsync(bytes, 0, bytes.Length));
+        }
+
+        // Renders the chart area (with its background) at twice its size, so the image stays sharp on any display.
+        private async Task SavePngAsync()
+        {
+            string kind = ChartKind(_Metric);
+            if (!UsageChartExport.HasData(_Data, kind) || _ChartHost.Bounds.Width <= 0 || _ChartHost.Bounds.Height <= 0)
+            {
+                return;
+            }
+
+            byte[] png;
+            try
+            {
+                PixelSize size = new PixelSize((int)Math.Ceiling(_ChartHost.Bounds.Width * 2), (int)Math.Ceiling(_ChartHost.Bounds.Height * 2));
+                using RenderTargetBitmap bitmap = new RenderTargetBitmap(size, new Vector(192, 192));
+                bitmap.Render(_ChartHost);
+                using MemoryStream buffer = new MemoryStream();
+                bitmap.Save(buffer, PngBitmapEncoderOptions.Default);
+                png = buffer.ToArray();
+            }
+            catch (Exception ex)
+            {
+                _ExportStatus.Text = Format("usage.export.failed", ex.Message);
+                return;
+            }
+
+            await SaveAsync(kind, "png", Localizer.T("usage.export.pngType"), "image/png", "public.png", stream => stream.WriteAsync(png, 0, png.Length));
+        }
+
+        private async Task SaveAsync(string kind, string extension, string typeName, string mimeType, string appleType, Func<Stream, Task> write)
+        {
+            try
+            {
+                FilePickerFileType type = new FilePickerFileType(typeName)
+                {
+                    Patterns = new[] { "*." + extension },
+                    MimeTypes = new[] { mimeType },
+                    AppleUniformTypeIdentifiers = new[] { appleType }
+                };
+                IStorageFile? file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+                {
+                    Title = Localizer.T(extension == "png" ? "usage.export.png" : "usage.export.csv"),
+                    SuggestedFileName = UsageChartExport.FileName(kind, _SplitMetric, _Dimension, _Range, DateTime.Now, extension),
+                    DefaultExtension = extension,
+                    FileTypeChoices = new[] { type },
+                    ShowOverwritePrompt = true
+                });
+                if (file == null)
+                {
+                    return;
+                }
+
+                await using (Stream stream = await file.OpenWriteAsync())
+                {
+                    await write(stream);
+                }
+
+                _ExportStatus.Text = Format("usage.export.saved", file.TryGetLocalPath() ?? file.Name);
+                _ExportStatus.Tip(_ExportStatus.Text);
+            }
+            catch (Exception ex)
+            {
+                _ExportStatus.Text = Format("usage.export.failed", ex.Message);
+            }
+        }
+
+        private string ByLabel(string key)
+        {
+            return string.Format(CultureInfo.CurrentCulture, Localizer.T(key), Localizer.T(UsageChartShaping.DimensionLabelKey(_Dimension)));
         }
 
         private void AddMetricTab(string label, ChartMetric metric, AppTheme theme, string tip)
         {
-            Button button = new Button { Content = label, BorderBrush = theme.Border, Padding = new Thickness(12, 6, 12, 6) };
+            Button button = new Button { Content = label, BorderBrush = theme.Border, Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 0, 6, 6) };
             button.Tip(tip);
             _MetricButtons[metric] = button;
             ApplyTabStyle(button, metric == _Metric, theme);
@@ -286,193 +601,182 @@ namespace Mux.Desktop.Views
             RenderEvents(theme);
         }
 
+        private void ScheduleReload()
+        {
+            _FilterTimer.Stop();
+            _FilterTimer.Start();
+        }
+
+        private bool IsFiltered()
+        {
+            return (_EndpointFilter.Text ?? string.Empty).Trim().Length > 0 || (_ConversationFilter.Text ?? string.Empty).Trim().Length > 0;
+        }
+
         private async Task ReloadAsync()
         {
             AppTheme theme = AppTheme.Current;
+            int version = ++_LoadVersion;
 
             if (!_Analytics.IsEnabled)
             {
                 _Status.Text = Localizer.T("usage.disabled");
                 _KpiStrip.Children.Clear();
                 _ChartHost.Child = null;
+                UpdateToolbar(theme);
                 _EventsList.Children.Clear();
-                _Series.Clear();
                 _Events.Clear();
-                _AllEvents.Clear();
+                _Data = null;
                 return;
             }
 
             try
             {
-                // Fetch every call in the range, then filter and aggregate on the client so the table, KPIs,
-                // and charts all reflect the endpoint/conversation filters consistently.
-                UsageEventPage page = await _Analytics.GetEventsAsync(_Range, null, null, null, 1, MaxEvents, CancellationToken.None);
-                _AllEvents.Clear();
-                _AllEvents.AddRange(page.Items);
-                _LoadTruncated = page.TotalCount > _AllEvents.Count;
-                ApplyFilters(theme);
+                // The text filters are resolved into exact endpoint names and session ids, so every chart and KPI
+                // comes from the shared query service (see UsageScope and UsageAnalyticsService).
+                List<string> endpoints = await _Analytics.GetEndpointsAsync(CancellationToken.None);
+                if (version != _LoadVersion)
+                {
+                    return;
+                }
+
+                _KnownEndpoints = endpoints;
+                UsageScope scope = new UsageScope(
+                    UsageScope.MatchEndpoints(_EndpointFilter.Text, _KnownEndpoints),
+                    UsageScope.MatchSessions(_ConversationFilter.Text, _Conversations));
+
+                UsageDashboardData data = await _Analytics.LoadDashboardAsync(_Range, scope, _Dimension, CancellationToken.None);
+                if (version != _LoadVersion)
+                {
+                    return;
+                }
+
+                _Data = data;
+                _Scope = scope;
+                RenderKpis(data.Summary.Metrics, theme);
+                _ChartHost.Child = BuildChart(theme);
+                await ReloadEventsAsync();
             }
             catch (Exception ex)
             {
-                _Status.Text = Localizer.T("usage.loadError") + ex.Message;
+                if (version == _LoadVersion)
+                {
+                    _Status.Text = Localizer.T("usage.loadError") + ex.Message;
+                }
             }
         }
 
-        private void ApplyFilters(AppTheme theme)
+        private async Task ReloadEventsAsync()
         {
-            if (!_Analytics.IsEnabled)
+            if (_Data == null)
             {
                 return;
             }
 
-            string endpointFilter = (_EndpointFilter.Text ?? string.Empty).Trim();
-            string conversationFilter = (_ConversationFilter.Text ?? string.Empty).Trim();
-
-            _Events.Clear();
-            foreach (UsageEventRow row in _AllEvents)
+            int version = ++_EventsVersion;
+            AppTheme theme = AppTheme.Current;
+            long from;
+            long to;
+            if (_DrillStart.HasValue)
             {
-                if (endpointFilter.Length > 0 && (row.EndpointName ?? string.Empty).IndexOf(endpointFilter, StringComparison.OrdinalIgnoreCase) < 0)
-                {
-                    continue;
-                }
-
-                if (conversationFilter.Length > 0 && ConversationLabel(row).IndexOf(conversationFilter, StringComparison.OrdinalIgnoreCase) < 0)
-                {
-                    continue;
-                }
-
-                _Events.Add(row);
+                (from, to) = UsageChartShaping.DrillWindow(_DrillStart.Value, _DrillWidth);
+            }
+            else
+            {
+                from = _Data.Window.FromUnixMs;
+                to = _Data.Window.ToUnixMs - 1;
             }
 
-            RenderKpis(ComputeMetrics(_Events), theme);
-
-            _Series.Clear();
-            _Series.AddRange(ComputeSeries(_Events));
-            _ChartHost.Child = BuildChart(theme);
-
-            RenderEvents(theme);
-
-            bool filtered = endpointFilter.Length > 0 || conversationFilter.Length > 0;
-            string scope = filtered ? " " + Localizer.T("usage.status.of") + " " + _AllEvents.Count + " " + Localizer.T("usage.status.loaded") : string.Empty;
-            string truncated = _LoadTruncated ? " (" + Localizer.T("usage.status.mostRecent") + " " + _AllEvents.Count + " " + Localizer.T("usage.status.loaded") + ")" : string.Empty;
-            string rangeWord = _Range switch
+            try
             {
-                UsageRange.Hour => Localizer.T("usage.range.hour"),
-                UsageRange.Week => Localizer.T("usage.range.week"),
-                UsageRange.Month => Localizer.T("usage.range.month"),
-                _ => Localizer.T("usage.range.day")
-            };
-            _Status.Text = Localizer.T("usage.status.showing") + " " + _Events.Count + scope + " "
-                + (_Events.Count == 1 ? Localizer.T("usage.status.call") : Localizer.T("usage.status.calls"))
-                + " " + Localizer.T("usage.status.inTheLast") + " " + rangeWord
-                + (filtered ? ", " + Localizer.T("usage.status.filtered") : string.Empty) + "." + truncated;
+                UsageEventPage page = await _Analytics.GetEventsInWindowAsync(from, to, _Scope, TablePageSize, CancellationToken.None);
+                if (version != _EventsVersion)
+                {
+                    return;
+                }
+
+                _Events.Clear();
+                _Events.AddRange(page.Items);
+                _EventsTotal = page.TotalCount;
+                RenderEvents(theme);
+                UpdateStatus();
+            }
+            catch (Exception ex)
+            {
+                if (version == _EventsVersion)
+                {
+                    _Status.Text = Localizer.T("usage.loadError") + ex.Message;
+                }
+            }
         }
 
-        private static UsageMetrics ComputeMetrics(List<UsageEventRow> events)
+        private void UpdateStatus()
         {
-            UsageMetrics metrics = new UsageMetrics { Calls = events.Count };
-            long errors = 0;
-            List<double> ttft = new List<double>();
-            List<double> latency = new List<double>();
-            List<double> streaming = new List<double>();
-            List<double> throughput = new List<double>();
-
-            foreach (UsageEventRow row in events)
+            string shown = _Events.Count.ToString("#,##0", CultureInfo.CurrentCulture);
+            string total = _EventsTotal.ToString("#,##0", CultureInfo.CurrentCulture);
+            string text;
+            if (_DrillStart.HasValue)
             {
-                if (!row.Success)
-                {
-                    errors++;
-                }
-
-                metrics.InputTokens += row.InputTokens;
-                metrics.CachedTokens += row.CachedTokens;
-                metrics.OutputTokens += row.OutputTokens;
-                metrics.TotalTokens += row.TotalTokens;
-                metrics.CostUsd += row.CostUsd;
-
-                if (row.TimeToFirstTokenMs.HasValue)
-                {
-                    ttft.Add(row.TimeToFirstTokenMs.Value);
-                }
-
-                if (row.TotalMs.HasValue)
-                {
-                    latency.Add(row.TotalMs.Value);
-                }
-
-                if (row.StreamingMs.HasValue)
-                {
-                    streaming.Add(row.StreamingMs.Value);
-                }
-
-                if (row.TokensPerSecond.HasValue)
-                {
-                    throughput.Add(row.TokensPerSecond.Value);
-                }
+                text = Format("usage.status.bucket", shown, total, UsageChartShaping.FormatBucketWindow(_DrillStart.Value, _DrillWidth));
+            }
+            else if (_Range == UsageRange.All)
+            {
+                text = Format("usage.status.rangeAll", shown, total);
+            }
+            else
+            {
+                text = Format("usage.status.range", shown, total, Localizer.T(UsageChartShaping.RangeLabelKey(_Range)));
             }
 
-            metrics.Errors = errors;
-            metrics.ErrorRate = metrics.Calls > 0 ? (double)errors / metrics.Calls : 0.0;
-            metrics.CacheHitRate = metrics.InputTokens > 0 ? (double)metrics.CachedTokens / metrics.InputTokens : 0.0;
+            if (IsFiltered())
+            {
+                text += " " + Localizer.T("usage.status.filteredNote");
+            }
 
-            metrics.TtftMsDist = UsageDistribution.From(ttft, Percentile);
-            metrics.TotalMsDist = UsageDistribution.From(latency, Percentile);
-            metrics.StreamMsDist = UsageDistribution.From(streaming, Percentile);
-            metrics.ThroughputDist = UsageDistribution.From(throughput, Percentile);
+            if (_Scope.Endpoints != null && _Scope.Endpoints.Count > 1)
+            {
+                text += " " + Localizer.T("usage.status.approx");
+            }
 
-            metrics.AvgTtftMs = metrics.TtftMsDist.Avg;
-            metrics.P95TtftMs = metrics.TtftMsDist.P95;
-            metrics.P99TtftMs = metrics.TtftMsDist.P99;
-            metrics.AvgTotalMs = metrics.TotalMsDist.Avg;
-            metrics.P95TotalMs = metrics.TotalMsDist.P95;
-            metrics.P99TotalMs = metrics.TotalMsDist.P99;
-            metrics.AvgStreamMs = metrics.StreamMsDist.Avg;
-            metrics.AvgTokensPerSec = metrics.ThroughputDist.Avg;
-            return metrics;
+            _Status.Text = text;
         }
 
-        private List<UsageBucket> ComputeSeries(List<UsageEventRow> events)
+        private static string Format(string key, params object[] args)
         {
-            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            UsageWindow window = UsageWindow.Compute(_Range, now);
-            int count = Math.Max(1, window.BucketCount);
-
-            List<List<UsageEventRow>> grouped = new List<List<UsageEventRow>>(count);
-            for (int i = 0; i < count; i++)
-            {
-                grouped.Add(new List<UsageEventRow>());
-            }
-
-            foreach (UsageEventRow row in events)
-            {
-                long offset = row.TimestampUnixMs - window.FromUnixMs;
-                int index = window.BucketMs > 0 ? (int)(offset / window.BucketMs) : 0;
-                index = Math.Clamp(index, 0, count - 1);
-                grouped[index].Add(row);
-            }
-
-            List<UsageBucket> series = new List<UsageBucket>(count);
-            for (int i = 0; i < count; i++)
-            {
-                series.Add(new UsageBucket
-                {
-                    BucketStartUnixMs = window.FromUnixMs + (i * window.BucketMs),
-                    Metrics = ComputeMetrics(grouped[i])
-                });
-            }
-
-            return series;
+            return string.Format(CultureInfo.CurrentCulture, Localizer.T(key), args);
         }
 
-        private static double Percentile(List<double> sortedValues, double quantile)
+        private void SelectBucket(long bucketStartUnixMs, long? widthMs = null)
         {
-            if (sortedValues.Count == 0)
+            long width = widthMs ?? BucketWidth;
+            if (_DrillStart == bucketStartUnixMs)
             {
-                return 0.0;
+                ClearDrill();
+                return;
             }
 
-            int index = (int)Math.Round(quantile * (sortedValues.Count - 1));
-            return sortedValues[Math.Clamp(index, 0, sortedValues.Count - 1)];
+            SetDrill(bucketStartUnixMs, width);
+            _ChartHost.Child = BuildChart(AppTheme.Current);
+            _ = ReloadEventsAsync();
+        }
+
+        private void ClearDrill()
+        {
+            if (!_DrillStart.HasValue)
+            {
+                return;
+            }
+
+            SetDrill(null, 0);
+            _ChartHost.Child = BuildChart(AppTheme.Current);
+            _ = ReloadEventsAsync();
+        }
+
+        private void SetDrill(long? start, long width)
+        {
+            _DrillStart = start;
+            _DrillWidth = width;
+            _DrillChip.IsVisible = start.HasValue;
+            _DrillText.Text = start.HasValue ? Format("usage.drill.chip", UsageChartShaping.FormatBucketWindow(start.Value, width)) : string.Empty;
         }
 
         private void RenderKpis(UsageMetrics metrics, AppTheme theme)
@@ -505,49 +809,196 @@ namespace Mux.Desktop.Views
             }.Tip(tip);
         }
 
+        // The token heatmap on the shared clock-aligned grid: each row one local period (its start labeled on the
+        // left), each column one bucket within it (labeled on top), an axis caption naming both, and a legend.
         private Control BuildTokenHeatmap(AppTheme theme)
         {
-            StackPanel host = new StackPanel { Spacing = 12 };
-            host.Children.Add(new TextBlock { Text = "Token activity heatmap", Foreground = theme.Text, FontSize = 14 });
+            UsageHeatmap heatmap = _Data!.Heatmap!;
+            UsageHeatmapLayout layout = heatmap.Layout;
+            CultureInfo culture = CultureInfo.CurrentCulture;
+            StackPanel host = new StackPanel { Spacing = 8 };
+            host.Children.Add(new TextBlock { Text = Localizer.T("usage.heatmap.title"), Foreground = theme.Text, FontSize = 14 });
+            host.Children.Add(new TextBlock { Text = UsageChartShaping.HeatmapCaption(layout, Localizer.T), Foreground = theme.Muted, FontSize = 12 });
+
+            double rowHeight = UsageChartShaping.HeatmapRowHeight(layout.Rows);
             Grid grid = new Grid();
-            const int rows = 7;
-            int columns = (_Series.Count + rows - 1) / rows;
-            for (int c = 0; c < columns; c++) grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
-            for (int r = 0; r < rows; r++) grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-            double max = 0;
-            foreach (UsageBucket bucket in _Series) max = Math.Max(max, bucket.Metrics.TotalTokens);
-            string[] colors = { "#2d3034", "#0e4429", "#006d32", "#26a641", "#39d353" };
-            for (int i = 0; i < _Series.Count; i++)
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+            for (int c = 0; c < layout.Columns; c++)
             {
-                double tokens = _Series[i].Metrics.TotalTokens;
-                int level = tokens <= 0 ? 0 : Math.Min(4, 1 + (int)(tokens / Math.Max(1, max) * 3));
-                Border cell = new Border { Height = 24, Margin = new Thickness(2), CornerRadius = new CornerRadius(3), Background = new SolidColorBrush(Color.Parse(colors[level])) };
-                ToolTip.SetTip(cell, BucketTooltip(_Series[i]));
-                Grid.SetColumn(cell, i / rows); Grid.SetRow(cell, i % rows); grid.Children.Add(cell);
+                grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
             }
+
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            for (int r = 0; r < layout.Rows; r++)
+            {
+                grid.RowDefinitions.Add(new RowDefinition(new GridLength(rowHeight, GridUnitType.Pixel)));
+            }
+
+            // Column labels, thinned so they never crowd (about one per 44 pixels of a 640 pixel plot); a half-day
+            // grid labels each weekday once, spanning its AM and PM columns.
+            foreach (int c in layout.LabeledColumns(14))
+            {
+                TextBlock label = new TextBlock { Text = layout.FormatColumnLabel(c, culture), Foreground = theme.Muted, FontSize = 10, Margin = new Thickness(2, 0, 0, 2) };
+                Grid.SetRow(label, 0);
+                Grid.SetColumn(label, c + 1);
+                Grid.SetColumnSpan(label, Math.Min(layout.ColumnGroup > 1 ? layout.ColumnGroup : 3, layout.Columns - c));
+                grid.Children.Add(label);
+            }
+
+            List<int> labeledRows = UsageChartShaping.HeatmapLabeledRows(layout.Rows);
+            foreach (int r in labeledRows)
+            {
+                TextBlock label = new TextBlock { Text = layout.FormatRowLabel(r, culture), Foreground = theme.Muted, FontSize = 11, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = rowHeight >= 16 ? VerticalAlignment.Center : VerticalAlignment.Top };
+                Grid.SetRow(label, r + 1);
+                Grid.SetRowSpan(label, rowHeight >= 16 ? 1 : Math.Min(2, layout.Rows - r));
+                Grid.SetColumn(label, 0);
+                grid.Children.Add(label);
+            }
+
+            long max = heatmap.TotalTokens.Length > 0 ? heatmap.TotalTokens.Max() : 0;
+
+            // Shades by quartile of the used cells; an empty cell is a neutral grey, and a cell outside the window
+            // (after now, or before the month's last 30 days) is left blank and not clickable.
+            UsageHeatmapScale scale = UsageHeatmapScale.FromValues(heatmap.TotalTokens.Select(v => (double)v));
+            for (int i = 0; i < layout.CellCount; i++)
+            {
+                if (layout.IsOutsideWindow(i))
+                {
+                    continue;
+                }
+
+                long tokens = heatmap.TotalTokens[i];
+                int level = scale.LevelOf(tokens);
+                long start = layout.CellStartUnixMs(i);
+                bool selected = _DrillStart == start;
+                Border cell = HeatmapSwatch(level, theme, Math.Max(4, rowHeight - 3));
+                cell.Margin = new Thickness(1.5);
+                if (selected)
+                {
+                    cell.BorderBrush = theme.Text;
+                    cell.BorderThickness = new Thickness(2);
+                }
+
+                cell.Cursor = HandCursor;
+                ToolTip.SetTip(cell, UsageChartShaping.FormatBucketWindow(start, layout.BucketMs, null, culture)
+                    + "\n" + Localizer.T("usage.tip.total") + ": " + tokens.ToString("#,##0", culture)
+                    + "\n" + Localizer.T("us.calls") + ": " + heatmap.Calls[i].ToString("#,##0", culture)
+                    + "\n" + Localizer.T("usage.tip.drill"));
+                long width = layout.BucketMs;
+                cell.PointerPressed += (sender, args) => SelectBucket(start, width);
+                Grid.SetColumn(cell, (i % layout.Columns) + 1);
+                Grid.SetRow(cell, (i / layout.Columns) + 1);
+                grid.Children.Add(cell);
+            }
+
             host.Children.Add(grid);
-            host.Children.Add(BuildXAxis(theme));
-            host.Children.Add(new TextBlock { Text = "Oldest → newest · Less ░▒▓█ More · peak " + max.ToString("#,##0") + " tokens", Foreground = theme.Muted, FontSize = 12 });
+            host.Children.Add(BuildHeatmapLegend(theme, max));
             return host;
+        }
+
+        // The chart area's height: the fixed chart height, or enough for every heatmap row.
+        private double ChartHostHeight()
+        {
+            if (_Metric != ChartMetric.Heatmap || _Data?.Heatmap == null)
+            {
+                return 340;
+            }
+
+            int rows = _Data.Heatmap.Layout.Rows;
+            return Math.Max(340, (rows * UsageChartShaping.HeatmapRowHeight(rows)) + 120);
+        }
+
+        // A grey swatch for no usage, then the four shades from less to more, then the order and the peak.
+        private static Control BuildHeatmapLegend(AppTheme theme, long max)
+        {
+            StackPanel legend = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+            TextBlock Label(string text) => new TextBlock { Text = text, Foreground = theme.Muted, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+            legend.Children.Add(Label(Localizer.T("usage.heatmap.order") + " · "));
+            legend.Children.Add(HeatmapSwatch(0, theme, 12, 12));
+            legend.Children.Add(Label(Localizer.T("usage.heatmap.none") + " · " + Localizer.T("usage.heatmap.less")));
+            for (int level = 1; level <= UsageHeatmapScale.Levels; level++)
+            {
+                legend.Children.Add(HeatmapSwatch(level, theme, 12, 12));
+            }
+
+            legend.Children.Add(Label(Localizer.T("usage.heatmap.more") + " · " + Format("usage.heatmap.peak", max.ToString("#,##0", CultureInfo.CurrentCulture))));
+            return legend;
+        }
+
+        // A heatmap cell or legend swatch: a solid fill, the neutral grey for level 0 (no usage), with no border. A NaN
+        // width stretches to the grid column.
+        private static Border HeatmapSwatch(int level, AppTheme theme, double height, double width = double.NaN)
+        {
+            return new Border
+            {
+                Width = width,
+                Height = height,
+                CornerRadius = new CornerRadius(3),
+                Background = new SolidColorBrush(Color.Parse(UsageChartShaping.HeatmapFill(level, theme.IsDark))),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+        }
+
+        private Control EmptyState(AppTheme theme)
+        {
+            return new TextBlock { Text = Localizer.T("usage.noUsage"), Foreground = theme.Muted, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
         }
 
         private Control BuildChart(AppTheme theme)
         {
-            if (_Series.Count == 0)
+            List<UsageBucket> buckets = Buckets;
+            _ChartHost.Height = ChartHostHeight();
+            UpdateToolbar(theme);
+            if (_Metric == ChartMetric.Heatmap)
             {
-                return new TextBlock { Text = Localizer.T("usage.noActivity"), Foreground = theme.Muted, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+                return _Data?.Heatmap != null && _Data.Heatmap.HasUsage() ? BuildTokenHeatmap(theme) : EmptyState(theme);
             }
 
-            if (_Metric == ChartMetric.Heatmap) return BuildTokenHeatmap(theme);
+            if (_Data == null || buckets.Count == 0 || !UsageChartShaping.HasUsage(buckets))
+            {
+                return EmptyState(theme);
+            }
 
-            double max = ComputeMax();
+            switch (_Metric)
+            {
+                case ChartMetric.UsageBy:
+                    return BuildUsageByChart(theme);
+                case ChartMetric.Calls:
+                    Grid split = new Grid { ColumnDefinitions = new ColumnDefinitions("*,240") };
+                    Control chart = BuildOverTimeChart(buckets, theme);
+                    Grid.SetColumn(chart, 0);
+                    split.Children.Add(chart);
+                    Control failures = BuildFailurePanel(theme);
+                    Grid.SetColumn(failures, 1);
+                    split.Children.Add(failures);
+                    return split;
+                default:
+                    return BuildOverTimeChart(buckets, theme);
+            }
+        }
+
+        private Control BuildOverTimeChart(List<UsageBucket> buckets, AppTheme theme)
+        {
+            List<(UsageSeries Series, int ColorIndex)> stack = _Metric == ChartMetric.TokensBy
+                ? UsageChartShaping.SplitStack(_Data?.Split)
+                : new List<(UsageSeries Series, int ColorIndex)>();
+            List<Dictionary<long, UsageMetrics>> stackByStart = stack
+                .Select(s => s.Series.Buckets.GroupBy(b => b.BucketStartUnixMs).ToDictionary(g => g.Key, g => g.First().Metrics))
+                .ToList();
+
+            // Lines mode (stacked charts only): one unstacked line per series, scaled to the largest single value.
+            bool lines = _Lines && UsageChartExport.IsStacked(ChartKind(_Metric));
+            List<(double[] Values, IBrush Color)> lineSeries = lines ? LineSeries(buckets, stack, theme) : new List<(double[] Values, IBrush Color)>();
+            double max = lines
+                ? UsageChartShaping.LineMax(lineSeries.Select(s => (IReadOnlyList<double>)s.Values))
+                : _Metric == ChartMetric.TokensBy ? UsageChartShaping.SplitMax(stack.Select(s => s.Series), _SplitMetric) : ComputeMax(buckets);
             if (max <= 0)
             {
                 max = 1;
             }
 
             Grid plot = new Grid();
-            for (int i = 0; i < _Series.Count; i++)
+            for (int i = 0; i < buckets.Count; i++)
             {
                 plot.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
             }
@@ -555,17 +1006,44 @@ namespace Mux.Desktop.Views
             bool distribution = IsDistribution();
             IBrush boxColor = BoxColor(theme);
 
-            for (int i = 0; i < _Series.Count; i++)
+            for (int i = 0; i < buckets.Count; i++)
             {
-                UsageMetrics m = _Series[i].Metrics;
+                UsageBucket bucket = buckets[i];
+                UsageMetrics m = bucket.Metrics;
                 Control column;
 
-                if (_Metric == ChartMetric.Tokens)
+                if (lines)
                 {
+                    // The lines are drawn over the whole plot; the column only carries the hover, click, and selection.
+                    column = new Panel();
+                }
+                else if (_Metric == ChartMetric.Calls)
+                {
+                    (long succeeded, long failed) = UsageChartShaping.CallStack(m);
                     StackPanel bars = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(1, 0, 1, 0) };
-                    AddSegment(bars, m.OutputTokens, max, OutputColor);
-                    AddSegment(bars, m.CachedTokens, max, CachedColor);
-                    AddSegment(bars, Math.Max(0, m.InputTokens - m.CachedTokens), max, PromptColor);
+                    AddSegment(bars, failed, max, theme.Error);
+                    AddSegment(bars, succeeded, max, theme.Success);
+                    column = bars;
+                }
+                else if (_Metric == ChartMetric.Tokens)
+                {
+                    (long uncached, long cached, long output, long _) = UsageChartShaping.TokenStack(m);
+                    StackPanel bars = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(1, 0, 1, 0) };
+                    AddSegment(bars, output, max, OutputColor);
+                    AddSegment(bars, cached, max, CachedColor);
+                    AddSegment(bars, uncached, max, PromptColor);
+                    column = bars;
+                }
+                else if (_Metric == ChartMetric.TokensBy)
+                {
+                    // Rank 0 at the bottom, "Other" on top.
+                    StackPanel bars = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(1, 0, 1, 0) };
+                    for (int k = stack.Count - 1; k >= 0; k--)
+                    {
+                        double amount = stackByStart[k].TryGetValue(bucket.BucketStartUnixMs, out UsageMetrics? part) ? UsageChartShaping.SplitValue(part, _SplitMetric) : 0;
+                        AddSegment(bars, amount, max, SeriesColor(stack[k].ColorIndex));
+                    }
+
                     column = bars;
                 }
                 else if (distribution)
@@ -579,8 +1057,16 @@ namespace Mux.Desktop.Views
                     column = bars;
                 }
 
-                Border cell = new Border { Background = Brushes.Transparent, Child = column };
-                ToolTip.SetTip(cell, BucketTooltip(_Series[i]));
+                bool selected = _DrillStart == bucket.BucketStartUnixMs;
+                Border cell = new Border
+                {
+                    Background = selected ? theme.Hover : Brushes.Transparent,
+                    Child = column,
+                    Cursor = HandCursor
+                };
+                ToolTip.SetTip(cell, _Metric == ChartMetric.TokensBy ? SplitTooltip(bucket, stack, stackByStart) : BucketTooltip(bucket, _Metric));
+                long start = bucket.BucketStartUnixMs;
+                cell.PointerPressed += (sender, args) => SelectBucket(start);
                 Grid.SetColumn(cell, i);
                 plot.Children.Add(cell);
             }
@@ -588,7 +1074,7 @@ namespace Mux.Desktop.Views
             Grid chart = new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("56,*"),
-                RowDefinitions = new RowDefinitions(PlotHeight.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",Auto")
+                RowDefinitions = new RowDefinitions(PlotHeight.ToString(CultureInfo.InvariantCulture) + ",Auto")
             };
 
             Control yAxis = BuildYAxis(max, theme);
@@ -599,6 +1085,10 @@ namespace Mux.Desktop.Views
             Panel plotArea = new Panel { Height = PlotHeight };
             plotArea.Children.Add(BuildGridlines(theme));
             plotArea.Children.Add(plot);
+            if (lines)
+            {
+                plotArea.Children.Add(new UsageLinesControl(lineSeries, max) { Height = PlotHeight, IsHitTestVisible = false });
+            }
             Grid.SetRow(plotArea, 0);
             Grid.SetColumn(plotArea, 1);
             chart.Children.Add(plotArea);
@@ -608,7 +1098,15 @@ namespace Mux.Desktop.Views
             Grid.SetColumn(xAxis, 1);
             chart.Children.Add(xAxis);
 
-            Control? legend = BuildLegend(boxColor, theme);
+            Control? legend = BuildLegend(boxColor, stack, theme);
+            if (legend == null && lines)
+            {
+                // A single cost line still gets a key, so lines mode always says what each line is.
+                WrapPanel key = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(56, 6, 0, 0) };
+                key.Children.Add(LegendItem(Localizer.T("usage.kpi.cost"), theme.Accent, theme));
+                legend = key;
+            }
+
             if (legend == null)
             {
                 return chart;
@@ -621,16 +1119,187 @@ namespace Mux.Desktop.Views
             return content;
         }
 
-        private Control? BuildLegend(IBrush boxColor, AppTheme theme)
+        // The series lines mode draws for the current stacked chart, in the bars' colors and stacking order.
+        private List<(double[] Values, IBrush Color)> LineSeries(List<UsageBucket> buckets, List<(UsageSeries Series, int ColorIndex)> stack, AppTheme theme)
         {
-            StackPanel legend = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(56, 6, 0, 0) };
-
-            if (_Metric == ChartMetric.Tokens)
+            List<(double[], IBrush)> series = new List<(double[], IBrush)>();
+            switch (_Metric)
             {
-                legend.Children.Add(LegendItem(Localizer.T("usage.legend.prompt"), PromptColor, theme));
-                legend.Children.Add(LegendItem(Localizer.T("usage.legend.cached"), CachedColor, theme));
-                legend.Children.Add(LegendItem(Localizer.T("usage.legend.output"), OutputColor, theme));
-                return legend;
+                case ChartMetric.Calls:
+                    series.Add((buckets.Select(b => (double)UsageChartShaping.CallStack(b.Metrics).Succeeded).ToArray(), theme.Success));
+                    series.Add((buckets.Select(b => (double)UsageChartShaping.CallStack(b.Metrics).Failed).ToArray(), theme.Error));
+                    break;
+                case ChartMetric.Tokens:
+                    series.Add((buckets.Select(b => (double)UsageChartShaping.TokenStack(b.Metrics).Uncached).ToArray(), PromptColor));
+                    series.Add((buckets.Select(b => (double)UsageChartShaping.TokenStack(b.Metrics).Cached).ToArray(), CachedColor));
+                    series.Add((buckets.Select(b => (double)UsageChartShaping.TokenStack(b.Metrics).Output).ToArray(), OutputColor));
+                    break;
+                case ChartMetric.TokensBy:
+                    foreach ((UsageSeries s, int colorIndex) in stack)
+                    {
+                        series.Add((UsageChartShaping.AlignSeries(s, buckets, _SplitMetric), SeriesColor(colorIndex)));
+                    }
+
+                    break;
+                default:
+                    series.Add((buckets.Select(b => b.Metrics.CostUsd).ToArray(), theme.Accent));
+                    break;
+            }
+
+            return series;
+        }
+
+        private Control BuildFailurePanel(AppTheme theme)
+        {
+            StackPanel panel = new StackPanel { Spacing = 6, Margin = new Thickness(16, 0, 0, 0) };
+            panel.Children.Add(new TextBlock { Text = Localizer.T("usage.failures.title"), Foreground = theme.Text, FontSize = 13, FontWeight = FontWeight.SemiBold });
+
+            List<UsageErrorCount> reasons = UsageChartShaping.FailureReasons(_Data?.Errors);
+            if (reasons.Count == 0)
+            {
+                panel.Children.Add(new TextBlock { Text = Localizer.T("usage.failures.none"), Foreground = theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+            }
+
+            foreach (UsageErrorCount reason in reasons)
+            {
+                DockPanel row = new DockPanel();
+                TextBlock count = new TextBlock { Text = reason.Count.ToString("#,##0", CultureInfo.CurrentCulture), Foreground = theme.Error, FontSize = 12, FontWeight = FontWeight.SemiBold, Margin = new Thickness(8, 0, 0, 0) };
+                DockPanel.SetDock(count, Dock.Right);
+                row.Children.Add(count);
+                TextBlock code = new TextBlock { Text = reason.ErrorCode, Foreground = theme.Text, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis };
+                code.Tip(reason.ErrorCode);
+                row.Children.Add(code);
+                panel.Children.Add(row);
+            }
+
+            return new Border
+            {
+                BorderBrush = theme.Border,
+                BorderThickness = new Thickness(1, 0, 0, 0),
+                Child = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto }
+            };
+        }
+
+        private Control BuildUsageByChart(AppTheme theme)
+        {
+            // Ranked, and drawn, by the shared metric; every row still lists tokens, cost, and calls.
+            List<UsageBreakdownRow> rows = UsageChartShaping.RankBreakdown(_Data?.Breakdown, _SplitMetric);
+            if (rows.Count == 0)
+            {
+                return EmptyState(theme);
+            }
+
+            string metricName = Localizer.T(UsageChartShaping.SplitMetricLabelKey(_SplitMetric));
+            List<(string Label, IBrush Color)> keys = _SplitMetric == UsageCsv.MetricCalls
+                ? new List<(string, IBrush)> { (Localizer.T("usage.legend.succeeded"), theme.Success), (Localizer.T("usage.legend.failed"), theme.Error) }
+                : _SplitMetric == UsageCsv.MetricCost
+                    ? new List<(string, IBrush)> { (Localizer.T("usage.kpi.cost"), theme.Accent) }
+                    : new List<(string, IBrush)> { (Localizer.T("usage.legend.prompt"), PromptColor), (Localizer.T("usage.legend.cached"), CachedColor), (Localizer.T("usage.legend.output"), OutputColor) };
+            double max = Math.Max(1e-12, rows.Max(r => UsageChartShaping.SplitValue(r.Metrics, _SplitMetric)));
+            StackPanel list = new StackPanel { Spacing = 6 };
+            StackPanel heading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(0, 0, 0, 4) };
+            heading.Children.Add(new TextBlock { Text = ByLabel("usage.metric.usageBy"), Foreground = theme.Text, FontSize = 14, VerticalAlignment = VerticalAlignment.Center });
+            heading.Children.Add(new TextBlock { Text = Format("usage.usageBy.sortedBy", metricName), Foreground = theme.Muted, FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+            list.Children.Add(heading);
+
+            foreach (UsageBreakdownRow row in rows)
+            {
+                (long uncached, long cached, long output, long total) = UsageChartShaping.TokenStack(row.Metrics);
+                string value = string.IsNullOrWhiteSpace(row.Value) ? "—" : row.Value;
+                string detail = Format("usage.usageBy.tokens", FormatCount(total)) + " · $" + row.Metrics.CostUsd.ToString("0.0000")
+                    + " · " + Format("usage.usageBy.calls", row.Metrics.Calls.ToString("#,##0", CultureInfo.CurrentCulture));
+
+                Grid line = new Grid { ColumnDefinitions = new ColumnDefinitions("200,*,260"), Height = 20 };
+                TextBlock label = new TextBlock { Text = value, Foreground = theme.Text, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 0, 8, 0) };
+                label.Tip(value);
+                Grid.SetColumn(label, 0);
+                line.Children.Add(label);
+
+                (long succeeded, long failed) = UsageChartShaping.CallStack(row.Metrics);
+                double[] parts = _SplitMetric == UsageCsv.MetricCalls
+                    ? new double[] { succeeded, failed }
+                    : _SplitMetric == UsageCsv.MetricCost
+                        ? new[] { row.Metrics.CostUsd }
+                        : new double[] { uncached, cached, output };
+                Grid bar = new Grid { Height = 14, VerticalAlignment = VerticalAlignment.Center };
+                for (int p = 0; p < parts.Length; p++)
+                {
+                    bar.ColumnDefinitions.Add(new ColumnDefinition(Math.Max(0, parts[p]), GridUnitType.Star));
+                    AddBarPart(bar, p, keys[p].Color);
+                }
+
+                bar.ColumnDefinitions.Add(new ColumnDefinition(Math.Max(0, max - parts.Sum()), GridUnitType.Star));
+                Border barHost = new Border { Background = Brushes.Transparent, Child = bar };
+                ToolTip.SetTip(barHost, value
+                    + "\n" + Localizer.T("usage.legend.prompt") + ": " + uncached.ToString("#,##0")
+                    + "\n" + Localizer.T("usage.legend.cached") + ": " + cached.ToString("#,##0")
+                    + "\n" + Localizer.T("usage.legend.output") + ": " + output.ToString("#,##0")
+                    + "\n" + Localizer.T("usage.legend.succeeded") + ": " + succeeded.ToString("#,##0")
+                    + "\n" + Localizer.T("usage.legend.failed") + ": " + failed.ToString("#,##0")
+                    + "\n" + detail);
+                Grid.SetColumn(barHost, 1);
+                line.Children.Add(barHost);
+
+                TextBlock info = new TextBlock { Text = detail, Foreground = theme.Muted, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis };
+                Grid.SetColumn(info, 2);
+                line.Children.Add(info);
+                list.Children.Add(line);
+            }
+
+            WrapPanel legend = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(200, 6, 0, 0) };
+            foreach ((string label, IBrush color) in keys)
+            {
+                legend.Children.Add(LegendItem(label, color, theme));
+            }
+
+            list.Children.Add(legend);
+            return new ScrollViewer { Content = list, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
+        }
+
+        private static void AddBarPart(Grid bar, int column, IBrush color)
+        {
+            Border part = new Border { Background = color };
+            Grid.SetColumn(part, column);
+            bar.Children.Add(part);
+        }
+
+        private static IBrush SeriesColor(int colorIndex)
+        {
+            return colorIndex < 0 ? OtherColor : SeriesPalette[colorIndex % SeriesPalette.Length];
+        }
+
+        private static string SeriesLabel(UsageSeries series)
+        {
+            if (series.IsOther)
+            {
+                return Localizer.T("usage.legend.other");
+            }
+
+            return string.IsNullOrWhiteSpace(series.Key) ? "—" : series.Key;
+        }
+
+        private Control? BuildLegend(IBrush boxColor, List<(UsageSeries Series, int ColorIndex)> stack, AppTheme theme)
+        {
+            WrapPanel legend = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(56, 6, 0, 0) };
+
+            switch (_Metric)
+            {
+                case ChartMetric.Calls:
+                    legend.Children.Add(LegendItem(Localizer.T("usage.legend.succeeded"), theme.Success, theme));
+                    legend.Children.Add(LegendItem(Localizer.T("usage.legend.failed"), theme.Error, theme));
+                    return legend;
+                case ChartMetric.Tokens:
+                    legend.Children.Add(LegendItem(Localizer.T("usage.legend.prompt"), PromptColor, theme));
+                    legend.Children.Add(LegendItem(Localizer.T("usage.legend.cached"), CachedColor, theme));
+                    legend.Children.Add(LegendItem(Localizer.T("usage.legend.output"), OutputColor, theme));
+                    return legend;
+                case ChartMetric.TokensBy:
+                    foreach ((UsageSeries series, int colorIndex) in stack)
+                    {
+                        legend.Children.Add(LegendItem(SeriesLabel(series), SeriesColor(colorIndex), theme));
+                    }
+
+                    return legend;
             }
 
             if (IsDistribution())
@@ -690,12 +1359,22 @@ namespace Mux.Desktop.Views
 
         private bool IsDistribution()
         {
-            return _Metric == ChartMetric.Latency || _Metric == ChartMetric.Ttft || _Metric == ChartMetric.Streaming || _Metric == ChartMetric.Throughput;
+            return IsDistribution(_Metric);
+        }
+
+        private static bool IsDistribution(ChartMetric metric)
+        {
+            return metric == ChartMetric.Latency || metric == ChartMetric.Ttft || metric == ChartMetric.Streaming || metric == ChartMetric.Throughput;
         }
 
         private UsageDistribution DistFor(UsageMetrics m)
         {
-            switch (_Metric)
+            return DistFor(m, _Metric);
+        }
+
+        private static UsageDistribution DistFor(UsageMetrics m, ChartMetric metric)
+        {
+            switch (metric)
             {
                 case ChartMetric.Ttft:
                     return m.TtftMsDist;
@@ -725,35 +1404,78 @@ namespace Mux.Desktop.Views
             }
         }
 
-        private string BucketTooltip(UsageBucket bucket)
+        private string BucketTitle(UsageBucket bucket)
         {
-            string time = DateTimeOffset.FromUnixTimeMilliseconds(bucket.BucketStartUnixMs).LocalDateTime.ToString("MMM d  HH:mm");
+            return UsageChartShaping.FormatBucketWindow(bucket.BucketStartUnixMs, BucketWidth);
+        }
+
+        private string BucketTooltip(UsageBucket bucket, ChartMetric metric)
+        {
+            string time = BucketTitle(bucket);
             UsageMetrics m = bucket.Metrics;
+            string hint = "\n" + Localizer.T("usage.tip.drill");
 
-            if (_Metric == ChartMetric.Tokens)
+            if (metric == ChartMetric.Calls)
             {
-                long prompt = Math.Max(0, m.InputTokens - m.CachedTokens);
-                return time + "\nPrompt: " + prompt.ToString("#,##0")
-                    + "\nCached: " + m.CachedTokens.ToString("#,##0")
-                    + "\nOutput: " + m.OutputTokens.ToString("#,##0")
-                    + "\nTotal: " + StackTotal(m).ToString("#,##0");
+                (long succeeded, long failed) = UsageChartShaping.CallStack(m);
+                double rate = m.Calls > 0 ? (double)failed / m.Calls : 0.0;
+                return time
+                    + "\n" + Localizer.T("usage.legend.succeeded") + ": " + succeeded.ToString("#,##0")
+                    + "\n" + Localizer.T("usage.legend.failed") + ": " + failed.ToString("#,##0")
+                    + "\n" + Localizer.T("usage.kpi.errorRate") + ": " + (rate * 100).ToString("0.#") + "%"
+                    + hint;
             }
 
-            if (_Metric == ChartMetric.Cost)
+            if (metric == ChartMetric.Tokens)
             {
-                return time + "\nCost: $" + m.CostUsd.ToString("0.0000") + "\nCalls: " + m.Calls.ToString("#,##0");
+                (long uncached, long cached, long output, long total) = UsageChartShaping.TokenStack(m);
+                return time
+                    + "\n" + Localizer.T("usage.legend.prompt") + ": " + uncached.ToString("#,##0")
+                    + "\n" + Localizer.T("usage.legend.cached") + ": " + cached.ToString("#,##0")
+                    + "\n" + Localizer.T("usage.legend.output") + ": " + output.ToString("#,##0")
+                    + "\n" + Localizer.T("usage.tip.total") + ": " + total.ToString("#,##0")
+                    + hint;
             }
 
-            UsageDistribution d = DistFor(m);
-            string unit = _Metric == ChartMetric.Throughput ? " tok/s" : " ms";
-            string format = _Metric == ChartMetric.Throughput ? "0.#" : "#,##0";
+            if (metric == ChartMetric.Cost)
+            {
+                return time
+                    + "\n" + Localizer.T("usage.kpi.cost") + ": $" + m.CostUsd.ToString("0.0000")
+                    + "\n" + Localizer.T("usage.kpi.calls") + ": " + m.Calls.ToString("#,##0")
+                    + hint;
+            }
+
+            UsageDistribution d = DistFor(m, metric);
+            string unit = metric == ChartMetric.Throughput ? " tok/s" : " ms";
+            string format = metric == ChartMetric.Throughput ? "0.#" : "#,##0";
             return time
-                + "\nMax:  " + d.Max.ToString(format) + unit
+                + "\n" + Localizer.T("usage.tip.max") + ":  " + d.Max.ToString(format) + unit
                 + "\np99:  " + d.P99.ToString(format) + unit
                 + "\np95:  " + d.P95.ToString(format) + unit
-                + "\nAvg:  " + d.Avg.ToString(format) + unit
-                + "\nMin:  " + d.Min.ToString(format) + unit
-                + "\nSamples: " + d.Count.ToString("#,##0");
+                + "\n" + Localizer.T("usage.legend.avg") + ":  " + d.Avg.ToString(format) + unit
+                + "\n" + Localizer.T("usage.tip.min") + ":  " + d.Min.ToString(format) + unit
+                + "\n" + Localizer.T("usage.tip.samples") + ": " + d.Count.ToString("#,##0")
+                + hint;
+        }
+
+        private string SplitTooltip(UsageBucket bucket, List<(UsageSeries Series, int ColorIndex)> stack, List<Dictionary<long, UsageMetrics>> stackByStart)
+        {
+            string text = BucketTitle(bucket) + "\n" + Localizer.T(UsageChartShaping.SplitMetricLabelKey(_SplitMetric));
+            double total = 0;
+            for (int k = 0; k < stack.Count; k++)
+            {
+                double amount = stackByStart[k].TryGetValue(bucket.BucketStartUnixMs, out UsageMetrics? part) ? UsageChartShaping.SplitValue(part, _SplitMetric) : 0;
+                total += amount;
+                text += "\n" + SeriesLabel(stack[k].Series) + ": " + FormatSplitValue(amount);
+            }
+
+            return text + "\n" + Localizer.T("usage.tip.total") + ": " + FormatSplitValue(total) + "\n" + Localizer.T("usage.tip.drill");
+        }
+
+        // A split value in the metric's unit: "$0.0123" for cost, a grouped count for tokens and calls.
+        private string FormatSplitValue(double value)
+        {
+            return _SplitMetric == UsageCsv.MetricCost ? "$" + value.ToString("0.0000", CultureInfo.CurrentCulture) : value.ToString("#,##0", CultureInfo.CurrentCulture);
         }
 
         private Control BuildGridlines(AppTheme theme)
@@ -822,6 +1544,7 @@ namespace Mux.Desktop.Views
 
         private Control BuildXAxis(AppTheme theme)
         {
+            List<UsageBucket> buckets = Buckets;
             Grid axis = new Grid { Margin = new Thickness(0, 4, 0, 0) };
             const int ticks = 6;
             for (int k = 0; k < ticks; k++)
@@ -829,15 +1552,21 @@ namespace Mux.Desktop.Views
                 axis.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
             }
 
-            int count = _Series.Count;
+            int count = buckets.Count;
+            if (count == 0)
+            {
+                return axis;
+            }
+
+            string format = UsageChartShaping.AxisFormat(_Range, BucketWidth);
             for (int k = 0; k < ticks; k++)
             {
                 int index = count <= 1 ? 0 : (int)Math.Round(k / (double)(ticks - 1) * (count - 1));
-                long ts = _Series[Math.Clamp(index, 0, count - 1)].BucketStartUnixMs;
+                long ts = buckets[Math.Clamp(index, 0, count - 1)].BucketStartUnixMs;
 
                 TextBlock label = new TextBlock
                 {
-                    Text = FormatX(ts),
+                    Text = DateTimeOffset.FromUnixTimeMilliseconds(ts).LocalDateTime.ToString(format),
                     Foreground = theme.Muted,
                     FontSize = 10,
                     HorizontalAlignment = k == 0 ? HorizontalAlignment.Left : (k == ticks - 1 ? HorizontalAlignment.Right : HorizontalAlignment.Center)
@@ -860,20 +1589,24 @@ namespace Mux.Desktop.Views
             column.Children.Add(new Border { Height = height, Background = color });
         }
 
-        private double ComputeMax()
+        private double ComputeMax(List<UsageBucket> buckets)
         {
             bool distribution = IsDistribution();
             double max = 0;
-            foreach (UsageBucket bucket in _Series)
+            foreach (UsageBucket bucket in buckets)
             {
                 double value;
                 if (distribution)
                 {
                     value = DistFor(bucket.Metrics).Max;
                 }
+                else if (_Metric == ChartMetric.Calls)
+                {
+                    value = bucket.Metrics.Calls;
+                }
                 else if (_Metric == ChartMetric.Tokens)
                 {
-                    value = StackTotal(bucket.Metrics);
+                    value = UsageChartShaping.TokenStack(bucket.Metrics).Total;
                 }
                 else
                 {
@@ -895,6 +1628,8 @@ namespace Mux.Desktop.Views
             {
                 case ChartMetric.Cost:
                     return m.CostUsd;
+                case ChartMetric.Calls:
+                    return m.Calls;
                 case ChartMetric.Latency:
                     return m.AvgTotalMs;
                 case ChartMetric.Ttft:
@@ -904,7 +1639,7 @@ namespace Mux.Desktop.Views
                 case ChartMetric.Throughput:
                     return m.AvgTokensPerSec;
                 default:
-                    return StackTotal(m);
+                    return UsageChartShaping.TokenStack(m).Total;
             }
         }
 
@@ -920,22 +1655,14 @@ namespace Mux.Desktop.Views
                 case ChartMetric.Ttft:
                 case ChartMetric.Streaming:
                     return value.ToString("#,##0");
+                case ChartMetric.Calls:
+                    return value >= 1000 ? FormatCount((long)Math.Round(value)) : value.ToString("#,##0.#");
+                case ChartMetric.TokensBy when _SplitMetric == UsageCsv.MetricCost:
+                    return "$" + value.ToString("0.00");
+                case ChartMetric.TokensBy when _SplitMetric == UsageCsv.MetricCalls:
+                    return value >= 1000 ? FormatCount((long)Math.Round(value)) : value.ToString("#,##0.#");
                 default:
                     return FormatCount((long)Math.Round(value));
-            }
-        }
-
-        private string FormatX(long timestampUnixMs)
-        {
-            DateTime local = DateTimeOffset.FromUnixTimeMilliseconds(timestampUnixMs).LocalDateTime;
-            switch (_Range)
-            {
-                case UsageRange.Week:
-                    return local.ToString("ddd HH:mm");
-                case UsageRange.Month:
-                    return local.ToString("MMM d");
-                default:
-                    return local.ToString("HH:mm");
             }
         }
 
@@ -956,7 +1683,7 @@ namespace Mux.Desktop.Views
 
         private Control LegendItem(string label, IBrush color, AppTheme theme)
         {
-            StackPanel row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
+            StackPanel row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, Margin = new Thickness(0, 0, 12, 2) };
             row.Children.Add(new Border { Width = 10, Height = 10, Background = color, CornerRadius = new CornerRadius(2), VerticalAlignment = VerticalAlignment.Center });
             row.Children.Add(new TextBlock { Text = label, Foreground = theme.Muted, FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
             return row;
@@ -1030,17 +1757,12 @@ namespace Mux.Desktop.Views
         private string ConversationLabel(UsageEventRow row)
         {
             string? resolved = _ConversationName?.Invoke(row.SessionId);
-            if (!string.IsNullOrWhiteSpace(resolved))
+            if (string.IsNullOrWhiteSpace(resolved) && row.SessionId != null && _Conversations.TryGetValue(row.SessionId, out string? known))
             {
-                return resolved!;
+                resolved = known;
             }
 
-            if (string.IsNullOrEmpty(row.SessionId))
-            {
-                return "—";
-            }
-
-            return row.SessionId!.Length > 8 ? row.SessionId!.Substring(0, 8) : row.SessionId!;
+            return UsageScope.ConversationLabel(row.SessionId, resolved);
         }
 
         private static void AddDataCell(Grid grid, int column, string text, AppTheme theme)
@@ -1062,15 +1784,70 @@ namespace Mux.Desktop.Views
             grid.Children.Add(cell);
         }
 
-        private static long StackTotal(UsageMetrics metrics)
-        {
-            return Math.Max(0, metrics.InputTokens - metrics.CachedTokens) + metrics.CachedTokens + metrics.OutputTokens;
-        }
-
         private static void AddRow(Grid grid, int row, Control child)
         {
             Grid.SetRow(child, row);
             grid.Children.Add(child);
+        }
+
+        // Lines mode: one 2px line per series through the bucket centers (see UsageChartShaping.LinePoints), in the
+        // bars' colors, with a point marker per bucket when there are few buckets. The first series is drawn last, so
+        // it stays on top where lines cross. It does not take input; the bucket columns under it handle hover and click.
+        private sealed class UsageLinesControl : Control
+        {
+            private readonly List<(double[] Values, IBrush Color)> _Series;
+            private readonly double _Max;
+
+            public UsageLinesControl(List<(double[] Values, IBrush Color)> series, double max)
+            {
+                _Series = series;
+                _Max = max;
+            }
+
+            public override void Render(DrawingContext context)
+            {
+                double width = Bounds.Width;
+                double height = Bounds.Height;
+                if (width <= 0 || height <= 0)
+                {
+                    return;
+                }
+
+                for (int s = _Series.Count - 1; s >= 0; s--)
+                {
+                    (double[] values, IBrush color) = _Series[s];
+                    List<(double X, double Y)> points = UsageChartShaping.LinePoints(values, width, height, _Max);
+                    if (points.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    if (points.Count > 1)
+                    {
+                        StreamGeometry geometry = new StreamGeometry();
+                        using (StreamGeometryContext path = geometry.Open())
+                        {
+                            path.BeginFigure(new Point(points[0].X, points[0].Y), false);
+                            for (int i = 1; i < points.Count; i++)
+                            {
+                                path.LineTo(new Point(points[i].X, points[i].Y));
+                            }
+
+                            path.EndFigure(false);
+                        }
+
+                        context.DrawGeometry(null, new Pen(color, 2, null, PenLineCap.Round, PenLineJoin.Round, 10), geometry);
+                    }
+
+                    if (points.Count == 1 || UsageChartShaping.ShowLineMarkers(points.Count))
+                    {
+                        foreach ((double x, double y) in points)
+                        {
+                            context.DrawEllipse(color, null, new Point(x, y), 3, 3);
+                        }
+                    }
+                }
+            }
         }
     }
 }

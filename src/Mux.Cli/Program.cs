@@ -71,7 +71,8 @@ namespace Mux.Cli
                 || a == "worktree"
                 || a == "memory"
                 || a == "mcp"
-                || a == "mirror");
+                || a == "mirror")
+                || (args.Length > 0 && string.Equals(args[0], "agent", StringComparison.OrdinalIgnoreCase));
 
             if (!isNonInteractiveCommand && !Console.IsOutputRedirected)
             {
@@ -89,7 +90,7 @@ namespace Mux.Cli
                 // Bring up the background tray agent (REST server + dashboard) if it is not already running,
                 // so the dashboard and usage telemetry are available while the interactive session runs.
                 // Best-effort: never blocks or fails startup.
-                AgentLauncher.EnsureRunning();
+                Mux.Core.Startup.AgentLauncher.EnsureRunning();
             }
 
             return Dispatch(args);
@@ -120,6 +121,7 @@ USAGE:
     mux worktree <list|prune|remove>     Manage worktrees left by isolated subagents and jobs
     mux mirror <sessionId> [OPTIONS]     Live-tail a run on a running mux server (read-only)
     mux mcp serve [OPTIONS]              Serve mux as an MCP server (stdio, or --http <port>)
+    mux agent <start|status>             Start the tray agent (server, dashboard), or show whether it runs
 
 OPTIONS:
     -h, --help, /?                       Show this help message and exit
@@ -286,6 +288,11 @@ CONFIG:
         {
             try
             {
+                if (args.Length > 0 && string.Equals(args[0], "agent", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Mux.Cli.Commands.AgentCommand.Run(args.Skip(1).ToArray(), Console.Out, Console.Error);
+                }
+
                 if (args.Length > 0 && string.Equals(args[0], "print", StringComparison.OrdinalIgnoreCase))
                 {
                     string[] commandArgs = args.Skip(1).ToArray();

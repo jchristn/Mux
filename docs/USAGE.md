@@ -359,19 +359,52 @@ continue.
 Every model call — interactive, `print`, subagent, or dashboard chat — is recorded to a local SQLite
 database (`~/.mux/usage.db`) with its token counts, time-to-first-token, streaming time, latency, and
 throughput. The sidebar shows the running session cost (once there is spend), and `/usage` (`/stats`,
-`/spend`) opens a summary of the last 24 hours and 7 days — tokens, cost, calls, error rate, average and
-p95 TTFT/latency, and the top models by spend — read from the shared database, so it reflects every mux
-instance on the machine, not just the current one.
+`/spend`) opens full-screen usage charts read from the shared database, so they reflect every mux instance
+on the machine, not just the current one. (With telemetry disabled it shows the plain summary instead.)
+The terminal, desktop app, web dashboard, and VS Code panel share one query service and show the same
+charts:
 
-For charts over time (token usage by type, cost, latency/TTFT percentiles, streaming time, throughput) with
-endpoint, model, **label**, and **tag** filters, plus a paginated per-call history, run `mux serve` and open
-the dashboard's **Usage** page; edit per-model rates on its **Pricing** page. Filtering by label or tag joins
+| Page | Shows |
+|---|---|
+| Calls | Succeeded and failed calls per bucket, with a failure-reasons list (error codes by count) |
+| Tokens | Uncached input, cached input, and output tokens per bucket |
+| Metric by | Tokens, calls, or cost per bucket split by model, endpoint, provider, or call kind (top 6 plus Other); "Calls by call kind" shows interactive, subagent, and chat activity |
+| Cost | US dollars per bucket |
+| Latency, TTFT, Streaming, Throughput | Box plots per bucket: min-max wick, avg-p95 box, avg mark, p99 tick |
+| Usage by | One bar per model, endpoint, provider, or call kind over the range (top 10), sorted by the chosen metric |
+| Heatmap | Token volume on a grid in your local time: each row is a period (an hour, a day, a week, labelled on the left) and each column a step within it (minutes, time of day, or weekday, labelled on top). Four shades of green each hold about a quarter of the used cells (the peak is always the darkest); cells with no usage are light grey (dark grey on a dark theme; a dim dot in the terminal) |
+
+Ranges are Hour (60 x 1 minute), Day (96 x 15 minutes), Week (84 x 2 hours), Month (60 x 12 hours),
+Quarter (91 x 1 day), Year (52 x 1 week), and All (from the oldest call, about 90 buckets).
+
+Every surface can export a chart's data as CSV (one row per bucket, ISO local times with offsets, invariant
+numbers; cells that a spreadsheet would run as formulas get a leading `'`), and the web dashboard, desktop app,
+and VS Code also save a PNG. The heatmap's month view is a calendar of five Monday-start weeks by half-days.
+
+Keys in the terminal charts:
+
+| Key | Action |
+|---|---|
+| `←` / `→`, `Tab` / `Shift+Tab` | Previous or next page |
+| `1`-`7` | Hour, Day, Week, Month, Quarter, Year, All |
+| `d` / `D` | Cycle the dimension (model, endpoint, provider, call kind) for Metric by and Usage by |
+| `m` / `M` | Cycle the metric (tokens, calls, cost) for Metric by and Usage by |
+| `l` | Switch Calls, Tokens, Metric by, and Cost between stacked bars and lines |
+| `e` | Export the current page as CSV to `~/.mux/exports/` (the path is shown in the footer) |
+| `[` / `]`, `Home` / `End` | Move the bucket cursor |
+| `Enter` | List the calls in the selected bucket (Calls through Throughput); `Esc` or `Enter` goes back |
+| `PgUp` / `PgDn` | Scroll buckets, heatmap rows, or usage-by rows |
+| `↑` / `↓` | Scroll the failure reasons, legend, or usage-by rows |
+| `Esc` | Close the charts |
+
+The web dashboard (`mux serve`, **Usage** page) adds endpoint, model, **label**, and **tag** filters and a
+paginated per-call history; clicking a column there filters the history to that bucket. Edit per-model
+rates on its **Pricing** page. Filtering by label or tag joins
 each usage row to its session's *current* metadata, so relabeling a session refilters its whole history
 retroactively. A session that carries several labels counts under each in a label breakdown, so per-label
 totals can add up to more than the grand total. In the terminal, `/usage label <label>` or
-`/usage tag <key:value>` opens the charts scoped to that label or tag. Cost is derived from `pricing.json`
-at read
-time, so correcting a rate re-values history. Disable capture with `telemetry.enabled: false` (or the
+`/usage tag <key:value>` opens the charts scoped to that label or tag, including the drill-down lists.
+Cost is derived from `pricing.json` at read time, so correcting a rate re-values history. Disable capture with `telemetry.enabled: false` (or the
 `MUX_TELEMETRY_ENABLED` environment variable). See [CONFIG.md](CONFIG.md#usage-telemetry-settingsjson-telemetry).
 
 Interactively, the model works one job's plan at a time (it keeps a single task `in_progress`), so the

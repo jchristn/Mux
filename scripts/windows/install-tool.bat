@@ -1,6 +1,11 @@
 @echo off
 REM Build and install the mux global tool (Mux.Cli) from this checkout. Fails if mux is already
 REM installed; use reinstall-tool.bat to replace an existing install.
+REM Also publishes the desktop app (Mux) and the tray agent (Mux Agent) self-contained under
+REM artifacts\windows-app\<rid>\<framework> and installs them, with Start Menu shortcuts, per-user in
+REM %LOCALAPPDATA%\Programs\Mux\{Desktop,Agent} and, from an elevated prompt, for all users in
+REM %ProgramFiles%\Mux\{Desktop,Agent}. Without elevation the all-users install is skipped with a
+REM warning; set MUX_SYSTEM_INSTALL=0 to skip it quietly. The work is done by mux-apps.ps1.
 REM The package is built under artifacts\tool-packages\<framework>.
 REM Usage: scripts\windows\install-tool.bat [net8.0^|net10.0]  (or --framework ^<tfm^>; MUX_TFM is also honored)
 setlocal
@@ -27,21 +32,24 @@ set "FRAMEWORK=%TFM%"
 set "PACKAGE_SOURCE=%ROOT_DIR%artifacts\tool-packages\%FRAMEWORK%"
 
 echo mux tool install (Windows, %FRAMEWORK%)
-echo [1/5] Checking for running mux processes...
+echo [1/6] Checking for running mux processes...
 tasklist /FI "IMAGENAME eq mux.exe" /FI "USERNAME eq %USERDOMAIN%\%USERNAME%" 2>nul | find /I "mux.exe" >nul
 if not errorlevel 1 (
     echo Error: A running mux process is using the global tool. Exit all mux sessions ^(or run scripts\windows\kill-mux.bat^) and try again. 1>&2
     exit /b 1
 )
+REM The apps are replaced in the last step; check now so a running app cannot leave a half-done install.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0mux-apps.ps1" -Action Check
+if errorlevel 1 exit /b 1
 set "MUX_INSTALLED=0"
 dotnet tool list -g 2>nul | findstr /R /I /B /C:"mux\.cli " >nul
 if not errorlevel 1 set "MUX_INSTALLED=1"
-echo [2/5] Checking for an existing install...
+echo [2/6] Checking for an existing install...
 if "%MUX_INSTALLED%"=="1" (
     echo Error: mux is already installed. Run scripts\windows\reinstall-tool.bat to replace it. 1>&2
     exit /b 1
 )
-echo [3/5] Building the mux package...
+echo [3/6] Building the mux package...
 if exist "%PACKAGE_SOURCE%" rmdir /s /q "%PACKAGE_SOURCE%"
 mkdir "%PACKAGE_SOURCE%"
 if errorlevel 1 exit /b 1
@@ -50,13 +58,13 @@ if errorlevel 1 (
     echo Error: Build failed. 1>&2
     exit /b 1
 )
-echo [4/5] Installing the mux global tool...
+echo [4/6] Installing the mux global tool...
 dotnet tool install -g --source "%PACKAGE_SOURCE%" --framework %FRAMEWORK% --disable-parallel Mux.Cli
 if errorlevel 1 (
     echo Error: dotnet tool install failed. 1>&2
     exit /b 1
 )
-echo [5/5] Verifying the mux command...
+echo [5/6] Verifying the mux command...
 REM dotnet tool install puts mux in %USERPROFILE%\.dotnet\tools, which may not be on this
 REM session's PATH yet (a new terminal picks it up).
 where mux >nul 2>nul || set "PATH=%USERPROFILE%\.dotnet\tools;%PATH%"
@@ -65,6 +73,9 @@ if errorlevel 1 (
     echo Error: mux was installed, but "mux -v" failed. 1>&2
     exit /b 1
 )
+echo [6/6] Installing the desktop app and tray agent...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0mux-apps.ps1" -Action Install -Framework %FRAMEWORK%
+if errorlevel 1 exit /b 1
 echo Done.
 endlocal
 exit /b 0

@@ -2,6 +2,7 @@
 # Deregister the mux agent from starting at login: removes the systemd --user service and the
 # desktop autostart entry, whichever exist. Disabling the service also stops it; an agent started
 # from the autostart entry keeps running (quit it from the tray or run scripts/linux/kill-mux.sh).
+# The installed agent stays in place; remove-tool.sh removes it.
 # Usage: ./scripts/linux/remove-from-startup.sh
 set -euo pipefail
 

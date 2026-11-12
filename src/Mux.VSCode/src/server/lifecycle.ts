@@ -141,11 +141,41 @@ export class MuxServerLifecycle implements vscode.Disposable {
 
         // The shared key is authoritative; fall back to a previously-stored one only when settings.json has none.
         const sharedKey = shared.apiKey ?? null;
+
+        // Every user surface brings up the tray agent (the terminal UI and desktop app do it at startup), so
+        // the tray, dashboard, and usage telemetry are there whichever surface opened first. Best-effort.
+        const agent = settings.autoStart ? await this.startAgent(settings.muxPath) : 'skipped';
+
         const storedKey = sharedKey ?? (await this.context.secrets.get(SECRET_KEY)) ?? null;
         const reusable = await this.tryReuse(baseUrl, storedKey, token);
         if (reusable) {
             this.client = reusable;
             return reusable;
+        }
+
+        // The agent hosts the server on the shared port; when the extension uses that port, wait for it rather
+        // than starting a second server. Fall back to `mux serve` if it does not answer.
+        if ((agent === 'started' || agent === 'running') && !(settings.port > 0)) {
+            try {
+                const agentKey = readSharedRest().apiKey ?? sharedKey ?? (await this.waitForSharedKey(token));
+                const agentClient = new ApiClient({ baseUrl, apiKey: agentKey });
+                const health = await this.waitForHealth(agentClient, token);
+                if (agentKey) {
+                    await this.context.secrets.store(SECRET_KEY, agentKey);
+                }
+                this.client = agentClient;
+                this.setState({
+                    connected: true,
+                    baseUrl,
+                    productVersion: health.Version,
+                    contractVersion: health.ContractVersion,
+                    ownedByExtension: false,
+                    detail: 'Connected to the mux agent',
+                });
+                return agentClient;
+            } catch (error) {
+                logError('The mux agent did not answer; starting mux serve instead.', error);
+            }
         }
 
         if (!settings.autoStart) {
@@ -222,6 +252,32 @@ export class MuxServerLifecycle implements vscode.Disposable {
             logError(`Could not reuse a server at ${baseUrl}; will start one.`, error);
             return undefined;
         }
+    }
+
+    /**
+     * Runs `mux agent start`, which starts the tray agent unless one from this build is already running.
+     *
+     * @param muxPath The mux CLI path.
+     * @returns 'started' or 'running' when the agent is up, 'unavailable' when it is not installed, the CLI is
+     * missing, or the command failed or timed out.
+     */
+    private startAgent(muxPath: string): Promise<AgentStartOutcome> {
+        return new Promise((resolve) => {
+            try {
+                childProcess.execFile(muxPath, ['agent', 'start'], { timeout: 15000, windowsHide: true }, (error, stdout) => {
+                    const outcome = agentStartOutcome(error ? (typeof error.code === 'number' ? error.code : -1) : 0, String(stdout ?? ''));
+                    if (outcome === 'unavailable') {
+                        logError('Could not start the mux agent.', error ?? new Error('mux agent start failed'));
+                    } else {
+                        log(outcome === 'started' ? 'Started the mux agent.' : 'The mux agent is already running.');
+                    }
+                    resolve(outcome);
+                });
+            } catch (error) {
+                logError('Could not start the mux agent.', error);
+                resolve('unavailable');
+            }
+        });
     }
 
     private spawnServer(muxPath: string, port: number, key: string | null): Promise<void> {
@@ -344,4 +400,22 @@ export class MuxServerLifecycle implements vscode.Disposable {
 
 function delay(milliseconds: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+/** The outcome of `mux agent start`. */
+export type AgentStartOutcome = 'started' | 'running' | 'unavailable' | 'skipped';
+
+/**
+ * Interprets `mux agent start`: exit 0 means the agent is up ('running' when the CLI said it already was), any other
+ * exit (3 when the agent is not installed) means it is unavailable.
+ *
+ * @param exitCode The process exit code (non-zero or negative on failure).
+ * @param stdout The command's standard output.
+ * @returns The outcome.
+ */
+export function agentStartOutcome(exitCode: number, stdout: string): AgentStartOutcome {
+    if (exitCode !== 0) {
+        return 'unavailable';
+    }
+    return /already running/i.test(stdout) ? 'running' : 'started';
 }

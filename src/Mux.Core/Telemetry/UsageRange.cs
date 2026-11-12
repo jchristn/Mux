@@ -17,6 +17,15 @@ namespace Mux.Core.Telemetry
         Week,
 
         /// <summary>The last month, in sixty twelve-hour buckets.</summary>
-        Month
+        Month,
+
+        /// <summary>The last quarter (13 weeks), in ninety-one one-day buckets.</summary>
+        Quarter,
+
+        /// <summary>The last year (52 weeks), in fifty-two one-week buckets.</summary>
+        Year,
+
+        /// <summary>All recorded usage, from the oldest event to now, in about ninety buckets of a "nice" width.</summary>
+        All
     }
 }

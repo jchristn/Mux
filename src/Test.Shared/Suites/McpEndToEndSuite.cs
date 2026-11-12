@@ -54,9 +54,9 @@ namespace Test.Shared.Suites
         public static TestSuiteDescriptor Create()
         {
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
-            void Add(string id, string name, Func<CancellationToken, Task> body, bool skip = false, string skipReason = "")
+            void Add(string id, string name, Func<CancellationToken, Task> body, string? skipReason = null)
             {
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, body, skip: skip, skipReason: skipReason));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, body, skipReason: skipReason));
             }
 
             // --- REST routes ---
@@ -281,7 +281,7 @@ namespace Test.Shared.Suites
                 {
                     try { Directory.Delete(configDir, true); } catch (Exception) { }
                 }
-            }, skip: cliDll == null, skipReason: "Mux.Cli.dll was not found next to the test build");
+            }, skipReason: (cliDll == null) ? "Mux.Cli.dll was not found next to the test build" : null);
 
             // --- mux print --mcp-config ---
             Add("PrintUsesInlineMcpConfig", "mux print --mcp-config with inline JSON exposes and calls the MCP tool", (CancellationToken ct) => WithPrintAsync(ct, async (ScriptableMcpHttpServer mcp, MockHttpServer model, string configDir) =>

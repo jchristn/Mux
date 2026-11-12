@@ -17,12 +17,6 @@ namespace Mux.Agent
     {
         private const string RepositoryUrl = "https://github.com/jchristn/Mux";
 
-        // The mux ASCII-art wordmark (matches the TUI splash), as a single block so its internal alignment
-        // is preserved while the block itself is centered.
-        private const string Wordmark =
-            "▄▄   ▄▄ ▄▄ ▄▄ ▄▄ ▄▄\n" +
-            "██▀▄▀██ ██ ██ ▀█▄█▀\n" +
-            "██   ██ ▀███▀ ██ ██";
 
         /// <summary>
         /// Instantiate the About window.
@@ -40,8 +34,6 @@ namespace Mux.Agent
             SolidColorBrush green = new SolidColorBrush(Color.Parse("#3fb950"));
             SolidColorBrush light = new SolidColorBrush(Color.Parse("#e6edf3"));
             SolidColorBrush muted = new SolidColorBrush(Color.Parse("#8b949e"));
-            FontFamily mono = new FontFamily("Cascadia Mono,Consolas,Menlo,monospace");
-
             StackPanel panel = new StackPanel
             {
                 Margin = new Thickness(28),
@@ -50,15 +42,14 @@ namespace Mux.Agent
                 VerticalAlignment = VerticalAlignment.Center
             };
 
-            panel.Children.Add(new TextBlock
+            // Drawn as shapes, not text: block glyphs are shorter than a font's line height, which left bands
+            // between the rows (see BlockArt).
+            panel.Children.Add(new Mux.Desktop.Controls.BlockArtView
             {
-                Text = Wordmark,
-                FontFamily = mono,
-                FontSize = 18,
-                FontWeight = FontWeight.Bold,
-                Foreground = green,
-                TextAlignment = TextAlignment.Left,
-                HorizontalAlignment = HorizontalAlignment.Center
+                Fill = green,
+                PixelSize = 8,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 4)
             });
 
             panel.Children.Add(new TextBlock

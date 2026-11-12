@@ -107,7 +107,7 @@ namespace Test.Shared.Suites
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
             void Add(string id, string name, bool needsPython, Func<SkillTestContext, Task> body)
             {
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithSkillsAsync(body, ct), skip: needsPython && !python, skipReason: "Python 3 is not on PATH"));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithSkillsAsync(body, ct), skipReason: (needsPython && !python) ? "Python 3 is not on PATH" : null));
             }
 
             Add("CommandsDeclared", "Every engineering (m-z) and product script command is declared with python, an existing script, and its timeout", false, (SkillTestContext c) =>

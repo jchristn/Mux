@@ -79,7 +79,7 @@ namespace Test.Shared.Suites
                 string skillId = entry.Key;
                 string[] commands = entry.Value;
                 cases.Add(new TestCaseDescriptor(SuiteId, "Commands_" + skillId, skillId + ": commands are declared, dry-run cleanly, and answer --help", (CancellationToken ct) =>
-                    CheckSkillAsync(Path.Combine(packDir!, skillId), skillId, commands, ct), skip: !ready, skipReason: "the source tree is not available"));
+                    CheckSkillAsync(Path.Combine(packDir!, skillId), skillId, commands, ct), skipReason: (!ready) ? "the source tree is not available" : null));
             }
 
             cases.Add(new TestCaseDescriptor(SuiteId, "EveryScriptSkillCovered", "Every engineering a-l skill with Python or Node.js scripts is listed here, and nothing else", (CancellationToken ct) =>
@@ -98,7 +98,7 @@ namespace Test.Shared.Suites
                 expected.Sort(StringComparer.Ordinal);
                 MuxAssert.AreEqual(string.Join(",", expected), string.Join(",", found), "script-bearing skills in scope");
                 return Task.CompletedTask;
-            }, skip: !ready, skipReason: "the source tree is not available"));
+            }, skipReason: (!ready) ? "the source tree is not available" : null));
 
             cases.Add(new TestCaseDescriptor(SuiteId, "UnknownCommandRefused", "run_skill refuses a command the skill does not declare", (CancellationToken ct) =>
                 WithCopyAsync(Path.Combine(packDir!, "env-secrets-manager"), async (string root, string skillDir) =>
@@ -111,7 +111,7 @@ namespace Test.Shared.Suites
                         MuxAssert.IsFalse(result.Success, "unknown command fails");
                         MuxAssert.Contains("command_not_found", result.Content, "error code");
                     }
-                }), skip: !ready, skipReason: "the source tree is not available"));
+                }), skipReason: (!ready) ? "the source tree is not available" : null));
 
             cases.Add(new TestCaseDescriptor(SuiteId, "MissingScriptInvalid", "A command whose script file is missing makes the skill invalid and cannot run", (CancellationToken ct) =>
                 WithCopyAsync(Path.Combine(packDir!, "kubernetes-operator"), async (string root, string skillDir) =>
@@ -123,7 +123,7 @@ namespace Test.Shared.Suites
                     SkillCommand command = Find(skill, "crd-validator");
                     ToolResult result = await new SkillExecutor().ExecuteAsync("t", skill, command, new List<string> { "--help" }, root, ct, Hermetic()).ConfigureAwait(false);
                     MuxAssert.IsFalse(result.Success, "running a missing script fails");
-                }), skip: !ready, skipReason: "the source tree is not available"));
+                }), skipReason: (!ready) ? "the source tree is not available" : null));
 
             cases.Add(new TestCaseDescriptor(SuiteId, "InvalidArgumentsExitTwo", "Invalid arguments exit 2 (argparse usage errors and the scripts' own input checks)", (CancellationToken ct) =>
                 WithCopyAsync(Path.Combine(packDir!, "aws-solution-architect"), async (string root, string skillDir) =>
@@ -138,7 +138,7 @@ namespace Test.Shared.Suites
                     EngineeringScriptRun missingFile = await RunAsync(skill, "architecture-designer", new List<string> { "--input", Path.Combine(root, "nope.json") }, root, false, ct).ConfigureAwait(false);
                     MuxAssert.AreEqual(2, missingFile.ExitCode, "an unreadable input file exits 2");
                     MuxAssert.DoesNotContain("Traceback", missingFile.Stderr, "no traceback");
-                }), skip: !ready, skipReason: "the source tree is not available"));
+                }), skipReason: (!ready) ? "the source tree is not available" : null));
 
             cases.Add(new TestCaseDescriptor(SuiteId, "AwsEntryPointsProduceOutput", "The aws-solution-architect entry points added in mux produce JSON and templates", (CancellationToken ct) =>
                 WithCopyAsync(Path.Combine(packDir!, "aws-solution-architect"), async (string root, string skillDir) =>
@@ -156,7 +156,7 @@ namespace Test.Shared.Suites
                     EngineeringScriptRun stack = await RunAsync(skill, "serverless-stack", new List<string> { "--app-name", "demo", "--format", "terraform", "--output", "main.tf" }, root, false, ct).ConfigureAwait(false);
                     MuxAssert.AreEqual(0, stack.ExitCode, "template succeeds: " + stack.Stderr);
                     MuxAssert.Contains("required_providers", File.ReadAllText(Path.Combine(root, "main.tf")), "terraform written to --output");
-                }), skip: !ready, skipReason: "the source tree is not available"));
+                }), skipReason: (!ready) ? "the source tree is not available" : null));
 
             cases.Add(new TestCaseDescriptor(SuiteId, "EvaluatorsShippedForAutoresearch", "The autoresearch skills ship the built-in evaluators setup-experiment lists, normalized for mux", (CancellationToken ct) =>
                 WithCopyAsync(Path.Combine(packDir!, "ar-setup"), async (string root, string skillDir) =>
@@ -173,7 +173,7 @@ namespace Test.Shared.Suites
                     EngineeringScriptRun listed = await RunAsync(skill, "setup-experiment", new List<string> { "--list-evaluators" }, root, false, ct).ConfigureAwait(false);
                     MuxAssert.AreEqual(0, listed.ExitCode, "listing succeeds: " + listed.Stderr);
                     MuxAssert.Contains("test_pass_rate", listed.Stdout, "lists the shipped evaluators");
-                }), skip: !ready, skipReason: "the source tree is not available"));
+                }), skipReason: (!ready) ? "the source tree is not available" : null));
 
             return new TestSuiteDescriptor(SuiteId, "Script commands: engineering pack skills a through l", cases);
         }

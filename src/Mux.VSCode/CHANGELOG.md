@@ -4,6 +4,13 @@ All notable changes to the mux VS Code extension are documented here.
 
 ## Unreleased
 
+- Connecting starts the mux tray agent (`mux agent start`) and uses its server, like the terminal UI and desktop
+  app, so the tray and dashboard are up whichever surface opened first. Without an installed agent the extension
+  starts `mux serve` as before. Respects `mux.server.autoStart`.
+- Usage panel: Quarter and Year ranges, plus a fixed All range that charts from the oldest call instead of the
+  last 24 hours. New tabs for calls by outcome with failure reasons, tokens by model, endpoint, provider, or
+  call kind, usage by dimension, and a token heatmap; error rate in the KPIs. Clicking a column (or Enter on
+  the focused chart) lists the calls in that bucket.
 - Chat slash-command autocomplete with arrow-key selection, Tab completion, and Escape dismissal.
 - Endpoint selections leave inline, persisted model-switch notices in chat. Notices survive reopening and
   cross-client session reloads and stay out of model context.

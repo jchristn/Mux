@@ -28,7 +28,6 @@ namespace Test.Shared.Suites
                         "CliModelOverrideWorks",
                         "--model CLI flag overrides the default model",
                         (CancellationToken ct) => Task.CompletedTask,
-                        skip: true,
                         skipReason: "Integration placeholder; CLI override behavior is covered by the CLI command unit suites."),
 
                     new TestCaseDescriptor(
@@ -36,7 +35,6 @@ namespace Test.Shared.Suites
                         "CliEndpointOverrideWorks",
                         "--endpoint CLI flag overrides the default endpoint",
                         (CancellationToken ct) => Task.CompletedTask,
-                        skip: true,
                         skipReason: "Integration placeholder; CLI override behavior is covered by the CLI command unit suites.")
                 });
         }

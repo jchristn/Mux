@@ -185,7 +185,7 @@ namespace Test.Shared.Suites
                     Environment.SetEnvironmentVariable("MUX_TEST_EXPAND", null);
                 }
             });
-            Add("McpSectionListsEveryTool", "The MCP prompt section lists each tool with its description; no tools means no section", () =>
+            Add("McpSectionListsEveryTool", "The MCP prompt section lists each tool by name (descriptions travel in the tool definitions); no tools means no section", () =>
             {
                 List<ToolDefinition> tools = new List<ToolDefinition>
                 {
@@ -193,8 +193,9 @@ namespace Test.Shared.Suites
                     new ToolDefinition { Name = "web.fetch", Description = "[MCP:web] Fetch a URL" }
                 };
                 string section = McpTemplateBinder.BuildMcpSection(tools);
-                MuxAssert.Contains("- fs.read: [MCP:fs] Read a file", section, "first tool");
-                MuxAssert.Contains("- web.fetch: [MCP:web] Fetch a URL", section, "second tool");
+                MuxAssert.Contains("- fs.read\n", section, "first tool");
+                MuxAssert.IsFalse(section.Contains("Read a file", StringComparison.Ordinal), "descriptions are not repeated in the prompt");
+                MuxAssert.IsTrue(section.EndsWith("- web.fetch", StringComparison.Ordinal), "second tool");
                 MuxAssert.IsFalse(section.EndsWith("\n", StringComparison.Ordinal), "trimmed");
                 MuxAssert.AreEqual(string.Empty, McpTemplateBinder.BuildMcpSection(null), "null tools");
                 MuxAssert.AreEqual(string.Empty, McpTemplateBinder.BuildMcpSection(new List<ToolDefinition>()), "empty tools");
@@ -207,7 +208,7 @@ namespace Test.Shared.Suites
                 ExternalToolsBinder.Apply(template, "BASE", "COMPACT", tools, executor, null, 10);
                 MuxAssert.AreEqual(2, template.AdditionalTools!.Count, "tools exposed");
                 MuxAssert.IsNotNull(template.ExternalToolExecutor, "executor set");
-                MuxAssert.Contains("- s.t: d", template.SystemPrompt, "section in the prompt");
+                MuxAssert.Contains("- s.t\n- s.u", template.SystemPrompt, "section in the prompt");
                 MuxAssert.IsTrue(template.SystemPrompt.StartsWith("BASE", StringComparison.Ordinal), "base prompt first");
                 MuxAssert.AreEqual(12, template.EffectiveToolCount, "built-ins plus MCP");
                 ExternalToolsBinder.Apply(template, "BASE", "COMPACT", new List<ToolDefinition>(), null, null, 10);

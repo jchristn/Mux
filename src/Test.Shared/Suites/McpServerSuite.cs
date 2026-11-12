@@ -144,7 +144,7 @@ namespace Test.Shared.Suites
                 MuxAssert.AreEqual("stderr", doc.RootElement.GetProperty("stderr").GetString(), "stderr over HTTP");
                 MuxAssert.AreEqual(4, doc.RootElement.GetProperty("exit_code").GetInt32(), "exit over HTTP");
                 MuxAssert.AreEqual(PowerShellCommandRunner.ResolveExecutable(null), doc.RootElement.GetProperty("executable").GetString(), "engine path over HTTP");
-            }), skip: !powerShellAvailable, skipReason: "Install PowerShell to run the real MCP shell integration check."));
+            }), skipReason: (!powerShellAvailable) ? "Install PowerShell to run the real MCP shell integration check." : null));
 
             // --- over HTTP with a fake executor ---
             Add("HttpToolsListAndRun", "tools/list shows the catalog with schemas, and run returns the answer and summary", (CancellationToken ct) => WithServerAsync(new MuxMcpServerOptions { MaxApprovalPolicy = ApprovalPolicyEnum.AutoSafe }, null, async (McpServerFixture f) =>
@@ -423,7 +423,7 @@ namespace Test.Shared.Suites
                         try { Directory.Delete(configDir, true); } catch (Exception) { }
                     }
                 }
-            }, skip: cliDll == null, skipReason: "Mux.Cli.dll was not found next to the test build"));
+            }, skipReason: (cliDll == null) ? "Mux.Cli.dll was not found next to the test build" : null));
             cases.Add(new TestCaseDescriptor(SuiteId, "StdioChildProcessEndToEnd", "mux's MCP client launches `mux mcp serve` over stdio and runs a real turn against a mock model", async (CancellationToken ct) =>
             {
                 using (MockHttpServer model = new MockHttpServer())
@@ -466,7 +466,7 @@ namespace Test.Shared.Suites
                         try { Directory.Delete(configDir, true); } catch (Exception) { }
                     }
                 }
-            }, skip: cliDll == null, skipReason: "Mux.Cli.dll was not found next to the test build"));
+            }, skipReason: (cliDll == null) ? "Mux.Cli.dll was not found next to the test build" : null));
 
             return new TestSuiteDescriptor(SuiteId, "mux mcp serve: tools, HTTP and stdio transports, auth, progress, cancellation", cases);
         }

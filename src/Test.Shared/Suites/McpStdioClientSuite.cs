@@ -52,7 +52,7 @@ namespace Test.Shared.Suites
                     {
                         try { File.Delete(script); } catch (Exception) { }
                     }
-                }, skip: node == null, skipReason: "node is not on PATH"));
+                }, skipReason: (node == null) ? "node is not on PATH" : null));
             }
 
             Add("ConnectsDiscoversAndCalls", "A stdio server is launched, its tools discovered and prefixed, and a call returns its text", async (string script, CancellationToken ct) =>

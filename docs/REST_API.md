@@ -7,8 +7,10 @@ processes and UIs can drive it without shelling out per run. It is built on **Wa
 Watson 7 hosting conventions in `agents/requirements/BACKEND_ARCHITECTURE.md`, with the single-user
 deviations noted under [Conformance](#conformance).
 
-> **The server never starts on its own.** A plain `mux` or `mux print` invocation listens on nothing. The
-> API runs only when you start `mux serve` or launch the tray agent.
+> **Where the server runs.** The tray agent hosts it, and the terminal UI, the desktop app, and the VS Code
+> extension start the agent when it is not running (set `MUX_AGENT_AUTOSTART=0`, or `mux.server.autoStart` to
+> false in VS Code, to stop that). `mux serve` runs the server on its own. `mux print` and the other one-shot
+> commands never start it.
 
 ## Starting the server
 
@@ -25,8 +27,11 @@ mux serve --no-auth             # no authentication (loopback dev only)
 ### Tray agent
 
 The cross-platform **tray agent** (`Mux.Agent`) hosts the same server in the background and adds a
-system-tray icon with three actions: **About**, **Launch Mux** (opens the interactive TUI), and **Exit**.
-Launching the agent is itself the opt-in; only one agent runs at a time (single-instance lock).
+system-tray icon with **Launch Dashboard**, **Launch Terminal**, **Launch Desktop**, **About**, and **Exit**. It
+always starts the server. The terminal UI, the desktop app, and the VS Code extension (through
+`mux agent start`) start it when it is not running, and replace one from another mux version; `mux agent status`
+shows whether it runs. Only one agent runs at a time (single-instance lock). The install scripts install it as
+an app (see the README), and `run-at-startup` registers it to start at login.
 
 ## Configuration
 
@@ -47,7 +52,7 @@ The `rest` block in `settings.json`:
 
 | Field | Default | Notes |
 |---|---|---|
-| `enabled` | `false` | Whether the **tray agent** auto-starts the server. `mux serve` starts it regardless. |
+| `enabled` | `false` | Not used: the tray agent and `mux serve` always start the server. Kept so existing files still load. |
 | `hostname` | `127.0.0.1` | Bind host. Loopback IPv4 is pinned to avoid Windows `localhost`/IPv6 latency. |
 | `port` | `8710` | Bind port (clamped 1–65535). |
 | `ssl` | `false` | Bind with SSL. |
@@ -133,8 +138,11 @@ All paths are versioned under `/v1.0/api`.
 | POST | `/v1.0/api/chat/stream` | key | Agentic run over Server-Sent Events (`run`/`token`/`thinking`/`tool`/`approval`/`done`/`canceled`/`error`). The first event is `run` (`{ "RunId", "SessionId" }`) so the client can address the run (cancel it via `POST /v1.0/api/runs/{runId}/cancel`, or subscribe over the WebSocket). Body adds optional `id` (session), `workingDirectory` (the directory tools resolve paths against; it must exist, else `400`; falls back to the session's recorded directory, then the server's), and, with `mux serve --allow-tools`, mutating tools raise an `approval` event answered by `POST /v1.0/api/chat/approve`. `planMode: true` runs the turn in plan mode (read-only tools only); when the model presents its plan with `exit_plan`, a `plan` event carries `{ plan, steps, text, executionPrompt }` before `done`, and the client approves by sending `executionPrompt` as the next turn without `planMode`. The model's `ask_user` tool gets the no-user answer over the REST API. Persists the turn to the shared session store. |
 | GET | `/v1.0/api/settings` | key | Editable settings subset, **secrets masked** (`rest.apiKeySet` instead of the key). |
 | PUT | `/v1.0/api/settings` | key | Update settings (validated/clamped, written to `settings.json`). The REST API key changes only when a non-blank `rest.apiKey` is supplied. |
-| GET | `/v1.0/api/usage/summary` | key | Window KPI summary. Query: `from`/`to` (epoch ms) or `range=hour\|day\|week\|month\|all`, plus `endpoint`, `model`, `callKind`, `session`, `label` (comma-separated), `tag` (comma-separated `key:value`). Label/tag filters resolve to the sessions carrying them (query-time join) and compose with AND. Returns `{ FromUnixMs, ToUnixMs, Metrics }`. |
-| GET | `/v1.0/api/usage/timeseries` | key | Dense, evenly-spaced series for charting. Granularity is derived from the range — hour = 60×1-min, day = 96×15-min, week = 84×2-hour, month = 60×12-hour — and empty slices are zero-filled. Returns `{ Items: [ { BucketStartUnixMs, Metrics } ], Count }`. |
+| GET | `/v1.0/api/usage/summary` | key | Window KPI summary. Query: `from`/`to` (epoch ms) or `range=hour\|day\|week\|month\|quarter\|year\|all` (quarter = 91 days, year = 52 weeks, all = no window), plus `endpoint`, `model`, `callKind`, `session`, `label` (comma-separated), `tag` (comma-separated `key:value`). Label/tag filters resolve to the sessions carrying them (query-time join) and compose with AND. Returns `{ FromUnixMs, ToUnixMs, Metrics }`. |
+| GET | `/v1.0/api/usage/timeseries` | key | Dense, evenly-spaced series for charting. Granularity is derived from the range — hour = 60×1-min, day = 96×15-min, week = 84×2-hour, month = 60×12-hour, quarter = 91×1-day, year = 52×1-week, all = from the oldest matching event to now in about 90 buckets of a nice width (1 min up to 1 week; the day grid when there are no events) — and empty slices are zero-filled. Explicit `from`/`to` get about 90 buckets. Each bucket's `Calls` and `Errors` drive the calls-by-outcome chart. Returns `{ Items: [ { BucketStartUnixMs, Metrics } ], Count }`. |
+| GET | `/v1.0/api/usage/timeseries/split` | key | The same buckets split by `dimension=model\|endpoint\|provider\|command\|callkind` (default `model`): one series per value, ranked by total tokens over the window, keeping the top `top` values (1–20, default 6) and folding the rest into one series keyed `Other` (`IsOther: true`; only when at least two values would be folded). Series stack to the totals. Buckets carry totals and timing means, not percentiles. `label`/`tag` (a session can carry several) and unknown dimensions return 400. Returns `{ Items: [ { Key, IsOther, Buckets: [ { BucketStartUnixMs, Metrics } ] } ], Count }`. |
+| GET | `/v1.0/api/usage/heatmap` | key | Token heatmap on a clock-aligned grid in the viewer's local time: `range` (as above) and `tzOffsetMinutes` (JavaScript's `new Date().getTimezoneOffset()`, clamped to ±840), plus the usual filters. Rows are periods (hour: 4 quarter-hour rows × 15 minutes; day: 24 hour rows × 4 quarter-hours; week: 7 day rows × 12 two-hour cells; month: 30 day rows × 2 half-days; quarter: 13 Monday-start week rows × 7 days; year: 4 thirteen-week rows × 13 weeks; all: sized from the oldest event). Returns `{ Layout: { Range, UtcOffsetMinutes, FromUnixMs, ToUnixMs, BucketMs, RowMs, Rows, Columns, CellCount, RowKind, RowUnit, ColumnKind, RowStartsUnixMs, RowLabels, ColumnLabels, Caption, … }, TotalTokens: [ … ], Calls: [ … ] }`, one value per cell, row by row. |
+| GET | `/v1.0/api/usage/errors` | key | Failed calls in the window counted by error code, most frequent first; failures with no recorded code count as `unknown`. Same window filters. Returns `{ Items: [ { ErrorCode, Count } ], Count }`. |
 | GET | `/v1.0/api/usage/breakdown` | key | Totals grouped by `dimension=model\|endpoint\|provider\|command\|callkind\|label\|tag`, sorted by cost. For `label`/`tag`, a session contributes to every label/tag it carries, so per-value totals can exceed the grand total (intentional fan-out). Returns `{ Items: [ { Dimension, Value, Metrics } ], Count }`. |
 | GET | `/v1.0/api/usage/events` | key | Paginated raw call history (newest first). Query: window filters + `success`, `page`, `pageSize`. Returns `{ Items: [ … per-call rows with CostUsd … ], TotalCount, PageNumber, PageSize }`. |
 | DELETE | `/v1.0/api/usage/events?id=<id>` | key | Delete one recorded call by its row id. Returns `{ Deleted: <count> }`. |
@@ -234,9 +242,12 @@ inlined). It provides:
 - **Sessions** — browse saved sessions, export any to HTML/Markdown (client-side download), or delete.
 - **Settings** — a form-based editor over `settings.json` (agent, context, features, REST server) with masked
   secrets and per-group "restart required" hints. Backed by `GET`/`PUT /v1.0/api/settings`.
-- **Usage** — token, cost, latency, TTFT, streaming-time, and throughput analytics over selectable time
-  ranges (hour/day/week/month) with endpoint/model filters, a KPI strip, inline SVG charts, and a paginated
-  per-call history table. Backed by the `GET /v1.0/api/usage/*` routes.
+- **Usage** — calls by outcome (with failure reasons), tokens by type, tokens, calls, or cost by model,
+  endpoint, provider, or call kind, cost, latency, TTFT, streaming-time, and throughput box plots, usage by dimension, and a token
+  heatmap on a labelled local-time grid, over selectable ranges (hour/day/week/month/quarter/year/all) with
+  endpoint/model/label/tag filters, a KPI strip, and inline SVG charts that switch between bars and lines and
+  export as CSV or PNG. Clicking a column filters the paginated per-call history table
+  to that bucket. Backed by the `GET /v1.0/api/usage/*` routes.
 - **Pricing** — a form-based editor over `pricing.json` (per-model input/cached/output rates in USD per
   million tokens) used to derive usage cost. Backed by `GET`/`PUT /v1.0/api/usage/pricing`.
 - **Server Info** — health/version/uptime and the configured endpoints.
@@ -374,7 +385,9 @@ subscribing by that run's session id mirrors a desktop run live. Consumers ship 
   `apiKey` and tightening `corsAllowOrigin`.
 - **Secrets are never surfaced.** Endpoint responses project a whitelist of fields; API keys, headers, and
   credentials are excluded.
-- **Opt-in.** Nothing listens unless you run `mux serve` or the tray agent.
+- **Loopback by default.** The server listens only while the tray agent or `mux serve` runs, on `127.0.0.1`
+  unless you change `hostname`. Set `MUX_AGENT_AUTOSTART=0` to stop the terminal UI and desktop app from
+  starting the agent.
 
 ## Conformance
 

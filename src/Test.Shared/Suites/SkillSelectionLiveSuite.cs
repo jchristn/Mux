@@ -40,7 +40,7 @@ namespace Test.Shared.Suites
             const string reason = "no live model configured (pass --llm-endpoint and --llm-model, or set MUX_TEST_LLM_ENDPOINT and MUX_TEST_LLM_MODEL)";
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>
             {
-                new TestCaseDescriptor(SuiteId, "ModelPicksExpectedSkills", "A real model picks an expected skill for the built-in prompts at or above the configured floor", RunAsync, skip: !configured, skipReason: reason)
+                new TestCaseDescriptor(SuiteId, "ModelPicksExpectedSkills", "A real model picks an expected skill for the built-in prompts at or above the configured floor", RunAsync, skipReason: (!configured) ? reason : null)
             };
 
             return new TestSuiteDescriptor(SuiteId, "Skill selection against a live model", cases);

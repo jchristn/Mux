@@ -50,7 +50,6 @@ namespace Test.Shared.Suites
                         "ContextCompactionEmittedWhenHistoryTooLarge",
                         "Context compaction emitted when history is too large",
                         (CancellationToken ct) => ContextCompactionEmittedAsync(ct),
-                        skip: true,
                         skipReason: "Pre-existing failure carried over from the legacy suite (no ContextCompactedEvent emitted for these inputs); tracked for a separate fix. Logic preserved so it can be re-enabled once compaction behavior is corrected.")
                 });
         }

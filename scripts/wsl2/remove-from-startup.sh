@@ -2,6 +2,7 @@
 # Deregister the mux agent from starting at Windows login: removes the Windows Startup launcher
 # that scripts/wsl2/run-at-startup.sh installs, plus any systemd user service or desktop autostart
 # entry left by the Linux scripts. A running agent keeps running; stop it with scripts/wsl2/kill-mux.sh.
+# The installed agent stays in place; remove-tool.sh removes it.
 # Usage: ./scripts/wsl2/remove-from-startup.sh
 set -euo pipefail
 

@@ -49,7 +49,7 @@ namespace Test.Shared.Suites
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
             void Add(string id, string name, Func<string, CancellationToken, Task> body)
             {
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => WithTempAsync((string root) => body(root, ct)), skip: !git, skipReason: "git is not on PATH"));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => WithTempAsync((string root) => body(root, ct)), skipReason: (!git) ? "git is not on PATH" : null));
             }
 
             // --- manager ---

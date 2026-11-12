@@ -101,7 +101,7 @@ namespace Test.Shared.Suites
                             TryDelete(work);
                         }
                     }
-                }, skip: skillsRoot == null, skipReason: "the skill source tree was not found"));
+                }, skipReason: (skillsRoot == null) ? "the skill source tree was not found" : null));
 
                 cases.Add(new TestCaseDescriptor(SuiteId, id + "_Help", relative + ": every command answers --help cleanly in an empty directory", async (CancellationToken ct) =>
                 {
@@ -122,7 +122,7 @@ namespace Test.Shared.Suites
                             TryDelete(work);
                         }
                     }
-                }, skip: skillsRoot == null || !python, skipReason: "python or the skill source tree is not available"));
+                }, skipReason: (skillsRoot == null || !python) ? "python or the skill source tree is not available" : null));
             }
 
             cases.Add(new TestCaseDescriptor(SuiteId, "SkillsValidateWithoutWarnings", "Every wrapped skill loads valid with no warnings", (CancellationToken ct) =>
@@ -136,7 +136,7 @@ namespace Test.Shared.Suites
                 }
 
                 return Task.CompletedTask;
-            }, skip: skillsRoot == null, skipReason: "the skill source tree was not found"));
+            }, skipReason: (skillsRoot == null) ? "the skill source tree was not found" : null));
 
             cases.Add(new TestCaseDescriptor(SuiteId, "UnknownCommandIsRefused", "run_skill refuses a command the skill does not declare", async (CancellationToken ct) =>
             {
@@ -157,7 +157,7 @@ namespace Test.Shared.Suites
                 {
                     TryDelete(skills);
                 }
-            }, skip: skillsRoot == null, skipReason: "the skill source tree was not found"));
+            }, skipReason: (skillsRoot == null) ? "the skill source tree was not found" : null));
 
             cases.Add(new TestCaseDescriptor(SuiteId, "MissingScriptFails", "A command whose script file is missing fails instead of succeeding", async (CancellationToken ct) =>
             {
@@ -178,7 +178,7 @@ namespace Test.Shared.Suites
                     TryDelete(skills);
                     TryDelete(work);
                 }
-            }, skip: skillsRoot == null || !python, skipReason: "python or the skill source tree is not available"));
+            }, skipReason: (skillsRoot == null || !python) ? "python or the skill source tree is not available" : null));
 
             cases.Add(new TestCaseDescriptor(SuiteId, "InvalidArgumentsExitTwo", "Invalid arguments exit 2 (argparse usage errors), matching mux's invalid-input code", async (CancellationToken ct) =>
             {
@@ -199,7 +199,7 @@ namespace Test.Shared.Suites
                 {
                     TryDelete(work);
                 }
-            }, skip: skillsRoot == null || !python, skipReason: "python or the skill source tree is not available"));
+            }, skipReason: (skillsRoot == null || !python) ? "python or the skill source tree is not available" : null));
 
             cases.Add(new TestCaseDescriptor(SuiteId, "TddCliWorks", "tdd-guide's tdd command summarizes coverage (exit 1 below the threshold), detects frameworks, and gives phase guidance", async (CancellationToken ct) =>
             {
@@ -226,7 +226,7 @@ namespace Test.Shared.Suites
                 {
                     TryDelete(work);
                 }
-            }, skip: skillsRoot == null || !python, skipReason: "python or the skill source tree is not available"));
+            }, skipReason: (skillsRoot == null || !python) ? "python or the skill source tree is not available" : null));
 
             return new TestSuiteDescriptor(SuiteId, "Script commands: bundled skills and the security, data, research, business, docs, compliance, and productivity packs", cases);
         }

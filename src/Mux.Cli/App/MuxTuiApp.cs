@@ -6880,7 +6880,7 @@ namespace Mux.Cli.App
 
             // The paged charts modal queries per range through this provider (it handles its own errors), so
             // the view stays a pure renderer and switching range re-queries without reopening.
-            _App.Modals.Push(new UsageChartsModal("Usage", BuildUsageChartData, Mux.Core.Telemetry.UsageRange.Day));
+            PushUsageCharts();
         }
 
         // Slash-argument handler: "/usage label <label>" or "/usage tag <key:value>" opens the usage charts
@@ -6920,114 +6920,16 @@ namespace Mux.Cli.App
                 return;
             }
 
-            _App.Modals.Push(new UsageChartsModal("Usage", BuildUsageChartData, Mux.Core.Telemetry.UsageRange.Day));
+            PushUsageCharts();
         }
 
-        private UsageChartData BuildUsageChartData(Mux.Core.Telemetry.UsageRange range)
+        // The paged charts modal queries per range, per dimension, and per drill-down bucket through these providers
+        // (it handles their errors), so the view stays a pure renderer. The /usage label or tag filter is captured
+        // here and applied to every query.
+        private void PushUsageCharts()
         {
-            UsageChartData data = new UsageChartData();
-            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            Mux.Core.Telemetry.UsageWindow window = Mux.Core.Telemetry.UsageWindow.Compute(range, now);
-            Mux.Core.Telemetry.UsageFilter filter = new Mux.Core.Telemetry.UsageFilter
-            {
-                FromUnixMs = window.FromUnixMs,
-                ToUnixMs = window.ToUnixMs,
-                Labels = _UsageFilterLabels,
-                Tags = _UsageFilterTags
-            };
-
-            Mux.Core.Telemetry.UsageSummary summary = _UsageQuery!.GetSummaryAsync(filter, _Cts.Token).GetAwaiter().GetResult();
-            string scope = DescribeUsageScope();
-            data.HeaderLines.Add(scope.Length == 0 ? KpiLine(summary.Metrics) : scope + " — " + KpiLine(summary.Metrics));
-
-            List<Mux.Core.Telemetry.UsageBucket> series = _UsageQuery.GetTimeseriesAsync(filter, window.BucketMs, _Cts.Token).GetAwaiter().GetResult();
-            foreach (Mux.Core.Telemetry.UsageBucket bucket in series)
-            {
-                data.BucketStartsUnixMs.Add(bucket.BucketStartUnixMs);
-                data.TokensPerBucket.Add(bucket.Metrics.TotalTokens);
-                data.CostPerBucket.Add(bucket.Metrics.CostUsd);
-                data.TtftMsPerBucket.Add(bucket.Metrics.AvgTtftMs);
-                data.TotalMsPerBucket.Add(bucket.Metrics.AvgTotalMs);
-                data.StreamMsPerBucket.Add(bucket.Metrics.AvgStreamMs);
-                data.BucketLabels.Add(FormatBucketLabel(bucket.BucketStartUnixMs, range));
-            }
-
-            var modelSeries = _UsageQuery.GetModelTimeseriesAsync(filter, window.BucketMs, _Cts.Token).GetAwaiter().GetResult();
-            foreach (var model in modelSeries)
-            {
-                var metrics = new List<Mux.Core.Telemetry.UsageMetrics>();
-                foreach (var bucket in model.Value) metrics.Add(bucket.Metrics);
-                data.ModelBuckets[model.Key] = metrics;
-            }
-
-            Mux.Core.Telemetry.UsageWindow heatmapWindow = Mux.Core.Telemetry.UsageWindow.ComputeHeatmap(range, now);
-            Mux.Core.Telemetry.UsageFilter heatmapFilter = new Mux.Core.Telemetry.UsageFilter
-            {
-                FromUnixMs = heatmapWindow.FromUnixMs,
-                // The query emits its upper bucket inclusively; avoid an extra cell at the exclusive boundary.
-                ToUnixMs = heatmapWindow.ToUnixMs - 1,
-                Labels = _UsageFilterLabels,
-                Tags = _UsageFilterTags
-            };
-            List<Mux.Core.Telemetry.UsageBucket> heatmap = _UsageQuery.GetTimeseriesAsync(heatmapFilter, heatmapWindow.BucketMs, _Cts.Token).GetAwaiter().GetResult();
-            foreach (Mux.Core.Telemetry.UsageBucket bucket in heatmap)
-            {
-                data.HeatmapTokensPerBucket.Add(bucket.Metrics.TotalTokens);
-                data.HeatmapBucketStartsUnixMs.Add(bucket.BucketStartUnixMs);
-            }
-
-            List<Mux.Core.Telemetry.UsageBreakdownRow> topModels = _UsageQuery.GetBreakdownAsync("model", filter, _Cts.Token).GetAwaiter().GetResult();
-            int shown = 0;
-            foreach (Mux.Core.Telemetry.UsageBreakdownRow row in topModels)
-            {
-                if (shown >= 5)
-                {
-                    break;
-                }
-
-                shown++;
-                data.ModelLabels.Add(row.Value);
-                data.ModelCosts.Add(row.Metrics.CostUsd);
-            }
-
-            return data;
-        }
-
-        private string DescribeUsageScope()
-        {
-            if (_UsageFilterLabels != null && _UsageFilterLabels.Count > 0)
-            {
-                return "label:" + string.Join(",", _UsageFilterLabels);
-            }
-
-            if (_UsageFilterTags != null && _UsageFilterTags.Count > 0)
-            {
-                List<string> parts = new List<string>();
-                foreach (Mux.Core.Sessions.SessionTag tag in _UsageFilterTags) parts.Add(tag.Key + ":" + tag.Value);
-                return "tag:" + string.Join(",", parts);
-            }
-
-            return string.Empty;
-        }
-
-        private static string FormatBucketLabel(long unixMs, Mux.Core.Telemetry.UsageRange range)
-        {
-            DateTimeOffset t = DateTimeOffset.FromUnixTimeMilliseconds(unixMs).ToLocalTime();
-            switch (range)
-            {
-                case Mux.Core.Telemetry.UsageRange.Hour:
-                case Mux.Core.Telemetry.UsageRange.Day:
-                    return t.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
-                case Mux.Core.Telemetry.UsageRange.Week:
-                    return t.ToString("ddd", System.Globalization.CultureInfo.InvariantCulture);
-                default:
-                    return t.ToString("MM/dd", System.Globalization.CultureInfo.InvariantCulture);
-            }
-        }
-
-        private static string KpiLine(Mux.Core.Telemetry.UsageMetrics m)
-        {
-            return TokShort(m.TotalTokens) + " tok · " + UsdShort(m.CostUsd) + " · " + m.Calls + " calls · " + m.Errors + " err";
+            UsageChartQueries queries = new UsageChartQueries(_UsageQuery!, _UsageFilterLabels, _UsageFilterTags, _Cts.Token);
+            _App.Modals.Push(new UsageChartsModal("Usage", queries.Load, Mux.Core.Telemetry.UsageRange.Day, queries.LoadDimension, queries.LoadCalls));
         }
 
         private List<string> BuildUsageLines()

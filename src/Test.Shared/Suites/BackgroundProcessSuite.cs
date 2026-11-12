@@ -53,7 +53,7 @@ namespace Test.Shared.Suites
 
             void AddProcess(string id, string name, Func<string, CancellationToken, Task> body)
             {
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => WithTempAsync((string dir) => body(dir, ct)), skip: !pwsh, skipReason: "pwsh is not on PATH"));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => WithTempAsync((string dir) => body(dir, ct)), skipReason: (!pwsh) ? "pwsh is not on PATH" : null));
             }
 
             // --- registry ---
@@ -398,7 +398,7 @@ namespace Test.Shared.Suites
                 }
 
                 return Task.CompletedTask;
-            }, skip: !pwsh, skipReason: "pwsh is not on PATH"));
+            }, skipReason: (!pwsh) ? "pwsh is not on PATH" : null));
 
             // --- react-dev-server ---
             AddProcess("ReactDevServerDetect", "react-dev-server detect finds the dev command, framework, port, and patterns", async (string dir, CancellationToken ct) =>

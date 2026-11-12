@@ -101,7 +101,7 @@ namespace Test.Shared.Suites
             List<TestCaseDescriptor> cases = new List<TestCaseDescriptor>();
             void Add(string id, string name, Func<SkillTestContext, Task> body, bool skip = false, string reason = "")
             {
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithContextAsync(body, ct), skip: !ready || skip, skipReason: !ready ? "pwsh is not on PATH" : reason));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => RunWithContextAsync(body, ct), skipReason: (!ready || skip) ? (!ready ? "pwsh is not on PATH" : reason) : null));
             }
 
             cases.Add(new TestCaseDescriptor(SuiteId, "SkillsDefined", "deps-audit is read-only and sbom mutating, both in security and gated on manifests and lockfiles", (CancellationToken ct) =>

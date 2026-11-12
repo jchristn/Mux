@@ -27,7 +27,7 @@ shift "$FRAMEWORK_ARGS"
 MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
 mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
-install_macos_app agent
+install_macos_app agent --user-only
 # The agent registers itself to start at login on its first run unless MUX_AGENT_AUTOSTART=0. Login
 # startup is run-at-startup.sh's job, so keep this launch from registering it.
 open --env MUX_AGENT_AUTOSTART=0 -a "$HOME/Applications/Mux Agent.app"

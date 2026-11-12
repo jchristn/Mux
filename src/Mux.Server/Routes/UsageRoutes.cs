@@ -85,11 +85,76 @@ namespace Mux.Server.Routes
                 // Derive an aligned, fixed-granularity window from the range so the series has a fixed number
                 // of evenly-spaced slices (60 x 1-min for the hour, 96 x 15-min for the day, 84 x 2-hour for
                 // the week, 60 x 12-hour for the month). Overrides the coarse window BuildFilter set.
-                long bucketMs = ResolveTimeseriesWindow(req.Http, filter);
+                long bucketMs = await ResolveTimeseriesWindowAsync(req.Http, filter, _Query).ConfigureAwait(false);
                 List<UsageBucket> buckets = await _Query.GetTimeseriesAsync(filter, bucketMs, CancellationToken.None).ConfigureAwait(false);
                 req.Http.Response.StatusCode = 200;
                 return (object)new ListResponse<UsageBucket>(buckets);
             }, Documentation.ApiDoc.UsageTimeseries);
+
+            app.Get("/v1.0/api/usage/timeseries/split", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();
+
+                if (_Query == null)
+                {
+                    req.Http.Response.StatusCode = 200;
+                    return (object)new ListResponse<UsageSeries>(new List<UsageSeries>());
+                }
+
+                string dimension = req.Http.Request.Query.Elements["dimension"] ?? "model";
+                int top = ParseInt(req.Http.Request.Query.Elements["top"], 6);
+                UsageFilter filter = BuildFilter(req.Http);
+                long bucketMs = await ResolveTimeseriesWindowAsync(req.Http, filter, _Query).ConfigureAwait(false);
+                try
+                {
+                    List<UsageSeries> series = await _Query.GetSplitTimeseriesAsync(dimension, filter, bucketMs, top, CancellationToken.None).ConfigureAwait(false);
+                    req.Http.Response.StatusCode = 200;
+                    return (object)new ListResponse<UsageSeries>(series);
+                }
+                catch (ArgumentException ex)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiError("BadRequest", ex.Message);
+                }
+            }, Documentation.ApiDoc.UsageTimeseriesSplit);
+
+            app.Get("/v1.0/api/usage/heatmap", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();
+
+                UsageRange range = UsageWindow.ParseRange(req.Http.Request.Query.Elements["range"], UsageRange.Day);
+                int offset = UsageHeatmapLayout.FromJavaScriptOffset(ParseInt(req.Http.Request.Query.Elements["tzOffsetMinutes"], 0));
+                long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                if (_Query == null)
+                {
+                    req.Http.Response.StatusCode = 200;
+                    return (object)new UsageHeatmap(UsageHeatmapLayout.Compute(range, now, offset));
+                }
+
+                // Only the non-time constraints matter: the layout sets the window.
+                UsageFilter filter = BuildFilter(req.Http);
+                filter.FromUnixMs = 0;
+                filter.ToUnixMs = 0;
+                UsageHeatmap heatmap = await _Query.GetHeatmapAsync(range, filter, now, offset, CancellationToken.None).ConfigureAwait(false);
+                req.Http.Response.StatusCode = 200;
+                return (object)heatmap;
+            }, Documentation.ApiDoc.UsageHeatmap);
+
+            app.Get("/v1.0/api/usage/errors", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();
+
+                if (_Query == null)
+                {
+                    req.Http.Response.StatusCode = 200;
+                    return (object)new ListResponse<UsageErrorCount>(new List<UsageErrorCount>());
+                }
+
+                UsageFilter filter = BuildFilter(req.Http);
+                List<UsageErrorCount> counts = await _Query.GetErrorCountsAsync(filter, CancellationToken.None).ConfigureAwait(false);
+                req.Http.Response.StatusCode = 200;
+                return (object)new ListResponse<UsageErrorCount>(counts);
+            }, Documentation.ApiDoc.UsageErrors);
 
             app.Get("/v1.0/api/usage/breakdown", async (req) =>
             {
@@ -237,8 +302,9 @@ namespace Mux.Server.Routes
             long from = ParseLong(ctx.Request.Query.Elements["from"], 0);
             long to = ParseLong(ctx.Request.Query.Elements["to"], 0);
 
-            // A `range` keyword (hour/day/week/month/all) is a convenience: when explicit from/to are not
-            // supplied, derive the window from the server clock. Explicit from/to always win.
+            // A `range` keyword (hour/day/week/month/quarter/year/all) is a convenience: when explicit from/to are
+            // not supplied, derive the window from the server clock ("all" leaves it unbounded). Explicit from/to
+            // always win.
             string? range = ctx.Request.Query.Elements["range"];
             if (from == 0 && to == 0 && !string.IsNullOrWhiteSpace(range))
             {
@@ -295,7 +361,7 @@ namespace Mux.Server.Routes
         /// from/to (custom range) is honored with a bucket width chosen for roughly 90 slices. The resolved
         /// window is written back onto <paramref name="filter"/> (From/To), overriding the coarse window.
         /// </summary>
-        private static long ResolveTimeseriesWindow(WatsonWebserver.Core.HttpContextBase ctx, UsageFilter filter)
+        private static async Task<long> ResolveTimeseriesWindowAsync(WatsonWebserver.Core.HttpContextBase ctx, UsageFilter filter, UsageQueryService query)
         {
             long explicitFrom = ParseLong(ctx.Request.Query.Elements["from"], 0);
             long explicitTo = ParseLong(ctx.Request.Query.Elements["to"], 0);
@@ -309,9 +375,19 @@ namespace Mux.Server.Routes
                 return width;
             }
 
-            UsageWindow.Bucketing(ctx.Request.Query.Elements["range"], out long bucketMs, out int count);
-
+            string? rangeKey = ctx.Request.Query.Elements["range"];
             long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+            // "All time" spans from the oldest matching event to now; with no events it falls back to the day grid.
+            if (UsageWindow.ParseRange(rangeKey, UsageRange.Day) == UsageRange.All)
+            {
+                UsageWindow all = await query.ResolveWindowAsync(UsageRange.All, filter, now, CancellationToken.None).ConfigureAwait(false);
+                filter.FromUnixMs = all.FromUnixMs;
+                filter.ToUnixMs = all.ToUnixMs - 1;
+                return all.BucketMs;
+            }
+
+            UsageWindow.Bucketing(rangeKey, out long bucketMs, out int count);
             long lastStart = (now / bucketMs) * bucketMs;
             long firstStart = lastStart - ((count - 1) * bucketMs);
             filter.FromUnixMs = firstStart;

@@ -98,14 +98,24 @@ section reads the server's live configuration:
 - **Skills**: see every discovered skill grouped by category and toggle it on or off. **Set skill category** on a skill's context menu picks a canonical category, a custom one, or clears the override.
 - **Settings** — opens an editor over the server's settings (approval policy, iteration and concurrency
   limits, compaction, task planning, and more).
-- **Usage** — a quick summary of calls, tokens, cost, errors, and latency for the last day.
+- **Usage** — usage analytics over Hour, Day, Week, Month, Quarter, Year, or All, filtered by endpoint and
+  model. KPIs show calls, tokens, cost, errors, error rate, average TTFT, and average latency. Tabs: **Calls**
+  (succeeded and failed per bucket, with a failure-reasons list), **Tokens** (uncached, cached, output),
+  **Metric by** model, endpoint, provider, or call kind (tokens, calls, or cost; top 6 plus Other), **Cost**, box plots for
+  **Latency**, **TTFT**, **Streaming**, and **Throughput**, **Usage by** dimension (up to 10 bars), and a token
+  **Heatmap** on a labelled local-time grid. One picker sets the dimension and another the metric for both "by"
+  tabs. A toolbar switches the stacked charts between bars and lines and exports the chart as CSV or PNG. Click a column (or focus the chart, move
+  with Left/Right/Home/End, and press Enter or Space) to list the calls in that bucket; × or Escape closes
+  the list.
 
 Everything here changes the same configuration the CLI, desktop app, and dashboard read, because it goes
 through the same local server — so a change you make in the editor shows up everywhere.
 
 ## Settings
 
-- `mux.server.autoStart` — start a local server when none is reachable. Turn it off to require your own.
+- `mux.server.autoStart` — start the mux tray agent (with `mux agent start`) when the extension connects, and use
+  its server; when no agent is installed or it does not answer, start `mux serve` instead. Turn it off to require
+  your own server.
 - `mux.server.port` — the port to reach or bind. `0` uses the extension default, `8710`.
 - `mux.server.path` — the `mux` executable name or full path.
 - `mux.defaultEndpoint` — the endpoint runs use; empty follows the server's default. Change it from the status

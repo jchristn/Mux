@@ -991,7 +991,7 @@ namespace Mux.Desktop.Shell
                 return sessionId != null && titles.TryGetValue(sessionId, out string? title) ? title : null;
             }
 
-            new UsageDashboardWindow(new UsageAnalyticsService(_UsageQuery!, true), Resolve).Show(this);
+            new UsageDashboardWindow(new UsageAnalyticsService(_UsageQuery!, true), Resolve, titles).Show(this);
         }
 
         private void OpenEndpointsWindow()

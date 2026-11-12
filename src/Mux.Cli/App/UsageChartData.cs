@@ -5,49 +5,48 @@ namespace Mux.Cli.App
 
     /// <summary>
     /// A plain, pre-computed snapshot of usage telemetry for one time range, rendered by
-    /// <see cref="UsageChartsModal"/>. Holds the KPI header line, per-bucket series (tokens, cost, and the
-    /// three latency metrics) with matching bucket labels, and a top-models-by-cost breakdown. Free of any
-    /// query or widget dependency so the chart modal stays a pure view and the assembly can be unit-tested.
+    /// <see cref="UsageChartsModal"/>. Holds the KPI header line, the resolved window, the per-bucket metrics (calls,
+    /// errors, tokens by type, cost, and the four timing distributions) with matching bucket labels, the failure
+    /// reasons, and the clock-aligned heatmap. Free of any query or widget dependency so the chart modal stays
+    /// a pure view and the assembly can be unit-tested. Build one with <see cref="UsageChartQueries"/>.
     /// </summary>
     public sealed class UsageChartData
     {
-        /// <summary>Per-model metrics aligned with BucketLabels; empty buckets contain zero metrics.</summary>
-        public Dictionary<string, List<UsageMetrics>> ModelBuckets { get; } = new Dictionary<string, List<UsageMetrics>>(System.StringComparer.Ordinal);
+        #region Public-Members
 
-        /// <summary>KPI summary line shown in the header (tokens/cost/calls for the selected range).</summary>
+        /// <summary>KPI summary line shown in the header (tokens, cost, calls, errors, and error rate for the selected range).</summary>
         public List<string> HeaderLines { get; } = new List<string>();
 
-        /// <summary>UTC bucket timestamps for labeled heatmap rows.</summary>
+        /// <summary>The inclusive lower bound of the charted window, Unix epoch milliseconds (0 when unknown).</summary>
+        public long WindowFromUnixMs { get; set; }
+
+        /// <summary>The exclusive upper bound of the charted window, Unix epoch milliseconds (0 when unknown).</summary>
+        public long WindowToUnixMs { get; set; }
+
+        /// <summary>
+        /// The bucket width in milliseconds. 0 means unknown: the modal then derives it from the first two
+        /// <see cref="BucketStartsUnixMs"/> values, or from the window for a single bucket.
+        /// </summary>
+        public long BucketMs { get; set; }
+
+        /// <summary>UTC bucket starts, oldest first; parallel to <see cref="BucketLabels"/> and <see cref="Buckets"/>.</summary>
         public List<long> BucketStartsUnixMs { get; } = new List<long>();
 
-        /// <summary>Tokens in clock-aligned heatmap buckets, independent of rolling bar-chart buckets.</summary>
-        public List<double> HeatmapTokensPerBucket { get; } = new List<double>();
-
-        /// <summary>UTC starts of the clock-aligned heatmap buckets.</summary>
-        public List<long> HeatmapBucketStartsUnixMs { get; } = new List<long>();
-
-        /// <summary>Short time labels (range-appropriate, e.g. "14:20", "Mon", "09/17") parallel to every per-bucket series.</summary>
+        /// <summary>Short time labels (range-appropriate, e.g. "14:20", "Mon", "11/09", "2026-11-09") parallel to <see cref="Buckets"/>.</summary>
         public List<string> BucketLabels { get; } = new List<string>();
 
-        /// <summary>Total tokens per bucket, oldest first; parallel to <see cref="BucketLabels"/>.</summary>
-        public List<double> TokensPerBucket { get; } = new List<double>();
+        /// <summary>Per-bucket metrics, oldest first, including the four timing distributions; empty buckets hold zero metrics.</summary>
+        public List<UsageMetrics> Buckets { get; } = new List<UsageMetrics>();
 
-        /// <summary>Total cost (USD) per bucket, oldest first; parallel to <see cref="BucketLabels"/>.</summary>
-        public List<double> CostPerBucket { get; } = new List<double>();
+        /// <summary>Failure reasons for the window: error codes with counts, most frequent first.</summary>
+        public List<UsageErrorCount> ErrorCounts { get; } = new List<UsageErrorCount>();
 
-        /// <summary>Average time-to-first-token (ms) per bucket; parallel to <see cref="BucketLabels"/>.</summary>
-        public List<double> TtftMsPerBucket { get; } = new List<double>();
+        /// <summary>
+        /// The token heatmap on the shared clock-aligned grid (local-time rows, see <see cref="UsageHeatmapLayout"/>),
+        /// independent of the rolling chart buckets; null when none was loaded.
+        /// </summary>
+        public UsageHeatmap? Heatmap { get; set; }
 
-        /// <summary>Average total latency (ms) per bucket; parallel to <see cref="BucketLabels"/>.</summary>
-        public List<double> TotalMsPerBucket { get; } = new List<double>();
-
-        /// <summary>Average streaming time (ms) per bucket; parallel to <see cref="BucketLabels"/>.</summary>
-        public List<double> StreamMsPerBucket { get; } = new List<double>();
-
-        /// <summary>Model names for the top-models-by-cost breakdown, highest first; parallel to <see cref="ModelCosts"/>.</summary>
-        public List<string> ModelLabels { get; } = new List<string>();
-
-        /// <summary>Costs (USD) parallel to <see cref="ModelLabels"/>.</summary>
-        public List<double> ModelCosts { get; } = new List<double>();
+        #endregion
     }
 }

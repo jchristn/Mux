@@ -28,7 +28,6 @@ namespace Test.Shared.Suites
                         "AtomicMultiEditAllOrNothing",
                         "Multi-edit applies all edits atomically or rolls back",
                         (CancellationToken ct) => Task.CompletedTask,
-                        skip: true,
                         skipReason: "Integration placeholder; unit-level coverage lives in the MultiEditTool suite.")
                 });
         }

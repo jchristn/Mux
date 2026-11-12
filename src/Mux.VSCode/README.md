@@ -31,7 +31,8 @@ Dedicated **Ollama Cloud** (`ollama-cloud`) and **xAI Grok** (`xai`) providers a
   surface.
 - **Manage** — a tree view over the server's live config: connection status, endpoints (add/edit/delete/set
   default), MCP servers, prompt profiles and the operational prompt catalog (edit/reset by kind), skills, a
-  settings editor, and a usage summary.
+  settings editor, and usage analytics (calls by outcome, tokens, cost, latency, usage by model or
+  endpoint, a token heatmap, and drill-down into the calls behind any bucket).
 - **Endpoint picker** — choose the endpoint runs go against from the status bar, next to a connection-status
   indicator. Changes leave saved model-switch notices in the conversation, visible across mux clients.
 
@@ -45,7 +46,8 @@ The full guide lives in [docs/VSCODE.md](https://github.com/jchristn/Mux/blob/ma
 
 ## Settings
 
-- `mux.server.autoStart` — start a local server when none is reachable (default on).
+- `mux.server.autoStart` — start the mux tray agent when connecting and use its server, falling back to `mux serve`
+  when no agent is installed (default on).
 - `mux.server.port` / `mux.server.path` — where to reach or how to launch `mux serve`.
 - `mux.defaultEndpoint` — the endpoint runs use; empty follows the server's default.
 - `mux.approvalPosture` — prompt in the editor for mutating tools, or auto-safe.

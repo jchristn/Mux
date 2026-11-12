@@ -34,7 +34,7 @@ namespace Test.Shared.Suites
                 "Live MuxServer usage-telemetry endpoints over HTTP",
                 new List<TestCaseDescriptor>
                 {
-                    new TestCaseDescriptor("UsageRoutes", "UsageEndpointsReturnSeededData", "Summary, filters, and events reflect seeded telemetry", (CancellationToken ct) =>
+                    new TestCaseDescriptor("UsageRoutes", "UsageEndpointsReturnSeededData", "Summary, filters, events, every range of the time series, the split series, and failure reasons reflect seeded telemetry", (CancellationToken ct) =>
                     {
                         string dir = Path.Combine(Path.GetTempPath(), "mux_usageapi_" + Guid.NewGuid().ToString("N"));
                         Directory.CreateDirectory(dir);
@@ -45,11 +45,14 @@ namespace Test.Shared.Suites
                         {
                             using SqliteUsageStore store = new SqliteUsageStore(dbPath, 90, 5_000_000);
                             long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                            UsageEvent failed = Event(now - 3000, "claude-opus-4-8", "anthropic-endpoint", 500, 0, 300);
+                            failed.Success = false;
+                            failed.ErrorCode = "http_429";
                             store.InsertBatchAsync(new List<UsageEvent>
                             {
                                 Event(now - 1000, "gpt-4o", "openai-endpoint", 1000, 0, 500),
                                 Event(now - 2000, "gpt-4o", "openai-endpoint", 2000, 0, 800),
-                                Event(now - 3000, "claude-opus-4-8", "anthropic-endpoint", 500, 0, 300)
+                                failed
                             }, ct).GetAwaiter().GetResult();
 
                             PricingTable pricing = new PricingTable
@@ -102,6 +105,95 @@ namespace Test.Shared.Suites
                                 using JsonDocument events = JsonDocument.Parse(eventsBody);
                                 MuxAssert.AreEqual(3L, events.RootElement.GetProperty("TotalCount").GetInt64(), "three events total");
                                 MuxAssert.AreEqual(3, events.RootElement.GetProperty("Items").GetArrayLength(), "three rows on the page");
+
+                                // Time series for every range keyword: calls and errors per bucket sum to the totals.
+                                foreach (string range in new[] { "hour", "day", "week", "month", "quarter", "year", "all" })
+                                {
+                                    using JsonDocument series = JsonDocument.Parse(GetWithRetry(http, baseUrl + "/v1.0/api/usage/timeseries?range=" + range));
+                                    long calls = 0, errors = 0;
+                                    foreach (JsonElement bucket in series.RootElement.GetProperty("Items").EnumerateArray())
+                                    {
+                                        calls += bucket.GetProperty("Metrics").GetProperty("Calls").GetInt64();
+                                        errors += bucket.GetProperty("Metrics").GetProperty("Errors").GetInt64();
+                                    }
+
+                                    MuxAssert.AreEqual(3L, calls, "calls in the " + range + " series");
+                                    MuxAssert.AreEqual(1L, errors, "errors in the " + range + " series");
+                                    int expected = range == "quarter" ? 91 : range == "year" ? 52 : 0;
+                                    if (expected > 0)
+                                    {
+                                        MuxAssert.AreEqual(expected, series.RootElement.GetProperty("Count").GetInt32(), range + " bucket count");
+                                    }
+                                }
+
+                                // Heatmap for every range: one value per cell of the shared layout, every call counted, the
+                                // browser's offset applied with JavaScript's sign, and the filters honored.
+                                foreach (string range in new[] { "hour", "day", "week", "month", "quarter", "year", "all" })
+                                {
+                                    using JsonDocument heat = JsonDocument.Parse(GetWithRetry(http, baseUrl + "/v1.0/api/usage/heatmap?range=" + range + "&tzOffsetMinutes=-330"));
+                                    JsonElement layout = heat.RootElement.GetProperty("Layout");
+                                    int cells = layout.GetProperty("Rows").GetInt32() * layout.GetProperty("Columns").GetInt32();
+                                    MuxAssert.AreEqual(range, layout.GetProperty("Range").GetString(), "heatmap range " + range);
+                                    MuxAssert.AreEqual(330, layout.GetProperty("UtcOffsetMinutes").GetInt32(), "heatmap offset for " + range);
+                                    MuxAssert.AreEqual(cells, heat.RootElement.GetProperty("TotalTokens").GetArrayLength(), "a token value per cell for " + range);
+                                    MuxAssert.AreEqual(cells, heat.RootElement.GetProperty("Calls").GetArrayLength(), "a call count per cell for " + range);
+                                    MuxAssert.AreEqual(layout.GetProperty("Rows").GetInt32(), layout.GetProperty("RowLabels").GetArrayLength(), "row labels for " + range);
+                                    MuxAssert.AreEqual(layout.GetProperty("Columns").GetInt32(), layout.GetProperty("ColumnLabels").GetArrayLength(), "column labels for " + range);
+                                    long heatCalls = 0, heatTokens = 0;
+                                    foreach (JsonElement v in heat.RootElement.GetProperty("Calls").EnumerateArray()) heatCalls += v.GetInt64();
+                                    foreach (JsonElement v in heat.RootElement.GetProperty("TotalTokens").EnumerateArray()) heatTokens += v.GetInt64();
+                                    MuxAssert.AreEqual(3L, heatCalls, "every call in the " + range + " heatmap");
+                                    MuxAssert.AreEqual(5100L, heatTokens, "every token in the " + range + " heatmap");
+                                }
+
+                                using (JsonDocument monthHeat = JsonDocument.Parse(GetWithRetry(http, baseUrl + "/v1.0/api/usage/heatmap?range=month&tzOffsetMinutes=-330")))
+                                {
+                                    // Month: a 5-week calendar of half-days from a local Monday, covering the last 30 days.
+                                    JsonElement layout = monthHeat.RootElement.GetProperty("Layout");
+                                    MuxAssert.AreEqual(5, layout.GetProperty("Rows").GetInt32(), "month week rows");
+                                    MuxAssert.AreEqual(14, layout.GetProperty("Columns").GetInt32(), "month half-day columns");
+                                    MuxAssert.AreEqual(12L * 3_600_000L, layout.GetProperty("BucketMs").GetInt64(), "month half-day cells");
+                                    MuxAssert.AreEqual("halfday", layout.GetProperty("ColumnKind").GetString(), "month column kind");
+                                    MuxAssert.AreEqual("1w", layout.GetProperty("RowUnit").GetString(), "month row unit");
+                                    MuxAssert.AreEqual(2, layout.GetProperty("ColumnGroup").GetInt32(), "two columns per weekday");
+                                    MuxAssert.AreEqual("Mon", layout.GetProperty("ColumnLabels")[0].GetString(), "Monday AM");
+                                    MuxAssert.AreEqual("Mon", layout.GetProperty("ColumnLabels")[1].GetString(), "Monday PM");
+                                    MuxAssert.AreEqual("Sun", layout.GetProperty("ColumnLabels")[13].GetString(), "Sunday PM");
+                                    MuxAssert.AreEqual("Rows: week starting · Columns: day (AM, PM)", layout.GetProperty("Caption").GetString(), "month caption");
+                                    long from = layout.GetProperty("FromUnixMs").GetInt64();
+                                    long windowFrom = layout.GetProperty("WindowFromUnixMs").GetInt64();
+                                    long nowMs = layout.GetProperty("NowUnixMs").GetInt64();
+                                    MuxAssert.IsTrue(windowFrom >= from && nowMs - windowFrom <= 30L * 86_400_000L, "the window is the last 30 days");
+                                    DateTime localMonday = DateTimeOffset.FromUnixTimeMilliseconds(from + 330L * 60_000L).UtcDateTime;
+                                    MuxAssert.AreEqual(DayOfWeek.Monday, localMonday.DayOfWeek, "rows start on a local Monday at UTC+5:30");
+                                    MuxAssert.AreEqual(TimeSpan.Zero, localMonday.TimeOfDay, "rows start at local midnight at UTC+5:30");
+                                }
+
+                                using (JsonDocument quarterHeat = JsonDocument.Parse(GetWithRetry(http, baseUrl + "/v1.0/api/usage/heatmap?range=quarter&model=gpt-4o")))
+                                {
+                                    JsonElement layout = quarterHeat.RootElement.GetProperty("Layout");
+                                    MuxAssert.AreEqual(13, layout.GetProperty("Rows").GetInt32(), "quarter week rows");
+                                    MuxAssert.AreEqual("Mon", layout.GetProperty("ColumnLabels")[0].GetString(), "quarter weekday columns");
+                                    long calls = 0;
+                                    foreach (JsonElement v in quarterHeat.RootElement.GetProperty("Calls").EnumerateArray()) calls += v.GetInt64();
+                                    MuxAssert.AreEqual(2L, calls, "model filter applies to the heatmap");
+                                }
+
+                                // Split by model: one series per model on the total series' buckets.
+                                using JsonDocument split = JsonDocument.Parse(GetWithRetry(http, baseUrl + "/v1.0/api/usage/timeseries/split?range=day&dimension=model&top=6"));
+                                MuxAssert.AreEqual(2, split.RootElement.GetProperty("Count").GetInt32(), "one series per model");
+                                MuxAssert.AreEqual("gpt-4o", split.RootElement.GetProperty("Items")[0].GetProperty("Key").GetString(), "ranked by tokens");
+                                MuxAssert.AreEqual(96, split.RootElement.GetProperty("Items")[0].GetProperty("Buckets").GetArrayLength(), "day buckets");
+
+                                // An unknown split dimension is a 400.
+                                HttpResponseMessage bad = http.GetAsync(baseUrl + "/v1.0/api/usage/timeseries/split?range=day&dimension=label").GetAwaiter().GetResult();
+                                MuxAssert.AreEqual(400, (int)bad.StatusCode, "label split refused");
+
+                                // Failures by error code.
+                                using JsonDocument errorsDoc = JsonDocument.Parse(GetWithRetry(http, baseUrl + "/v1.0/api/usage/errors?range=all"));
+                                MuxAssert.AreEqual(1, errorsDoc.RootElement.GetProperty("Count").GetInt32(), "one failure reason");
+                                MuxAssert.AreEqual("http_429", errorsDoc.RootElement.GetProperty("Items")[0].GetProperty("ErrorCode").GetString(), "error code");
+                                MuxAssert.AreEqual(1L, errorsDoc.RootElement.GetProperty("Items")[0].GetProperty("Count").GetInt64(), "error count");
                             }
                             finally
                             {

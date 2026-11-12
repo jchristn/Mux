@@ -46,7 +46,7 @@ namespace Test.Shared.Suites
             catch (McpToolException) { powerShellAvailable = false; }
             void Add(string id, string name, Func<string, CancellationToken, Task> body, bool requiresPowerShell = false)
             {
-                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => WithTempAsync((string root) => body(root, ct)), skip: requiresPowerShell && !powerShellAvailable, skipReason: "Install PowerShell (pwsh), or use Windows PowerShell on Windows, to run shell integration checks."));
+                cases.Add(new TestCaseDescriptor(SuiteId, id, name, (CancellationToken ct) => WithTempAsync((string root) => body(root, ct)), skipReason: (requiresPowerShell && !powerShellAvailable) ? "Install PowerShell (pwsh), or use Windows PowerShell on Windows, to run shell integration checks." : null));
             }
 
             // --- registration ---

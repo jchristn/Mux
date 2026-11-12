@@ -107,7 +107,7 @@ Everything you can configure in the TUI is available here as a window, each back
 
 ## Analytics
 
-- **Usage dashboard** — durable token/latency/cost analytics over the shared SQLite usage store, with selectable time ranges and per-metric charts.
+- **Usage dashboard** — durable usage analytics over the shared SQLite usage store, computed by the same query service as the web dashboard, VS Code, and the terminal, so the numbers match. Ranges: Hour, Day, Week, Month, Quarter, Year, All. Tabs: **Calls** (succeeded and failed per bucket, with a failure-reasons panel), **Tokens** (uncached, cached, output), **Metric by** dimension (tokens, calls, or cost; top 6 plus Other), **Cost**, box plots for **Latency**, **TTFT**, **Streaming**, and **Throughput**, **Usage by** dimension (up to 10 bars, sorted by the metric), and a token **Heatmap** on a labelled local-time grid. **Group by** (Model, Endpoint, Provider, Call kind) and the metric picker drive both "by" tabs. A toolbar switches the stacked charts between bars and lines and exports the chart as CSV or PNG. Clicking a column or heatmap cell narrows the call table to that bucket and shows a removable chip; click × or the same column again to clear it. The endpoint and conversation boxes match by "contains"; when the endpoint text matches several endpoints the results are combined, and p95/p99 are then sample-weighted approximations (the status line says so).
 - **Stats** — a JSON snapshot of the current conversation's statistics, with a copy button.
 
 ## Local server

@@ -496,8 +496,10 @@ These override config values after endpoint selection.
 
 ## REST server & tray agent (`settings.json` `rest`)
 
-mux v0.9.0 adds an opt-in local REST + WebSocket server and a system-tray agent. Configure them under the
-`rest` block:
+mux has a local REST + WebSocket server and a system-tray agent that hosts it. The agent starts the server
+whenever it runs, and every user surface (the terminal UI, the desktop app, and the VS Code extension) starts
+the agent if it is not running; set `MUX_AGENT_AUTOSTART=0` (or `mux.server.autoStart` to false in VS Code) to
+turn that off. `mux serve` runs the server without the agent. Configure the server under the `rest` block:
 
 ```json
 {
@@ -514,7 +516,7 @@ mux v0.9.0 adds an opt-in local REST + WebSocket server and a system-tray agent.
 
 | Field | Type | Notes |
 |---|---|---|
-| `enabled` | bool | Whether the tray agent auto-starts the server. `mux serve` starts it regardless. Default false. |
+| `enabled` | bool | Not used: the tray agent always starts the server, and `mux serve` always does. Kept so existing files still load. Default false. |
 | `hostname` | string | Bind host. Default `127.0.0.1` (loopback). |
 | `port` | int | Bind port, clamped 1-65535. Default 8710. |
 | `ssl` | bool | Bind with SSL. Default false. |

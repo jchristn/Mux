@@ -28,7 +28,6 @@ namespace Test.Shared.Suites
                         "McpServerDiscovery",
                         "MCP servers are discovered and tools enumerated",
                         (CancellationToken ct) => Task.CompletedTask,
-                        skip: true,
                         skipReason: "Requires a live MCP server; unit-level coverage lives in the McpToolManager suite.")
                 });
         }

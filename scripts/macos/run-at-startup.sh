@@ -39,7 +39,7 @@ fi
 
 # shellcheck source=app-bundle.sh
 . "$SCRIPT_DIR/app-bundle.sh"
-install_macos_app agent
+install_macos_app agent --user-only
 AGENT_BIN="$HOME/Applications/Mux Agent.app/Contents/MacOS/Mux.Agent"
 [ -x "$AGENT_BIN" ] || die "Mux.Agent was not found at $AGENT_BIN after the build."
 # The agent registers itself at login on its first run unless this marker exists. Login startup is

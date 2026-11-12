@@ -9,7 +9,7 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.6.0-blue.svg" alt="v1.6.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.7.0-blue.svg" alt="v1.7.0"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-yellow.svg" alt="beta"></a>
   <a href="https://github.com/jchristn/Mux/actions/workflows/ci.yml"><img src="https://github.com/jchristn/Mux/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.nuget.org/packages/Mux.Core"><img src="https://img.shields.io/nuget/v/Mux.Core.svg" alt="NuGet Mux.Core"></a>
@@ -20,7 +20,12 @@
 
 [Get started](#getting-started) · [Model providers](#model-providers) · [CLI usage](#cli-usage) · [Configuration](#configuration) · [Documentation](#documentation)
 
-Version 1.6.0 adds opt-in `bash` and `powershell` MCP tools
+Version 1.7.0 brings the same usage charts to the terminal, desktop app, web dashboard, and VS Code:
+calls by outcome with failure reasons, tokens by model, endpoint, provider, or call kind, latency box plots,
+usage by dimension, and a token heatmap, over ranges up to a year or all time, with click-through from any
+bucket to the calls behind it. See [usage analytics](docs/USAGE.md#usage-analytics).
+
+Version 1.6.0 added opt-in `bash` and `powershell` MCP tools
 (`mux mcp serve --allow-bash --allow-powershell`),
 configurable tool-approval countdowns, and a faint, responsive MUX watermark in an
 idle TUI conversation. See [MCP usage](docs/USAGE.md#mux-as-an-mcp-server-mux-mcp-serve)
@@ -175,12 +180,36 @@ sudo apt install xclip           # copy to clipboard from the TUI
 sudo apt install wslu xdg-utils  # WSL: open links in the Windows browser
 ```
 
-On macOS, `install-tool.sh` and `reinstall-tool.sh` also build and install self-contained `Mux.app`
-and `Mux Agent.app` in `~/Applications`, visible in Finder, and `remove-tool.sh` removes them.
-`run-desktop.sh`, `run-agent.sh` and `run-at-startup.sh` refresh and use those installed apps (quit a
-running copy first). No administrator access is required on any platform.
+`install-tool` and `reinstall-tool` also build the desktop app ("Mux") and the tray agent ("Mux Agent") as
+self-contained apps and install them twice, for you and for every user of the machine; `remove-tool` removes
+both copies:
 
-`run-at-startup` builds the agent and registers it for login on every platform. `run-agent` runs it
+| OS | For you | For all users |
+|---|---|---|
+| macOS | `~/Applications/Mux.app`, `Mux Agent.app` | `/Applications/Mux.app`, `Mux Agent.app` |
+| Linux, WSL | `~/.local/share/mux/apps/{desktop,agent}` (or under `$XDG_DATA_HOME`), with menu entries in `~/.local/share/applications` | `/opt/mux/{desktop,agent}`, with menu entries in `/usr/share/applications` |
+| Windows | `%LOCALAPPDATA%\Programs\Mux\{Desktop,Agent}`, with Start Menu shortcuts | `%ProgramFiles%\Mux\{Desktop,Agent}`, with all-users Start Menu shortcuts |
+
+The all-users copy needs administrator rights: on macOS and Linux the scripts write directly when they can
+(macOS admin accounts can write `/Applications`) and otherwise use `sudo`, which may prompt; on Windows run
+the script from an elevated prompt. Without those rights the scripts print a warning, keep the per-user
+install, and succeed. Set `MUX_SYSTEM_INSTALL=0` to skip the all-users copy. The scripts refuse to replace an
+app that is running from either location. On macOS, `run-desktop.sh`, `run-agent.sh` and
+`run-at-startup.sh` refresh and use the per-user apps (quit a running copy first).
+
+Every user surface starts the tray agent when it is not already running: the terminal UI and the desktop app
+at startup, and the VS Code extension through `mux agent start` when it connects. An agent from an older
+version is replaced. They look for it in `MUX_AGENT` (a path to the executable or its folder), beside the
+running program, in the install that program came from, then in the per-user and all-users installs above,
+and finally in a source checkout's build output. `mux agent status` shows whether it runs and which
+executable would be started. Set `MUX_AGENT_AUTOSTART=0` to stop the terminal UI and desktop app from
+starting it, or `mux.server.autoStart` to false in VS Code.
+
+`run-at-startup` installs or refreshes the per-user tray agent (the same per-user copy `install-tool` puts in
+place, without needing administrator rights) and registers that installed agent to start at login on every
+platform: a LaunchAgent on macOS, a systemd user service or XDG autostart entry on Linux, those or a Windows
+Startup-folder launcher on WSL, and the `HKCU\...\Run` key on Windows. `remove-from-startup` unregisters it and
+leaves the app installed. `run-agent` runs it
 without registering it (it sets `MUX_AGENT_AUTOSTART=0`, which turns off the agent's own first-run
 login registration), and `kill-mux` stops a launchd- or systemd-managed agent through its supervisor
 so it does not come straight back.

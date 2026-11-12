@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Uninstall, rebuild and reinstall the mux global tool (Mux.Cli) from this checkout.
-# On macOS this also builds and installs ~/Applications/Mux.app and ~/Applications/Mux Agent.app.
+# On macOS this also builds Mux.app and Mux Agent.app and installs them in ~/Applications and /Applications
+# (/Applications directly for admin users, otherwise with sudo; MUX_SYSTEM_INSTALL=0 skips it).
 # The package is built under artifacts/tool-packages/<framework>.
 # Usage: ./scripts/macos/reinstall-tool.sh [net8.0|net10.0]  (or --framework <tfm>; MUX_TFM is also honored)
 set -euo pipefail
@@ -37,11 +38,12 @@ echo "[1/6] Checking for running mux processes..."
 if mux_running; then
     die "A running mux process is using the global tool. Exit all mux sessions (or run scripts/macos/kill-mux.sh) and try again."
 fi
-# The apps are replaced in the last step; check now so a running app cannot leave a half-done install.
+# The apps are replaced in the last step (in ~/Applications and /Applications); check now so a running app
+# cannot leave a half-done install.
+# shellcheck source=app-bundle.sh
+. "$SCRIPT_DIR/app-bundle.sh"
 for app in "Mux" "Mux Agent"; do
-    if pgrep -u "$(id -u)" -f "$HOME/Applications/$app.app/Contents/MacOS/" >/dev/null 2>&1; then
-        die "$app is running. Quit it (or run scripts/macos/kill-mux.sh) and try again."
-    fi
+    macos_app_not_running "$app" || exit 1
 done
 echo "[2/6] Removing the existing mux global tool..."
 if tool_installed; then
@@ -76,9 +78,7 @@ if [ -z "$ORIGINAL_DOTNET_ROOT" ] && [ "$(command -v dotnet)" = "$HOME/.dotnet/d
     echo "Note: .NET is installed in ~/.dotnet, so 'mux' also needs DOTNET_ROOT. Add this line to ~/.zprofile:" >&2
     echo '  export DOTNET_ROOT="$HOME/.dotnet"' >&2
 fi
-echo "[6/6] Installing the macOS apps..."
-# shellcheck source=app-bundle.sh
-. "$SCRIPT_DIR/app-bundle.sh"
+echo "[6/6] Installing the macOS apps (~/Applications and /Applications)..."
 install_macos_app desktop
 install_macos_app agent
 echo "Done."
