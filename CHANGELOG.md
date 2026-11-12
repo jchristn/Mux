@@ -39,6 +39,9 @@ All notable changes to mux are documented here.
   shortcuts. Previously only macOS installed the apps, and only per-user. The all-users copy uses sudo or an
   elevated prompt when needed and is skipped with a warning without those rights; `MUX_SYSTEM_INSTALL=0`
   skips it. `remove-tool` removes both copies.
+- `run-agent` on every OS starts the installed per-user agent the same way (installing or refreshing it only when
+  it is missing or stale, `MUX_REFRESH_AGENT=1` to force), reports "already running" instead of failing when an
+  agent is up, and no longer runs the agent from source on Linux, WSL, and Windows.
 - `run-desktop` and `run-tui` on every OS install or refresh the per-user tray agent when it is missing or from
   another version (`MUX_REFRESH_AGENT=1` forces it; installs record the version in `mux-version.txt` or the
   macOS `Info.plist`) and start it before the surface, so a fresh checkout also gets the agent. A surface replaces
@@ -97,7 +100,9 @@ All notable changes to mux are documented here.
   Clicking a cell lists its calls on the web, desktop, and (newly) VS Code. Time runs along the x-axis (periods across, steps within
   each period down; year is a contribution-style grid of daily cells), cells stretch to the available width, and
   the month view is a calendar of days (AM/PM) across by five or six Monday-start weeks down, so the whole 30-day
-  window always shows. `UsageWindow.ComputeHeatmap` is removed.
+  window always shows. `UsageWindow.ComputeHeatmap` is removed. Axis labels are placed once in Mux.Core
+  (`UsageHeatmapLayout.PlaceColumnLabels`): each sits over the columns it names (month weekdays centred over
+  their AM/PM pair), and the web grid no longer overflows into a horizontal scrollbar.
 - `range=all` time series fell back to the last 24 hours, so VS Code's All range showed all-time KPIs over
   a one-day chart.
 - The OpenAPI schema for `UsageBreakdownRow` documented a `Key` property; it is `Dimension` and `Value`.

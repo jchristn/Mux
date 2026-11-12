@@ -242,9 +242,9 @@ linux_install_apps() {
 
 # Publishes one component and installs it per-user only, with its launcher and the icon. It never
 # touches the system-wide copy (so it never needs sudo): the run-at-startup scripts use it to install
-# or refresh the agent they register, and linux_ensure_user_agent (run-desktop, run-tui) to install or
-# refresh the agent a surface starts. Fails before building when the component runs from the per-user
-# folder. The installed executable is "$(linux_app_dir <component> user)/$(linux_app_exe <component>)".
+# or refresh the agent they register, and linux_ensure_user_agent (run-desktop, run-tui, run-agent) to
+# install or refresh the agent they start. Fails before building when the component runs from the
+# per-user folder. The installed executable is "$(linux_app_dir <component> user)/$(linux_app_exe <component>)".
 # Usage: linux_install_user_app desktop|agent
 linux_install_user_app() {
     linux_app_not_running "$1" user || return 1
@@ -285,16 +285,21 @@ linux_agent_autostart_enabled() {
 # agent. Installs or refreshes it with linux_install_user_app only when it is missing, its version
 # differs, or MUX_REFRESH_AGENT=1, so the common case adds no build. Never replaces a copy running
 # from the per-user folder: a current one is left alone, a stale one gets a one-line note. Does nothing
-# when MUX_AGENT_AUTOSTART turns automatic starts off. Fails only when the install fails.
+# when MUX_AGENT_AUTOSTART turns automatic starts off, unless --explicit (run-agent) is passed. Fails only
+# when the install fails. Sets LINUX_AGENT_RUNNING_STALE=1 when it printed the note about a stale running
+# copy, else 0.
+# Usage: linux_ensure_user_agent [--explicit]
 linux_ensure_user_agent() {
     local want have dir
-    linux_agent_autostart_enabled || return 0
+    LINUX_AGENT_RUNNING_STALE=0
+    [ "${1:-}" = --explicit ] || linux_agent_autostart_enabled || return 0
     want="$(linux_app_version agent)" || return 1
     have="$(linux_installed_version agent user)"
     dir="$(linux_app_dir agent user)"
     if pgrep -u "$(id -u)" -f "$dir/Mux.Agent" >/dev/null 2>&1; then
         if [ "$have" != "$want" ]; then
             echo "Note: the running tray agent is an older version (${have:-unknown}, this checkout is $want). Quit it (or run ${LINUX_APPS_KILL_MUX:-kill-mux}) to update it." >&2
+            LINUX_AGENT_RUNNING_STALE=1
         elif [ "${MUX_REFRESH_AGENT:-0}" = 1 ]; then
             echo "Note: the tray agent is running, so MUX_REFRESH_AGENT=1 cannot refresh it. Quit it (or run ${LINUX_APPS_KILL_MUX:-kill-mux}) first." >&2
         fi
@@ -316,12 +321,26 @@ linux_ensure_user_agent() {
 # Starts the per-user tray agent detached from this terminal, unless an agent is already running (from
 # anywhere), it is not installed, or MUX_AGENT_AUTOSTART turns automatic starts off. It runs with
 # MUX_AGENT_AUTOSTART=0 so it never registers itself at login (that is run-at-startup's job).
+# With --explicit (run-agent, after linux_ensure_user_agent --explicit): MUX_AGENT_AUTOSTART is ignored,
+# a running agent is reported as already running (unless linux_ensure_user_agent noted it is stale), and a
+# missing install fails.
+# Usage: linux_start_user_agent [--explicit]
 linux_start_user_agent() {
-    local bin
-    linux_agent_autostart_enabled || return 0
-    pgrep -u "$(id -u)" -x Mux.Agent >/dev/null 2>&1 && return 0
+    local bin explicit=0
+    [ "${1:-}" = --explicit ] && explicit=1
+    [ "$explicit" = 1 ] || linux_agent_autostart_enabled || return 0
+    if pgrep -u "$(id -u)" -x Mux.Agent >/dev/null 2>&1; then
+        if [ "$explicit" = 1 ] && [ "${LINUX_AGENT_RUNNING_STALE:-0}" != 1 ]; then
+            echo "The mux agent is already running."
+        fi
+        return 0
+    fi
     bin="$(linux_app_dir agent user)/Mux.Agent"
-    [ -x "$bin" ] || return 0
+    if [ ! -x "$bin" ]; then
+        [ "$explicit" = 1 ] || return 0
+        echo "The tray agent is not installed ($bin is missing)." >&2
+        return 1
+    fi
     if command -v setsid >/dev/null 2>&1; then
         MUX_AGENT_AUTOSTART=0 setsid nohup "$bin" </dev/null >/dev/null 2>&1 &
     else

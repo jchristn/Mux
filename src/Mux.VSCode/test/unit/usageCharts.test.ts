@@ -33,7 +33,7 @@ import {
     normalizeSplitMetric,
     stackSplitSeries,
     stackedMax,
-    thinLabels,
+    placeLabels,
     tokenParts,
     usageCsv,
     usageCsvTable,
@@ -249,24 +249,36 @@ test('heatmap labels both axes in local time, localized from the layout instants
     assert.deepEqual(labeledIndices(12, 6, true), [0, 2, 4, 6, 8, 11]);
 });
 
-test('x-axis labels thin so they never collide, keeping the first and last', () => {
+test('x-axis labels thin so they never collide, each over the columns it names', () => {
     const all = (n: number) => Array.from({ length: n }, (_, i) => i);
-    assert.deepEqual(thinLabels(all(24), 24, 1, 1, true), all(24), 'room for every label');
-    assert.deepEqual(thinLabels(all(24), 24, 1, 3, true), [0, 3, 6, 9, 12, 15, 18, 23], 'every 3rd, the right-aligned last replacing the one before it');
-    assert.deepEqual(thinLabels(all(13), 13, 1, 2, true), [0, 2, 4, 6, 8, 12], 'the right-aligned last needs room for the label before it');
-    assert.deepEqual(thinLabels([0, 2, 4, 6, 8, 10, 12], 14, 2, 2, true), [0, 2, 4, 6, 8, 10, 12], 'every weekday of a half-day grid');
-    assert.deepEqual(thinLabels([0, 2, 4, 6, 8, 10, 12], 14, 2, 3, true), [0, 4, 8, 12]);
-    assert.deepEqual(thinLabels(all(5), 5, 1, 9, true), [0], 'too narrow for two labels: only the first');
+    const cols = (labels: { col: number }[]) => labels.map((l) => l.col);
+    const show = (labels: { col: number; align: string }[]) => labels.map((l) => l.col + (l.align === 'start' ? '' : l.align[0])).join(',');
+    assert.deepEqual(cols(placeLabels(all(24), 24, 1, 1, true)), all(24), 'room for every label');
+    assert.equal(show(placeLabels(all(24), 24, 1, 3, true)), '0,3,6,9,12,15,18,23e', 'every 3rd; the last, ending at its own column, replaces the one before it');
+    assert.equal(show(placeLabels(all(13), 13, 1, 2, true)), '0,2,4,6,8,12e', 'the end-aligned last needs room for the label before it');
+    assert.equal(show(placeLabels(all(13), 13, 1, 1, true)), all(13).join(','), 'a label that fits in its column starts there, even the last');
+    assert.equal(show(placeLabels(all(5), 5, 1, 9, true)), '0e', 'too narrow for two labels: only the first, kept inside the grid');
+    // A month: weekday labels centred over their AM and PM columns, never pushed to the grid's end.
+    const weekdays = [0, 2, 4, 6, 8, 10, 12];
+    assert.equal(show(placeLabels(weekdays, 14, 2, 1, true)), '0c,2c,4c,6c,8c,10c,12c', 'every weekday centred over its half-days');
+    assert.equal(show(placeLabels(weekdays, 14, 2, 2, true)), '0c,2c,4c,6c,8c,10c,12c', 'Sun stays over Sun AM and PM');
+    assert.equal(show(placeLabels(weekdays, 14, 2, 3, true)), '0c,4c,8c,12c');
+    assert.equal(show(placeLabels(weekdays, 14, 2, 7, true)), '0c,12c', 'Sun replaces the stride label it would collide with');
+    for (const p of placeLabels(weekdays, 14, 2, 2, true)) {
+        assert.equal(p.span, 2, 'a weekday names two columns');
+    }
     // A year: month starts (uneven) plus the first and last column.
     const year = [0, 3, 7, 12, 16, 20, 25, 29, 34, 38, 42, 47, 51, 52];
-    const picked = thinLabels(year, 53, 1, 3, false);
-    assert.equal(picked[0], 0);
-    assert.equal(picked[picked.length - 1], 52);
+    const picked = placeLabels(year, 53, 1, 3, false);
+    assert.equal(picked[0].col, 0);
+    assert.equal(picked[picked.length - 1].col, 52);
+    assert.equal(picked[picked.length - 1].align, 'end', 'the last column label ends at its own column');
     for (let i = 1; i < picked.length - 1; i++) {
-        assert.ok(picked[i] - picked[i - 1] >= 3, 'labels never overlap');
+        assert.ok(picked[i].col - picked[i - 1].col >= 3, 'labels never overlap');
+        assert.equal(picked[i].align, 'start');
     }
-    assert.ok(52 - picked[picked.length - 2] >= 5, 'the right-aligned last label has room');
-    assert.deepEqual(thinLabels([], 0, 1, 1, true), []);
+    assert.ok(53 - 3 >= picked[picked.length - 2].col + 3, 'the end-aligned last label has room');
+    assert.deepEqual(placeLabels([], 0, 1, 1, true), []);
 });
 
 test('heatmap cells stretch to the width within 10-96 pixels and rows stay short', () => {

@@ -4,7 +4,8 @@ Run with: python3 scripts/tests/test-framework.py
 
 Covers framework selection and forwarding, the OS guards, the install/reinstall/remove tool flows,
 kill-mux, publish-nuget, build-installers, the Linux start-at-login registration, and the tray agent
-install/refresh/start that run-desktop and run-tui do on Linux, WSL and WSL 2. Nothing real is
+install/refresh/start that run-desktop, run-tui and run-agent do on Linux, WSL and WSL 2 (and the
+static parity of the Windows .bat launchers). Nothing real is
 built or installed: dotnet, uname, pgrep, pkill and mux are fakes that log their arguments, and the
 scripts run against a temporary copy of the repository. The WSL scripts run with WSL_SKIP_CHECK=1;
 the Windows interop parts (Startup-folder launcher) are covered by shellcheck and bash -n only.
@@ -150,7 +151,7 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
     for platform in PLATFORMS:
         scripts = ['run-tui', 'run-mcp-server', 'worktrees', 'publish-desktop']
         if platform != 'macos':
-            scripts += ['run-agent', 'run-desktop']
+            scripts += ['run-desktop']  # run-agent builds only when the agent is missing or stale: see below
         for script in scripts:
             for selection in [[], ['net8.0'], ['--framework', 'net8.0'], ['-f', 'net8'], ['net10.0']]:
                 app = ['--http', '4321', '--host', 'two words'] if script == 'run-mcp-server' else ['list'] if script == 'worktrees' else []
@@ -325,9 +326,9 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
         launch_log.unlink(missing_ok=True)
         return lines
 
-    def surface(platform, script, **env):
+    def surface(platform, script, *args, **env):
         launch_log.unlink(missing_ok=True)
-        p, calls = run(platform, script, LAUNCH_LOG=str(launch_log), **env)
+        p, calls = run(platform, script, *args, LAUNCH_LOG=str(launch_log), **env)
         publishes = [c for c in calls if c[1] == 'publish']
         assert all(c[2].endswith('Mux.Agent.csproj') for c in publishes), publishes
         ran = [c for c in calls if c[1] == 'run']
@@ -386,6 +387,54 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
             p, publishes, ran, _ = surface(platform, script, MOCK_PUBLISH_FAIL='1')
             assert p.returncode != 0 and 'Installing the tray agent failed' in p.stderr and not ran, (where, p.stderr)
             count += 10
+    # run-agent: the same ensure-then-start of the installed per-user agent (no source run in the foreground),
+    # as an explicit request, so MUX_AGENT_AUTOSTART does not stop it.
+    for platform in ['linux', 'wsl', 'wsl2']:
+        where = (platform, 'run-agent')
+        started = f'Started the tray agent ({installed}).'
+        # Nothing installed: installed per-user for the chosen framework (never sudo), then started detached.
+        shutil.rmtree(share / 'mux', ignore_errors=True)
+        p, publishes, ran, calls = surface(platform, 'run-agent', 'net10.0', MUX_SYSTEM_INSTALL='1', SUDO_LOG=str(sudo_log))
+        assert p.returncode == 0 and len(publishes) == 1 and not ran, (where, p.stderr, calls)
+        assert '-p:TargetFrameworks=net10.0' in publishes[0] and publishes[0][publishes[0].index('--framework') + 1] == 'net10.0', publishes
+        assert installed.is_file() and marker.read_text().strip() == agent_version and not sudo_log.exists(), where
+        assert not (share / 'mux/apps/desktop').exists(), where
+        assert started in p.stdout and launches(True) == [f'{installed}|0'], (where, p.stdout)
+        # Installed and current: started with no rebuild.
+        p, publishes, ran, calls = surface(platform, 'run-agent')
+        assert p.returncode == 0 and not calls and started in p.stdout, (where, p.stderr, calls)
+        assert launches(True) == [f'{installed}|0'], where
+        # Stale: refreshed and started.
+        marker.write_text('0.0.0-old\n')
+        p, publishes, _, _ = surface(platform, 'run-agent')
+        assert p.returncode == 0 and len(publishes) == 1 and marker.read_text().strip() == agent_version, (where, p.stderr)
+        assert started in p.stdout and launches(True) == [f'{installed}|0'], where
+        # MUX_REFRESH_AGENT=1: rebuilt even when current.
+        p, publishes, _, _ = surface(platform, 'run-agent', MUX_REFRESH_AGENT='1')
+        assert p.returncode == 0 and len(publishes) == 1 and launches(True) == [f'{installed}|0'], (where, p.stderr)
+        # MUX_AGENT_AUTOSTART=0 (or off): still installed and started, and the agent still gets MUX_AGENT_AUTOSTART=0.
+        for off in ['0', 'Off']:
+            shutil.rmtree(share / 'mux')
+            p, publishes, _, _ = surface(platform, 'run-agent', MUX_AGENT_AUTOSTART=off)
+            assert p.returncode == 0 and len(publishes) == 1 and started in p.stdout, (where, off, p.stderr)
+            assert launches(True) == [f'{installed}|0'], (where, off)
+        # Running and current: reported, exit 0, no rebuild, no second agent.
+        p, publishes, _, calls = surface(platform, 'run-agent', MOCK_RUNNING_MATCH='Mux.Agent')
+        assert p.returncode == 0 and not calls and 'The mux agent is already running.' in p.stdout, (where, p.stdout, p.stderr)
+        assert started not in p.stdout and launches(False) == [], where
+        # Running and stale: only the note, exit 0, nothing replaced or started.
+        marker.write_text('0.0.0-old\n')
+        p, publishes, _, calls = surface(platform, 'run-agent', MOCK_RUNNING_MATCH='Mux.Agent')
+        notes = [line for line in p.stderr.splitlines() if 'older version' in line]
+        assert p.returncode == 0 and not calls and len(notes) == 1 and f'scripts/{platform}/kill-mux.sh' in notes[0], (where, p.stderr)
+        assert 'already running' not in p.stdout and marker.read_text() == '0.0.0-old\n' and launches(False) == [], (where, p.stdout)
+        # A failed install fails and starts nothing.
+        p, publishes, _, _ = surface(platform, 'run-agent', MOCK_PUBLISH_FAIL='1')
+        assert p.returncode != 0 and 'Installing the tray agent failed' in p.stderr and launches(False) == [], (where, p.stderr)
+        for bad in [['--framework'], ['net9.0']]:
+            p, calls = run(platform, 'run-agent', *bad)
+            assert p.returncode != 0 and not calls, (where, bad, calls)
+        count += 9
     shutil.rmtree(share / 'mux', ignore_errors=True)
     for leftover in ['applications/mux-agent.desktop', 'icons/hicolor/256x256/apps/mux.png']:
         (share / leftover).unlink(missing_ok=True)
@@ -400,6 +449,24 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
             ensure, start = text.index(f'{prefix}_ensure_user_agent ||'), text.index(f'\n{prefix}_start_user_agent\n')
             launch = text.index('open -a "$HOME/Applications/Mux.app"' if (platform, script) == ('macos', 'run-desktop') else 'dotnet run')
             assert ensure < start < launch, (platform, script)
+    # run-agent starts the installed agent the same way on every OS, and never runs it from source.
+    for platform in PLATFORMS:
+        prefix = 'macos' if platform == 'macos' else 'linux'
+        text = (root / f'scripts/{platform}/run-agent.sh').read_text()
+        ensure = text.index(f'\n{prefix}_ensure_user_agent --explicit ||')
+        start = text.index(f'\n{prefix}_start_user_agent --explicit ||')
+        assert ensure < start and 'dotnet run' not in text and 'MUX_REFRESH_AGENT=1' in text, platform
+        if platform.startswith('wsl'):
+            assert ensure < text.index('\nwsl_prepare_app_env\n') < start, platform
+    raw = (root / 'scripts/windows/run-agent.bat').read_bytes()
+    assert raw.count(b'\r\n') == raw.count(b'\n'), 'run-agent.bat must keep CRLF line endings'
+    text = raw.decode()
+    ensure = text.index('-Action EnsureUserAgent -Framework %TFM% -Explicit\r\n')
+    stale = text.index('if "%AGENT_STATUS%"=="3" exit /b 0')
+    running = text.index('echo The mux agent is already running.')
+    start = text.index('start "" "%AGENT_EXE%"')
+    assert ensure < stale < running < start and 'dotnet run' not in text and 'MUX_REFRESH_AGENT=1' in text, text
+    assert text.index('set "MUX_AGENT_AUTOSTART=0"') < start and text.index('startup-registered') < ensure, text
     for script in ['run-desktop', 'run-tui']:
         raw = (root / f'scripts/windows/{script}.bat').read_bytes()
         assert raw.count(b'\r\n') == raw.count(b'\n'), f'{script}.bat must keep CRLF line endings'
@@ -502,7 +569,7 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
             if text:
                 assert text in p.stderr, (platform, script, p.stderr)
             if not ok:
-                assert not [c for c in calls if c[1] in ('run', 'build', 'pack')], (platform, script, calls)
+                assert not [c for c in calls if c[1] in ('run', 'build', 'pack', 'publish')], (platform, script, calls)
             assert 'install' not in apt_log(), (platform, script, apt_log())
             count += 1
         # Install-type scripts install what is missing, then carry on.

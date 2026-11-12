@@ -141,7 +141,7 @@ namespace Mux.Core.Telemetry
 
         /// <summary>
         /// How many consecutive columns share one label: 2 for half-day columns (a weekday's AM and PM), else 1.
-        /// Surfaces label only the first column of a group, spanning the group where they can.
+        /// Surfaces label only the first column of a group, centred over the group (see <see cref="PlaceColumnLabels"/>).
         /// </summary>
         public int ColumnGroup
         {
@@ -195,8 +195,8 @@ namespace Mux.Core.Telemetry
 
         /// <summary>
         /// The columns that may carry a label, ascending: every column; the AM column of each weekday for half-days;
-        /// and for the year the first column, each column where a month starts, and the last column. Thin them with
-        /// <see cref="LabeledColumns"/>.
+        /// and for the year the first column, each column where a month starts, and the last column. Place them with
+        /// <see cref="PlaceColumnLabels"/>.
         /// </summary>
         public IReadOnlyList<int> ColumnLabelAnchors
         {
@@ -544,36 +544,50 @@ namespace Mux.Core.Telemetry
         }
 
         /// <summary>
-        /// Which columns to label so labels never collide, when one label (with its spacing) needs
-        /// <paramref name="minGap"/> columns: see <see cref="ThinLabels"/> over <see cref="ColumnLabelAnchors"/>.
+        /// Where to draw the x-axis labels so none collide, when one label (with its spacing) needs
+        /// <paramref name="minGap"/> columns: see <see cref="PlaceLabels"/> over <see cref="ColumnLabelAnchors"/>.
         /// </summary>
         /// <param name="minGap">The columns one label needs (at least 1).</param>
-        /// <returns>The column indices to label, ascending; the last is drawn right-aligned to the grid's end.</returns>
-        public List<int> LabeledColumns(int minGap)
+        /// <returns>The labels to draw, left to right.</returns>
+        public List<UsageHeatmapLabel> PlaceColumnLabels(int minGap)
         {
-            return ThinLabels(_Anchors, _Columns, ColumnGroup, minGap, _ColumnKind != ColumnKindMonth);
+            return PlaceLabels(_Anchors, _Columns, ColumnGroup, minGap, _ColumnKind != ColumnKindMonth);
         }
 
         /// <summary>
-        /// Thins x-axis labels so none collide, keeping the first and the last. A label at column a is drawn from a's left
-        /// edge over <paramref name="minGap"/> columns; the last one ends at the grid's right edge instead. Evenly spaced
-        /// anchors are kept every 1st, 2nd, 3rd, 4th, 6th, 8th, 12th, ... anchor so labels fall on round values;
-        /// uneven anchors (month starts) are kept greedily. Stride labels too close to the last are dropped; when even
-        /// the first and last would collide, only the first is kept.
+        /// Which columns to label: the columns of <see cref="PlaceColumnLabels"/>.
         /// </summary>
-        /// <param name="anchors">The columns that may carry a label, ascending, starting at 0.</param>
+        /// <param name="minGap">The columns one label needs (at least 1).</param>
+        /// <returns>The column indices to label, ascending.</returns>
+        public List<int> LabeledColumns(int minGap)
+        {
+            return PlaceColumnLabels(minGap).ConvertAll(l => l.Column);
+        }
+
+        /// <summary>
+        /// Places x-axis labels so none collide and none leaves the columns it names. A label names
+        /// <paramref name="group"/> columns from its anchor and needs <paramref name="minGap"/> columns of room
+        /// (its text plus spacing). Grouped labels (<paramref name="group"/> &gt; 1, such as a weekday over its AM and
+        /// PM columns) are centred over their columns. An ungrouped label starts at its column's left edge, or, when
+        /// that would run past the grid's end, ends at its column's right edge instead; it is never moved off its
+        /// column. Evenly spaced anchors are kept every 1st, 2nd, 3rd, 4th, 6th, 8th, 12th, ... anchor so labels fall
+        /// on round values; uneven anchors (month starts) are kept greedily. The first anchor is always labeled, and
+        /// the last whenever it fits: labels just before it that would collide with it are dropped, and when it
+        /// would collide with the first it is dropped instead. Mirrored by the web dashboard and VS Code.
+        /// </summary>
+        /// <param name="anchors">The columns that may carry a label, ascending.</param>
         /// <param name="columns">The column count.</param>
-        /// <param name="group">Columns per label group (2 for half-days); the last label covers the last group.</param>
+        /// <param name="group">The columns each label names (2 for half-days).</param>
         /// <param name="minGap">The columns one label needs (at least 1).</param>
         /// <param name="even">True when the anchors are evenly spaced.</param>
-        /// <returns>The columns to label, ascending.</returns>
-        public static List<int> ThinLabels(IReadOnlyList<int> anchors, int columns, int group, int minGap, bool even)
+        /// <returns>The labels to draw, left to right.</returns>
+        public static List<UsageHeatmapLabel> PlaceLabels(IReadOnlyList<int> anchors, int columns, int group, int minGap, bool even)
         {
-            List<int> picked = new List<int>();
-            if (anchors == null || anchors.Count == 0 || columns <= 0) return picked;
+            List<UsageHeatmapLabel> placed = new List<UsageHeatmapLabel>();
+            if (anchors == null || anchors.Count == 0 || columns <= 0) return placed;
             int gap = Math.Max(1, minGap);
             group = Math.Max(1, group);
-            int last = anchors[anchors.Count - 1];
+            List<int> picked = new List<int>();
             if (even)
             {
                 int spacing = anchors.Count > 1 ? anchors[1] - anchors[0] : 1;
@@ -598,15 +612,31 @@ namespace Mux.Core.Telemetry
                 }
             }
 
-            if (last == anchors[0]) return picked;
-            if (picked.Count > 1 && picked[picked.Count - 1] == last) picked.RemoveAt(picked.Count - 1);
+            int last = anchors[anchors.Count - 1];
+            if (last != anchors[0])
+            {
+                if (picked[picked.Count - 1] == last) picked.RemoveAt(picked.Count - 1);
+                int lastLeft = Extent(last, columns, group, gap).Left;
+                while (picked.Count > 1 && Extent(picked[picked.Count - 1], columns, group, gap).Right > lastLeft) picked.RemoveAt(picked.Count - 1);
+                if (Extent(picked[picked.Count - 1], columns, group, gap).Right <= lastLeft) picked.Add(last);
+            }
 
-            // The last label is right-aligned, so it ends where the grid does: it needs its own width plus the width
-            // of the label before it between the two anchors.
-            int need = (2 * gap) - group;
-            while (picked.Count > 1 && last - picked[picked.Count - 1] < need) picked.RemoveAt(picked.Count - 1);
-            if (last - picked[picked.Count - 1] >= need) picked.Add(last);
-            return picked;
+            foreach (int a in picked) placed.Add(new UsageHeatmapLabel(a, group, AlignOf(a, columns, group, gap)));
+            return placed;
+        }
+
+        /// <summary>
+        /// Which columns to label: the columns of <see cref="PlaceLabels"/>.
+        /// </summary>
+        /// <param name="anchors">The columns that may carry a label, ascending.</param>
+        /// <param name="columns">The column count.</param>
+        /// <param name="group">The columns each label names (2 for half-days).</param>
+        /// <param name="minGap">The columns one label needs (at least 1).</param>
+        /// <param name="even">True when the anchors are evenly spaced.</param>
+        /// <returns>The columns to label, ascending.</returns>
+        public static List<int> ThinLabels(IReadOnlyList<int> anchors, int columns, int group, int minGap, bool even)
+        {
+            return PlaceLabels(anchors, columns, group, minGap, even).ConvertAll(l => l.Column);
         }
 
         /// <summary>
@@ -682,6 +712,25 @@ namespace Mux.Core.Telemetry
         #endregion
 
         #region Private-Methods
+
+        // How a label at anchor a sits over its columns: grouped labels centred, ungrouped ones from their column's
+        // left edge, or ending at its right edge when the label would run past the grid's end.
+        private static UsageHeatmapLabelAlignEnum AlignOf(int a, int columns, int group, int gap)
+        {
+            if (group > 1) return UsageHeatmapLabelAlignEnum.Center;
+            return a + gap <= columns ? UsageHeatmapLabelAlignEnum.Start : UsageHeatmapLabelAlignEnum.End;
+        }
+
+        // The room a label at anchor a takes, in half-columns (so a centred label's edges stay whole numbers).
+        private static (int Left, int Right) Extent(int a, int columns, int group, int gap)
+        {
+            switch (AlignOf(a, columns, group, gap))
+            {
+                case UsageHeatmapLabelAlignEnum.Center: return ((2 * a) + group - gap, (2 * a) + group + gap);
+                case UsageHeatmapLabelAlignEnum.End: return (2 * (a + group - gap), 2 * (a + group));
+                default: return (2 * a, 2 * (a + gap));
+            }
+        }
 
         // Columns of local-time periods, ending with the one holding now, each split into rows of one bucket.
         private static UsageHeatmapLayout Periods(string key, long now, int offset, long bucketMs, long periodMs, int columns, string columnKind, string rowKind, string columnUnit)

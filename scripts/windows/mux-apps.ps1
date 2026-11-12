@@ -1,7 +1,7 @@
 <#
 Install, check and remove the mux desktop app ("Mux", src\Mux.Desktop) and tray agent ("Mux Agent",
 src\Mux.Agent) on Windows. Called by install-tool.bat, reinstall-tool.bat, remove-tool.bat,
-run-at-startup.bat, run-desktop.bat and run-tui.bat.
+run-at-startup.bat, run-agent.bat, run-desktop.bat and run-tui.bat.
 Runs in Windows PowerShell 5.1 and PowerShell 7.
 
   -Action Check                    Fail when an app that would be replaced or removed is running.
@@ -19,6 +19,10 @@ Runs in Windows PowerShell 5.1 and PowerShell 7.
                                    from the per-user folder (a stale one gets a one-line note). Exit code 2 when
                                    MUX_AGENT_AUTOSTART turns automatic agent starts off (nothing is done), so the
                                    caller does not start the agent either.
+  -Action EnsureUserAgent -Framework <tfm> -Explicit
+                                   The same for run-agent.bat, an explicit request: MUX_AGENT_AUTOSTART is ignored
+                                   (never exit code 2). Exit code 3 when the per-user agent is running and stale
+                                   (after the note), so the caller does not report it as running.
 
 Every publish writes mux-version.txt (the project's <Version>) beside the executable.
 
@@ -29,12 +33,13 @@ System-wide: %ProgramFiles%\Mux\Desktop and ...\Mux\Agent, shortcuts in
              script prints a warning and continues. MUX_SYSTEM_INSTALL=0 skips it quietly.
 These paths are fixed: Mux.Core's agent locator searches exactly them.
 
-Exit code 0 on success, 1 on failure (with an "Error: ..." line on stderr), 2 as noted for EnsureUserAgent.
+Exit code 0 on success, 1 on failure (with an "Error: ..." line on stderr), 2 and 3 as noted for EnsureUserAgent.
 #>
 [CmdletBinding()]
 param(
     [string]$Action,
-    [string]$Framework
+    [string]$Framework,
+    [switch]$Explicit
 )
 
 $ErrorActionPreference = 'Stop'
@@ -318,9 +323,10 @@ function Install-MuxUserAgent([string]$RepoRoot, [string]$Framework) {
 
 # Before a user surface starts: install or refresh the per-user agent only when it is missing, stale or
 # MUX_REFRESH_AGENT=1, never under a copy running from the per-user folder. Returns 2 when MUX_AGENT_AUTOSTART
-# turns automatic starts off (nothing is done), otherwise 0.
-function Update-MuxUserAgent([string]$RepoRoot, [string]$Framework) {
-    if (-not (Test-MuxAutostartEnabled $env:MUX_AGENT_AUTOSTART)) { return 2 }
+# turns automatic starts off (nothing is done), otherwise 0. With -Explicit (run-agent.bat) MUX_AGENT_AUTOSTART
+# is ignored, and it returns 3 when the per-user agent is running and stale (after the note).
+function Update-MuxUserAgent([string]$RepoRoot, [string]$Framework, [switch]$Explicit) {
+    if (-not $Explicit -and -not (Test-MuxAutostartEnabled $env:MUX_AGENT_AUTOSTART)) { return 2 }
     if ([string]::IsNullOrEmpty($Framework)) { throw 'EnsureUserAgent needs -Framework <tfm>.' }
     $user = (Get-MuxInstallTargets)[0]
     $agent = @($script:MuxApps | Where-Object { $_.Component -eq 'agent' })[0]
@@ -334,6 +340,7 @@ function Update-MuxUserAgent([string]$RepoRoot, [string]$Framework) {
         if (-not $shown) { $shown = 'unknown' }
         if ($have -ne $want) {
             Write-MuxWarning "the running tray agent is an older version ($shown, this checkout is $want). Quit it (or run $script:KillHint) to update it."
+            if ($Explicit) { return 3 }
         } elseif ($force) {
             Write-MuxWarning "the tray agent is running, so MUX_REFRESH_AGENT=1 cannot refresh it. Quit it (or run $script:KillHint) first."
         }
@@ -403,10 +410,10 @@ function Remove-MuxApps {
 }
 
 # Entry point; returns the process exit code.
-function Invoke-MuxApps([string]$Action, [string]$Framework, [string]$RepoRoot) {
+function Invoke-MuxApps([string]$Action, [string]$Framework, [string]$RepoRoot, [switch]$Explicit) {
     try {
         switch ($Action) {
-            'EnsureUserAgent' { return [int](Update-MuxUserAgent $RepoRoot $Framework) }
+            'EnsureUserAgent' { return [int](Update-MuxUserAgent $RepoRoot $Framework -Explicit:$Explicit) }
             'Check' { $null = Assert-MuxNotRunning (Get-MuxPlan).Targets }
             'Install' { $null = Install-MuxApps $RepoRoot $Framework }
             'Remove' { $null = Remove-MuxApps }
@@ -423,5 +430,5 @@ function Invoke-MuxApps([string]$Action, [string]$Framework, [string]$RepoRoot) 
 # Dot-sourcing (tests) only defines the functions.
 if ($MyInvocation.InvocationName -ne '.') {
     $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-    exit (Invoke-MuxApps -Action $Action -Framework $Framework -RepoRoot $repoRoot)
+    exit (Invoke-MuxApps -Action $Action -Framework $Framework -RepoRoot $repoRoot -Explicit:$Explicit)
 }

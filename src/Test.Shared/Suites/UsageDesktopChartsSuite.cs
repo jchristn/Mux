@@ -257,6 +257,33 @@ namespace Test.Shared.Suites
                         List<int> picked = year.LabeledColumns(UsageChartShaping.HeatmapLabelGap(22, 800, year.Columns));
                         MuxAssert.AreEqual(0, picked[0], "year: first month labeled");
                         MuxAssert.AreEqual(year.Columns - 1, picked[picked.Count - 1], "year: last column labeled");
+
+                        // Where each label's text goes (cells inset 1.5 pixels in their columns): a weekday centred over
+                        // its AM and PM cells, Sun over Sun AM and PM rather than pushed to the grid's end.
+                        long wednesday = new DateTimeOffset(2026, 11, 11, 15, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                        UsageHeatmapLayout calendar = UsageHeatmapLayout.Compute(UsageRange.Month, wednesday, 0);
+                        foreach (double width in new[] { 400.0, 700.0, 1400.0 })
+                        {
+                            double pitch = width / 14;
+                            List<UsageHeatmapLabel> days = calendar.PlaceColumnLabels(UsageChartShaping.HeatmapLabelGap(22, width, 14));
+                            UsageHeatmapLabel sun = days[days.Count - 1];
+                            MuxAssert.AreEqual(12, sun.Column, "Sun is labeled at " + width);
+                            double x = UsageChartShaping.HeatmapLabelLeft(sun, width, 14, 22);
+                            MuxAssert.IsTrue(Math.Abs((x + 11) - (13 * pitch)) < 0.01, "Sun centred over Sun AM and PM at " + width + ": " + x);
+                            MuxAssert.IsTrue(x + 22 < width - 1, "Sun does not reach the grid's end at " + width);
+                            foreach (UsageHeatmapLabel weekday in days)
+                            {
+                                double left = UsageChartShaping.HeatmapLabelLeft(weekday, width, 14, 22);
+                                MuxAssert.IsTrue(Math.Abs((left + 11) - ((weekday.Column + 1) * pitch)) < 0.01, calendar.ColumnLabels[weekday.Column] + " centred over its half-days at " + width);
+                            }
+                        }
+
+                        UsageHeatmapLayout dayRange = UsageHeatmapLayout.Compute(UsageRange.Day, wednesday, 0);
+                        UsageHeatmapLabel lastHour = dayRange.PlaceColumnLabels(3)[dayRange.PlaceColumnLabels(3).Count - 1];
+                        MuxAssert.AreEqual(23, lastHour.Column, "day: the last hour labeled");
+                        MuxAssert.AreEqual(720.0 - 1.5 - 14, UsageChartShaping.HeatmapLabelLeft(lastHour, 720, 24, 14), "day: the last hour ends at its own cell");
+                        MuxAssert.AreEqual(30.0 * 3 + 1.5, UsageChartShaping.HeatmapLabelLeft(dayRange.PlaceColumnLabels(3)[1], 720, 24, 14), "day: a label starts at its own cell");
+                        MuxAssert.AreEqual(0.0, UsageChartShaping.HeatmapLabelLeft(new UsageHeatmapLabel(0, 2, UsageHeatmapLabelAlignEnum.Center), 30, 14, 22), "text wider than its room stays inside the plot");
                         MuxAssert.AreEqual("Mo", UsageHeatmapLayout.Compute(UsageRange.Quarter, now, 0).FormatRowLabel(0, new System.Globalization.CultureInfo("de-DE")), "weekday rows follow the culture");
                         MuxAssert.AreEqual("Do 05.11", UsageHeatmapLayout.Compute(UsageRange.Week, now, 0).FormatColumnLabel(0, new System.Globalization.CultureInfo("de-DE")), "weekday and date columns follow the culture");
                         return Task.CompletedTask;

@@ -4,7 +4,7 @@
 # in /Applications (directly when writable, which it is for admin users, otherwise with sudo; when that is not
 # possible it warns and keeps the per-user copy). Pass --user-only to skip /Applications (the run scripts do).
 # macos_ensure_user_agent and macos_start_user_agent install (when missing or stale) and start the agent before a
-# user surface (run-desktop.sh, run-tui.sh).
+# user surface (run-desktop.sh, run-tui.sh), and with --explicit for run-agent.sh.
 # MUX_SYSTEM_APPLICATIONS_DIR overrides the system folder (tests use it to stay out of the real /Applications).
 
 # The system-wide application folder.
@@ -186,10 +186,13 @@ macos_agent_autostart_enabled() {
 # Installs or refreshes it with install_macos_app agent --user-only only when it is missing, its version
 # differs, or MUX_REFRESH_AGENT=1, so the common case adds no build. Never replaces a copy running from
 # ~/Applications: a current one is left alone, a stale one gets a one-line note. Does nothing when
-# MUX_AGENT_AUTOSTART turns automatic starts off. Fails only when the install fails.
+# MUX_AGENT_AUTOSTART turns automatic starts off, unless --explicit (run-agent.sh) is passed. Sets
+# MACOS_AGENT_RUNNING_STALE=1 when it printed the note about a stale running copy, else 0.
+# Usage: macos_ensure_user_agent [--explicit]
 macos_ensure_user_agent() {
     local want have app
-    macos_agent_autostart_enabled || return 0
+    MACOS_AGENT_RUNNING_STALE=0
+    [ "${1:-}" = --explicit ] || macos_agent_autostart_enabled || return 0
     want="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$REPO_ROOT/src/Mux.Agent/Mux.Agent.csproj" | head -n 1)"
     [ -n "$want" ] || { echo "Cannot determine Mux.Agent version." >&2; return 1; }
     have="$(macos_installed_version agent)"
@@ -197,6 +200,7 @@ macos_ensure_user_agent() {
     if pgrep -u "$(id -u)" -f "$app/Contents/MacOS/" >/dev/null 2>&1; then
         if [ "$have" != "$want" ]; then
             echo "Note: the running Mux Agent is an older version (${have:-unknown}, this checkout is $want). Quit it (or run scripts/macos/kill-mux.sh) to update it." >&2
+            MACOS_AGENT_RUNNING_STALE=1
         elif [ "${MUX_REFRESH_AGENT:-0}" = 1 ]; then
             echo "Note: Mux Agent is running, so MUX_REFRESH_AGENT=1 cannot refresh it. Quit it (or run scripts/macos/kill-mux.sh) first." >&2
         fi
@@ -218,11 +222,33 @@ macos_ensure_user_agent() {
 # Opens ~/Applications/Mux Agent.app in the background unless an agent is already running (from anywhere),
 # it is not installed, or MUX_AGENT_AUTOSTART turns automatic starts off. It runs with MUX_AGENT_AUTOSTART=0
 # so it never registers itself at login (that is run-at-startup.sh's job).
+# With --explicit (run-agent.sh, after macos_ensure_user_agent --explicit): MUX_AGENT_AUTOSTART is ignored; a
+# running agent is reported as already running and opened in the background, which brings up the tray app (a
+# second copy exits at once), unless macos_ensure_user_agent noted it is stale; a missing install fails.
+# Usage: macos_start_user_agent [--explicit]
 macos_start_user_agent() {
-    local app="$HOME/Applications/Mux Agent.app"
-    macos_agent_autostart_enabled || return 0
-    pgrep -u "$(id -u)" -x Mux.Agent >/dev/null 2>&1 && return 0
-    [ -x "$app/Contents/MacOS/Mux.Agent" ] || return 0
+    local app="$HOME/Applications/Mux Agent.app" explicit=0
+    [ "${1:-}" = --explicit ] && explicit=1
+    [ "$explicit" = 1 ] || macos_agent_autostart_enabled || return 0
+    if pgrep -u "$(id -u)" -x Mux.Agent >/dev/null 2>&1; then
+        if [ "$explicit" = 1 ] && [ "${MACOS_AGENT_RUNNING_STALE:-0}" != 1 ]; then
+            echo "The mux agent is already running."
+            if [ -x "$app/Contents/MacOS/Mux.Agent" ]; then
+                # Already running: just bring it forward (no --env, which open rejects for a running app).
+                open -g -a "$app" >/dev/null 2>&1 || true
+            fi
+        fi
+        return 0
+    fi
+    if [ ! -x "$app/Contents/MacOS/Mux.Agent" ]; then
+        [ "$explicit" = 1 ] || return 0
+        echo "Mux Agent is not installed in ~/Applications." >&2
+        return 1
+    fi
     open -g --env MUX_AGENT_AUTOSTART=0 -a "$app" || return 0
-    echo "Started Mux Agent."
+    if [ "$explicit" = 1 ]; then
+        echo "Started the mux agent ($app)."
+    else
+        echo "Started Mux Agent."
+    fi
 }

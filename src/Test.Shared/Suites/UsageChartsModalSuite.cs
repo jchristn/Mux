@@ -582,9 +582,26 @@ namespace Test.Shared.Suites
                                 MuxAssert.AreEqual(60, CountSpots(buffer, size.Width, size.Height), "only the 60 half-days in the window are drawn" + at);
                                 MuxAssert.Contains("Oldest at the top-left, newest at the bottom-right", text, "calendar reading order" + at);
                                 string header = HeaderLine(text);
-                                foreach (string day in new[] { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" })
+                                string[] days = { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
+                                foreach (string day in days)
                                 {
                                     MuxAssert.AreEqual(1, header.Split(day).Length - 1, day + " labeled once" + at);
+                                }
+
+                                // Each weekday is centred over its AM and PM columns (Sun over Sun AM and PM, not pushed
+                                // to the grid's end): its text overlaps both cells and its centre is within a character
+                                // of theirs.
+                                string[] lines = text.Split('\n');
+                                int headerY = Array.FindIndex(lines, l => l.Contains("Columns:", StringComparison.Ordinal)) + 1;
+                                List<(int Left, int Right)> cells = Enumerable.Range(headerY + 1, buffer.Height - headerY - 1).Select(y => PeakRuns(buffer, y)).FirstOrDefault(r => r.Count == 14) ?? new List<(int Left, int Right)>();
+                                MuxAssert.AreEqual(14, cells.Count, "a full week row has 14 half-day cells" + at);
+                                for (int d = 0; d < days.Length; d++)
+                                {
+                                    int left = lines[headerY].IndexOf(days[d], StringComparison.Ordinal);
+                                    int right = left + days[d].Length - 1;
+                                    (int am, int pm) = (cells[2 * d].Left, cells[(2 * d) + 1].Right);
+                                    MuxAssert.IsTrue(left <= cells[2 * d].Right && right >= cells[(2 * d) + 1].Left, days[d] + " overlaps its AM and PM cells" + at + ": " + lines[headerY]);
+                                    MuxAssert.IsTrue(Math.Abs((left + right) - (am + pm)) <= 2, days[d] + " is centred over its AM and PM cells" + at + ": " + lines[headerY]);
                                 }
 
                                 foreach (string week in layout.RowLabels) MuxAssert.Contains(week, text, "week row " + week + at);
@@ -951,6 +968,21 @@ namespace Test.Shared.Suites
                         && buffer.Get(x - 1, y).Style.Background != Peak
                         && buffer.Get(x, y - 1).Style.Background != Peak) spots++;
             return spots;
+        }
+
+        // The x ranges (inclusive) of the runs of peak cells on one line.
+        private static List<(int Left, int Right)> PeakRuns(CellBuffer buffer, int y)
+        {
+            List<(int Left, int Right)> runs = new List<(int Left, int Right)>();
+            for (int x = 0; x < buffer.Width; x++)
+            {
+                if (buffer.Get(x, y).Style.Background != Peak) continue;
+                int start = x;
+                while (x + 1 < buffer.Width && buffer.Get(x + 1, y).Style.Background == Peak) x++;
+                runs.Add((start, x));
+            }
+
+            return runs;
         }
 
         // The foreground colors of full bar blocks inside the plot area.

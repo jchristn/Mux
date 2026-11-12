@@ -835,8 +835,8 @@ namespace Mux.Desktop.Views
                 grid.RowDefinitions.Add(new RowDefinition(new GridLength(rowHeight, GridUnitType.Pixel)));
             }
 
-            // Column labels along the x-axis, thinned to the width the grid gets so they never collide (the first
-            // and last always labeled, the last right-aligned to the grid's end).
+            // Column labels along the x-axis, thinned to the width the grid gets so they never collide, each over the
+            // columns it names.
             List<string> columnLabels = Enumerable.Range(0, layout.Columns).Select(c => layout.FormatColumnLabel(c, culture)).ToList();
             HeatmapXAxis axis = new HeatmapXAxis(layout, columnLabels, theme.Muted) { Height = 14, Margin = new Thickness(0, 0, 0, 2) };
             Grid.SetRow(axis, 0);
@@ -1787,9 +1787,10 @@ namespace Mux.Desktop.Views
             grid.Children.Add(child);
         }
 
-        // The heatmap's x-axis labels, laid out for the width it is given: labels thinned by
-        // UsageHeatmapLayout.LabeledColumns so none collide, each drawn from its column's left edge, the last
-        // right-aligned to the end. It redraws on resize, so labels thin and return as the window narrows and widens.
+        // The heatmap's x-axis labels, laid out for the width it is given: labels placed by
+        // UsageHeatmapLayout.PlaceColumnLabels so none collide, each over the columns it names (centred over a
+        // weekday's AM and PM, else from its column's left edge, or ending at its column's right edge near the grid's
+        // end). It redraws on resize, so labels thin and return as the window narrows and widens.
         private sealed class HeatmapXAxis : Control
         {
             private readonly UsageHeatmapLayout _Layout;
@@ -1814,16 +1815,10 @@ namespace Mux.Desktop.Views
                 Typeface face = new Typeface(FontFamily.Default);
                 FormattedText Text(string text) => new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, face, 10, _Brush);
                 double widest = _Labels.Max(l => Text(l).Width);
-                double pitch = width / _Layout.Columns;
-                List<int> picked = _Layout.LabeledColumns(UsageChartShaping.HeatmapLabelGap(widest, width, _Layout.Columns));
-                int end = _Layout.ColumnLabelAnchors[_Layout.ColumnLabelAnchors.Count - 1];
-                for (int i = 0; i < picked.Count; i++)
+                foreach (UsageHeatmapLabel label in _Layout.PlaceColumnLabels(UsageChartShaping.HeatmapLabelGap(widest, width, _Layout.Columns)))
                 {
-                    int c = picked[i];
-                    FormattedText text = Text(_Labels[c]);
-                    bool last = i > 0 && c == end;
-                    double x = last ? width - text.Width - 1.5 : (c * pitch) + 1.5;
-                    context.DrawText(text, new Point(Math.Max(0, x), 0));
+                    FormattedText text = Text(_Labels[label.Column]);
+                    context.DrawText(text, new Point(UsageChartShaping.HeatmapLabelLeft(label, width, _Layout.Columns, text.Width), 0));
                 }
             }
         }

@@ -2,8 +2,8 @@
 
 Run with: python3 scripts/tests/test-macos-app.py
 
-Covers install/reinstall/run-desktop/run-agent bundles, the system-folder sudo fallback, run-at-startup,
-and the tray agent install/refresh/start that run-desktop and run-tui do before a surface starts.
+Covers install/reinstall/run-desktop bundles, the system-folder sudo fallback, run-at-startup, the tray agent
+install/refresh/start that run-desktop and run-tui do before a surface starts, and run-agent's ensure-then-start.
 """
 import json
 import os
@@ -74,7 +74,7 @@ if name == 'dotnet' and args[0] == 'publish':
 
     for script, components in [('install-tool', ['desktop', 'agent']),
                                 ('reinstall-tool', ['desktop', 'agent']),
-                                ('run-desktop', ['desktop']), ('run-agent', ['agent'])]:
+                                ('run-desktop', ['desktop'])]:
         for tfm, arch in [('net10.0', 'arm64'), ('net8.0', 'x86_64')]:
             for leftover in system.iterdir():
                 shutil.rmtree(leftover)
@@ -106,9 +106,7 @@ if name == 'dotnet' and args[0] == 'publish':
                 assert installed == script.endswith('-tool'), (script, name, installed)
             opens = [c for c in calls if c[0] == 'open']
             agent_app = str(temp / 'home/Applications/Mux Agent.app')
-            if script == 'run-agent':
-                assert opens == [['open', '--env', 'MUX_AGENT_AUTOSTART=0', '-a', agent_app]], opens
-            elif script == 'run-desktop':
+            if script == 'run-desktop':
                 # The agent installed by install-tool is current, so it is started, not rebuilt.
                 assert opens == [['open', '-g', '--env', 'MUX_AGENT_AUTOSTART=0', '-a', agent_app],
                                  ['open', '-a', str(app)]], opens
@@ -245,5 +243,49 @@ if name == 'dotnet' and args[0] == 'publish':
         assert result.returncode != 0 and 'Installing Mux Agent failed' in result.stderr and not opens and not ran, (script, result.stderr)
         result, _, _, _, _ = surface(script)  # reinstalled for the next round
         assert result.returncode == 0 and plist_version() == agent_version, result.stderr
+    # run-agent: the same ensure-then-start, as an explicit request (MUX_AGENT_AUTOSTART does not stop it).
+    started = f'Started the mux agent ({agent_app}).'
+    # Nothing installed: installed per-user (for the chosen framework) and started.
+    shutil.rmtree(agent_app)
+    result, publishes, opens, ran, calls = surface('run-agent', tfm='net8.0')
+    assert result.returncode == 0 and publishes == ['Mux.Agent'] and opens == [agent_open] and not ran, (result.stderr, calls)
+    publish = next(c for c in calls if c[:2] == ['dotnet', 'publish'])
+    assert publish[publish.index('--framework') + 1] == 'net8.0', publish
+    assert calls.index(opens[0]) > calls.index(publish) and started in result.stdout, result.stdout
+    assert plist_version() == agent_version and (temp / 'home/.mux/startup-registered').exists()
+    # Installed and current: started with no rebuild.
+    result, publishes, opens, _, _ = surface('run-agent')
+    assert result.returncode == 0 and not publishes and opens == [agent_open] and started in result.stdout, (result.stdout, result.stderr)
+    # Stale: refreshed, then started.
+    set_plist_version('0.0.1')
+    result, publishes, opens, _, _ = surface('run-agent')
+    assert result.returncode == 0 and publishes == ['Mux.Agent'] and opens == [agent_open] and plist_version() == agent_version, result.stderr
+    # MUX_REFRESH_AGENT=1: rebuilt even when current.
+    result, publishes, opens, _, _ = surface('run-agent', MUX_REFRESH_AGENT='1')
+    assert result.returncode == 0 and publishes == ['Mux.Agent'] and opens == [agent_open], result.stderr
+    # MUX_AGENT_AUTOSTART=0 (or off): still installed and started, and the agent still gets MUX_AGENT_AUTOSTART=0.
+    for off in ['0', 'Off']:
+        shutil.rmtree(agent_app)
+        result, publishes, opens, _, _ = surface('run-agent', MUX_AGENT_AUTOSTART=off)
+        assert result.returncode == 0 and publishes == ['Mux.Agent'] and opens == [agent_open] and started in result.stdout, (off, result.stderr)
+    # Running and current: reported, opened in the background (brings up the tray app), exit 0, no rebuild.
+    result, publishes, opens, _, _ = surface('run-agent', MOCK_RUNNING_MATCH=running)
+    # A running app only comes forward: open rejects --env for it, so none is passed.
+    assert result.returncode == 0 and not publishes and opens == [['open', '-g', '-a', str(agent_app)]], (result.stderr, opens)
+    assert 'The mux agent is already running.' in result.stdout and started not in result.stdout, result.stdout
+    # Running and current from somewhere else (no ~/Applications copy running): the same.
+    result, publishes, opens, _, _ = surface('run-agent', MOCK_RUNNING_MATCH='Mux.Agent')
+    assert result.returncode == 0 and not publishes and 'already running' in result.stdout, result.stdout
+    # Running and stale: one note, nothing replaced or opened, exit 0.
+    set_plist_version('0.0.1')
+    result, publishes, opens, _, _ = surface('run-agent', MOCK_RUNNING_MATCH=running)
+    notes = [l for l in result.stderr.splitlines() if 'older version' in l]
+    assert result.returncode == 0 and not publishes and not opens and plist_version() == '0.0.1', (result.stderr, opens)
+    assert len(notes) == 1 and 'kill-mux.sh' in notes[0] and 'already running' not in result.stdout, (result.stdout, result.stderr)
+    # A failed install fails and starts nothing.
+    result, publishes, opens, _, _ = surface('run-agent', FAIL_AGENT_PUBLISH='1')
+    assert result.returncode != 0 and 'Installing Mux Agent failed' in result.stderr and not opens, result.stderr
+    result, _ = run('run-agent', 'net9.0')
+    assert result.returncode != 0
     assert not any(system.iterdir()), 'the run scripts never install system-wide'
-    print('macOS install/reinstall/run: both architectures and frameworks passed; per-user and system installs; sudo fallback and opt-out; run-at-startup per-user agent; failed publish preserves installed app; run-desktop and run-tui install, refresh and start the tray agent.')
+    print('macOS install/reinstall/run: both architectures and frameworks passed; per-user and system installs; sudo fallback and opt-out; run-at-startup per-user agent; failed publish preserves installed app; run-desktop, run-tui and run-agent install, refresh and start the tray agent.')

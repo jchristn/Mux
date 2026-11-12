@@ -35,7 +35,7 @@ import {
     normalizeRange,
     normalizeSplitMetric,
     stackSplitSeries,
-    thinLabels,
+    placeLabels,
     tokenParts,
     usageCsv,
     usageCsvTable,
@@ -640,11 +640,13 @@ export class UsagePanel {
   .tool:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-secondaryBackground)); }
   .tool:disabled { opacity: 0.5; cursor: default; }
   .brow-text { font-size: 0.78em; color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
-  .heatmap { display: grid; gap: 3px; margin: 10px 0 6px; align-items: center; justify-content: start; max-width: 100%; overflow-x: auto; }
+  .heatmap { display: grid; gap: 3px; margin: 10px 0 6px; align-items: center; justify-content: start; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
   .hm-cap { font-size: 0.85em; color: var(--vscode-descriptionForeground); margin-top: 2px; }
   .hm-y { font-size: 11px; color: var(--vscode-descriptionForeground); white-space: nowrap; padding-inline-end: 8px; line-height: 1; align-self: center; font-variant-numeric: tabular-nums; }
-  .hm-x { font-size: 11px; color: var(--vscode-descriptionForeground); white-space: nowrap; line-height: 1; padding-bottom: 3px; font-variant-numeric: tabular-nums; }
-  .hm-x.end { text-align: end; }
+  .hm-x { display: flex; min-width: 0; font-size: 11px; color: var(--vscode-descriptionForeground); white-space: nowrap; line-height: 1; padding-bottom: 3px; font-variant-numeric: tabular-nums; }
+  .hm-x > span { flex: none; }
+  .hm-x.center { justify-content: center; }
+  .hm-x.end { justify-content: flex-end; }
   .heatmap .hm { height: calc(100% - 1px); cursor: pointer; }
   /* Heatmap shades 1-4 (low to high): one green hue, validated for monotone lightness, visible steps, and >= 2:1
      contrast for the step nearest the background. Light themes go light to dark, dark themes dark to bright. No
@@ -1144,10 +1146,11 @@ export class UsagePanel {
   // Token heatmap on the shared clock-aligned grid: time runs left to right, each column one local period (labeled
   // along the top) and each row one step within it (labeled on the left); the month is a calendar of half-day
   // columns and week rows. Cells stretch to the panel's width (10-96 pixels); x labels thin so they never collide,
-  // the first and last always labeled (the last right-aligned to the end). Cells outside the window (after now, or
-  // before the month's or year's window) are blank. A cell lists its calls. thinLabels and heatmapSizes are the
-  // host's own functions (usageCharts.ts), so the panel and its unit tests share one implementation.
-  ${thinLabels.toString()}
+  // each over the columns it names: centred over a weekday's AM and PM, else from its column's left edge, or ending
+  // at its column's right edge when it would run past the grid. Cells outside the window (after now, or before the
+  // month's or year's window) are blank. A cell lists its calls. placeLabels and heatmapSizes are the host's own
+  // functions (usageCharts.ts), so the panel and its unit tests share one implementation.
+  ${placeLabels.toString()}
   ${heatmapSizes.toString()}
   function drawHeatmap(){
     const chart = document.getElementById('chart');
@@ -1162,11 +1165,10 @@ export class UsagePanel {
     grid.style.gridTemplateColumns = 'auto repeat(' + hm.cols + ', ' + z.colW + 'px)';
     grid.style.gridTemplateRows = 'auto repeat(' + hm.rows + ', ' + z.rowH + 'px)';
     const anchors = hm.anchors && hm.anchors.length ? hm.anchors : [0];
-    const end = anchors[anchors.length - 1];
-    thinLabels(anchors, hm.cols, hm.colGroup || 1, z.gap, hm.evenAnchors !== false).forEach(function(c, k){
-      const last = k > 0 && c === end, span = Math.max(1, Math.min(Math.max(hm.colGroup || 1, z.gap), last ? hm.cols : hm.cols - c));
-      const x = document.createElement('div'); x.className = last ? 'hm-x end' : 'hm-x'; x.textContent = hm.colLabels[c];
-      x.style.gridRow = '1'; x.style.gridColumn = (last ? hm.cols + 2 - span : c + 2) + ' / span ' + span;
+    placeLabels(anchors, hm.cols, hm.colGroup || 1, z.gap, hm.evenAnchors !== false).forEach(function(p){
+      const x = document.createElement('div'); x.className = 'hm-x ' + p.align;
+      const text = document.createElement('span'); text.textContent = hm.colLabels[p.col]; x.appendChild(text);
+      x.style.gridRow = '1'; x.style.gridColumn = (p.col + 2) + ' / span ' + Math.max(1, Math.min(p.span, hm.cols - p.col));
       grid.appendChild(x);
     });
     hm.rowLabels.forEach(function(label, r){

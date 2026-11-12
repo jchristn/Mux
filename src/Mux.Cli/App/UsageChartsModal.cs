@@ -1375,15 +1375,15 @@ namespace Mux.Cli.App
             UsageHeatmapScale scale = UsageHeatmapScale.FromValues(values);
             surface.DrawText(x, y, Trim(layout.Caption + " (local time)", w), muted);
 
-            // Column labels, thinned so they never collide: the first and last visible column always labeled, the last
-            // right-aligned to the grid's end.
+            // Column labels, thinned so they never collide, each over the columns it names: a weekday centred over its
+            // AM and PM columns, else from its column's left edge, or ending at its column's right edge near the end.
             int span = (visible * pitchX) - gapX;
             int widest = layout.ColumnLabels.Max(l => l.Length);
-            foreach ((int column, bool last) in HeatmapLabeledColumns(layout, offset, visible, (widest + 1 + pitchX - 1) / pitchX))
+            foreach (UsageHeatmapLabel placed in HeatmapLabels(layout, offset, visible, (widest + 1 + pitchX - 1) / pitchX))
             {
-                string label = Trim(layout.ColumnLabels[column], span);
-                int left = last ? span - label.Length : (column - offset) * pitchX;
-                surface.DrawText(plotX + Math.Max(0, left), y + 1, label, muted);
+                string label = Trim(layout.ColumnLabels[placed.Column + offset], span);
+                int left = (int)Math.Floor(placed.TextLeft(pitchX, cellWidth, label.Length));
+                surface.DrawText(plotX + Math.Clamp(left, 0, Math.Max(0, span - label.Length)), y + 1, label, muted);
             }
 
             for (int row = 0; row < rows; row++)
@@ -1432,28 +1432,22 @@ namespace Mux.Cli.App
             if (w > 26) surface.DrawText(x + 25, y + h - 2, Trim("more (quartiles) · peak " + UsageChartFormat.Tokens(max), w - 25), muted);
         }
 
-        // The columns to label in the visible part of the grid (absolute indices), and whether each is the last one,
-        // drawn right-aligned. The whole grid uses the layout's thinning; a scrolled part thins its own anchors
-        // greedily, keeping its first and last column.
-        private static List<(int Column, bool Last)> HeatmapLabeledColumns(UsageHeatmapLayout layout, int offset, int visible, int minGap)
+        // The labels for the visible part of the grid, with columns relative to its first visible column. The whole
+        // grid uses the layout's placement; a scrolled part places the anchors whose columns are all visible (plus its
+        // first and last column when labels are not grouped), greedily.
+        private static List<UsageHeatmapLabel> HeatmapLabels(UsageHeatmapLayout layout, int offset, int visible, int minGap)
         {
-            List<int> picked;
-            int end;
-            if (offset == 0 && visible == layout.Columns)
+            if (offset == 0 && visible == layout.Columns) return layout.PlaceColumnLabels(minGap);
+            int group = layout.ColumnGroup;
+            List<int> anchors = layout.ColumnLabelAnchors.Where(a => a >= offset && a + group <= offset + visible).Select(a => a - offset).ToList();
+            if (group == 1)
             {
-                picked = layout.LabeledColumns(minGap);
-                end = layout.ColumnLabelAnchors[layout.ColumnLabelAnchors.Count - 1];
-            }
-            else
-            {
-                List<int> anchors = new List<int> { 0 };
-                anchors.AddRange(layout.ColumnLabelAnchors.Where(a => a > offset && a < offset + visible - 1).Select(a => a - offset));
+                anchors.Add(0);
                 anchors.Add(visible - 1);
-                picked = UsageHeatmapLayout.ThinLabels(anchors.Distinct().ToList(), visible, 1, minGap, false).Select(c => c + offset).ToList();
-                end = offset + visible - 1;
             }
 
-            return picked.Select((c, i) => (c, i > 0 && c == end)).ToList();
+            anchors = anchors.Distinct().OrderBy(a => a).ToList();
+            return UsageHeatmapLayout.PlaceLabels(anchors, visible, group, minGap, false);
         }
 
         // The cell size that fills the plot's width: cells up to 8 characters wide and about half as tall (terminal

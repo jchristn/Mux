@@ -187,9 +187,9 @@ test('usage panel webview script parses and lists all seven ranges and ten tabs'
     assert.match(panel.html, /--hm0: #e3e7eb/, 'light no-usage grey');
     assert.match(panel.html, /--hm0: #2e3640/, 'dark no-usage grey');
     assert.match(scripts[0], /openDrillWindow\(c\.from, c\.to, c\.label\)/, 'heatmap cells drill into their window');
-    assert.match(scripts[0], /'hm-x end' : 'hm-x'/, 'column labels, the last right-aligned');
+    assert.match(scripts[0], /className = 'hm-x ' \+ p\.align/, 'column labels aligned over the columns they name');
     assert.match(scripts[0], /className = 'hm-y'/, 'row labels');
-    assert.match(scripts[0], /function thinLabels\(/, "the host's label thinning runs in the webview");
+    assert.match(scripts[0], /function placeLabels\(/, "the host's label placement runs in the webview");
     assert.match(scripts[0], /function heatmapSizes\(/, "the host's cell sizing runs in the webview");
     assert.match(scripts[0], /addEventListener\('resize'/, 'the heatmap redraws on resize');
     assert.match(panel.html, /<select id="splitMetric"><\/select>\s*<select id="dimension"><\/select>/, 'the metric picker sits next to the dimension picker');

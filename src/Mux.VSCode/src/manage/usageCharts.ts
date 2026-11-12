@@ -479,22 +479,36 @@ export function labeledIndices(count: number, maxLabels: number, includeLast: bo
     return out;
 }
 
+/** Where one x-axis label goes: the columns it names (`col` .. `col + span - 1`) and how its text sits over them. */
+export interface HeatmapLabel {
+    col: number;
+    span: number;
+    align: 'start' | 'center' | 'end';
+}
+
 /**
- * Thins x-axis labels so none collide, keeping the first and last; mirrors Mux.Core's
- * `UsageHeatmapLayout.ThinLabels` and the web dashboard. A label needs `gap` columns from its anchor; evenly spaced
- * anchors keep every 1st, 2nd, 3rd, 4th, 6th, ... anchor, uneven ones (month starts) are kept greedily; the last label
- * is right-aligned to the grid's end, so it needs room for itself and the label before it. Self-contained (no outer
- * references) so the webview runs the same function.
+ * Places x-axis labels so none collide and none leaves the columns it names; mirrors Mux.Core's
+ * `UsageHeatmapLayout.PlaceLabels` and the web dashboard. A label names `group` columns from its anchor and needs
+ * `gap` columns of room. Grouped labels (a weekday over its AM and PM columns) are centred over their columns; an
+ * ungrouped label starts at its column's left edge, or ends at its column's right edge when it would run past the
+ * grid. Evenly spaced anchors keep every 1st, 2nd, 3rd, 4th, 6th, ... anchor, uneven ones (month starts) are kept
+ * greedily; the first is always labeled and the last whenever it fits (dropping the labels before it that it would
+ * collide with, but never the first). Self-contained (no outer references) so the webview runs the same function.
  */
-export function thinLabels(anchors: readonly number[], columns: number, group: number, gap: number, even: boolean): number[] {
+export function placeLabels(anchors: readonly number[], columns: number, group: number, gap: number, even: boolean): HeatmapLabel[] {
     const strides = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
-    const out: number[] = [];
+    const picked: number[] = [];
     if (!anchors || anchors.length === 0 || columns <= 0) {
-        return out;
+        return [];
     }
     gap = Math.max(1, gap);
     group = Math.max(1, group);
-    const last = anchors[anchors.length - 1];
+    const align = (a: number): 'start' | 'center' | 'end' => (group > 1 ? 'center' : a + gap <= columns ? 'start' : 'end');
+    // The room a label takes, in half-columns.
+    const extent = (a: number): [number, number] => {
+        const al = align(a);
+        return al === 'center' ? [2 * a + group - gap, 2 * a + group + gap] : al === 'end' ? [2 * (a + group - gap), 2 * (a + group)] : [2 * a, 2 * (a + gap)];
+    };
     if (even) {
         const spacing = anchors.length > 1 ? anchors[1] - anchors[0] : 1;
         let stride = strides[strides.length - 1];
@@ -505,30 +519,30 @@ export function thinLabels(anchors: readonly number[], columns: number, group: n
             }
         }
         for (let i = 0; i < anchors.length; i += stride) {
-            out.push(anchors[i]);
+            picked.push(anchors[i]);
         }
     } else {
-        out.push(anchors[0]);
+        picked.push(anchors[0]);
         for (let i = 1; i < anchors.length; i++) {
-            if (anchors[i] - out[out.length - 1] >= gap) {
-                out.push(anchors[i]);
+            if (anchors[i] - picked[picked.length - 1] >= gap) {
+                picked.push(anchors[i]);
             }
         }
     }
-    if (last === anchors[0]) {
-        return out;
+    const last = anchors[anchors.length - 1];
+    if (last !== anchors[0]) {
+        if (picked[picked.length - 1] === last) {
+            picked.pop();
+        }
+        const lo = extent(last)[0];
+        while (picked.length > 1 && extent(picked[picked.length - 1])[1] > lo) {
+            picked.pop();
+        }
+        if (extent(picked[picked.length - 1])[1] <= lo) {
+            picked.push(last);
+        }
     }
-    if (out.length > 1 && out[out.length - 1] === last) {
-        out.pop();
-    }
-    const need = 2 * gap - group;
-    while (out.length > 1 && last - out[out.length - 1] < need) {
-        out.pop();
-    }
-    if (last - out[out.length - 1] >= need) {
-        out.push(last);
-    }
-    return out;
+    return picked.map((a) => ({ col: a, span: group, align: align(a) }));
 }
 
 /**

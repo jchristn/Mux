@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Launch the mux agent from source (the tray host that runs the local REST server).
+# Launch the mux agent (the tray host that runs the local REST server). Starts the per-user install in
+# ${XDG_DATA_HOME:-~/.local/share}/mux/apps/agent, first installing or refreshing it when it is missing or its
+# version differs from this checkout. Set MUX_REFRESH_AGENT=1 to rebuild it anyway (to test agent changes).
+# A running agent is never replaced: a current one is reported, a stale one gets a note to quit it first.
+# This is an explicit request, so MUX_AGENT_AUTOSTART does not stop it.
 # Usage: ./scripts/linux/run-agent.sh [net8.0|net10.0]
 set -euo pipefail
 
@@ -22,6 +26,10 @@ command -v dotnet >/dev/null 2>&1 || die "dotnet was not found on PATH. Install 
 native_check_icu
 # shellcheck source=../common/framework.sh
 . "$REPO_ROOT/scripts/common/framework.sh"
+# shellcheck source=../common/linux-apps.sh
+. "$REPO_ROOT/scripts/common/linux-apps.sh"
+# shellcheck disable=SC2034 # read by linux-apps.sh
+LINUX_APPS_KILL_MUX="scripts/linux/kill-mux.sh"
 resolve_framework "$@"
 shift "$FRAMEWORK_ARGS"
 [ "$#" -eq 0 ] || die "Unexpected argument: $1"
@@ -33,7 +41,8 @@ native_check_libs error "The mux agent" "$NATIVE_AVALONIA_LIBS"
 MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
 mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
-# The agent registers itself to start at login on its first run unless MUX_AGENT_AUTOSTART=0. Login
-# startup is run-at-startup.sh's job, so keep a source run from registering this build.
-export MUX_AGENT_AUTOSTART=0
-dotnet run --project "$REPO_ROOT/src/Mux.Agent/Mux.Agent.csproj" --framework "$TFM" -p:TargetFrameworks="$TFM"
+# Install or refresh the per-user agent only when needed, then start it unless one is running. The agent is
+# started with MUX_AGENT_AUTOSTART=0: it registers itself to start at login on its first run otherwise, and
+# login startup is run-at-startup.sh's job.
+linux_ensure_user_agent --explicit || die "Installing the tray agent failed."
+linux_start_user_agent --explicit || die "Installing the tray agent failed."

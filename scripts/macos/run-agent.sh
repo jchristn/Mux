@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Launch the mux agent (the menu-bar host that runs the local REST server).
-# On macOS this builds and installs ~/Applications/Mux Agent.app, then opens it.
+# On macOS this starts ~/Applications/Mux Agent.app, first installing or refreshing it when it is missing or its
+# version differs from this checkout. Set MUX_REFRESH_AGENT=1 to rebuild it anyway (to test agent changes).
+# A running agent is never replaced: a current one is reported (and brought up), a stale one gets a note to quit
+# it first. This is an explicit request, so MUX_AGENT_AUTOSTART does not stop it.
 # Usage: ./scripts/macos/run-agent.sh [net8.0|net10.0]
 set -euo pipefail
 
@@ -27,7 +30,8 @@ shift "$FRAMEWORK_ARGS"
 MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
 mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
-install_macos_app agent --user-only
-# The agent registers itself to start at login on its first run unless MUX_AGENT_AUTOSTART=0. Login
-# startup is run-at-startup.sh's job, so keep this launch from registering it.
-open --env MUX_AGENT_AUTOSTART=0 -a "$HOME/Applications/Mux Agent.app"
+# Install or refresh the per-user agent only when needed, then start it unless one is running. The agent is
+# started with MUX_AGENT_AUTOSTART=0: it registers itself to start at login on its first run otherwise, and
+# login startup is run-at-startup.sh's job.
+macos_ensure_user_agent --explicit || die "Installing Mux Agent failed."
+macos_start_user_agent --explicit || die "Installing Mux Agent failed."

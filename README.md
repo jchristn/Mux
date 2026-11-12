@@ -149,7 +149,7 @@ to run on the wrong one:
 | Script | What it does |
 |---|---|
 | `install-tool` / `reinstall-tool` / `remove-tool` | Install, replace or uninstall the `mux` global tool (refuses while `mux` is running) |
-| `run-tui` / `run-desktop` / `run-agent` | Run the terminal UI, desktop app or tray agent from source |
+| `run-tui` / `run-desktop` / `run-agent` | Run the terminal UI or desktop app from source, or start the installed tray agent; all three install or refresh the per-user agent when needed and start it |
 | `run-mcp-server` | Build and serve mux as an MCP server (stdio by default) |
 | `run-at-startup` / `remove-from-startup` | Start the agent at login, or stop doing so |
 | `kill-mux` | Stop every running mux process |
@@ -194,8 +194,8 @@ The all-users copy needs administrator rights: on macOS and Linux the scripts wr
 (macOS admin accounts can write `/Applications`) and otherwise use `sudo`, which may prompt; on Windows run
 the script from an elevated prompt. Without those rights the scripts print a warning, keep the per-user
 install, and succeed. Set `MUX_SYSTEM_INSTALL=0` to skip the all-users copy. The scripts refuse to replace an
-app that is running from either location. On macOS, `run-desktop.sh`, `run-agent.sh` and
-`run-at-startup.sh` refresh and use the per-user apps (quit a running copy first).
+app that is running from either location. On macOS, `run-desktop.sh` refreshes and opens the per-user
+`Mux.app` (quit a running copy first).
 
 Every user surface starts the tray agent when it is not already running: the terminal UI and the desktop app
 at startup, and the VS Code extension through `mux agent start` when it connects. An agent from an older
@@ -208,7 +208,8 @@ and finally in a source checkout's build output. `mux agent status` shows whethe
 executable would be started. Set `MUX_AGENT_AUTOSTART=0` to stop the terminal UI and desktop app from
 starting it, or `mux.server.autoStart` to false in VS Code.
 
-`run-at-startup` installs or refreshes the per-user tray agent (the same per-user copy `install-tool` puts in
+`run-agent` starts that installed per-user agent (installing or refreshing it first when it is missing or stale)
+and says so when one is already running. `run-at-startup` installs or refreshes the per-user tray agent (the same per-user copy `install-tool` puts in
 place, without needing administrator rights) and registers that installed agent to start at login on every
 platform: a LaunchAgent on macOS, a systemd user service or XDG autostart entry on Linux, those or a Windows
 Startup-folder launcher on WSL, and the `HKCU\...\Run` key on Windows. `remove-from-startup` unregisters it and

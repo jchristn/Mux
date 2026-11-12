@@ -382,12 +382,13 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 .uchip{display:inline-flex;align-items:center;gap:6px;padding:3px 4px 3px 11px;border-radius:999px;font-size:12.5px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);font-weight:600;white-space:nowrap}
 .uchip button{border:none;background:none;color:inherit;cursor:pointer;font-size:15px;line-height:1;padding:1px 6px;border-radius:999px;font-family:inherit}
 .uchip button:hover,.uchip button:focus-visible{background:color-mix(in srgb,var(--accent) 24%,transparent);outline:none}
-.uhm{display:grid;gap:3px;margin:12px 0 4px;align-items:center;justify-content:start;max-width:100%;overflow-x:auto}
+.uhm{display:grid;gap:3px;margin:12px 0 4px;align-items:center;justify-content:start;max-width:100%;overflow-x:auto;overflow-y:hidden}
 .uhm-cell{cursor:pointer;outline:none;border-radius:3px;height:calc(100% - 1px)}
 .uhm-cell.sel{box-shadow:0 0 0 2px var(--text)}
 .uhm-y{font-size:11px;color:var(--muted);white-space:nowrap;padding-inline-end:8px;line-height:1;align-self:center;font-variant-numeric:tabular-nums}
-.uhm-x{font-size:11px;color:var(--muted);white-space:nowrap;overflow:visible;line-height:1;padding-bottom:3px;font-variant-numeric:tabular-nums}
-.uhm-x.end{text-align:end}
+.uhm-x{display:flex;min-width:0;font-size:11px;color:var(--muted);white-space:nowrap;overflow:visible;line-height:1;padding-bottom:3px;font-variant-numeric:tabular-nums}
+.uhm-x>span{flex:none}
+.uhm-x.center{justify-content:center}.uhm-x.end{justify-content:flex-end}
 .uhm-cap{font-size:12px;color:var(--muted);margin-top:2px}
 .uhm-cell.l0,.uhm-key.l0{background:var(--heat-0)}
 .uhm-cell.l1,.uhm-key.l1{background:var(--heat-1)}.uhm-cell.l2,.uhm-key.l2{background:var(--heat-2)}
@@ -2346,7 +2347,11 @@ function drawUsageChartBody(){
   var host=el("us_chart"),buckets=usageState.buckets,tab=usageState.tab,loaded=usageState.loaded||{};
   var part=tab==="breakdown"?"breakdown":(tab==="split"?"split":(tab==="heatmap"?"heatmap":"buckets"));
   if(!loaded[part]){host.innerHTML='<div class="chartempty"><div class="spinner"></div></div>';return;}
-  if(tab==="heatmap"){var hm=usageState.heatmap;if(!heatmapHasUsage(hm)){host.innerHTML=usageEmptyHtml();return;}host.innerHTML=tokenHeatmap(hm,host.clientWidth||800);wireHeatmap(hm);return;}
+  if(tab==="heatmap"){var hm=usageState.heatmap;if(!heatmapHasUsage(hm)){host.innerHTML=usageEmptyHtml();return;}var hw=host.clientWidth||800;host.innerHTML=tokenHeatmap(hm,hw);
+    /* The row labels' width is estimated, so when the grid still comes out wider than its box, it is redrawn that
+       much narrower: the heatmap never scrolls sideways unless its cells are already at their 10px minimum. */
+    var hg=el("us_heatmap");if(hg&&hg.scrollWidth>hg.clientWidth)host.innerHTML=tokenHeatmap(hm,hw-(hg.scrollWidth-hg.clientWidth));
+    wireHeatmap(hm);return;}
   if(tab==="breakdown"){host.innerHTML=breakdownChart(usageState.breakdown);return;}
   if(tab==="split"){
     var sd=splitChartData(),anyTok=sd.buckets.some(function(b){return b.Metrics._split.some(function(v){return v>0;});});
@@ -2405,8 +2410,9 @@ function heatmapScale(values){
    one local period, labeled along the top, and each row one step within it, labeled on the left; the month is a
    calendar of half-day columns and week rows. Every cell's start and whether it is outside the window come from the
    server (CellStartsUnixMs, OutsideWindow), so nothing here recomputes a cell's time. Cells stretch to the
-   container's width between 10 and 96 pixels; x labels thin so they never collide, the first and last always
-   labeled (the last right-aligned to the grid's end). Cells outside the window are left blank. */
+   container's width between 10 and 96 pixels; x labels thin so they never collide (hmPlace), each over the
+   columns it names: centred over a weekday's AM and PM, else from its column's left edge, or ending at its column's
+   right edge when it would run past the grid. Cells outside the window are left blank. */
 function heatmapHasUsage(hm){return !!(hm&&hm.Layout&&(hm.TotalTokens||[]).some(function(v){return v>0;}));}
 var HM_STRIDES=[1,2,3,4,6,8,12,16,24,32,48,64];
 function hmPick(count,max,last){var st=1,i,out=[];if(count<=0)return out;max=Math.max(1,max);
@@ -2414,20 +2420,26 @@ function hmPick(count,max,last){var st=1,i,out=[];if(count<=0)return out;max=Mat
   for(i=0;i<count;i+=st)out.push(i);
   if(last&&out[out.length-1]!==count-1){if(out.length>1&&(count-1)-out[out.length-1]<st)out.pop();out.push(count-1);}
   return out;}
-/* x-axis label thinning, mirroring Mux.Core's UsageHeatmapLayout.ThinLabels: a label needs `gap` columns; evenly
-   spaced anchors keep every 1st, 2nd, 3rd, 4th, 6th, ... anchor, uneven ones (month starts) are kept greedily, and
-   the right-aligned last label needs room for itself and the label before it. */
-function hmThin(anchors,columns,group,gap,even){var out=[],i;if(!anchors||!anchors.length||columns<=0)return out;
-  gap=Math.max(1,gap);group=Math.max(1,group);var last=anchors[anchors.length-1];
+/* x-axis label placement, mirroring Mux.Core's UsageHeatmapLayout.PlaceLabels: a label names `group` columns from
+   its anchor and needs `gap` columns of room. Grouped labels (a weekday over AM and PM) are centred over their
+   columns; an ungrouped label starts at its column, or ends at its column's right edge when it would run past the
+   grid. Evenly spaced anchors keep every 1st, 2nd, 3rd, 4th, 6th, ... anchor, uneven ones (month starts) are kept
+   greedily; the first is always labeled and the last whenever it fits (dropping the labels it would collide with,
+   but never the first). Returns [{col,span,align}] with align "start", "center", or "end". */
+function hmAlign(a,columns,group,gap){return group>1?"center":(a+gap<=columns?"start":"end");}
+function hmExtent(a,columns,group,gap){var al=hmAlign(a,columns,group,gap);
+  return al==="center"?[2*a+group-gap,2*a+group+gap]:(al==="end"?[2*(a+group-gap),2*(a+group)]:[2*a,2*(a+gap)]);}
+function hmPlace(anchors,columns,group,gap,even){var out=[],i;if(!anchors||!anchors.length||columns<=0)return out;
+  gap=Math.max(1,gap);group=Math.max(1,group);
   if(even){var sp=anchors.length>1?anchors[1]-anchors[0]:1,st=HM_STRIDES[HM_STRIDES.length-1];
     for(i=0;i<HM_STRIDES.length;i++){if(HM_STRIDES[i]*sp>=gap){st=HM_STRIDES[i];break;}}
     for(i=0;i<anchors.length;i+=st)out.push(anchors[i]);}
   else{out.push(anchors[0]);for(i=1;i<anchors.length;i++){if(anchors[i]-out[out.length-1]>=gap)out.push(anchors[i]);}}
-  if(last===anchors[0])return out;
-  if(out.length>1&&out[out.length-1]===last)out.pop();
-  var need=2*gap-group;while(out.length>1&&last-out[out.length-1]<need)out.pop();
-  if(last-out[out.length-1]>=need)out.push(last);
-  return out;}
+  var last=anchors[anchors.length-1];
+  if(last!==anchors[0]){if(out[out.length-1]===last)out.pop();var lo=hmExtent(last,columns,group,gap)[0];
+    while(out.length>1&&hmExtent(out[out.length-1],columns,group,gap)[1]>lo)out.pop();
+    if(hmExtent(out[out.length-1],columns,group,gap)[1]<=lo)out.push(last);}
+  return out.map(function(a){return {col:a,span:group,align:hmAlign(a,columns,group,gap)};});}
 function hmAnchors(lay){return lay.ColumnLabelAnchors&&lay.ColumnLabelAnchors.length?lay.ColumnLabelAnchors:[0];}
 /* Local wall-clock parts of an instant at the layout's fixed offset (UTC getters on a shifted Date). */
 function hmLocal(ms,lay){return new Date(ms+(lay.UtcOffsetMinutes||0)*60000);}
@@ -2453,11 +2465,11 @@ function hmCellWindow(lay,start){var w=lay.BucketMs,end=start+w,D=86400000,date=
   if(w>=D){var first=hmFmt(start,lay,date);return w===D?first:first+" – "+hmFmt(end-1,lay,date);}
   return hmFmt(start,lay,date)+" "+hmFmt(start,lay,HM_TIME)+"–"+hmFmt(end,lay,HM_TIME);}
 function hmTextPx(text){return (""+text).length*6.6;}
-/* Cell size for a container width: columns share the width left of the row labels (3px gaps), clamped to 10-96px;
-   rows are as tall as a column is wide, clamped to 12-28px, so the grid reads wide rather than tall. */
+/* Cell size for a container width: columns share the width left of the row labels (a 3px gap before each), clamped
+   to 10-96px; rows are as tall as a column is wide, clamped to 12-28px, so the grid reads wide rather than tall. */
 function hmSizes(lay,width,rowLabels,colLabels){
   var axis=Math.ceil(Math.max.apply(null,rowLabels.map(hmTextPx).concat([0])))+10,C=Math.max(1,lay.Columns);
-  var colW=Math.max(10,Math.min(96,Math.floor((Math.max(100,width-32-axis)+3)/C)-3)),rowH=Math.max(12,Math.min(28,colW));
+  var colW=Math.max(10,Math.min(96,Math.floor(Math.max(100,width-32-axis)/C)-3)),rowH=Math.max(12,Math.min(28,colW));
   var gap=Math.max(1,Math.ceil((Math.max.apply(null,colLabels.map(hmTextPx).concat([0]))+8)/(colW+3)));
   return {colW:colW,rowH:rowH,gap:gap};}
 function tokenHeatmap(hm,width){
@@ -2466,13 +2478,12 @@ function tokenHeatmap(hm,width){
   var scale=heatmapScale(tok.map(function(v){return v||0;}));
   var caption=t("us.hm.axes",{cols:t("us.hm.x."+lay.ColumnUnit),rows:t("us.hm.y."+lay.RowKind)});
   var rowLabels=[],colLabels=[];for(i=0;i<R;i++)rowLabels.push(hmRowLabel(lay,i));for(i=0;i<C;i++)colLabels.push(hmColLabel(lay,i));
-  var z=hmSizes(lay,width,rowLabels,colLabels),grp=Math.max(1,lay.ColumnGroup||1),anchors=hmAnchors(lay),end=anchors[anchors.length-1];
-  var cols=hmThin(anchors,C,grp,z.gap,lay.ColumnKind!=="month"),rows=hmPick(R,z.rowH>=14?R:Math.floor(R*z.rowH/14),true);
+  var z=hmSizes(lay,width,rowLabels,colLabels),grp=Math.max(1,lay.ColumnGroup||1);
+  var cols=hmPlace(hmAnchors(lay),C,grp,z.gap,lay.ColumnKind!=="month"),rows=hmPick(R,z.rowH>=14?R:Math.floor(R*z.rowH/14),true);
   var h='<div style="padding:16px"><strong>'+esc(t("us.t.heatmap"))+'</strong><div class="uhm-cap" id="us_heatmap_axes">'+esc(caption)+'</div>';
   h+='<div id="us_heatmap" class="uhm" role="grid" aria-label="'+usAttr(caption)+'" data-cols="'+C+'" data-rows="'+R+'" style="grid-template-columns:auto repeat('+C+','+z.colW+'px);grid-template-rows:auto repeat('+R+','+z.rowH+'px)">';
-  cols.forEach(function(c,k){var last=k>0&&c===end,span=Math.max(1,Math.min(Math.max(grp,z.gap),last?C:C-c));
-    h+=last?'<div class="uhm-x end" data-col="'+c+'" style="grid-row:1;grid-column:'+(C+2-span)+' / span '+span+'">'+esc(colLabels[c])+'</div>'
-      :'<div class="uhm-x" data-col="'+c+'" style="grid-row:1;grid-column:'+(c+2)+' / span '+span+'">'+esc(colLabels[c])+'</div>';});
+  cols.forEach(function(p){var span=Math.max(1,Math.min(p.span,C-p.col));
+    h+='<div class="uhm-x '+p.align+'" data-col="'+p.col+'" style="grid-row:1;grid-column:'+(p.col+2)+' / span '+span+'"><span>'+esc(colLabels[p.col])+'</span></div>';});
   rows.forEach(function(r){h+='<div class="uhm-y" style="grid-row:'+(r+2)+';grid-column:1">'+esc(rowLabels[r])+'</div>';});
   var sel=usageState.drill;
   for(i=0;i<R*C;i++){var start=starts[i],pos='grid-row:'+(Math.floor(i/C)+2)+';grid-column:'+((i%C)+2);

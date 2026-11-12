@@ -8,7 +8,8 @@ Covers parsing of every scripts/**/*.ps1, install-path resolution, the elevated 
 MUX_SYSTEM_INSTALL=0 branches, the running-process guard, RID selection, publish staging, install
 replacement and removal, the per-user agent-only install used by run-at-startup.bat, the mux-version.txt
 marker, and EnsureUserAgent (run-desktop.bat and run-tui.bat: install or refresh the agent only when it is
-missing or stale, never under a running copy, and exit 2 when MUX_AGENT_AUTOSTART turns automatic starts off). Nothing real is
+missing or stale, never under a running copy, and exit 2 when MUX_AGENT_AUTOSTART turns automatic starts off;
+with -Explicit, for run-agent.bat: MUX_AGENT_AUTOSTART is ignored and a running stale agent exits 3). Nothing real is
 built or installed: dotnet, elevation, the process list, shortcut creation and the console messages are
 fakes, and every path lives under a temporary directory. The .bat callers are not run here.
 #>
@@ -93,10 +94,10 @@ try {
         Set-Env 'MUX_SYSTEM_INSTALL' $System
     }
     # Run an action and return its exit code and stderr.
-    function Run([string]$Action, [string]$Framework = 'net10.0') {
+    function Run([string]$Action, [string]$Framework = 'net10.0', [switch]$Explicit) {
         $writer = New-Object IO.StringWriter
         [Console]::SetError($writer)
-        try { $code = Invoke-MuxApps -Action $Action -Framework $Framework -RepoRoot $repo } finally { [Console]::SetError($savedError) }
+        try { $code = Invoke-MuxApps -Action $Action -Framework $Framework -RepoRoot $repo -Explicit:$Explicit } finally { [Console]::SetError($savedError) }
         return [pscustomobject]@{ Code = $code; Err = $writer.ToString() }
     }
     function Running([string]$Path) { $script:MockProcesses = @([pscustomobject]@{ Name = 'x'; Id = 42; Path = $Path }) }
@@ -319,6 +320,44 @@ try {
     $script:MockPublishFail = $false
     Check ((Run 'EnsureUserAgent' '').Code -eq 1) 'EnsureUserAgent without a framework fails'
 
+    # EnsureUserAgent -Explicit (run-agent.bat): the same install-or-refresh, but MUX_AGENT_AUTOSTART is ignored
+    # (never exit 2), and a stale agent running from the per-user folder exits 3 after its note.
+    Reset-Mocks
+    Check ((Run 'Remove').Code -eq 0) 'clean slate for EnsureUserAgent -Explicit'
+    $r = Run 'EnsureUserAgent' 'net8.0' -Explicit
+    Check ($r.Code -eq 0 -and $script:Calls.Count -eq 1 -and (Get-MuxInstalledVersion $agentDir) -eq '1.2.3') "explicit: missing agent installed: $($r.Err)"
+    Check (-not (Test-Path -LiteralPath (J $userRoot 'Desktop')) -and -not (Test-Path -LiteralPath $systemRoot)) 'explicit: agent only, per-user only'
+    Reset-Mocks
+    Check ((Run 'EnsureUserAgent' -Explicit).Code -eq 0 -and $script:Calls.Count -eq 0) 'explicit: current agent, no rebuild'
+    Set-Content -LiteralPath $agentMarker -Value '0.0.1'
+    Check ((Run 'EnsureUserAgent' -Explicit).Code -eq 0 -and $script:Calls.Count -eq 1 -and (Get-MuxInstalledVersion $agentDir) -eq '1.2.3') 'explicit: stale agent refreshed'
+    Reset-Mocks
+    Set-Env 'MUX_REFRESH_AGENT' '1'
+    Check ((Run 'EnsureUserAgent' -Explicit).Code -eq 0 -and $script:Calls.Count -eq 1) 'explicit: MUX_REFRESH_AGENT=1 rebuilds'
+    Set-Env 'MUX_REFRESH_AGENT' $null
+    Reset-Mocks
+    Running (J $agentDir 'Mux.Agent.exe')
+    $r = Run 'EnsureUserAgent' -Explicit
+    Check ($r.Code -eq 0 -and $script:Calls.Count -eq 0 -and $script:Warnings.Count -eq 0) "explicit: running current agent, exit 0, no rebuild: $($r.Err)"
+    Set-Content -LiteralPath $agentMarker -Value '0.0.1'
+    $r = Run 'EnsureUserAgent' -Explicit
+    Check ($r.Code -eq 3 -and $script:Calls.Count -eq 0 -and (Get-MuxInstalledVersion $agentDir) -eq '0.0.1') "explicit: running stale agent exits 3, not replaced: $($r.Err)"
+    Check ($script:Warnings.Count -eq 1 -and $script:Warnings[0] -match 'older version \(0\.0\.1, this checkout is 1\.2\.3\)\. Quit it') "explicit: stale note: $($script:Warnings)"
+    Reset-Mocks
+    Check ((Run 'Remove').Code -eq 0) 'clean slate for explicit MUX_AGENT_AUTOSTART=0'
+    foreach ($off in '0', 'OFF') {
+        Reset-Mocks
+        Set-Env 'MUX_AGENT_AUTOSTART' $off
+        $r = Run 'EnsureUserAgent' -Explicit
+        Check ($r.Code -eq 0 -and $script:Calls.Count -eq 1 -and (Test-Path -LiteralPath (J $agentDir 'Mux.Agent.exe'))) "explicit: MUX_AGENT_AUTOSTART=$($off) ignored, agent installed: $($r.Err)"
+        Remove-Item -LiteralPath $agentDir -Recurse -Force
+    }
+    Set-Env 'MUX_AGENT_AUTOSTART' $null
+    Reset-Mocks
+    $script:MockPublishFail = $true
+    Check ((Run 'EnsureUserAgent' -Explicit).Code -eq 1) 'explicit: failed agent install fails'
+    $script:MockPublishFail = $false
+
     # Remove, not elevated: user copy goes, the system copy is named in a warning.
     Reset-Mocks -Elevated $true
     Check ((Run 'Install').Code -eq 0) 'reinstall both for the remove tests'
@@ -355,6 +394,10 @@ try {
     Set-Env 'MUX_AGENT_AUTOSTART' '0'
     $out = & $exe -NoProfile -File $helper -Action EnsureUserAgent -Framework net8.0 2>&1
     Check ($LASTEXITCODE -eq 2) "entry point EnsureUserAgent with MUX_AGENT_AUTOSTART=0 exits 2: $LASTEXITCODE $out"
+    # -Explicit reaches EnsureUserAgent through the entry point: MUX_AGENT_AUTOSTART=0 no longer exits 2 (the
+    # missing framework fails first, so nothing is built).
+    $out = & $exe -NoProfile -File $helper -Action EnsureUserAgent -Framework '' -Explicit 2>&1
+    Check ($LASTEXITCODE -eq 1 -and ($out -join "`n") -match 'EnsureUserAgent needs -Framework') "entry point EnsureUserAgent -Explicit ignores MUX_AGENT_AUTOSTART: $LASTEXITCODE $out"
     Set-Env 'MUX_AGENT_AUTOSTART' $null
 } finally {
     [Console]::SetError($savedError)
