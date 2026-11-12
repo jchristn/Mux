@@ -101,8 +101,9 @@ All notable changes to mux are documented here.
   each period down; year is a contribution-style grid of daily cells), cells stretch to the available width, and
   the month view is a calendar of days (AM/PM) across by five or six Monday-start weeks down, so the whole 30-day
   window always shows. `UsageWindow.ComputeHeatmap` is removed. Axis labels are placed once in Mux.Core
-  (`UsageHeatmapLayout.PlaceColumnLabels`): each sits over the columns it names (month weekdays centred over
-  their AM/PM pair), and the web grid no longer overflows into a horizontal scrollbar.
+  (`UsageHeatmapLayout.PlaceColumnLabels`): every label is left-justified at the first column it names (month
+  weekdays at their AM column) on every surface, a label that would run past the grid is dropped rather than
+  moved, and the web grid no longer overflows into a horizontal scrollbar.
 - `range=all` time series fell back to the last 24 hours, so VS Code's All range showed all-time KPIs over
   a one-day chart.
 - The OpenAPI schema for `UsageBreakdownRow` documented a `Key` property; it is `Dimension` and `Value`.

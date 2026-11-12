@@ -1375,15 +1375,13 @@ namespace Mux.Cli.App
             UsageHeatmapScale scale = UsageHeatmapScale.FromValues(values);
             surface.DrawText(x, y, Trim(layout.Caption + " (local time)", w), muted);
 
-            // Column labels, thinned so they never collide, each over the columns it names: a weekday centred over its
-            // AM and PM columns, else from its column's left edge, or ending at its column's right edge near the end.
+            // Column labels, thinned so they never collide, each left-justified at the first column it names (a weekday
+            // at its AM column); one that would run past the grid is dropped, never moved.
             int span = (visible * pitchX) - gapX;
             int widest = layout.ColumnLabels.Max(l => l.Length);
-            foreach (UsageHeatmapLabel placed in HeatmapLabels(layout, offset, visible, (widest + 1 + pitchX - 1) / pitchX))
+            foreach (int column in HeatmapLabels(layout, offset, visible, (widest + 1 + pitchX - 1) / pitchX))
             {
-                string label = Trim(layout.ColumnLabels[placed.Column + offset], span);
-                int left = (int)Math.Floor(placed.TextLeft(pitchX, cellWidth, label.Length));
-                surface.DrawText(plotX + Math.Clamp(left, 0, Math.Max(0, span - label.Length)), y + 1, label, muted);
+                surface.DrawText(plotX + (column * pitchX), y + 1, Trim(layout.ColumnLabels[column + offset], span - (column * pitchX)), muted);
             }
 
             for (int row = 0; row < rows; row++)
@@ -1432,10 +1430,10 @@ namespace Mux.Cli.App
             if (w > 26) surface.DrawText(x + 25, y + h - 2, Trim("more (quartiles) · peak " + UsageChartFormat.Tokens(max), w - 25), muted);
         }
 
-        // The labels for the visible part of the grid, with columns relative to its first visible column. The whole
-        // grid uses the layout's placement; a scrolled part places the anchors whose columns are all visible (plus its
+        // The labeled columns of the visible part of the grid, relative to its first visible column. The whole grid
+        // uses the layout's placement; a scrolled part places the anchors whose columns are all visible (plus its
         // first and last column when labels are not grouped), greedily.
-        private static List<UsageHeatmapLabel> HeatmapLabels(UsageHeatmapLayout layout, int offset, int visible, int minGap)
+        private static List<int> HeatmapLabels(UsageHeatmapLayout layout, int offset, int visible, int minGap)
         {
             if (offset == 0 && visible == layout.Columns) return layout.PlaceColumnLabels(minGap);
             int group = layout.ColumnGroup;
@@ -1447,7 +1445,7 @@ namespace Mux.Cli.App
             }
 
             anchors = anchors.Distinct().OrderBy(a => a).ToList();
-            return UsageHeatmapLayout.PlaceLabels(anchors, visible, group, minGap, false);
+            return UsageHeatmapLayout.PlaceLabels(anchors, visible, minGap, false);
         }
 
         // The cell size that fills the plot's width: cells up to 8 characters wide and about half as tall (terminal

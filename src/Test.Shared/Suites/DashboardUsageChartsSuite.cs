@@ -258,8 +258,8 @@ namespace Test.Shared.Suites
                     {
                         string html = DashboardPage.Render(null, "9.9.9-test");
                         MuxAssert.Contains("class=\"uhm-y\"", html, "row labels");
-                        MuxAssert.Contains("class=\"uhm-x '+p.align+'\"", html, "column labels, aligned over the columns they name");
-                        MuxAssert.Contains(".uhm-x.center{justify-content:center}.uhm-x.end{justify-content:flex-end}", html, "centred and end-aligned labels overflow inward, never past the grid's end");
+                        MuxAssert.Contains("'<div class=\"uhm-x\" data-col=\"'+c+'\" style=\"grid-row:1;grid-column:'+(c+2)+'\">", html, "column labels, each starting at its own column");
+                        MuxAssert.IsFalse(Regex.IsMatch(html, "\\.uhm-x\\.(center|end)|p\\.align|hmAlign\\("), "no centred or end-aligned labels");
                         MuxAssert.IsFalse(html.Contains("hmThin(", StringComparison.Ordinal), "the old thinning (last label pushed to the grid's end) is gone");
                         MuxAssert.Contains("t(\"us.hm.axes\",{cols:t(\"us.hm.x.\"+lay.ColumnUnit),rows:t(\"us.hm.y.\"+lay.RowKind)})", html, "localized axis caption, x first");
                         MuxAssert.Contains("starts=lay.CellStartsUnixMs||[],outside=lay.OutsideWindow||[]", html, "cell starts and window flags come from the server");
@@ -287,53 +287,60 @@ namespace Test.Shared.Suites
                                 UsageHeatmapLayout lay = heatmap.Layout;
                                 for (int i = 0; i < heatmap.TotalTokens.Length; i++) heatmap.TotalTokens[i] = lay.IsOutsideWindow(i) ? 0 : (i * 37) % 11 * 100;
                                 string file = Path.Combine(dir, "hm.js");
-                                File.WriteAllText(file, "var LOCALE='en',usageState={drill:null};window={addEventListener:function(){}};function el(){return null;}function t(k,p){var s={'us.hm.axes':'Columns: {cols} · Rows: {rows}'}[k]||k;if(p)for(var x in p)s=s.split('{'+x+'}').join(p[x]);return s;}"
-                                    + "function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}function usAttr(s){return esc(''+s).replace(/\"/g,'&quot;');}\n"
-                                    + js + "\nconsole.log(tokenHeatmap(" + JsonSerializer.Serialize(heatmap) + ",1000));");
-                                ProcessStartInfo info = new ProcessStartInfo(node) { RedirectStandardError = true, RedirectStandardOutput = true, UseShellExecute = false };
-                                info.ArgumentList.Add(file);
-                                using Process process = Process.Start(info)!;
-                                string output = process.StandardOutput.ReadToEnd();
-                                string error = process.StandardError.ReadToEnd();
-                                process.WaitForExit(30000);
-                                MuxAssert.AreEqual(0, process.ExitCode, "heatmap renders for " + c.Name + ": " + error);
-                                outputs[c.Name] = output;
-                                MuxAssert.Contains("Columns: us.hm.x." + lay.ColumnUnit + " · Rows: us.hm.y." + lay.RowKind, output, "caption for " + c.Name);
-                                MuxAssert.AreEqual(lay.CellCount, Regex.Matches(output, "class=\"uhm-(cell|future)").Count, "one grid cell per layout cell for " + c.Name);
-                                MuxAssert.AreEqual(Enumerable.Range(0, lay.CellCount).Count(i => lay.IsOutsideWindow(i)), Regex.Matches(output, "class=\"uhm-future\"").Count, "cells outside the window are blank for " + c.Name);
-                                MuxAssert.AreEqual(lay.Rows, Regex.Matches(output, "class=\"uhm-y\"").Count, "every row labeled for " + c.Name);
-
-                                // Cells fill the 1000 pixel container (10-96 pixels) and the grid is wider than tall.
-                                Match size = Regex.Match(output, "grid-template-columns:auto repeat\\((\\d+),(\\d+)px\\);grid-template-rows:auto repeat\\((\\d+),(\\d+)px\\)");
-                                MuxAssert.IsTrue(size.Success, "grid template for " + c.Name);
-                                int cols = int.Parse(size.Groups[1].Value), colW = int.Parse(size.Groups[2].Value), rows = int.Parse(size.Groups[3].Value), rowH = int.Parse(size.Groups[4].Value);
-                                MuxAssert.AreEqual(lay.Columns, cols, "x-axis columns for " + c.Name);
-                                MuxAssert.AreEqual(lay.Rows, rows, "y-axis rows for " + c.Name);
-                                MuxAssert.IsTrue(colW >= 10 && colW <= 96, "cell width clamped for " + c.Name);
-                                MuxAssert.IsTrue(colW == 96 || cols * (colW + 3) >= 820, "cells stretch to the width for " + c.Name);
-                                MuxAssert.IsTrue(cols * (colW + 3) > rows * (rowH + 3) || c.Range == UsageRange.Week, "wider than tall for " + c.Name);
-
-                                // x labels: each over the columns it names (never moved off them), the first and last
-                                // column labeled, none overlapping (about 6.6 pixels a character), none past the grid.
-                                List<(int Col, string Align, int GridCol, int Span, string Text)> labels = Regex.Matches(output, "class=\"uhm-x (start|center|end)\" data-col=\"(\\d+)\" style=\"grid-row:1;grid-column:(\\d+) / span (\\d+)\"><span>([^<]*)<")
-                                    .Select(m => (int.Parse(m.Groups[2].Value), m.Groups[1].Value, int.Parse(m.Groups[3].Value), int.Parse(m.Groups[4].Value), m.Groups[5].Value)).ToList();
-                                MuxAssert.AreEqual(Regex.Matches(output, "class=\"uhm-x ").Count, labels.Count, "every x label parsed for " + c.Name);
-                                MuxAssert.IsTrue(labels.Count >= 2, "x labels for " + c.Name);
-                                MuxAssert.AreEqual(0, labels[0].Col, "first column labeled for " + c.Name);
-                                MuxAssert.AreEqual(lay.ColumnLabelAnchors[lay.ColumnLabelAnchors.Count - 1], labels[labels.Count - 1].Col, "last column labeled for " + c.Name);
-                                double pitch = colW + 3, gridEnd = (lay.Columns * pitch) - 3, prevRight = double.NegativeInfinity;
-                                foreach (var l in labels)
+                                foreach (int width in new[] { 800, 1000, 1400 })
                                 {
-                                    string at = "'" + l.Text + "' (column " + l.Col + ") for " + c.Name;
-                                    MuxAssert.AreEqual(l.Col + 2, l.GridCol, at + " sits over its own column");
-                                    MuxAssert.AreEqual(lay.ColumnGroup, l.Span, at + " spans the columns it names");
-                                    MuxAssert.AreEqual(lay.ColumnGroup > 1 ? "center" : (l.Align == "end" ? "end" : "start"), l.Align, at + " alignment");
-                                    if (l.Align == "end") MuxAssert.AreEqual(labels[labels.Count - 1].Col, l.Col, at + " only the last label ends at its column");
-                                    double w = l.Text.Length * 6.6, left = l.Col * pitch, right = ((l.Col + l.Span) * pitch) - 3;
-                                    double textLeft = l.Align == "center" ? ((left + right - w) / 2) : (l.Align == "end" ? right - w : left);
-                                    MuxAssert.IsTrue(textLeft >= prevRight, at + " does not collide with the label before it");
-                                    MuxAssert.IsTrue(textLeft + w <= gridEnd + 0.01, at + " stays inside the grid");
-                                    prevRight = textLeft + w;
+                                    string name = c.Name + " at " + width + "px";
+                                    File.WriteAllText(file, "var LOCALE='en',usageState={drill:null};window={addEventListener:function(){}};function el(){return null;}function t(k,p){var s={'us.hm.axes':'Columns: {cols} · Rows: {rows}'}[k]||k;if(p)for(var x in p)s=s.split('{'+x+'}').join(p[x]);return s;}"
+                                        + "function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}function usAttr(s){return esc(''+s).replace(/\"/g,'&quot;');}\n"
+                                        + js + "\nconsole.log(tokenHeatmap(" + JsonSerializer.Serialize(heatmap) + "," + width + "));");
+                                    ProcessStartInfo info = new ProcessStartInfo(node) { RedirectStandardError = true, RedirectStandardOutput = true, UseShellExecute = false };
+                                    info.ArgumentList.Add(file);
+                                    using Process process = Process.Start(info)!;
+                                    string output = process.StandardOutput.ReadToEnd();
+                                    string error = process.StandardError.ReadToEnd();
+                                    process.WaitForExit(30000);
+                                    MuxAssert.AreEqual(0, process.ExitCode, "heatmap renders for " + name + ": " + error);
+                                    if (width == 1000) outputs[c.Name] = output;
+                                    MuxAssert.Contains("Columns: us.hm.x." + lay.ColumnUnit + " · Rows: us.hm.y." + lay.RowKind, output, "caption for " + name);
+                                    MuxAssert.AreEqual(lay.CellCount, Regex.Matches(output, "class=\"uhm-(cell|future)").Count, "one grid cell per layout cell for " + name);
+                                    MuxAssert.AreEqual(Enumerable.Range(0, lay.CellCount).Count(i => lay.IsOutsideWindow(i)), Regex.Matches(output, "class=\"uhm-future\"").Count, "cells outside the window are blank for " + name);
+
+                                    // Cells fill the container (10-96 pixels), the grid is wider than tall, and it fits:
+                                    // the row-label axis plus the columns never exceed the container's width.
+                                    Match size = Regex.Match(output, "grid-template-columns:(\\d+)px repeat\\((\\d+),(\\d+)px\\);grid-template-rows:auto repeat\\((\\d+),(\\d+)px\\)");
+                                    MuxAssert.IsTrue(size.Success, "grid template for " + name);
+                                    int axis = int.Parse(size.Groups[1].Value), cols = int.Parse(size.Groups[2].Value), colW = int.Parse(size.Groups[3].Value), rows = int.Parse(size.Groups[4].Value), rowH = int.Parse(size.Groups[5].Value);
+                                    MuxAssert.AreEqual(lay.Columns, cols, "x-axis columns for " + name);
+                                    MuxAssert.AreEqual(lay.Rows, rows, "y-axis rows for " + name);
+                                    MuxAssert.IsTrue(colW >= 10 && colW <= 96, "cell width clamped for " + name);
+                                    int rowLabels = Regex.Matches(output, "class=\"uhm-y\"").Count;
+                                    if (rowH >= 14) MuxAssert.AreEqual(lay.Rows, rowLabels, "every row labeled for " + name);
+                                    else MuxAssert.IsTrue(rowLabels >= 2 && rowLabels <= lay.Rows, "short rows thin their labels for " + name);
+                                    MuxAssert.IsTrue(colW == 96 || cols * (colW + 3) >= width - 180, "cells stretch to the width for " + name);
+                                    MuxAssert.IsTrue(cols * (colW + 3) > rows * (rowH + 3) || c.Range == UsageRange.Week, "wider than tall for " + name);
+                                    MuxAssert.IsTrue(axis >= Regex.Matches(output, "class=\"uhm-y\"[^>]*>([^<]*)<").Select(m => m.Groups[1].Value.Length * 6.6).DefaultIfEmpty(0).Max() + 10, "the row-label column holds its labels for " + name);
+                                    MuxAssert.IsTrue(axis + (cols * (colW + 3)) <= width - 32, "the grid, with its fixed row-label column, fits its container for " + name);
+
+                                    // x labels: every one left-justified at the first column it names (one class, no
+                                    // centring or end alignment, one grid column each), the first always labeled, none
+                                    // overlapping (about 6.6 pixels a character), and none reaching past the grid.
+                                    List<(int Col, int GridCol, string Text)> labels = Regex.Matches(output, "<div class=\"uhm-x\" data-col=\"(\\d+)\" style=\"grid-row:1;grid-column:(\\d+)\"><span>([^<]*)<")
+                                        .Select(m => (int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value), m.Groups[3].Value)).ToList();
+                                    MuxAssert.AreEqual(Regex.Matches(output, "class=\"uhm-x").Count, labels.Count, "every x label parsed, all left-justified, for " + name);
+                                    MuxAssert.IsTrue(labels.Count >= 2, "x labels for " + name);
+                                    MuxAssert.AreEqual(0, labels[0].Col, "first column labeled for " + name);
+                                    double pitch = colW + 3, gridEnd = (lay.Columns * pitch) - 3, prevRight = double.NegativeInfinity;
+                                    foreach (var l in labels)
+                                    {
+                                        string at = "'" + l.Text + "' (column " + l.Col + ") for " + name;
+                                        MuxAssert.AreEqual(l.Col + 2, l.GridCol, at + " starts at its own column");
+                                        MuxAssert.IsTrue(lay.ColumnLabelAnchors.Contains(l.Col), at + " is an anchor");
+                                        if (lay.ColumnGroup > 1) MuxAssert.AreEqual(0, l.Col % lay.ColumnGroup, at + " a weekday starts at its AM column");
+                                        double w = l.Text.Length * 6.6, left = l.Col * pitch;
+                                        MuxAssert.IsTrue(left >= prevRight, at + " does not collide with the label before it");
+                                        MuxAssert.IsTrue(left + w <= gridEnd + 0.01, at + " stays inside the grid");
+                                        prevRight = left + w;
+                                    }
                                 }
                             }
 
@@ -349,11 +356,10 @@ namespace Test.Shared.Suites
                             // and the cells before the last 30 days (Monday the 12th) and after now blank and not clickable.
                             MuxAssert.Contains(">Oct 12, 2026<", outputs["month"], "the first month row is the week starting Monday the 12th");
                             MuxAssert.Contains(">Nov 9, 2026<", outputs["month"], "the last month row is this week");
-                            MuxAssert.AreEqual(7, Regex.Matches(outputs["month"], "class=\"uhm-x ").Count, "one column label per weekday");
-                            MuxAssert.AreEqual(7, Regex.Matches(outputs["month"], "class=\"uhm-x center\" data-col=\"\\d+\" style=\"grid-row:1;grid-column:\\d+ / span 2\"").Count, "each weekday label is centred over its AM and PM");
+                            MuxAssert.AreEqual(7, Regex.Matches(outputs["month"], "class=\"uhm-x\"").Count, "one column label per weekday");
                             foreach (string month in new[] { "month", "month-monday" })
                             {
-                                MuxAssert.Contains("<div class=\"uhm-x center\" data-col=\"12\" style=\"grid-row:1;grid-column:14 / span 2\"><span>Sun</span>", outputs[month], "Sun sits over Sun AM and PM, not at the grid's end, for " + month);
+                                MuxAssert.Contains("<div class=\"uhm-x\" data-col=\"12\" style=\"grid-row:1;grid-column:14\"><span>Sun</span>", outputs[month], "Sun starts at Sun AM, like every weekday, for " + month);
                             }
                             foreach (string day in new[] { ">Mon<", ">Wed<", ">Sun<" }) MuxAssert.Contains(day, outputs["month"], "month columns are weekdays: " + day);
                             MuxAssert.AreEqual(60, Regex.Matches(outputs["month"], "class=\"uhm-cell ").Count, "60 half-days in the window");
@@ -364,7 +370,7 @@ namespace Test.Shared.Suites
                             MuxAssert.Contains(">Oct 5, 2026<", outputs["month-monday"], "the 6th row is the week starting Monday the 5th");
                             foreach (string day in new[] { ">Mon<", ">Tue<", ">Sun<" }) MuxAssert.Contains(day, outputs["quarter"], "quarter rows are weekdays: " + day);
                             MuxAssert.Contains("class=\"uhm-future\"", outputs["quarter"], "days after today are blank");
-                            MuxAssert.Contains("grid-template-columns:auto repeat(53,", outputs["year"], "the year is 53 week columns");
+                            MuxAssert.IsTrue(Regex.IsMatch(outputs["year"], "grid-template-columns:\\d+px repeat\\(53,"), "the year is 53 week columns");
                             MuxAssert.Contains(">Dec<", outputs["year"], "the year labels months where they start");
                             MuxAssert.AreEqual(364, Regex.Matches(outputs["year"], "class=\"uhm-cell ").Count, "364 daily cells");
                         }

@@ -254,36 +254,46 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(3, UsageChartShaping.HeatmapLabelGap(20, 900, 100), "a 20 pixel label over 9 pixel columns needs 3");
                         MuxAssert.AreEqual(5, UsageChartShaping.HeatmapLabelGap(10, 0, 5), "no width: one label");
                         UsageHeatmapLayout year = UsageHeatmapLayout.Compute(UsageRange.Year, now, 0);
-                        List<int> picked = year.LabeledColumns(UsageChartShaping.HeatmapLabelGap(22, 800, year.Columns));
+                        List<int> picked = year.PlaceColumnLabels(UsageChartShaping.HeatmapLabelGap(22, 800, year.Columns));
                         MuxAssert.AreEqual(0, picked[0], "year: first month labeled");
-                        MuxAssert.AreEqual(year.Columns - 1, picked[picked.Count - 1], "year: last column labeled");
 
-                        // Where each label's text goes (cells inset 1.5 pixels in their columns): a weekday centred over
-                        // its AM and PM cells, Sun over Sun AM and PM rather than pushed to the grid's end.
+                        // Where each label's text goes: the left edge of its first cell (cells are inset 1.5 pixels in
+                        // their columns), a weekday at its AM cell, the last label too; nothing reaches past the plot.
                         long wednesday = new DateTimeOffset(2026, 11, 11, 15, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                        UsageHeatmapLayout calendar = UsageHeatmapLayout.Compute(UsageRange.Month, wednesday, 0);
-                        foreach (double width in new[] { 400.0, 700.0, 1400.0 })
+                        foreach (UsageRange range in new[] { UsageRange.Hour, UsageRange.Day, UsageRange.Week, UsageRange.Month, UsageRange.Quarter, UsageRange.Year })
                         {
-                            double pitch = width / 14;
-                            List<UsageHeatmapLabel> days = calendar.PlaceColumnLabels(UsageChartShaping.HeatmapLabelGap(22, width, 14));
-                            UsageHeatmapLabel sun = days[days.Count - 1];
-                            MuxAssert.AreEqual(12, sun.Column, "Sun is labeled at " + width);
-                            double x = UsageChartShaping.HeatmapLabelLeft(sun, width, 14, 22);
-                            MuxAssert.IsTrue(Math.Abs((x + 11) - (13 * pitch)) < 0.01, "Sun centred over Sun AM and PM at " + width + ": " + x);
-                            MuxAssert.IsTrue(x + 22 < width - 1, "Sun does not reach the grid's end at " + width);
-                            foreach (UsageHeatmapLabel weekday in days)
+                            UsageHeatmapLayout layout = UsageHeatmapLayout.Compute(range, wednesday, 0);
+                            foreach (double width in new[] { 300.0, 400.0, 700.0, 1000.0, 1400.0 })
                             {
-                                double left = UsageChartShaping.HeatmapLabelLeft(weekday, width, 14, 22);
-                                MuxAssert.IsTrue(Math.Abs((left + 11) - ((weekday.Column + 1) * pitch)) < 0.01, calendar.ColumnLabels[weekday.Column] + " centred over its half-days at " + width);
+                                double pitch = width / layout.Columns;
+                                foreach (double text in new[] { 14.0, 22.0, 40.0 })
+                                {
+                                    List<int> columns = layout.PlaceColumnLabels(UsageChartShaping.HeatmapLabelGap(text, width, layout.Columns));
+                                    string name = range + " at " + width + "px, " + text + "px labels";
+                                    MuxAssert.AreEqual(0, columns[0], name + ": first labeled");
+                                    double previousRight = double.NegativeInfinity;
+                                    foreach (int column in columns)
+                                    {
+                                        double left = UsageChartShaping.HeatmapLabelLeft(column, width, layout.Columns);
+                                        MuxAssert.IsTrue(Math.Abs(left - (1.5 + column * pitch)) < 0.001, name + ": " + column + " starts at its own cell");
+                                        if (layout.ColumnGroup > 1) MuxAssert.AreEqual(0, column % 2, name + ": a weekday starts at its AM cell");
+                                        if (column != 0 || text + 3 <= width) MuxAssert.IsTrue(left + text <= width, name + ": " + column + " stays inside the plot");
+                                        MuxAssert.IsTrue(left >= previousRight, name + ": " + column + " does not collide");
+                                        previousRight = left + text;
+                                    }
+                                }
                             }
                         }
 
+                        UsageHeatmapLayout calendar = UsageHeatmapLayout.Compute(UsageRange.Month, wednesday, 0);
+                        List<int> days = calendar.PlaceColumnLabels(UsageChartShaping.HeatmapLabelGap(22, 700, 14));
+                        MuxAssert.AreEqual(12, days[days.Count - 1], "month: Sun is labeled when it fits");
+                        MuxAssert.AreEqual(12 * 50.0 + 1.5, UsageChartShaping.HeatmapLabelLeft(12, 700, 14), "month: Sun starts at Sun AM, not centred or pushed to the end");
                         UsageHeatmapLayout dayRange = UsageHeatmapLayout.Compute(UsageRange.Day, wednesday, 0);
-                        UsageHeatmapLabel lastHour = dayRange.PlaceColumnLabels(3)[dayRange.PlaceColumnLabels(3).Count - 1];
-                        MuxAssert.AreEqual(23, lastHour.Column, "day: the last hour labeled");
-                        MuxAssert.AreEqual(720.0 - 1.5 - 14, UsageChartShaping.HeatmapLabelLeft(lastHour, 720, 24, 14), "day: the last hour ends at its own cell");
-                        MuxAssert.AreEqual(30.0 * 3 + 1.5, UsageChartShaping.HeatmapLabelLeft(dayRange.PlaceColumnLabels(3)[1], 720, 24, 14), "day: a label starts at its own cell");
-                        MuxAssert.AreEqual(0.0, UsageChartShaping.HeatmapLabelLeft(new UsageHeatmapLabel(0, 2, UsageHeatmapLabelAlignEnum.Center), 30, 14, 22), "text wider than its room stays inside the plot");
+                        List<int> hours = dayRange.PlaceColumnLabels(3);
+                        MuxAssert.AreEqual(21, hours[hours.Count - 1], "day: the last hour would run past the grid, so 21 is the last label");
+                        MuxAssert.AreEqual(30.0 * 21 + 1.5, UsageChartShaping.HeatmapLabelLeft(21, 720, 24), "day: the last label starts at its own cell");
+                        MuxAssert.AreEqual(30.0 * 3 + 1.5, UsageChartShaping.HeatmapLabelLeft(hours[1], 720, 24), "day: a label starts at its own cell");
                         MuxAssert.AreEqual("Mo", UsageHeatmapLayout.Compute(UsageRange.Quarter, now, 0).FormatRowLabel(0, new System.Globalization.CultureInfo("de-DE")), "weekday rows follow the culture");
                         MuxAssert.AreEqual("Do 05.11", UsageHeatmapLayout.Compute(UsageRange.Week, now, 0).FormatColumnLabel(0, new System.Globalization.CultureInfo("de-DE")), "weekday and date columns follow the culture");
                         return Task.CompletedTask;

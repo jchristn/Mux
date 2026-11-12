@@ -479,36 +479,22 @@ export function labeledIndices(count: number, maxLabels: number, includeLast: bo
     return out;
 }
 
-/** Where one x-axis label goes: the columns it names (`col` .. `col + span - 1`) and how its text sits over them. */
-export interface HeatmapLabel {
-    col: number;
-    span: number;
-    align: 'start' | 'center' | 'end';
-}
-
 /**
- * Places x-axis labels so none collide and none leaves the columns it names; mirrors Mux.Core's
- * `UsageHeatmapLayout.PlaceLabels` and the web dashboard. A label names `group` columns from its anchor and needs
- * `gap` columns of room. Grouped labels (a weekday over its AM and PM columns) are centred over their columns; an
- * ungrouped label starts at its column's left edge, or ends at its column's right edge when it would run past the
- * grid. Evenly spaced anchors keep every 1st, 2nd, 3rd, 4th, 6th, ... anchor, uneven ones (month starts) are kept
- * greedily; the first is always labeled and the last whenever it fits (dropping the labels before it that it would
- * collide with, but never the first). Self-contained (no outer references) so the webview runs the same function.
+ * Picks which x-axis labels to draw; mirrors Mux.Core's `UsageHeatmapLayout.PlaceLabels` and the web dashboard's
+ * `hmPlace` exactly. Every label is left-justified at the first column it names (a weekday at its AM column) and
+ * needs `gap` columns of room from there; it is never centred or moved, and one that would run past the grid's right
+ * edge is dropped (never the first). Evenly spaced anchors keep every 1st, 2nd, 3rd, 4th, 6th, ... anchor, uneven
+ * ones (month starts) are kept greedily; the first is always labeled and the last whenever it fits (dropping the
+ * labels before it that it would collide with, but never the first). Returns the labeled columns, ascending.
+ * Self-contained (no outer references) so the webview runs the same function.
  */
-export function placeLabels(anchors: readonly number[], columns: number, group: number, gap: number, even: boolean): HeatmapLabel[] {
+export function placeLabels(anchors: readonly number[], columns: number, gap: number, even: boolean): number[] {
     const strides = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
     const picked: number[] = [];
     if (!anchors || anchors.length === 0 || columns <= 0) {
         return [];
     }
     gap = Math.max(1, gap);
-    group = Math.max(1, group);
-    const align = (a: number): 'start' | 'center' | 'end' => (group > 1 ? 'center' : a + gap <= columns ? 'start' : 'end');
-    // The room a label takes, in half-columns.
-    const extent = (a: number): [number, number] => {
-        const al = align(a);
-        return al === 'center' ? [2 * a + group - gap, 2 * a + group + gap] : al === 'end' ? [2 * (a + group - gap), 2 * (a + group)] : [2 * a, 2 * (a + gap)];
-    };
     if (even) {
         const spacing = anchors.length > 1 ? anchors[1] - anchors[0] : 1;
         let stride = strides[strides.length - 1];
@@ -529,20 +515,22 @@ export function placeLabels(anchors: readonly number[], columns: number, group: 
             }
         }
     }
+    while (picked.length > 1 && picked[picked.length - 1] + gap > columns) {
+        picked.pop();
+    }
     const last = anchors[anchors.length - 1];
-    if (last !== anchors[0]) {
+    if (last !== anchors[0] && last + gap <= columns) {
         if (picked[picked.length - 1] === last) {
             picked.pop();
         }
-        const lo = extent(last)[0];
-        while (picked.length > 1 && extent(picked[picked.length - 1])[1] > lo) {
+        while (picked.length > 1 && picked[picked.length - 1] + gap > last) {
             picked.pop();
         }
-        if (extent(picked[picked.length - 1])[1] <= lo) {
+        if (picked[picked.length - 1] + gap <= last) {
             picked.push(last);
         }
     }
-    return picked.map((a) => ({ col: a, span: group, align: align(a) }));
+    return picked;
 }
 
 /**

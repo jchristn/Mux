@@ -1788,9 +1788,9 @@ namespace Mux.Desktop.Views
         }
 
         // The heatmap's x-axis labels, laid out for the width it is given: labels placed by
-        // UsageHeatmapLayout.PlaceColumnLabels so none collide, each over the columns it names (centred over a
-        // weekday's AM and PM, else from its column's left edge, or ending at its column's right edge near the grid's
-        // end). It redraws on resize, so labels thin and return as the window narrows and widens.
+        // UsageHeatmapLayout.PlaceColumnLabels so none collide, each left-justified at the first column it names (a
+        // weekday at its AM column); a label that would run past the grid is dropped, and the axis clips to its bounds.
+        // It redraws on resize, so labels thin and return as the window narrows and widens.
         private sealed class HeatmapXAxis : Control
         {
             private readonly UsageHeatmapLayout _Layout;
@@ -1802,6 +1802,7 @@ namespace Mux.Desktop.Views
                 _Layout = layout;
                 _Labels = labels;
                 _Brush = brush;
+                ClipToBounds = true;
             }
 
             public override void Render(DrawingContext context)
@@ -1815,10 +1816,9 @@ namespace Mux.Desktop.Views
                 Typeface face = new Typeface(FontFamily.Default);
                 FormattedText Text(string text) => new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, face, 10, _Brush);
                 double widest = _Labels.Max(l => Text(l).Width);
-                foreach (UsageHeatmapLabel label in _Layout.PlaceColumnLabels(UsageChartShaping.HeatmapLabelGap(widest, width, _Layout.Columns)))
+                foreach (int column in _Layout.PlaceColumnLabels(UsageChartShaping.HeatmapLabelGap(widest, width, _Layout.Columns)))
                 {
-                    FormattedText text = Text(_Labels[label.Column]);
-                    context.DrawText(text, new Point(UsageChartShaping.HeatmapLabelLeft(label, width, _Layout.Columns, text.Width), 0));
+                    context.DrawText(Text(_Labels[column]), new Point(UsageChartShaping.HeatmapLabelLeft(column, width, _Layout.Columns), 0));
                 }
             }
         }

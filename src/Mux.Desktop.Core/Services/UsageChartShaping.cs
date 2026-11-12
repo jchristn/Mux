@@ -507,21 +507,17 @@ namespace Mux.Desktop.Services
         }
 
         /// <summary>
-        /// The left edge of an x-axis label's text on the heatmap, in pixels from the plot's left edge: from
-        /// <see cref="UsageHeatmapLabel.TextLeft"/> over cells inset 1.5 pixels within their columns (a weekday
-        /// centred over its AM and PM cells, an ungrouped label starting at its cell or ending at it), kept inside the
-        /// plot when the text is wider than the room it has.
+        /// The left edge of an x-axis label's text on the heatmap, in pixels from the plot's left edge: the left edge
+        /// of the cell at <paramref name="column"/> (cells are inset 1.5 pixels within their columns). Every label is
+        /// left-justified at its column, never centred or moved (see <see cref="UsageHeatmapLayout.PlaceLabels"/>).
         /// </summary>
-        /// <param name="label">The placement from <see cref="UsageHeatmapLayout.PlaceColumnLabels"/>.</param>
+        /// <param name="column">A column from <see cref="UsageHeatmapLayout.PlaceColumnLabels"/>.</param>
         /// <param name="plotWidth">The plot width in pixels.</param>
         /// <param name="columns">The column count.</param>
-        /// <param name="textWidth">The label's text width in pixels.</param>
         /// <returns>The text's left edge.</returns>
-        public static double HeatmapLabelLeft(UsageHeatmapLabel label, double plotWidth, int columns, double textWidth)
+        public static double HeatmapLabelLeft(int column, double plotWidth, int columns)
         {
-            double pitch = plotWidth / Math.Max(1, columns);
-            double x = 1.5 + label.TextLeft(pitch, Math.Max(0, pitch - 3), textWidth);
-            return Math.Max(0, Math.Min(x, plotWidth - textWidth));
+            return 1.5 + (column * (plotWidth / Math.Max(1, columns)));
         }
 
         /// <summary>

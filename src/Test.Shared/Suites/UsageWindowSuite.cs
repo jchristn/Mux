@@ -259,19 +259,11 @@ namespace Test.Shared.Suites
                         long wednesday = Utc(2026, 11, 11, 15, 30);
                         UsageHeatmapLayout labels = UsageHeatmapLayout.Compute(UsageRange.Month, wednesday, 0);
                         MuxAssert.AreEqual("0,2,4,6,8,10,12", string.Join(",", labels.ColumnLabelAnchors), "each weekday labeled once, over its AM column");
-                        MuxAssert.AreEqual("0,2,4,6,8,10,12", string.Join(",", labels.LabeledColumns(2)), "all seven weekdays fit");
-                        foreach (int gap in new[] { 1, 2 })
-                        {
-                            List<UsageHeatmapLabel> weekdays = labels.PlaceColumnLabels(gap);
-                            MuxAssert.AreEqual("0c,2c,4c,6c,8c,10c,12c", string.Join(",", weekdays), "every weekday centred over its half-days at gap " + gap);
-                            MuxAssert.IsTrue(weekdays.All(l => l.Span == 2), "each weekday names its AM and PM columns");
-                        }
-
-                        UsageHeatmapLabel sunday = labels.PlaceColumnLabels(2)[6];
-                        MuxAssert.AreEqual("Sun", labels.ColumnLabels[sunday.Column], "the last label is Sunday");
-                        MuxAssert.AreEqual(126.0, sunday.TextLeft(10, 8, 6), "Sun is centred over Sun AM and PM (120-138), not pushed to the grid's end");
-                        MuxAssert.AreEqual("0c,4c,8c,12c", string.Join(",", labels.PlaceColumnLabels(3)), "every other weekday when they crowd, Sun still over its own columns");
-                        MuxAssert.AreEqual("0c,12c", string.Join(",", labels.PlaceColumnLabels(7)), "Sun replaces the stride label it would collide with");
+                        MuxAssert.AreEqual("0,2,4,6,8,10,12", string.Join(",", labels.PlaceColumnLabels(1)), "every weekday, each at its AM column");
+                        MuxAssert.AreEqual("0,2,4,6,8,10,12", string.Join(",", labels.PlaceColumnLabels(2)), "Sun fits in Sun AM and PM");
+                        MuxAssert.AreEqual("Sun", labels.ColumnLabels[labels.PlaceColumnLabels(2)[6]], "the last label is Sunday, at its AM column");
+                        MuxAssert.AreEqual("0,4,8", string.Join(",", labels.PlaceColumnLabels(3)), "every other weekday when they crowd; Sun at 12 would run past the grid, so it is dropped, not moved");
+                        MuxAssert.AreEqual("0", string.Join(",", labels.PlaceColumnLabels(7)), "only Mon when one label needs half the grid");
                         MuxAssert.AreEqual("Mon", labels.ColumnLabels[1], "the PM column repeats its weekday");
                         MuxAssert.AreEqual("0,1", string.Join(",", Cells(labels).Where(i => labels.IsOutsideWindow(i) && !labels.IsFuture(i))), "Wednesday PM: Monday 10-12 is before the window");
                         UsageHeatmap heat = new UsageHeatmap(labels);
@@ -298,12 +290,12 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(14, year.ColumnLabelAnchors.Count, "the first and last column plus 12 month starts");
                         MuxAssert.AreEqual("Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Nov", string.Join(",", year.ColumnLabelAnchors.Select(c => year.ColumnLabels[c])), "month labels where months start");
                         MuxAssert.AreEqual(3, year.ColumnLabelAnchors[1], "December 1st 2025 (a Monday) starts column 3");
-                        List<int> picked = year.LabeledColumns(3);
+                        List<int> picked = year.PlaceColumnLabels(3);
                         MuxAssert.AreEqual(0, picked[0], "first labeled");
-                        MuxAssert.AreEqual(52, picked[picked.Count - 1], "last labeled");
-                        for (int i = 1; i < picked.Count - 1; i++) MuxAssert.IsTrue(picked[i] - picked[i - 1] >= 3, "month labels never collide");
-                        MuxAssert.IsTrue(52 - picked[picked.Count - 2] >= 5, "room for the last label, which ends at its own column");
-                        MuxAssert.AreEqual(UsageHeatmapLabelAlignEnum.End, year.PlaceColumnLabels(3)[picked.Count - 1].Align, "the last column's label ends at the grid's end, over its own column");
+                        for (int i = 1; i < picked.Count; i++) MuxAssert.IsTrue(picked[i] - picked[i - 1] >= 3, "month labels never collide");
+                        MuxAssert.AreEqual(50, picked[picked.Count - 1], "November starts column 50, which fits; the last column (52) would run past the grid, so it is dropped");
+                        MuxAssert.IsTrue(picked[picked.Count - 1] + 3 <= year.Columns, "the last label stays inside the grid");
+                        MuxAssert.AreEqual(52, year.PlaceColumnLabels(1)[year.PlaceColumnLabels(1).Count - 1], "the last column is labeled when it fits left-justified");
                         CheckLayout(year, "year");
 
                         long sunday = Utc(2026, 11, 15, 21, 0);
@@ -370,59 +362,45 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor("UsageWindow", "HeatmapLabelThinning", "x-axis labels thin so they never collide, each over the columns it names, the first always and the last whenever it fits", (CancellationToken ct) =>
+                    new TestCaseDescriptor("UsageWindow", "HeatmapLabelThinning", "x-axis labels are left-justified at their columns, thinned so none collide or run past the grid, the first always and the last whenever it fits", (CancellationToken ct) =>
                     {
                         long now = Utc(2026, 11, 11, 15, 30);
                         UsageHeatmapLayout day = UsageHeatmapLayout.Compute(UsageRange.Day, now, 0);
-                        MuxAssert.AreEqual(24, day.LabeledColumns(1).Count, "room for every hour");
-                        MuxAssert.IsTrue(day.PlaceColumnLabels(1).All(l => l.Align == UsageHeatmapLabelAlignEnum.Start), "a label that fits starts at its column, even the last");
-                        MuxAssert.AreEqual("0,3,6,9,12,15,18,23e", string.Join(",", day.PlaceColumnLabels(3)), "every 3rd hour; the last, ending at its own column, replaces the one before it");
-                        MuxAssert.AreEqual("0e", string.Join(",", day.PlaceColumnLabels(30)), "too narrow for two labels: only the first, kept inside the grid");
+                        MuxAssert.AreEqual(24, day.PlaceColumnLabels(1).Count, "room for every hour, the last included");
+                        MuxAssert.AreEqual("0,3,6,9,12,15,18,21", string.Join(",", day.PlaceColumnLabels(3)), "every 3rd hour; the last would run past the grid, so it is dropped");
+                        MuxAssert.AreEqual("0", string.Join(",", day.PlaceColumnLabels(30)), "too narrow for any label: only the first");
                         foreach (UsageRange range in new[] { UsageRange.Hour, UsageRange.Day, UsageRange.Week, UsageRange.Month, UsageRange.Quarter, UsageRange.Year })
                         {
-                            foreach (long at in new[] { now, Utc(2026, 11, 9, 8, 0), Utc(2026, 11, 15, 21, 0) })
+                            foreach (long at in new[] { now, Utc(2026, 11, 9, 8, 0), Utc(2026, 11, 15, 21, 0), Utc(2026, 3, 1, 12, 0) })
                             {
                                 UsageHeatmapLayout layout = UsageHeatmapLayout.Compute(range, at, 0);
                                 int end = layout.ColumnLabelAnchors[layout.ColumnLabelAnchors.Count - 1];
-                                int group = layout.ColumnGroup;
                                 for (int gap = 1; gap <= 12; gap++)
                                 {
-                                    List<UsageHeatmapLabel> placed = layout.PlaceColumnLabels(gap);
-                                    string name = range + " (" + layout.Columns + " columns) gap " + gap;
-                                    MuxAssert.AreEqual(0, placed[0].Column, name + " first labeled");
-                                    double previousRight = double.NegativeInfinity;
-                                    foreach (UsageHeatmapLabel l in placed)
+                                    List<int> placed = layout.PlaceColumnLabels(gap);
+                                    string name = range + " (" + layout.Columns + "x" + layout.Rows + ") gap " + gap;
+                                    MuxAssert.AreEqual(0, placed[0], name + " first labeled");
+                                    for (int i = 0; i < placed.Count; i++)
                                     {
-                                        MuxAssert.IsTrue(layout.ColumnLabelAnchors.Contains(l.Column), name + " " + l + " is an anchor");
-                                        MuxAssert.AreEqual(group, l.Span, name + " " + l + " names its group");
-                                        // The room the label takes, in columns, from the grid's left edge.
-                                        double left = l.TextLeft(1, 1, gap), right = left + gap;
-                                        if (group > 1)
-                                        {
-                                            MuxAssert.AreEqual(UsageHeatmapLabelAlignEnum.Center, l.Align, name + " " + l + " grouped labels are centred");
-                                            MuxAssert.AreEqual(l.Column + (group / 2.0), (left + right) / 2, name + " " + l + " centred over its own columns");
-                                        }
-                                        else
-                                        {
-                                            MuxAssert.IsTrue(l.Align != UsageHeatmapLabelAlignEnum.Center, name + " " + l + " ungrouped labels are not centred");
-                                            MuxAssert.IsTrue(left <= l.Column && right >= l.Column + 1, name + " " + l + " sits over its own column");
-                                            MuxAssert.IsTrue(right <= layout.Columns, name + " " + l + " never runs past the grid");
-                                            MuxAssert.AreEqual(l.Column + gap > layout.Columns, l.Align == UsageHeatmapLabelAlignEnum.End, name + " " + l + " ends at its column only when it would run past the grid");
-                                        }
-
-                                        MuxAssert.IsTrue(left >= previousRight, name + " " + l + " does not collide with the label before it");
-                                        previousRight = right;
+                                        // Each label takes [column, column + gap) from its column's left edge.
+                                        int c = placed[i];
+                                        MuxAssert.IsTrue(layout.ColumnLabelAnchors.Contains(c), name + " " + c + " is an anchor");
+                                        if (layout.ColumnGroup > 1) MuxAssert.AreEqual(0, c % layout.ColumnGroup, name + " " + c + " a weekday starts at its AM column");
+                                        if (i == 0) continue;
+                                        MuxAssert.IsTrue(c + gap <= layout.Columns, name + " " + c + " never runs past the grid");
+                                        MuxAssert.IsTrue(c - placed[i - 1] >= gap, name + " " + c + " does not collide with the label before it");
                                     }
 
-                                    bool lastFits = UsageHeatmapLayout.PlaceLabels(new[] { 0, end }, layout.Columns, group, gap, false).Count == 2;
-                                    if (lastFits) MuxAssert.AreEqual(end, placed[placed.Count - 1].Column, name + " last labeled when it fits beside the first");
+                                    bool lastFits = end != 0 && end + gap <= layout.Columns && end >= gap;
+                                    MuxAssert.AreEqual(lastFits, placed[placed.Count - 1] == end, name + " last labeled exactly when it fits left-justified beside the first");
                                 }
                             }
                         }
 
-                        MuxAssert.AreEqual("0,4,8,12", string.Join(",", UsageHeatmapLayout.ThinLabels(new[] { 0, 2, 4, 6, 8, 10, 12 }, 14, 2, 3, true)), "half-day groups");
-                        MuxAssert.AreEqual("0,2,4,6,8,12e", string.Join(",", UsageHeatmapLayout.PlaceLabels(Enumerable.Range(0, 13).ToList(), 13, 1, 2, true)), "the same as VS Code and the web dashboard");
-                        MuxAssert.AreEqual(0, UsageHeatmapLayout.ThinLabels(Array.Empty<int>(), 0, 1, 1, true).Count, "no anchors");
+                        MuxAssert.AreEqual("0,4,8", string.Join(",", UsageHeatmapLayout.PlaceLabels(new[] { 0, 2, 4, 6, 8, 10, 12 }, 14, 3, true)), "half-day groups");
+                        MuxAssert.AreEqual("0,2,4,6,8,10", string.Join(",", UsageHeatmapLayout.PlaceLabels(Enumerable.Range(0, 13).ToList(), 13, 2, true)), "the same as VS Code and the web dashboard");
+                        MuxAssert.AreEqual("0,4,9", string.Join(",", UsageHeatmapLayout.PlaceLabels(new[] { 0, 4, 8, 9 }, 12, 3, false)), "a last label that fits replaces the one it would collide with");
+                        MuxAssert.AreEqual(0, UsageHeatmapLayout.PlaceLabels(Array.Empty<int>(), 0, 1, true).Count, "no anchors");
                         MuxAssert.AreEqual("0,3,6,9,12,15,18,23", string.Join(",", UsageHeatmapLayout.LabeledIndices(24, 8, true)), "dense rows thin out but keep the last");
                         MuxAssert.AreEqual("0,1,2,3,4,5,6", string.Join(",", UsageHeatmapLayout.LabeledIndices(7, 10, true)), "sparse rows all labeled");
                         return Task.CompletedTask;

@@ -249,36 +249,41 @@ test('heatmap labels both axes in local time, localized from the layout instants
     assert.deepEqual(labeledIndices(12, 6, true), [0, 2, 4, 6, 8, 11]);
 });
 
-test('x-axis labels thin so they never collide, each over the columns it names', () => {
+test('x-axis labels are left-justified at their columns, thinned so they never collide or leave the grid', () => {
     const all = (n: number) => Array.from({ length: n }, (_, i) => i);
-    const cols = (labels: { col: number }[]) => labels.map((l) => l.col);
-    const show = (labels: { col: number; align: string }[]) => labels.map((l) => l.col + (l.align === 'start' ? '' : l.align[0])).join(',');
-    assert.deepEqual(cols(placeLabels(all(24), 24, 1, 1, true)), all(24), 'room for every label');
-    assert.equal(show(placeLabels(all(24), 24, 1, 3, true)), '0,3,6,9,12,15,18,23e', 'every 3rd; the last, ending at its own column, replaces the one before it');
-    assert.equal(show(placeLabels(all(13), 13, 1, 2, true)), '0,2,4,6,8,12e', 'the end-aligned last needs room for the label before it');
-    assert.equal(show(placeLabels(all(13), 13, 1, 1, true)), all(13).join(','), 'a label that fits in its column starts there, even the last');
-    assert.equal(show(placeLabels(all(5), 5, 1, 9, true)), '0e', 'too narrow for two labels: only the first, kept inside the grid');
-    // A month: weekday labels centred over their AM and PM columns, never pushed to the grid's end.
+    const show = (cols: number[]) => cols.join(',');
+    assert.deepEqual(placeLabels(all(24), 24, 1, true), all(24), 'room for every label, the last included');
+    assert.equal(show(placeLabels(all(24), 24, 3, true)), '0,3,6,9,12,15,18,21', 'every 3rd; the last hour would run past the grid, so it is dropped');
+    assert.equal(show(placeLabels(all(13), 13, 2, true)), '0,2,4,6,8,10', '12 + 2 > 13: the last is dropped, not moved');
+    assert.equal(show(placeLabels([0, 4, 8, 9], 12, 3, false)), '0,4,9', 'the last fits left-justified: it replaces the one it would collide with');
+    assert.equal(show(placeLabels(all(5), 5, 9, true)), '0', 'too narrow for any label: only the first');
+    // A month: each weekday starts at its AM column; Sun shows only when it fits in Sun AM and PM.
     const weekdays = [0, 2, 4, 6, 8, 10, 12];
-    assert.equal(show(placeLabels(weekdays, 14, 2, 1, true)), '0c,2c,4c,6c,8c,10c,12c', 'every weekday centred over its half-days');
-    assert.equal(show(placeLabels(weekdays, 14, 2, 2, true)), '0c,2c,4c,6c,8c,10c,12c', 'Sun stays over Sun AM and PM');
-    assert.equal(show(placeLabels(weekdays, 14, 2, 3, true)), '0c,4c,8c,12c');
-    assert.equal(show(placeLabels(weekdays, 14, 2, 7, true)), '0c,12c', 'Sun replaces the stride label it would collide with');
-    for (const p of placeLabels(weekdays, 14, 2, 2, true)) {
-        assert.equal(p.span, 2, 'a weekday names two columns');
-    }
+    assert.equal(show(placeLabels(weekdays, 14, 1, true)), '0,2,4,6,8,10,12');
+    assert.equal(show(placeLabels(weekdays, 14, 2, true)), '0,2,4,6,8,10,12', 'Sun fits in its two columns');
+    assert.equal(show(placeLabels(weekdays, 14, 3, true)), '0,4,8', 'Sun at 12 would run past the grid');
+    assert.equal(show(placeLabels(weekdays, 14, 7, true)), '0', 'Thu at 8 would run past the grid; Sun does not fit');
     // A year: month starts (uneven) plus the first and last column.
     const year = [0, 3, 7, 12, 16, 20, 25, 29, 34, 38, 42, 47, 51, 52];
-    const picked = placeLabels(year, 53, 1, 3, false);
-    assert.equal(picked[0].col, 0);
-    assert.equal(picked[picked.length - 1].col, 52);
-    assert.equal(picked[picked.length - 1].align, 'end', 'the last column label ends at its own column');
-    for (let i = 1; i < picked.length - 1; i++) {
-        assert.ok(picked[i].col - picked[i - 1].col >= 3, 'labels never overlap');
-        assert.equal(picked[i].align, 'start');
+    const picked = placeLabels(year, 53, 3, false);
+    assert.equal(picked[0], 0);
+    assert.equal(show(picked), '0,3,7,12,16,20,25,29,34,38,42,47', 'the labels at 51 and 52 would run past the grid');
+    assert.equal(show(placeLabels(year, 53, 2, false)), '0,3,7,12,16,20,25,29,34,38,42,47,51', 'the last column needs a gap of 1');
+    assert.equal(placeLabels(year, 53, 1, false).at(-1), 52, 'the last column label shows when it fits');
+    for (const [anchors, columns] of [[all(12), 12], [all(24), 24], [all(7), 7], [weekdays, 14], [all(13), 13], [year, 53]] as [number[], number][]) {
+        for (let gap = 1; gap <= 12; gap++) {
+            const cols = placeLabels(anchors, columns, gap, anchors !== year);
+            assert.equal(cols[0], 0, 'first always');
+            cols.forEach((c, i) => {
+                assert.ok(anchors.includes(c), 'an anchor');
+                if (i > 0) {
+                    assert.ok(c - cols[i - 1] >= gap, `no collision at gap ${gap}`);
+                    assert.ok(c + gap <= columns, `nothing past the grid at gap ${gap}`);
+                }
+            });
+        }
     }
-    assert.ok(53 - 3 >= picked[picked.length - 2].col + 3, 'the end-aligned last label has room');
-    assert.deepEqual(placeLabels([], 0, 1, 1, true), []);
+    assert.deepEqual(placeLabels([], 0, 1, true), []);
 });
 
 test('heatmap cells stretch to the width within 10-96 pixels and rows stay short', () => {

@@ -455,7 +455,7 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
-                    new TestCaseDescriptor(SuiteId, "HeatmapAxesLabelRowsAndColumns", "Both axes are labeled for every range: periods along the top (thinned, never colliding, first and last kept) and steps on the left", (CancellationToken ct) =>
+                    new TestCaseDescriptor(SuiteId, "HeatmapAxesLabelRowsAndColumns", "Both axes are labeled for every range: periods along the top (thinned, never colliding, the first kept) and steps on the left", (CancellationToken ct) =>
                     {
                         (UsageRange Range, string Spots, string Interval, string Caption, string FirstRow, string LastRow)[] cases =
                         {
@@ -482,7 +482,6 @@ namespace Test.Shared.Suites
                                 MuxAssert.Contains(c.LastRow, text, "last row label" + at);
                                 string header = HeaderLine(text);
                                 MuxAssert.IsTrue(header.StartsWith(layout.ColumnLabels[0], StringComparison.Ordinal), "first column labeled" + at + ": " + header);
-                                MuxAssert.IsTrue(header.EndsWith(layout.ColumnLabels[layout.ColumnLabelAnchors[layout.ColumnLabelAnchors.Count - 1]], StringComparison.Ordinal), "last column labeled" + at + ": " + header);
                                 // Labels never run into each other: the line splits back into whole labels.
                                 HashSet<string> words = new HashSet<string>(layout.ColumnLabels.SelectMany(l => l.Split(' ')));
                                 foreach (string word in header.Split(' ', StringSplitOptions.RemoveEmptyEntries)) MuxAssert.IsTrue(words.Contains(word), "label '" + word + "' is whole, not run into a neighbour" + at + ": " + header);
@@ -499,6 +498,65 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains(all.ColumnLabels[0], allText, "all-time date columns");
                         MuxAssert.Contains("+3w", allText, "all-time week rows");
                         MuxAssert.AreEqual(PastCells(all), CountSpots(allBuffer, 160, 60), "every past all-time cell drawn once");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor(SuiteId, "HeatmapColumnLabelsStartAtTheirColumns", "Every x-axis label's first character is at its column's first cell, for every range and width, and none runs past the grid", (CancellationToken ct) =>
+                    {
+                        long wednesday = new DateTimeOffset(2026, 11, 11, 15, 30, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                        long monday = new DateTimeOffset(2026, 11, 9, 8, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                        (string Name, UsageHeatmapLayout Layout)[] cases =
+                        {
+                            ("hour", UsageHeatmapLayout.Compute(UsageRange.Hour, HeatNow, 0)), ("day", UsageHeatmapLayout.Compute(UsageRange.Day, HeatNow, 0)),
+                            ("week", UsageHeatmapLayout.Compute(UsageRange.Week, HeatNow, 0)), ("month (5 rows)", UsageHeatmapLayout.Compute(UsageRange.Month, wednesday, 0)),
+                            ("month (6 rows)", UsageHeatmapLayout.Compute(UsageRange.Month, monday, 0)), ("quarter", UsageHeatmapLayout.Compute(UsageRange.Quarter, HeatNow, 0)),
+                            ("year", UsageHeatmapLayout.Compute(UsageRange.Year, HeatNow, 0))
+                        };
+                        foreach (var c in cases)
+                        {
+                            // Alternate columns get different shades so adjacent cells stay apart even without a gap.
+                            UsageHeatmap heatmap = new UsageHeatmap(c.Layout);
+                            for (int i = 0; i < c.Layout.CellCount; i++) heatmap.TotalTokens[i] = c.Layout.IsOutsideWindow(i) ? 0 : (i % c.Layout.Columns) % 2 == 0 ? 100 : 50;
+                            foreach (int width in new[] { 60, 100, 160 })
+                            {
+                                UsageChartsModal modal = new UsageChartsModal("Usage", _ => new UsageChartData { Heatmap = heatmap }, Enum.Parse<UsageRange>(c.Layout.Range, true));
+                                modal.HandleKey(KeyEvent.Special(KeyCode.Left));
+                                CellBuffer buffer = RenderBuffer(modal, width, 50);
+                                string text = Flatten(buffer);
+                                string at = " for " + c.Name + " at " + width;
+                                string[] lines = text.Split('\n');
+                                int headerY = Array.FindIndex(lines, l => l.Contains("Columns:", StringComparison.Ordinal)) + 1;
+                                MuxAssert.IsTrue(headerY > 0, "the heatmap is drawn" + at);
+                                Match scroll = Regex.Match(text, "columns (\\d+)–(\\d+)/\\d+");
+                                int offset = scroll.Success ? int.Parse(scroll.Groups[1].Value) - 1 : 0;
+                                int visible = scroll.Success ? int.Parse(scroll.Groups[2].Value) - offset : c.Layout.Columns;
+                                // Each column's cells, from every row (no one row need hold every column in the window).
+                                List<(int Left, int Right)> cells = Enumerable.Range(headerY + 1, buffer.Height - headerY - 6).SelectMany(y => ShadeRuns(buffer, y))
+                                    .GroupBy(r => r.Left).Select(g => (g.Key, g.Max(r => r.Right))).OrderBy(r => r.Key).ToList();
+                                MuxAssert.AreEqual(visible, cells.Count, "every visible column found" + at);
+                                string header = lines[headerY];
+                                int gridRight = cells[cells.Count - 1].Right, border = header.LastIndexOfAny(new[] { '│', '║' });
+                                List<int> labeled = new List<int>();
+                                int cursor = cells[0].Left, covered = cells[0].Left;
+                                for (int v = 0; v < visible; v++)
+                                {
+                                    string label = c.Layout.ColumnLabels[offset + v];
+                                    int left = cells[v].Left;
+                                    if (left < cursor || header[left - 1] != ' ' || string.CompareOrdinal(header, left, label, 0, label.Length) != 0) continue;
+                                    MuxAssert.IsTrue(header.Substring(covered, left - covered).Trim().Length == 0, "nothing but labels on the axis line" + at + ": " + header);
+                                    labeled.Add(v);
+                                    cursor = left + label.Length + 1;
+                                    covered = left + label.Length;
+                                    MuxAssert.IsTrue(covered - 1 <= gridRight, "'" + label + "' does not run past the grid" + at + ": " + header);
+                                }
+
+                                MuxAssert.IsTrue(header.Substring(covered, (border > covered ? border : header.Length) - covered).Trim().Length == 0, "every label starts at its column's first cell, nothing past the grid" + at + ": " + header);
+                                MuxAssert.IsTrue(labeled.Count >= 2, "labels drawn" + at + ": " + header);
+                                MuxAssert.AreEqual(0, labeled[0], "the first visible column is labeled" + at + ": " + header);
+                                if (c.Layout.ColumnGroup > 1) MuxAssert.IsTrue(labeled.All(v => (offset + v) % 2 == 0), "each weekday at its AM column" + at + ": " + header);
+                            }
+                        }
+
                         return Task.CompletedTask;
                     }),
 
@@ -530,7 +588,7 @@ namespace Test.Shared.Suites
                         for (int i = 0; i < 10; i++) modal.HandleKey(KeyEvent.Special(KeyCode.PageDown));
                         MuxAssert.AreEqual(newest, Render(modal, 44, 30), "PgDn returns to the newest weeks");
                         string header = HeaderLine(newest);
-                        MuxAssert.IsTrue(header.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2, "a scrolled grid labels its first and last visible column");
+                        MuxAssert.IsTrue(header.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2, "a scrolled grid labels its visible columns");
                         modal.HandleKey(KeyEvent.Char('2'));
                         MuxAssert.IsFalse(Scrolls(Render(modal, 80, 30)), "a day fits 80 columns");
                         return Task.CompletedTask;
@@ -588,20 +646,15 @@ namespace Test.Shared.Suites
                                     MuxAssert.AreEqual(1, header.Split(day).Length - 1, day + " labeled once" + at);
                                 }
 
-                                // Each weekday is centred over its AM and PM columns (Sun over Sun AM and PM, not pushed
-                                // to the grid's end): its text overlaps both cells and its centre is within a character
-                                // of theirs.
+                                // Each weekday starts at its AM cell (Sun at Sun AM too, not centred or pushed to the
+                                // grid's end).
                                 string[] lines = text.Split('\n');
                                 int headerY = Array.FindIndex(lines, l => l.Contains("Columns:", StringComparison.Ordinal)) + 1;
                                 List<(int Left, int Right)> cells = Enumerable.Range(headerY + 1, buffer.Height - headerY - 1).Select(y => PeakRuns(buffer, y)).FirstOrDefault(r => r.Count == 14) ?? new List<(int Left, int Right)>();
                                 MuxAssert.AreEqual(14, cells.Count, "a full week row has 14 half-day cells" + at);
                                 for (int d = 0; d < days.Length; d++)
                                 {
-                                    int left = lines[headerY].IndexOf(days[d], StringComparison.Ordinal);
-                                    int right = left + days[d].Length - 1;
-                                    (int am, int pm) = (cells[2 * d].Left, cells[(2 * d) + 1].Right);
-                                    MuxAssert.IsTrue(left <= cells[2 * d].Right && right >= cells[(2 * d) + 1].Left, days[d] + " overlaps its AM and PM cells" + at + ": " + lines[headerY]);
-                                    MuxAssert.IsTrue(Math.Abs((left + right) - (am + pm)) <= 2, days[d] + " is centred over its AM and PM cells" + at + ": " + lines[headerY]);
+                                    MuxAssert.AreEqual(cells[2 * d].Left, lines[headerY].IndexOf(days[d], StringComparison.Ordinal), days[d] + " starts at its AM cell" + at + ": " + lines[headerY]);
                                 }
 
                                 foreach (string week in layout.RowLabels) MuxAssert.Contains(week, text, "week row " + week + at);
@@ -968,6 +1021,24 @@ namespace Test.Shared.Suites
                         && buffer.Get(x - 1, y).Style.Background != Peak
                         && buffer.Get(x, y - 1).Style.Background != Peak) spots++;
             return spots;
+        }
+
+        // The x ranges (inclusive) of the runs of one heat shade on one line: each run is one cell, even when
+        // adjacent cells of different shades touch.
+        private static List<(int Left, int Right)> ShadeRuns(CellBuffer buffer, int y)
+        {
+            List<(int Left, int Right)> runs = new List<(int Left, int Right)>();
+            Color low = Color.FromRgb(31, 107, 72);
+            for (int x = 0; x < buffer.Width; x++)
+            {
+                Color? shade = buffer.Get(x, y).Style.Background;
+                if (shade != Peak && shade != low) continue;
+                int start = x;
+                while (x + 1 < buffer.Width && buffer.Get(x + 1, y).Style.Background == shade) x++;
+                runs.Add((start, x));
+            }
+
+            return runs;
         }
 
         // The x ranges (inclusive) of the runs of peak cells on one line.

@@ -187,7 +187,9 @@ test('usage panel webview script parses and lists all seven ranges and ten tabs'
     assert.match(panel.html, /--hm0: #e3e7eb/, 'light no-usage grey');
     assert.match(panel.html, /--hm0: #2e3640/, 'dark no-usage grey');
     assert.match(scripts[0], /openDrillWindow\(c\.from, c\.to, c\.label\)/, 'heatmap cells drill into their window');
-    assert.match(scripts[0], /className = 'hm-x ' \+ p\.align/, 'column labels aligned over the columns they name');
+    assert.match(scripts[0], /className = 'hm-x';/, 'column labels, one alignment for all');
+    assert.match(scripts[0], /x\.style\.gridColumn = String\(col \+ 2\)/, 'each label starts at its own column');
+    assert.ok(!/hm-x\.(center|end)/.test(panel.html), 'no centred or end-aligned labels');
     assert.match(scripts[0], /className = 'hm-y'/, 'row labels');
     assert.match(scripts[0], /function placeLabels\(/, "the host's label placement runs in the webview");
     assert.match(scripts[0], /function heatmapSizes\(/, "the host's cell sizing runs in the webview");

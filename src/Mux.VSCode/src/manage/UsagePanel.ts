@@ -645,8 +645,6 @@ export class UsagePanel {
   .hm-y { font-size: 11px; color: var(--vscode-descriptionForeground); white-space: nowrap; padding-inline-end: 8px; line-height: 1; align-self: center; font-variant-numeric: tabular-nums; }
   .hm-x { display: flex; min-width: 0; font-size: 11px; color: var(--vscode-descriptionForeground); white-space: nowrap; line-height: 1; padding-bottom: 3px; font-variant-numeric: tabular-nums; }
   .hm-x > span { flex: none; }
-  .hm-x.center { justify-content: center; }
-  .hm-x.end { justify-content: flex-end; }
   .heatmap .hm { height: calc(100% - 1px); cursor: pointer; }
   /* Heatmap shades 1-4 (low to high): one green hue, validated for monotone lightness, visible steps, and >= 2:1
      contrast for the step nearest the background. Light themes go light to dark, dark themes dark to bright. No
@@ -1146,8 +1144,8 @@ export class UsagePanel {
   // Token heatmap on the shared clock-aligned grid: time runs left to right, each column one local period (labeled
   // along the top) and each row one step within it (labeled on the left); the month is a calendar of half-day
   // columns and week rows. Cells stretch to the panel's width (10-96 pixels); x labels thin so they never collide,
-  // each over the columns it names: centred over a weekday's AM and PM, else from its column's left edge, or ending
-  // at its column's right edge when it would run past the grid. Cells outside the window (after now, or before the
+  // each left-justified at the first column it names (a weekday at its AM column); a label that would run past the
+  // grid is dropped, never moved. Cells outside the window (after now, or before the
   // month's or year's window) are blank. A cell lists its calls. placeLabels and heatmapSizes are the host's own
   // functions (usageCharts.ts), so the panel and its unit tests share one implementation.
   ${placeLabels.toString()}
@@ -1165,10 +1163,10 @@ export class UsagePanel {
     grid.style.gridTemplateColumns = 'auto repeat(' + hm.cols + ', ' + z.colW + 'px)';
     grid.style.gridTemplateRows = 'auto repeat(' + hm.rows + ', ' + z.rowH + 'px)';
     const anchors = hm.anchors && hm.anchors.length ? hm.anchors : [0];
-    placeLabels(anchors, hm.cols, hm.colGroup || 1, z.gap, hm.evenAnchors !== false).forEach(function(p){
-      const x = document.createElement('div'); x.className = 'hm-x ' + p.align;
-      const text = document.createElement('span'); text.textContent = hm.colLabels[p.col]; x.appendChild(text);
-      x.style.gridRow = '1'; x.style.gridColumn = (p.col + 2) + ' / span ' + Math.max(1, Math.min(p.span, hm.cols - p.col));
+    placeLabels(anchors, hm.cols, z.gap, hm.evenAnchors !== false).forEach(function(col){
+      const x = document.createElement('div'); x.className = 'hm-x';
+      const text = document.createElement('span'); text.textContent = hm.colLabels[col]; x.appendChild(text);
+      x.style.gridRow = '1'; x.style.gridColumn = String(col + 2);
       grid.appendChild(x);
     });
     hm.rowLabels.forEach(function(label, r){
