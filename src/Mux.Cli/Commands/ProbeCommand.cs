@@ -71,6 +71,14 @@ namespace Mux.Cli.Commands
                 }
 
                 ProbeResult result = await RunProbeAsync(runtime, settings, cancellationToken).ConfigureAwait(false);
+                foreach (Mux.Core.Settings.EndpointAdvisory advisory in Mux.Core.Settings.EndpointAdvisories.For(runtime.Endpoint))
+                {
+                    result.Advisories.Add(new ProbeAdvisory { Code = advisory.Code, Message = advisory.Message });
+                    if (outputFormat != OutputFormatEnum.Json)
+                    {
+                        Console.Error.WriteLine(ConsoleMessageStyler.Notification("Note: " + advisory.Message));
+                    }
+                }
 
                 if (outputFormat == OutputFormatEnum.Json)
                 {
@@ -206,6 +214,15 @@ namespace Mux.Cli.Commands
                 stopwatch.Stop();
                 result.DurationMs = stopwatch.ElapsedMilliseconds;
                 ProbeFailureInfo failure = ClassifyProbeFailure(ex);
+                // Since mux 1.8 the openai adapter speaks the Responses API; a 404 or 405 there almost always
+                // means a Chat Completions server configured with the wrong adapter.
+                if (runtime.Endpoint.AdapterType == Mux.Core.Enums.AdapterTypeEnum.OpenAi
+                    && ex is HttpRequestException http
+                    && (http.StatusCode == HttpStatusCode.NotFound || http.StatusCode == HttpStatusCode.MethodNotAllowed))
+                {
+                    failure = new ProbeFailureInfo("responses_api_unsupported", "configuration");
+                }
+
                 result.ErrorCode = failure.Code;
                 result.FailureCategory = failure.Category;
                 result.ErrorMessage = ex.Message;
@@ -442,6 +459,28 @@ namespace Mux.Cli.Commands
         /// Elapsed duration in milliseconds.
         /// </summary>
         public long DurationMs { get; set; }
+
+        /// <summary>
+        /// Configuration advisories for the endpoint (settings with no effect, or combinations likely to fail).
+        /// Advisories never change the probe outcome.
+        /// </summary>
+        public List<ProbeAdvisory> Advisories { get; set; } = new List<ProbeAdvisory>();
+    }
+
+    /// <summary>
+    /// One configuration advisory reported by <c>mux probe</c>.
+    /// </summary>
+    public sealed class ProbeAdvisory
+    {
+        /// <summary>
+        /// Stable, machine-readable advisory code.
+        /// </summary>
+        public string Code { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Human-readable advisory message.
+        /// </summary>
+        public string Message { get; set; } = string.Empty;
     }
 
     internal sealed class ProbeFailureInfo

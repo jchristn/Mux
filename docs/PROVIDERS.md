@@ -31,9 +31,25 @@ endpoint picker. `isDefault: true` makes an endpoint the default.
 For API keys, put an environment reference such as `${OPENAI_API_KEY}` in `apiKey`
 and set that variable in the environment of the process running Mux. An unset
 referenced variable fails the request before sending it. The name of the variable
-is your choice; the names below are conventions. Ollama Cloud and xAI additionally
-fall back to `OLLAMA_API_KEY` and `XAI_API_KEY`, respectively, when `apiKey` is absent.
-Their endpoint-level key takes precedence over that fallback.
+is your choice; the names below are conventions. When `apiKey` is absent, these
+adapters fall back to a standard environment variable; an endpoint-level key always
+takes precedence:
+
+| Adapter | Fallback |
+|---|---|
+| `openai` | `OPENAI_API_KEY` |
+| `anthropic` | `ANTHROPIC_API_KEY` |
+| `gemini` | `GEMINI_API_KEY`, then `GOOGLE_API_KEY` |
+| `xai` | `XAI_API_KEY` |
+| `ollama-cloud` | `OLLAMA_API_KEY` |
+
+These keyed adapters fail with a clear message, before sending anything, when no key
+is configured.
+
+**Credentials are API keys only.** Mux does not sign in with consumer accounts or
+subscriptions: there is no OAuth or "log in with Claude/ChatGPT/Google" flow, and
+Claude Pro/Max, ChatGPT plans (`codex login`), and Antigravity account quotas are not
+used. Create an API key in each provider's developer console.
 
 Common controls for context size, reasoning effort, timeouts, and approval apply to
 these endpoints. See the [configuration reference](CONFIG.md) for the full schema.
@@ -89,27 +105,47 @@ Use `ollama` for connections through a signed-in local Ollama service.
 
 ## OpenAI
 
-- **Connection:** OpenAI API at `https://api.openai.com/v1`.
-- **Credentials:** OpenAI API key, normally sent as a bearer token.
+- **Connection:** OpenAI's **Responses API** at `https://api.openai.com/v1`; blank `baseUrl` uses this default.
+- **Credentials:** OpenAI API key, sent as a bearer token (falls back to `OPENAI_API_KEY`).
 
 ```json
 {
   "name": "openai",
   "adapterType": "openai",
-  "baseUrl": "https://api.openai.com/v1",
   "model": "MODEL_ID",
   "apiKey": "${OPENAI_API_KEY}"
 }
 ```
 
-Choose a model your API account can access. Use `openai-compatible` for a different
-server implementing that API format. OpenAI-family adapters also support custom
-header or query-string key placement for gateways; see [authentication](CONFIG.md).
+Since Mux 1.8 the `openai` adapter speaks the Responses API, so every current OpenAI
+model works, including the reasoning and codex-tuned coding models. The model's
+encrypted reasoning is returned with each response and replayed on the next request,
+so a reasoning model keeps its train of thought across tool calls, saved sessions,
+and resume. Mux sends `store: false`: nothing is kept on OpenAI's servers, and the
+reasoning travels in Mux's own session instead.
+
+Reasoning effort accepts `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and
+`max`; not every model supports every level, and the usage views show the value
+that was sent.
+
+**Which adapter?**
+
+| Server | Adapter |
+|---|---|
+| OpenAI, or a server or gateway that implements `/v1/responses` | `openai` |
+| vLLM, LM Studio, OpenRouter, Ollama's `/v1`, most gateways (Chat Completions) | `openai-compatible` (or `vllm`) |
+
+If an `openai` endpoint points at a server that only implements Chat Completions,
+requests fail with a 404 and the error names `openai-compatible`; `mux probe`
+reports `responses_api_unsupported`, and `mux probe` and `mux endpoint show` add a
+note for any `openai` endpoint whose `baseUrl` is not OpenAI's. The `openai` adapter
+always sends a bearer key; custom header or query-string key placement is available
+on `openai-compatible` and `vllm` (see [authentication](CONFIG.md)).
 
 ## Anthropic
 
 - **Connection:** native Messages API at `https://api.anthropic.com`; blank `baseUrl` uses this default.
-- **Credentials:** Anthropic API key, sent in `x-api-key`.
+- **Credentials:** Anthropic API key, sent in `x-api-key` (falls back to `ANTHROPIC_API_KEY`).
 
 ```json
 {
@@ -121,12 +157,13 @@ header or query-string key placement for gateways; see [authentication](CONFIG.m
 ```
 
 Use the native `anthropic` adapter for Anthropic's protocol and tool handling.
-Custom `authPlacement` does not change its authentication scheme.
+Custom `authPlacement` does not change its authentication scheme. `mux endpoint
+models` lists the Claude models your key can use.
 
 ## Google Gemini
 
 - **Connection:** Gemini API at `https://generativelanguage.googleapis.com`; blank `baseUrl` uses this default.
-- **Credentials:** Google AI Studio API key, sent in `x-goog-api-key`.
+- **Credentials:** Google AI Studio API key, sent in `x-goog-api-key` (falls back to `GEMINI_API_KEY`, then `GOOGLE_API_KEY`).
 
 ```json
 {
@@ -139,11 +176,19 @@ Custom `authPlacement` does not change its authentication scheme.
 
 This is the direct Gemini API. Choose `vertex` when accessing Gemini through Google
 Cloud with project, region, and Application Default Credentials. Native Gemini
-thinking budgets use the existing reasoning-effort controls.
+thinking budgets use the existing reasoning-effort controls. `mux endpoint models`
+lists the Gemini models your key can use.
+
+### Google Antigravity
+
+Antigravity is Google's agent IDE, not an API. The Gemini models it runs are
+available to Mux through the `gemini` adapter above with an AI Studio API key.
+Signing in with an Antigravity (Google) account, or using its account quota, is not
+supported.
 
 ## Azure OpenAI
 
-- **Connection:** your Azure resource endpoint, such as `https://RESOURCE.openai.azure.com`.
+- **Connection:** your Azure resource endpoint, such as `https://RESOURCE.openai.azure.com`, through Azure's v1 Responses API.
 - **Credentials:** Azure OpenAI API key, sent in `api-key`.
 
 ```json
@@ -157,8 +202,12 @@ thinking budgets use the existing reasoning-effort controls.
 ```
 
 Both the resource URL and deployment name are required. `model` is the deployment
-name, not the underlying model's catalog name. Set `apiVersion` if your resource
-requires a version other than the provider library's default.
+name, not the underlying model's catalog name; Mux sends it as the request's model
+on Azure's v1 API (`/openai/v1/...`), which needs no `api-version`. Since Mux 1.8,
+`apiVersion` is ignored: existing endpoints still load, and `mux probe` and `mux
+endpoint show` note that it has no effect. For Chat Completions on Azure's v1 API,
+use `openai-compatible` with `baseUrl` `https://RESOURCE.openai.azure.com/openai/v1`,
+`authPlacement` `header`, and `authParameterName` `api-key`.
 
 ## Google Vertex AI
 
@@ -263,10 +312,10 @@ mux --endpoint my-model -p "Reply with hello."
 mux probe --endpoint my-model
 ```
 
-`mux endpoint models my-model` can discover models from Ollama, Ollama Cloud,
-xAI, and OpenAI-compatible model-list endpoints. Other native providers do not
-necessarily expose that discovery API through Mux; use the provider's catalog
-or deployment configuration for their model identifiers.
+`mux endpoint models my-model` discovers models from OpenAI, Anthropic, Gemini,
+Bedrock, Azure OpenAI, xAI, Ollama, Ollama Cloud, and OpenAI-compatible model-list
+endpoints. Vertex AI has no model-listing API (it reports `models_not_supported`);
+use Google Cloud's model catalog for its identifiers.
 
 For a tool check, ask Mux to read a small file and describe it. Tool permissions,
 reasoning support, and context limits remain model- and endpoint-specific.

@@ -52,7 +52,7 @@ namespace Mux.Server.Models
         /// <summary>Whether the model's reasoning is displayed.</summary>
         public bool ShowThinking { get; set; }
 
-        /// <summary>Reasoning-effort level (off/minimal/low/medium/high), or null.</summary>
+        /// <summary>Reasoning-effort level (off/none/minimal/low/medium/high/xhigh/max), or null.</summary>
         public string? ReasoningEffort { get; set; }
 
         /// <summary>Whether a stored API key exists (read-only indicator).</summary>

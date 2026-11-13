@@ -86,10 +86,11 @@ export class ManageActions {
     }
 
     private async editEndpointFormWith(client: ApiClient, all: EndpointDetail[], existing: EndpointDetail | undefined): Promise<void> {
-        // The OpenAI-family adapters honor a configurable auth placement; everything except the cloud-IAM
-        // adapters (vertex/bedrock) takes an API key and custom headers. These drive the adaptive visibility.
-        const openAiFamily = ['ollama', 'openai', 'openai-compatible', 'vllm'];
-        const usesKey = [...openAiFamily, 'ollama-cloud', 'xai', 'anthropic', 'gemini', 'azure-openai'];
+        // The Chat Completions adapters and Ollama honor a configurable auth placement (the openai adapter speaks
+        // the OpenAI Responses API and always sends a bearer key); everything except the cloud-IAM adapters
+        // (vertex/bedrock) takes an API key and custom headers. These drive the adaptive visibility.
+        const openAiFamily = ['ollama', 'openai-compatible', 'vllm'];
+        const usesKey = [...openAiFamily, 'openai', 'ollama-cloud', 'xai', 'anthropic', 'gemini', 'azure-openai'];
 
         const fields: FormField[] = [
             { key: 'Name', label: vscode.l10n.t('Name'), type: 'text', value: existing?.Name ?? '', required: true },
@@ -101,7 +102,6 @@ export class ManageActions {
             { key: 'AuthParameterName', label: vscode.l10n.t('Parameter name'), type: 'text', value: existing?.AuthParameterName ?? '', hint: vscode.l10n.t('Header or query-string parameter that carries the key, e.g. x-api-key or key.'), showIf: [{ key: 'AdapterType', anyOf: openAiFamily }, { key: 'AuthPlacement', anyOf: ['header', 'query'] }] },
             { key: 'Region', label: vscode.l10n.t('Region'), type: 'text', value: existing?.Region ?? '', hint: vscode.l10n.t('Cloud region, e.g. us-central1 (Vertex) or us-east-1 (Bedrock).'), showIf: [{ key: 'AdapterType', anyOf: ['vertex', 'bedrock'] }] },
             { key: 'Project', label: vscode.l10n.t('Project'), type: 'text', value: existing?.Project ?? '', hint: vscode.l10n.t('Google Cloud project id.'), showIf: [{ key: 'AdapterType', anyOf: ['vertex'] }] },
-            { key: 'ApiVersion', label: vscode.l10n.t('API version'), type: 'text', value: existing?.ApiVersion ?? '', hint: vscode.l10n.t('Azure OpenAI api-version, e.g. 2024-10-21.'), showIf: [{ key: 'AdapterType', anyOf: ['azure-openai'] }] },
             { key: 'MaxTokens', label: vscode.l10n.t('Max tokens'), type: 'number', value: existing?.MaxTokens ?? 8192 },
             { key: 'Temperature', label: vscode.l10n.t('Temperature'), type: 'number', value: existing?.Temperature ?? 0.1 },
             { key: 'ContextWindow', label: vscode.l10n.t('Context window'), type: 'number', value: existing?.ContextWindow ?? 32768 },
@@ -132,11 +132,12 @@ export class ManageActions {
             AutoApproveTools: Boolean(result.AutoApproveTools),
             ToolAutoApproveSeconds: result.ToolAutoApproveSeconds === '' || result.ToolAutoApproveSeconds == null ? null : Math.max(0, Number(result.ToolAutoApproveSeconds)),
             ShowThinking: Boolean(result.ShowThinking),
-            AuthPlacement: ['ollama-cloud', 'xai'].includes(String(result.AdapterType)) ? 'bearer' : String(result.AuthPlacement ?? 'bearer'),
-            AuthParameterName: ['ollama-cloud', 'xai'].includes(String(result.AdapterType)) ? '' : String(result.AuthParameterName ?? '').trim(),
+            AuthPlacement: ['ollama-cloud', 'xai', 'openai'].includes(String(result.AdapterType)) ? 'bearer' : String(result.AuthPlacement ?? 'bearer'),
+            AuthParameterName: ['ollama-cloud', 'xai', 'openai'].includes(String(result.AdapterType)) ? '' : String(result.AuthParameterName ?? '').trim(),
             Region: String(result.Region ?? '').trim(),
             Project: String(result.Project ?? '').trim(),
-            ApiVersion: String(result.ApiVersion ?? '').trim(),
+            // Azure OpenAI uses the v1 API, so apiVersion is no longer edited; keep any stored value unchanged.
+            ApiVersion: String(existing?.ApiVersion ?? '').trim(),
             Headers: endpointTextToHeaders(String(result.Headers ?? '')),
         };
 

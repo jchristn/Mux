@@ -25,7 +25,8 @@ namespace Mux.Core.Telemetry
     {
         #region Private-Members
 
-        private const int CurrentSchemaVersion = 1;
+        // Version 2 (mux 1.8) adds applied_effort.
+        private const int CurrentSchemaVersion = 2;
 
         private readonly string _DatabasePath = string.Empty;
         private readonly string _ConnectionString = string.Empty;
@@ -70,7 +71,8 @@ CREATE TABLE IF NOT EXISTS usage_events (
     success           INTEGER NOT NULL DEFAULT 1,
     error_code        TEXT,
     retry_count       INTEGER NOT NULL DEFAULT 0,
-    pricing_ver       TEXT
+    pricing_ver       TEXT,
+    applied_effort    TEXT
 );
 
 CREATE INDEX IF NOT EXISTS ix_usage_ts       ON usage_events (ts_utc);
@@ -84,12 +86,12 @@ INSERT INTO usage_events
     (ts_utc, run_id, session_id, job_id, call_kind, command, endpoint_name, adapter_type, model,
      base_host, project, iteration, input_tokens, cached_tokens, output_tokens, reasoning_tokens,
      total_tokens, ttft_ms, stream_ms, total_ms, tokens_per_sec, finish_reason, success, error_code,
-     retry_count, pricing_ver)
+     retry_count, pricing_ver, applied_effort)
 VALUES
     ($ts, $run, $session, $job, $kind, $command, $endpoint, $adapter, $model,
      $host, $project, $iteration, $input, $cached, $output, $reasoning,
      $total, $ttft, $stream, $totalms, $tps, $finish, $success, $error,
-     $retry, $pricing);
+     $retry, $pricing, $effort);
 ";
 
         #endregion
@@ -471,7 +473,7 @@ WHERE id IN (
             System.Text.StringBuilder sql = new System.Text.StringBuilder();
             sql.Append("SELECT id, ts_utc, run_id, session_id, call_kind, command, endpoint_name, adapter_type, model, ");
             sql.Append("base_host, project, input_tokens, cached_tokens, output_tokens, reasoning_tokens, total_tokens, ");
-            sql.Append("ttft_ms, stream_ms, total_ms, tokens_per_sec, finish_reason, success, error_code FROM usage_events");
+            sql.Append("ttft_ms, stream_ms, total_ms, tokens_per_sec, finish_reason, success, error_code, applied_effort FROM usage_events");
 
             await using SqliteConnection connection = await OpenConnectionAsync(token).ConfigureAwait(false);
             await using SqliteCommand command = connection.CreateCommand();
@@ -509,7 +511,8 @@ WHERE id IN (
                     TokensPerSecond = reader.IsDBNull(19) ? (double?)null : reader.GetDouble(19),
                     FinishReason = reader.IsDBNull(20) ? null : reader.GetString(20),
                     Success = reader.GetInt64(21) != 0,
-                    ErrorCode = reader.IsDBNull(22) ? null : reader.GetString(22)
+                    ErrorCode = reader.IsDBNull(22) ? null : reader.GetString(22),
+                    AppliedReasoningEffort = reader.IsDBNull(23) ? null : reader.GetString(23)
                 });
             }
 
@@ -668,7 +671,43 @@ WHERE id IN (
                 insert.ExecuteNonQuery();
             }
 
-            // Future migrations: compare `existing` to CurrentSchemaVersion and apply ALTER steps here.
+            // Migrations. Each step is idempotent, so several processes opening the same database at once (the
+            // TUI, the tray agent, the desktop app) can all run it safely: an already-added column is detected
+            // and skipped, and a concurrent ALTER that wins the race is tolerated.
+            if (existing >= 0 && existing < 2)
+            {
+                if (!HasColumn(connection, "usage_events", "applied_effort"))
+                {
+                    try
+                    {
+                        using SqliteCommand alter = connection.CreateCommand();
+                        alter.CommandText = "ALTER TABLE usage_events ADD COLUMN applied_effort TEXT;";
+                        alter.ExecuteNonQuery();
+                    }
+                    catch (SqliteException) when (HasColumn(connection, "usage_events", "applied_effort"))
+                    {
+                        // Another process added the column first.
+                    }
+                }
+
+                using SqliteCommand bump = connection.CreateCommand();
+                bump.CommandText = "UPDATE schema_version SET version = $v WHERE version < $v;";
+                bump.Parameters.AddWithValue("$v", CurrentSchemaVersion);
+                bump.ExecuteNonQuery();
+            }
+        }
+
+        private static bool HasColumn(SqliteConnection connection, string table, string column)
+        {
+            using SqliteCommand info = connection.CreateCommand();
+            info.CommandText = "PRAGMA table_info(" + table + ");";
+            using SqliteDataReader reader = info.ExecuteReader();
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+
+            return false;
         }
 
         private async Task<SqliteConnection> OpenConnectionAsync(CancellationToken token)
@@ -719,6 +758,7 @@ WHERE id IN (
             command.Parameters.Add("$error", SqliteType.Text);
             command.Parameters.Add("$retry", SqliteType.Integer);
             command.Parameters.Add("$pricing", SqliteType.Text);
+            command.Parameters.Add("$effort", SqliteType.Text);
         }
 
         private static void BindInsertParameters(SqliteCommand command, UsageEvent e)
@@ -749,6 +789,7 @@ WHERE id IN (
             command.Parameters["$error"].Value = NullableText(e.ErrorCode);
             command.Parameters["$retry"].Value = e.RetryCount;
             command.Parameters["$pricing"].Value = NullableText(e.PricingVersion);
+            command.Parameters["$effort"].Value = NullableText(e.AppliedReasoningEffort);
         }
 
         private static object NullableText(string? value)

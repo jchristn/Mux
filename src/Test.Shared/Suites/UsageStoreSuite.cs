@@ -29,6 +29,77 @@ namespace Test.Shared.Suites
                 "SQLite usage telemetry: schema, inserts, retention, and concurrent writers",
                 new List<TestCaseDescriptor>
                 {
+                    StoreCase("AppliedEffortRoundTrips", "The reasoning effort actually sent is stored and read back with each call", async (SqliteUsageStore store, CancellationToken ct) =>
+                    {
+                        await store.InsertBatchAsync(new List<UsageEvent>
+                        {
+                            new UsageEvent { TimestampUnixMs = 1000, EndpointName = "o", AdapterType = "OpenAi", Model = "m", AppliedReasoningEffort = "xhigh" },
+                            new UsageEvent { TimestampUnixMs = 2000, EndpointName = "o", AdapterType = "OpenAi", Model = "m" }
+                        }, ct).ConfigureAwait(false);
+                        List<UsageEventRow> rows = await store.QueryEventsAsync(null, 1, 10, ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual(2, rows.Count, "both calls");
+                        MuxAssert.IsNull(rows[0].AppliedReasoningEffort, "newest call sent no effort");
+                        MuxAssert.AreEqual("xhigh", rows[1].AppliedReasoningEffort, "applied effort stored");
+                    }),
+                    new TestCaseDescriptor(SuiteId, "MigratesVersionOneDatabase", "A mux 1.7 (schema v1) usage.db gains applied_effort and keeps its rows", async (CancellationToken ct) =>
+                    {
+                        string dir = Path.Combine(Path.GetTempPath(), "mux_usage_v1_" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(dir);
+                        string dbPath = Path.Combine(dir, "usage.db");
+                        try
+                        {
+                            // The 1.7 schema, verbatim except for the indexes.
+                            using (Microsoft.Data.Sqlite.SqliteConnection legacy = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=" + dbPath + ";Pooling=False"))
+                            {
+                                legacy.Open();
+                                using Microsoft.Data.Sqlite.SqliteCommand create = legacy.CreateCommand();
+                                create.CommandText = @"
+CREATE TABLE schema_version (version INTEGER NOT NULL);
+INSERT INTO schema_version (version) VALUES (1);
+CREATE TABLE usage_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, ts_utc INTEGER NOT NULL, run_id TEXT, session_id TEXT, job_id TEXT,
+    call_kind TEXT NOT NULL, command TEXT, endpoint_name TEXT NOT NULL, adapter_type TEXT NOT NULL, model TEXT NOT NULL,
+    base_host TEXT, project TEXT, iteration INTEGER, input_tokens INTEGER NOT NULL DEFAULT 0,
+    cached_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0,
+    reasoning_tokens INTEGER NOT NULL DEFAULT 0, total_tokens INTEGER NOT NULL DEFAULT 0, ttft_ms INTEGER,
+    stream_ms INTEGER, total_ms INTEGER, tokens_per_sec REAL, finish_reason TEXT, success INTEGER NOT NULL DEFAULT 1,
+    error_code TEXT, retry_count INTEGER NOT NULL DEFAULT 0, pricing_ver TEXT);
+INSERT INTO usage_events (ts_utc, call_kind, endpoint_name, adapter_type, model, input_tokens, total_tokens)
+VALUES (500, 'primary', 'legacy', 'OpenAiCompatible', 'old-model', 7, 9);";
+                                create.ExecuteNonQuery();
+                            }
+
+                            // Opening twice exercises the idempotent migration path.
+                            for (int open = 0; open < 2; open++)
+                            {
+                                using SqliteUsageStore store = new SqliteUsageStore(dbPath, 36500, 5_000_000);
+                                if (open == 0)
+                                {
+                                    await store.InsertBatchAsync(new List<UsageEvent>
+                                    {
+                                        new UsageEvent { TimestampUnixMs = 1000, EndpointName = "o", AdapterType = "OpenAi", Model = "m", AppliedReasoningEffort = "max" }
+                                    }, ct).ConfigureAwait(false);
+                                }
+
+                                List<UsageEventRow> rows = await store.QueryEventsAsync(null, 1, 10, ct).ConfigureAwait(false);
+                                MuxAssert.AreEqual(2, rows.Count, $"open {open}: legacy and new rows");
+                                MuxAssert.AreEqual("max", rows[0].AppliedReasoningEffort, $"open {open}: new row's effort");
+                                MuxAssert.AreEqual("legacy", rows[1].EndpointName, $"open {open}: legacy row kept");
+                                MuxAssert.IsNull(rows[1].AppliedReasoningEffort, $"open {open}: legacy row has no effort");
+                            }
+
+                            using Microsoft.Data.Sqlite.SqliteConnection check = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=" + dbPath + ";Pooling=False");
+                            check.Open();
+                            using Microsoft.Data.Sqlite.SqliteCommand version = check.CreateCommand();
+                            version.CommandText = "SELECT version FROM schema_version;";
+                            MuxAssert.AreEqual(2L, Convert.ToInt64(version.ExecuteScalar()), "schema version bumped");
+                        }
+                        finally
+                        {
+                            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+                            TryDeleteDirectory(dir);
+                        }
+                    }),
                     StoreCase("ModelTimeseriesPreservesBucketsAndSamples", "Model time series preserve mixed-model totals, empty buckets, filters, and timing sample counts", async (SqliteUsageStore store, CancellationToken ct) =>
                     {
                         UsageEvent a = MakeEvent(1100, "openai", "alpha");

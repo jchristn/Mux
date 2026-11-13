@@ -148,6 +148,11 @@ namespace Mux.Core.Telemetry
         public string? FinishReason { get; set; }
 
         /// <summary>
+        /// The reasoning-effort wire value actually sent to the provider, or null when none was sent.
+        /// </summary>
+        public string? AppliedReasoningEffort { get; set; }
+
+        /// <summary>
         /// Whether the call succeeded.
         /// </summary>
         public bool Success { get; set; } = true;
@@ -233,6 +238,7 @@ namespace Mux.Core.Telemetry
                 TotalMs = call?.TotalMs ?? fallbackTotalMs,
                 TokensPerSecond = call?.TokensPerSecond,
                 FinishReason = call?.FinishReason,
+                AppliedReasoningEffort = call?.AppliedReasoningEffort,
                 Success = success
             };
         }

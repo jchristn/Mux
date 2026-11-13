@@ -209,6 +209,35 @@ namespace Test.Shared.Suites
                     return Task.CompletedTask;
                 }),
 
+                Case("ProbeCommandFlagsChatOnlyServerOnOpenAiAdapter", "probe reports responses_api_unsupported and the gateway advisory for an openai endpoint on a Chat Completions server", (CancellationToken ct) =>
+                {
+                    using LocalLlmTestServer server = LocalLlmTestServer.Start();
+                    string configDir = CreateTempConfigDirectory(new[]
+                    {
+                        new Dictionary<string, object?> { ["name"] = "gateway", ["adapterType"] = "openai", ["baseUrl"] = server.Endpoint + "/chat-only-gateway", ["model"] = "test-model", ["apiKey"] = "sk-test", ["isDefault"] = true }
+                    });
+                    string? original = Environment.GetEnvironmentVariable("MUX_CONFIG_DIR");
+                    try
+                    {
+                        Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", configDir);
+                        CliInvocationResult result = InvokeCli(new[] { "probe", "--output-format", "json", "--endpoint", "gateway" });
+                        MuxAssert.AreEqual(1, result.ExitCode, "exit code");
+                        JsonDocument json = JsonDocument.Parse(result.StdOut);
+                        MuxAssert.AreEqual("responses_api_unsupported", json.RootElement.GetProperty("errorCode").GetString(), "errorCode");
+                        MuxAssert.AreEqual("configuration", json.RootElement.GetProperty("failureCategory").GetString(), "failureCategory");
+                        MuxAssert.Contains("openai-compatible", json.RootElement.GetProperty("errorMessage").GetString(), "message names the fix");
+                        JsonElement advisories = json.RootElement.GetProperty("advisories");
+                        MuxAssert.AreEqual(1, advisories.GetArrayLength(), "one advisory");
+                        MuxAssert.AreEqual("openai_non_openai_base_url", advisories[0].GetProperty("code").GetString(), "gateway advisory");
+                    }
+                    finally
+                    {
+                        Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", original);
+                        DeleteDir(configDir);
+                    }
+                    return Task.CompletedTask;
+                }),
+
                 Case("ProbeCommandJsonReturnsSuccessPayload", "probe returns machine-readable JSON success output", (CancellationToken ct) =>
                 {
                     using MockHttpServer server = new MockHttpServer();

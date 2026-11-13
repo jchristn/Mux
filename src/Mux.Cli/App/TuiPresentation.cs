@@ -47,10 +47,13 @@ namespace Mux.Cli.App
         {
             switch (level)
             {
-                case ReasoningLevelEnum.Minimal: return 1;
-                case ReasoningLevelEnum.Low: return 2;
-                case ReasoningLevelEnum.Medium: return 3;
-                case ReasoningLevelEnum.High: return 4;
+                case ReasoningLevelEnum.None: return 1;
+                case ReasoningLevelEnum.Minimal: return 2;
+                case ReasoningLevelEnum.Low: return 3;
+                case ReasoningLevelEnum.Medium: return 4;
+                case ReasoningLevelEnum.High: return 5;
+                case ReasoningLevelEnum.XHigh: return 6;
+                case ReasoningLevelEnum.Max: return 7;
                 default: return 0;
             }
         }
@@ -59,10 +62,13 @@ namespace Mux.Cli.App
         {
             switch (index)
             {
-                case 1: return ReasoningLevelEnum.Minimal;
-                case 2: return ReasoningLevelEnum.Low;
-                case 3: return ReasoningLevelEnum.Medium;
-                case 4: return ReasoningLevelEnum.High;
+                case 1: return ReasoningLevelEnum.None;
+                case 2: return ReasoningLevelEnum.Minimal;
+                case 3: return ReasoningLevelEnum.Low;
+                case 4: return ReasoningLevelEnum.Medium;
+                case 5: return ReasoningLevelEnum.High;
+                case 6: return ReasoningLevelEnum.XHigh;
+                case 7: return ReasoningLevelEnum.Max;
                 default: return null;
             }
         }
@@ -75,6 +81,9 @@ namespace Mux.Cli.App
                 case ReasoningLevelEnum.Low: return "Low";
                 case ReasoningLevelEnum.Medium: return "Medium";
                 case ReasoningLevelEnum.High: return "High";
+                case ReasoningLevelEnum.XHigh: return "Extra high";
+                case ReasoningLevelEnum.Max: return "Max";
+                case ReasoningLevelEnum.None: return "None";
                 default: return "Off";
             }
         }

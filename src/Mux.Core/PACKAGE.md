@@ -2,7 +2,7 @@
 
 The engine behind [**mux**](https://github.com/jchristn/Mux) — a backend-agnostic AI coding agent — packaged so you can build your own experiences (desktop apps, services, bespoke tools) on top of it.
 
-`Mux.Core` gives you an agent loop with streaming events, a built-in tool suite (file edit/read/write, glob, grep, process execution, web retrieval/search), MCP client integration, skills, subagents, session persistence, git checkpoints, approval/sandbox governance, and durable usage telemetry — all provider-agnostic through [PolyPrompt](https://www.nuget.org/packages/PolyPrompt) (Ollama, OpenAI, vLLM, Azure OpenAI, Anthropic, Gemini, Vertex, Bedrock, and any OpenAI-compatible API).
+`Mux.Core` gives you an agent loop with streaming events, a built-in tool suite (file edit/read/write, glob, grep, process execution, web retrieval/search), MCP client integration, skills, subagents, session persistence, git checkpoints, approval/sandbox governance, and durable usage telemetry — all provider-agnostic through [PolyPrompt](https://www.nuget.org/packages/PolyPrompt) 4.0 (Ollama, Ollama Cloud, OpenAI on the Responses API, xAI, vLLM, Azure OpenAI, Anthropic, Gemini, Vertex, Bedrock, and any OpenAI-compatible API). Since 1.8, Mux.Core depends on PolyPrompt 4.0; applications that also reference PolyPrompt directly must use 4.0.
 
 ## Quick start
 

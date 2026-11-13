@@ -362,7 +362,8 @@ namespace Mux.Cli.Commands
 
         /// <summary>
         /// Applies any CLI reasoning-effort overrides onto the resolved endpoint. A level flag replaces the
-        /// endpoint's level; "off"/"none" clears it entirely; the per-provider flags override individual
+        /// endpoint's level; "off" clears it entirely (no reasoning field is sent), while "none" is a level that
+        /// asks the provider to turn reasoning off; the per-provider flags override individual
         /// values but only when a level is active (from config or the flag), so they stay inert otherwise.
         /// </summary>
         /// <param name="endpoint">The resolved endpoint to mutate.</param>
@@ -375,7 +376,7 @@ namespace Mux.Cli.Commands
                 return;
             }
 
-            if (effortFlag == "off" || effortFlag == "none")
+            if (effortFlag == "off")
             {
                 endpoint.ReasoningEffort = null;
                 return;

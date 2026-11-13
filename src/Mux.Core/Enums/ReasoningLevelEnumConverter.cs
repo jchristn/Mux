@@ -6,7 +6,7 @@ namespace Mux.Core.Enums
 
     /// <summary>
     /// A JSON converter for <see cref="ReasoningLevelEnum"/> that accepts case-insensitive level names
-    /// ("minimal", "low", "medium", "high") and writes them back in lowercase. Use <see cref="TryParse"/>
+    /// ("none", "minimal", "low", "medium", "high", "xhigh", "max") and writes them back in lowercase. Use <see cref="TryParse"/>
     /// anywhere a level string is accepted (JSON, CLI flags) so every surface parses the same forms.
     /// </summary>
     public class ReasoningLevelEnumConverter : JsonConverter<ReasoningLevelEnum>
@@ -24,7 +24,7 @@ namespace Mux.Core.Enums
             string? value = reader.GetString();
             if (!TryParse(value, out ReasoningLevelEnum result))
             {
-                throw new JsonException($"Unknown reasoning level: '{value}'. Expected: minimal, low, medium, high.");
+                throw new JsonException($"Unknown reasoning level: '{value}'. Expected: none, minimal, low, medium, high, xhigh, max.");
             }
 
             return result;
@@ -58,13 +58,23 @@ namespace Mux.Core.Enums
                 case "high":
                     result = ReasoningLevelEnum.High;
                     return true;
+                case "xhigh":
+                case "x-high":
+                    result = ReasoningLevelEnum.XHigh;
+                    return true;
+                case "max":
+                    result = ReasoningLevelEnum.Max;
+                    return true;
+                case "none":
+                    result = ReasoningLevelEnum.None;
+                    return true;
                 default:
                     return false;
             }
         }
 
         /// <summary>
-        /// Returns the lowercase wire string for a level ("minimal", "low", "medium", "high").
+        /// Returns the lowercase wire string for a level ("none", "minimal", "low", "medium", "high", "xhigh", "max").
         /// </summary>
         /// <param name="value">The level.</param>
         /// <returns>The lowercase name.</returns>
@@ -76,6 +86,9 @@ namespace Mux.Core.Enums
                 case ReasoningLevelEnum.Low: return "low";
                 case ReasoningLevelEnum.Medium: return "medium";
                 case ReasoningLevelEnum.High: return "high";
+                case ReasoningLevelEnum.XHigh: return "xhigh";
+                case ReasoningLevelEnum.Max: return "max";
+                case ReasoningLevelEnum.None: return "none";
                 default: return value.ToString().ToLowerInvariant();
             }
         }

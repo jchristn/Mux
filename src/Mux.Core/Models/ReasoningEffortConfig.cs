@@ -39,16 +39,17 @@ namespace Mux.Core.Models
         }
 
         /// <summary>
-        /// Optional OpenAI <c>reasoning_effort</c> override. Null derives from <see cref="Level"/>. Set
-        /// values are normalized to one of <c>minimal</c>, <c>low</c>, <c>medium</c>, <c>high</c>; an
-        /// unrecognized value reverts to null.
+        /// Optional exact OpenAI effort value (<c>reasoning.effort</c> on the openai adapter's Responses API,
+        /// <c>reasoning_effort</c> on Chat Completions servers). Null derives from <see cref="Level"/>. Set
+        /// values are normalized to one of <c>none</c>, <c>minimal</c>, <c>low</c>, <c>medium</c>, <c>high</c>,
+        /// <c>xhigh</c>, <c>max</c>; an unrecognized value reverts to null.
         /// </summary>
         [JsonPropertyName("openAiValue")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? OpenAiValue
         {
             get => _OpenAiValue;
-            set => _OpenAiValue = NormalizeToken(value, "minimal", "low", "medium", "high");
+            set => _OpenAiValue = NormalizeToken(value, "none", "minimal", "low", "medium", "high", "xhigh", "max");
         }
 
         /// <summary>

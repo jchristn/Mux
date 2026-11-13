@@ -143,11 +143,15 @@ Key chords for these commands can be rebound in `~/.mux/keybindings.json` — se
 `/theme` opens a theme selector (pick a theme and apply it); the whole UI — including the panes behind
 the text — conforms to the chosen theme.
 
-`/effort` (`/reasoning`) opens a reasoning-effort picker — Off, Minimal, Low, Medium, High — for the
-active endpoint. The choice persists to `endpoints.json` and applies to the next turn, and the sidebar's
-`EFFORT` line shows the active level. Selecting a level drives provider-appropriate defaults: OpenAI
-`reasoning_effort`, a Gemini thinking budget, or the Ollama `think` value. Headless runs set it with
-`--effort <off|minimal|low|medium|high>` and tune the per-provider values with `--effort-openai-value`,
+`/effort` (`/reasoning`) opens a reasoning-effort picker — Off, None, Minimal, Low, Medium, High, Extra
+high, Max — for the active endpoint. The choice persists to `endpoints.json` and applies to the next turn,
+and the sidebar's `EFFORT` line shows the active level. Off sends no reasoning field; None asks the provider
+to turn reasoning off; Extra high and Max map to a provider's highest level where it lacks them. Selecting a
+level drives provider-appropriate defaults: OpenAI `reasoning.effort` (or `reasoning_effort` on Chat
+Completions servers), a Gemini thinking budget, or the Ollama `think` value. Not every model supports every
+level; the usage call details show the value that was actually sent. Headless runs set it with
+`--effort <off|none|minimal|low|medium|high|xhigh|max>` (since 1.8, `none` is a level rather than an alias
+for `off`) and tune the per-provider values with `--effort-openai-value`,
 `--effort-gemini-budget`, and `--effort-ollama-think`. Per-endpoint tuning is also available in the
 endpoint Add/Edit form (a **Reasoning effort** field plus an advanced **Gemini thinking budget** field).
 
@@ -364,8 +368,10 @@ Set `MUX_BLOCK_ART=cells` or `MUX_BLOCK_ART=glyphs` to choose for any terminal.
 ### Usage analytics
 
 Every model call — interactive, `print`, subagent, or dashboard chat — is recorded to a local SQLite
-database (`~/.mux/usage.db`) with its token counts, time-to-first-token, streaming time, latency, and
-throughput. The sidebar shows the running session cost (once there is spend), and `/usage` (`/stats`,
+database (`~/.mux/usage.db`) with its token counts, time-to-first-token, streaming time, latency,
+throughput, and the reasoning effort actually sent (shown in the web dashboard's call details, as a tooltip on
+each row of the desktop app's call table, and in the REST call records). Mux 1.8 migrates an existing database
+in place. The sidebar shows the running session cost (once there is spend), and `/usage` (`/stats`,
 `/spend`) opens full-screen usage charts read from the shared database, so they reflect every mux instance
 on the machine, not just the current one. (With telemetry disabled it shows the plain summary instead.)
 The terminal, desktop app, web dashboard, and VS Code panel share one query service and show the same

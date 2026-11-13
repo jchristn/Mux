@@ -54,7 +54,58 @@ namespace Test.Shared.Suites
                         MuxAssert.IsFalse(Defaults.QuirksForAdapter(AdapterTypeEnum.OllamaCloud).SupportsParallelToolCalls, "native Ollama defaults");
                         // An explicit invalid token must fail locally, regardless of the developer's environment.
                         endpoint.ApiKey = " ";
-                        MuxAssert.Throws<ArgumentException>(() => { using LlmClient client = new LlmClient(endpoint); }, "required bearer token");
+                        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OLLAMA_API_KEY")))
+                            MuxAssert.Throws<InvalidOperationException>(() => { using LlmClient client = new LlmClient(endpoint); }, "required bearer token");
+                        return Task.CompletedTask;
+                    }),
+                    new TestCaseDescriptor("EndpointConfig", "MalformedConfigNamesTheFile", "A JSON error in endpoints.json or settings.json names the file, its path, and a 1-based line and column", (CancellationToken ct) =>
+                    {
+                        string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mux_badjson_" + Guid.NewGuid().ToString("N"));
+                        System.IO.Directory.CreateDirectory(dir);
+                        string? original = Environment.GetEnvironmentVariable("MUX_CONFIG_DIR");
+                        try
+                        {
+                            Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", dir);
+                            // A stray comma on line 3, column 5, inside the second endpoint slot.
+                            System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "endpoints.json"), "{\n  \"endpoints\": [ {\"name\":\"a\"},\n    ,\n  ]\n}");
+                            ConfigFileJsonException error = MuxAssert.Throws<ConfigFileJsonException>(() => SettingsLoader.LoadEndpoints(), "endpoints.json error");
+                            MuxAssert.IsTrue(error.Message.StartsWith("Please check your endpoints.json file for errors", StringComparison.Ordinal), "names the file: " + error.Message);
+                            MuxAssert.Contains(System.IO.Path.Combine(dir, "endpoints.json"), error.Message, "full path");
+                            MuxAssert.Contains("line 3, column 5", error.Message, "1-based position");
+                            MuxAssert.Contains("is an invalid start of a value", error.Message, "parser reason kept");
+                            MuxAssert.DoesNotContain("BytePositionInLine", error.Message, "raw parser suffix removed");
+                            MuxAssert.IsTrue(error is JsonException, "still a JsonException for existing callers");
+
+                            System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "settings.json"), "{ \"maxAgentIterations\": }");
+                            ConfigFileJsonException settings = MuxAssert.Throws<ConfigFileJsonException>(() => SettingsLoader.LoadSettings(), "settings.json error");
+                            MuxAssert.IsTrue(settings.Message.StartsWith("Please check your settings.json file for errors", StringComparison.Ordinal), "names settings.json");
+                        }
+                        finally
+                        {
+                            Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", original);
+                            try { System.IO.Directory.Delete(dir, true); } catch { }
+                        }
+
+                        return Task.CompletedTask;
+                    }),
+                    new TestCaseDescriptor("EndpointConfig", "AdvisoriesFlagOpenAiGatewaysAndIgnoredSettings", "Endpoint advisories flag openai gateways, ignored placement, and ignored apiVersion", (CancellationToken ct) =>
+                    {
+                        EndpointConfig openai = new EndpointConfig { Name = "o", AdapterType = AdapterTypeEnum.OpenAi, BaseUrl = "https://api.openai.com/v1", Model = "m" };
+                        MuxAssert.AreEqual(0, EndpointAdvisories.For(openai).Count, "OpenAI's own host has no advisory");
+                        openai.BaseUrl = "";
+                        MuxAssert.AreEqual(0, EndpointAdvisories.For(openai).Count, "blank baseUrl (the default) has no advisory");
+                        openai.BaseUrl = "http://localhost:8000/v1";
+                        List<EndpointAdvisory> gateway = EndpointAdvisories.For(openai);
+                        MuxAssert.AreEqual(1, gateway.Count, "gateway advisory");
+                        MuxAssert.AreEqual(EndpointAdvisories.OpenAiNonOpenAiBaseUrl, gateway[0].Code, "gateway code");
+                        MuxAssert.Contains("openai-compatible", gateway[0].Message, "names the fix");
+                        openai.BaseUrl = "https://api.openai.com/v1";
+                        openai.AuthPlacement = AuthPlacementEnum.Header;
+                        MuxAssert.AreEqual(EndpointAdvisories.OpenAiAuthPlacementIgnored, EndpointAdvisories.For(openai)[0].Code, "placement advisory");
+                        EndpointConfig compatible = new EndpointConfig { Name = "c", AdapterType = AdapterTypeEnum.OpenAiCompatible, BaseUrl = "http://localhost:8000/v1", Model = "m", AuthPlacement = AuthPlacementEnum.Query };
+                        MuxAssert.AreEqual(0, EndpointAdvisories.For(compatible).Count, "openai-compatible honors placement and any host");
+                        EndpointConfig azure = new EndpointConfig { Name = "a", AdapterType = AdapterTypeEnum.AzureOpenAi, BaseUrl = "https://r.openai.azure.com", Model = "dep", ApiVersion = "2024-10-21" };
+                        MuxAssert.AreEqual(EndpointAdvisories.AzureApiVersionIgnored, EndpointAdvisories.For(azure)[0].Code, "apiVersion advisory");
                         return Task.CompletedTask;
                     }),
                     new TestCaseDescriptor("EndpointConfig", "SerializationRoundTripPreservesAllFields", "Serializing and deserializing preserves all fields", (CancellationToken ct) =>

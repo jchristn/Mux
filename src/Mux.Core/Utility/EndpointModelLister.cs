@@ -7,6 +7,7 @@ namespace Mux.Core.Utility
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Enums;
+    using Mux.Core.Llm;
     using Mux.Core.Models;
     using Mux.Core.Settings;
 
@@ -57,6 +58,18 @@ namespace Mux.Core.Utility
                     var headers = new Dictionary<string, string>(endpoint.Headers) { ["Authorization"] = "Bearer " + key };
                     models = await OpenAiModelLister.ListModelsAsync(root, headers, ignoreCertErrors, cancellationToken).ConfigureAwait(false);
                 }
+                else if (endpoint.AdapterType == AdapterTypeEnum.OpenAi
+                    || endpoint.AdapterType == AdapterTypeEnum.Anthropic
+                    || endpoint.AdapterType == AdapterTypeEnum.Gemini
+                    || endpoint.AdapterType == AdapterTypeEnum.Bedrock
+                    || endpoint.AdapterType == AdapterTypeEnum.AzureOpenAi
+                    || endpoint.AdapterType == AdapterTypeEnum.Vertex)
+                {
+                    // Native providers list through their own model API and credentials (PolyPrompt 4). Vertex AI
+                    // has no listing API and reports models_not_supported.
+                    using LlmClient client = new LlmClient(endpoint, ignoreCertErrors);
+                    models = await client.ListModelIdsAsync(cancellationToken).ConfigureAwait(false);
+                }
                 else
                 {
                     models = await OpenAiModelLister
@@ -83,6 +96,10 @@ namespace Mux.Core.Utility
             {
                 case ArgumentException:
                     return ("invalid_argument", ex.Message);
+                case NotSupportedException:
+                    return ("models_not_supported", ex.Message);
+                case InvalidOperationException:
+                    return ("configuration_error", ex.Message);
                 case TaskCanceledException:
                 case TimeoutException:
                     return ("query_timeout", "The backend did not respond before the timeout elapsed.");

@@ -374,6 +374,8 @@ export interface UsageEventRow {
     Success: boolean;
     ErrorCode?: string | null;
     CostUsd: number;
+    /** The reasoning-effort wire value actually sent to the provider, or null when none was sent. */
+    AppliedReasoningEffort?: string | null;
     [key: string]: unknown;
 }
 

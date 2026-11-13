@@ -2,6 +2,7 @@ namespace Test.Shared.Suites
 {
     using System;
     using System.Collections.Generic;
+    using System.Net.Http;
     using System.Text;
     using System.Text.Json;
     using System.Threading;
@@ -141,7 +142,91 @@ namespace Test.Shared.Suites
                         MuxAssert.IsFalse(server.RequestBodies[0].Contains("secret-notice", System.StringComparison.Ordinal), "display-only notice excluded");
                         MuxAssert.Contains("hello", server.RequestBodies[0], "user prompt retained");
                     }),
-                    Case("OpenAiBridge", "OpenAI-compatible adapter maps streaming, tools, usage, and errors", ct => RunAdapterScenariosAsync(AdapterTypeEnum.OpenAi, ct)),
+                    Case("OpenAiResponsesBridge", "openai adapter uses the Responses API, bearer auth, and replays persisted encrypted reasoning", async ct =>
+                    {
+                        using LocalLlmTestServer server = LocalLlmTestServer.Start();
+                        var endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+                        endpoint.ApiKey = "openai-fixture-key";
+                        endpoint.AuthPlacement = AuthPlacementEnum.Query;
+                        endpoint.AuthParameterName = "must-not-be-used";
+                        endpoint.Headers["X-Mux-Test"] = "marker";
+                        using LlmClient client = new LlmClient(endpoint);
+                        var history = Messages("hello");
+                        ConversationMessage assistant = await client.SendAsync(history, WeatherTools(), ct).ConfigureAwait(false);
+                        MuxAssert.IsTrue(assistant.ProviderState.HasValue, "nonstream encrypted reasoning retained");
+                        MuxAssert.AreEqual("call-weather-1", assistant.ToolCalls![0].Id, "function call_id, not output item id");
+                        MuxAssert.Contains("\"openai\"", assistant.ProviderState!.Value.GetRawText(), "state tagged with the OpenAI provider");
+                        assistant = System.Text.Json.JsonSerializer.Deserialize<ConversationMessage>(System.Text.Json.JsonSerializer.Serialize(assistant))!;
+                        history.Add(assistant);
+                        history.Add(new ConversationMessage { Role = RoleEnum.Tool, ToolCallId = "call-weather-1", Content = "sunny" });
+                        await CollectAsync(client.StreamAsync(history, WeatherTools(), ct), ct).ConfigureAwait(false);
+                        MuxAssert.IsTrue(client.LastProviderState.HasValue, "stream encrypted reasoning retained");
+                        MuxAssert.AreEqual("/v1/responses", server.RequestPaths[0], "Responses API path");
+                        MuxAssert.AreEqual("/v1/responses", server.RequestPaths[1], "Responses API path when streaming");
+                        MuxAssert.AreEqual("Bearer openai-fixture-key", server.HeaderValue("Authorization"), "bearer auth regardless of placement");
+                        MuxAssert.DoesNotContain("must-not-be-used", server.RequestQueries[0], "key is never a query parameter");
+                        MuxAssert.AreEqual("marker", server.HeaderValue("X-Mux-Test"), "per-endpoint headers still reach the server");
+                        using var first = JsonDocument.Parse(server.RequestBodies[0]);
+                        MuxAssert.IsFalse(first.RootElement.GetProperty("store").GetBoolean(), "store is sent explicitly as false");
+                        MuxAssert.Contains("reasoning.encrypted_content", server.RequestBodies[0], "encrypted reasoning requested");
+                        MuxAssert.Contains("\"model\":\"test-model\"", server.RequestBodies[0], "endpoint model sent");
+                        MuxAssert.Contains("opaque-fixture", server.RequestBodies[1], "encrypted reasoning replayed after save/reload");
+                        MuxAssert.Contains("function_call_output", server.RequestBodies[1], "tool output sent as a Responses item");
+                        MuxAssert.DoesNotContain("\"max_tokens\"", server.RequestBodies[1], "no Chat Completions fields");
+                        // Usage: OpenAI reports cached and cache-write tokens as subsets of input_tokens, so mux's
+                        // InputTokens is the full input count and nothing is double counted.
+                        MuxAssert.AreEqual(10, client.LastUsage!.InputTokens, "full input count, cache buckets not added");
+                        MuxAssert.AreEqual(4, client.LastUsage!.CachedTokens, "cached read tokens");
+                        MuxAssert.AreEqual(3, client.LastUsage!.ReasoningTokens, "reasoning tokens");
+                        MuxAssert.AreEqual(15, client.LastUsage!.TotalTokens, "total is input plus output");
+                    }),
+                    Case("OpenAiResponsesMissingHint", "A 404 on /responses names the openai-compatible adapter", async ct =>
+                    {
+                        using LocalLlmTestServer server = LocalLlmTestServer.Start();
+                        var endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint + "/chat-only-gateway");
+                        endpoint.ApiKey = "openai-fixture-key";
+                        using LlmClient client = new LlmClient(endpoint);
+                        var events = await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual("llm_error", FirstError(events)!.Code, "HTTP failure surfaces as llm_error");
+                        MuxAssert.Contains("openai-compatible", FirstError(events)!.Message, "streaming error names the fix");
+                        HttpRequestException? thrown = null;
+                        try { await client.SendAsync(Messages("hello"), NoTools(), ct).ConfigureAwait(false); }
+                        catch (HttpRequestException ex) { thrown = ex; }
+                        MuxAssert.IsNotNull(thrown, "nonstreaming call throws");
+                        MuxAssert.Contains("openai-compatible", thrown!.Message, "nonstreaming error names the fix");
+                    }),
+                    Case("NativeKeysRequired", "Keyed native adapters fail with a clear message when no key is configured", ct =>
+                    {
+                        foreach (var (adapter, variables) in new[]
+                        {
+                            (AdapterTypeEnum.OpenAi, new[] { "OPENAI_API_KEY" }),
+                            (AdapterTypeEnum.Anthropic, new[] { "ANTHROPIC_API_KEY" }),
+                            (AdapterTypeEnum.Gemini, new[] { "GEMINI_API_KEY", "GOOGLE_API_KEY" }),
+                            (AdapterTypeEnum.XAi, new[] { "XAI_API_KEY" })
+                        })
+                        {
+                            bool environmentHasKey = false;
+                            foreach (string variable in variables) environmentHasKey |= !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(variable));
+                            if (environmentHasKey) continue; // the developer's environment legitimately supplies the key
+                            EndpointConfig endpoint = MakeEndpoint(adapter, "http://127.0.0.1:1");
+                            InvalidOperationException? error = null;
+                            try { using LlmClient client = new LlmClient(endpoint); }
+                            catch (InvalidOperationException ex) { error = ex; }
+                            MuxAssert.IsNotNull(error, $"{adapter}: missing key fails at construction");
+                            MuxAssert.Contains(variables[0], error!.Message, $"{adapter}: message names the environment fallback");
+                        }
+
+                        return Task.CompletedTask;
+                    }),
+                    Case("NativeKeyEnvironmentFallback", "An endpoint apiKey wins over the environment fallback", async ct =>
+                    {
+                        using LocalLlmTestServer server = LocalLlmTestServer.Start();
+                        var endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+                        endpoint.ApiKey = "explicit-key";
+                        using LlmClient client = new LlmClient(endpoint);
+                        await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
+                        MuxAssert.AreEqual("Bearer explicit-key", server.HeaderValue("Authorization"), "explicit key sent");
+                    }),
                     Case("OpenAiCompatibleBridge", "openai-compatible adapter maps streaming, tools, usage, and errors", ct => RunAdapterScenariosAsync(AdapterTypeEnum.OpenAiCompatible, ct)),
                     Case("VllmBridge", "vLLM adapter maps streaming, tools, usage, and errors", ct => RunAdapterScenariosAsync(AdapterTypeEnum.Vllm, ct)),
                     Case("OllamaBridge", "Ollama adapter maps streaming, tools, usage, and errors", ct => RunAdapterScenariosAsync(AdapterTypeEnum.Ollama, ct)),
@@ -243,7 +328,7 @@ namespace Test.Shared.Suites
         {
             // PolyPrompt 3 moved per-request model and token settings from ToolChatRequest onto its Options;
             // the endpoint's values must still land in the body, and no system message may be injected.
-            foreach (AdapterTypeEnum adapterType in new[] { AdapterTypeEnum.OpenAi, AdapterTypeEnum.Anthropic })
+            foreach (AdapterTypeEnum adapterType in new[] { AdapterTypeEnum.OpenAi, AdapterTypeEnum.OpenAiCompatible, AdapterTypeEnum.Anthropic })
             {
                 using LocalLlmTestServer server = LocalLlmTestServer.Start();
                 EndpointConfig endpoint = MakeEndpoint(adapterType, server.Endpoint);
@@ -257,7 +342,9 @@ namespace Test.Shared.Suites
 
                 string body = server.RequestBodies[0];
                 MuxAssert.Contains("\"model\":\"wire-model\"", body, $"{adapterType}: endpoint model is sent");
-                MuxAssert.Contains("\"max_tokens\":2345", body, $"{adapterType}: endpoint max tokens are sent");
+                // The Responses API names the limit max_output_tokens; Chat Completions and Anthropic use max_tokens.
+                string limitField = adapterType == AdapterTypeEnum.OpenAi ? "max_output_tokens" : "max_tokens";
+                MuxAssert.Contains($"\"{limitField}\":2345", body, $"{adapterType}: endpoint max tokens are sent");
                 MuxAssert.IsFalse(body.Contains("\"system\"", StringComparison.Ordinal), $"{adapterType}: no system prompt is injected");
             }
         }
@@ -363,7 +450,7 @@ namespace Test.Shared.Suites
 
         private static async Task RunConnectionFailureAsync(CancellationToken ct)
         {
-            EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, "http://127.0.0.1:1");
+            EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAiCompatible, "http://127.0.0.1:1");
             endpoint.TimeoutMs = 2000;
 
             int retries = 0;
@@ -381,10 +468,10 @@ namespace Test.Shared.Suites
 
         private static async Task RunReasoningEffortWireAsync(CancellationToken ct)
         {
-            // OpenAI-compatible: a High level sends reasoning_effort "high".
+            // OpenAI-compatible (Chat Completions): a High level sends reasoning_effort "high".
             using (LocalLlmTestServer server = LocalLlmTestServer.Start())
             {
-                EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+                EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAiCompatible, server.Endpoint);
                 endpoint.ReasoningEffort = new ReasoningEffortConfig { Level = ReasoningLevelEnum.High };
                 using LlmClient client = new LlmClient(endpoint);
                 await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
@@ -394,7 +481,7 @@ namespace Test.Shared.Suites
             // Unset: no reasoning field is sent, so existing requests are byte-for-byte unchanged.
             using (LocalLlmTestServer server = LocalLlmTestServer.Start())
             {
-                EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+                EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAiCompatible, server.Endpoint);
                 using LlmClient client = new LlmClient(endpoint);
                 await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
                 MuxAssert.IsFalse(server.RequestBodies[0].Contains("reasoning_effort", StringComparison.Ordinal), "no reasoning_effort is sent by default");
@@ -403,11 +490,51 @@ namespace Test.Shared.Suites
             // A Minimal level overrides to reasoning_effort "minimal".
             using (LocalLlmTestServer server = LocalLlmTestServer.Start())
             {
-                EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+                EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAiCompatible, server.Endpoint);
                 endpoint.ReasoningEffort = new ReasoningEffortConfig { Level = ReasoningLevelEnum.Minimal };
                 using LlmClient client = new LlmClient(endpoint);
                 await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
                 MuxAssert.Contains("\"reasoning_effort\":\"minimal\"", server.RequestBodies[0], "OpenAI adapter sends reasoning_effort minimal");
+            }
+
+            // OpenAI Responses (openai adapter): every level, including none, xhigh, and max, reaches
+            // reasoning.effort by its OpenAI name; an unset level sends no reasoning object.
+            foreach (var (level, wire) in new[]
+            {
+                (ReasoningLevelEnum.None, "none"), (ReasoningLevelEnum.Minimal, "minimal"), (ReasoningLevelEnum.Low, "low"),
+                (ReasoningLevelEnum.Medium, "medium"), (ReasoningLevelEnum.High, "high"), (ReasoningLevelEnum.XHigh, "xhigh"),
+                (ReasoningLevelEnum.Max, "max")
+            })
+            {
+                using LocalLlmTestServer server = LocalLlmTestServer.Start();
+                EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+                endpoint.ApiKey = "test-key";
+                endpoint.ReasoningEffort = new ReasoningEffortConfig { Level = level };
+                using LlmClient client = new LlmClient(endpoint);
+                await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
+                using JsonDocument body = JsonDocument.Parse(server.RequestBodies[0]);
+                MuxAssert.AreEqual(wire, body.RootElement.GetProperty("reasoning").GetProperty("effort").GetString(), $"openai adapter sends reasoning.effort {wire}");
+            }
+
+            using (LocalLlmTestServer server = LocalLlmTestServer.Start())
+            {
+                EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+                endpoint.ApiKey = "test-key";
+                using LlmClient client = new LlmClient(endpoint);
+                await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
+                MuxAssert.IsFalse(server.RequestBodies[0].Contains("\"effort\"", StringComparison.Ordinal), "no reasoning effort is sent by default on Responses");
+            }
+
+            // An exact openAiValue override reaches reasoning.effort on the Responses API too.
+            using (LocalLlmTestServer server = LocalLlmTestServer.Start())
+            {
+                EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+                endpoint.ApiKey = "test-key";
+                endpoint.ReasoningEffort = new ReasoningEffortConfig { Level = ReasoningLevelEnum.Medium, OpenAiValue = "xhigh" };
+                using LlmClient client = new LlmClient(endpoint);
+                await CollectAsync(client.StreamAsync(Messages("hello"), NoTools(), ct), ct).ConfigureAwait(false);
+                using JsonDocument body = JsonDocument.Parse(server.RequestBodies[0]);
+                MuxAssert.AreEqual("xhigh", body.RootElement.GetProperty("reasoning").GetProperty("effort").GetString(), "openAiValue overrides the level on Responses");
             }
 
             // Ollama-native: a Medium level sends think "medium".
@@ -424,7 +551,7 @@ namespace Test.Shared.Suites
         private static async Task RunThinkingCapturedAsync(CancellationToken ct)
         {
             using LocalLlmTestServer server = LocalLlmTestServer.Start();
-            EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+            EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAiCompatible, server.Endpoint);
             endpoint.ShowThinking = true;
 
             using LlmClient client = new LlmClient(endpoint);
@@ -438,7 +565,7 @@ namespace Test.Shared.Suites
         private static async Task RunThinkingSuppressedAsync(CancellationToken ct)
         {
             using LocalLlmTestServer server = LocalLlmTestServer.Start();
-            EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAi, server.Endpoint);
+            EndpointConfig endpoint = MakeEndpoint(AdapterTypeEnum.OpenAiCompatible, server.Endpoint);
             // ShowThinking defaults to false.
 
             using LlmClient client = new LlmClient(endpoint);

@@ -270,7 +270,7 @@ namespace Test.Shared
                             new { type = "reasoning", id = "reason-fixture", encrypted_content = "opaque-fixture", summary = new[] { new { type = "summary_text", text = "Check the evidence." } } },
                             new { type = "function_call", id = "fc-item", call_id = "call-weather-1", name = "get_weather", arguments = "{\"city\":\"Seattle\"}", status = "completed" }
                         },
-                        usage = new { input_tokens = 10, output_tokens = 5, total_tokens = 15 }
+                        usage = new { input_tokens = 10, input_tokens_details = new { cached_tokens = 4, cache_write_tokens = 2 }, output_tokens = 5, output_tokens_details = new { reasoning_tokens = 3 }, total_tokens = 15 }
                     });
                     if (stream)
                     {

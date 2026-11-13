@@ -439,7 +439,7 @@ namespace Mux.Cli.App
 
             return ReasoningLevelEnumConverter.TryParse(trimmed, out _)
                 ? null
-                : "Reasoning effort must be minimal, low, medium, or high.";
+                : "Reasoning effort must be none, minimal, low, medium, high, xhigh, or max.";
         }
 
         private static string? ValidateOptionalInt(string value, string label, int min, int max)
@@ -464,7 +464,8 @@ namespace Mux.Cli.App
             return int.Parse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture);
         }
 
-        private static bool UsesFixedBearer(AdapterTypeEnum adapter) => adapter == AdapterTypeEnum.OllamaCloud || adapter == AdapterTypeEnum.XAi;
+        // The openai adapter speaks the OpenAI Responses API and, like xAI and Ollama Cloud, always sends a bearer key.
+        private static bool UsesFixedBearer(AdapterTypeEnum adapter) => adapter == AdapterTypeEnum.OllamaCloud || adapter == AdapterTypeEnum.XAi || adapter == AdapterTypeEnum.OpenAi;
 
         private static int IndexOfAdapter(AdapterTypeEnum adapterType)
         {

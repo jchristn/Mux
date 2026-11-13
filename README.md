@@ -9,7 +9,7 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.7.0-blue.svg" alt="v1.7.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.8.0-blue.svg" alt="v1.8.0"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-yellow.svg" alt="beta"></a>
   <a href="https://github.com/jchristn/Mux/actions/workflows/ci.yml"><img src="https://github.com/jchristn/Mux/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.nuget.org/packages/Mux.Core"><img src="https://img.shields.io/nuget/v/Mux.Core.svg" alt="NuGet Mux.Core"></a>
@@ -20,7 +20,15 @@
 
 [Get started](#getting-started) · [Model providers](#model-providers) · [CLI usage](#cli-usage) · [Configuration](#configuration) · [Documentation](#documentation)
 
-Version 1.7.0 brings the same usage charts to the terminal, desktop app, web dashboard, and VS Code:
+Version 1.8.0 moves the `openai` adapter to OpenAI's Responses API on PolyPrompt 4.0, so every current
+OpenAI model works, including the codex-tuned coding models, and reasoning models keep their reasoning
+across tool calls and resumed sessions. Model listing now covers OpenAI, Anthropic, Gemini, Bedrock, and
+Azure OpenAI, keyed adapters fall back to their standard API-key environment variables, reasoning effort
+gains `none`, `xhigh`, and `max`, and the usage views show the effort actually sent. Credentials are API
+keys only. See [model providers](docs/PROVIDERS.md) for the one change to check: an `openai` endpoint
+pointed at a Chat Completions gateway should use `openai-compatible`.
+
+Version 1.7.0 brought the same usage charts to the terminal, desktop app, web dashboard, and VS Code:
 calls by outcome with failure reasons, tokens by model, endpoint, provider, or call kind, latency box plots,
 usage by dimension, and a token heatmap, over ranges up to a year or all time, with click-through from any
 bucket to the calls behind it. See [usage analytics](docs/USAGE.md#usage-analytics).
@@ -107,7 +115,7 @@ and [configuration](docs/CONFIG.md) for setup and Windows behavior.
 - Engine as a library: `Mux.Core` (and `Mux.Search`) publish to NuGet with a symbol package, so you can build your own experiences on the mux engine (`AgentLoop`, `SessionStore`, `McpToolManager`, `UsageQueryService`, `SettingsLoader`)
 - Config isolation: set `MUX_CONFIG_DIR` to run with a fully isolated config directory
 - Health checks: `mux probe` validates config, backend reachability, auth, and model access
-- Endpoint & model inspection: `mux endpoint list`/`show` report the configured endpoints, and `mux endpoint models` live-enumerates the models each backend advertises (Ollama `/api/tags`, OpenAI-compatible `/v1/models`) — as a table or `--output-format json`
+- Endpoint & model inspection: `mux endpoint list`/`show` report the configured endpoints, and `mux endpoint models` live-enumerates the models each backend advertises (OpenAI, Anthropic, Gemini, Bedrock, Azure OpenAI, xAI, Ollama, and OpenAI-compatible servers) — as a table or `--output-format json`; `mux probe` and `mux endpoint show` add notes for settings that have no effect or are likely to fail
 
 ## Getting Started
 
@@ -358,18 +366,19 @@ OpenAI-compatible adapters connect to local servers and gateways using that API 
 |---|---|---|
 | <a id="ollama"></a>[Ollama](docs/PROVIDERS.md#ollama) | `ollama` | Local or remote Ollama service; no key needed for an ordinary local server |
 | <a id="ollama-cloud"></a>[Ollama Cloud](docs/PROVIDERS.md#ollama-cloud) | `ollama-cloud` | Direct cloud API; Ollama bearer key |
-| <a id="openai"></a>[OpenAI](docs/PROVIDERS.md#openai) | `openai` | OpenAI API; bearer key |
-| <a id="anthropic"></a>[Anthropic](docs/PROVIDERS.md#anthropic) | `anthropic` | Native Messages API; Anthropic key |
-| <a id="gemini"></a>[Google Gemini](docs/PROVIDERS.md#google-gemini) | `gemini` | Gemini API; Google AI Studio key |
-| <a id="azure-openai"></a>[Azure OpenAI](docs/PROVIDERS.md#azure-openai) | `azure-openai` | Azure resource URL, deployment name, and API key |
+| <a id="openai"></a>[OpenAI](docs/PROVIDERS.md#openai) | `openai` | OpenAI Responses API (including codex-tuned models); bearer key or `OPENAI_API_KEY` |
+| <a id="anthropic"></a>[Anthropic (Claude)](docs/PROVIDERS.md#anthropic) | `anthropic` | Native Messages API; Anthropic key or `ANTHROPIC_API_KEY` |
+| <a id="gemini"></a>[Google Gemini (including the models behind Antigravity)](docs/PROVIDERS.md#google-gemini) | `gemini` | Gemini API; Google AI Studio key or `GEMINI_API_KEY` |
+| <a id="azure-openai"></a>[Azure OpenAI](docs/PROVIDERS.md#azure-openai) | `azure-openai` | Azure resource URL (v1 API), deployment name, and API key |
 | <a id="vertex"></a>[Google Vertex AI](docs/PROVIDERS.md#google-vertex-ai) | `vertex` | Project, region, and Application Default Credentials |
 | <a id="bedrock"></a>[AWS Bedrock](docs/PROVIDERS.md#aws-bedrock) | `bedrock` | Region and AWS environment credentials |
 | <a id="xai-grok"></a>[xAI Grok](docs/PROVIDERS.md#xai-grok) | `xai` | Native Responses API; xAI bearer key |
 | <a id="vllm"></a>[vLLM](docs/PROVIDERS.md#vllm) | `vllm` | Your inference server's URL and authentication, if enabled |
 | <a id="openai-compatible"></a>[LM Studio and other compatible servers](docs/PROVIDERS.md#openai-compatible-servers) | `openai-compatible` | Server or gateway URL and its authentication requirements |
 
-Use the endpoint editor to add the connection, model, and credentials, or edit
-`endpoints.json` directly. Store secret references such as `${MY_API_KEY}` instead
+Mux uses API keys only; it does not sign in with Claude, ChatGPT, or Google accounts or
+use subscription quotas. Use the endpoint editor to add the connection, model, and
+credentials, or edit `endpoints.json` directly. Store secret references such as `${MY_API_KEY}` instead
 of literal keys. Select a model that supports tools for coding tasks.
 
 The [provider setup guide](docs/PROVIDERS.md) gives every adapter an endpoint example,
@@ -408,8 +417,8 @@ The **desktop app** launches from the repo with `scripts\windows\run-desktop.bat
 | `--temperature <float>` |  | Override temperature |
 | `--max-tokens <int>` |  | Override max output tokens |
 | `--context-window <int>` |  | Override the context window size in tokens (1024 - 1048576) |
-| `--effort <level>` |  | Reasoning effort: `off`, `minimal`, `low`, `medium`, `high` |
-| `--effort-openai-value <str>` |  | Override the OpenAI `reasoning_effort` value |
+| `--effort <level>` |  | Reasoning effort: `off`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
+| `--effort-openai-value <str>` |  | Override the exact OpenAI effort value (`reasoning.effort` on `openai`, `reasoning_effort` on Chat Completions servers) |
 | `--effort-gemini-budget <int>` |  | Override the Gemini thinking budget (`-1`..`32768`) |
 | `--effort-ollama-think <val>` |  | Override the Ollama `think` value (`low`/`medium`/`high`/`true`/`false`) |
 | `--show-thinking` |  | Surface the model's reasoning ("thinking") for this run |
@@ -502,19 +511,24 @@ Configured MCP servers are connected live: on startup mux connects to each serve
 
 ### Reasoning Effort
 
-Reasoning-capable models can trade latency and cost against how hard they think. mux carries one choice — a level — and translates it per backend, so picking `high` sends `reasoning_effort: high` to an OpenAI-compatible endpoint, a dynamic thinking budget to Gemini, and `think: high` to Ollama. The level is stored per endpoint in `endpoints.json`; leaving it unset (the default) sends no reasoning field, so existing endpoints behave exactly as before.
+Reasoning-capable models can trade latency and cost against how hard they think. mux carries one choice — a level — and translates it per backend, so picking `high` sends `reasoning.effort: high` to OpenAI's Responses API, `reasoning_effort: high` to an OpenAI-compatible endpoint, a dynamic thinking budget to Gemini, and `think: high` to Ollama. The level is stored per endpoint in `endpoints.json`; leaving it unset (the default) sends no reasoning field, so existing endpoints behave exactly as before.
 
-`/effort` (alias `/reasoning`; also on the `F1` menu under **Model**) opens a picker — **Off · Minimal · Low · Medium · High** — with the active level marked. Choosing one persists it to the active endpoint and applies it to the next turn; the sidebar shows an `EFFORT` line so the current level stays visible. The endpoint Add/Edit form also carries a **Reasoning effort** field and an advanced **Gemini thinking budget** field for per-endpoint tuning.
+`/effort` (alias `/reasoning`; also on the `F1` menu under **Model**) opens a picker — **Off · None · Minimal · Low · Medium · High · Extra high · Max** — with the active level marked. Off sends no reasoning field; None asks the provider to turn reasoning off. Choosing one persists it to the active endpoint and applies it to the next turn; the sidebar shows an `EFFORT` line so the current level stays visible. The endpoint Add/Edit form also carries a **Reasoning effort** field and an advanced **Gemini thinking budget** field for per-endpoint tuning.
 
 Each level's default projection per provider (every value is individually overridable):
 
-| Level | OpenAI `reasoning_effort` | Gemini `thinkingBudget` | Ollama `think` |
-|---|---|---|---|
-| Off | *(omitted)* | *(omitted)* | *(omitted)* |
-| Minimal | `minimal` | `0` | `false` |
-| Low | `low` | `1024` | `low` |
-| Medium | `medium` | `8192` | `medium` |
-| High | `high` | `-1` (dynamic) | `high` |
+| Level | OpenAI `reasoning.effort` (`openai`) | `reasoning_effort` (Chat Completions servers) | Gemini `thinkingBudget` | Ollama `think` |
+|---|---|---|---|---|
+| Off | *(omitted)* | *(omitted)* | *(omitted)* | *(omitted)* |
+| None | `none` | *(omitted)* | `0` | `false` |
+| Minimal | `minimal` | `minimal` | `0` | `false` |
+| Low | `low` | `low` | `1024` | `low` |
+| Medium | `medium` | `medium` | `8192` | `medium` |
+| High | `high` | `high` | `-1` (dynamic) | `high` |
+| Extra high | `xhigh` | `high` | `-1` (dynamic) | `high` |
+| Max | `max` | `high` | `-1` (dynamic) | `high` |
+
+Not every model supports every level; the provider rejects a value its model lacks. The usage call details record the value that was actually sent.
 
 Headless runs set the level with `--effort <level>` (with `off` forcing it off even when the endpoint sets a level) and tune the per-provider values with `--effort-openai-value`, `--effort-gemini-budget`, and `--effort-ollama-think`. The provider overrides apply only when a level is active. A run reports its effective selection in the `run_started` JSONL event under `reasoningEffort`, and `cliOverridesApplied` lists `reasoningEffort` when a flag drove the value.
 

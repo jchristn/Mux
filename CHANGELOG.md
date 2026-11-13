@@ -2,6 +2,89 @@
 
 All notable changes to mux are documented here.
 
+## 1.8.0 (unreleased)
+
+Mux now runs on PolyPrompt 4.0. Credentials are API keys only: Mux does not sign in with Claude, ChatGPT,
+or Google accounts, and does not use subscription quotas.
+
+### Changed
+
+- **The `openai` adapter uses OpenAI's Responses API** (PolyPrompt's `OpenAiClient`). Every current OpenAI
+  model works, including the reasoning and codex-tuned coding models, and the model's encrypted reasoning is
+  replayed on each request, so it survives tool calls, saved sessions, resume, and compaction. Mux sends
+  `store: false`. The adapter always sends a bearer key.
+  - **Check this if you use a gateway:** an `openai` endpoint whose server only implements Chat Completions
+    (vLLM, LM Studio, OpenRouter, Ollama `/v1`, most gateways) now fails with a 404. Change its adapter to
+    `openai-compatible`, which keeps the Chat Completions behavior and its key placement. The turn error names
+    the fix, `mux probe` reports `responses_api_unsupported`, and `mux probe` and `mux endpoint show` note any
+    `openai` endpoint whose `baseUrl` is not OpenAI's.
+- **`azure-openai` uses Azure's v1 API**, with the deployment name sent as the model and no `api-version`.
+  `apiVersion` is ignored (it still loads; `mux probe` and `mux endpoint show` note it), and the endpoint
+  editors no longer show it.
+- **Keyed native adapters require a key up front.** `openai`, `anthropic`, `gemini`, `xai`, and
+  `ollama-cloud` fail with a configuration error naming the environment fallback when no key is configured,
+  instead of an HTTP 401. An `openai` endpoint can still carry its key as `Authorization: Bearer ...` in
+  `headers`.
+- **`--effort none` is now a level** that asks the provider to turn reasoning off; it was an alias for
+  `off`. Use `--effort off` to send no reasoning field.
+- Key placement (`authPlacement`) applies to `ollama`, `openai-compatible`, and `vllm`; the endpoint editors no
+  longer offer it for `openai`.
+- The per-endpoint `openAiValue` effort override reaches `reasoning.effort` on `openai` and `azure-openai`
+  (PolyPrompt 4.0 reads it from the Responses options there, not from the shared effort object).
+- `usage.db` moves to schema version 2 (adds `applied_effort`). Existing databases migrate in place on first
+  open, safely when several mux processes open them at once.
+- Default pricing (`2026-11`) adds `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-luna`, `claude-opus-5-5`,
+  `claude-sonnet-5-5`, `claude-haiku-5-5`, and `gemini-3.8-flash`, read from the providers' pricing pages on
+  2026-11-12. Cohere's pricing page did not list `command-a-plus-05-2026`, so it has no default rate.
+- Mux.Core depends on PolyPrompt 4.0.0.
+
+### Added
+
+- **API-key environment fallbacks:** `OPENAI_API_KEY` (`openai`), `ANTHROPIC_API_KEY` (`anthropic`), and
+  `GEMINI_API_KEY` then `GOOGLE_API_KEY` (`gemini`), alongside the existing `XAI_API_KEY` and `OLLAMA_API_KEY`.
+  An endpoint's own `apiKey` always wins.
+- **Model listing for OpenAI, Anthropic, Gemini, Bedrock, and Azure OpenAI** through each provider's own model
+  API, in `mux endpoint models` and every surface's model import. Vertex AI, which has no listing API, reports
+  `models_not_supported`; a missing key reports `configuration_error`; HTTP failures keep their
+  classification.
+- **Reasoning effort `none`, `xhigh`, and `max`** in endpoint config, `--effort`, the terminal `/effort`
+  picker, the desktop effort dialog and endpoint form (all 11 languages), and the REST API. `xhigh` and `max`
+  map to a provider's highest level where it lacks them.
+- **The reasoning effort actually sent** is recorded with every call (`LlmCallMetrics.AppliedReasoningEffort`,
+  `usage.db`, the `polyprompt.reasoning.effort` span attribute) and shown in the web dashboard's call details,
+  the desktop call table's row tooltips, and the REST call records.
+- **Descriptive config-file errors.** A JSON error in `endpoints.json`, `settings.json`, or `mcp-servers.json`
+  now reads "Please check your endpoints.json file for errors (<full path>): line 4, column 5: ',' is an
+  invalid start of a value. (at $.endpoints[1])" instead of the bare parser message. Positions are 1-based, as in
+  editors. The error is a `ConfigFileJsonException`, which derives from `JsonException`.
+- `EndpointAdvisories` in Mux.Core: configuration notes for an endpoint (settings with no effect, or
+  combinations likely to fail), shown by `mux probe` (text, and an `advisories` array in JSON) and
+  `mux endpoint show`.
+- Docs: a "Which adapter?" table for OpenAI, a Google Antigravity note (its Gemini models are reached through
+  `gemini` with an AI Studio key; account sign-in is not supported), and the API-keys-only policy.
+
+### Notes
+
+- Mux keeps its own header and query-string key placement (`QueryStringAuthHandler`) for `ollama`,
+  `openai-compatible`, and `vllm` rather than PolyPrompt 4.0's `AuthPlacement`, because Mux guarantees that an
+  explicit `headers` entry wins and that an existing query parameter is not duplicated, and PolyPrompt's
+  Ollama client has no placement option.
+- OpenAI reports cached and cache-write tokens as part of `input_tokens`, so Mux's input totals and costs
+  count them once.
+
+### Validation
+
+- Release build, Test.Automated on .NET 8 and .NET 10: 2035 cases each, 2012 passed, 0 failed, 23 skipped
+  (environment-gated, as before). Test.Xunit and Test.Nunit (run before the last two fixes, the `openAiValue`
+  override and the config-file error message): 2011 passed on each framework, with Nunit skipping the same 23. VS Code extension: 137 passed. `node tools/i18n/gen.js --check`: clean.
+- 14 new cases (plus new assertions in existing ones) cover the descriptive config-file error, the OpenAI Responses round trip (encrypted reasoning replayed after save and reload,
+  bearer auth regardless of placement, `store: false`, cached and reasoning token usage), the `/responses`
+  404 hint on both call paths, required keys and the environment fallback, every effort level on the
+  Responses wire, native model listing (OpenAI, Anthropic, failure classification, Vertex unsupported,
+  missing key), endpoint advisories, the `mux probe` Responses check, applied effort storage, the schema v1
+  to v2 `usage.db` migration, and `--effort none`/`xhigh`/`max`.
+- No live provider calls were made.
+
 ## 1.7.0 (unreleased)
 
 ### Added

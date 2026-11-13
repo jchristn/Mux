@@ -494,9 +494,11 @@ namespace Mux.Cli.Commands
                 case "low":
                 case "medium":
                 case "high":
+                case "xhigh":
+                case "max":
                     return normalized;
                 default:
-                    throw new InvalidOperationException($"Option '{option}' expects one of: off, minimal, low, medium, high.");
+                    throw new InvalidOperationException($"Option '{option}' expects one of: off, none, minimal, low, medium, high, xhigh, max.");
             }
         }
 

@@ -67,10 +67,11 @@ namespace Mux.Cli.Commands
         public int? ContextWindow { get; set; }
 
         /// <summary>
-        /// Override the reasoning effort level: off, minimal, low, medium, or high. "off" disables the
-        /// reasoning field even when the endpoint sets a level.
+        /// Override the reasoning effort level: off, none, minimal, low, medium, high, xhigh, or max. "off"
+        /// sends no reasoning field even when the endpoint sets a level; "none" asks the provider to turn
+        /// reasoning off.
         /// </summary>
-        [Description("Reasoning effort: off, minimal, low, medium, high.")]
+        [Description("Reasoning effort: off, none, minimal, low, medium, high, xhigh, max.")]
         [CommandOption("--effort")]
         public string? Effort { get; set; }
 

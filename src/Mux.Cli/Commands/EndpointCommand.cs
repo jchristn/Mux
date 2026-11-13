@@ -315,7 +315,8 @@ namespace Mux.Cli.Commands
                 HeaderNames = headers.Keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToList(),
                 Headers = headers.ToDictionary(
                     pair => pair.Key,
-                    pair => string.IsNullOrWhiteSpace(pair.Value) ? string.Empty : "[redacted]")
+                    pair => string.IsNullOrWhiteSpace(pair.Value) ? string.Empty : "[redacted]"),
+                Advisories = Mux.Core.Settings.EndpointAdvisories.For(endpoint).Select(advisory => advisory.Message).ToList()
             };
         }
 
@@ -341,6 +342,11 @@ namespace Mux.Cli.Commands
             else
             {
                 AnsiConsole.MarkupLine("[bold]Headers:[/] none");
+            }
+
+            foreach (string advisory in endpoint.Advisories)
+            {
+                AnsiConsole.MarkupLine($"[yellow]Note:[/] {Markup.Escape(advisory)}");
             }
         }
 
@@ -430,6 +436,11 @@ namespace Mux.Cli.Commands
     /// </summary>
     public class EndpointInspectionRecord
     {
+        /// <summary>
+        /// Configuration advisories for the endpoint (settings with no effect, or combinations likely to fail).
+        /// </summary>
+        public List<string> Advisories { get; set; } = new List<string>();
+
         /// <summary>
         /// Endpoint name.
         /// </summary>

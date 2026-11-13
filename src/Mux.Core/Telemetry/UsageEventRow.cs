@@ -72,6 +72,9 @@ namespace Mux.Core.Telemetry
         /// <summary>The provider finish reason, or null.</summary>
         public string? FinishReason { get; set; }
 
+        /// <summary>The reasoning-effort wire value actually sent to the provider, or null when none was sent.</summary>
+        public string? AppliedReasoningEffort { get; set; }
+
         /// <summary>Whether the call succeeded.</summary>
         public bool Success { get; set; }
 

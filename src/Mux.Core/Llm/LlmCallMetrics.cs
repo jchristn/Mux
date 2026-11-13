@@ -55,6 +55,13 @@ namespace Mux.Core.Llm
         public string? FinishReason { get; set; }
 
         /// <summary>
+        /// The reasoning-effort wire value actually sent to the provider after per-provider mapping (for example
+        /// <c>high</c> when <c>max</c> was requested of a provider without it), or null when no reasoning field
+        /// was sent.
+        /// </summary>
+        public string? AppliedReasoningEffort { get; set; }
+
+        /// <summary>
         /// The model identifier echoed by the provider, or null when unreported.
         /// </summary>
         public string? Model { get; set; }

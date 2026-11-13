@@ -114,6 +114,26 @@ namespace Test.Shared.Suites
                         return Task.CompletedTask;
                     }),
 
+                    new TestCaseDescriptor("CommandRuntimeResolver", "EffortNoneIsALevelAndOffClears", "--effort none selects the None level; only off clears the endpoint's effort", (CancellationToken ct) =>
+                    {
+                        foreach (var (flag, level) in new[] { ("none", ReasoningLevelEnum.None), ("xhigh", ReasoningLevelEnum.XHigh), ("max", ReasoningLevelEnum.Max) })
+                        {
+                            EndpointConfig endpoint = new EndpointConfig { ReasoningEffort = new ReasoningEffortConfig { Level = ReasoningLevelEnum.Low } };
+                            CommandRuntimeResolver.ApplyReasoningOverride(endpoint, new PrintSettings { Effort = flag });
+                            MuxAssert.AreEqual(level, endpoint.ReasoningEffort!.Level, $"{flag} selects its level");
+                        }
+
+                        EndpointConfig cleared = new EndpointConfig { ReasoningEffort = new ReasoningEffortConfig { Level = ReasoningLevelEnum.Low } };
+                        CommandRuntimeResolver.ApplyReasoningOverride(cleared, new PrintSettings { Effort = "off" });
+                        MuxAssert.IsNull(cleared.ReasoningEffort, "off clears the effort");
+                        foreach (string wire in new[] { "none", "minimal", "low", "medium", "high", "xhigh", "max" })
+                        {
+                            MuxAssert.IsTrue(ReasoningLevelEnumConverter.TryParse(wire, out ReasoningLevelEnum parsed), $"{wire} parses");
+                            MuxAssert.AreEqual(wire, ReasoningLevelEnumConverter.ToWire(parsed), $"{wire} round-trips");
+                        }
+
+                        return Task.CompletedTask;
+                    }),
                     new TestCaseDescriptor("CommandRuntimeResolver", "HasReasoningOverrideDetectsFlags", "HasReasoningOverride reflects the effort flags", (CancellationToken ct) =>
                     {
                         MuxAssert.IsFalse(CommandRuntimeResolver.HasReasoningOverride(new PrintSettings()), "none");

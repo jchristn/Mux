@@ -1097,12 +1097,12 @@ namespace Mux.Server.Documentation
                 ["AutoApproveTools"] = Pbool("Auto-approve tool calls when this endpoint is active."),
                 ["MaxAgentIterations"] = PintNullable("Per-endpoint agent-iteration override; null inherits the global setting."),
                 ["ShowThinking"] = Pbool("Whether the model's reasoning is displayed."),
-                ["ReasoningEffort"] = PstrNullable("Reasoning-effort level (off/minimal/low/medium/high), or null."),
+                ["ReasoningEffort"] = PstrNullable("Reasoning-effort level (off/none/minimal/low/medium/high/xhigh/max), or null."),
                 ["ApiKeySet"] = Pbool("Whether a stored API key exists (read-only)."),
                 ["ApiKey"] = PstrNullable("New API key to store; blank/null preserves the existing key. Never returned on read."),
                 ["Region"] = PstrNullable("Cloud region (vertex/bedrock)."),
                 ["Project"] = PstrNullable("Google Cloud project id (vertex)."),
-                ["ApiVersion"] = PstrNullable("Azure OpenAI api-version."),
+                ["ApiVersion"] = PstrNullable("Ignored since mux 1.8: Azure OpenAI uses the v1 API. Accepted and stored for compatibility."),
                 ["Headers"] = Parr(Ref("HeaderDto"), "Custom header entries.")
             }, new Dictionary<string, object?>
             {

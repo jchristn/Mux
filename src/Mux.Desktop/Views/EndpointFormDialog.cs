@@ -107,7 +107,7 @@ namespace Mux.Desktop.Views
             _ToolAutoApproveSeconds.Text = config.ToolAutoApproveSeconds?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             _ShowThinking.IsChecked = config.ShowThinking;
 
-            _ReasoningEffort.ItemsSource = new[] { EffortOff, "minimal", "low", "medium", "high" };
+            _ReasoningEffort.ItemsSource = new[] { EffortOff, "none", "minimal", "low", "medium", "high", "xhigh", "max" };
             _ReasoningEffort.SelectedItem = config.ReasoningEffort?.Level.HasValue == true
                 ? config.ReasoningEffort.Level.Value.ToString().ToLowerInvariant()
                 : EffortOff;
@@ -202,11 +202,13 @@ namespace Mux.Desktop.Views
         private void UpdateAdaptiveVisibility()
         {
             AdapterTypeEnum adapter = _Adapter.SelectedItem is AdapterTypeEnum selected ? selected : AdapterTypeEnum.Ollama;
+            // The openai adapter speaks the OpenAI Responses API and always sends a bearer key, so only the Chat
+            // Completions adapters and Ollama offer key placement.
             bool openAiFamily = adapter == AdapterTypeEnum.Ollama
-                || adapter == AdapterTypeEnum.OpenAi
                 || adapter == AdapterTypeEnum.OpenAiCompatible
                 || adapter == AdapterTypeEnum.Vllm;
             bool usesKey = adapter == AdapterTypeEnum.XAi || adapter == AdapterTypeEnum.OllamaCloud || openAiFamily
+                || adapter == AdapterTypeEnum.OpenAi
                 || adapter == AdapterTypeEnum.Anthropic
                 || adapter == AdapterTypeEnum.Gemini
                 || adapter == AdapterTypeEnum.AzureOpenAi;
@@ -217,7 +219,8 @@ namespace Mux.Desktop.Views
             _ParameterNameField.IsVisible = openAiFamily && (placement == "header" || placement == "query");
             _RegionField.IsVisible = adapter == AdapterTypeEnum.Vertex || adapter == AdapterTypeEnum.Bedrock;
             _ProjectField.IsVisible = adapter == AdapterTypeEnum.Vertex;
-            _ApiVersionField.IsVisible = adapter == AdapterTypeEnum.AzureOpenAi;
+            // Azure OpenAI uses the v1 API, so api-version is no longer edited (a stored value is kept as is).
+            _ApiVersionField.IsVisible = false;
             _HeadersField.IsVisible = usesKey;
         }
 
@@ -399,7 +402,7 @@ namespace Mux.Desktop.Views
             _Config.BaseUrl = adapter == AdapterTypeEnum.OllamaCloud ? "https://ollama.com" : adapter == AdapterTypeEnum.XAi && string.IsNullOrWhiteSpace(_BaseUrl.Text) ? "https://api.x.ai/v1" : (_BaseUrl.Text ?? string.Empty).Trim();
             _Config.Model = (_Model.Text ?? string.Empty).Trim();
             _Config.ApiKey = string.IsNullOrWhiteSpace(_ApiKey.Text) ? null : _ApiKey.Text;
-            _Config.AuthPlacement = (adapter == AdapterTypeEnum.XAi || adapter == AdapterTypeEnum.OllamaCloud) ? AuthPlacementEnum.Bearer : AuthPlacementEnumConverter.Parse(_AuthPlacement.SelectedItem as string);
+            _Config.AuthPlacement = (adapter == AdapterTypeEnum.XAi || adapter == AdapterTypeEnum.OllamaCloud || adapter == AdapterTypeEnum.OpenAi) ? AuthPlacementEnum.Bearer : AuthPlacementEnumConverter.Parse(_AuthPlacement.SelectedItem as string);
             string parameterName = (_AuthParameterName.Text ?? string.Empty).Trim();
             _Config.AuthParameterName = adapter == AdapterTypeEnum.XAi || adapter == AdapterTypeEnum.OllamaCloud || parameterName.Length == 0 ? null : parameterName;
             _Config.Region = string.IsNullOrWhiteSpace(_Region.Text) ? null : _Region.Text!.Trim();

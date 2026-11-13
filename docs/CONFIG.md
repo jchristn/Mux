@@ -109,14 +109,14 @@ Fields:
 | `autoApproveTools` | bool | auto-approve tool calls whenever this endpoint is active unless CLI approval flags override it |
 | `maxAgentIterations` | int or null | optional endpoint override for the agent loop guard; `null` inherits `settings.json` |
 | `quirks` | object or null | backend behavior flags |
-| `reasoningEffort` | object or null | optional reasoning effort. Omit (or `null`) to send no reasoning field. A `level` (`minimal`, `low`, `medium`, `high`) drives provider defaults; optional `openAiValue`, `geminiThinkingBudget` (`-1`..`32768`), and `ollamaThink` (`low`/`medium`/`high`/`true`/`false`) override individual per-provider values |
+| `reasoningEffort` | object or null | optional reasoning effort. Omit (or `null`) to send no reasoning field. A `level` (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) drives provider defaults: `none` asks the provider to turn reasoning off (unlike omitting the field), and `xhigh`/`max` map to a provider's highest level where it lacks them; optional `openAiValue` (an exact OpenAI value from the same set), `geminiThinkingBudget` (`-1`..`32768`), and `ollamaThink` (`low`/`medium`/`high`/`true`/`false`) override individual per-provider values |
 | `showThinking` | bool | whether the model's reasoning ("thinking") is captured and displayed when this endpoint is active. Defaults to false; toggle live with `/thinking` or override a headless run with `--show-thinking` |
-| `apiKey` | string or null | API key. For the OpenAI family (`ollama`/`openai`/`openai-compatible`/`vllm`) it is placed per `authPlacement` (below). For `anthropic` (`x-api-key`), `gemini` (`x-goog-api-key` header), and `azure-openai` (`api-key` header) it is passed to the provider's client. Literal value or a `${VAR}` reference. A reference to an unset variable fails the run before any request (`config_unresolved_env`), naming the variable. For `ollama-cloud` and `xai`, a fixed bearer key; when absent, they fall back to `OLLAMA_API_KEY` and `XAI_API_KEY`, respectively. Ignored by `vertex`/`bedrock` (environment credentials) |
-| `authPlacement` | string | how `apiKey` is presented for the OpenAI family: `bearer` (default — `Authorization: Bearer <key>`), `header` (a custom header named by `authParameterName`), or `query` (a query-string parameter named by `authParameterName`). Use `header`/`query` for services that don't accept bearer tokens. Ignored by the native adapters, which carry a fixed scheme |
+| `apiKey` | string or null | API key. For `ollama`, `openai-compatible`, and `vllm` it is placed per `authPlacement` (below). For `openai`, `xai`, and `ollama-cloud` it is a bearer key; for `anthropic` (`x-api-key`), `gemini` (`x-goog-api-key` header), and `azure-openai` (`api-key` header) it is passed to the provider's client. Literal value or a `${VAR}` reference. A reference to an unset variable fails the run before any request (`config_unresolved_env`), naming the variable. When absent, `openai` falls back to `OPENAI_API_KEY`, `anthropic` to `ANTHROPIC_API_KEY`, `gemini` to `GEMINI_API_KEY` then `GOOGLE_API_KEY`, `xai` to `XAI_API_KEY`, and `ollama-cloud` to `OLLAMA_API_KEY`; these keyed adapters fail with a clear configuration error when no key is found (an `openai` endpoint may instead carry `Authorization: Bearer ...` in `headers`). Ignored by `vertex`/`bedrock` (environment credentials). Mux supports API keys only, not account sign-in |
+| `authPlacement` | string | how `apiKey` is presented for `ollama`, `openai-compatible`, and `vllm`: `bearer` (default — `Authorization: Bearer <key>`), `header` (a custom header named by `authParameterName`), or `query` (a query-string parameter named by `authParameterName`). Use `header`/`query` for services that don't accept bearer tokens. An explicit `headers` entry with the same name wins, and an existing query parameter is not duplicated. Ignored by `openai` (since 1.8, the Responses API with a bearer key; `mux probe` and `mux endpoint show` note it) and by the native adapters, which carry a fixed scheme |
 | `authParameterName` | string or null | the header name (`header` placement) or query-string parameter name (`query` placement) that carries `apiKey`, e.g. `x-api-key` or `key`. Ignored when `authPlacement` is `bearer` |
 | `region` | string or null | cloud region for `vertex` (e.g. `us-central1`) and `bedrock` (e.g. `us-east-1`). Literal or `${VAR}` |
 | `project` | string or null | Google Cloud project id, required by `vertex`. Literal or `${VAR}` |
-| `apiVersion` | string or null | optional Azure OpenAI `api-version` for `azure-openai`; `null` uses PolyPrompt's default |
+| `apiVersion` | string or null | **ignored since 1.8.** `azure-openai` now uses Azure's v1 API, which needs no `api-version` (the deployment goes in `model`). The field still loads, and `mux probe` and `mux endpoint show` note that it has no effect |
 
 Header values support environment expansion:
 
@@ -128,7 +128,7 @@ Header values support environment expansion:
 }
 ```
 
-For the OpenAI family you can instead set `apiKey` and let `authPlacement` decide where it goes — no
+For `ollama`, `openai-compatible`, and `vllm` you can instead set `apiKey` and let `authPlacement` decide where it goes — no
 hand-written header needed. This is the way to reach services that authenticate with a **custom header** or a
 **query-string value** rather than a bearer token:
 
@@ -149,15 +149,16 @@ hand-written header needed. This is the way to reach services that authenticate 
 
 ### Frontier and cloud provider adapters
 
-mux reaches these through PolyPrompt's native completion clients (PolyPrompt 3.1.0+):
+mux reaches these through PolyPrompt's native provider clients (PolyPrompt 4.0):
 
 ```json
 {
   "endpoints": [
-    { "name": "claude", "adapterType": "anthropic", "model": "claude-opus-4-8", "apiKey": "${ANTHROPIC_API_KEY}" },
-    { "name": "gemini", "adapterType": "gemini", "model": "gemini-2.5-pro", "apiKey": "${GEMINI_API_KEY}" },
+    { "name": "openai", "adapterType": "openai", "model": "gpt-6.1-sol", "apiKey": "${OPENAI_API_KEY}" },
+    { "name": "claude", "adapterType": "anthropic", "model": "claude-sonnet-5-5", "apiKey": "${ANTHROPIC_API_KEY}" },
+    { "name": "gemini", "adapterType": "gemini", "model": "gemini-3.8-flash", "apiKey": "${GEMINI_API_KEY}" },
     { "name": "azure", "adapterType": "azure-openai", "baseUrl": "https://my-resource.openai.azure.com",
-      "model": "my-gpt4o-deployment", "apiKey": "${AZURE_OPENAI_API_KEY}", "apiVersion": "2024-10-21" },
+      "model": "my-deployment", "apiKey": "${AZURE_OPENAI_API_KEY}" },
     { "name": "vertex", "adapterType": "vertex", "model": "gemini-2.5-pro", "project": "my-gcp-project", "region": "us-central1" },
     { "name": "bedrock", "adapterType": "bedrock", "model": "anthropic.claude-3-5-sonnet-20241022-v2:0", "region": "us-east-1" }
   ]

@@ -52,10 +52,13 @@ namespace Mux.Desktop.Views
             string current = _Endpoint.ReasoningEffort?.Level?.ToString().ToLowerInvariant() ?? Off;
 
             panel.Children.Add(Option(Localizer.T("reasoning.off"), Off, current, theme, Localizer.T("reasoning.off.tip")));
+            panel.Children.Add(Option(Localizer.T("reasoning.none"), "none", current, theme, Localizer.T("reasoning.none.tip")));
             panel.Children.Add(Option(Localizer.T("reasoning.minimal"), "minimal", current, theme, Localizer.T("reasoning.minimal.tip")));
             panel.Children.Add(Option(Localizer.T("reasoning.low"), "low", current, theme, Localizer.T("reasoning.low.tip")));
             panel.Children.Add(Option(Localizer.T("reasoning.medium"), "medium", current, theme, Localizer.T("reasoning.medium.tip")));
             panel.Children.Add(Option(Localizer.T("reasoning.high"), "high", current, theme, Localizer.T("reasoning.high.tip")));
+            panel.Children.Add(Option(Localizer.T("reasoning.xhigh"), "xhigh", current, theme, Localizer.T("reasoning.xhigh.tip")));
+            panel.Children.Add(Option(Localizer.T("reasoning.max"), "max", current, theme, Localizer.T("reasoning.max.tip")));
 
             Button cancel = new Button { Content = Localizer.T("act.cancel"), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 6, 0, 0) };
             cancel.Tip(Localizer.T("reasoning.cancel.tip"));

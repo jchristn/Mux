@@ -465,7 +465,15 @@ namespace Mux.Core.Settings
                 return new List<EndpointConfig>();
             }
 
-            EndpointsFile? file = JsonSerializer.Deserialize<EndpointsFile>(json, _JsonOptions);
+            EndpointsFile? file;
+            try
+            {
+                file = JsonSerializer.Deserialize<EndpointsFile>(json, _JsonOptions);
+            }
+            catch (JsonException ex)
+            {
+                throw ConfigFileJsonException.For(filePath, ex);
+            }
             if (file == null || file.Endpoints == null)
             {
                 return new List<EndpointConfig>();
@@ -711,7 +719,15 @@ namespace Mux.Core.Settings
             }
 
             string json = File.ReadAllText(filePath);
-            MuxSettings? settings = JsonSerializer.Deserialize<MuxSettings>(json, _JsonOptions);
+            MuxSettings? settings;
+            try
+            {
+                settings = JsonSerializer.Deserialize<MuxSettings>(json, _JsonOptions);
+            }
+            catch (JsonException ex)
+            {
+                throw ConfigFileJsonException.For(filePath, ex);
+            }
             settings ??= new MuxSettings();
 
             MuxSettings normalized = NormalizeSettingsForPersistence(settings);
@@ -752,7 +768,14 @@ namespace Mux.Core.Settings
             }
 
             string json = ReadAllTextShared(filePath);
-            return ParseMcpServers(json);
+            try
+            {
+                return ParseMcpServers(json);
+            }
+            catch (JsonException ex)
+            {
+                throw ConfigFileJsonException.For(filePath, ex);
+            }
         }
 
         /// <summary>

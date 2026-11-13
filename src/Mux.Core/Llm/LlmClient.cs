@@ -39,7 +39,7 @@ namespace Mux.Core.Llm
         private static readonly LoggingModule SilentLogging = CreateSilentLogging();
 
         private readonly HttpClient _HttpClient;
-        private readonly CompletionClientBase _Client;
+        private readonly ProviderClientBase _Client;
         private readonly EndpointConfig _Endpoint;
         private readonly LlmUsage _CumulativeUsage = new LlmUsage();
         private Action<int, int, string>? _OnRetry = null;
@@ -236,7 +236,7 @@ namespace Mux.Core.Llm
             if (!response.Success)
             {
                 throw new HttpRequestException(
-                    $"LLM request to {_Endpoint.BaseUrl} failed with status {response.StatusCode}: {response.Error}",
+                    $"LLM request to {_Endpoint.BaseUrl} failed with status {response.StatusCode}: {response.Error}{AdapterHint(response.StatusCode)}",
                     null,
                     response.StatusCode.HasValue ? (HttpStatusCode)response.StatusCode.Value : null);
             }
@@ -658,7 +658,7 @@ namespace Mux.Core.Llm
                 yield return new ErrorEvent
                 {
                     Code = "llm_error",
-                    Message = $"LLM request to {_Endpoint.BaseUrl} failed with status {response.StatusCode}: {response.Error}"
+                    Message = $"LLM request to {_Endpoint.BaseUrl} failed with status {response.StatusCode}: {response.Error}{AdapterHint(response.StatusCode)}"
                 };
                 yield break;
             }
@@ -832,13 +832,13 @@ namespace Mux.Core.Llm
             return new QueryStringAuthHandler(endpoint.AuthParameterName!, key!);
         }
 
-        // The OpenAI-family HTTP adapters share a single OpenAI-compatible wire protocol and so honor the
-        // configurable auth placement. Native adapters (anthropic, gemini, azure-openai, vertex, bedrock)
-        // carry a fixed credential scheme and ignore placement.
+        // The Chat Completions adapters and Ollama honor the configurable auth placement. The openai adapter
+        // speaks the OpenAI Responses API and always sends a bearer key (SettingsLoader warns when placement is
+        // set on it); native adapters (anthropic, gemini, azure-openai, vertex, bedrock, xai) carry a fixed
+        // credential scheme and ignore placement.
         private static bool IsOpenAiFamilyAdapter(AdapterTypeEnum type)
         {
-            return type == AdapterTypeEnum.OpenAi
-                || type == AdapterTypeEnum.Vllm
+            return type == AdapterTypeEnum.Vllm
                 || type == AdapterTypeEnum.OpenAiCompatible
                 || type == AdapterTypeEnum.Ollama;
         }
@@ -928,6 +928,7 @@ namespace Mux.Core.Llm
             MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrOutputTokens, call.Usage.OutputTokens);
             MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrResponseModel, call.Model);
             MuxTelemetry.SetTag(activity, MuxTelemetryNames.AttrFinishReasons, call.FinishReason);
+            MuxTelemetry.SetTag(activity, "polyprompt.reasoning.effort", call.AppliedReasoningEffort);
             if (call.TimeToFirstTokenMs.HasValue)
             {
                 MuxTelemetry.SetTag(activity, "mux.llm.time_to_first_token_ms", call.TimeToFirstTokenMs.Value);
@@ -988,6 +989,7 @@ namespace Mux.Core.Llm
                 TokensPerSecond = tokensPerSecond,
                 FinishReason = string.IsNullOrEmpty(response.FinishReason) ? null : response.FinishReason,
                 Model = string.IsNullOrEmpty(response.Model) ? null : response.Model,
+                AppliedReasoningEffort = string.IsNullOrEmpty(response.AppliedReasoningEffort) ? null : response.AppliedReasoningEffort,
                 Success = response.Success
             };
         }
@@ -1007,13 +1009,21 @@ namespace Mux.Core.Llm
 
         private Pp.ToolChatRequest BuildRequest(List<ConversationMessage> messages, List<ToolDefinition> tools)
         {
-            Pp.CompletionOptions options = new Pp.CompletionOptions
-            {
-                Model = string.IsNullOrWhiteSpace(_Endpoint.Model) ? null : _Endpoint.Model,
-                MaxTokens = _Endpoint.MaxTokens
-            };
-
             Pp.ReasoningEffort? reasoning = MapReasoningEffort(_Endpoint.ReasoningEffort);
+
+            // On the OpenAI Responses API (openai and azure-openai) PolyPrompt takes an exact effort value from
+            // ResponsesApiCompletionOptions.ReasoningEffortValue rather than ReasoningEffort.OpenAiValue (which only
+            // Chat Completions servers read), so carry the endpoint's openAiValue override there as well.
+            string? responsesEffortValue = reasoning != null
+                && (_Endpoint.AdapterType == AdapterTypeEnum.OpenAi || _Endpoint.AdapterType == AdapterTypeEnum.AzureOpenAi)
+                ? reasoning.OpenAiValue
+                : null;
+            Pp.CompletionOptions options = string.IsNullOrWhiteSpace(responsesEffortValue)
+                ? new Pp.CompletionOptions()
+                : new PolyPrompt.Options.ResponsesApiCompletionOptions { ReasoningEffortValue = responsesEffortValue };
+            options.Model = string.IsNullOrWhiteSpace(_Endpoint.Model) ? null : _Endpoint.Model;
+            options.MaxTokens = _Endpoint.MaxTokens;
+
             if (reasoning != null)
             {
                 options.ReasoningEffort = reasoning;
@@ -1078,6 +1088,9 @@ namespace Mux.Core.Llm
                 case ReasoningLevelEnum.Low: return Pp.ReasoningEffortLevel.Low;
                 case ReasoningLevelEnum.Medium: return Pp.ReasoningEffortLevel.Medium;
                 case ReasoningLevelEnum.High: return Pp.ReasoningEffortLevel.High;
+                case ReasoningLevelEnum.XHigh: return Pp.ReasoningEffortLevel.XHigh;
+                case ReasoningLevelEnum.Max: return Pp.ReasoningEffortLevel.Max;
+                case ReasoningLevelEnum.None: return Pp.ReasoningEffortLevel.None;
                 default: return Pp.ReasoningEffortLevel.Medium;
             }
         }
@@ -1179,9 +1192,15 @@ namespace Mux.Core.Llm
             }
         }
 
-        private static CompletionClientBase CreateClient(EndpointConfig endpoint, HttpClient httpClient)
+        private static ProviderClientBase CreateClient(EndpointConfig endpoint, HttpClient httpClient)
         {
-            CompletionClientBase client;
+            ProviderClientBase client;
+
+            // The PolyPrompt client shares mux's transport (certificate policy, per-endpoint headers, and the
+            // query-string auth handler) and never disposes it; LlmClient owns and disposes it. Streaming
+            // responses stay open for minutes, so per-request timeouts are enforced by PolyPrompt via TimeoutMs.
+            int timeoutMs = endpoint.TimeoutMs > 0 ? endpoint.TimeoutMs : 120000;
+            ClientOptions options = new ClientOptions { HttpClient = httpClient, Logging = SilentLogging, TimeoutMs = timeoutMs };
 
             // API keys and cloud coordinates may be stored as ${VAR} references; resolve them the same way
             // header values are resolved so the client receives literal secrets.
@@ -1190,62 +1209,43 @@ namespace Mux.Core.Llm
             switch (endpoint.AdapterType)
             {
                 case AdapterTypeEnum.Ollama:
-                    // The Ollama adapter speaks Ollama's native API (/api/chat), which lives at the server
-                    // root, not under /v1. A base URL carrying a trailing /v1 targets Ollama's separate
-                    // OpenAI-compatible surface and yields "404 page not found" against /v1/api/chat. mux's
-                    // own defaults and docs historically appended /v1 to ollama base URLs, so tolerate it
-                    // here the way OpenAiCompletionClient tolerates a base URL that already ends in /v1.
-                    //
-                    // Pass the API key through: a local Ollama needs none (a blank key resolves to null and
-                    // sends no auth), but an authenticated Ollama-compatible gateway expects the key as an
-                    // Authorization: Bearer header — which PolyPrompt's OllamaCompletionClient sends when given a key.
-                    // Honor the auth placement: only bearer placement hands the key to the client; header and
-                    // query placements apply it to the transport instead (see the constructor).
-                    client = new OllamaCompletionClient(NormalizeOllamaBaseUrl(endpoint.BaseUrl), apiKey: OpenAiFamilyBearerKey(endpoint, apiKey), logging: SilentLogging, httpClient: httpClient);
+                    // The Ollama adapter speaks Ollama's native API (/api/chat) at the server root; PolyPrompt 4
+                    // strips a trailing /v1 itself, and mux normalizes it too for older configurations. A local
+                    // Ollama needs no key; an authenticated gateway gets the key by the endpoint's auth placement
+                    // (bearer here, header or query on the shared transport).
+                    client = new OllamaClient(NormalizeOllamaBaseUrl(endpoint.BaseUrl), OpenAiFamilyBearerKey(endpoint, apiKey), options);
                     break;
                 case AdapterTypeEnum.OllamaCloud:
                     // Cloud has a fixed endpoint and bearer scheme; never inherit local/custom auth placement.
-                    client = new OllamaCloudCompletionClient(
-                        apiKey ?? Environment.GetEnvironmentVariable("OLLAMA_API_KEY") ?? string.Empty,
-                        logging: SilentLogging, httpClient: httpClient);
+                    client = new OllamaCloudClient(RequireKey(endpoint, apiKey, "OLLAMA_API_KEY"), options: options);
                     break;
                 case AdapterTypeEnum.XAi:
-                    client = new XAiCompletionClient(
-                        apiKey ?? Environment.GetEnvironmentVariable("XAI_API_KEY") ?? string.Empty,
-                        DefaultIfBlank(endpoint.BaseUrl, "https://api.x.ai/v1"),
-                        logging: SilentLogging, httpClient: httpClient);
+                    client = new XAiClient(RequireKey(endpoint, apiKey, "XAI_API_KEY"), DefaultIfBlank(endpoint.BaseUrl, "https://api.x.ai/v1"), options);
+                    break;
+                case AdapterTypeEnum.OpenAi:
+                    // OpenAI speaks the Responses API, which carries encrypted reasoning across tool calls in
+                    // ProviderState. It always authenticates with a bearer key. Servers that implement only
+                    // Chat Completions belong on the openai-compatible adapter (SettingsLoader warns when an
+                    // openai endpoint points elsewhere, and PolyPrompt's 404 error says so too).
+                    client = new OpenAiClient(RequireKey(endpoint, apiKey, "OPENAI_API_KEY"), DefaultIfBlankOrNull(endpoint.BaseUrl), options);
                     break;
                 case AdapterTypeEnum.Anthropic:
-                    // Anthropic authenticates with an API key sent as x-api-key; PolyPrompt's client attaches
-                    // it to each request. A blank base URL falls back to the public API root.
-                    client = new AnthropicCompletionClient(
-                        DefaultIfBlank(endpoint.BaseUrl, "https://api.anthropic.com"),
-                        apiKey,
-                        SilentLogging,
-                        httpClient);
+                    // Anthropic authenticates with an API key sent as x-api-key. A blank base URL falls back
+                    // to the public API root.
+                    client = new AnthropicClient(RequireKey(endpoint, apiKey, "ANTHROPIC_API_KEY"), DefaultIfBlankOrNull(endpoint.BaseUrl), options);
                     break;
                 case AdapterTypeEnum.Gemini:
-                    // Gemini (AI Studio) authenticates with the x-goog-api-key header, which PolyPrompt's client
-                    // attaches to each request, so the key is passed to the client rather than as a mux header.
-                    client = new GeminiCompletionClient(
-                        DefaultIfBlank(endpoint.BaseUrl, "https://generativelanguage.googleapis.com"),
-                        apiKey,
-                        SilentLogging,
-                        httpClient);
+                    // Gemini (AI Studio) authenticates with the x-goog-api-key header, sent by the client.
+                    client = new GeminiClient(RequireKey(endpoint, apiKey, "GEMINI_API_KEY", "GOOGLE_API_KEY"), DefaultIfBlankOrNull(endpoint.BaseUrl), options);
                     break;
                 case AdapterTypeEnum.AzureOpenAi:
-                    // Azure routes by resource endpoint + deployment (the model), keyed by an api-key header.
+                    // Azure OpenAI uses the v1 API: the resource endpoint, the deployment sent as the model, and
+                    // an api-key header. api-version is no longer used.
                     if (string.IsNullOrWhiteSpace(endpoint.BaseUrl))
                         throw new InvalidOperationException($"Endpoint '{endpoint.Name}' (azure-openai) requires a baseUrl set to the Azure resource endpoint, e.g. https://my-resource.openai.azure.com.");
                     if (string.IsNullOrWhiteSpace(endpoint.Model))
                         throw new InvalidOperationException($"Endpoint '{endpoint.Name}' (azure-openai) requires a model set to the Azure deployment name.");
-                    client = new AzureOpenAiCompletionClient(
-                        endpoint.BaseUrl,
-                        endpoint.Model,
-                        apiKey ?? string.Empty,
-                        string.IsNullOrWhiteSpace(endpoint.ApiVersion) ? null : ResolveConfigValue(endpoint.ApiVersion),
-                        SilentLogging,
-                        httpClient);
+                    client = new AzureOpenAiClient(endpoint.BaseUrl, RequireKey(endpoint, apiKey), options);
                     break;
                 case AdapterTypeEnum.Vertex:
                 {
@@ -1255,13 +1255,7 @@ namespace Mux.Core.Llm
                     string region = ResolveConfigValue(endpoint.Region) ?? string.Empty;
                     if (string.IsNullOrWhiteSpace(project) || string.IsNullOrWhiteSpace(region))
                         throw new InvalidOperationException($"Endpoint '{endpoint.Name}' (vertex) requires both 'project' and 'region'. Credentials come from Application Default Credentials (set GOOGLE_APPLICATION_CREDENTIALS).");
-                    client = new VertexAiCompletionClient(
-                        project,
-                        region,
-                        new AdcCredential(),
-                        DefaultIfBlankOrNull(endpoint.BaseUrl),
-                        SilentLogging,
-                        httpClient);
+                    client = new VertexAiClient(project, region, new AdcCredential(), DefaultIfBlankOrNull(endpoint.BaseUrl), options);
                     break;
                 }
                 case AdapterTypeEnum.Bedrock:
@@ -1271,33 +1265,111 @@ namespace Mux.Core.Llm
                     string region = ResolveConfigValue(endpoint.Region) ?? string.Empty;
                     if (string.IsNullOrWhiteSpace(region))
                         throw new InvalidOperationException($"Endpoint '{endpoint.Name}' (bedrock) requires a 'region'. Credentials come from the AWS environment (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN).");
-                    client = new BedrockCompletionClient(
-                        new EnvironmentAwsCredential(region),
-                        region,
-                        DefaultIfBlankOrNull(endpoint.BaseUrl),
-                        SilentLogging,
-                        httpClient);
+                    client = new BedrockClient(region, new EnvironmentAwsCredential(region), DefaultIfBlankOrNull(endpoint.BaseUrl), options);
                     break;
                 }
-                case AdapterTypeEnum.OpenAi:
                 case AdapterTypeEnum.Vllm:
                 case AdapterTypeEnum.OpenAiCompatible:
                 default:
-                    // The OpenAI family authenticates by the endpoint's auth placement. Bearer placement hands
-                    // the key to the client (sent as Authorization: Bearer); header and query placements apply
-                    // it to the transport instead (see the constructor). A hand-written Authorization entry in
-                    // Headers still works when no API key is set (the key resolves to null and none is sent).
-                    client = new OpenAiCompletionClient(endpoint.BaseUrl, apiKey: OpenAiFamilyBearerKey(endpoint, apiKey), logging: SilentLogging, httpClient: httpClient);
+                    // Chat Completions servers authenticate by the endpoint's auth placement. Bearer placement
+                    // hands the key to the client (sent as Authorization: Bearer); header and query placements
+                    // are applied to mux's transport instead (see the constructor), which keeps mux's rules that
+                    // an explicit Headers entry wins and an existing query parameter is not duplicated. A
+                    // hand-written Authorization entry in Headers still works when no API key is set.
+                    client = new OpenAiCompatibleClient(endpoint.BaseUrl, OpenAiFamilyBearerKey(endpoint, apiKey), options);
                     break;
             }
 
-            if (!string.IsNullOrWhiteSpace(endpoint.Model))
+            if (!string.IsNullOrWhiteSpace(endpoint.Model) && client.Defaults.Completion != null)
             {
-                client.Model = endpoint.Model;
+                client.Defaults.Completion.Model = endpoint.Model;
             }
 
-            client.TimeoutMs = endpoint.TimeoutMs > 0 ? endpoint.TimeoutMs : 120000;
+            client.TimeoutMs = timeoutMs;
             return client;
+        }
+
+        /// <summary>
+        /// Lists the model ids the endpoint's provider advertises, through the provider's own model API. Used by
+        /// <see cref="EndpointModelLister"/> for the native adapters (openai, anthropic, gemini, bedrock,
+        /// azure-openai).
+        /// </summary>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>The model ids, sorted ordinally and de-duplicated.</returns>
+        /// <exception cref="NotSupportedException">The provider has no model-listing API.</exception>
+        /// <exception cref="HttpRequestException">The provider rejected the listing request.</exception>
+        internal async Task<List<string>> ListModelIdsAsync(CancellationToken cancellationToken)
+        {
+            if (!_Client.Supports(Pp.Capability.Models))
+            {
+                throw new NotSupportedException($"{_Client.ProviderName} does not provide a model-listing API; use the provider's model catalog for model identifiers.");
+            }
+
+            SettingsLoader.ValidateEnvironmentReferences(_Endpoint);
+            _Client.ClearCallDetails();
+            SortedSet<string> ids = new SortedSet<string>(StringComparer.Ordinal);
+            await foreach (Pp.ModelInformation model in _Client.ListModelsAsync(cancellationToken).ConfigureAwait(false))
+            {
+                if (!string.IsNullOrWhiteSpace(model.Name)) ids.Add(model.Name);
+            }
+
+            // PolyPrompt ends the listing quietly on an HTTP failure; recover the status from the call details so
+            // callers can still tell an auth error from an empty catalog.
+            if (ids.Count == 0)
+            {
+                foreach (Pp.CallDetail call in _Client.CallDetails)
+                {
+                    if (!call.Success && call.StatusCode.HasValue && call.StatusCode.Value >= 400)
+                    {
+                        throw new HttpRequestException(
+                            $"Model listing at {call.Url} failed with status {call.StatusCode.Value}.",
+                            null,
+                            (HttpStatusCode)call.StatusCode.Value);
+                    }
+                }
+            }
+
+            return new List<string>(ids);
+        }
+
+        // Since mux 1.8 the openai adapter speaks the OpenAI Responses API. A 404 or 405 from a server that only
+        // implements Chat Completions is the likeliest misconfiguration, so name the mux setting that fixes it.
+        private string AdapterHint(int? status)
+        {
+            if (_Endpoint.AdapterType != AdapterTypeEnum.OpenAi || (status != 404 && status != 405)) return string.Empty;
+            return $" Endpoint '{_Endpoint.Name}' uses the openai adapter, which speaks the OpenAI Responses API; if this server only supports Chat Completions, set its adapter to openai-compatible.";
+        }
+
+        // The key a keyed native client requires: the endpoint's own key, else the first set environment
+        // fallback. PolyPrompt 4 rejects a blank key at construction, so fail here with a message that names
+        // the endpoint and where the key can come from.
+        private static string RequireKey(EndpointConfig endpoint, string? apiKey, params string[] environmentFallbacks)
+        {
+            if (!string.IsNullOrWhiteSpace(apiKey)) return apiKey!;
+
+            // Before 1.8 an openai endpoint could authenticate with a hand-written Authorization header and no
+            // apiKey; keep that working by taking the bearer token from the header.
+            if (endpoint.AdapterType == AdapterTypeEnum.OpenAi && endpoint.Headers != null)
+            {
+                foreach (KeyValuePair<string, string> header in endpoint.Headers)
+                {
+                    if (!string.Equals(header.Key, "Authorization", StringComparison.OrdinalIgnoreCase)) continue;
+                    string value = (ResolveConfigValue(header.Value) ?? string.Empty).Trim();
+                    if (value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) && value.Length > 7) return value.Substring(7).Trim();
+                }
+            }
+
+            foreach (string name in environmentFallbacks)
+            {
+                string? value = Environment.GetEnvironmentVariable(name);
+                if (!string.IsNullOrWhiteSpace(value)) return value;
+            }
+
+            string adapter = endpoint.AdapterType.ToKebab();
+            string where = environmentFallbacks.Length == 0
+                ? "set apiKey"
+                : "set apiKey or the " + string.Join(" or ", environmentFallbacks) + " environment variable";
+            throw new InvalidOperationException($"Endpoint '{endpoint.Name}' ({adapter}) requires an API key: {where}.");
         }
 
         private static string? ResolveConfigValue(string? value)

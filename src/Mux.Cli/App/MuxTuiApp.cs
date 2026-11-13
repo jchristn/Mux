@@ -776,7 +776,9 @@ namespace Mux.Cli.App
             ReasoningLevelEnum? current = active?.ReasoningEffort?.Level;
             int selected = TuiPresentation.EffortIndexFor(current);
 
-            string[] names = { "Off", "Minimal", "Low", "Medium", "High" };
+            // Off sends no reasoning field; None asks the provider to turn reasoning off. Extra high and Max map
+            // to the provider's highest level where it lacks them.
+            string[] names = { "Off", "None", "Minimal", "Low", "Medium", "High", "Extra high", "Max" };
             List<string> labels = new List<string>();
             for (int i = 0; i < names.Length; i++)
             {
@@ -792,7 +794,7 @@ namespace Mux.Cli.App
         private async Task ResolveEffortSelectorAsync(EffortSelectModal modal, EndpointConfig? active)
         {
             object? result = await modal.Completion.ConfigureAwait(false);
-            if (result is int index && index >= 0 && index <= 4)
+            if (result is int index && index >= 0 && index <= 7)
             {
                 ApplyEffort(active, index);
             }

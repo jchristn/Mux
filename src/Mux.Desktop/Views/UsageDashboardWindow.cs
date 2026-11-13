@@ -1713,6 +1713,11 @@ namespace Mux.Desktop.Views
                 Grid.SetColumn(status, 7);
                 line.Children.Add(status);
 
+                if (!string.IsNullOrEmpty(row.AppliedReasoningEffort))
+                {
+                    line.Tip(Localizer.T("usage.effortSent") + ": " + row.AppliedReasoningEffort);
+                }
+
                 _EventsList.Children.Add(line);
             }
         }

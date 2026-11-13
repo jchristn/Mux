@@ -1819,8 +1819,8 @@ function renderEp(){renderGrid("endpoints_list",
    {h:t("col.model"),get:function(e){return esc(e.Model||"")}},
    {h:t("col.auth"),w:"60px",tip:"Whether an API key is stored for this endpoint (never shown)",get:function(e){return e.ApiKeySet?'🔑':'<span class="muted">—</span>'}}],
   _ep,{icon:"🔌",msg:t("empty.endpoints"),add:"+ "+t("add.endpoint")});}
-function epIsOpenAiFamily(v){return v.AdapterType==="ollama"||v.AdapterType==="openai"||v.AdapterType==="openai-compatible"||v.AdapterType==="vllm";}
-function epUsesKey(v){return epIsOpenAiFamily(v)||v.AdapterType==="xai"||v.AdapterType==="ollama-cloud"||v.AdapterType==="anthropic"||v.AdapterType==="gemini"||v.AdapterType==="azure-openai";}
+function epIsOpenAiFamily(v){return v.AdapterType==="ollama"||v.AdapterType==="openai-compatible"||v.AdapterType==="vllm";}
+function epUsesKey(v){return epIsOpenAiFamily(v)||v.AdapterType==="openai"||v.AdapterType==="xai"||v.AdapterType==="ollama-cloud"||v.AdapterType==="anthropic"||v.AdapterType==="gemini"||v.AdapterType==="azure-openai";}
 function epUsesParamName(v){return epIsOpenAiFamily(v)&&(v.AuthPlacement==="header"||v.AuthPlacement==="query");}
 function epHeadersToText(hs){return (hs||[]).map(function(h){return h.Key+":"+(h.Value?" "+h.Value:"");});}
 function epTextToHeaders(lines){return (lines||[]).map(function(ln){var i=ln.indexOf(":");var k=(i<0?ln:ln.slice(0,i)).trim();var val=(i<0?"":ln.slice(i+1)).trim();return {Key:k,Value:val};}).filter(function(h){return h.Key;});}
@@ -1847,7 +1847,6 @@ function epFields(isEdit){return [
   {id:"AuthParameterName",label:"Parameter name",placeholder:"x-api-key / key",showIf:epUsesParamName,tip:"The header name (header placement) or query-string parameter name (query placement) that carries the API key, e.g. x-api-key or key."},
   {id:"Region",label:"Region",sub:"(cloud region)",showIf:function(v){return v.AdapterType==="vertex"||v.AdapterType==="bedrock";},tip:"Cloud region hosting the model, e.g. us-central1 (Vertex) or us-east-1 (Bedrock)."},
   {id:"Project",label:"Project",sub:"(GCP project id)",showIf:function(v){return v.AdapterType==="vertex";},tip:"The Google Cloud project id that owns the Vertex AI resources."},
-  {id:"ApiVersion",label:"API version",showIf:function(v){return v.AdapterType==="azure-openai";},tip:"The Azure OpenAI api-version query value, e.g. 2024-10-21."},
   {type:"section",label:"Custom headers"},
   {id:"HeadersText",label:"Headers",sub:"(Name: Value per line)",type:"lines",rows:3,showIf:epUsesKey,tip:"Extra HTTP headers sent with every request, one 'Name: Value' per line. For an existing header, leave the value blank to keep the stored one. Applied in addition to the API-key placement above."}];}
 function openEp(i,prefill,onSaved){var isEdit=i>=0,e=isEdit?Object.assign({},_ep[i]):(prefill||{AdapterType:"ollama",MaxTokens:8192,Temperature:0.1,ContextWindow:32768,TimeoutMs:120000,AuthPlacement:"bearer"});
@@ -2815,7 +2814,7 @@ function viewUsageRow(i){var r=_uhist[i];if(!r)return;
   var body='<div class="udetail">'+
     '<div class="udetail-hd"><div><div class="mdl">'+esc(r.Model)+'</div><div class="when">'+esc(fmtWhenAbs(r.TimestampUnixMs))+'</div></div>'+badge+'</div>'+
     sec("Identity",[["Endpoint",r.EndpointName],["Provider",r.AdapterType||"—"],["Call kind",r.CallKind],["Command",r.Command||"—"],["Session",r.SessionId||"—"],["Host",r.BaseHost||"—"]])+
-    sec("Tokens",[["Input",fmtTok(r.InputTokens)],["Cached",fmtTok(r.CachedTokens)],["Output",fmtTok(r.OutputTokens)],["Reasoning",fmtTok(r.ReasoningTokens)],["Total",fmtTok(r.TotalTokens)]])+
+    sec("Tokens",[["Input",fmtTok(r.InputTokens)],["Cached",fmtTok(r.CachedTokens)],["Output",fmtTok(r.OutputTokens)],["Reasoning",fmtTok(r.ReasoningTokens)],["Total",fmtTok(r.TotalTokens)],["Reasoning effort",r.AppliedReasoningEffort||"—"]])+
     sec("Timing",[["Time to first token",r.TimeToFirstTokenMs!=null?fmtMsCompact(r.TimeToFirstTokenMs):"—"],["Streaming time",r.StreamingMs!=null?fmtMsCompact(r.StreamingMs):"—"],["Total latency",r.TotalMs!=null?fmtMsCompact(r.TotalMs):"—"],["Throughput",r.TokensPerSecond!=null?(r.TokensPerSecond.toFixed(1)+" tok/s"):"—"],["Finish reason",r.FinishReason||"—"]])+
     sec("Cost",[["Derived cost",fmtUsd(r.CostUsd)]])+
   '</div>';

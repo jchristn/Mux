@@ -177,14 +177,11 @@ Example:
       "isDefault": true
     },
     {
-      "name": "openai-gpt4o",
+      "name": "openai",
       "adapterType": "openai",
-      "baseUrl": "https://api.openai.com/v1",
-      "model": "gpt-4o",
+      "model": "gpt-6.1-sol",
       "maxAgentIterations": null,
-      "headers": {
-        "Authorization": "Bearer ${OPENAI_API_KEY}"
-      }
+      "apiKey": "${OPENAI_API_KEY}"
     }
   ]
 }
@@ -193,7 +190,7 @@ Example:
 Use one:
 
 ```bash
-mux --endpoint openai-gpt4o
+mux --endpoint openai
 ```
 
 ## Configure Web Search
