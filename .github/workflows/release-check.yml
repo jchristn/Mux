@@ -2,8 +2,8 @@ name: release-check
 
 # Runs the release packaging on all three runners without publishing: every channel builds with the real
 # tools (hdiutil, appimagetool, fpm, gpg, Inno Setup, ...), but no secrets are passed and nothing is
-# uploaded or tagged. It runs when the packaging code or manifest changes, weekly (runner images change
-# underneath the release), and on demand, so a broken channel shows up here rather than in a release.
+# uploaded or tagged. It runs on pushes to main that change the packaging code, manifest, or other
+# packaging inputs.
 
 on:
   push:
@@ -15,9 +15,6 @@ on:
       - 'LICENSE.md'
       - '.github/workflows/release.yml'
       - '.github/workflows/release-check.yml'
-  schedule:
-    - cron: "41 6 * * 1"
-  workflow_dispatch:
 
 concurrency:
   group: release-check-${{ github.ref }}

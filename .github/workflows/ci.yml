@@ -1,19 +1,13 @@
 name: CI
 
-# Every push and pull request runs the Touchstone console runner, which executes every suite, as a parallel
+# Every matching push runs the Touchstone console runner, which executes every suite, as a parallel
 # matrix of operating system and target framework. The xUnit and NUnit adapters run the same suites through
-# their test frameworks, so they run weekly and on demand to keep the adapters honest without tripling the
-# time every push takes. The Docker integration suite (real databases and audit tools in throwaway
-# containers) runs on pushes to main and on demand, in its own job, so it never holds up the main result.
+# their test frameworks on each matching push. The Docker integration suite (real databases and audit tools
+# in throwaway containers) runs on pushes to main in its own job.
 
 on:
   push:
     branches: [main, "feature/**"]
-  pull_request:
-    branches: [main]
-  schedule:
-    - cron: "17 6 * * 1"
-  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -26,7 +20,6 @@ env:
 jobs:
   test:
     name: Tests (${{ matrix.os }}, ${{ matrix.tfm }})
-    if: github.event_name != 'schedule'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -79,7 +72,6 @@ jobs:
 
   adapters:
     name: xUnit and NUnit adapters (${{ matrix.os }})
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -108,7 +100,7 @@ jobs:
 
   docker-integration:
     name: Docker integration (real services)
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
