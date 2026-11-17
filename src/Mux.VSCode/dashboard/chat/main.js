@@ -41,7 +41,7 @@
         }
         const empty = el('div', 'empty');
         const mark = el('div', 'empty-mark');
-        mark.textContent = 'm';
+        mark.appendChild(muxLogo());
         empty.appendChild(mark);
         empty.appendChild(withText(el('div', 'empty-title'), t('empty.title')));
         empty.appendChild(withText(el('div', 'empty-hint'), t('empty.hint')));
@@ -284,6 +284,20 @@
             node.className = cls;
         }
         return node;
+    }
+
+    // The mux "M" mark, the same 7x5 pixel glyph as dashboard/media/mux.svg and the dashboard / desktop logo,
+    // drawn in currentColor so it follows the accent color set on its container.
+    function muxLogo() {
+        const ns = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(ns, 'svg');
+        svg.setAttribute('viewBox', '1 5 21 15');
+        svg.setAttribute('fill', 'currentColor');
+        svg.setAttribute('aria-hidden', 'true');
+        const path = document.createElementNS(ns, 'path');
+        path.setAttribute('d', 'M1 5h6v15H1zM16 5h6v15h-6zM7 8h3v3H7zM13 8h3v3h-3zM10 11h3v3h-3z');
+        svg.appendChild(path);
+        return svg;
     }
 
     function withText(node, text) {

@@ -48,12 +48,16 @@ body {
     border-radius: 12px;
     display: grid;
     place-items: center;
-    font-family: var(--vscode-editor-font-family);
-    font-size: 26px;
-    font-weight: 700;
     color: var(--mux-accent);
     border: 1.5px solid var(--mux-accent);
     opacity: 0.9;
+}
+
+.empty-mark svg {
+    width: 28px;
+    height: 20px;
+    display: block;
+    shape-rendering: crispEdges;
 }
 
 .empty-title {
