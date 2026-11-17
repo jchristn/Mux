@@ -94,11 +94,20 @@ namespace Mux.Publisher.Channels.Drivers
                 // 4. Build the .dmg.
                 string dmgName = Naming.Dmg(project, context.Version, rid);
                 string dmgOut = System.IO.Path.Combine(context.OutputRoot, "macos", dmgName);
-                plan.AddCommand(new ShellCommand("hdiutil", new List<string>
+                // hdiutil sizes a -srcfolder image from its own estimate, which can come up short for a large
+                // self-contained bundle ("create failed - No space left on device"). Pass an explicit size
+                // with headroom when the publish output is on disk; UDZO compresses the result, so the extra
+                // room costs nothing in the shipped .dmg.
+                List<string> createArgs = new List<string> { "create", "-volname", display, "-srcfolder", appAbs };
+                long publishBytes = DirectorySizeBytes(published.PublishDir);
+                if (publishBytes > 0)
                 {
-                    "create", "-volname", display, "-srcfolder", appAbs, "-ov", "-format", "UDZO", dmgOut
-                })
-                { Description = "Create the .dmg for " + rid });
+                    createArgs.Add("-size");
+                    createArgs.Add(DmgImageSizeMegabytes(publishBytes) + "m");
+                }
+
+                createArgs.AddRange(new[] { "-ov", "-format", "UDZO", dmgOut });
+                plan.AddCommand(new ShellCommand("hdiutil", createArgs) { Description = "Create the .dmg for " + rid });
 
                 // 4b. Attach a Software License Agreement so the volume shows an Agree/Disagree prompt and will
                 //     not mount until the user accepts. Done before notarize/staple so the ticket covers the
@@ -185,6 +194,34 @@ namespace Mux.Publisher.Channels.Drivers
         private static string Xml(string value)
         {
             return (value ?? string.Empty).Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+        }
+
+        /// <summary>
+        /// The image size, in megabytes, to give <c>hdiutil create</c> for a bundle whose content is
+        /// <paramref name="contentBytes"/>: the content plus 25% for filesystem overhead plus a fixed 64 MB
+        /// for the icon, plist, license, and codesign data added to the bundle, rounded up.
+        /// </summary>
+        /// <param name="contentBytes">The size of the published output in bytes.</param>
+        /// <returns>The size in megabytes (at least 64).</returns>
+        public static long DmgImageSizeMegabytes(long contentBytes)
+        {
+            const long Mb = 1024L * 1024L;
+            long withOverhead = Math.Max(0, contentBytes) + (Math.Max(0, contentBytes) / 4);
+            return ((withOverhead + Mb - 1) / Mb) + 64;
+        }
+
+        private static long DirectorySizeBytes(string? dir)
+        {
+            if (string.IsNullOrEmpty(dir) || !System.IO.Directory.Exists(dir)) return 0;
+            long total = 0;
+            foreach (string file in System.IO.Directory.EnumerateFiles(dir, "*", System.IO.SearchOption.AllDirectories))
+            {
+                try { total += new System.IO.FileInfo(file).Length; }
+                catch (System.IO.IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+
+            return total;
         }
     }
 }

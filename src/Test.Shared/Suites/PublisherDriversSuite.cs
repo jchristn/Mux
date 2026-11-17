@@ -249,6 +249,37 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual("Mux.Agent", PublishService.ProjectExecutableName("src/Mux.Agent/Mux.Agent.csproj", "osx-arm64"), "agent on macOS");
                     }),
 
+                    Case("DmgSizesImageFromPublishOutput", "dmg passes hdiutil an explicit -size with headroom when the publish output is on disk", () =>
+                    {
+                        MuxAssert.AreEqual(64L, DmgDriver.DmgImageSizeMegabytes(0), "empty content still gets the fixed headroom");
+                        MuxAssert.AreEqual(64L + 125L, DmgDriver.DmgImageSizeMegabytes(100L * 1024 * 1024), "100 MB of content -> 125 MB + 64 MB");
+
+                        ChannelConfig cfg = Cfg("desktop", "osx-arm64");
+                        PublisherContext ctx = Ctx(ArtifactKind.Gui, cfg, "osx-arm64");
+                        List<string> unsized = CreateArgs(new DmgDriver().Plan(ctx, cfg));
+                        MuxAssert.IsTrue(!unsized.Contains("-size"), "no -size when the publish output is not on disk (dry run)");
+
+                        string dir = Path.Combine(Path.GetTempPath(), "mux-dmgsize-" + Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(Path.Combine(dir, "sub"));
+                        try
+                        {
+                            File.WriteAllBytes(Path.Combine(dir, "Mux.Desktop"), new byte[3 * 1024 * 1024]);
+                            File.WriteAllBytes(Path.Combine(dir, "sub", "lib.dylib"), new byte[1024 * 1024]);
+                            ctx.PublishedFor("osx-arm64")!.PublishDir = dir;
+                            List<string> sized = CreateArgs(new DmgDriver().Plan(ctx, cfg));
+                            int i = sized.IndexOf("-size");
+                            MuxAssert.IsTrue(i >= 0, "passes -size");
+                            MuxAssert.AreEqual(DmgDriver.DmgImageSizeMegabytes(4L * 1024 * 1024) + "m", sized[i + 1], "size covers every file, nested ones included");
+                            MuxAssert.IsTrue(i < sized.IndexOf("-format"), "-size precedes the format and output");
+                        }
+                        finally
+                        {
+                            try { Directory.Delete(dir, true); } catch (Exception) { }
+                        }
+
+                        static List<string> CreateArgs(ChannelPlan plan) => plan.Commands.Find(c => c.Executable == "hdiutil" && c.Arguments.Count > 0 && c.Arguments[0] == "create")!.Arguments;
+                    }),
+
                     Case("BundledCliHostIsRenamed", "the published Mux.Cli host is renamed to mux (mux.exe on Windows) so installers find it; other bundles keep their names", () =>
                     {
                         string dir = Path.Combine(Path.GetTempPath(), "mux-bundle-" + Guid.NewGuid().ToString("N"));
