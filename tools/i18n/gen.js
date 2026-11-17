@@ -113,7 +113,8 @@ function generateDesktop() {
 // ---------------------------------------------------------------- DashboardStrings.cs
 
 function readDashboardPacks() {
-  const txt = fs.readFileSync(dashboardTemplate, 'utf8');
+  // Normalize a CRLF working-tree checkout (core.autocrlf on Windows) so the markers match.
+  const txt = fs.readFileSync(dashboardTemplate, 'utf8').replace(/\r\n/g, '\n');
   const start = txt.indexOf('var I18N={');
   const end = start < 0 ? -1 : txt.indexOf('\n};\n', start);
   if (start < 0 || end < 0) { throw new Error('could not find "var I18N={ ... };" in ' + dashboardTemplate); }

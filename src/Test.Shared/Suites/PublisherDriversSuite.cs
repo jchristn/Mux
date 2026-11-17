@@ -168,7 +168,20 @@ namespace Test.Shared.Suites
                         ChannelPlan plan = new AppImageDriver().Plan(ctx, cfg);
                         GeneratedFile appRun = Find(plan, "AppRun");
                         MuxAssert.Contains("exec ", appRun.Content, "AppRun execs the binary");
-                        MuxAssert.IsTrue(HasCommand(plan, "appimagetool"), "packs with appimagetool");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "env", "appimagetool"), "packs with appimagetool");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "env", "ARCH=x86_64"), "sets ARCH for x64");
+                    }),
+
+                    Case("AppImageSetsArchPerRuntime", "appimage passes ARCH to appimagetool for each runtime it packs", () =>
+                    {
+                        ChannelConfig cfg = Cfg("desktop", "linux-arm64");
+                        PublisherContext ctx = Ctx(ArtifactKind.Gui, cfg, "linux-arm64");
+                        ChannelPlan plan = new AppImageDriver().Plan(ctx, cfg);
+                        ShellCommand? pack = plan.Commands.Find(c => c.Arguments.Contains("appimagetool"));
+                        MuxAssert.IsTrue(pack != null, "packs with appimagetool");
+                        MuxAssert.AreEqual("env", pack!.Executable, "runs through env so ARCH is set");
+                        MuxAssert.AreEqual("ARCH=aarch64", pack.Arguments[0], "arm64 packs as aarch64");
+                        MuxAssert.AreEqual("x86_64", AppImageDriver.AppImageArch("linux-x64"), "x64 packs as x86_64");
                     }),
 
                     Case("AptSignsRepoMetadata", "apt generates and GPG-signs Release metadata", () =>

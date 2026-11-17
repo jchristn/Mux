@@ -405,7 +405,7 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("(cfg.kind===\"dist\")?distChart(buckets,cfg,usageState.range):(usageState.mode===\"lines\"?lineChart(buckets,cfg,usageState.range):barChart(buckets,cfg,usageState.range))", html, "box plots are unaffected");
                         MuxAssert.Contains(".uplot .uline{fill:none;stroke-width:2;vector-effect:non-scaling-stroke", html, "2px lines");
                         MuxAssert.Contains("if(n<=48)pts.forEach(", html, "point markers on short series");
-                        MuxAssert.Contains("return plotFrameHtml(svg,cfg,yl,buckets,rangeId);\n}\n/* Distribution", html, "lines reuse the plot frame (tooltip, cursor, drill-down)");
+                        MuxAssert.Contains("return plotFrameHtml(svg,cfg,yl,buckets,rangeId);\n}\n/* Distribution", html.Replace("\r\n", "\n"), "lines reuse the plot frame (tooltip, cursor, drill-down)");
 
                         string? node = FindOnPath("node");
                         if (node == null) return Task.CompletedTask;

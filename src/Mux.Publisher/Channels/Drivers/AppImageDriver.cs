@@ -59,17 +59,30 @@ namespace Mux.Publisher.Channels.Drivers
 
                 plan.AddCommand(new ShellCommand("cp", new List<string> { System.IO.Path.Combine(context.RepoRoot, "assets", "icon-green.png"), appDirAbs + "/" + project + ".png" }) { Description = "Copy the app icon", ContinueOnError = true });
 
-                // appimagetool reads the target architecture from the ARCH environment variable, which
-                // the release workflow exports (aarch64/x86_64) before invoking this channel.
+                // appimagetool reads the target architecture from the ARCH environment variable. One channel
+                // run packs every runtime, so set it per invocation through env(1) rather than relying on the
+                // caller's environment; without it appimagetool guesses from the AppDir's ELF files and fails
+                // when a cross-architecture publish carries a binary of another architecture.
+                string arch = AppImageArch(rid);
                 string outFile = System.IO.Path.Combine(context.OutputRoot, "linux", Naming.AppImage(display, context.Version, rid));
-                plan.AddCommand(new ShellCommand("appimagetool", new List<string> { appDirAbs, outFile })
+                plan.AddCommand(new ShellCommand("env", new List<string> { "ARCH=" + arch, "appimagetool", appDirAbs, outFile })
                 {
-                    Description = "Pack the AppImage for " + rid + " (set ARCH=" + (rid.EndsWith("arm64", StringComparison.OrdinalIgnoreCase) ? "aarch64" : "x86_64") + ")"
+                    Description = "Pack the AppImage for " + rid + " (ARCH=" + arch + ")"
                 });
             }
 
             plan.AddNote("appimage: portable single file — chmod +x and run; no installation needed.");
             return plan;
+        }
+
+        /// <summary>
+        /// Maps a .NET runtime identifier to the architecture name appimagetool expects in <c>ARCH</c>.
+        /// </summary>
+        /// <param name="rid">The runtime identifier (for example <c>linux-arm64</c>).</param>
+        /// <returns><c>aarch64</c> for arm64 runtimes; otherwise <c>x86_64</c>.</returns>
+        public static string AppImageArch(string rid)
+        {
+            return rid != null && rid.EndsWith("arm64", StringComparison.OrdinalIgnoreCase) ? "aarch64" : "x86_64";
         }
 
         /// <summary>
