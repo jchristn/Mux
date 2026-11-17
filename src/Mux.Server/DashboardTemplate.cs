@@ -64,8 +64,8 @@ body{background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
 .view{flex:1;min-height:0;overflow:auto;display:none}
 .view.active{display:flex;flex-direction:column}
 /* chat */
-.chatwrap{flex:1;min-height:0;display:grid;grid-template-columns:248px minmax(0,1fr)}
-.convos{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--panel)}
+.chatwrap{flex:1;min-height:0;display:grid;grid-template-columns:var(--convos-w,248px) minmax(0,1fr)}
+.convos{position:relative;display:flex;flex-direction:column;min-height:0;min-width:0;border-right:1px solid var(--line);background:var(--panel)}
 .convos-head{height:64px;box-sizing:border-box;padding:0 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
 .convos-head .btn{flex:1;height:36px;display:inline-flex;align-items:center;justify-content:center;padding:0 10px;box-sizing:border-box}
 .convos-head .btn.icon{flex:0 0 auto;width:40px}
@@ -78,15 +78,18 @@ body{background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
 .convo-item .convo-menu{display:none;background:none;border:none;cursor:pointer;color:inherit;font-size:16px;line-height:1;padding:2px 6px;border-radius:4px;flex:none}
 .convo-item:hover .convo-menu,.convo-item.active .convo-menu{display:inline-flex}
 .convo-item .convo-menu:hover{background:rgba(127,127,127,.25)}
-.convo-selbar{display:none;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px}
+.convo-selbar{display:none;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;box-sizing:border-box;min-width:0}
 .convos.selecting .convo-selbar{display:flex}
-.convo-selbar .cnt{flex:1;color:var(--muted);white-space:nowrap}
-.convo-selbar .btn{height:28px;padding:0 10px;font-size:12px}
+.convo-selbar .cnt{flex:1 0 100%;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.convo-selbar .btn{flex:1 1 0;min-width:0;height:28px;padding:0 6px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .convo-item .csel{margin:0;flex:none;width:15px;height:15px;accent-color:var(--accent);pointer-events:none}
 .convos.selecting .convo-item{user-select:none}
 .convos.selecting .convo-item.active{background:transparent;color:var(--text);box-shadow:inset 3px 0 0 var(--accent)}
 .convos.selecting .convo-item.selected{background:color-mix(in srgb,var(--accent) 16%,transparent)}
 .convos.selecting .convo-item .convo-menu{display:none}
+.convo-resizer{position:absolute;top:0;right:-4px;width:8px;height:100%;cursor:col-resize;z-index:5;touch-action:none;outline:none}
+.convo-resizer:hover,.convo-resizer:focus-visible,.convo-resizer.dragging{background:linear-gradient(to right,transparent 3px,var(--accent) 3px,var(--accent) 5px,transparent 5px)}
+body.resizing-convos{cursor:col-resize;user-select:none}
 .pickhead{display:flex;gap:8px;margin-bottom:10px}
 .picklist{max-height:min(50vh,360px);overflow-y:auto;display:flex;flex-direction:column;gap:2px}
 .pickrow{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer}
@@ -575,6 +578,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
             <button class="btn secondary" id="convoSelCancel" title="Leave selection mode (Esc)">Cancel</button>
           </div>
           <div class="convo-list" id="convoList"></div>
+          <div class="convo-resizer" id="convoResizer" role="separator" aria-orientation="vertical" aria-label="Resize the conversation list" tabindex="0" title="Drag to resize the conversation list (double-click to reset)"></div>
         </aside>
         <div class="chat">
           <div class="chat-toolbar">
@@ -2928,6 +2932,35 @@ el("delMultiBtn").addEventListener("click",function(){if(convoSel)exitConvoSelec
 el("convoSelAll").addEventListener("click",convoSelAll);
 el("convoSelDelete").addEventListener("click",convoSelDelete);
 el("convoSelCancel").addEventListener("click",exitConvoSelect);
+// Drag the conversation list's right edge to resize it. The width is a per-browser convenience in localStorage
+// (guarded: storage can be unavailable); double-click resets to the default, and Left/Right adjust when focused.
+(function(){
+  var r=el("convoResizer"),wrap=document.querySelector(".chatwrap");if(!r||!wrap)return;
+  var KEY="mux.convosWidth",MIN=180,MAX=640;
+  // The chat view may be hidden when this runs (clientWidth 0), so fall back to the window width.
+  function maxW(){var w=wrap.clientWidth||window.innerWidth;return Math.max(MIN,Math.min(MAX,Math.floor(w*0.6)));}
+  function cur(){var c=document.querySelector(".convos");return c?c.getBoundingClientRect().width:248;}
+  function apply(w){w=Math.round(Math.max(MIN,Math.min(maxW(),w)));wrap.style.setProperty("--convos-w",w+"px");return w;}
+  function save(w){try{localStorage.setItem(KEY,String(w));}catch(e){}}
+  try{var saved=parseInt(localStorage.getItem(KEY),10);if(saved>0)apply(saved);}catch(e){}
+  r.addEventListener("pointerdown",function(e){
+    if(e.button!==0)return;e.preventDefault();
+    try{r.setPointerCapture(e.pointerId);}catch(x){}
+    r.classList.add("dragging");document.body.classList.add("resizing-convos");
+    var left=wrap.getBoundingClientRect().left,last=null;
+    function move(ev){last=apply(ev.clientX-left);}
+    function up(ev){try{r.releasePointerCapture(ev.pointerId);}catch(x){}
+      r.classList.remove("dragging");document.body.classList.remove("resizing-convos");
+      r.removeEventListener("pointermove",move);r.removeEventListener("pointerup",up);r.removeEventListener("pointercancel",up);
+      if(last!==null)save(last);}
+    r.addEventListener("pointermove",move);r.addEventListener("pointerup",up);r.addEventListener("pointercancel",up);
+  });
+  r.addEventListener("dblclick",function(){wrap.style.removeProperty("--convos-w");try{localStorage.removeItem(KEY);}catch(e){}});
+  r.addEventListener("keydown",function(e){
+    if(e.key!=="ArrowLeft"&&e.key!=="ArrowRight")return;e.preventDefault();
+    save(apply(cur()+(e.key==="ArrowRight"?16:-16)));
+  });
+})();
 el("refreshConvosBtn").addEventListener("click",function(){loadConvos();toast("Refreshed");});
 el("endpointSelect").addEventListener("change",recordModelSwitch);
 el("saveSettingsBtn").addEventListener("click",saveSettings);
