@@ -76,6 +76,10 @@ namespace Mux.Cli.App
         private readonly ListView<string> _List = new ListView<string>();
         private readonly int _EndpointCount;
 
+        // The inner content width: at least 64 columns, wider when a row (name, adapter, model) needs it. Render
+        // clamps it to the terminal.
+        private readonly int _ContentWidth;
+
         // Geometry captured on the last Render so HandleMouse can hit-test clicks against the rows and the
         // key-hint line (a modal draws its own box, so it owns the coordinate mapping).
         private Rect _ListRect;
@@ -110,6 +114,7 @@ namespace Mux.Cli.App
                 copy.Add(options[i]);
 
             _List.SetItems(copy);
+            _ContentWidth = Math.Max(64, WideSelectModal.FitWidth(title, copy));
         }
 
         #endregion
@@ -227,7 +232,7 @@ namespace Mux.Cli.App
 
             Padding pad = ContentPadding;
             int hintRows = 2; // blank separator + hint line
-            int innerWidth = Math.Min(64, surface.Size.Width - 2 - pad.Horizontal);
+            int innerWidth = Math.Min(_ContentWidth, surface.Size.Width - 2 - pad.Horizontal);
             int listHeight = Math.Min(_List.Items.Count, surface.Size.Height - 2 - pad.Vertical - hintRows);
             if (innerWidth < 4 || listHeight < 1)
                 return;

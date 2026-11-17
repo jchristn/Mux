@@ -147,6 +147,41 @@ namespace Test.Shared.Suites
                             app.PumpInputOnce();
                             MuxAssert.IsFalse(app.IsModalActive, "splash dismissed");
                         }
+                    }),
+
+                    // ---- Content-fitted select menus (/sessions, skills, packs, ...) ----
+                    Case("FitWidthKeepsShortMenusAtDefault", "A menu of short rows keeps TUIKit's default select width", async (CancellationToken ct) =>
+                    {
+                        await Task.CompletedTask.ConfigureAwait(false);
+                        int width = WideSelectModal.FitWidth("Pick one", new List<string> { "Resume", "Rename", "Delete" });
+                        MuxAssert.AreEqual(WideSelectModal.DefaultContentWidth, width, "short rows stay at the default width");
+                        MuxAssert.AreEqual(WideSelectModal.DefaultContentWidth, WideSelectModal.FitWidth(null, null), "null title/options are tolerated");
+                    }),
+
+                    Case("FitWidthGrowsToWidestRowAndTitle", "A menu grows to fit its widest row or its title", async (CancellationToken ct) =>
+                    {
+                        await Task.CompletedTask.ConfigureAwait(false);
+                        string row = new string('x', 90);
+                        MuxAssert.AreEqual(92, WideSelectModal.FitWidth("Sessions", new List<string> { "short", row }), "widest row plus breathing room");
+                        string title = new string('t', 70);
+                        MuxAssert.AreEqual(74, WideSelectModal.FitWidth(title, new List<string> { "short" }), "long title fits on the border");
+                    }),
+
+                    Case("FittedMenuRendersLongRowUnclipped", "A fitted menu renders a long row in full on a wide terminal", async (CancellationToken ct) =>
+                    {
+                        await Task.CompletedTask.ConfigureAwait(false);
+                        string longRow = "A session title well past forty-six columns   2026-11-17 09:30   model-x   0123456789abcdef";
+                        WideSelectModal modal = WideSelectModal.Fit("Sessions — select to manage", new List<string> { longRow, "short" });
+                        TUIKit.BufferSurface surface = new TUIKit.BufferSurface(new TUIKit.CellBuffer(160, 20));
+                        modal.Render(surface);
+                        System.Text.StringBuilder screen = new System.Text.StringBuilder();
+                        for (int y = 0; y < 20; y++)
+                        {
+                            for (int x = 0; x < 160; x++) screen.Append(surface.Get(x, y).Grapheme);
+                            screen.Append('\n');
+                        }
+
+                        MuxAssert.Contains("0123456789abcdef", screen.ToString(), "the trailing id column is not clipped");
                     })
                 });
         }

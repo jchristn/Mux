@@ -1019,12 +1019,12 @@ namespace Mux.Cli.App
                 labels.Add(marker + TuiPresentation.ThemeLabel(_Themes[i]));
             }
 
-            SelectModal modal = new SelectModal("Theme — ↑↓ then Enter to apply", labels);
+            WideSelectModal modal = WideSelectModal.Fit("Theme — ↑↓ then Enter to apply", labels);
             _App.Modals.Push(modal);
             _ = ResolveThemeSelectorAsync(modal);
         }
 
-        private async Task ResolveThemeSelectorAsync(SelectModal modal)
+        private async Task ResolveThemeSelectorAsync(WideSelectModal modal)
         {
             object? result = await modal.Completion.ConfigureAwait(false);
             if (result is int index && index >= 0 && index < _Themes.Length)
@@ -2588,7 +2588,7 @@ namespace Mux.Cli.App
             }
             else
             {
-                SelectModal modal = new SelectModal(request.Question, labels);
+                WideSelectModal modal = WideSelectModal.Fit(request.Question, labels);
                 _App.Modals.Push(modal);
                 object? result;
                 using (CancellationTokenRegistration registration = Link(cancellationToken, () => modal.RequestClose(-1)))
@@ -2640,7 +2640,7 @@ namespace Mux.Cli.App
 
             WriteNotice("── Proposed plan ──");
             _Conversation.WriteMarkdown(proposal.ToText(), MarkdownOptions.Create());
-            SelectModal modal = new SelectModal("Approve this plan?", new List<string>
+            WideSelectModal modal = WideSelectModal.Fit("Approve this plan?", new List<string>
             {
                 "Approve and auto-accept edits",
                 "Approve (ask before edits)",
@@ -3777,6 +3777,9 @@ namespace Mux.Cli.App
 
 
 
+        // The widest a session title may render in the /sessions browser before it is truncated.
+        private const int SessionTitleColumnMax = 72;
+
         private void OpenSessionBrowser()
         {
             if (_Store == null)
@@ -3802,19 +3805,29 @@ namespace Mux.Cli.App
                 return byUpdated != 0 ? byUpdated : b.CreatedUtc.CompareTo(a.CreatedUtc);
             });
 
-            List<string> labels = new List<string>();
+            // Title / last-updated / model / id, each column on one vertical axis. Titles are capped so a single
+            // very long one cannot push the other columns off-screen; the modal sizes to the widest row.
+            List<IReadOnlyList<string>> rows = new List<IReadOnlyList<string>>();
             foreach (SessionSnapshot session in sessions)
             {
                 string title = string.IsNullOrWhiteSpace(session.Title) ? session.Id : session.Title;
-                labels.Add($"{title}  ({session.Id})");
+                DateTime updated = session.UpdatedUtc == default ? session.CreatedUtc : session.UpdatedUtc;
+                rows.Add(new[]
+                {
+                    TuiPresentation.Truncate(title.Replace('\n', ' ').Trim(), SessionTitleColumnMax),
+                    updated == default ? string.Empty : updated.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture),
+                    session.Model ?? string.Empty,
+                    session.Id,
+                });
             }
 
-            SelectModal modal = new SelectModal("Sessions — select to manage", labels);
+            IReadOnlyList<string> labels = ColumnFormatter.Format(rows, 3);
+            WideSelectModal modal = WideSelectModal.Fit("Sessions — select to manage", labels);
             _App.Modals.Push(modal);
             _ = ResolveSessionBrowserAsync(modal, sessions);
         }
 
-        private async Task ResolveSessionBrowserAsync(SelectModal modal, IReadOnlyList<SessionSnapshot> sessions)
+        private async Task ResolveSessionBrowserAsync(WideSelectModal modal, IReadOnlyList<SessionSnapshot> sessions)
         {
             object? result = await modal.Completion.ConfigureAwait(false);
             int index = result is int value ? value : -1;
@@ -3838,7 +3851,7 @@ namespace Mux.Cli.App
 
             string label = string.IsNullOrWhiteSpace(session.Title) ? session.Id : session.Title;
             List<string> actions = new List<string> { "Resume", "Rename", "Duplicate", "Export (Markdown)", "Export (HTML)", "Delete", "Edit labels", "Edit tags" };
-            SelectModal actionModal = new SelectModal($"Session: {label}", actions);
+            WideSelectModal actionModal = WideSelectModal.Fit($"Session: {label}", actions);
             _App.Modals.Push(actionModal);
             object? actionResult = await actionModal.Completion.ConfigureAwait(false);
             if (!(actionResult is int action) || action < 0)
@@ -4477,7 +4490,7 @@ namespace Mux.Cli.App
         // cancel leaves the flag unset so an unconfigured user is offered it again next launch.
         private async Task RunFirstRunWizardAsync()
         {
-            SelectModal intro = new SelectModal(
+            WideSelectModal intro = WideSelectModal.Fit(
                 "Welcome to mux — set up your first endpoint now?",
                 new List<string> { "Set up now", "Skip for now" });
             _App.Modals.Push(intro);
@@ -4566,7 +4579,7 @@ namespace Mux.Cli.App
                 names.Add(endpoint.Name);
             }
 
-            SelectModal pick = new SelectModal("Edit which endpoint?", names);
+            WideSelectModal pick = WideSelectModal.Fit("Edit which endpoint?", names);
             _App.Modals.Push(pick);
             object? pickResult = await pick.Completion.ConfigureAwait(false);
             int pickIndex = pickResult is int p ? p : -1;
@@ -4643,7 +4656,7 @@ namespace Mux.Cli.App
                 names.Add(endpoint.Name);
             }
 
-            SelectModal pick = new SelectModal("Remove which endpoint?", names);
+            WideSelectModal pick = WideSelectModal.Fit("Remove which endpoint?", names);
             _App.Modals.Push(pick);
             object? pickResult = await pick.Completion.ConfigureAwait(false);
             int pickIndex = pickResult is int p ? p : -1;
@@ -4914,9 +4927,11 @@ namespace Mux.Cli.App
                 actions.Add(McpMenuAction.Details);
             }
 
-            // Widen the modal by 25% over TUIKit's default select width (46) so server rows render with room.
-            const int mcpModalWidth = 58;
-            WideSelectModal modal = new WideSelectModal("MCP servers — Enter edit · +/- add/remove", options, mcpModalWidth, hotkeys);
+            // At least 25% wider than TUIKit's default select width (46) so server rows render with room, and
+            // wider still when a server row (name, transport, status) needs it.
+            const string mcpTitle = "MCP servers — Enter edit · +/- add/remove";
+            int mcpModalWidth = Math.Max(58, WideSelectModal.FitWidth(mcpTitle, options));
+            WideSelectModal modal = new WideSelectModal(mcpTitle, options, mcpModalWidth, hotkeys);
             _App.Modals.Push(modal);
             _ = ResolveMcpModalAsync(modal, servers, actions);
         }
@@ -5042,7 +5057,7 @@ namespace Mux.Cli.App
                 names.Add(server.Name);
             }
 
-            SelectModal pick = new SelectModal("Remove which MCP server?", names);
+            WideSelectModal pick = WideSelectModal.Fit("Remove which MCP server?", names);
             _App.Modals.Push(pick);
             object? pickResult = await pick.Completion.ConfigureAwait(false);
             int pickIndex = pickResult is int p ? p : -1;
@@ -5175,12 +5190,12 @@ namespace Mux.Cli.App
             {
                 title += " · category " + _SkillCategoryFilter;
             }
-            SelectModal modal = new SelectModal(title, options);
+            WideSelectModal modal = WideSelectModal.Fit(title, options);
             _App.Modals.Push(modal);
             _ = ResolveSkillsModalAsync(modal, statuses, actions);
         }
 
-        private async Task ResolveSkillsModalAsync(SelectModal modal, List<SkillStatus> statuses, List<SkillMenuAction> actions)
+        private async Task ResolveSkillsModalAsync(WideSelectModal modal, List<SkillStatus> statuses, List<SkillMenuAction> actions)
         {
             object? result = await modal.Completion.ConfigureAwait(false);
             int index = result is int value ? value : -1;
@@ -5270,7 +5285,7 @@ namespace Mux.Cli.App
                 "Forget the decision"
             };
 
-            SelectModal modal = new SelectModal("Trust this project's skills?", options);
+            WideSelectModal modal = WideSelectModal.Fit("Trust this project's skills?", options);
             _App.Modals.Push(modal);
             object? result = await modal.Completion.ConfigureAwait(false);
             int index = result is int value ? value : -1;
@@ -5799,7 +5814,7 @@ namespace Mux.Cli.App
                 "Set category… (now " + status.Category + (status.CategoryOverridden ? ", overridden" : string.Empty) + ")"
             };
 
-            SelectModal pick = new SelectModal($"{status.Title} — action", actions);
+            WideSelectModal pick = WideSelectModal.Fit($"{status.Title} — action", actions);
             _App.Modals.Push(pick);
             object? result = await pick.Completion.ConfigureAwait(false);
             int index = result is int value ? value : -1;
@@ -5844,7 +5859,7 @@ namespace Mux.Cli.App
             }
 
             List<string> options = counts.ConvertAll(c => c.Category + "  (" + c.Count + ")");
-            SelectModal pick = new SelectModal("Filter skills by category", options);
+            WideSelectModal pick = WideSelectModal.Fit("Filter skills by category", options);
             _App.Modals.Push(pick);
             object? result = await pick.Completion.ConfigureAwait(false);
             int index = result is int value ? value : -1;
@@ -5889,7 +5904,7 @@ namespace Mux.Cli.App
 
             options.Add("Custom…");
             options.Add("Clear override (use the SKILL.md category)");
-            SelectModal pick = new SelectModal(status.Title + " · category", options);
+            WideSelectModal pick = WideSelectModal.Fit(status.Title + " · category", options);
             _App.Modals.Push(pick);
             object? result = await pick.Completion.ConfigureAwait(false);
             int index = result is int value ? value : -1;
@@ -5997,12 +6012,12 @@ namespace Mux.Cli.App
                 options.Add(pack.Id + "  " + installer.InstalledCount(pack.Id) + "/" + pack.Skills.Count + "  " + pack.Title);
             }
 
-            SelectModal modal = new SelectModal("Skill packs (installed/total)", options);
+            WideSelectModal modal = WideSelectModal.Fit("Skill packs (installed/total)", options);
             _App.Modals.Push(modal);
             _ = ResolvePacksModalAsync(modal, installer);
         }
 
-        private async Task ResolvePacksModalAsync(SelectModal modal, Mux.Core.Skills.Packaging.SkillPackInstaller installer)
+        private async Task ResolvePacksModalAsync(WideSelectModal modal, Mux.Core.Skills.Packaging.SkillPackInstaller installer)
         {
             object? result = await modal.Completion.ConfigureAwait(false);
             int index = result is int value ? value : -1;
@@ -6020,12 +6035,12 @@ namespace Mux.Cli.App
                 options.Add((installer.IsInstalled(pack.Id, skill.Id) ? "[x] " : "[ ] ") + skill.Id);
             }
 
-            SelectModal modal = new SelectModal(pack.Title + ": select a skill to install or remove it", options);
+            WideSelectModal modal = WideSelectModal.Fit(pack.Title + ": select a skill to install or remove it", options);
             _App.Modals.Push(modal);
             _ = ResolvePackModalAsync(modal, installer, pack);
         }
 
-        private async Task ResolvePackModalAsync(SelectModal modal, Mux.Core.Skills.Packaging.SkillPackInstaller installer, Mux.Core.Skills.Packaging.SkillPack pack)
+        private async Task ResolvePackModalAsync(WideSelectModal modal, Mux.Core.Skills.Packaging.SkillPackInstaller installer, Mux.Core.Skills.Packaging.SkillPack pack)
         {
             object? result = await modal.Completion.ConfigureAwait(false);
             int index = result is int value ? value : -1;
@@ -6274,7 +6289,7 @@ namespace Mux.Cli.App
             _App.Modals.Push(descPrompt);
             string description = ((await descPrompt.Completion.ConfigureAwait(false)) as string ?? string.Empty).Trim();
 
-            SelectModal mutatingPick = new SelectModal("New skill — behavior", new List<string> { "Read-only (no writes)", "Mutating (writes; needs approval)" });
+            WideSelectModal mutatingPick = WideSelectModal.Fit("New skill — behavior", new List<string> { "Read-only (no writes)", "Mutating (writes; needs approval)" });
             _App.Modals.Push(mutatingPick);
             object? mutatingResult = await mutatingPick.Completion.ConfigureAwait(false);
             int mutatingIndex = mutatingResult is int m ? m : 0;
@@ -6284,7 +6299,7 @@ namespace Mux.Cli.App
             }
 
             List<string> interpreters = new List<string> { "pwsh", "bash", "python", "node", "sh", "dotnet-script" };
-            SelectModal interpreterPick = new SelectModal("New skill — interpreter", interpreters);
+            WideSelectModal interpreterPick = WideSelectModal.Fit("New skill — interpreter", interpreters);
             _App.Modals.Push(interpreterPick);
             object? interpreterResult = await interpreterPick.Completion.ConfigureAwait(false);
             int interpreterIndex = interpreterResult is int i ? i : -1;

@@ -2,6 +2,11 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 1.8.1
+
+- The mux icon in the activity bar and Chat view now matches the dashboard and desktop "M" logo. It was a
+  distorted redraw.
+
 ## Unreleased
 
 - Connecting starts the mux tray agent (`mux agent start`) and uses its server, like the terminal UI and desktop

@@ -53,6 +53,49 @@ namespace Mux.Cli.App
             _Hotkeys = hotkeys;
         }
 
+        /// <summary>
+        /// The narrowest content width <see cref="Fit"/> produces: TUIKit's fixed <c>SelectModal</c> width, so
+        /// a menu of short rows looks the same as before and only menus with long rows grow.
+        /// </summary>
+        public const int DefaultContentWidth = 46;
+
+        /// <summary>
+        /// Creates a modal sized to its content: as wide as the widest option or the title (whichever is
+        /// larger), never narrower than <see cref="DefaultContentWidth"/>. The modal still clamps to the
+        /// terminal when it renders, so a very wide menu is safe on a narrow terminal.
+        /// </summary>
+        /// <param name="title">The box title. Must not be null.</param>
+        /// <param name="options">The options. Must not be null or empty.</param>
+        /// <param name="hotkeys">Optional single-key shortcuts; see the constructor.</param>
+        /// <returns>The modal.</returns>
+        public static WideSelectModal Fit(string title, IReadOnlyList<string> options, IReadOnlyDictionary<char, int>? hotkeys = null)
+        {
+            return new WideSelectModal(title, options, FitWidth(title, options), hotkeys);
+        }
+
+        /// <summary>
+        /// The content width <see cref="Fit"/> uses for <paramref name="title"/> and <paramref name="options"/>.
+        /// </summary>
+        /// <param name="title">The box title (null is treated as empty).</param>
+        /// <param name="options">The options (null is treated as empty).</param>
+        /// <returns>The content width in columns.</returns>
+        public static int FitWidth(string? title, IReadOnlyList<string>? options)
+        {
+            int width = DefaultContentWidth;
+            if (options != null)
+            {
+                for (int i = 0; i < options.Count; i++)
+                {
+                    // +2 leaves a little breathing room after the longest row.
+                    width = Math.Max(width, TUIKit.Unicode.Graphemes.MeasureWidth(options[i] ?? string.Empty) + 2);
+                }
+            }
+
+            // The title is drawn on the top border; room for it plus the corner and spacing glyphs.
+            width = Math.Max(width, TUIKit.Unicode.Graphemes.MeasureWidth(title ?? string.Empty) + 4);
+            return width;
+        }
+
         /// <inheritdoc/>
         public override bool HandleKey(KeyEvent key)
         {

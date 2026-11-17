@@ -78,6 +78,15 @@ body{background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
 .convo-item .convo-menu{display:none;background:none;border:none;cursor:pointer;color:inherit;font-size:16px;line-height:1;padding:2px 6px;border-radius:4px;flex:none}
 .convo-item:hover .convo-menu,.convo-item.active .convo-menu{display:inline-flex}
 .convo-item .convo-menu:hover{background:rgba(127,127,127,.25)}
+.convo-selbar{display:none;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px}
+.convos.selecting .convo-selbar{display:flex}
+.convo-selbar .cnt{flex:1;color:var(--muted);white-space:nowrap}
+.convo-selbar .btn{height:28px;padding:0 10px;font-size:12px}
+.convo-item .csel{margin:0;flex:none;width:15px;height:15px;accent-color:var(--accent);pointer-events:none}
+.convos.selecting .convo-item{user-select:none}
+.convos.selecting .convo-item.active{background:transparent;color:var(--text);box-shadow:inset 3px 0 0 var(--accent)}
+.convos.selecting .convo-item.selected{background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.convos.selecting .convo-item .convo-menu{display:none}
 .pickhead{display:flex;gap:8px;margin-bottom:10px}
 .picklist{max-height:min(50vh,360px);overflow-y:auto;display:flex;flex-direction:column;gap:2px}
 .pickrow{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer}
@@ -556,8 +565,14 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
         <aside class="convos">
           <div class="convos-head">
             <button class="btn" id="newChatBtn" title="Start a fresh conversation">+ New</button>
-            <button class="btn secondary" id="delMultiBtn" title="Delete multiple conversations">- Delete</button>
+            <button class="btn secondary" id="delMultiBtn" title="Select conversations to delete several at once (or Ctrl/Cmd-click a conversation)">☐ Select</button>
             <button class="btn secondary icon" id="refreshConvosBtn" title="Refresh the conversation list">⟳</button>
+          </div>
+          <div class="convo-selbar" id="convoSelBar">
+            <span class="cnt" id="convoSelCount">0 selected</span>
+            <button class="btn secondary" id="convoSelAll" title="Select every conversation (click again to clear)">All</button>
+            <button class="btn danger" id="convoSelDelete" title="Delete the selected conversations, after a confirmation" disabled>Delete</button>
+            <button class="btn secondary" id="convoSelCancel" title="Leave selection mode (Esc)">Cancel</button>
           </div>
           <div class="convo-list" id="convoList"></div>
         </aside>
@@ -630,7 +645,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 
     <!-- Sessions --><div class="view" id="view-sessions"><div class="padw">
       <div class="pagehead"><div class="desc">Saved sessions under <code>~/.mux/sessions</code>. Export to HTML/Markdown or delete.</div>
-        <div class="row"><button class="btn secondary" id="sessions_reload" title="Reload this list from disk, discarding unsaved changes" data-i18n="act.reload">Reload</button></div></div>
+        <div class="row"><button class="btn secondary" id="sessions_delmulti" title="Pick several sessions and delete them at once">Delete multiple…</button><button class="btn secondary" id="sessions_reload" title="Reload this list from disk, discarding unsaved changes" data-i18n="act.reload">Reload</button></div></div>
       <div id="sessions_list"></div></div></div>
 
     <!-- Settings -->
@@ -1153,31 +1168,65 @@ function copyMsg(i,btn){var m=messages[i];if(!m||!m.content)return;copyText(m.co
 function setChatTitle(x){var e=el("chatTitle");if(e)e.textContent=x||"";}
 function loadConvos(){api("/v1.0/api/sessions").then(function(r){renderConvos((r&&r.Items)||[]);}).catch(function(){renderConvos([]);});}
 function highlightConvo(){Array.prototype.forEach.call(document.querySelectorAll("#convoList .convo-item"),function(row){row.classList.toggle("active",row.getAttribute("data-id")===currentSessionId);});}
+// Multi-select over the conversation list: null when off, otherwise the set of selected ids plus the last
+// clicked index (the anchor for a Shift-click range). Entered with the Select button or a Ctrl/Cmd-click.
+var convoSel=null;
+var _convoItems=[];
 function renderConvos(items){
   var box=el("convoList");if(!box)return;
-  if(!items.length){box.innerHTML='<div class="convo-empty">'+"No conversations yet."+'</div>';return;}
   items.sort(function(a,b){return String(b.UpdatedUtc||"").localeCompare(String(a.UpdatedUtc||""));});
+  _convoItems=items;
+  if(convoSel){var keep={};items.forEach(function(s){if(convoSel.ids[s.Id])keep[s.Id]=1;});convoSel.ids=keep;}
+  if(!items.length){box.innerHTML='<div class="convo-empty">'+"No conversations yet."+'</div>';if(convoSel)exitConvoSelect();return;}
   var html="";
-  for(var i=0;i<items.length;i++){var s=items[i];var act=(s.Id===currentSessionId)?" active":"";
-    html+='<div class="convo-item'+act+'" data-id="'+esc(s.Id)+'"><span class="ct" title="'+esc(s.Title||s.Id)+'">'+esc(s.Title||"Untitled")+'</span>'
+  for(var i=0;i<items.length;i++){var s=items[i];var act=(s.Id===currentSessionId)?" active":"";var sel=(convoSel&&convoSel.ids[s.Id]);
+    html+='<div class="convo-item'+act+(sel?" selected":"")+'" data-id="'+esc(s.Id)+'" data-i="'+i+'">'
+      +(convoSel?'<input type="checkbox" class="csel" tabindex="-1"'+(sel?" checked":"")+'>':'')
+      +'<span class="ct" title="'+esc(s.Title||s.Id)+'">'+esc(s.Title||"Untitled")+'</span>'
       +'<button class="convo-menu" title="Actions">&#8942;</button></div>';
   }
   box.innerHTML=html;
+  updateConvoSelBar();
   Array.prototype.forEach.call(box.querySelectorAll(".convo-item"),function(row){
-    var id=row.getAttribute("data-id");
+    var id=row.getAttribute("data-id");var idx=parseInt(row.getAttribute("data-i"),10);
     row.addEventListener("click",function(e){
+      if(convoSel){toggleConvoSel(idx,e.shiftKey);return;}
+      if(e.ctrlKey||e.metaKey){enterConvoSelect();toggleConvoSel(idx,false);return;}
       var b=e.target.closest(".convo-menu");
       if(b){e.stopPropagation();openMenu(b,[
         {label:"Rename",run:function(){renameConvo(id);}},
         {label:"Export (Markdown)",run:function(){exportSe(id,"md");}},
         {label:"Export (HTML)",run:function(){exportSe(id,"html");}},
         {sep:true},
+        {label:"Select",run:function(){enterConvoSelect();toggleConvoSel(idx,false);}},
         {label:"Delete",danger:true,run:function(){deleteConvo(id);}}
       ]);return;}
       openConvo(id);
     });
   });
 }
+function enterConvoSelect(){if(convoSel)return;convoSel={ids:{},last:-1};var a=document.querySelector(".convos");if(a)a.classList.add("selecting");renderConvos(_convoItems);}
+function exitConvoSelect(){convoSel=null;var a=document.querySelector(".convos");if(a)a.classList.remove("selecting");renderConvos(_convoItems);}
+// Toggle one row; with Shift, set every row between the last clicked one and this one to this row's new state.
+function toggleConvoSel(idx,range){
+  if(!convoSel||idx<0||idx>=_convoItems.length)return;
+  var id=_convoItems[idx].Id;var on=!convoSel.ids[id];
+  if(range&&convoSel.last>=0){var a=Math.min(convoSel.last,idx),b=Math.max(convoSel.last,idx);for(var i=a;i<=b;i++){if(on)convoSel.ids[_convoItems[i].Id]=1;else delete convoSel.ids[_convoItems[i].Id];}}
+  else{if(on)convoSel.ids[id]=1;else delete convoSel.ids[id];}
+  convoSel.last=idx;
+  var rows=document.querySelectorAll("#convoList .convo-item");
+  for(var j=0;j<rows.length;j++){var rid=rows[j].getAttribute("data-id");var s=!!convoSel.ids[rid];rows[j].classList.toggle("selected",s);var cb=rows[j].querySelector(".csel");if(cb)cb.checked=s;}
+  updateConvoSelBar();
+}
+function selectedConvoIds(){return convoSel?Object.keys(convoSel.ids):[];}
+function updateConvoSelBar(){
+  var n=selectedConvoIds().length;var c=el("convoSelCount");if(c)c.textContent=n+" selected";
+  var d=el("convoSelDelete");if(d)d.disabled=(n===0);
+  var all=el("convoSelAll");if(all)all.textContent=(n>0&&n===_convoItems.length)?"None":"All";
+}
+function convoSelAll(){if(!convoSel)return;var everything=selectedConvoIds().length===_convoItems.length;convoSel.ids={};if(!everything)_convoItems.forEach(function(s){convoSel.ids[s.Id]=1;});convoSel.last=-1;renderConvos(_convoItems);}
+function convoSelDelete(){var ids=selectedConvoIds();if(!ids.length)return;
+  confirmModal("Delete "+ids.length+" conversation"+(ids.length===1?"":"s")+"? This cannot be undone.",function(){doDeleteMultiple(ids);});}
 function deleteMultiple(){
   api("/v1.0/api/sessions").then(function(r){
     var items=(r&&r.Items)||[];
@@ -1203,9 +1252,12 @@ function doDeleteMultiple(ids){
     api("/v1.0/api/sessions?id="+encodeURIComponent(id),"DELETE").then(function(){ok++;},function(){fail++;}).then(function(){
       done++;if(done!==ids.length)return;
       if(ids.indexOf(currentSessionId)>=0)newChat();
+      if(convoSel){convoSel=null;var a=document.querySelector(".convos");if(a)a.classList.remove("selecting");}
       loadConvos();notifySessionsChanged("");
+      if(el("view-sessions")&&el("view-sessions").classList.contains("active"))loadSessions();
       var msg=(fail===0)?("Deleted "+ok+" conversation"+(ok===1?"":"s")+"."):("Deleted "+ok+", failed to delete "+fail+".");
-      openModal(fail===0?"Deleted":"Completed with errors",'<p style="margin:0">'+esc(msg)+'</p>',[{label:"OK",primary:true}]);
+      if(fail===0)toast(msg);
+      else openModal("Completed with errors",'<p style="margin:0">'+esc(msg)+'</p>',[{label:"OK",primary:true}]);
     });
   });
 }
@@ -2872,7 +2924,10 @@ document.querySelectorAll(".nav-item").forEach(function(n){n.addEventListener("c
 el("themeBtn").addEventListener("click",function(){applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");});
 el("sendBtn").addEventListener("click",function(){if(busy)stopChat();else sendChat();});
 el("newChatBtn").addEventListener("click",newChat);
-el("delMultiBtn").addEventListener("click",deleteMultiple);
+el("delMultiBtn").addEventListener("click",function(){if(convoSel)exitConvoSelect();else enterConvoSelect();});
+el("convoSelAll").addEventListener("click",convoSelAll);
+el("convoSelDelete").addEventListener("click",convoSelDelete);
+el("convoSelCancel").addEventListener("click",exitConvoSelect);
 el("refreshConvosBtn").addEventListener("click",function(){loadConvos();toast("Refreshed");});
 el("endpointSelect").addEventListener("change",recordModelSwitch);
 el("saveSettingsBtn").addEventListener("click",saveSettings);
@@ -2880,7 +2935,7 @@ el("reloadSettingsBtn").addEventListener("click",loadSettings);
 /* modal close wiring */
 el("modalX").addEventListener("click",closeModal);
 el("modalOverlay").addEventListener("click",function(e){if(e.target===el("modalOverlay"))closeModal();});
-document.addEventListener("keydown",function(e){if(e.key==="Escape"){closeMenu();if(el("modalOverlay").classList.contains("show"))closeModal();}});
+document.addEventListener("keydown",function(e){if(e.key==="Escape"){closeMenu();if(el("modalOverlay").classList.contains("show"))closeModal();else if(convoSel)exitConvoSelect();}});
 document.addEventListener("click",closeMenu);
 window.addEventListener("scroll",closeMenu,true);
 window.addEventListener("resize",closeMenu);
@@ -2907,7 +2962,7 @@ on("subagents_add",function(){openSa(-1);});on("subagents_reload",loadSubagents)
 on("hooks_add",function(){openHook(-1);});on("hooks_reload",loadHooks);
 on("cmds_add",function(){openCmd(-1);});on("commands_reload",loadHooks);
 on("keybindings_add",function(){openKb(-1);});on("keybindings_reload",loadKeybindings);
-on("skills_add",function(){openSk(null);});on("skills_packs",openPacks);on("skills_reload",loadSkills);(function(){var sc=el("sk_cat");if(sc)sc.addEventListener("change",function(){_skCat=sc.value;renderSk();});})();loadSkCats();on("sessions_reload",loadSessions);
+on("skills_add",function(){openSk(null);});on("skills_packs",openPacks);on("skills_reload",loadSkills);(function(){var sc=el("sk_cat");if(sc)sc.addEventListener("change",function(){_skCat=sc.value;renderSk();});})();loadSkCats();on("sessions_reload",loadSessions);on("sessions_delmulti",deleteMultiple);
 on("usage_refresh",refreshUsage);on("pricing_add",function(){openPrice(-1);});on("pricing_reload",loadPricing);
 /* row context-menus + row-click-to-edit + empty-state add */
 wireTable("endpoints_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openEp(i);}},{label:t("act.duplicate"),run:function(){openEp(-1,dupOf(_ep[i],"Name"));}},{label:t("act.viewjson"),run:function(){viewJson("Endpoint · "+_ep[i].Name,_ep[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delEp(_ep[i].Name);}}];},row:function(i){openEp(i);},add:function(){openEp(-1);}});
