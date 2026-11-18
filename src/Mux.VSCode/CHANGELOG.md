@@ -2,7 +2,7 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
-## Unreleased
+## 1.8.3
 
 - **Color palettes.** The new `mux.colorPalette` setting defaults to `editor`, which follows your VS Code theme.
   Set it to `mux` to render the chat, usage, form, and about views in the palette chosen on any mux surface
