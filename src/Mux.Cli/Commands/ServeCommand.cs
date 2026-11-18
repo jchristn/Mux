@@ -158,9 +158,12 @@ namespace Mux.Cli.Commands
                 }
             }
             Console.WriteLine("  " + "cloud".PadRight(labelWidth) + " : " + cloud.Status.Describe());
-            Console.WriteLine("  " + "tools".PadRight(labelWidth) + " : " + (allowTools
-                ? "interactive (mutating tools prompt the browser for approval)"
-                : "read-only (mutating tools denied; enable with --allow-tools)"));
+            bool cloudApprovals = settings.Cloud.IsEnrolled && settings.Cloud.Enabled && settings.Cloud.AllowRemoteToolApproval;
+            string toolsLine;
+            if (allowTools) toolsLine = "interactive (mutating tools prompt the browser for approval)";
+            else if (cloudApprovals) toolsLine = "interactive while connected to Mux Cloud (mutating tools prompt for approval); read-only otherwise";
+            else toolsLine = "read-only (mutating tools denied; enable with --allow-tools)";
+            Console.WriteLine("  " + "tools".PadRight(labelWidth) + " : " + toolsLine);
             Console.WriteLine();
             Console.WriteLine("Press Ctrl+C to stop.");
             Console.WriteLine();
