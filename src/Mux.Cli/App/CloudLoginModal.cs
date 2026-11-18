@@ -104,7 +104,7 @@ namespace Mux.Cli.App
             int screenWidth = surface.Size.Width;
             int screenHeight = surface.Size.Height;
             int contentWidth = Math.Max(8, Math.Min(ContentWidth, screenWidth - 2 - (2 * PadX)));
-            List<string> notice = Wrap(CloudAccountService.RemoteAccessNotice, contentWidth);
+            List<string> notice = Wrap(CloudAccountService.RemoteAccessNoticeFor("/cloud remote-approval off"), contentWidth);
             int noticeRows = notice.Count + 1;
             int hintRows = 2;
             int formHeight = _Host.MeasureHeight(contentWidth);

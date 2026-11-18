@@ -29,7 +29,7 @@ namespace Mux.Desktop.Views
         private readonly TextBox _Password = new TextBox { PasswordChar = '•' };
         private readonly TextBox _Server = new TextBox();
         private readonly TextBox _MachineName = new TextBox();
-        private readonly TextBlock _Message = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
+        private readonly TextBlock _Message = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, IsVisible = false };
         private CloudStatus _Status = new CloudStatus();
         private bool _Busy;
         private bool _SignedInView;
@@ -71,6 +71,14 @@ namespace Mux.Desktop.Views
             root.Children.Add(_Message);
             Content = root;
 
+            _Password.KeyDown += (sender, args) =>
+            {
+                if (args.Key == Avalonia.Input.Key.Enter && !_Busy)
+                {
+                    args.Handled = true;
+                    _ = SignInAsync();
+                }
+            };
             _Timer.Tick += (sender, args) => _ = RefreshAsync();
             Opened += (sender, args) => { _Timer.Start(); _ = RefreshAsync(); };
             Closed += (sender, args) => _Timer.Stop();
@@ -100,6 +108,7 @@ namespace Mux.Desktop.Views
             _Built = true;
             _SignedInView = signedIn;
             _Body.Children.Clear();
+            _Body.Children.Add(StatusRow());
             if (!signedIn)
             {
                 _Body.Children.Add(Labeled(Localizer.T("cloud.email"), _Email));
@@ -109,18 +118,11 @@ namespace Mux.Desktop.Views
                 Button signIn = new Button { Content = Localizer.T(_Busy ? "cloud.signingIn" : "cloud.signIn"), IsEnabled = !_Busy, Background = _Theme.AccentButton, Foreground = _Theme.AccentText, Padding = new Thickness(16, 8, 16, 8), HorizontalAlignment = HorizontalAlignment.Left };
                 signIn.Click += (sender, args) => _ = SignInAsync();
                 _Body.Children.Add(signIn);
-                if (_Status.State == CloudStateEnum.SignedOut || _Status.State == CloudStateEnum.Revoked)
-                {
-                    _Body.Children.Add(FieldRow(Localizer.T("cloud.status"), _Status.StateName + ": " + _Status.Describe()));
-                }
-
                 return;
             }
 
-            _Body.Children.Add(FieldRow(Localizer.T("cloud.status"), _Status.StateName));
-            _Body.Children.Add(new TextBlock { Text = _Status.Describe(), Foreground = _Status.State == CloudStateEnum.Connected ? _Theme.Text : _Theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap });
             _Body.Children.Add(FieldRow(Localizer.T("cloud.server"), settings.Cloud.ServerUrl));
-            _Body.Children.Add(FieldRow(Localizer.T("cloud.machine"), (settings.Cloud.MachineName ?? CloudMachineInfo.Hostname()) + "  (" + settings.Cloud.MachineId + ")"));
+            _Body.Children.Add(FieldRow(Localizer.T("cloud.machine"), (settings.Cloud.MachineName ?? CloudMachineInfo.Hostname()) + " (" + settings.Cloud.MachineId + ")"));
             _Body.Children.Add(FieldRow(Localizer.T("cloud.account"), settings.Cloud.AccountEmail ?? string.Empty));
 
             CheckBox remote = new CheckBox { Content = Localizer.T("cloud.remoteApproval"), IsChecked = settings.Cloud.AllowRemoteToolApproval, Foreground = _Theme.Text };
@@ -131,6 +133,7 @@ namespace Mux.Desktop.Views
                 SettingsLoader.SaveSettings(latest);
             };
             _Body.Children.Add(remote);
+            _Body.Children.Add(new TextBlock { Text = Localizer.T("cloud.remoteApprovalHint"), Foreground = _Theme.Muted, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(28, -6, 0, 0) });
 
             StackPanel buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
             Button open = new Button { Content = Localizer.T("cloud.open"), Background = _Theme.SurfaceAlt, Foreground = _Theme.Text, BorderBrush = _Theme.Border, BorderThickness = new Thickness(1), Padding = new Thickness(14, 6, 14, 6) };
@@ -140,6 +143,7 @@ namespace Mux.Desktop.Views
             {
                 CloudAccountService.Logout();
                 _Message.Text = string.Empty;
+                _Message.IsVisible = false;
                 Render(true);
                 _ = RefreshAsync();
             };
@@ -156,11 +160,13 @@ namespace Mux.Desktop.Views
             {
                 _Message.Foreground = _Theme.Error;
                 _Message.Text = Localizer.T("cloud.required");
+                _Message.IsVisible = true;
                 return;
             }
 
             _Busy = true;
             _Message.Text = string.Empty;
+            _Message.IsVisible = false;
             Render(true);
             string? server = string.IsNullOrWhiteSpace(_Server.Text) ? null : _Server.Text.Trim();
             string? name = string.IsNullOrWhiteSpace(_MachineName.Text) ? null : _MachineName.Text.Trim();
@@ -183,11 +189,43 @@ namespace Mux.Desktop.Views
                 {
                     _Message.Foreground = _Theme.Error;
                     _Message.Text = Localizer.T("cloud.failed") + error;
+                    _Message.IsVisible = true;
                 }
 
                 Render(true);
                 _ = RefreshAsync();
             });
+        }
+
+        // Status in the shared state names, colored by state, with the reason under it (the Connected state needs no
+        // description: the rows below say where and as whom).
+        private Control StatusRow()
+        {
+            IBrush color = _Status.State switch
+            {
+                CloudStateEnum.Connected => _Theme.Success,
+                CloudStateEnum.Connecting => _Theme.Warning,
+                CloudStateEnum.Reconnecting => _Theme.Warning,
+                CloudStateEnum.SignedOut => _Theme.Error,
+                CloudStateEnum.Revoked => _Theme.Error,
+                _ => _Theme.Muted
+            };
+            StackPanel value = new StackPanel { Spacing = 2 };
+            value.Children.Add(new TextBlock { Text = "● " + _Status.StateName, Foreground = color, FontSize = 12, FontWeight = FontWeight.SemiBold });
+            string detail = _Status.State == CloudStateEnum.Connected
+                ? (_Status.LatencyMs.HasValue ? Math.Round(_Status.LatencyMs.Value).ToString(System.Globalization.CultureInfo.InvariantCulture) + " ms" : string.Empty)
+                : _Status.Describe();
+            if (!string.IsNullOrEmpty(detail))
+            {
+                value.Children.Add(new TextBlock { Text = detail, Foreground = _Theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+            }
+
+            DockPanel row = new DockPanel();
+            TextBlock name = new TextBlock { Text = Localizer.T("cloud.status"), Foreground = _Theme.Muted, FontSize = 12, Width = 110, VerticalAlignment = VerticalAlignment.Top };
+            DockPanel.SetDock(name, Dock.Left);
+            row.Children.Add(name);
+            row.Children.Add(value);
+            return row;
         }
 
         private Control Labeled(string label, Control field)

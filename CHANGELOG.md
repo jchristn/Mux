@@ -18,6 +18,8 @@ All notable changes to mux are documented here.
 - **Working directory for new conversations.** `GET /v1.0/api/workspaces` suggests folders, sessions report their
   `WorkingDirectory`, and the dashboard chat has a folder picker.
 - `WEBSOCKETS_API.md`: the full `/v1.0/ws` reference.
+- Dashboard deep links: `/dashboard?session=<id>` or `#session=<id>` opens that conversation, and `#<view>`
+  opens a view (the tray's Mux Cloud item opens `#settings`).
 
 ### Changed
 

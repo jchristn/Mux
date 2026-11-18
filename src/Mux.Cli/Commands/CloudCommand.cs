@@ -82,19 +82,29 @@ namespace Mux.Cli.Commands
         /// </summary>
         /// <param name="status">Status.</param>
         /// <param name="output">Destination.</param>
-        public static void WriteStatus(CloudStatus status, TextWriter output)
+        /// <param name="signInCommand">The sign-in command for this surface. Default <c>mux cloud login</c>.</param>
+        /// <param name="remoteOffCommand">The command that turns remote approval off. Default <c>mux cloud remote-approval off</c>.</param>
+        public static void WriteStatus(CloudStatus status, TextWriter output, string signInCommand = "mux cloud login", string remoteOffCommand = "mux cloud remote-approval off")
         {
             ArgumentNullException.ThrowIfNull(status);
             ArgumentNullException.ThrowIfNull(output);
+            bool enrolled = !string.IsNullOrEmpty(status.MachineId);
             output.WriteLine("Mux Cloud : " + status.StateName);
-            output.WriteLine("  " + status.Describe());
-            if (!string.IsNullOrEmpty(status.Reason) && status.State != CloudStateEnum.Reconnecting && status.State != CloudStateEnum.SignedOut) output.WriteLine("  reason          : " + status.Reason);
+            if (status.State != CloudStateEnum.Connected) output.WriteLine("  " + status.Describe());
             output.WriteLine("  server          : " + status.ServerUrl);
-            if (!string.IsNullOrEmpty(status.MachineName)) output.WriteLine("  machine         : " + status.MachineName + (string.IsNullOrEmpty(status.MachineId) ? string.Empty : " (" + status.MachineId + ")"));
+            if (!string.IsNullOrEmpty(status.MachineName)) output.WriteLine("  machine         : " + status.MachineName + (enrolled ? " (" + status.MachineId + ")" : string.Empty));
             if (!string.IsNullOrEmpty(status.AccountEmail)) output.WriteLine("  account         : " + status.AccountEmail);
-            output.WriteLine("  remote approval : " + (status.AllowRemoteToolApproval ? "on (remote users can approve tools; turn off with: mux cloud remote-approval off)" : "off (remote runs deny tools that would prompt)"));
-            if (status.LatencyMs.HasValue) output.WriteLine("  latency         : " + status.LatencyMs.Value.ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " ms");
-            if (status.RetryInSeconds.HasValue) output.WriteLine("  next retry      : " + status.RetryInSeconds.Value.ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " s");
+            if (enrolled)
+            {
+                output.WriteLine("  remote approval : " + (status.AllowRemoteToolApproval ? "on (turn off with: " + remoteOffCommand + ")" : "off (runs started through Mux Cloud deny tools that would prompt)"));
+            }
+
+            if (status.LatencyMs.HasValue && status.State == CloudStateEnum.Connected) output.WriteLine("  latency         : " + status.LatencyMs.Value.ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " ms");
+            if (status.RetryInSeconds.HasValue && status.State == CloudStateEnum.Reconnecting) output.WriteLine("  next retry      : " + status.RetryInSeconds.Value.ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " s");
+            if (!enrolled || status.State == CloudStateEnum.SignedOut || status.State == CloudStateEnum.Revoked)
+            {
+                output.WriteLine("  Sign in with: " + signInCommand);
+            }
         }
 
         #endregion
@@ -104,10 +114,14 @@ namespace Mux.Cli.Commands
         private static void PrintUsage(TextWriter error)
         {
             error.WriteLine("Usage: mux cloud <login|logout|status|remote-approval>");
-            error.WriteLine("  login [--email E] [--password-stdin] [--server URL] [--name NAME]");
-            error.WriteLine("                         Sign this machine in to Mux Cloud (default https://app.usemux.ai)");
-            error.WriteLine("  logout                 Sign this machine out and delete its credential");
-            error.WriteLine("  status                 Show the Mux Cloud connection");
+            error.WriteLine();
+            error.WriteLine("  login [options]           Sign this machine in to Mux Cloud (default https://app.usemux.ai)");
+            error.WriteLine("    --email <address>       Account email (prompted when omitted)");
+            error.WriteLine("    --password-stdin        Read the password from standard input");
+            error.WriteLine("    --server <url>          Mux Cloud server URL");
+            error.WriteLine("    --name <name>           How this machine is listed (default: the host name)");
+            error.WriteLine("  logout                    Sign this machine out and delete its credential");
+            error.WriteLine("  status                    Show the Mux Cloud connection");
             error.WriteLine("  remote-approval <on|off>  Allow or refuse tool approvals from Mux Cloud");
         }
 

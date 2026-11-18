@@ -291,6 +291,5 @@
   "Reconnecting to {0}: {1}": "Erneute Verbindung mit {0}: {1}",
   "Signed out of Mux Cloud: {0}": "Von Mux Cloud abgemeldet: {0}",
   "This machine was removed from Mux Cloud. Sign in again to reconnect it.": "Dieser Rechner wurde aus Mux Cloud entfernt. Melden Sie sich erneut an, um ihn wieder zu verbinden.",
-  "Not connected to Mux Cloud: {0}": "Nicht mit Mux Cloud verbunden: {0}",
   "Not connected to Mux Cloud": "Nicht mit Mux Cloud verbunden"
 }

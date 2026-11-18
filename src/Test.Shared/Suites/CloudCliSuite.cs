@@ -116,9 +116,16 @@ namespace Test.Shared.Suites
                     CloudCommand.WriteStatus(status, output);
                     string text = output.ToString();
                     MuxAssert.Contains("Mux Cloud : Connected", text, "state");
-                    MuxAssert.Contains("Connected to https://app.usemux.ai as box (a@b.c)", text, "description");
+                    MuxAssert.DoesNotContain("Connected to", text, "connected status lists fields instead of repeating them");
+                    MuxAssert.Contains("account         : a@b.c", text, "account");
+                    MuxAssert.DoesNotContain("Sign in with", text, "no sign-in hint when connected");
                     MuxAssert.Contains("machine         : box (mch_1)", text, "machine");
                     MuxAssert.Contains("remote approval : on", text, "remote approval");
+                    StringWriter signedOut = new StringWriter();
+                    CloudCommand.WriteStatus(new CloudStatus { State = CloudStateEnum.Disabled, Reason = "This machine is not signed in to Mux Cloud.", ServerUrl = "https://app.usemux.ai", MachineName = "box" }, signedOut);
+                    MuxAssert.DoesNotContain("remote approval", signedOut.ToString(), "no remote approval line before signing in");
+                    MuxAssert.Contains("Sign in with: mux cloud login", signedOut.ToString(), "next step");
+                    MuxAssert.AreEqual(1, signedOut.ToString().Split("not signed in").Length - 1, "reason shown once");
                     MuxAssert.Contains("latency         : 42 ms", text, "latency");
                     return Task.CompletedTask;
                 })

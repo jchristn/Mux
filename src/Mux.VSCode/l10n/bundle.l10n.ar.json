@@ -291,6 +291,5 @@
   "Reconnecting to {0}: {1}": "جارٍ إعادة الاتصال بـ {0}: {1}",
   "Signed out of Mux Cloud: {0}": "تم تسجيل الخروج من Mux Cloud: {0}",
   "This machine was removed from Mux Cloud. Sign in again to reconnect it.": "أُزيل هذا الجهاز من Mux Cloud. سجّل الدخول مجددًا لإعادة توصيله.",
-  "Not connected to Mux Cloud: {0}": "غير متصل بـ Mux Cloud: {0}",
   "Not connected to Mux Cloud": "غير متصل بـ Mux Cloud"
 }

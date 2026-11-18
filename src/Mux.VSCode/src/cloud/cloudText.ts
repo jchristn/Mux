@@ -31,8 +31,23 @@ export function describeStatus(status: CloudStatus): string {
         case 'Revoked':
             return vscode.l10n.t('This machine was removed from Mux Cloud. Sign in again to reconnect it.');
         default:
-            return status.Reason ? vscode.l10n.t('Not connected to Mux Cloud: {0}', status.Reason) : vscode.l10n.t('Not connected to Mux Cloud');
+            return status.Reason || vscode.l10n.t('Not connected to Mux Cloud');
     }
+}
+
+/**
+ * A one-line summary for notifications and pickers: the state name, then the machine when connected or the reason
+ * otherwise, without repeating the state.
+ *
+ * @param status The status.
+ * @returns The summary, for example "Mux Cloud: Connected · studio-mac".
+ */
+export function statusSummary(status: CloudStatus): string {
+    if (status.StateName === 'Connected') {
+        return `Mux Cloud: Connected · ${status.MachineName}`;
+    }
+
+    return `Mux Cloud: ${status.StateName}. ${describeStatus(status)}`;
 }
 
 /**

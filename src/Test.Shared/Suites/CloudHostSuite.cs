@@ -245,6 +245,12 @@ namespace Test.Shared.Suites
                             }
 
                             await WaitForAsync(() => host.Status.State == CloudStateEnum.Connected, "connected after login").ConfigureAwait(false);
+                            MuxSettings hubSettings = SettingsLoader.LoadSettings();
+                            hubSettings.Rest.Port = port;
+                            hubSettings.Rest.ApiKey = Key;
+                            CloudStatus? viaHub = await CloudHubStatusClient.GetAsync(hubSettings, ct).ConfigureAwait(false);
+                            MuxAssert.IsNotNull(viaHub, "the CLI, terminal, and desktop read the hub's status");
+                            MuxAssert.AreEqual(CloudStateEnum.Connected, viaHub!.State, "state name parses");
                             using (HttpRequestMessage get = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:" + port + "/v1.0/api/settings"))
                             {
                                 get.Headers.Add("Authorization", "Bearer " + Key);

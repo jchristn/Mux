@@ -18,7 +18,17 @@ namespace Mux.Core.Cloud
 
         /// <summary>Notice every connect screen shows before signing in.</summary>
         public const string RemoteAccessNotice =
-            "Anyone signed in to this Mux Cloud account can use this machine remotely, as if they were at it, including approving tools that edit files and run commands. To keep remote use read-only for those tools, set cloud.allowRemoteToolApproval to false (Mux Cloud settings on any surface, or MUX_CLOUD_ALLOW_REMOTE_TOOL_APPROVAL=false).";
+            "Anyone signed in to this Mux Cloud account can use this machine remotely, as if they were at it, including approving tools that edit files and run commands. To keep remote use read-only for those tools, turn remote tool approval off (mux cloud remote-approval off).";
+
+        /// <summary>
+        /// The remote-access notice with the way to turn remote approval off on a given surface.
+        /// </summary>
+        /// <param name="howToTurnOff">The command or control, for example <c>/cloud remote-approval off</c>.</param>
+        /// <returns>Notice text.</returns>
+        public static string RemoteAccessNoticeFor(string howToTurnOff)
+        {
+            return "Anyone signed in to this Mux Cloud account can use this machine remotely, as if they were at it, including approving tools that edit files and run commands. To keep remote use read-only for those tools, turn remote tool approval off (" + (string.IsNullOrWhiteSpace(howToTurnOff) ? "mux cloud remote-approval off" : howToTurnOff) + ").";
+        }
 
         #endregion
 

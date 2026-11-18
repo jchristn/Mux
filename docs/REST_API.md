@@ -232,7 +232,9 @@ an unknown name a 404. These are the same operations as `mux worktree` and `/wor
 ## Web dashboard
 
 `GET /dashboard` serves a self-contained single-page dashboard (no external assets — CSS/JS/logos are
-inlined). It provides:
+inlined). Links can open a specific place: `/dashboard?session=<id>` or `/dashboard#session=<id>` opens that
+conversation in Chat (an unknown id leaves the normal view), and `/dashboard#settings` (or any other view name)
+opens that view. Mux Cloud uses the session link to open a machine's conversation. It provides:
 
 - **Chat** — chat over any configured endpoint (endpoint picker, message bubbles, markdown + code blocks,
   new-chat), with a per-message **(i)** hover showing time-to-first-token, streaming time, and token counts.
@@ -316,7 +318,7 @@ it started in. `GET /v1.0/api/sessions` and `GET /v1.0/api/sessions/detail` incl
 
 | Route | Purpose |
 |---|---|
-| `GET /v1.0/api/cloud/status` | The machine's Mux Cloud status: `State` (number) and `StateName` (`Disabled`, `Connecting`, `Connected`, `Reconnecting`, `SignedOut`, `Revoked`), `Reason`, `ServerUrl`, `MachineId`, `MachineName`, `AccountEmail`, `AllowRemoteToolApproval`, `HostedHere`, `ConnectionId`, `ConnectedUtc`, `LatencyMs`, `RetryInSeconds`. |
+| `GET /v1.0/api/cloud/status` | The machine's Mux Cloud status: `State` and `StateName` (both the state name: `Disabled`, `Connecting`, `Connected`, `Reconnecting`, `SignedOut`, `Revoked`), `Reason`, `ServerUrl`, `MachineId`, `MachineName`, `AccountEmail`, `AllowRemoteToolApproval`, `HostedHere`, `ConnectionId`, `ConnectedUtc`, `LatencyMs`, `RetryInSeconds`. |
 | `POST /v1.0/api/cloud/login` | Body `{ "Email", "Password", "ServerUrl"?, "MachineName"? }`. Exchanges the credentials for a machine credential (the password is sent to Mux Cloud once and never stored), connects, and returns the status. 400 for a missing field or a refusal, 401 for wrong credentials, 502 when Mux Cloud cannot be reached. |
 | `POST /v1.0/api/cloud/logout` | Deletes the machine credential, turns the connection off, and returns the status. |
 

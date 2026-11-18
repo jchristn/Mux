@@ -291,6 +291,5 @@
   "Reconnecting to {0}: {1}": "Повторное подключение к {0}: {1}",
   "Signed out of Mux Cloud: {0}": "Выполнен выход из Mux Cloud: {0}",
   "This machine was removed from Mux Cloud. Sign in again to reconnect it.": "Этот компьютер удалён из Mux Cloud. Войдите снова, чтобы подключить его.",
-  "Not connected to Mux Cloud: {0}": "Нет подключения к Mux Cloud: {0}",
   "Not connected to Mux Cloud": "Нет подключения к Mux Cloud"
 }

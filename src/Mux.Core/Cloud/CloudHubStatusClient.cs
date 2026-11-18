@@ -17,7 +17,12 @@ namespace Mux.Core.Cloud
     {
         #region Private-Members
 
-        private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        // The hub writes enums as names ("Connected"); the converter also accepts numbers.
+        private static readonly JsonSerializerOptions _JsonOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+        };
 
         #endregion
 

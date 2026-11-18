@@ -71,7 +71,7 @@ namespace Mux.Core.Cloud
                 case CloudStateEnum.Revoked:
                     return "This machine was removed from Mux Cloud. Sign in again to reconnect it.";
                 default:
-                    return string.IsNullOrEmpty(Reason) ? "Not connected to Mux Cloud" : "Not connected to Mux Cloud: " + Reason;
+                    return string.IsNullOrEmpty(Reason) ? "Not connected to Mux Cloud." : Reason;
             }
         }
 

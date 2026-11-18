@@ -291,6 +291,5 @@
   "Reconnecting to {0}: {1}": "Menyambung semula ke {0}: {1}",
   "Signed out of Mux Cloud: {0}": "Dilog keluar daripada Mux Cloud: {0}",
   "This machine was removed from Mux Cloud. Sign in again to reconnect it.": "Mesin ini telah dialih keluar daripada Mux Cloud. Log masuk semula untuk menyambungkannya kembali.",
-  "Not connected to Mux Cloud: {0}": "Tidak disambungkan ke Mux Cloud: {0}",
   "Not connected to Mux Cloud": "Tidak disambungkan ke Mux Cloud"
 }

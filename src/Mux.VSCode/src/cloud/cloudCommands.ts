@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { ApiError } from '../api/ApiError';
 import { MuxServerLifecycle } from '../server/lifecycle';
 import { CloudStatusBar } from './CloudStatusBar';
-import { describeStatus, remoteAccessNotice } from './cloudText';
+import { remoteAccessNotice, statusSummary } from './cloudText';
 
 /**
  * `mux: Connect to Mux Cloud`: signs this machine in (email and masked password; the local hub sends them to Mux
@@ -32,10 +32,10 @@ export async function runCloudCommand(lifecycle: MuxServerLifecycle, bar: CloudS
         const open = vscode.l10n.t('Open Mux Cloud');
         const signOut = vscode.l10n.t('Sign out of Mux Cloud');
         const choice = await vscode.window.showQuickPick([showStatus, toggle, open, signOut], {
-            placeHolder: `Mux Cloud: ${status.StateName}. ${describeStatus(status)}`,
+            placeHolder: statusSummary(status),
         });
         if (choice === showStatus) {
-            void vscode.window.showInformationMessage(`Mux Cloud: ${status.StateName}. ${describeStatus(status)}`);
+            void vscode.window.showInformationMessage(statusSummary(status));
         } else if (choice === toggle) {
             settings.Cloud = { ...cloud, AllowRemoteToolApproval: !remote };
             await client.putSettings(settings);
@@ -86,7 +86,7 @@ export async function runCloudCommand(lifecycle: MuxServerLifecycle, bar: CloudS
             { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Signing in to Mux Cloud…') },
             () => client.cloudLogin(email.trim(), password, cloud?.ServerUrl, cloud?.MachineName ?? undefined),
         );
-        void vscode.window.showInformationMessage(`Mux Cloud: ${status.StateName}. ${describeStatus(status)}`);
+        void vscode.window.showInformationMessage(statusSummary(status));
     } catch (error) {
         const message = error instanceof ApiError ? error.message : String((error as Error).message ?? error);
         void vscode.window.showErrorMessage(vscode.l10n.t('Could not sign in to Mux Cloud: {0}', message));

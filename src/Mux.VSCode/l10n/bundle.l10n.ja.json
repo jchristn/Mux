@@ -291,6 +291,5 @@
   "Reconnecting to {0}: {1}": "{0} に再接続しています: {1}",
   "Signed out of Mux Cloud: {0}": "Mux Cloud からサインアウトされました: {0}",
   "This machine was removed from Mux Cloud. Sign in again to reconnect it.": "このマシンは Mux Cloud から削除されました。再接続するには再度サインインしてください。",
-  "Not connected to Mux Cloud: {0}": "Mux Cloud に接続されていません: {0}",
   "Not connected to Mux Cloud": "Mux Cloud に接続されていません"
 }

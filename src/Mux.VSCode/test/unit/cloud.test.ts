@@ -30,7 +30,7 @@ function loadCloudText(): any {
 }
 
 function status(stateName: string, reason = ''): any {
-    return { State: 0, StateName: stateName, Reason: reason, ServerUrl: 'https://app.usemux.ai', MachineId: 'mch_1', MachineName: 'studio', AccountEmail: 'a@b.c', AllowRemoteToolApproval: true, HostedHere: true, ConnectionId: '' };
+    return { State: stateName, StateName: stateName, Reason: reason, ServerUrl: 'https://app.usemux.ai', MachineId: 'mch_1', MachineName: 'studio', AccountEmail: 'a@b.c', AllowRemoteToolApproval: true, HostedHere: true, ConnectionId: '' };
 }
 
 test('cloud status text uses the shared state names and wording', () => {
@@ -44,6 +44,8 @@ test('cloud status text uses the shared state names and wording', () => {
     assert.equal(text.stateIcon('SignedOut'), '$(warning)');
     assert.match(text.remoteAccessNotice(), /approving tools/);
     assert.match(text.remoteAccessNotice(), /allowRemoteToolApproval/);
+    assert.equal(text.statusSummary(status('Connected')), 'Mux Cloud: Connected · studio');
+    assert.equal(text.statusSummary(status('Reconnecting', 'dropped')), 'Mux Cloud: Reconnecting. Reconnecting to https://app.usemux.ai: dropped');
 });
 
 test('every Mux Cloud string has a translation in every runtime l10n bundle', () => {

@@ -124,7 +124,7 @@ namespace Mux.Cli.App
             _SummaryCacheEnabled = new Checkbox("Cache large-file summaries", _Settings.Context.SummaryCacheEnabled);
             _SummaryCacheRetentionDays = new TextField { Value = _Settings.Context.SummaryCacheRetentionDays.ToString(CultureInfo.InvariantCulture) };
 
-            _CloudEnabled = new Checkbox("Connect when signed in (/cloud login)", _Settings.Cloud.Enabled);
+            _CloudEnabled = new Checkbox("Connect when signed in", _Settings.Cloud.Enabled);
             // The caller saves the connect switch through SettingsLoader.UpdateCloud (SaveSettings preserves it).
             _CloudServerUrl = new TextField { Value = _Settings.Cloud.ServerUrl };
             _CloudMachineName = new TextField { Value = _Settings.Cloud.MachineName ?? string.Empty };
@@ -166,7 +166,7 @@ namespace Mux.Cli.App
             _Form.Add("Summary cache", _SummaryCacheEnabled);
             _Form.Add("Summary cache retention (days)", _SummaryCacheRetentionDays, () => ValidateInt(_SummaryCacheRetentionDays.Value, "Summary cache retention", 1, 365));
             _Form.AddSection("Mux Cloud (sign in with /cloud login)");
-            _Form.Add("Mux Cloud", _CloudEnabled);
+            _Form.Add("Connection", _CloudEnabled);
             _Form.Add("Server URL", _CloudServerUrl, () => ValidateUrl(_CloudServerUrl.Value));
             _Form.Add("Machine name (blank = host name)", _CloudMachineName);
             _Form.Add("Remote tool approval", _CloudRemoteApproval);

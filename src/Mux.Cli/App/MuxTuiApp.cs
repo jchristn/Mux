@@ -5868,16 +5868,12 @@ namespace Mux.Cli.App
         {
             Mux.Core.Cloud.CloudStatus status = await Mux.Core.Cloud.CloudHubStatusClient.GetOrOfflineAsync(_Cts.Token).ConfigureAwait(false);
             using System.IO.StringWriter text = new System.IO.StringWriter();
-            Mux.Cli.Commands.CloudCommand.WriteStatus(status, text);
+            Mux.Cli.Commands.CloudCommand.WriteStatus(status, text, "/cloud login", "/cloud remote-approval off");
             foreach (string line in text.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
                 WriteNotice(line.TrimEnd('\r'));
             }
 
-            if (status.State == Mux.Core.Cloud.CloudStateEnum.Disabled || status.State == Mux.Core.Cloud.CloudStateEnum.SignedOut || status.State == Mux.Core.Cloud.CloudStateEnum.Revoked)
-            {
-                WriteNotice("Sign in with /cloud login.");
-            }
         }
 
         private async Task ResolveCloudLoginAsync(CloudLoginModal modal)

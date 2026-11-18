@@ -124,6 +124,7 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("fetch(BASE+\"/v1.0/api/chat/stream\"", local, "streaming chat prefixes the base path");
                         MuxAssert.Contains("location.host+BASE+\"/v1.0/ws\"", local, "WebSocket URLs route under the base path");
                         MuxAssert.DoesNotContain("location.host+\"/v1.0/ws\"", local, "no WebSocket URL bypasses the base path");
+                        MuxAssert.Contains("openSessionFromLocation(location.search,location.hash);", local, "the page opens ?session= or #session= deep links");
 
                         using HttpRequestMessage relayed = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:" + port + "/dashboard");
                         relayed.Headers.Add("X-Mux-Relay", "cloud");

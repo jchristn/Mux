@@ -291,6 +291,5 @@
   "Reconnecting to {0}: {1}": "正在重新连接到 {0}：{1}",
   "Signed out of Mux Cloud: {0}": "已退出 Mux Cloud：{0}",
   "This machine was removed from Mux Cloud. Sign in again to reconnect it.": "此计算机已从 Mux Cloud 中移除。请重新登录以重新连接。",
-  "Not connected to Mux Cloud: {0}": "未连接到 Mux Cloud：{0}",
   "Not connected to Mux Cloud": "未连接到 Mux Cloud"
 }

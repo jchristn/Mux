@@ -1240,7 +1240,7 @@ namespace Mux.Server.Documentation
 
             s["CloudStatus"] = Obj(new Dictionary<string, M>
             {
-                ["State"] = Pstr("Disabled, Connecting, Connected, Reconnecting, SignedOut, or Revoked (numeric enum value)."),
+                ["State"] = Pstr("Disabled, Connecting, Connected, Reconnecting, SignedOut, or Revoked."),
                 ["StateName"] = Pstr("The state name."),
                 ["Reason"] = Pstr("Why the connection is in this state, or empty."),
                 ["ServerUrl"] = Pstr("Mux Cloud server URL."),
@@ -1253,7 +1253,7 @@ namespace Mux.Server.Documentation
                 ["ConnectedUtc"] = PstrNullable("When the current connection was accepted (UTC)."),
                 ["LatencyMs"] = PstrNullable("Last heartbeat round trip in milliseconds."),
                 ["RetryInSeconds"] = PstrNullable("Seconds until the next reconnect attempt.")
-            }, new Dictionary<string, object?> { ["State"] = 2, ["StateName"] = "Connected", ["Reason"] = "", ["ServerUrl"] = "https://app.usemux.ai", ["MachineId"] = "mch_01JD3M5ZK7T2R8W4Q6Y9P3N1A0", ["MachineName"] = "studio-mac", ["AccountEmail"] = "you@example.com", ["AllowRemoteToolApproval"] = true, ["HostedHere"] = true });
+            }, new Dictionary<string, object?> { ["State"] = "Connected", ["StateName"] = "Connected", ["Reason"] = "", ["ServerUrl"] = "https://app.usemux.ai", ["MachineId"] = "mch_01JD3M5ZK7T2R8W4Q6Y9P3N1A0", ["MachineName"] = "studio-mac", ["AccountEmail"] = "you@example.com", ["AllowRemoteToolApproval"] = true, ["HostedHere"] = true });
 
             s["WorkspaceDto"] = Obj(new Dictionary<string, M>
             {

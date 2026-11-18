@@ -233,8 +233,8 @@ export interface CloudSettings {
 
 /** `GET /v1.0/api/cloud/status`: the Mux Cloud tunnel status on this machine. */
 export interface CloudStatus {
-    /** 0 Disabled, 1 Connecting, 2 Connected, 3 Reconnecting, 4 SignedOut, 5 Revoked. */
-    State: number;
+    /** The state name, the same as {@link StateName}. */
+    State: string;
     StateName: 'Disabled' | 'Connecting' | 'Connected' | 'Reconnecting' | 'SignedOut' | 'Revoked' | string;
     Reason: string;
     ServerUrl: string;
