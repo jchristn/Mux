@@ -1,7 +1,6 @@
 # Contributing to mux
 
-Thanks for your interest in contributing! mux is beta software and feedback, bug reports, and pull
-requests are all welcome.
+Thanks for your interest in contributing! Feedback, bug reports, and pull requests are all welcome.
 
 ## Ways to contribute
 

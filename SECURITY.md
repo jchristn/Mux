@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-mux is beta software under active development. Security fixes land on the latest release line only.
+Security fixes land on the latest release line only.
 
 | Version | Supported |
 | ------- | --------- |
