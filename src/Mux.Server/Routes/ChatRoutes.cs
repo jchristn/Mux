@@ -38,6 +38,7 @@ namespace Mux.Server.Routes
         private readonly IUsageRecorder? _UsageRecorder;
         private readonly SessionStore? _SessionStore;
         private readonly bool _AllowInteractiveTools;
+        private readonly Mux.Core.Cloud.CloudRoutePolicy _Policy;
         private readonly CheckpointRegistry? _Checkpoints;
         private readonly RunRegistry _Runs;
         private readonly Mux.Core.Processes.BackgroundProcessRegistry? _Processes;
@@ -60,6 +61,7 @@ namespace Mux.Server.Routes
         /// <param name="checkpoints">Optional checkpoint registry so each run records a pre-turn git snapshot for undo/redo. Null disables checkpointing.</param>
         /// <param name="runs">The run registry tracking each streamed run so it can be inspected, canceled, and mirrored over the WebSocket bridge.</param>
         /// <param name="processes">Optional server-wide background process registry exposed through <c>process_start</c> and its sibling tools. Null leaves the tools out.</param>
+        /// <param name="policy">Mux Cloud remote-approval policy. Null derives one from <paramref name="allowInteractiveTools"/> alone.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpointsProvider"/> or <paramref name="runs"/> is null.</exception>
         public ChatRoutes(
             string? apiKey,
@@ -69,9 +71,11 @@ namespace Mux.Server.Routes
             bool allowInteractiveTools,
             CheckpointRegistry? checkpoints,
             RunRegistry runs,
-            Mux.Core.Processes.BackgroundProcessRegistry? processes = null)
+            Mux.Core.Processes.BackgroundProcessRegistry? processes = null,
+            Mux.Core.Cloud.CloudRoutePolicy? policy = null)
         {
             _Processes = processes;
+            _Policy = policy ?? new Mux.Core.Cloud.CloudRoutePolicy(allowInteractiveTools);
             _ApiKey = apiKey;
             _EndpointsProvider = endpointsProvider ?? throw new ArgumentNullException(nameof(endpointsProvider));
             _UsageRecorder = usageRecorder;
@@ -106,6 +110,12 @@ namespace Mux.Server.Routes
                 if (!ApiAuth.Authorize(req.Http, _ApiKey))
                 {
                     return (object)new ApiError("Unauthorized", "Authentication required.");
+                }
+
+                if (!_Policy.AllowsApprovalDecision(RelayContext.IsRelayed(req.Http)))
+                {
+                    req.Http.Response.StatusCode = 403;
+                    return (object)new ApiError("Forbidden", "This machine does not accept tool approvals through Mux Cloud (cloud.allowRemoteToolApproval is false).");
                 }
 
                 ChatApproveRequest? decision;
@@ -483,7 +493,9 @@ namespace Mux.Server.Routes
                     ApprovalPolicy = ApprovalPolicyEnum.AutoSafe,
                     PlanMode = request.PlanMode,
                     PromptUserFunc = _ => Task.FromResult("n"),
-                    InteractiveApprovalPrompt = _AllowInteractiveTools
+                    // Interactive approvals: on with --allow-tools, and while Mux Cloud is connected with remote
+                    // approval allowed. A relayed run follows cloud.allowRemoteToolApproval (CloudRoutePolicy).
+                    InteractiveApprovalPrompt = _Policy.AllowsInteractiveApproval(RelayContext.IsRelayed(ctx))
                         ? (toolCall, seconds, token) => RequestBrowserApprovalAsync(ctx, runHandle, toolCall, seconds, token)
                         : null,
                     WorkingDirectory = runDirectory,
@@ -792,7 +804,7 @@ namespace Mux.Server.Routes
                 return "n";
             }
 
-            TaskCompletionSource<string> source = handle.RegisterApproval(toolCallId);
+            TaskCompletionSource<string> source = handle.RegisterApproval(toolCallId, toolCall?.Name ?? string.Empty, toolCall?.Arguments ?? string.Empty, seconds);
 
             try
             {

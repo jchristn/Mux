@@ -732,7 +732,12 @@ namespace Mux.Core.Settings
 
             MuxSettings normalized = NormalizeSettingsForPersistence(settings);
             string normalizedJson = JsonSerializer.Serialize(normalized, _JsonWriteOptions);
-            File.WriteAllText(filePath, normalizedJson);
+            // Rewrite only when normalization changed something, so a settings watcher (the tray agent watches the
+            // cloud block) is not woken by its own reload.
+            if (!string.Equals(json, normalizedJson, StringComparison.Ordinal))
+            {
+                File.WriteAllText(filePath, normalizedJson);
+            }
 
             ApplyEnvironmentOverrides(normalized);
             return normalized;
@@ -751,8 +756,64 @@ namespace Mux.Core.Settings
 
             EnsureConfigDirectory();
             MuxSettings normalized = NormalizeSettingsForPersistence(settings);
+
+            // The Mux Cloud credential and connect switch are written only through UpdateCloud, so a surface saving
+            // a stale in-memory copy (a long-running terminal or desktop session) never signs the machine out or
+            // back in behind the user's back.
+            CloudSettings? onDisk = TryLoadPersistedSettings()?.Cloud;
+            if (onDisk != null)
+            {
+                normalized.Cloud.Enabled = onDisk.Enabled;
+                normalized.Cloud.MachineId = onDisk.MachineId;
+                normalized.Cloud.MachineSecret = onDisk.MachineSecret;
+                normalized.Cloud.AccountEmail = onDisk.AccountEmail;
+            }
+
             string json = JsonSerializer.Serialize(normalized, _JsonWriteOptions);
             File.WriteAllText(Path.Combine(GetConfigDirectory(), "settings.json"), json);
+        }
+
+        /// <summary>
+        /// Change the Mux Cloud block on disk, including the credential and connect switch that
+        /// <see cref="SaveSettings"/> preserves. Reads the file as persisted (without environment overrides), applies
+        /// the change, and writes it back.
+        /// </summary>
+        /// <param name="change">The change to apply.</param>
+        /// <returns>The saved cloud settings.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="change"/> is null.</exception>
+        public static CloudSettings UpdateCloud(Action<CloudSettings> change)
+        {
+            if (change == null)
+            {
+                throw new ArgumentNullException(nameof(change));
+            }
+
+            EnsureConfigDirectory();
+            MuxSettings settings = TryLoadPersistedSettings() ?? new MuxSettings();
+            change(settings.Cloud);
+            MuxSettings normalized = NormalizeSettingsForPersistence(settings);
+            string json = JsonSerializer.Serialize(normalized, _JsonWriteOptions);
+            File.WriteAllText(Path.Combine(GetConfigDirectory(), "settings.json"), json);
+            return normalized.Cloud;
+        }
+
+        private static MuxSettings? TryLoadPersistedSettings()
+        {
+            string filePath = Path.Combine(GetConfigDirectory(), "settings.json");
+            if (!File.Exists(filePath))
+            {
+                return null;
+            }
+
+            try
+            {
+                MuxSettings? persisted = JsonSerializer.Deserialize<MuxSettings>(File.ReadAllText(filePath), _JsonOptions);
+                return persisted == null ? null : NormalizeSettingsForPersistence(persisted);
+            }
+            catch (Exception ex) when (ex is JsonException || ex is IOException || ex is UnauthorizedAccessException)
+            {
+                return null;
+            }
         }
 
         /// <summary>
@@ -1525,7 +1586,8 @@ namespace Mux.Core.Settings
                 Context = NormalizeContextSettings(settings.Context),
                 Rest = NormalizeRestServerSettings(settings.Rest),
                 Telemetry = NormalizeTelemetrySettings(settings.Telemetry),
-                Observability = NormalizeObservabilitySettings(settings.Observability)
+                Observability = NormalizeObservabilitySettings(settings.Observability),
+                Cloud = NormalizeCloudSettings(settings.Cloud)
             };
 
             return normalized;
@@ -1615,8 +1677,48 @@ namespace Mux.Core.Settings
             };
         }
 
+        private static CloudSettings NormalizeCloudSettings(CloudSettings? settings)
+        {
+            if (settings == null)
+            {
+                return new CloudSettings();
+            }
+
+            // Re-run the validating setters so hand-edited values are clamped and blank strings collapse to defaults.
+            return new CloudSettings
+            {
+                Enabled = settings.Enabled,
+                ServerUrl = settings.ServerUrl,
+                MachineId = settings.MachineId,
+                MachineName = settings.MachineName,
+                MachineSecret = settings.MachineSecret,
+                AccountEmail = settings.AccountEmail,
+                AllowRemoteToolApproval = settings.AllowRemoteToolApproval,
+                HeartbeatSeconds = settings.HeartbeatSeconds,
+                ReconnectMaxDelaySeconds = settings.ReconnectMaxDelaySeconds,
+                AllowInvalidCertificates = settings.AllowInvalidCertificates
+            };
+        }
+
         private static void ApplyEnvironmentOverrides(MuxSettings settings)
         {
+            // Mux Cloud overrides (see docs/CONFIG.md). The machine credential is never read from the environment.
+            if (TryParseBooleanEnvironmentValue(Environment.GetEnvironmentVariable("MUX_CLOUD_ENABLED"), out bool cloudEnabled))
+            {
+                settings.Cloud.Enabled = cloudEnabled;
+            }
+
+            string? cloudServerUrl = Environment.GetEnvironmentVariable("MUX_CLOUD_SERVER_URL");
+            if (!string.IsNullOrWhiteSpace(cloudServerUrl))
+            {
+                settings.Cloud.ServerUrl = cloudServerUrl;
+            }
+
+            if (TryParseBooleanEnvironmentValue(Environment.GetEnvironmentVariable("MUX_CLOUD_ALLOW_REMOTE_TOOL_APPROVAL"), out bool remoteApproval))
+            {
+                settings.Cloud.AllowRemoteToolApproval = remoteApproval;
+            }
+
             string? ignoreCertErrorsValue = Environment.GetEnvironmentVariable("MUX_IGNORE_CERT_ERRORS");
             if (TryParseBooleanEnvironmentValue(ignoreCertErrorsValue, out bool ignoreCertErrors))
             {

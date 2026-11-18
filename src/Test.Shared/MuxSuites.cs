@@ -93,6 +93,9 @@ namespace Test.Shared
                     // REST server (v0.9.0): settings + live route behavior.
                     RestServerSettingsSuite.Create(),
                     MuxServerRouteSuite.Create(),
+                    CloudGroundworkSuite.Create(),
+                    CloudTunnelSuite.Create(),
+                    CloudHostSuite.Create(),
                     RunRegistrySuite.Create(),
                     SessionTitleHelperSuite.Create(),
 

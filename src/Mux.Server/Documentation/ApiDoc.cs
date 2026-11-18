@@ -322,6 +322,40 @@ namespace Mux.Server.Documentation
             .WithResponse(200, OkList("SessionSummary"))
             .WithResponse(401, Unauthorized());
 
+        /// <summary>Metadata for <c>GET /v1.0/api/cloud/status</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> CloudStatusGet = m => Sec(Init(m, TagSettings,
+            "Mux Cloud connection status",
+            "Returns this machine's Mux Cloud tunnel status: `State` is one of `Disabled`, `Connecting`, `Connected`, `Reconnecting`, `SignedOut`, or `Revoked`, with the reason, server URL, machine name, account email, and whether remote tool approval is allowed.",
+            operationId: "getCloudStatus"))
+            .WithResponse(200, Ok("CloudStatus"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>POST /v1.0/api/cloud/login</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> CloudLogin = m => Sec(Init(m, TagSettings,
+            "Sign this machine in to Mux Cloud",
+            "Exchanges a Mux Cloud email and password for a machine credential (saved in settings.json under `cloud`; the password is never stored) and connects the tunnel. Anyone signed in to the account can then use this machine remotely, including approving tools unless `cloud.allowRemoteToolApproval` is false.",
+            operationId: "cloudLogin"))
+            .WithRequestBody(Body("CloudLoginRequestDto", "The Mux Cloud credentials."))
+            .WithResponse(200, Ok("CloudStatus"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>POST /v1.0/api/cloud/logout</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> CloudLogout = m => Sec(Init(m, TagSettings,
+            "Sign this machine out of Mux Cloud",
+            "Deletes the machine credential, turns the connection off, and closes the tunnel.",
+            operationId: "cloudLogout"))
+            .WithResponse(200, Ok("CloudStatus"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/workspaces</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> WorkspacesGet = m => Sec(Init(m, TagSessions,
+            "Suggest working directories",
+            "Returns working-directory suggestions for a new conversation: the directories recent sessions ran in, most recently used first, then the user's home directory. Any existing directory may be passed as `WorkingDirectory` to `POST /v1.0/api/chat/stream`; these are only suggestions.",
+            operationId: "listWorkspaces"))
+            .WithResponse(200, OkList("WorkspaceDto"))
+            .WithResponse(401, Unauthorized());
+
         /// <summary>Metadata for <c>GET /v1.0/api/sessions/detail</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> SessionsDetail = m => Sec(Init(m, TagSessions,
             "Read a session transcript",
@@ -1188,12 +1222,47 @@ namespace Mux.Server.Documentation
                 ["Model"] = Pstr("Model captured with the session."),
                 ["CreatedUtc"] = Pstr("UTC creation time.", "date-time"),
                 ["UpdatedUtc"] = Pstr("UTC last-updated time.", "date-time"),
-                ["MessageCount"] = Pint("Number of messages in the conversation.")
+                ["MessageCount"] = Pint("Number of messages in the conversation."),
+                ["WorkingDirectory"] = Pstr("The working directory the session's tools run in (empty when none was recorded).")
             }, new Dictionary<string, object?>
             {
                 ["Id"] = "9f1c…", ["Title"] = "Refactor the auth module", ["EndpointName"] = "openai-gpt4o",
-                ["Model"] = "gpt-4o", ["MessageCount"] = 8
+                ["Model"] = "gpt-4o", ["MessageCount"] = 8, ["WorkingDirectory"] = "/src/app"
             });
+
+            s["CloudLoginRequestDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Email"] = Pstr("Account email."),
+                ["Password"] = Pstr("Account password (sent once, never stored)."),
+                ["ServerUrl"] = PstrNullable("Mux Cloud URL; null keeps the configured one (default https://app.usemux.ai)."),
+                ["MachineName"] = PstrNullable("Display name; null uses the configured name or the host name.")
+            }, new Dictionary<string, object?> { ["Email"] = "you@example.com", ["Password"] = "********" });
+
+            s["CloudStatus"] = Obj(new Dictionary<string, M>
+            {
+                ["State"] = Pstr("Disabled, Connecting, Connected, Reconnecting, SignedOut, or Revoked (numeric enum value)."),
+                ["StateName"] = Pstr("The state name."),
+                ["Reason"] = Pstr("Why the connection is in this state, or empty."),
+                ["ServerUrl"] = Pstr("Mux Cloud server URL."),
+                ["MachineId"] = Pstr("Enrolled machine id, or empty."),
+                ["MachineName"] = Pstr("Machine display name."),
+                ["AccountEmail"] = Pstr("Account email, or empty."),
+                ["AllowRemoteToolApproval"] = Pbool("Whether remote users may approve tools."),
+                ["HostedHere"] = Pbool("Whether this process runs the tunnel."),
+                ["ConnectionId"] = Pstr("Current connection id, or empty."),
+                ["ConnectedUtc"] = PstrNullable("When the current connection was accepted (UTC)."),
+                ["LatencyMs"] = PstrNullable("Last heartbeat round trip in milliseconds."),
+                ["RetryInSeconds"] = PstrNullable("Seconds until the next reconnect attempt.")
+            }, new Dictionary<string, object?> { ["State"] = 2, ["StateName"] = "Connected", ["Reason"] = "", ["ServerUrl"] = "https://app.usemux.ai", ["MachineId"] = "mch_01JD3M5ZK7T2R8W4Q6Y9P3N1A0", ["MachineName"] = "studio-mac", ["AccountEmail"] = "you@example.com", ["AllowRemoteToolApproval"] = true, ["HostedHere"] = true });
+
+            s["WorkspaceDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Path"] = Pstr("Absolute directory path."),
+                ["Name"] = Pstr("The folder name, for display."),
+                ["Source"] = Pstr("`recent` (a saved session ran there) or `home`."),
+                ["LastUsedUtc"] = PstrNullable("Most recent session update in this directory (UTC); null for the home directory."),
+                ["SessionCount"] = Pint("Number of saved sessions that ran in this directory.")
+            }, new Dictionary<string, object?> { ["Path"] = "/src/app", ["Name"] = "app", ["Source"] = "recent", ["LastUsedUtc"] = "2026-11-17T12:00:00Z", ["SessionCount"] = 3 });
 
             s["ChatToolCallDto"] = Obj(new Dictionary<string, M>
             {
@@ -1275,6 +1344,7 @@ namespace Mux.Server.Documentation
                 ["Title"] = Pstr("Session title."),
                 ["EndpointName"] = Pstr("Endpoint name captured with the session."),
                 ["Model"] = Pstr("Model captured with the session."),
+                ["WorkingDirectory"] = Pstr("The working directory the session's tools run in (empty when none was recorded)."),
                 ["Messages"] = Parr(Ref("ChatMessageDto"), "The conversation messages, oldest first.")
             }, new Dictionary<string, object?>
             {
@@ -1595,6 +1665,20 @@ namespace Mux.Server.Documentation
                 ["ErrorMessage"] = PstrNullable("Failure message.")
             });
 
+            s["CloudSettingsDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Enabled"] = Pbool("Whether this machine connects to Mux Cloud (effective once signed in)."),
+                ["ServerUrl"] = Pstr("Mux Cloud server URL."),
+                ["MachineName"] = PstrNullable("Machine display name; null uses the host name."),
+                ["MachineId"] = PstrNullable("Read only: enrolled machine id."),
+                ["AccountEmail"] = PstrNullable("Read only: account email."),
+                ["MachineSecretSet"] = Pbool("Read only: whether a machine secret is stored (never returned)."),
+                ["AllowRemoteToolApproval"] = Pbool("Whether remote users may approve tools on this machine."),
+                ["HeartbeatSeconds"] = Pint("Heartbeat interval in seconds (5-300)."),
+                ["ReconnectMaxDelaySeconds"] = Pint("Largest reconnect delay in seconds (5-3600)."),
+                ["AllowInvalidCertificates"] = Pbool("Accept invalid TLS certificates from a self-hosted server.")
+            }, new Dictionary<string, object?> { ["Enabled"] = true, ["ServerUrl"] = "https://app.usemux.ai", ["MachineName"] = "studio-mac", ["MachineId"] = "mch_01JD3M5ZK7T2R8W4Q6Y9P3N1A0", ["AccountEmail"] = "you@example.com", ["MachineSecretSet"] = true, ["AllowRemoteToolApproval"] = true, ["HeartbeatSeconds"] = 20, ["ReconnectMaxDelaySeconds"] = 60, ["AllowInvalidCertificates"] = false });
+
             s["SettingsDto"] = Obj(new Dictionary<string, M>
             {
                 ["ToolAutoApproveSeconds"] = Pint("Interactive approval countdown in seconds; zero disables."),
@@ -1613,7 +1697,8 @@ namespace Mux.Server.Documentation
                 ["IgnoreCertErrors"] = Pbool("Ignore TLS certificate errors."),
                 ["ShowBoundaryLines"] = Pbool("Show interactive boundary lines."),
                 ["DefaultEnqueueBehavior"] = Pstr("Default enqueue behavior."),
-                ["Rest"] = Ref("RestSettingsDto")
+                ["Rest"] = Ref("RestSettingsDto"),
+                ["Cloud"] = Ref("CloudSettingsDto")
             }, new Dictionary<string, object?>
             {
                 ["DefaultApprovalPolicy"] = "ask", ["MaxAgentIterations"] = 256, ["MaxConcurrency"] = 3,

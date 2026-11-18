@@ -33,6 +33,7 @@ namespace Mux.Server.Runs
         private readonly string? _ApiKey;
         private readonly RunRegistry _Runs;
         private readonly string _Version;
+        private readonly Mux.Core.Cloud.CloudRoutePolicy? _Policy;
 
         #endregion
 
@@ -44,9 +45,11 @@ namespace Mux.Server.Runs
         /// <param name="apiKey">Configured API key, or null/empty for no-auth mode.</param>
         /// <param name="runs">The server's run registry.</param>
         /// <param name="version">Product version, announced on connect.</param>
+        /// <param name="policy">Mux Cloud remote-approval policy; null allows every approval.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="runs"/> is null.</exception>
-        public WebSocketBridge(string? apiKey, RunRegistry runs, string version)
+        public WebSocketBridge(string? apiKey, RunRegistry runs, string version, Mux.Core.Cloud.CloudRoutePolicy? policy = null)
         {
+            _Policy = policy;
             _ApiKey = apiKey;
             _Runs = runs ?? throw new ArgumentNullException(nameof(runs));
             _Version = version ?? string.Empty;
@@ -66,6 +69,7 @@ namespace Mux.Server.Runs
             if (ctx == null || session == null) return;
 
             SemaphoreSlim sendLock = new SemaphoreSlim(1, 1);
+            bool relayed = RelayContext.IsRelayed(ctx);
 
             if (!Authorized(ctx))
             {
@@ -187,9 +191,24 @@ namespace Mux.Server.Runs
                             _Runs.AddTranscriptListener(transcriptListener);
                         }
                     }
+                    else if (action == "approve" && _Policy != null && !_Policy.AllowsApprovalDecision(relayed))
+                    {
+                        await SafeSendAsync(session, sendLock, ErrorFrame("forbidden", "This machine does not accept tool approvals through Mux Cloud (cloud.allowRemoteToolApproval is false)."), ctx.Token).ConfigureAwait(false);
+                    }
                     else if (action == "approve")
                     {
-                        RunHandle? target = approvalTarget;
+                        // Resolve on the run the client names. Without a run id, fall back to the most recently
+                        // attached non-terminal run (the original behavior).
+                        RunHandle? target = null;
+                        if (!string.IsNullOrWhiteSpace(frame.RunId) && _Runs.TryGet(frame.RunId!, out RunHandle? named) && named != null)
+                        {
+                            target = named;
+                        }
+                        else if (string.IsNullOrWhiteSpace(frame.RunId))
+                        {
+                            target = approvalTarget;
+                        }
+
                         target?.ResolveApproval(frame.ToolCallId ?? string.Empty, NormalizeDecision(frame.Decision));
                     }
                     else if (action == "publish" && !string.IsNullOrEmpty(frame.RunId))

@@ -41,6 +41,7 @@ namespace Mux.Server
         private bool _Disposed = false;
         private System.Threading.Timer? _SummaryCacheTimer;
         private readonly bool _AllowInteractiveTools;
+        private readonly Mux.Core.Cloud.CloudRoutePolicy _CloudPolicy;
         private readonly CheckpointRegistry _Checkpoints = new CheckpointRegistry();
         private readonly Mux.Core.Processes.BackgroundProcessRegistry _Processes = CreateProcessRegistry();
         private readonly RunRegistry _Runs;
@@ -50,6 +51,34 @@ namespace Mux.Server
         #endregion
 
         #region Public-Members
+
+        /// <summary>
+        /// The run registry this server exposes over <c>/v1.0/ws</c> and <c>/v1.0/api/runs</c>.
+        /// </summary>
+        public RunRegistry Runs => _Runs;
+
+        /// <summary>
+        /// The Mux Cloud remote-approval policy chat runs and approval routes consult. A
+        /// <see cref="Cloud.CloudTunnelHost"/> updates it as the tunnel connects and settings change.
+        /// </summary>
+        public Mux.Core.Cloud.CloudRoutePolicy CloudPolicy => _CloudPolicy;
+
+        /// <summary>
+        /// The Mux Cloud tunnel host attached to this server, or null. <c>GET /v1.0/api/cloud/status</c> reports its
+        /// status; without one the route reports status derived from settings.
+        /// </summary>
+        public Cloud.CloudTunnelHost? CloudHost { get; set; }
+
+        /// <summary>
+        /// The REST settings the server was started with (port, key, SSL).
+        /// </summary>
+        public RestServerSettings Settings => _Settings;
+
+        /// <summary>
+        /// Loopback URL other local components (the Mux Cloud forwarder) use to reach this server, always
+        /// <c>127.0.0.1</c> regardless of the bind host.
+        /// </summary>
+        public string LoopbackUrl => (_Settings.Ssl ? "https" : "http") + "://127.0.0.1:" + _Settings.Port;
 
         /// <summary>
         /// The resolved base URL the server listens on.
@@ -104,6 +133,7 @@ namespace Mux.Server
             _UsageQuery = usageQuery;
             _UsageRecorder = usageRecorder;
             _AllowInteractiveTools = allowInteractiveTools;
+            _CloudPolicy = new Mux.Core.Cloud.CloudRoutePolicy(allowInteractiveTools);
             _Runs = runs ?? new RunRegistry();
             _OwnsRuns = runs == null;
         }
@@ -137,7 +167,7 @@ namespace Mux.Server
 
             ConfigureServer(_App);
             RegisterRoutes(_App);
-            WebSocketBridge bridge = new WebSocketBridge(_Settings.ApiKey, _Runs, _Version);
+            WebSocketBridge bridge = new WebSocketBridge(_Settings.ApiKey, _Runs, _Version, _CloudPolicy);
             _App.WebSocket("/v1.0/ws", bridge.HandleAsync);
 
             _App.Start(_TokenSource.Token);
@@ -296,7 +326,9 @@ namespace Mux.Server
             new HealthRoutes(_Version, _StartUtc).Register(app);
             new EndpointRoutes(apiKey, _EndpointsProvider).Register(app);
             new SessionRoutes(apiKey, _SessionStore, _Runs).Register(app);
-            new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder, _SessionStore, _AllowInteractiveTools, _Checkpoints, _Runs, _Processes).Register(app);
+            new WorkspaceRoutes(apiKey, _SessionStore).Register(app);
+            new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder, _SessionStore, _AllowInteractiveTools, _Checkpoints, _Runs, _Processes, _CloudPolicy).Register(app);
+            new CloudRoutes(apiKey, this).Register(app);
             new CheckpointRoutes(apiKey, _Checkpoints).Register(app);
             new SettingsRoutes(apiKey).Register(app);
             new PaletteRoutes(apiKey).Register(app);
@@ -332,7 +364,12 @@ namespace Mux.Server
                 ApplyCors(ctx);
                 ctx.Response.StatusCode = 200;
                 ctx.Response.ContentType = "text/html; charset=utf-8";
-                await ctx.Response.Send(DashboardPage.Render(_Settings.ApiKey, _Version)).ConfigureAwait(false);
+                // Behind the Mux Cloud relay the page must not carry the local API key (the machine's tunnel
+                // forwarder authenticates each relayed call), and its URLs must route back through /m/{machineId}.
+                bool relayed = RelayContext.IsRelayed(ctx);
+                string pageKey = relayed ? string.Empty : (_Settings.ApiKey ?? string.Empty);
+                string basePath = relayed ? RelayContext.GetBasePath(ctx) : string.Empty;
+                await ctx.Response.Send(DashboardPage.Render(pageKey, _Version, basePath)).ConfigureAwait(false);
                 return;
             }
 

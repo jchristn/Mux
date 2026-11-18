@@ -20,6 +20,13 @@
   </PropertyGroup>
 
   <PropertyGroup>
+    <!-- Root of a MuxCloud checkout. While MuxCloud.Protocol is unpublished, Mux.Core references its source
+         project from here when present (CI checks it out and sets MuxCloudRoot); otherwise it uses the NuGet
+         package. Remove the project-reference branch once the package is published. -->
+    <MuxCloudRoot Condition="'$(MuxCloudRoot)' == ''">$(MSBuildThisFileDirectory)..\..\MuxCloud</MuxCloudRoot>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <!-- No blanket warning suppression. Nullable (CS86xx), obsolete-usage (CS0618), XML-documentation
          (CS1591/CS1572/CS1587), and other warnings must be fixed at the call site, not silenced here. -->
   </PropertyGroup>

@@ -244,6 +244,9 @@ namespace Mux.Server.Models
         /// <summary>The session's key/value tags.</summary>
         public List<SessionTagDto> Tags { get; set; } = new List<SessionTagDto>();
 
+        /// <summary>The working directory the session's tools run in (empty when none was recorded).</summary>
+        public string WorkingDirectory { get; set; } = string.Empty;
+
         /// <summary>The conversation messages, oldest first.</summary>
         public List<ChatMessageDto> Messages { get; set; } = new List<ChatMessageDto>();
     }

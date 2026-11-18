@@ -81,6 +81,14 @@ namespace Mux.Server.Routes
                     dto.ApplyTo(settings);
                     SettingsLoader.SaveSettings(settings);
 
+                    // The connect switch is credential-adjacent and written only through UpdateCloud (SaveSettings
+                    // preserves the on-disk value so stale copies cannot flip it).
+                    if (dto.Cloud != null)
+                    {
+                        bool enabled = dto.Cloud.Enabled;
+                        settings.Cloud.Enabled = SettingsLoader.UpdateCloud(c => c.Enabled = enabled).Enabled;
+                    }
+
                     req.Http.Response.StatusCode = 200;
                     return await Task.FromResult<object>(SettingsDto.FromSettings(settings)).ConfigureAwait(false);
                 }

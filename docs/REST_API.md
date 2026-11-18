@@ -298,91 +298,10 @@ Health response:
 
 ## WebSocket
 
-Connect to `ws://127.0.0.1:<port>/v1.0/ws` (add `?apiKey=<key>` when a key is configured — see footnote ²).
-The server sends a first text frame:
-
-```json
-{ "eventType": "server.connected", "product": "mux", "version": "0.12.0" }
-```
-
-**Subscribe to a run.** Send a subscribe frame naming a run id (from the chat stream's `run` event):
-
-```json
-{ "action": "subscribe", "runId": "8b2f…" }
-```
-
-The bridge replays the events the run has already emitted, then live-tails the rest, framing each as the
-**canonical event envelope** — byte-for-byte the same `eventType` shape that `mux print --output-format jsonl`
-emits (`run_started`, `assistant_text`, `assistant_thinking`, `tool_call_proposed`, `tool_call_completed`,
-`context_compacted`, `task_plan_updated`, `hook`, `error`, `run_completed`). A run-scoped subscription closes the
-socket when the run reaches a terminal state. A subscribe frame for an unknown **run** id returns an `error`
-frame with code `not_found`.
-
-The `run_completed` envelope can include `modelCallCount` when statistics are enabled:
-the number of primary model calls started by the run, excluding internal transport retries,
-compaction, and title generation. This is distinct from `iterationsCompleted`, since a budget
-check can stop an iteration before a model call. Older or synthetic events may omit the field;
-consumers should treat omission as unknown, not zero. Token usage totals accumulate across
-the run's primary calls and are distinct from `finalEstimatedTokens` (the estimated context size).
-Two optional, nonnegative millisecond fields carry model timing when statistics are enabled:
-`firstModelCallTtftMs` is request-start to first token for the first primary call, excluding
-preparation; `modelStreamingMs` sums first-token-to-last-token durations across all primary calls,
-excluding tools and approval waits. The first is omitted if the first call has no timing; the second
-is omitted if any call has no streaming timing. Both are omitted when no model call ran. Zero is a
-valid reported duration. These fields are independent of `durationMs`, the agent run's wall-clock time.
-
-**Subscribe to a session** (what "mirror on by default" uses). Name a `sessionId` instead of a `runId`:
-
-```json
-{ "action": "subscribe", "sessionId": "9f1c…" }
-```
-
-The bridge attaches to any run already in flight for that session and to future runs as they start, streaming
-each run's frames. It does **not** error when the session is currently idle — the socket stays open and the
-next run for the session streams in the moment it begins. This lets a surface subscribe when a conversation is
-opened and simply see whatever run happens there, from any surface.
-
-**Publish a run** (how a surface that runs the engine in its own process — the desktop app, the terminal —
-feeds the hub so others can mirror it). Send `publish` frames; the first materializes the run in the hub's
-registry, and each carries one pre-serialized canonical envelope:
-
-```json
-{ "action": "publish", "runId": "8b2f…", "sessionId": "9f1c…", "endpointName": "openai-gpt4o",
-  "model": "gpt-4o", "frame": "{\"eventType\":\"assistant_text\",\"text\":\"…\"}" }
-```
-
-**Signal a transcript change** (how an in-process surface tells others to reload an open conversation without
-streaming a whole run through the hub). After persisting a turn to the shared store, send:
-
-```json
-{ "action": "notify-transcript", "sessionId": "9f1c…" }
-```
-
-The hub broadcasts a `transcript_changed` event (`{ "eventType": "transcript_changed", "sessionId": "9f1c…" }`)
-to every session-scoped subscriber of that id, and refreshes the conversation list too. `transcript_changed`
-is the message-level counterpart to the list-level `sessions_changed`: a surface viewing the conversation
-reloads its transcript on it, exactly as it does on `run_completed`. The server fires it automatically on every
-turn persist (a streamed run and the `PUT /v1.0/api/sessions` upsert) **and whenever any process changes a
-session file on disk** — the server watches the session-store directory, so a turn written straight to the
-shared store by an in-process terminal or desktop run (or by a second server) is rebroadcast to this server's
-subscribers too. A viewer therefore reloads whether or not the writer drove a run through this hub, and even
-when the writer is on a different hub that shares the same store.
-
-**Answer an approval over the socket.** When the server runs with `--allow-tools`, a proposed mutating tool
-raises an `approval_required`/`tool_call_proposed` event; answer it on the same socket:
-
-```json
-{ "action": "approve", "runId": "8b2f…", "toolCallId": "call_1", "decision": "y" }
-```
-
-`decision` is `y` (approve once), `always` (approve and remember), or `n` (deny). This resolves the same
-pending approval the `POST /v1.0/api/chat/approve` route does.
-
-**Mirroring runs started elsewhere.** The registry the bridge reads is a `Mux.Core` type a host process can
-share. The desktop app records its in-process runs into the registry its embedded server exposes, so
-subscribing by that run's session id mirrors a desktop run live. Consumers ship on every surface:
-`mux mirror <sessionId>` (terminal), `/mirror <sessionId>` (dashboard), and *Mirror a session's live run*
-(VS Code).
+The WebSocket endpoint `/v1.0/ws` (run streaming and mirroring, session and list notifications, tool approvals,
+and the producer `publish` path) is documented in full in [WEBSOCKETS_API.md](../WEBSOCKETS_API.md). Tool approvals
+are emitted on the run stream as `approval_requested` and `approval_resolved` frames, and an `approve` frame
+resolves the run named by its `runId`.
 
 ## Security posture
 

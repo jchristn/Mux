@@ -102,6 +102,7 @@ namespace Mux.Server.Routes
                 CreatedUtc = snapshot.CreatedUtc,
                 UpdatedUtc = snapshot.UpdatedUtc,
                 MessageCount = snapshot.ConversationHistory.Count,
+                WorkingDirectory = snapshot.WorkingDirectory ?? string.Empty,
                 Labels = new List<string>(snapshot.Labels),
                 Tags = ToTagDtos(snapshot.Tags)
             };
@@ -147,6 +148,7 @@ namespace Mux.Server.Routes
                     Title = snapshot.Title,
                     EndpointName = snapshot.EndpointName,
                     Model = snapshot.Model,
+                    WorkingDirectory = snapshot.WorkingDirectory ?? string.Empty,
                     Labels = new List<string>(snapshot.Labels),
                     Tags = ToTagDtos(snapshot.Tags)
                 };

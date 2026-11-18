@@ -28,6 +28,7 @@ namespace Mux.Desktop.Services
 
         private readonly RunRegistry _Runs = new RunRegistry();
         private MuxServer? _Server;
+        private Mux.Server.Cloud.CloudTunnelHost? _Cloud;
         private UsageTelemetry? _Telemetry;
         private string? _BaseUrl;
         private string? _ApiKey;
@@ -221,6 +222,18 @@ namespace Mux.Desktop.Services
 
                     server.Start();
 
+                    // When the desktop app's embedded server owns the hub port, it also runs the Mux Cloud tunnel
+                    // (the config-directory lock keeps it to one tunnel per machine).
+                    try
+                    {
+                        _Cloud = new Mux.Server.Cloud.CloudTunnelHost(server, ProductVersion());
+                        _Cloud.Start();
+                    }
+                    catch (Exception)
+                    {
+                        _Cloud = null;
+                    }
+
                     _Server = server;
                     _Telemetry = telemetry;
                     _BaseUrl = server.BaseUrl;
@@ -245,6 +258,8 @@ namespace Mux.Desktop.Services
         {
             lock (_Sync)
             {
+                try { _Cloud?.Dispose(); } catch (Exception) { }
+                _Cloud = null;
                 try { _Server?.Dispose(); } catch (Exception) { }
                 try { _Telemetry?.Dispose(); } catch (Exception) { }
                 _Server = null;

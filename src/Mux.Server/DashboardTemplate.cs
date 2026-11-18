@@ -3,13 +3,13 @@ namespace Mux.Server
     /// <summary>
     /// The self-contained HTML/CSS/JavaScript markup for the single-page dashboard served at
     /// <c>/dashboard</c>, with <c>__MUX_*__</c> placeholders replaced at render time by
-    /// <see cref="DashboardPage.Render"/>. Kept separate so the page logic stays small and
+    /// <see cref="DashboardPage.Render(string?, string, string?)"/>. Kept separate so the page logic stays small and
     /// readable; all assets are inlined so the page has no external dependencies.
     /// </summary>
     internal static class DashboardTemplate
     {
         /// <summary>
-        /// Dashboard page markup. Placeholders: <c>__MUX_API_KEY__</c>, <c>__MUX_VERSION__</c>,
+        /// Dashboard page markup. Placeholders: <c>__MUX_API_KEY__</c>, <c>__MUX_BASE_PATH__</c>, <c>__MUX_VERSION__</c>,
         /// <c>__LOGO_DARK__</c>, <c>__LOGO_LIGHT__</c>, <c>__LOGO_GREY__</c>, and
         /// <c>__SLASH_COMPLETION_JS__</c>.
         /// </summary>
@@ -95,6 +95,8 @@ body.resizing-convos{cursor:col-resize;user-select:none}
 .pickrow{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer}
 .pickrow:hover{background:rgba(127,127,127,.12)}
 .pickrow span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cwd-input{min-width:220px;max-width:30vw}
+.cwd-input:disabled{opacity:.7}
 .chat-title{color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40vw}
 @media(max-width:820px){.chatwrap{grid-template-columns:1fr}.convos{display:none}}
 .chat{display:grid;grid-template-rows:auto 1fr auto;height:100%;min-height:0}
@@ -605,6 +607,9 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
             <span><label title="The model endpoint this chat runs against" data-i18n="chat.endpoint">Endpoint</label></span>
             <select id="endpointSelect" style="min-width:260px" title="Choose which configured model endpoint answers your messages"></select>
             <span id="modelStatus" class="model-status" title="Whether the selected model is loaded and ready"></span>
+            <span><label for="cwdInput" title="The folder this conversation's tools run in" data-i18n="chat.folder">Folder</label></span>
+            <input id="cwdInput" list="cwdList" class="cwd-input" autocomplete="off" spellcheck="false" placeholder="Default folder" data-i18n-ph="chat.folder.ph" data-i18n-title="chat.folder.tip" title="Pick a recent folder or type any folder path on this machine for a new conversation. An open conversation keeps the folder it started in.">
+            <datalist id="cwdList"></datalist>
             <span class="grow"></span>
             <span id="chatTitle" class="chat-title" title="The current conversation"></span>
           </div>
@@ -788,8 +793,11 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 __SLASH_COMPLETION_JS__
 
 var API_KEY="__MUX_API_KEY__";
+var BASE="__MUX_BASE_PATH__";
+function wsUrl(){return (location.protocol==="https:"?"wss":"ws")+"://"+location.host+BASE+"/v1.0/ws"+(API_KEY?("?apiKey="+encodeURIComponent(API_KEY)):"");}
 var I18N={
 en:{
+"chat.folder":"Folder","chat.folder.ph":"Default folder","chat.folder.tip":"Pick a recent folder or type any folder path on this machine for a new conversation. An open conversation keeps the folder it started in.",
 "pal.title":"Color palette","pal.system":"System (follow OS)","pal.custom":"custom","pal.new":"New palette…","pal.edit":"Edit palette","pal.delete":"Delete palette","pal.deleteConfirm":"Delete the palette “{name}”?","pal.saved":"Palette saved","pal.hint":"Palettes and the active choice are shared with the terminal UI, the desktop app, and VS Code.","pal.id":"Id","pal.idTip":"Lowercase kebab-case, for example my-palette.","pal.name":"Name","pal.dark":"Dark palette","pal.base":"Base palette","pal.baseTip":"Supplies any color left blank.","pal.colors":"Colors (hex)","ep.import":"Import models…","ep.importTitle":"Import models from {name}","ep.importHint":"Each model you pick becomes its own endpoint with this endpoint's settings and credentials.","ep.importBtn":"Import","ep.importNone":"No new models found.","ep.importFailed":"The backend did not list its models.","ep.importAdded":"Added {n} endpoint(s).","ep.importQuerying":"Asking {name} for its models…",
 "us.endpoint":"Endpoint","us.model":"Model","us.label":"Label","us.tag":"Tag","us.endpoint.tip":"Filter to one endpoint","us.model.tip":"Filter to one model","us.label.tip":"Filter usage to sessions carrying this label","us.tag.tip":"Filter usage to sessions carrying this tag","us.allEndpoints":"All endpoints","us.allModels":"All models","us.allLabels":"All labels","us.allTags":"All tags","sess.labels":"Labels","sess.tags":"Tags","sess.editLabels":"Edit labels","sess.editTags":"Edit tags","sess.labelsPh":"Labels (comma-separated)","sess.tagsPh":"Tags (key: value, comma-separated)","sess.metaSaved":"Metadata updated",
 "nav.home":"Home","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"MCP Servers","nav.prompts":"Prompts","nav.subagents":"Subagents","nav.hooks":"Hooks","nav.commands":"Commands","nav.keybindings":"Keybindings","nav.skills":"Skills","nav.sessions":"Sessions","nav.settings":"Settings","grp.observability":"Observability","nav.usage":"Usage","nav.pricing":"Pricing",
@@ -813,6 +821,7 @@ en:{
 "lang.label":"Language"
 },
 es:{
+"chat.folder":"Carpeta","chat.folder.ph":"Carpeta predeterminada","chat.folder.tip":"Elige una carpeta reciente o escribe cualquier ruta de carpeta de esta máquina para una conversación nueva. Una conversación abierta conserva la carpeta en la que empezó.",
 "pal.title":"Paleta de colores","pal.system":"Sistema (seguir el SO)","pal.custom":"personalizada","pal.new":"Nueva paleta…","pal.edit":"Editar paleta","pal.delete":"Eliminar paleta","pal.deleteConfirm":"¿Eliminar la paleta “{name}”?","pal.saved":"Paleta guardada","pal.hint":"Las paletas y la elección activa se comparten con la interfaz de terminal, la app de escritorio y VS Code.","pal.id":"Id","pal.idTip":"Minúsculas en kebab-case, por ejemplo my-palette.","pal.name":"Nombre","pal.dark":"Paleta oscura","pal.base":"Paleta base","pal.baseTip":"Aporta los colores que se dejen en blanco.","pal.colors":"Colores (hex)","ep.import":"Importar modelos…","ep.importTitle":"Importar modelos de {name}","ep.importHint":"Cada modelo elegido se convierte en su propio endpoint con la configuración y credenciales de este.","ep.importBtn":"Importar","ep.importNone":"No se encontraron modelos nuevos.","ep.importFailed":"El backend no listó sus modelos.","ep.importAdded":"Se añadieron {n} endpoint(s).","ep.importQuerying":"Consultando los modelos de {name}…",
 "nav.home":"Inicio","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"Servidores MCP","nav.prompts":"Prompts","nav.subagents":"Subagentes","nav.hooks":"Hooks","nav.commands":"Comandos","nav.keybindings":"Atajos de teclado","nav.skills":"Habilidades","nav.sessions":"Sesiones","nav.settings":"Ajustes",
 "grp.config":"Configuración","grp.system":"Sistema",
@@ -835,6 +844,7 @@ es:{
 "lang.label":"Idioma"
 },
 pt:{
+"chat.folder":"Pasta","chat.folder.ph":"Pasta padrão","chat.folder.tip":"Escolha uma pasta recente ou digite qualquer caminho de pasta desta máquina para uma nova conversa. Uma conversa aberta mantém a pasta em que começou.",
 "pal.title":"Paleta de cores","pal.system":"Sistema (seguir o SO)","pal.custom":"personalizada","pal.new":"Nova paleta…","pal.edit":"Editar paleta","pal.delete":"Excluir paleta","pal.deleteConfirm":"Excluir a paleta “{name}”?","pal.saved":"Paleta salva","pal.hint":"As paletas e a escolha ativa são compartilhadas com a interface de terminal, o app desktop e o VS Code.","pal.id":"Id","pal.idTip":"Minúsculas em kebab-case, por exemplo my-palette.","pal.name":"Nome","pal.dark":"Paleta escura","pal.base":"Paleta base","pal.baseTip":"Fornece as cores deixadas em branco.","pal.colors":"Cores (hex)","ep.import":"Importar modelos…","ep.importTitle":"Importar modelos de {name}","ep.importHint":"Cada modelo escolhido vira um endpoint próprio com as configurações e credenciais deste.","ep.importBtn":"Importar","ep.importNone":"Nenhum modelo novo encontrado.","ep.importFailed":"O backend não listou seus modelos.","ep.importAdded":"{n} endpoint(s) adicionado(s).","ep.importQuerying":"Consultando os modelos de {name}…",
 "nav.home":"Início","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"Servidores MCP","nav.prompts":"Prompts","nav.subagents":"Subagentes","nav.hooks":"Hooks","nav.commands":"Comandos","nav.keybindings":"Atalhos de teclado","nav.skills":"Habilidades","nav.sessions":"Sessões","nav.settings":"Configurações",
 "grp.config":"Configuração","grp.system":"Sistema",
@@ -857,6 +867,7 @@ pt:{
 "lang.label":"Idioma"
 },
 fr:{
+"chat.folder":"Dossier","chat.folder.ph":"Dossier par défaut","chat.folder.tip":"Choisissez un dossier récent ou saisissez le chemin de n'importe quel dossier de cette machine pour une nouvelle conversation. Une conversation ouverte garde le dossier où elle a commencé.",
 "pal.title":"Palette de couleurs","pal.system":"Système (suivre l'OS)","pal.custom":"personnalisée","pal.new":"Nouvelle palette…","pal.edit":"Modifier la palette","pal.delete":"Supprimer la palette","pal.deleteConfirm":"Supprimer la palette “{name}” ?","pal.saved":"Palette enregistrée","pal.hint":"Les palettes et le choix actif sont partagés avec l'interface terminal, l'application de bureau et VS Code.","pal.id":"Id","pal.idTip":"Minuscules en kebab-case, par exemple my-palette.","pal.name":"Nom","pal.dark":"Palette sombre","pal.base":"Palette de base","pal.baseTip":"Fournit les couleurs laissées vides.","pal.colors":"Couleurs (hex)","ep.import":"Importer des modèles…","ep.importTitle":"Importer des modèles depuis {name}","ep.importHint":"Chaque modèle choisi devient un point de terminaison avec les paramètres et identifiants de celui-ci.","ep.importBtn":"Importer","ep.importNone":"Aucun nouveau modèle trouvé.","ep.importFailed":"Le backend n'a pas listé ses modèles.","ep.importAdded":"{n} point(s) de terminaison ajouté(s).","ep.importQuerying":"Interrogation des modèles de {name}…",
 "nav.home":"Accueil","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"Serveurs MCP","nav.prompts":"Prompts","nav.subagents":"Sous-agents","nav.hooks":"Hooks","nav.commands":"Commandes","nav.keybindings":"Raccourcis clavier","nav.skills":"Compétences","nav.sessions":"Sessions","nav.settings":"Paramètres",
 "grp.config":"Configuration","grp.system":"Système",
@@ -879,6 +890,7 @@ fr:{
 "lang.label":"Langue"
 },
 it:{
+"chat.folder":"Cartella","chat.folder.ph":"Cartella predefinita","chat.folder.tip":"Scegli una cartella recente o digita il percorso di qualsiasi cartella di questa macchina per una nuova conversazione. Una conversazione aperta mantiene la cartella in cui è iniziata.",
 "pal.title":"Tavolozza di colori","pal.system":"Sistema (segui il SO)","pal.custom":"personalizzata","pal.new":"Nuova tavolozza…","pal.edit":"Modifica tavolozza","pal.delete":"Elimina tavolozza","pal.deleteConfirm":"Eliminare la tavolozza “{name}”?","pal.saved":"Tavolozza salvata","pal.hint":"Le tavolozze e la scelta attiva sono condivise con l'interfaccia da terminale, l'app desktop e VS Code.","pal.id":"Id","pal.idTip":"Minuscole in kebab-case, ad esempio my-palette.","pal.name":"Nome","pal.dark":"Tavolozza scura","pal.base":"Tavolozza di base","pal.baseTip":"Fornisce i colori lasciati vuoti.","pal.colors":"Colori (hex)","ep.import":"Importa modelli…","ep.importTitle":"Importa modelli da {name}","ep.importHint":"Ogni modello scelto diventa un endpoint con le impostazioni e le credenziali di questo.","ep.importBtn":"Importa","ep.importNone":"Nessun nuovo modello trovato.","ep.importFailed":"Il backend non ha elencato i suoi modelli.","ep.importAdded":"Aggiunti {n} endpoint.","ep.importQuerying":"Richiesta dei modelli a {name}…",
 "nav.home":"Home","nav.chat":"Chat","nav.endpoints":"Endpoint","nav.mcp":"Server MCP","nav.prompts":"Prompt","nav.subagents":"Subagent","nav.hooks":"Hook","nav.commands":"Comandi","nav.keybindings":"Scorciatoie da tastiera","nav.skills":"Competenze","nav.sessions":"Sessioni","nav.settings":"Impostazioni",
 "grp.config":"Configurazione","grp.system":"Sistema",
@@ -901,6 +913,7 @@ it:{
 "lang.label":"Lingua"
 },
 de:{
+"chat.folder":"Ordner","chat.folder.ph":"Standardordner","chat.folder.tip":"Wählen Sie einen zuletzt verwendeten Ordner oder geben Sie einen beliebigen Ordnerpfad auf diesem Rechner für eine neue Unterhaltung ein. Eine geöffnete Unterhaltung behält ihren Startordner.",
 "pal.title":"Farbpalette","pal.system":"System (dem OS folgen)","pal.custom":"eigene","pal.new":"Neue Palette…","pal.edit":"Palette bearbeiten","pal.delete":"Palette löschen","pal.deleteConfirm":"Palette „{name}“ löschen?","pal.saved":"Palette gespeichert","pal.hint":"Paletten und die aktive Auswahl werden mit der Terminal-Oberfläche, der Desktop-App und VS Code geteilt.","pal.id":"ID","pal.idTip":"Kleinbuchstaben in Kebab-Case, z. B. my-palette.","pal.name":"Name","pal.dark":"Dunkle Palette","pal.base":"Basispalette","pal.baseTip":"Liefert leer gelassene Farben.","pal.colors":"Farben (Hex)","ep.import":"Modelle importieren…","ep.importTitle":"Modelle von {name} importieren","ep.importHint":"Jedes gewählte Modell wird ein eigener Endpunkt mit den Einstellungen und Zugangsdaten dieses Endpunkts.","ep.importBtn":"Importieren","ep.importNone":"Keine neuen Modelle gefunden.","ep.importFailed":"Das Backend hat seine Modelle nicht aufgelistet.","ep.importAdded":"{n} Endpunkt(e) hinzugefügt.","ep.importQuerying":"Frage Modelle von {name} ab…",
 "nav.home":"Start","nav.chat":"Chat","nav.endpoints":"Endpunkte","nav.mcp":"MCP-Server","nav.prompts":"Prompts","nav.subagents":"Subagenten","nav.hooks":"Hooks","nav.commands":"Befehle","nav.keybindings":"Tastenkürzel","nav.skills":"Fähigkeiten","nav.sessions":"Sitzungen","nav.settings":"Einstellungen",
 "grp.config":"Konfiguration","grp.system":"System",
@@ -923,6 +936,7 @@ de:{
 "lang.label":"Sprache"
 },
 zh:{
+"chat.folder":"文件夹","chat.folder.ph":"默认文件夹","chat.folder.tip":"为新对话选择最近使用的文件夹，或输入此计算机上的任意文件夹路径。已打开的对话保留其开始时的文件夹。",
 "pal.title":"调色板","pal.system":"系统（跟随操作系统）","pal.custom":"自定义","pal.new":"新建调色板…","pal.edit":"编辑调色板","pal.delete":"删除调色板","pal.deleteConfirm":"删除调色板“{name}”？","pal.saved":"调色板已保存","pal.hint":"调色板和当前选择会与终端界面、桌面应用和 VS Code 共享。","pal.id":"ID","pal.idTip":"小写 kebab-case，例如 my-palette。","pal.name":"名称","pal.dark":"深色调色板","pal.base":"基础调色板","pal.baseTip":"为留空的颜色提供取值。","pal.colors":"颜色（十六进制）","ep.import":"导入模型…","ep.importTitle":"从 {name} 导入模型","ep.importHint":"所选的每个模型都会成为一个独立端点，沿用此端点的设置和凭据。","ep.importBtn":"导入","ep.importNone":"未发现新模型。","ep.importFailed":"后端未列出其模型。","ep.importAdded":"已添加 {n} 个端点。","ep.importQuerying":"正在向 {name} 查询模型…",
 "nav.home":"主页","nav.chat":"聊天","nav.endpoints":"端点","nav.mcp":"MCP 服务器","nav.prompts":"提示词","nav.subagents":"子代理","nav.hooks":"钩子","nav.commands":"命令","nav.keybindings":"快捷键","nav.skills":"技能","nav.sessions":"会话","nav.settings":"设置",
 "grp.config":"配置","grp.system":"系统",
@@ -945,6 +959,7 @@ zh:{
 "lang.label":"语言"
 },
 ar:{
+"chat.folder":"المجلد","chat.folder.ph":"المجلد الافتراضي","chat.folder.tip":"اختر مجلدًا حديثًا أو اكتب مسار أي مجلد على هذا الجهاز لمحادثة جديدة. تحتفظ المحادثة المفتوحة بالمجلد الذي بدأت فيه.",
 "pal.title":"لوحة الألوان","pal.system":"النظام (اتباع نظام التشغيل)","pal.custom":"مخصّصة","pal.new":"لوحة جديدة…","pal.edit":"تعديل اللوحة","pal.delete":"حذف اللوحة","pal.deleteConfirm":"حذف اللوحة «{name}»؟","pal.saved":"تم حفظ اللوحة","pal.hint":"تُشارك اللوحات والاختيار النشط مع واجهة الطرفية وتطبيق سطح المكتب وVS Code.","pal.id":"المعرّف","pal.idTip":"أحرف صغيرة بصيغة kebab-case، مثل my-palette.","pal.name":"الاسم","pal.dark":"لوحة داكنة","pal.base":"اللوحة الأساسية","pal.baseTip":"توفّر الألوان المتروكة فارغة.","pal.colors":"الألوان (ست عشري)","ep.import":"استيراد النماذج…","ep.importTitle":"استيراد النماذج من {name}","ep.importHint":"يصبح كل نموذج تختاره نقطة نهاية مستقلة بإعدادات نقطة النهاية هذه وبيانات اعتمادها.","ep.importBtn":"استيراد","ep.importNone":"لم يُعثر على نماذج جديدة.","ep.importFailed":"لم يعرض الخادم نماذجه.","ep.importAdded":"أُضيفت {n} نقطة نهاية.","ep.importQuerying":"جارٍ سؤال {name} عن نماذجه…",
 "nav.home":"الرئيسية","nav.chat":"الدردشة","nav.endpoints":"نقاط النهاية","nav.mcp":"خوادم MCP","nav.prompts":"التوجيهات","nav.subagents":"الوكلاء الفرعيون","nav.hooks":"الخطافات","nav.commands":"الأوامر","nav.keybindings":"اختصارات المفاتيح","nav.skills":"المهارات","nav.sessions":"الجلسات","nav.settings":"الإعدادات",
 "grp.config":"الإعداد","grp.system":"النظام",
@@ -967,6 +982,7 @@ ar:{
 "lang.label":"اللغة"
 },
 ru:{
+"chat.folder":"Папка","chat.folder.ph":"Папка по умолчанию","chat.folder.tip":"Выберите недавнюю папку или введите путь к любой папке на этом компьютере для нового разговора. Открытый разговор сохраняет папку, в которой он начался.",
 "pal.title":"Цветовая палитра","pal.system":"Системная (как в ОС)","pal.custom":"своя","pal.new":"Новая палитра…","pal.edit":"Изменить палитру","pal.delete":"Удалить палитру","pal.deleteConfirm":"Удалить палитру «{name}»?","pal.saved":"Палитра сохранена","pal.hint":"Палитры и текущий выбор общие для терминального интерфейса, настольного приложения и VS Code.","pal.id":"ID","pal.idTip":"Строчные буквы в kebab-case, например my-palette.","pal.name":"Название","pal.dark":"Тёмная палитра","pal.base":"Базовая палитра","pal.baseTip":"Задаёт незаполненные цвета.","pal.colors":"Цвета (hex)","ep.import":"Импорт моделей…","ep.importTitle":"Импорт моделей из {name}","ep.importHint":"Каждая выбранная модель станет отдельной конечной точкой с настройками и учётными данными этой.","ep.importBtn":"Импортировать","ep.importNone":"Новых моделей не найдено.","ep.importFailed":"Бэкенд не вернул список моделей.","ep.importAdded":"Добавлено конечных точек: {n}.","ep.importQuerying":"Запрашиваю модели у {name}…",
 "nav.home":"Главная","nav.chat":"Чат","nav.endpoints":"Эндпоинты","nav.mcp":"Серверы MCP","nav.prompts":"Промпты","nav.subagents":"Субагенты","nav.hooks":"Хуки","nav.commands":"Команды","nav.keybindings":"Горячие клавиши","nav.skills":"Навыки","nav.sessions":"Сессии","nav.settings":"Настройки",
 "grp.config":"Конфигурация","grp.system":"Система",
@@ -989,6 +1005,7 @@ ru:{
 "lang.label":"Язык"
 },
 ms:{
+"chat.folder":"Folder","chat.folder.ph":"Folder lalai","chat.folder.tip":"Pilih folder terkini atau taip mana-mana laluan folder pada mesin ini untuk perbualan baharu. Perbualan yang dibuka mengekalkan folder tempat ia bermula.",
 "pal.title":"Palet warna","pal.system":"Sistem (ikut OS)","pal.custom":"tersuai","pal.new":"Palet baharu…","pal.edit":"Sunting palet","pal.delete":"Padam palet","pal.deleteConfirm":"Padam palet “{name}”?","pal.saved":"Palet disimpan","pal.hint":"Palet dan pilihan aktif dikongsi dengan UI terminal, aplikasi desktop dan VS Code.","pal.id":"Id","pal.idTip":"Huruf kecil kebab-case, contohnya my-palette.","pal.name":"Nama","pal.dark":"Palet gelap","pal.base":"Palet asas","pal.baseTip":"Membekalkan warna yang dibiarkan kosong.","pal.colors":"Warna (hex)","ep.import":"Import model…","ep.importTitle":"Import model daripada {name}","ep.importHint":"Setiap model yang dipilih menjadi titik akhir sendiri dengan tetapan dan kelayakan titik akhir ini.","ep.importBtn":"Import","ep.importNone":"Tiada model baharu ditemui.","ep.importFailed":"Backend tidak menyenaraikan modelnya.","ep.importAdded":"{n} titik akhir ditambah.","ep.importQuerying":"Bertanya {name} tentang modelnya…",
 "nav.home":"Laman Utama","nav.chat":"Sembang","nav.endpoints":"Titik Akhir","nav.mcp":"Pelayan MCP","nav.prompts":"Gesaan","nav.subagents":"Subejen","nav.hooks":"Cangkuk","nav.commands":"Perintah","nav.keybindings":"Pintasan Papan Kekunci","nav.skills":"Kemahiran","nav.sessions":"Sesi","nav.settings":"Tetapan",
 "grp.config":"Konfigurasi","grp.system":"Sistem",
@@ -1011,6 +1028,7 @@ ms:{
 "lang.label":"Bahasa"
 },
 hi:{
+"chat.folder":"फ़ोल्डर","chat.folder.ph":"डिफ़ॉल्ट फ़ोल्डर","chat.folder.tip":"नई बातचीत के लिए हाल का फ़ोल्डर चुनें या इस मशीन पर किसी भी फ़ोल्डर का पथ लिखें। खुली बातचीत उसी फ़ोल्डर में रहती है जिसमें वह शुरू हुई थी।",
 "pal.title":"रंग पैलेट","pal.system":"सिस्टम (OS का पालन करें)","pal.custom":"कस्टम","pal.new":"नया पैलेट…","pal.edit":"पैलेट संपादित करें","pal.delete":"पैलेट हटाएँ","pal.deleteConfirm":"पैलेट “{name}” हटाएँ?","pal.saved":"पैलेट सहेजा गया","pal.hint":"पैलेट और सक्रिय चयन टर्मिनल UI, डेस्कटॉप ऐप और VS Code के साथ साझा होते हैं।","pal.id":"आईडी","pal.idTip":"छोटे अक्षरों में kebab-case, जैसे my-palette।","pal.name":"नाम","pal.dark":"गहरा पैलेट","pal.base":"आधार पैलेट","pal.baseTip":"खाली छोड़े गए रंग देता है।","pal.colors":"रंग (hex)","ep.import":"मॉडल आयात करें…","ep.importTitle":"{name} से मॉडल आयात करें","ep.importHint":"चुना गया हर मॉडल इस एंडपॉइंट की सेटिंग और क्रेडेंशियल के साथ अपना एंडपॉइंट बनेगा।","ep.importBtn":"आयात करें","ep.importNone":"कोई नया मॉडल नहीं मिला।","ep.importFailed":"बैकएंड ने अपने मॉडल सूचीबद्ध नहीं किए।","ep.importAdded":"{n} एंडपॉइंट जोड़े गए।","ep.importQuerying":"{name} से मॉडल पूछे जा रहे हैं…",
 "nav.home":"होम","nav.chat":"चैट","nav.endpoints":"एंडपॉइंट","nav.mcp":"MCP सर्वर","nav.prompts":"प्रॉम्प्ट","nav.subagents":"सबएजेंट","nav.hooks":"हुक","nav.commands":"कमांड","nav.keybindings":"कीबाइंडिंग","nav.skills":"स्किल","nav.sessions":"सत्र","nav.settings":"सेटिंग्स",
 "grp.config":"कॉन्फ़िगरेशन","grp.system":"सिस्टम",
@@ -1059,7 +1077,7 @@ function toast(msg,isErr){var t=el("toast");t.textContent=msg;t.className="toast
 function api(path,method,body){
   var headers={"Content-Type":"application/json"};
   if(API_KEY) headers["Authorization"]="Bearer "+API_KEY;
-  return fetch(path,{method:method||"GET",headers:headers,body:body?JSON.stringify(body):undefined})
+  return fetch(BASE+path,{method:method||"GET",headers:headers,body:body?JSON.stringify(body):undefined})
     .then(function(r){return r.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null;}catch(e){}
       if(!r.ok){var m=(j&&j.Message)||(j&&j.message)||("HTTP "+r.status);throw new Error(m);}return j;});});
 }
@@ -1201,7 +1219,11 @@ function copyMsg(i,btn){var m=messages[i];if(!m||!m.content)return;copyText(m.co
 
 /* ---- conversations (persisted like the desktop/TUI: list, open, new, rename, delete, export) ---- */
 function setChatTitle(x){var e=el("chatTitle");if(e)e.textContent=x||"";}
-function loadConvos(){api("/v1.0/api/sessions").then(function(r){renderConvos((r&&r.Items)||[]);}).catch(function(){renderConvos([]);});}
+// Working-directory suggestions for a new conversation (recent session folders, then home). Any existing folder
+// is accepted; an open conversation keeps the folder it started in, so the field locks while one is open.
+function loadWorkspaces(){api("/v1.0/api/workspaces").then(function(r){var dl=el("cwdList");if(!dl)return;dl.innerHTML="";((r&&r.Items)||[]).forEach(function(w){var o=document.createElement("option");o.value=w.Path||"";o.label=w.Name||"";dl.appendChild(o);});}).catch(function(){});}
+function setCwd(v,locked){var c=el("cwdInput");if(!c)return;c.value=v||"";c.disabled=!!locked;}
+function loadConvos(){loadWorkspaces();api("/v1.0/api/sessions").then(function(r){renderConvos((r&&r.Items)||[]);}).catch(function(){renderConvos([]);});}
 function highlightConvo(){Array.prototype.forEach.call(document.querySelectorAll("#convoList .convo-item"),function(row){row.classList.toggle("active",row.getAttribute("data-id")===currentSessionId);});}
 // Multi-select over the conversation list: null when off, otherwise the set of selected ids plus the last
 // clicked index (the anchor for a Shift-click range). Entered with the Select button or a Ctrl/Cmd-click.
@@ -1301,7 +1323,7 @@ function openConvo(id){
     messages=((d&&d.Messages)||[]).map(function(m){return {role:m.Role,content:m.Content,thinking:m.Reasoning||null,providerState:m.ProviderState||null,toolCalls:m.ToolCalls||null,toolCallId:m.ToolCallId||null,model:m.Model||(d&&d.Model)||"",stats:m.Stats||null,displayOnly:!!m.DisplayOnly};});
     currentSessionId=(d&&d.Id)||id;currentModel=(d&&d.Model)||"";
     if(d&&d.EndpointName){var sel=el("endpointSelect");if(sel){for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===d.EndpointName){sel.selectedIndex=i;break;}}}}
-    setChatTitle((d&&d.Title)||"");renderMessages();highlightConvo();
+    setChatTitle((d&&d.Title)||"");setCwd((d&&d.WorkingDirectory)||"",true);renderMessages();highlightConvo();
     watchConvo(currentSessionId);
   }).catch(function(e){toast(e.message,true);});
 }
@@ -1316,7 +1338,7 @@ function reconnectWatch(id){ if(id===currentSessionId&&!mirrorDisabled[id]&&!con
 function watchConvo(id){
   stopConvoWatch();
   if(!id||mirrorDisabled[id]||typeof WebSocket==="undefined")return;
-  var url=(location.protocol==="https:"?"wss":"ws")+"://"+location.host+"/v1.0/ws"+(API_KEY?("?apiKey="+encodeURIComponent(API_KEY)):"");
+  var url=wsUrl();
   var ws;try{ws=new WebSocket(url);}catch(e){reconnectWatch(id);return;}
   convoWatch=ws;
   ws.onopen=function(){try{ws.send(JSON.stringify({action:"subscribe",sessionId:id}));}catch(e){}};
@@ -1351,7 +1373,7 @@ function reloadOpenTranscript(id){
   }
   setTimeout(pull,250);
 }
-function newChat(){stopConvoWatch();messages=[];currentSessionId=null;currentModel="";setChatTitle("");renderMessages();highlightConvo();var c=el("composer");if(c)c.focus();}
+function newChat(){stopConvoWatch();messages=[];currentSessionId=null;currentModel="";setChatTitle("");setCwd("",false);renderMessages();highlightConvo();var c=el("composer");if(c)c.focus();}
 var modelSwitchSave=Promise.resolve();var deferredModelSwitchSave=false;
 function recordModelSwitch(){
   var sel=el("endpointSelect");if(!sel.value||sel.value===selectedEndpointName)return;
@@ -1391,7 +1413,7 @@ function deleteConvo(id){
 var sessionsWatch=null;
 function startSessionsWatch(){
   if(typeof WebSocket==="undefined"||sessionsWatch)return;
-  var url=(location.protocol==="https:"?"wss":"ws")+"://"+location.host+"/v1.0/ws"+(API_KEY?("?apiKey="+encodeURIComponent(API_KEY)):"");
+  var url=wsUrl();
   var ws;try{ws=new WebSocket(url);}catch(e){setTimeout(startSessionsWatch,3000);return;}
   sessionsWatch=ws;
   ws.onopen=function(){try{ws.send(JSON.stringify({action:"subscribe",all:true}));}catch(e){}};
@@ -1477,7 +1499,8 @@ function sendChat(){
   el("composer").value="";el("composer").style.height="44px";
   var typing={role:"assistant",content:"",typing:true};
   messages.push(typing);renderMessages();busy=true;el("sendBtn").textContent="■";el("sendBtn").title="Stop the response";el("sendBtn").style.background="#e5534b";
-  var payload={endpoint:endpoint,Id:currentSessionId||"",messages:messages.filter(function(m){return !m.typing&&!m.local;}).map(function(m){return {role:m.role,content:m.content,displayOnly:!!m.displayOnly};})};
+  var cwdEl=el("cwdInput");var cwd=(cwdEl&&!cwdEl.disabled)?cwdEl.value.trim():"";
+  var payload={endpoint:endpoint,Id:currentSessionId||"",WorkingDirectory:cwd||null,messages:messages.filter(function(m){return !m.typing&&!m.local;}).map(function(m){return {role:m.role,content:m.content,displayOnly:!!m.displayOnly};})};
   modelSwitchSave.then(function(){payload.Id=currentSessionId||"";streamChat(payload,typing);});
 }
 
@@ -1507,7 +1530,7 @@ function mirrorSession(text){
   if(typeof WebSocket==="undefined"){toast("This browser has no WebSocket support",true);return;}
   var id=arg||currentSessionId;
   if(!id){toast("Usage: /mirror <sessionId> (or open a conversation first)",true);return;}
-  var url=(location.protocol==="https:"?"wss":"ws")+"://"+location.host+"/v1.0/ws"+(API_KEY?("?apiKey="+encodeURIComponent(API_KEY)):"");
+  var url=wsUrl();
   var ws;try{ws=new WebSocket(url);}catch(e){toast("Could not open a mirror connection",true);return;}
   currentMirror=ws;
   var typing={role:"assistant",content:"",typing:true};
@@ -1541,7 +1564,7 @@ function streamChat(payload,typing){
   if(API_KEY) headers["Authorization"]="Bearer "+API_KEY;
   var opts={method:"POST",headers:headers,body:JSON.stringify(payload)};
   if(ac)opts.signal=ac.signal;
-  fetch("/v1.0/api/chat/stream",opts).then(function(res){
+  fetch(BASE+"/v1.0/api/chat/stream",opts).then(function(res){
     if(!res.ok||!res.body){
       return res.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null;}catch(e){}throw new Error((j&&(j.Message||j.message))||("HTTP "+res.status));});
     }
@@ -1580,7 +1603,7 @@ function handleSse(block,typing){
   else if(ev==="approval"){handleApproval(parsed);}
   // The server persists the turn itself (server-authored, full-fidelity), so adopt the id it assigned and
   // refresh the list rather than PUTting the browser's flattened copy back over it.
-  else if(ev==="done"){typing.typing=false;typing.content=(parsed&&parsed.Content)||typing.content;typing.model=(parsed&&parsed.Model)||"";typing.stats=(parsed&&parsed.Stats)||null;if(typing.model)currentModel=typing.model;if(parsed&&parsed.Id){currentSessionId=parsed.Id;}renderMessages();endChat();loadConvos();watchConvo(currentSessionId);}
+  else if(ev==="done"){typing.typing=false;typing.content=(parsed&&parsed.Content)||typing.content;typing.model=(parsed&&parsed.Model)||"";typing.stats=(parsed&&parsed.Stats)||null;if(typing.model)currentModel=typing.model;if(parsed&&parsed.Id){currentSessionId=parsed.Id;var ce=el("cwdInput");if(ce)ce.disabled=true;}renderMessages();endChat();loadConvos();watchConvo(currentSessionId);}
   else if(ev==="error"){typing.typing=false;typing.content="⚠️ "+parsed;renderMessages();toast(String(parsed),true);endChat();}
 }
 
@@ -3092,7 +3115,7 @@ window.addEventListener("resize",closeMenu);
 /* retry on load-error panels */
 document.addEventListener("click",function(e){var r=e.target.closest?e.target.closest("[data-retry]"):null;if(r){var fn=_reload[r.getAttribute("data-retry")];if(fn)fn();}});
 /* copy server url + mobile drawer nav */
-on("copyUrlBtn",function(){copyText(location.host,el("copyUrlBtn"));});
+on("copyUrlBtn",function(){copyText(location.host+BASE,el("copyUrlBtn"));});
 on("hamburger",function(){el("app").classList.toggle("navopen");});
 on("navscrim",function(){el("app").classList.remove("navopen");});
 /* focus trap inside the modal */
@@ -3148,7 +3171,7 @@ el("view-home").addEventListener("click",function(e){
   if(cached&&cached.Colors)applyPalette(cached);else{var legacy=null;try{legacy=localStorage.getItem("mux.theme");}catch(e){}applyTheme(legacy||"light");}
   loadPalettes().catch(function(){});
   try{window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",function(){if(activePaletteId()==="system")applyPalette(resolvePalette("system"));});}catch(e){}})();
-el("serverUrl").textContent=location.host;
+el("serverUrl").textContent=location.host+BASE;
 /* i18n: apply saved locale to the static chrome, wire the language picker */
 el("langSel").value=LOCALE;
 el("langSel").addEventListener("change",function(){setLocale(el("langSel").value);});
