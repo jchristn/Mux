@@ -6,6 +6,8 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **`MuxCloud.Protocol` 2.0.0 dependency.** Mux.Core references the published NuGet package for the Mux Cloud tunnel
+  contract; builds no longer need a MuxCloud checkout.
 - **Mux Cloud.** Sign a machine in with `mux cloud login` (or `/cloud`, the desktop Mux Cloud window, the
   dashboard's Settings panel, VS Code's `mux: Connect to Mux Cloud`, or the tray menu) and use it from
   [app.usemux.ai](https://app.usemux.ai) or the Mux mobile app exactly as if you were at it. The process that owns

@@ -57,12 +57,9 @@
     <ProjectReference Include="..\Mux.Search\Mux.Search.csproj" />
   </ItemGroup>
 
-  <!-- Mux Cloud tunnel wire contract. Source reference from a MuxCloud checkout when present, else the package. -->
-  <ItemGroup Condition="Exists('$(MuxCloudRoot)/src/MuxCloud.Protocol/MuxCloud.Protocol.csproj')">
-    <ProjectReference Include="$(MuxCloudRoot)/src/MuxCloud.Protocol/MuxCloud.Protocol.csproj" />
-  </ItemGroup>
-  <ItemGroup Condition="!Exists('$(MuxCloudRoot)/src/MuxCloud.Protocol/MuxCloud.Protocol.csproj')">
-    <PackageReference Include="MuxCloud.Protocol" Version="0.1.0-alpha" />
+  <!-- Mux Cloud tunnel wire contract (github.com/jchristn/MuxCloud). -->
+  <ItemGroup>
+    <PackageReference Include="MuxCloud.Protocol" Version="2.0.0" />
   </ItemGroup>
 
   <ItemGroup>

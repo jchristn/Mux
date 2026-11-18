@@ -232,7 +232,7 @@ that owns the hub port (normally the tray agent) keeps one outbound WebSocket op
 `wss://app.usemux.ai/v1.0/tunnel`. Through it, the cloud dashboard and the mobile app reach this machine's REST API
 and `/v1.0/ws` exactly as a local client does. The tunnel protocol is specified in Mux Cloud's
 [WEBSOCKETS_API.md](https://github.com/jchristn/MuxCloud/blob/main/WEBSOCKETS_API.md), and the contract types ship in
-the `MuxCloud.Protocol` package.
+the [`MuxCloud.Protocol`](https://www.nuget.org/packages/MuxCloud.Protocol) NuGet package (2.0.0).
 
 On the machine side:
 
