@@ -160,6 +160,36 @@ namespace Mux.Server.Models
         /// through <c>exit_plan</c>, which is streamed as a <c>plan</c> event. Nothing is executed.
         /// </summary>
         public bool PlanMode { get; set; }
+
+        /// <summary>
+        /// When true, tool calls that would otherwise raise an approval prompt run without asking. Honored only
+        /// when this caller could approve tools interactively anyway (see <c>GET /v1.0/api/chat/capabilities</c>):
+        /// a request relayed through Mux Cloud while <c>cloud.allowRemoteToolApproval</c> is false, or a hub with
+        /// no interactive approvals, ignores it and keeps denying those tools.
+        /// </summary>
+        public bool AutoApproveTools { get; set; }
+    }
+
+    /// <summary>
+    /// What the calling client may do about tool approvals in a dashboard chat run.
+    /// </summary>
+    public class ChatCapabilities
+    {
+        /// <summary>Whether tool calls that need approval prompt this caller (rather than being denied).</summary>
+        public bool ToolApprovals { get; set; }
+
+        /// <summary>Whether this caller may ask runs to auto-approve tools (<see cref="ChatRequest.AutoApproveTools"/>).</summary>
+        public bool AutoApproveTools { get; set; }
+
+        /// <summary>Whether the request came through the Mux Cloud relay.</summary>
+        public bool Relayed { get; set; }
+
+        /// <summary>
+        /// Why approvals are unavailable, when they are: <c>remote_approval_off</c> (relayed and
+        /// <c>cloud.allowRemoteToolApproval</c> is false) or <c>read_only</c> (the hub runs without interactive
+        /// approvals). Empty when available.
+        /// </summary>
+        public string Reason { get; set; } = string.Empty;
     }
 
     /// <summary>

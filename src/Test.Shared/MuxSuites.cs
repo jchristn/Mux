@@ -96,6 +96,7 @@ namespace Test.Shared
                     CloudGroundworkSuite.Create(),
                     CloudTunnelSuite.Create(),
                     CloudHostSuite.Create(),
+                    ChatAutoApproveSuite.Create(),
                     CloudCliSuite.Create(),
                     CloudTuiSuite.Create(),
                     RunRegistrySuite.Create(),

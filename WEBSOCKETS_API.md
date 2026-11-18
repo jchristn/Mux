@@ -204,11 +204,13 @@ immediately. A tool that would prompt (writing a file, running a process) behave
 - Any client may answer with an `approve` frame or `POST /v1.0/api/chat/approve`. The first answer wins. The hub
   then emits `approval_resolved`, and `tool_call_approved` or a denial error follows.
 - `toolAutoApproveSeconds` is the countdown a client may show before approving on the user's behalf. The server
-  never auto-approves, and canceling the run or disconnecting the chat stream denies the call.
+  never auto-approves on a timer, and canceling the run or disconnecting the chat stream denies the call.
+- A run started with `autoApproveTools: true` (the dashboard's **Auto-approve tools** switch) approves these tools
+  itself, so no `approval_requested` is emitted. It applies only when the caller could approve interactively.
 - While a run waits, `GET /v1.0/api/runs/{runId}` reports status `AwaitingApproval`.
 
 For a run relayed from Mux Cloud while `cloud.allowRemoteToolApproval` is false, prompting tools are denied as if
-interactive approvals were off.
+interactive approvals were off, and `autoApproveTools` is ignored.
 
 ## 7. Ordering, replay, and limits
 

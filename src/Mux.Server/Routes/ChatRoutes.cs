@@ -105,6 +105,15 @@ namespace Mux.Server.Routes
 
             // Answer an approval prompt raised during an interactive web chat run. The streaming run is
             // blocked awaiting this decision; resolving the pending completion source unblocks it.
+            // What this caller may do about tool approvals: lets the dashboard enable or disable its auto-approve
+            // switch. The run itself enforces the same rule, so this is informational only.
+            app.Get("/v1.0/api/chat/capabilities", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey)) return (object)new ApiError("Unauthorized", "Authentication required.");
+                req.Http.Response.StatusCode = 200;
+                return await Task.FromResult<object>(Capabilities(RelayContext.IsRelayed(req.Http))).ConfigureAwait(false);
+            }, Documentation.ApiDoc.ChatCapabilitiesGet);
+
             app.Post("/v1.0/api/chat/approve", async (req) =>
             {
                 if (!ApiAuth.Authorize(req.Http, _ApiKey))
@@ -495,8 +504,12 @@ namespace Mux.Server.Routes
                     PromptUserFunc = _ => Task.FromResult("n"),
                     // Interactive approvals: on with --allow-tools, and while Mux Cloud is connected with remote
                     // approval allowed. A relayed run follows cloud.allowRemoteToolApproval (CloudRoutePolicy).
+                    // AutoApproveTools answers those prompts with "approve" and is honored only when the caller
+                    // could approve interactively, so it never widens what a remote user may do.
                     InteractiveApprovalPrompt = _Policy.AllowsInteractiveApproval(RelayContext.IsRelayed(ctx))
-                        ? (toolCall, seconds, token) => RequestBrowserApprovalAsync(ctx, runHandle, toolCall, seconds, token)
+                        ? (request.AutoApproveTools
+                            ? (toolCall, seconds, token) => Task.FromResult("y")
+                            : (toolCall, seconds, token) => RequestBrowserApprovalAsync(ctx, runHandle, toolCall, seconds, token))
                         : null,
                     WorkingDirectory = runDirectory,
                     MuxSettings = settings,
@@ -796,6 +809,23 @@ namespace Mux.Server.Routes
         // disconnects. The pending approval is registered on the run handle so either transport can resolve it.
         // Returns "y"/"always" to approve or "n" to deny. Only used when the server was started with
         // interactive web tools enabled.
+        /// <summary>
+        /// The approval capabilities for a caller.
+        /// </summary>
+        /// <param name="relayed">Whether the request came through the Mux Cloud relay.</param>
+        /// <returns>The capabilities.</returns>
+        internal ChatCapabilities Capabilities(bool relayed)
+        {
+            bool available = _Policy.AllowsInteractiveApproval(relayed);
+            string reason = string.Empty;
+            if (!available)
+            {
+                reason = relayed && !_Policy.AllowRemoteToolApproval ? "remote_approval_off" : "read_only";
+            }
+
+            return new ChatCapabilities { ToolApprovals = available, AutoApproveTools = available, Relayed = relayed, Reason = reason };
+        }
+
         private async Task<string> RequestBrowserApprovalAsync(HttpContextBase ctx, RunHandle handle, ToolCall toolCall, int seconds, CancellationToken cancellationToken)
         {
             string toolCallId = toolCall?.Id ?? string.Empty;

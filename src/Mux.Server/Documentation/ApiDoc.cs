@@ -301,6 +301,14 @@ namespace Mux.Server.Documentation
             .WithResponse(401, Unauthorized())
             .WithResponse(404, RespJson("No pending approval matched the run and tool-call id.", Ref("ApiError")));
 
+        /// <summary>Metadata for <c>GET /v1.0/api/chat/capabilities</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ChatCapabilitiesGet = m => Sec(Init(m, TagChat,
+            "Tool-approval capabilities for this caller",
+            "Reports whether tool calls that need approval prompt this caller (`ToolApprovals`) and whether it may ask runs to auto-approve them (`AutoApproveTools`). A request relayed through Mux Cloud while `cloud.allowRemoteToolApproval` is false gets `false` for both with `Reason` `remote_approval_off`; a hub without interactive approvals reports `read_only`. Chat runs enforce the same rule.",
+            operationId: "getChatCapabilities"))
+            .WithResponse(200, Ok("ChatCapabilities"))
+            .WithResponse(401, Unauthorized());
+
         /// <summary>Metadata for <c>POST /v1.0/api/model/load</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> ModelLoad = m => Sec(Init(m, TagChat,
             "Warm (pre-load) a model",
@@ -1285,12 +1293,22 @@ namespace Mux.Server.Documentation
             }, new Dictionary<string, object?> { ["Role"] = "user", ["Content"] = "Explain this function." },
                new List<string> { "Role", "Content" }, "A single chat message. Tool-call structure is preserved across surfaces.");
 
+            s["ChatCapabilities"] = Obj(new Dictionary<string, M>
+            {
+                ["ToolApprovals"] = Pbool("Whether tool calls that need approval prompt this caller."),
+                ["AutoApproveTools"] = Pbool("Whether this caller may set `AutoApproveTools` on a chat run."),
+                ["Relayed"] = Pbool("Whether the request came through the Mux Cloud relay."),
+                ["Reason"] = Pstr("`remote_approval_off`, `read_only`, or empty when approvals are available.")
+            }, new Dictionary<string, object?> { ["ToolApprovals"] = true, ["AutoApproveTools"] = true, ["Relayed"] = false, ["Reason"] = "" });
+
             s["ChatRequest"] = Obj(new Dictionary<string, M>
             {
                 ["Endpoint"] = Pstr("Configured endpoint name to run against."),
                 ["Id"] = PstrNullable("Optional conversation/session id, used to tag usage telemetry."),
                 ["WorkingDirectory"] = PstrNullable("Optional working directory the run's tools resolve paths against. Must exist when set."),
-                ["Messages"] = Parr(Ref("ChatMessageDto"), "The conversation so far, including the new user turn.")
+                ["Messages"] = Parr(Ref("ChatMessageDto"), "The conversation so far, including the new user turn."),
+                ["PlanMode"] = Pbool("Run the turn in plan mode (read-only tools, ending with a plan)."),
+                ["AutoApproveTools"] = Pbool("Run tools that would prompt for approval without asking. Honored only when this caller may approve tools (see `GET /v1.0/api/chat/capabilities`).")
             }, new Dictionary<string, object?>
             {
                 ["Endpoint"] = "openai-gpt4o",

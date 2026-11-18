@@ -6,6 +6,11 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **Auto-approve tools in the web chat.** The dashboard chat (local, and through Mux Cloud) has an
+  **Auto-approve tools** switch that runs tools without an approval prompt, saved per browser, with a note above the
+  composer while it is on. Chat runs take `autoApproveTools`, and `GET /v1.0/api/chat/capabilities` reports whether the
+  caller may use it. The hub honors it only when the caller could approve tools anyway, so a request relayed through
+  Mux Cloud while `cloud.allowRemoteToolApproval` is false keeps denying those tools.
 - **`MuxCloud.Protocol` 2.0.0 dependency.** Mux.Core references the published NuGet package for the Mux Cloud tunnel
   contract; builds no longer need a MuxCloud checkout.
 - **Mux Cloud.** Sign a machine in with `mux cloud login` (or `/cloud`, the desktop Mux Cloud window, the
