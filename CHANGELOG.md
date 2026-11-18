@@ -88,6 +88,9 @@ or Google accounts, and does not use subscription quotas.
   **Import Models…**), alongside the desktop app's existing import. Each model becomes an endpoint that copies
   the source's adapter, URL, credentials, region, and project.
 
+- **`+` adds an endpoint from the terminal endpoints picker** (`/endpoints`, `/models`, Ctrl+E) without scrolling
+  to the **+ Add endpoint…** row. The key-hint line lists it, and clicking "+ add" does the same.
+
 ### Fixed
 
 - **The terminal endpoint editor (`/endpoints`, `/models`, Ctrl+E) offers every adapter.** It listed only

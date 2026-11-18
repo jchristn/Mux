@@ -31,7 +31,12 @@ namespace Mux.Cli.App
         /// <summary>
         /// The validate shortcut (v): probe the highlighted endpoint and show the result.
         /// </summary>
-        Validate
+        Validate,
+
+        /// <summary>
+        /// The add shortcut (+): open the new-endpoint form, whichever row is highlighted.
+        /// </summary>
+        Add
     }
 
     /// <summary>
@@ -64,8 +69,9 @@ namespace Mux.Cli.App
     /// <summary>
     /// The endpoints / models picker. It behaves like a <see cref="SelectModal"/> — Up/Down move, Enter
     /// chooses, Escape cancels — and additionally offers per-row shortcuts while an endpoint is highlighted:
-    /// <c>e</c> edits it and <c>d</c> or Delete removes it. The shortcuts fire only on the endpoint rows
-    /// (the first <c>endpointCount</c> rows); they are ignored on the separator and management rows below.
+    /// <c>e</c> edits it, <c>v</c> validates it, and <c>d</c> or Delete removes it. Those fire only on the endpoint
+    /// rows (the first <c>endpointCount</c> rows) and are ignored on the separator and management rows below.
+    /// <c>+</c> opens the new-endpoint form from any row.
     /// Completes with an <see cref="EndpointModalResult"/>, or null when cancelled.
     /// </summary>
     public sealed class EndpointSelectModal : Modal
@@ -143,6 +149,15 @@ namespace Mux.Cli.App
                 return true;
             }
 
+            // '+' adds a new endpoint from any row (Shift is allowed, since most layouts need it to type '+'), so
+            // the "+ Add endpoint…" row never has to be scrolled to.
+            if (key.Code == KeyCode.Character && key.Rune == '+'
+                && (key.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Alt)) == 0)
+            {
+                Close(new EndpointModalResult(_List.SelectedIndex, EndpointModalActivationEnum.Add));
+                return true;
+            }
+
             // The letter shortcuts fire only as plain keystrokes so Ctrl/Alt chords are left alone.
             if (key.Code == KeyCode.Character && key.Modifiers == KeyModifiers.None && IsEndpointRow(_List.SelectedIndex))
             {
@@ -211,7 +226,9 @@ namespace Mux.Cli.App
                 {
                     if (mouse.X >= zone.Start && mouse.X < zone.End)
                     {
-                        if (zone.Activation == EndpointModalActivationEnum.Select || IsEndpointRow(_List.SelectedIndex))
+                        if (zone.Activation == EndpointModalActivationEnum.Select
+                            || zone.Activation == EndpointModalActivationEnum.Add
+                            || IsEndpointRow(_List.SelectedIndex))
                         {
                             Close(new EndpointModalResult(_List.SelectedIndex, zone.Activation));
                         }
@@ -270,6 +287,7 @@ namespace Mux.Cli.App
             {
                 new Segment("↑↓ move", null),
                 new Segment("Enter switch", EndpointModalActivationEnum.Select),
+                new Segment("+ add", EndpointModalActivationEnum.Add),
                 new Segment("e edit", EndpointModalActivationEnum.Edit),
                 new Segment("v validate", EndpointModalActivationEnum.Validate),
                 new Segment("d/Del remove", EndpointModalActivationEnum.Remove),

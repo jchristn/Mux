@@ -13,6 +13,7 @@ namespace Test.Shared.Suites
     using Mux.Core.Models;
     using Mux.Core.Settings;
     using Touchstone.Core;
+    using TUIKit.Input;
     using TUIKit.Terminal;
 
     /// <summary>
@@ -102,6 +103,49 @@ namespace Test.Shared.Suites
                                 MuxAssert.IsTrue(HasEndpoint("brandnew"), "endpoint persisted");
                             }
                         })),
+
+                    Case("PlusShortcutAddsEndpoint", "Pressing + in the endpoints picker opens the add form from an endpoint row", (CancellationToken ct) =>
+                        WithConfigDirAsync(async dir =>
+                        {
+                            Seed(Endpoint("alpha", AdapterTypeEnum.OpenAiCompatible, "m-a"));
+                            await using (JobManager manager = NewManager())
+                            using (MuxTuiApp app = NewApp(out HeadlessBackend backend, manager, "alpha", null))
+                            {
+                                Feed(backend, app, "/endpoint" + "\r");   // the highlight starts on "alpha", far from "+ Add"
+                                await WaitModal(app, ct).ConfigureAwait(false);
+                                Feed(backend, app, "+");                  // + -> the add form, no scrolling
+                                await WaitModal(app, ct).ConfigureAwait(false);
+
+                                Feed(backend, app, "viaplus");
+                                Feed(backend, app, "\t\t\t");
+                                Feed(backend, app, "plus-model");
+                                Feed(backend, app, "\r");
+
+                                await WaitUntilAsync(() => HasEndpoint("viaplus"), ct).ConfigureAwait(false);
+                                MuxAssert.IsTrue(HasEndpoint("viaplus"), "endpoint added through the + shortcut");
+                                MuxAssert.IsTrue(HasEndpoint("alpha"), "the highlighted endpoint was not edited or removed");
+                            }
+                        })),
+
+                    Case("PlusShortcutModalContract", "+ completes with Add on any row, ignores Ctrl/Alt chords, and is listed in the hints", async (CancellationToken ct) =>
+                    {
+                        List<string> options = new List<string> { "  alpha  (openai-compatible · m)", string.Empty, "+ Add endpoint…" };
+                        EndpointSelectModal chord = new EndpointSelectModal("Endpoints / models", options, 1);
+                        chord.HandleKey(KeyEvent.Char('+', KeyModifiers.Ctrl));
+                        MuxAssert.IsFalse(chord.IsClosed, "Ctrl++ is not the add shortcut");
+
+                        EndpointSelectModal modal = new EndpointSelectModal("Endpoints / models", options, 1);
+                        TUIKit.CellBuffer buffer = new TUIKit.CellBuffer(100, 20);
+                        modal.Render(new TUIKit.BufferSurface(buffer));
+                        System.Text.StringBuilder screen = new System.Text.StringBuilder();
+                        for (int y = 0; y < 20; y++) for (int x = 0; x < 100; x++) screen.Append(buffer.Get(x, y).Grapheme ?? " ");
+                        MuxAssert.Contains("+ add", screen.ToString(), "hint lists the + shortcut");
+
+                        modal.HandleKey(KeyEvent.Char('+', KeyModifiers.Shift));
+                        MuxAssert.IsTrue(modal.IsClosed, "Shift+= (+) closes the picker");
+                        EndpointModalResult? result = await modal.Completion.ConfigureAwait(false) as EndpointModalResult;
+                        MuxAssert.AreEqual(EndpointModalActivationEnum.Add, result!.Activation, "completes with Add");
+                    }),
 
                     Case("EditEndpointFormUpdates", "The edit form updates an existing endpoint's model", (CancellationToken ct) =>
                         WithConfigDirAsync(async dir =>

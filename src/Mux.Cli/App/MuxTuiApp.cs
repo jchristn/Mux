@@ -4517,6 +4517,13 @@ namespace Mux.Cli.App
                 return;
             }
 
+            // The + shortcut opens the new-endpoint form whichever row is highlighted.
+            if (choice.Activation == EndpointModalActivationEnum.Add)
+            {
+                await AddEndpointFormAsync().ConfigureAwait(false);
+                return;
+            }
+
             int index = choice.Index;
             if (index < 0 || index >= actions.Count)
             {

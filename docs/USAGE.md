@@ -146,7 +146,8 @@ including the panes behind the text, takes the palette's colors, and the prompt 
 color. The choice is saved as `colorPalette` in `settings.json`, which the desktop app and web dashboard
 share. See [Color palettes](CONFIG.md#color-palettes).
 
-The endpoints picker (`/endpoints`, `/models`, Ctrl+E) adds and edits endpoints of every adapter: `ollama`,
+In the endpoints picker (`/endpoints`, `/models`, Ctrl+E), `+` adds an endpoint from any row, and on an
+endpoint row `e` edits, `v` validates, and `d` or Delete removes it. The picker adds and edits endpoints of every adapter: `ollama`,
 `ollama-cloud`, `openai`, `openai-compatible`, `vllm`, `anthropic`, `gemini`, `azure-openai`, `vertex`,
 `bedrock`, and `xai`. The form shows only the fields the selected adapter uses: an API key (named with its
 environment fallback), key placement for the Chat Completions adapters, a region for Vertex and Bedrock, and a
