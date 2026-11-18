@@ -284,6 +284,8 @@
   "Enter your password.": "Digite sua senha.",
   "Signing in to Mux Cloud…": "Entrando no Mux Cloud…",
   "Could not sign in to Mux Cloud: {0}": "Não foi possível entrar no Mux Cloud: {0}",
+  "No account yet? Create one at {0}": "Ainda não tem conta? Crie uma em {0}",
+  "Create an account": "Criar uma conta",
   "Mux Cloud": "Mux Cloud",
   "Anyone signed in to this Mux Cloud account can use this machine remotely, as if they were at it, including approving tools that edit files and run commands. To keep remote use read-only for those tools, turn off remote tool approval (Mux Cloud command, or set cloud.allowRemoteToolApproval to false).": "Qualquer pessoa conectada a esta conta do Mux Cloud pode usar esta máquina remotamente, como se estivesse diante dela, inclusive aprovar ferramentas que editam arquivos e executam comandos. Para manter o uso remoto somente leitura nessas ferramentas, desative a aprovação remota de ferramentas (comando Mux Cloud, ou cloud.allowRemoteToolApproval como false).",
   "Connected to {0} as {1}": "Conectado a {0} como {1}",

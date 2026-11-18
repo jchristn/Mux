@@ -52,6 +52,7 @@ namespace Test.Shared.Suites
                             MuxAssert.DoesNotContain("remote approval", status, "no remote approval line before signing in");
                             MuxAssert.DoesNotContain("mux cloud login", status, "the terminal UI names its own command");
                             MuxAssert.AreEqual(1, status.Split("Sign in with").Length - 1, "one sign-in hint");
+                            MuxAssert.Contains("No account yet? Create one at https://app.usemux.ai/signup", status, "where to create an account");
                             Dump(backend, app, "tui-cloud-status");
 
                             backend.FeedInput("/cloud bogus\r");
@@ -86,6 +87,7 @@ namespace Test.Shared.Suites
                             MuxAssert.Contains("dev@example.test", frame, "email echoes");
                             MuxAssert.DoesNotContain("supersecret", frame, "password is masked");
                             MuxAssert.Contains("Enter sign in", frame, "hint");
+                            MuxAssert.Contains("No account yet? Create one at https://app.usemux.ai/signup", frame, "where to create an account");
                             MuxAssert.Contains("remote-approval off).", frame, "the notice ends with the terminal command");
                             MuxAssert.Contains("(/cloud", frame, "the notice names the terminal command");
                             Save("tui-cloud-login", frame);

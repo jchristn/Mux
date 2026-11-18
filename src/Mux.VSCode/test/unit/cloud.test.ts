@@ -67,3 +67,11 @@ test('the Mux Cloud command is contributed and titled in every package.nls file'
         assert.equal(typeof nls['cmd.cloud'], 'string', file + ' has cmd.cloud');
     }
 });
+
+test('signup link follows the configured server and defaults to app.usemux.ai', () => {
+    const text = loadCloudText();
+    assert.equal(text.signupUrl(undefined), 'https://app.usemux.ai/signup');
+    assert.equal(text.signupUrl('  '), 'https://app.usemux.ai/signup');
+    assert.equal(text.signupUrl('https://cloud.example.test/'), 'https://cloud.example.test/signup');
+    assert.equal(text.signupHint(null), 'No account yet? Create one at https://app.usemux.ai/signup');
+});

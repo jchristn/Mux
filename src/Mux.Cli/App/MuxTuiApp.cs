@@ -5907,7 +5907,8 @@ namespace Mux.Cli.App
             }
             catch (Exception ex) when (ex is Mux.Core.Cloud.CloudEnrollmentException || ex is ArgumentException)
             {
-                WriteNotice("⚠ " + ex.Message);
+                string server = string.IsNullOrWhiteSpace(input.ServerUrl) ? SettingsLoader.LoadSettings().Cloud.ServerUrl : input.ServerUrl;
+                WriteNotice("⚠ " + Mux.Core.Cloud.CloudSignup.ErrorMessage(ex, server));
             }
             catch (OperationCanceledException)
             {

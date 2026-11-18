@@ -284,6 +284,8 @@
   "Enter your password.": "请输入密码。",
   "Signing in to Mux Cloud…": "正在登录 Mux Cloud…",
   "Could not sign in to Mux Cloud: {0}": "无法登录 Mux Cloud：{0}",
+  "No account yet? Create one at {0}": "还没有帐户？在 {0} 创建一个",
+  "Create an account": "创建帐户",
   "Mux Cloud": "Mux Cloud",
   "Anyone signed in to this Mux Cloud account can use this machine remotely, as if they were at it, including approving tools that edit files and run commands. To keep remote use read-only for those tools, turn off remote tool approval (Mux Cloud command, or set cloud.allowRemoteToolApproval to false).": "任何登录此 Mux Cloud 帐户的人都可以远程使用这台计算机，就像坐在它前面一样，包括批准编辑文件和运行命令的工具。若要让这些工具的远程使用保持只读，请关闭远程工具批准（Mux Cloud 命令，或将 cloud.allowRemoteToolApproval 设为 false）。",
   "Connected to {0} as {1}": "已作为 {1} 连接到 {0}",

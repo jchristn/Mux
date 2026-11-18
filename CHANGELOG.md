@@ -29,6 +29,10 @@ All notable changes to mux are documented here.
 - `settings.json` is rewritten on load only when normalization changed it.
 - The Mux Cloud credential and connect switch are written only by signing in or out, so saving an older copy of
   the settings never signs a machine out.
+- Every Mux Cloud sign-in form and command (dashboard, desktop, terminal UI, CLI, VS Code) says where to create an
+  account (`<server>/signup`), and a rejected email or password repeats it.
+- The dashboard header fits on phones and tablets: uptime, host, and version drop out on narrow screens, and the
+  closed navigation drawer no longer casts a shadow at the left edge.
 
 ## 1.8.0 (unreleased)
 

@@ -284,6 +284,8 @@
   "Enter your password.": "Masukkan kata laluan anda.",
   "Signing in to Mux Cloud…": "Sedang log masuk ke Mux Cloud…",
   "Could not sign in to Mux Cloud: {0}": "Tidak dapat log masuk ke Mux Cloud: {0}",
+  "No account yet? Create one at {0}": "Belum ada akaun? Cipta satu di {0}",
+  "Create an account": "Cipta akaun",
   "Mux Cloud": "Mux Cloud",
   "Anyone signed in to this Mux Cloud account can use this machine remotely, as if they were at it, including approving tools that edit files and run commands. To keep remote use read-only for those tools, turn off remote tool approval (Mux Cloud command, or set cloud.allowRemoteToolApproval to false).": "Sesiapa yang log masuk ke akaun Mux Cloud ini boleh menggunakan mesin ini dari jauh, seolah-olah berada di hadapannya, termasuk meluluskan alat yang menyunting fail dan menjalankan arahan. Untuk mengekalkan penggunaan jauh baca sahaja bagi alat tersebut, matikan kelulusan alat jauh (arahan Mux Cloud, atau tetapkan cloud.allowRemoteToolApproval kepada false).",
   "Connected to {0} as {1}": "Disambungkan ke {0} sebagai {1}",

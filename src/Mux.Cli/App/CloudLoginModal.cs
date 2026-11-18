@@ -106,7 +106,8 @@ namespace Mux.Cli.App
             int contentWidth = Math.Max(8, Math.Min(ContentWidth, screenWidth - 2 - (2 * PadX)));
             List<string> notice = Wrap(CloudAccountService.RemoteAccessNoticeFor("/cloud remote-approval off"), contentWidth);
             int noticeRows = notice.Count + 1;
-            int hintRows = 2;
+            List<string> signup = Wrap(CloudSignup.Hint(_ServerUrl.Value), contentWidth);
+            int hintRows = 2 + signup.Count;
             int formHeight = _Host.MeasureHeight(contentWidth);
             int boxWidth = Math.Min(screenWidth, contentWidth + 2 + (2 * PadX));
             int maxContentHeight = Math.Max(1, screenHeight - hintRows - noticeRows - 2 - (2 * PadY));
@@ -135,6 +136,13 @@ namespace Mux.Cli.App
             }
 
             int hintRow = boxY + boxHeight - 2;
+            int signupRow = hintRow - 1 - signup.Count;
+            foreach (string line in signup)
+            {
+                if (signupRow > boxY) surface.DrawText(contentX, signupRow, line, CellStyle.Default.WithForeground(Color.FromPalette(8)));
+                signupRow++;
+            }
+
             string? errors = _Host.ErrorSummary;
             string hint = errors ?? "Tab/↑↓ move · Enter sign in · Esc cancel";
             surface.DrawText(contentX, hintRow, hint.Length > contentWidth ? hint.Substring(0, contentWidth) : hint, CellStyle.Default.WithForeground(Color.FromPalette((byte)(errors != null ? 9 : 8))));

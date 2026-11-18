@@ -104,6 +104,7 @@ namespace Mux.Cli.Commands
             if (!enrolled || status.State == CloudStateEnum.SignedOut || status.State == CloudStateEnum.Revoked)
             {
                 output.WriteLine("  Sign in with: " + signInCommand);
+                if (!enrolled) output.WriteLine("  " + CloudSignup.Hint(status.ServerUrl));
             }
         }
 
@@ -141,7 +142,9 @@ namespace Mux.Cli.Commands
                 else throw new ArgumentException("Unknown option '" + a + "'. Run mux cloud for usage.");
             }
 
+            string effectiveServer = string.IsNullOrWhiteSpace(server) ? SettingsLoader.LoadSettings().Cloud.ServerUrl : server;
             output.WriteLine(CloudAccountService.RemoteAccessNotice);
+            output.WriteLine(CloudSignup.Hint(effectiveServer));
             output.WriteLine();
             if (string.IsNullOrWhiteSpace(email))
             {
@@ -163,7 +166,18 @@ namespace Mux.Cli.Commands
             }
 
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrEmpty(password)) throw new ArgumentException("An email and password are required.");
-            CloudSettings saved = await CloudAccountService.LoginAsync(email, password, server, name, token).ConfigureAwait(false);
+            CloudSettings saved;
+            try
+            {
+                saved = await CloudAccountService.LoginAsync(email, password, server, name, token).ConfigureAwait(false);
+            }
+            catch (CloudEnrollmentException e)
+            {
+                error.WriteLine("mux cloud: " + e.Message);
+                if (e.StatusCode == 401) error.WriteLine(CloudSignup.Hint(effectiveServer));
+                return FailedExitCode;
+            }
+
             output.WriteLine("Signed in as " + saved.AccountEmail + ". This machine is \"" + saved.MachineName + "\" (" + saved.MachineId + ").");
 
             AgentLauncher.EnsureRunning();

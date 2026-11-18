@@ -284,6 +284,8 @@
   "Enter your password.": "パスワードを入力してください。",
   "Signing in to Mux Cloud…": "Mux Cloud にサインインしています…",
   "Could not sign in to Mux Cloud: {0}": "Mux Cloud にサインインできませんでした: {0}",
+  "No account yet? Create one at {0}": "アカウントをお持ちでない場合は {0} で作成してください",
+  "Create an account": "アカウントを作成",
   "Mux Cloud": "Mux Cloud",
   "Anyone signed in to this Mux Cloud account can use this machine remotely, as if they were at it, including approving tools that edit files and run commands. To keep remote use read-only for those tools, turn off remote tool approval (Mux Cloud command, or set cloud.allowRemoteToolApproval to false).": "この Mux Cloud アカウントにサインインしている人は誰でも、このマシンの前にいるかのようにリモートで使用でき、ファイルを編集したりコマンドを実行したりするツールの承認も行えます。これらのツールのリモート使用を読み取り専用にするには、リモートでのツール承認をオフにしてください（Mux Cloud コマンド、または cloud.allowRemoteToolApproval を false に設定）。",
   "Connected to {0} as {1}": "{1} として {0} に接続済み",

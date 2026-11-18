@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { ApiError } from '../api/ApiError';
 import { MuxServerLifecycle } from '../server/lifecycle';
 import { CloudStatusBar } from './CloudStatusBar';
-import { remoteAccessNotice, statusSummary } from './cloudText';
+import { remoteAccessNotice, signupHint, signupUrl, statusSummary } from './cloudText';
 
 /**
  * `mux: Connect to Mux Cloud`: signs this machine in (email and masked password; the local hub sends them to Mux
@@ -54,14 +54,19 @@ export async function runCloudCommand(lifecycle: MuxServerLifecycle, bar: CloudS
     }
 
     const proceed = vscode.l10n.t('Continue');
-    const accepted = await vscode.window.showWarningMessage(remoteAccessNotice(), { modal: true }, proceed);
+    const createAccount = vscode.l10n.t('Create an account');
+    const accepted = await vscode.window.showWarningMessage(remoteAccessNotice(), { modal: true, detail: signupHint(cloud?.ServerUrl) }, proceed, createAccount);
+    if (accepted === createAccount) {
+        void vscode.env.openExternal(vscode.Uri.parse(signupUrl(cloud?.ServerUrl)));
+        return;
+    }
     if (accepted !== proceed) {
         return;
     }
 
     const email = await vscode.window.showInputBox({
         title: vscode.l10n.t('Connect to Mux Cloud'),
-        prompt: vscode.l10n.t('Mux Cloud email'),
+        prompt: vscode.l10n.t('Mux Cloud email') + ' · ' + signupHint(cloud?.ServerUrl),
         value: cloud?.AccountEmail ?? '',
         ignoreFocusOut: true,
         validateInput: (v) => (v.trim() ? undefined : vscode.l10n.t('Enter your email.')),
@@ -89,7 +94,15 @@ export async function runCloudCommand(lifecycle: MuxServerLifecycle, bar: CloudS
         void vscode.window.showInformationMessage(statusSummary(status));
     } catch (error) {
         const message = error instanceof ApiError ? error.message : String((error as Error).message ?? error);
-        void vscode.window.showErrorMessage(vscode.l10n.t('Could not sign in to Mux Cloud: {0}', message));
+        if (error instanceof ApiError && error.status === 401) {
+            const createAccount = vscode.l10n.t('Create an account');
+            const choice = await vscode.window.showErrorMessage(vscode.l10n.t('Could not sign in to Mux Cloud: {0}', message) + ' ' + signupHint(cloud?.ServerUrl), createAccount);
+            if (choice === createAccount) {
+                void vscode.env.openExternal(vscode.Uri.parse(signupUrl(cloud?.ServerUrl)));
+            }
+        } else {
+            void vscode.window.showErrorMessage(vscode.l10n.t('Could not sign in to Mux Cloud: {0}', message));
+        }
     }
 
     await bar.refresh();

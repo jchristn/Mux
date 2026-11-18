@@ -70,3 +70,24 @@ export function stateIcon(stateName: string): string {
             return '$(cloud-upload)';
     }
 }
+
+/**
+ * The signup page of a Mux Cloud server, for someone who has no account yet.
+ *
+ * @param serverUrl The configured server; blank uses https://app.usemux.ai.
+ * @returns For example `https://app.usemux.ai/signup`.
+ */
+export function signupUrl(serverUrl?: string | null): string {
+    const server = (serverUrl ?? '').trim() || 'https://app.usemux.ai';
+    return server.replace(/\/+$/, '') + '/signup';
+}
+
+/**
+ * The one-line hint shown next to every Mux Cloud sign-in prompt.
+ *
+ * @param serverUrl The configured server; blank uses the default.
+ * @returns For example `No account yet? Create one at https://app.usemux.ai/signup`.
+ */
+export function signupHint(serverUrl?: string | null): string {
+    return vscode.l10n.t('No account yet? Create one at {0}', signupUrl(serverUrl));
+}

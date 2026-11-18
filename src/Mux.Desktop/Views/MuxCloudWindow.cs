@@ -5,6 +5,7 @@ namespace Mux.Desktop.Views
     using System.Threading.Tasks;
     using Avalonia;
     using Avalonia.Controls;
+    using Avalonia.Input;
     using Avalonia.Layout;
     using Avalonia.Media;
     using Avalonia.Threading;
@@ -30,6 +31,7 @@ namespace Mux.Desktop.Views
         private readonly TextBox _Server = new TextBox();
         private readonly TextBox _MachineName = new TextBox();
         private readonly TextBlock _Message = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, IsVisible = false };
+        private readonly TextBlock _SignupLink = new TextBlock { FontSize = 12, TextDecorations = TextDecorations.Underline, Cursor = new Cursor(StandardCursorType.Hand) };
         private CloudStatus _Status = new CloudStatus();
         private bool _Busy;
         private bool _SignedInView;
@@ -79,6 +81,11 @@ namespace Mux.Desktop.Views
                     _ = SignInAsync();
                 }
             };
+            _SignupLink.PointerPressed += (sender, args) => BrowserLauncher.OpenUrl(CloudSignup.Url(_Server.Text));
+            _Server.PropertyChanged += (sender, args) =>
+            {
+                if (args.Property == TextBox.TextProperty) _SignupLink.Text = CreateAccountText(_Server.Text);
+            };
             _Timer.Tick += (sender, args) => _ = RefreshAsync();
             Opened += (sender, args) => { _Timer.Start(); _ = RefreshAsync(); };
             Closed += (sender, args) => _Timer.Stop();
@@ -118,6 +125,7 @@ namespace Mux.Desktop.Views
                 Button signIn = new Button { Content = Localizer.T(_Busy ? "cloud.signingIn" : "cloud.signIn"), IsEnabled = !_Busy, Background = _Theme.AccentButton, Foreground = _Theme.AccentText, Padding = new Thickness(16, 8, 16, 8), HorizontalAlignment = HorizontalAlignment.Left };
                 signIn.Click += (sender, args) => _ = SignInAsync();
                 _Body.Children.Add(signIn);
+                _Body.Children.Add(SignupRow());
                 return;
             }
 
@@ -180,6 +188,10 @@ namespace Mux.Desktop.Views
             catch (Exception ex) when (ex is CloudEnrollmentException || ex is ArgumentException)
             {
                 error = ex.Message;
+                if (ex is CloudEnrollmentException enrollment && enrollment.StatusCode == 401)
+                {
+                    error += " " + Localizer.T("cloud.noAccount") + " " + CreateAccountText(server);
+                }
             }
 
             Dispatcher.UIThread.Post(() =>
@@ -227,6 +239,24 @@ namespace Mux.Desktop.Views
             row.Children.Add(name);
             row.Children.Add(value);
             return row;
+        }
+
+        // "No account yet? Create one at app.usemux.ai/signup", under the sign-in button. The link follows the Server
+        // field, so someone signing in to a self-hosted cloud is sent to that server's signup page.
+        private Control SignupRow()
+        {
+            _SignupLink.Foreground = _Theme.Accent;
+            _SignupLink.Text = CreateAccountText(_Server.Text);
+            WrapPanel row = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, -2, 0, 0) };
+            row.Children.Add(new TextBlock { Text = Localizer.T("cloud.noAccount") + " ", Foreground = _Theme.Muted, FontSize = 12 });
+            if (_SignupLink.Parent is Panel previous) previous.Children.Remove(_SignupLink);
+            row.Children.Add(_SignupLink);
+            return row;
+        }
+
+        private static string CreateAccountText(string? serverUrl)
+        {
+            return Localizer.T("cloud.createAccountAt").Replace("{url}", CloudSignup.DisplayUrl(serverUrl), StringComparison.Ordinal);
         }
 
         private Control Labeled(string label, Control field)

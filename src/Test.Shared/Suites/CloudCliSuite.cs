@@ -58,6 +58,7 @@ namespace Test.Shared.Suites
                         int code = await Task.Run(() => CloudCommand.Run(new[] { "login", "--email", "dev@example.test", "--password-stdin", "--server", cloud.Url, "--name", "cli-box" }, new StringReader("secret-pw\n"), output, error), ct).ConfigureAwait(false);
                         MuxAssert.AreEqual(0, code, "login exit code: " + error);
                         MuxAssert.Contains("approving tools", output.ToString(), "shows the remote-access notice first");
+                        MuxAssert.Contains("No account yet? Create one at " + cloud.Url.TrimEnd('/') + "/signup", output.ToString(), "shows where to create an account on the chosen server");
                         MuxAssert.Contains("Signed in as dev@example.test", output.ToString(), "confirms the account");
                         MuxAssert.Contains("Mux Cloud : ", output.ToString(), "prints the status block");
                         CloudSettings saved = SettingsLoader.LoadSettings().Cloud;
@@ -135,6 +136,7 @@ namespace Test.Shared.Suites
                         int code = await Task.Run(() => CloudCommand.Run(new[] { "login", "--email", "dev@example.test", "--password-stdin", "--server", cloud.Url }, new StringReader("bad\n"), new StringWriter(), error), ct).ConfigureAwait(false);
                         MuxAssert.AreEqual(CloudCommand.FailedExitCode, code, "exit code");
                         MuxAssert.Contains("not correct", error.ToString(), "explains");
+                        MuxAssert.Contains("No account yet? Create one at " + cloud.Url.TrimEnd('/') + "/signup", error.ToString(), "a rejected password points at signup on the same server");
                         MuxAssert.IsFalse(SettingsLoader.LoadSettings().Cloud.IsEnrolled, "nothing saved");
                     }
                     finally
@@ -159,6 +161,11 @@ namespace Test.Shared.Suites
                     CloudCommand.WriteStatus(new CloudStatus { State = CloudStateEnum.Disabled, Reason = "This machine is not signed in to Mux Cloud.", ServerUrl = "https://app.usemux.ai", MachineName = "box" }, signedOut);
                     MuxAssert.DoesNotContain("remote approval", signedOut.ToString(), "no remote approval line before signing in");
                     MuxAssert.Contains("Sign in with: mux cloud login", signedOut.ToString(), "next step");
+                    MuxAssert.Contains("No account yet? Create one at https://app.usemux.ai/signup", signedOut.ToString(), "where to create an account");
+                    MuxAssert.DoesNotContain("No account yet", text, "no signup hint once connected");
+                    MuxAssert.AreEqual("https://cloud.example.test/signup", CloudSignup.Url("https://cloud.example.test/"), "signup URL follows the server and drops a trailing slash");
+                    MuxAssert.AreEqual("https://app.usemux.ai/signup", CloudSignup.Url("  "), "blank server uses the default");
+                    MuxAssert.AreEqual("app.usemux.ai/signup", CloudSignup.DisplayUrl(null), "display form drops the scheme");
                     MuxAssert.AreEqual(1, signedOut.ToString().Split("not signed in").Length - 1, "reason shown once");
                     MuxAssert.Contains("latency         : 42 ms", text, "latency");
                     return Task.CompletedTask;
