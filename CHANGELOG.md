@@ -2,6 +2,31 @@
 
 All notable changes to mux are documented here.
 
+## Unreleased (feature/v2.0.0)
+
+### Added
+
+- **Mux Cloud.** Sign a machine in with `mux cloud login` (or `/cloud`, the desktop Mux Cloud window, the
+  dashboard's Settings panel, VS Code's `mux: Connect to Mux Cloud`, or the tray menu) and use it from
+  [app.usemux.ai](https://app.usemux.ai) or the Mux mobile app exactly as if you were at it. The process that owns
+  the hub port keeps one outbound WebSocket to Mux Cloud (handshake proof of a per-machine secret, two-way
+  heartbeat, reconnect with backoff, concurrent relayed requests with streamed responses, relayed WebSockets). The
+  password is never stored. New `cloud` settings block; `cloud.allowRemoteToolApproval` (default on) controls
+  whether tools can be approved remotely.
+- **Tool approvals on the WebSocket.** Runs emit `approval_requested` and `approval_resolved` frames into the run
+  stream (and its replay buffer), and an `approve` frame resolves the run named by its `runId`.
+- **Working directory for new conversations.** `GET /v1.0/api/workspaces` suggests folders, sessions report their
+  `WorkingDirectory`, and the dashboard chat has a folder picker.
+- `WEBSOCKETS_API.md`: the full `/v1.0/ws` reference.
+
+### Changed
+
+- The dashboard builds every API and WebSocket URL under a base path, and renders without the local API key
+  when served through Mux Cloud.
+- `settings.json` is rewritten on load only when normalization changed it.
+- The Mux Cloud credential and connect switch are written only by signing in or out, so saving an older copy of
+  the settings never signs a machine out.
+
 ## 1.8.0 (unreleased)
 
 Mux now runs on PolyPrompt 4.0. Credentials are API keys only: Mux does not sign in with Claude, ChatGPT,

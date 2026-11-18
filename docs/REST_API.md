@@ -303,6 +303,40 @@ and the producer `publish` path) is documented in full in [WEBSOCKETS_API.md](..
 are emitted on the run stream as `approval_requested` and `approval_resolved` frames, and an `approve` frame
 resolves the run named by its `runId`.
 
+## Workspaces
+
+`GET /v1.0/api/workspaces` suggests working directories for a new conversation: the directories recent sessions ran
+in (most recently used first, each with `Path`, `Name`, `Source: "recent"`, `LastUsedUtc`, `SessionCount`), then the
+user's home directory (`Source: "home"`). Any existing directory can be passed as `WorkingDirectory` to
+`POST /v1.0/api/chat/stream`; a directory that does not exist returns 400. An open conversation keeps the directory
+it started in. `GET /v1.0/api/sessions` and `GET /v1.0/api/sessions/detail` include each session's
+`WorkingDirectory` (empty when none was recorded).
+
+## Mux Cloud
+
+| Route | Purpose |
+|---|---|
+| `GET /v1.0/api/cloud/status` | The machine's Mux Cloud status: `State` (number) and `StateName` (`Disabled`, `Connecting`, `Connected`, `Reconnecting`, `SignedOut`, `Revoked`), `Reason`, `ServerUrl`, `MachineId`, `MachineName`, `AccountEmail`, `AllowRemoteToolApproval`, `HostedHere`, `ConnectionId`, `ConnectedUtc`, `LatencyMs`, `RetryInSeconds`. |
+| `POST /v1.0/api/cloud/login` | Body `{ "Email", "Password", "ServerUrl"?, "MachineName"? }`. Exchanges the credentials for a machine credential (the password is sent to Mux Cloud once and never stored), connects, and returns the status. 400 for a missing field or a refusal, 401 for wrong credentials, 502 when Mux Cloud cannot be reached. |
+| `POST /v1.0/api/cloud/logout` | Deletes the machine credential, turns the connection off, and returns the status. |
+
+`GET /v1.0/api/settings` includes a `Cloud` block (`Enabled`, `ServerUrl`, `MachineName`, `MachineId`,
+`AccountEmail`, `MachineSecretSet`, `AllowRemoteToolApproval`, `HeartbeatSeconds`, `ReconnectMaxDelaySeconds`,
+`AllowInvalidCertificates`). The machine secret is never returned. `PUT /v1.0/api/settings` applies every field
+except the credential.
+
+### Relayed requests
+
+Requests that arrive through the Mux Cloud tunnel are forwarded to this API by the machine itself, with the local
+API key and two headers:
+
+| Header | Value | Effect |
+|---|---|---|
+| `X-Mux-Relay` | `cloud` | The request came through Mux Cloud. The dashboard page renders without the local API key. When `cloud.allowRemoteToolApproval` is false, chat runs deny tools that would prompt, and `POST /v1.0/api/chat/approve` and WebSocket `approve` frames return 403 / `forbidden`. |
+| `X-Mux-Base-Path` | `/m/{machineId}` | The dashboard builds every API and WebSocket URL under this prefix so they route back through the cloud. Only letters, digits, `_`, `-`, and `/` are accepted. |
+
+Everything else behaves exactly as for a local caller.
+
 ## Security posture
 
 - **Loopback + token by default.** Do not bind a non-loopback `hostname` without also setting a strong

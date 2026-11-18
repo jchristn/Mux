@@ -355,6 +355,26 @@ composer completes slash commands, and endpoint selections leave saved model-swi
 render when opening conversations from other clients. Source lives
 in `src/Mux.VSCode`; the full guide is in [docs/VSCODE.md](docs/VSCODE.md).
 
+### Mux Cloud
+
+[Mux Cloud](https://github.com/jchristn/MuxCloud) (hosted at [app.usemux.ai](https://app.usemux.ai)) lets you use
+this machine from a browser on another computer or from your phone, exactly as if you were sitting at it: the same
+dashboard, conversations, tool approvals, and settings. Sign in once:
+
+```text
+mux cloud login          Sign this machine in (email and password; the password is never stored)
+mux cloud status         Show the connection: Disabled, Connecting, Connected, Reconnecting, SignedOut, Revoked
+mux cloud remote-approval off   Refuse tool approvals that come through Mux Cloud
+mux cloud logout         Sign this machine out
+```
+
+The same controls are in the terminal UI (`/cloud`), the desktop app (Mux Cloud window), the dashboard (Settings,
+Mux Cloud), VS Code (`mux: Connect to Mux Cloud`), and the tray agent's menu. The tray agent keeps one outbound
+WebSocket open to Mux Cloud, so the machine needs no inbound port. Conversations stay on the machine; Mux Cloud passes
+them through. Anyone signed in to your account can operate the machine remotely, including approving tools, unless
+you turn remote tool approval off. See [docs/CONFIG.md](docs/CONFIG.md#mux-cloud-settingsjson-cloud) and
+[WEBSOCKETS_API.md](WEBSOCKETS_API.md).
+
 ## Model providers
 
 Choose a provider, configure a named endpoint, and select it in the surface you use.
@@ -396,6 +416,7 @@ echo "prompt" | mux --print          Read prompt from stdin
 mux probe [OPTIONS]                  Validate config and backend access
 mux endpoint <subcommand> [OPTIONS]  Inspect configured endpoints
 mux serve [OPTIONS]                   Start the local REST/WebSocket API + web dashboard (opt-in)
+mux cloud <login|logout|status>      Connect this machine to Mux Cloud (use it from a browser or phone)
 ```
 
 Use `mux print` as the preferred non-interactive entrypoint in scripts and automation. `--print` remains supported and is convenient for stdin piping. Use `mux endpoint list`/`ls`/`show` when automation needs to inspect stored endpoint configuration without entering the REPL. Use `mux serve` to bring up the token-guarded local REST API and web dashboard (see `docs/REST_API.md`).
@@ -909,6 +930,7 @@ See [CONFIG.md](docs/CONFIG.md) for the full reference.
 - [Desktop app](docs/DESKTOP.md)
 - [VS Code extension](docs/VSCODE.md)
 - [REST API](docs/REST_API.md)
+- [WebSockets API](WEBSOCKETS_API.md), including the Mux Cloud tunnel
 - [Observability](TELEMETRY.md): OpenTelemetry metrics, traces, logs, dashboards, and alerts
 - [Authoring skills](docs/SKILLS_AUTHORING.md)
 - [Testing](docs/TESTING.md)

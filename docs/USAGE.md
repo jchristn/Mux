@@ -488,6 +488,11 @@ Developers embedding `Mux.Core` can isolate jobs too: `JobManager.EnqueueAsync(.
 runs a job in a `mux/job/<id>` worktree and reports the result on `Job.WorktreeOutcome`, and
 `TaskOrchestrator.IsolateTasks` does it for every task of a plan.
 
+`/cloud` shows this machine's Mux Cloud connection; `/cloud login` opens a sign-in form (the password is masked and
+never stored), `/cloud logout` signs out, and `/cloud remote-approval on|off` allows or refuses tool approvals that
+come through Mux Cloud. The settings modal (`/settings`) has a Mux Cloud section for the server URL, machine name,
+connect switch, and remote approval. From a shell, `mux cloud login|logout|status|remote-approval` does the same.
+
 ### Plugins: hooks and custom commands
 
 The plugin system extends mux with out-of-process **event hooks** and **custom slash commands**,

@@ -114,6 +114,14 @@ Everything you can configure in the TUI is available here as a window, each back
 
 The **Local server** window starts and stops an embedded `mux serve` instance (the REST API + web dashboard) from inside the desktop app, with a port-in-use guard. Use it to expose the dashboard without launching a separate process.
 
+## Mux Cloud
+
+The **Mux Cloud** window (Manage drawer, command palette, or Tools menu) signs this machine in to
+[Mux Cloud](https://app.usemux.ai) so you can use it from a browser or phone, shows the connection state
+(`Disabled`, `Connecting`, `Connected`, `Reconnecting`, `SignedOut`, `Revoked`), and has the remote tool approval
+switch and Sign out. The tray agent runs the tunnel; when the desktop app's embedded server owns the hub port, the
+app runs it instead. See [CONFIG.md](CONFIG.md#mux-cloud-settingsjson-cloud).
+
 ## Configuration
 
 The desktop app reads the same configuration as the rest of mux, under `~/.mux/` by default. Set `MUX_CONFIG_DIR` before launching to point at an isolated config directory — endpoints, settings, sessions, and usage telemetry are all shared with the CLI and the tray agent. See [`CONFIG.md`](CONFIG.md).

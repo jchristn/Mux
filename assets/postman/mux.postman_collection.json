@@ -56,6 +56,18 @@
 			"value": "",
 			"type": "string",
 			"description": "Optional working directory for project-scoped routes (skills expand, context instructions). Blank uses the server's current directory."
+		},
+		{
+			"key": "cloudEmail",
+			"value": "you@example.com",
+			"type": "string",
+			"description": "Mux Cloud account email"
+		},
+		{
+			"key": "cloudPassword",
+			"value": "",
+			"type": "string",
+			"description": "Mux Cloud account password (never stored by mux)"
 		}
 	],
 	"item": [
@@ -1238,6 +1250,25 @@
 						},
 						"description": "Deletes a session by id."
 					}
+				},
+				{
+					"name": "Suggest working directories",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/workspaces",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"workspaces"
+							]
+						},
+						"description": "Working-directory suggestions for a new conversation: folders recent sessions ran in (most recent first), then the home directory. Any existing folder may be passed as WorkingDirectory to POST /v1.0/api/chat/stream."
+					}
 				}
 			]
 		},
@@ -1894,6 +1925,100 @@
 							]
 						},
 						"description": "Cooperatively cancel a run: trips its cancellation token and publishes a terminal `run_completed` (status `canceled`) to stream subscribers. `200` `{ Ok, RunId, Status }` on success; `404` when the run is unknown or already finished."
+					}
+				}
+			]
+		},
+		{
+			"name": "Mux Cloud",
+			"description": "Connect this machine to Mux Cloud (https://app.usemux.ai) so the cloud dashboard and mobile app can use it from anywhere. The password is sent to Mux Cloud once and never stored. Anyone signed in to the account can operate this machine remotely, including approving tools unless cloud.allowRemoteToolApproval is false.",
+			"item": [
+				{
+					"name": "Mux Cloud status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/cloud/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"cloud",
+								"status"
+							]
+						},
+						"description": "The tunnel status: StateName is Disabled, Connecting, Connected, Reconnecting, SignedOut, or Revoked, with the reason, server, machine, account, and whether remote tool approval is allowed."
+					}
+				},
+				{
+					"name": "Sign in to Mux Cloud",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/cloud/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"cloud",
+								"login"
+							]
+						},
+						"description": "Exchanges a Mux Cloud email and password for a machine credential, saves it in settings.json under cloud, and connects. 401 for wrong credentials, 502 when Mux Cloud is unreachable.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Email\": \"{{cloudEmail}}\",\n  \"Password\": \"{{cloudPassword}}\",\n  \"ServerUrl\": null,\n  \"MachineName\": null\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					}
+				},
+				{
+					"name": "Sign out of Mux Cloud",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/cloud/logout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"cloud",
+								"logout"
+							]
+						},
+						"description": "Deletes the machine credential, turns the connection off, and closes the tunnel.",
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
 					}
 				}
 			]
