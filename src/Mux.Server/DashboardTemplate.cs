@@ -54,8 +54,8 @@ body{background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
 .nav-item.active{background:var(--accent);color:var(--accent-text,#fff)}
 .sidebar-foot{margin-top:auto;padding:12px 18px;color:var(--sidebar-muted);font-size:12px}
 .main{display:flex;flex-direction:column;min-width:0;height:100vh}
-.topbar{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--line);background:var(--panel)}
-.topbar h1{font-size:16px;margin:0;font-weight:600}
+.topbar{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+.topbar h1{font-size:16px;margin:0;font-weight:600;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .topbar .right{display:flex;align-items:center;gap:14px;color:var(--muted);font-size:13px}
 .iconbtn{background:none;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px}
 .iconbtn:hover{border-color:var(--accent);color:var(--accent)}
@@ -508,8 +508,9 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 [dir="rtl"] .stattip,[dir="rtl"] .tooltip{direction:rtl}
 [dir="rtl"] .disclaimer,[dir="rtl"] .hint,[dir="rtl"] .desc{text-align:right}
 /* mobile drawer navigation */
-.hamburger{display:none;background:none;border:1px solid var(--line);border-radius:7px;width:34px;height:34px;cursor:pointer;color:var(--text);font-size:17px;align-items:center;justify-content:center}
+.hamburger{display:inline-flex;align-items:center;justify-content:center;flex:none;background:none;border:1px solid var(--line);border-radius:7px;width:34px;height:34px;cursor:pointer;color:var(--text);font-size:17px;align-items:center;justify-content:center}
 .navscrim{display:none}
+@media(min-width:821px){.app.navcollapsed{grid-template-columns:0 minmax(0,1fr)}.app.navcollapsed .sidebar{visibility:hidden}}
 @media(max-width:820px){
   .hamburger{display:inline-flex;align-items:center;justify-content:center}
   .sidebar{display:flex;position:fixed;left:0;top:0;bottom:0;width:252px;z-index:120;transform:translateX(-100%);transition:transform .2s,box-shadow .2s;box-shadow:none}
@@ -568,8 +569,8 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
   </aside>
   <main class="main">
     <header class="topbar">
-      <button class="hamburger" id="hamburger" title="Show navigation" aria-label="Show navigation">☰</button>
-      <h1 id="viewTitle">Chat</h1>
+      <button class="hamburger" id="hamburger" title="Hide navigation" aria-label="Hide navigation" aria-expanded="true">☰</button>
+      <h1 id="viewTitle">Home</h1>
       <div class="right">
         <span class="badge status" id="statusPill" title="Live health of the mux REST server, polled every few seconds">…</span>
         <span class="badge" id="badgeVersion" title="The version of mux running this server"></span>
@@ -3095,7 +3096,7 @@ function switchView(view){
   el("view-"+view).classList.add("active");
   el("viewTitle").textContent=viewTitle(view);
   document.title="mux · "+viewTitle(view);
-  el("app").classList.remove("navopen");
+  el("app").classList.remove("navopen");if(typeof navSync==="function")navSync();
   if(VIEW_LOADERS[view])VIEW_LOADERS[view]();
 }
 
@@ -3120,7 +3121,6 @@ function applyPalette(p){if(!p)return;var root=document.documentElement,native=(
   for(var i=0;i<PALETTE_VARS.length;i++)root.style.removeProperty(PALETTE_VARS[i]);
   if(!native){var css=paletteCss(p);for(var k in css)if(css[k])root.style.setProperty(k,css[k]);}
   var c=p.Colors||{};root.style.setProperty("--cursor",c.cursor||c.accent);root.style.setProperty("--selection",c.selection||c.surfaceAlt);
-  el("brandLogo").src=p.Dark?"__LOGO_DARK__":"__LOGO_LIGHT__";
   try{localStorage.setItem("mux.palette",JSON.stringify(p));localStorage.setItem("mux.theme",p.Dark?"dark":"light");}catch(e){}}
 function systemDark(){try{return window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;}catch(e){return false;}}
 function findPalette(id){if(!PALETTES)return null;for(var i=0;i<PALETTES.Palettes.length;i++)if(PALETTES.Palettes[i].Id===id)return PALETTES.Palettes[i];return null;}
@@ -3186,7 +3186,7 @@ function importEpModels(i){var src=_ep[i];if(!src)return;toast(t("ep.importQuery
   }).catch(function(e){toast(e.message,true);});}
 // Legacy light/dark entry point, kept for callers and tests: maps onto the Mux / Mux Light palettes.
 function applyTheme(mode){var p=findPalette(mode==="dark"?"mux":"mux-light");if(p)applyPalette(p);
-  else{document.documentElement.setAttribute("data-theme",mode);el("brandLogo").src=(mode==="dark")?"__LOGO_DARK__":"__LOGO_LIGHT__";try{localStorage.setItem("mux.theme",mode);}catch(e){}}}
+  else{document.documentElement.setAttribute("data-theme",mode);try{localStorage.setItem("mux.theme",mode);}catch(e){}}}
 
 document.querySelectorAll(".nav-item").forEach(function(n){n.addEventListener("click",function(){switchView(n.dataset.view);});});
 el("themeBtn").addEventListener("click",openPalettePicker);
@@ -3245,7 +3245,12 @@ window.addEventListener("resize",closeMenu);
 document.addEventListener("click",function(e){var r=e.target.closest?e.target.closest("[data-retry]"):null;if(r){var fn=_reload[r.getAttribute("data-retry")];if(fn)fn();}});
 /* copy server url + mobile drawer nav */
 on("copyUrlBtn",function(){copyText(location.host+BASE,el("copyUrlBtn"));});
-on("hamburger",function(){el("app").classList.toggle("navopen");});
+function navNarrow(){try{return window.matchMedia("(max-width:820px)").matches;}catch(e){return false;}}
+function navSync(){var app=el("app"),b=el("hamburger"),shown=navNarrow()?app.classList.contains("navopen"):!app.classList.contains("navcollapsed");var lbl=shown?"Hide navigation":"Show navigation";b.title=lbl;b.setAttribute("aria-label",lbl);b.setAttribute("aria-expanded",shown?"true":"false");}
+on("hamburger",function(){var app=el("app");if(navNarrow()){app.classList.toggle("navopen");}else{var c=app.classList.toggle("navcollapsed");try{localStorage.setItem("mux.navCollapsed",c?"1":"0");}catch(e){}}navSync();});
+try{if(localStorage.getItem("mux.navCollapsed")==="1")el("app").classList.add("navcollapsed");}catch(e){}
+try{window.matchMedia("(max-width:820px)").addEventListener("change",navSync);}catch(e){}
+navSync();
 on("navscrim",function(){el("app").classList.remove("navopen");});
 /* focus trap inside the modal */
 document.addEventListener("keydown",function(e){
