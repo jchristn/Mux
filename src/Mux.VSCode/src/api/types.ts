@@ -236,7 +236,22 @@ export interface CloudStatus {
     /** The state name, the same as {@link StateName}. */
     State: string;
     StateName: 'Disabled' | 'Connecting' | 'Connected' | 'Reconnecting' | 'SignedOut' | 'Revoked' | string;
+    /**
+     * What users see as the state: `not_signed_in`, `off`, `connecting`, `connected`, `reconnecting`, `signed_out`,
+     * or `removed`. Absent on hubs older than this field; fall back to {@link StateName}.
+     */
+    StateKey?: string;
+    /** English label for {@link StateKey}, for example `Not signed in`. */
+    StateLabel?: string;
+    /** Why the connection is in this state (English, with detail), or empty. */
     Reason: string;
+    /**
+     * Stable code for {@link Reason} (`not_signed_in`, `turned_off`, `agent_not_running`, `another_process`,
+     * `not_hosted_here`, `clock_skew`, `credential_rejected`, `removed`, `upgrade_required`, `unreachable`,
+     * `connection_dropped`, `heartbeat_timeout`, `replaced`, `server_restarting`, `rate_limited`,
+     * `handshake_rejected`), or empty. Show the translated sentence for a known code, else {@link Reason}.
+     */
+    ReasonCode?: string;
     ServerUrl: string;
     MachineId: string;
     MachineName: string;

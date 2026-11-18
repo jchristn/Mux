@@ -144,9 +144,9 @@ namespace Mux.Agent
 
         private static string CloudHeader(Mux.Core.Cloud.CloudStatus? status)
         {
-            if (status == null) return "Mux Cloud: Disabled";
-            if (status.State == Mux.Core.Cloud.CloudStateEnum.Disabled && string.IsNullOrEmpty(status.MachineId)) return "Connect to Mux Cloud…";
-            return "Mux Cloud: " + status.StateName + (status.State == Mux.Core.Cloud.CloudStateEnum.Connected && !string.IsNullOrEmpty(status.MachineName) ? " (" + status.MachineName + ")" : string.Empty);
+            if (status == null) return "Mux Cloud: Off";
+            if (status.StateKey == Mux.Core.Cloud.CloudStateKeys.NotSignedIn) return "Connect to Mux Cloud…";
+            return "Mux Cloud: " + status.StateLabel + (status.State == Mux.Core.Cloud.CloudStateEnum.Connected && !string.IsNullOrEmpty(status.MachineName) ? " (" + status.MachineName + ")" : string.Empty);
         }
 
         private void OnCloudClicked(object? sender, EventArgs e)

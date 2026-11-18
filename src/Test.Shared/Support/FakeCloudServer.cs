@@ -50,6 +50,9 @@ namespace Test.Shared.Support
         /// <summary>When set, the hello is answered by closing with this code instead of a welcome.</summary>
         public int? RejectHelloWith { get; set; }
 
+        /// <summary>Close description sent with <see cref="RejectHelloWith"/>.</summary>
+        public string RejectHelloReason { get; set; } = "rejected by fake";
+
         /// <summary>Whether the fake answers the machine's pings. Default true.</summary>
         public bool RespondToPings { get; set; } = true;
 
@@ -225,7 +228,7 @@ namespace Test.Shared.Support
                         int? reject = RejectHelloWith ?? (valid ? null : TunnelCloseCodes.Unauthorized);
                         if (reject.HasValue)
                         {
-                            await session.CloseAsync((WebSocketCloseStatus)reject.Value, "rejected by fake", _Stop.Token).ConfigureAwait(false);
+                            await session.CloseAsync((WebSocketCloseStatus)reject.Value, RejectHelloWith.HasValue ? RejectHelloReason : "rejected by fake", _Stop.Token).ConfigureAwait(false);
                             return;
                         }
 

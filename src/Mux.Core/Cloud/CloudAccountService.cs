@@ -137,13 +137,27 @@ namespace Mux.Core.Cloud
         /// <returns>Status.</returns>
         public static CloudStatus OfflineStatus(CloudSettings cloud, string? reason)
         {
+            return OfflineStatus(cloud, reason, null);
+        }
+
+        /// <summary>
+        /// The status to show when no process is running the tunnel, with a stable reason code.
+        /// </summary>
+        /// <param name="cloud">Cloud settings.</param>
+        /// <param name="reason">Reason to show, or null for the default for these settings.</param>
+        /// <param name="reasonCode">A <see cref="CloudReasonCodes"/> value for <paramref name="reason"/>, or null.</param>
+        /// <returns>Status.</returns>
+        public static CloudStatus OfflineStatus(CloudSettings cloud, string? reason, string? reasonCode)
+        {
             CloudSettings c = cloud ?? new CloudSettings();
+            string defaultCode = c.IsEnrolled ? (c.Enabled ? CloudReasonCodes.AgentNotRunning : CloudReasonCodes.TurnedOff) : CloudReasonCodes.NotSignedIn;
             return new CloudStatus
             {
                 State = CloudStateEnum.Disabled,
                 Reason = reason ?? (c.IsEnrolled ? (c.Enabled ? "The mux agent is not running." : "The connection is turned off.") : "This machine is not signed in to Mux Cloud."),
+                ReasonCode = reasonCode ?? (reason == null ? defaultCode : string.Empty),
                 ServerUrl = c.ServerUrl,
-                MachineId = c.MachineId ?? string.Empty,
+                MachineId = c.IsEnrolled ? (c.MachineId ?? string.Empty) : string.Empty,
                 MachineName = c.MachineName ?? CloudMachineInfo.Hostname(),
                 AccountEmail = c.AccountEmail ?? string.Empty,
                 AllowRemoteToolApproval = c.AllowRemoteToolApproval,

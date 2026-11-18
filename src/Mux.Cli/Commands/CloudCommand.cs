@@ -89,8 +89,8 @@ namespace Mux.Cli.Commands
             ArgumentNullException.ThrowIfNull(status);
             ArgumentNullException.ThrowIfNull(output);
             bool enrolled = !string.IsNullOrEmpty(status.MachineId);
-            output.WriteLine("Mux Cloud : " + status.StateName);
-            if (status.State != CloudStateEnum.Connected) output.WriteLine("  " + status.Describe());
+            output.WriteLine("Mux Cloud : " + status.StateLabel);
+            if (status.State != CloudStateEnum.Connected && !CloudStatusText.IsRedundant(status)) output.WriteLine("  " + status.Describe());
             output.WriteLine("  server          : " + status.ServerUrl);
             if (!string.IsNullOrEmpty(status.MachineName)) output.WriteLine("  machine         : " + status.MachineName + (enrolled ? " (" + status.MachineId + ")" : string.Empty));
             if (!string.IsNullOrEmpty(status.AccountEmail)) output.WriteLine("  account         : " + status.AccountEmail);
@@ -225,7 +225,7 @@ namespace Mux.Cli.Commands
                     // whenever the agent (or mux serve) runs.
                     if (++unanswered >= 4 || DateTime.UtcNow >= deadline)
                     {
-                        return CloudAccountService.OfflineStatus(settings.Cloud, "The mux agent is not running yet. The connection starts when it runs (mux agent start).");
+                        return CloudAccountService.OfflineStatus(settings.Cloud, "The mux agent is not running yet. The connection starts when it runs (mux agent start).", CloudReasonCodes.AgentNotRunning);
                     }
                 }
                 else if (status.State == CloudStateEnum.Connected || status.State == CloudStateEnum.SignedOut || status.State == CloudStateEnum.Revoked || DateTime.UtcNow >= deadline)

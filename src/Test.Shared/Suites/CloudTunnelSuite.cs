@@ -55,6 +55,8 @@ namespace Test.Shared.Suites
                     client.Start();
                     await WaitForStateAsync(client, CloudStateEnum.SignedOut).ConfigureAwait(false);
                     MuxAssert.Contains("credential", client.Status.Reason, "explains the rejection");
+                    MuxAssert.AreEqual(CloudReasonCodes.CredentialRejected, client.Status.ReasonCode, "stable reason code");
+                    MuxAssert.AreEqual(CloudStateKeys.SignedOut, client.Status.StateKey, "shown as Signed out");
                     await Task.Delay(2500, ct).ConfigureAwait(false);
                     MuxAssert.AreEqual(1, cloud.Connections, "no reconnect after a terminal close");
                 }),
@@ -65,8 +67,27 @@ namespace Test.Shared.Suites
                     using CloudTunnelClient client = NewClient(cloud, hub, null);
                     client.Start();
                     await WaitForStateAsync(client, CloudStateEnum.Revoked).ConfigureAwait(false);
+                    MuxAssert.AreEqual(CloudReasonCodes.Removed, client.Status.ReasonCode, "stable reason code");
+                    MuxAssert.AreEqual(CloudStateKeys.Removed, client.Status.StateKey, "shown as Removed");
                     await Task.Delay(2500, ct).ConfigureAwait(false);
                     MuxAssert.AreEqual(1, cloud.Connections, "no reconnect after revocation");
+                }),
+                new TestCaseDescriptor(Suite, "ClockSkewRetries", "A 4400 close that names the clock is shown as clock skew and the client keeps retrying", async (CancellationToken ct) =>
+                {
+                    using FakeCloudServer cloud = new FakeCloudServer
+                    {
+                        RejectHelloWith = TunnelCloseCodes.BadHandshake,
+                        RejectHelloReason = "timestamp is more than 120 seconds from server time; check this machine's clock"
+                    };
+                    using LocalHubStub hub = new LocalHubStub();
+                    using CloudTunnelClient client = NewClient(cloud, hub, null);
+                    client.Start();
+                    await WaitForStateAsync(client, CloudStateEnum.Reconnecting).ConfigureAwait(false);
+                    DateTime deadline = DateTime.UtcNow + Wait;
+                    while (cloud.Connections < 2 && DateTime.UtcNow < deadline) await Task.Delay(100, ct).ConfigureAwait(false);
+                    MuxAssert.IsTrue(cloud.Connections >= 2, "retries after a skewed-clock rejection");
+                    MuxAssert.AreEqual(CloudReasonCodes.ClockSkew, client.Status.ReasonCode, "reason code names the clock");
+                    MuxAssert.Contains("clock is off by more than 2 minutes", CloudStatusText.ReasonLine(client.Status), "plain-language reason");
                 }),
                 new TestCaseDescriptor(Suite, "ReconnectsAfterDrop", "When the cloud drops the tunnel, the client shows Reconnecting with a reason, then connects again", async (CancellationToken ct) =>
                 {

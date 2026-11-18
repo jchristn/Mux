@@ -47,8 +47,8 @@ namespace Test.Shared.Suites
                             app.PumpInputOnce();
                             await WaitForAsync(() => Join(app.TranscriptSnapshot()).Contains("Sign in with: /cloud login", StringComparison.Ordinal), ct).ConfigureAwait(false);
                             string status = Join(app.TranscriptSnapshot());
-                            MuxAssert.Contains("Mux Cloud : Disabled", status, "shared state name");
-                            MuxAssert.Contains("not signed in to Mux Cloud", status, "reason");
+                            MuxAssert.Contains("Mux Cloud : Not signed in", status, "friendly state label");
+                            MuxAssert.DoesNotContain("This machine is not signed in", status, "the label already says it");
                             MuxAssert.DoesNotContain("remote approval", status, "no remote approval line before signing in");
                             MuxAssert.DoesNotContain("mux cloud login", status, "the terminal UI names its own command");
                             MuxAssert.AreEqual(1, status.Split("Sign in with").Length - 1, "one sign-in hint");

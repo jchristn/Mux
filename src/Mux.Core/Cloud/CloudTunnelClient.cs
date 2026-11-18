@@ -140,7 +140,7 @@ namespace Mux.Core.Cloud
                 _Stop = null;
             }
 
-            UpdateStatus(s => { s.State = CloudStateEnum.Disabled; s.Reason = string.Empty; s.ConnectionId = string.Empty; s.ConnectedUtc = null; s.RetryInSeconds = null; });
+            UpdateStatus(s => { s.State = CloudStateEnum.Disabled; s.Reason = string.Empty; s.ReasonCode = CloudReasonCodes.TurnedOff; s.ConnectionId = string.Empty; s.ConnectedUtc = null; s.RetryInSeconds = null; });
         }
 
         /// <summary>Send a <c>machine.status</c> push when connected.</summary>
@@ -174,17 +174,19 @@ namespace Mux.Core.Cloud
             int attempt = 0;
             bool connectedBefore = false;
             string reason = string.Empty;
+            string reasonCode = string.Empty;
             while (!stop.IsCancellationRequested)
             {
                 bool retrying = connectedBefore || attempt > 0;
                 string shownReason = reason;
-                UpdateStatus(s => { s.State = retrying ? CloudStateEnum.Reconnecting : CloudStateEnum.Connecting; s.Reason = shownReason; s.RetryInSeconds = null; });
+                string shownCode = reasonCode;
+                UpdateStatus(s => { s.State = retrying ? CloudStateEnum.Reconnecting : CloudStateEnum.Connecting; s.Reason = shownReason; s.ReasonCode = shownCode; s.RetryInSeconds = null; });
 
                 CloudConnectionOutcome outcome = await RunConnectionAsync(stop).ConfigureAwait(false);
                 if (stop.IsCancellationRequested) break;
                 if (outcome.Terminal)
                 {
-                    UpdateStatus(s => { s.State = outcome.TerminalState; s.Reason = outcome.Reason; s.ConnectionId = string.Empty; s.ConnectedUtc = null; s.RetryInSeconds = null; });
+                    UpdateStatus(s => { s.State = outcome.TerminalState; s.Reason = outcome.Reason; s.ReasonCode = outcome.ReasonCode; s.ConnectionId = string.Empty; s.ConnectedUtc = null; s.RetryInSeconds = null; });
                     return;
                 }
 
@@ -196,11 +198,13 @@ namespace Mux.Core.Cloud
 
                 attempt++;
                 reason = outcome.Reason;
+                reasonCode = outcome.ReasonCode;
                 TimeSpan delay = outcome.RetryAfter ?? policy.ComputeDelay(attempt, Random.Shared);
                 if (outcome.CloseCode == TunnelCloseCodes.Replaced) delay = TimeSpan.FromSeconds(policy.MaxDelaySeconds);
                 double seconds = delay.TotalSeconds;
                 string retryReason = reason;
-                UpdateStatus(s => { s.State = CloudStateEnum.Reconnecting; s.Reason = retryReason; s.ConnectionId = string.Empty; s.ConnectedUtc = null; s.RetryInSeconds = Math.Round(seconds, 1); });
+                string retryCode = reasonCode;
+                UpdateStatus(s => { s.State = CloudStateEnum.Reconnecting; s.Reason = retryReason; s.ReasonCode = retryCode; s.ConnectionId = string.Empty; s.ConnectedUtc = null; s.RetryInSeconds = Math.Round(seconds, 1); });
                 try
                 {
                     await Task.Delay(delay, stop).ConfigureAwait(false);
@@ -240,6 +244,7 @@ namespace Mux.Core.Cloud
             catch (Exception e) when (e is WebSocketException || e is OperationCanceledException || e is IOException || e is InvalidOperationException)
             {
                 outcome.Reason = stop.IsCancellationRequested ? string.Empty : "Could not reach " + uri.GetLeftPart(UriPartial.Authority) + ": " + Root(e).Message;
+                outcome.ReasonCode = stop.IsCancellationRequested ? string.Empty : CloudReasonCodes.Unreachable;
                 return outcome;
             }
 
@@ -263,6 +268,7 @@ namespace Mux.Core.Cloud
             if (!await sender.SendAsync(TunnelProtocol.CreateHello(hello), stop).ConfigureAwait(false))
             {
                 outcome.Reason = "The tunnel closed before the handshake was sent.";
+                outcome.ReasonCode = CloudReasonCodes.ConnectionDropped;
                 return outcome;
             }
 
@@ -276,13 +282,21 @@ namespace Mux.Core.Cloud
             catch (Exception e) when (e is WebSocketException || e is OperationCanceledException || e is TunnelProtocolException || e is IOException)
             {
                 first = null;
-                if (!stop.IsCancellationRequested && socket.CloseStatus == null) outcome.Reason = "No handshake reply from Mux Cloud: " + Root(e).Message;
+                if (!stop.IsCancellationRequested && socket.CloseStatus == null)
+                {
+                    outcome.Reason = "No handshake reply from Mux Cloud: " + Root(e).Message;
+                    outcome.ReasonCode = CloudReasonCodes.HandshakeRejected;
+                }
             }
 
             if (first == null || first.Type != TunnelMessageTypes.Welcome || first.Welcome == null)
             {
                 ApplyClose(socket, outcome, false);
-                if (string.IsNullOrEmpty(outcome.Reason)) outcome.Reason = "Mux Cloud did not accept the handshake.";
+                if (string.IsNullOrEmpty(outcome.Reason))
+                {
+                    outcome.Reason = "Mux Cloud did not accept the handshake.";
+                    outcome.ReasonCode = CloudReasonCodes.HandshakeRejected;
+                }
                 await CloseQuietlyAsync(socket).ConfigureAwait(false);
                 return outcome;
             }
@@ -296,6 +310,7 @@ namespace Mux.Core.Cloud
             {
                 s.State = CloudStateEnum.Connected;
                 s.Reason = string.Empty;
+                s.ReasonCode = string.Empty;
                 s.ConnectionId = welcome.ConnectionId;
                 s.ConnectedUtc = DateTime.UtcNow;
                 s.RetryInSeconds = null;
@@ -347,7 +362,11 @@ namespace Mux.Core.Cloud
                 }
                 catch (Exception e) when (e is WebSocketException || e is OperationCanceledException || e is IOException)
                 {
-                    if (string.IsNullOrEmpty(outcome.Reason) && !token.IsCancellationRequested) outcome.Reason = "The connection to Mux Cloud dropped: " + Root(e).Message;
+                    if (string.IsNullOrEmpty(outcome.Reason) && !token.IsCancellationRequested)
+                    {
+                        outcome.Reason = "The connection to Mux Cloud dropped: " + Root(e).Message;
+                        outcome.ReasonCode = CloudReasonCodes.ConnectionDropped;
+                    }
                     return;
                 }
 
@@ -488,6 +507,7 @@ namespace Mux.Core.Cloud
                 if (Volatile.Read(ref _MissedPongs) >= _Options.MissedPongLimit)
                 {
                     outcome.Reason = "Mux Cloud stopped answering heartbeats.";
+                    outcome.ReasonCode = CloudReasonCodes.HeartbeatTimeout;
                     outcome.CloseCode = TunnelCloseCodes.HeartbeatTimeout;
                     try { socket.Abort(); } catch (Exception) { }
                     return;
@@ -534,36 +554,52 @@ namespace Mux.Core.Cloud
                     outcome.Terminal = true;
                     outcome.TerminalState = CloudStateEnum.SignedOut;
                     outcome.Reason = "Mux Cloud rejected this machine's credential" + Suffix(description);
+                    outcome.ReasonCode = CloudReasonCodes.CredentialRejected;
                     break;
                 case TunnelCloseCodes.Revoked:
                     outcome.Terminal = true;
                     outcome.TerminalState = CloudStateEnum.Revoked;
                     outcome.Reason = "This machine was removed from Mux Cloud" + Suffix(description);
+                    outcome.ReasonCode = CloudReasonCodes.Removed;
                     break;
                 case TunnelCloseCodes.UnsupportedVersion:
                     outcome.Terminal = true;
                     outcome.TerminalState = CloudStateEnum.Disabled;
                     outcome.Reason = "Mux Cloud requires a newer mux. Upgrade mux, then reconnect" + Suffix(description);
+                    outcome.ReasonCode = CloudReasonCodes.UpgradeRequired;
                     break;
                 case TunnelCloseCodes.Replaced:
                     outcome.Reason = "Another connection for this machine replaced this one" + Suffix(description);
+                    outcome.ReasonCode = CloudReasonCodes.Replaced;
                     break;
                 case TunnelCloseCodes.Draining:
                     outcome.Reason = "Mux Cloud is restarting" + Suffix(description);
+                    outcome.ReasonCode = CloudReasonCodes.ServerRestarting;
                     break;
                 case TunnelCloseCodes.RateLimited:
                     outcome.Reason = "Too many failed connection attempts; waiting before retrying" + Suffix(description);
+                    outcome.ReasonCode = CloudReasonCodes.RateLimited;
                     break;
                 case TunnelCloseCodes.HeartbeatTimeout:
                     outcome.Reason = "Mux Cloud timed out waiting for this machine's heartbeat" + Suffix(description);
+                    outcome.ReasonCode = CloudReasonCodes.HeartbeatTimeout;
                     break;
                 case TunnelCloseCodes.BadHandshake:
                     outcome.Reason = "Mux Cloud rejected the handshake" + Suffix(description);
+                    outcome.ReasonCode = IsClockSkew(description) ? CloudReasonCodes.ClockSkew : CloudReasonCodes.HandshakeRejected;
                     break;
                 default:
                     if (string.IsNullOrEmpty(outcome.Reason)) outcome.Reason = welcomed ? "Mux Cloud closed the connection" + Suffix(description) : "Mux Cloud closed the connection during the handshake" + Suffix(description);
+                    if (string.IsNullOrEmpty(outcome.ReasonCode)) outcome.ReasonCode = welcomed ? CloudReasonCodes.ConnectionDropped : CloudReasonCodes.HandshakeRejected;
                     break;
             }
+        }
+
+        private static bool IsClockSkew(string description)
+        {
+            // MuxCloud closes a handshake whose timestamp is outside the allowed window with 4400 and a reason that names
+            // the clock ("... from server time; check this machine's clock").
+            return description.IndexOf("clock", StringComparison.OrdinalIgnoreCase) >= 0 || description.IndexOf("server time", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static string Suffix(string description)

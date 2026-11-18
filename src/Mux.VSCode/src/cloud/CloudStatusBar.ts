@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { CloudStatus } from '../api/types';
 import { MuxServerLifecycle } from '../server/lifecycle';
-import { describeStatus, stateIcon } from './cloudText';
+import { describeStatus, stateIcon, stateLabel } from './cloudText';
 
 /**
  * A status-bar item showing this machine's Mux Cloud connection with the same state names every mux surface uses
@@ -61,7 +61,7 @@ export class CloudStatusBar implements vscode.Disposable {
         this.item.text = `${stateIcon(status.StateName)} ${vscode.l10n.t('Mux Cloud')}`;
         this.item.tooltip = new vscode.MarkdownString(
             [
-                `**Mux Cloud: ${status.StateName}**`,
+                `**${vscode.l10n.t('Mux Cloud: {0}', stateLabel(status))}**`,
                 '',
                 describeStatus(status),
                 '',

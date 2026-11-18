@@ -14,6 +14,11 @@ All notable changes to mux are documented here.
   password is never stored. New `cloud` settings block; `cloud.allowRemoteToolApproval` (default on) controls
   whether tools can be approved remotely. Signing out on any surface revokes the machine in Mux Cloud too (best
   effort, with a sign-out proof of the machine secret) before deleting the local credential.
+- **Mux Cloud status in plain language.** Every surface labels the connection `Not signed in`, `Off`, `Connecting`,
+  `Connected`, `Reconnecting`, `Signed out`, or `Removed` (translated in the dashboard, desktop app, and VS Code)
+  instead of enum names, and explains known causes in a translated sentence, including a machine clock that is off by
+  more than 2 minutes. `GET /v1.0/api/cloud/status` adds `StateKey`, `StateLabel`, and `ReasonCode`; `StateName` is
+  unchanged.
 - **Tool approvals on the WebSocket.** Runs emit `approval_requested` and `approval_resolved` frames into the run
   stream (and its replay buffer), and an `approve` frame resolves the run named by its `runId`.
 - **Working directory for new conversations.** `GET /v1.0/api/workspaces` suggests folders, sessions report their

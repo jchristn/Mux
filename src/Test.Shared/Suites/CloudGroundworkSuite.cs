@@ -11,6 +11,7 @@ namespace Test.Shared.Suites
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Cloud;
     using Mux.Core.Models;
     using Mux.Core.Runs;
     using Mux.Core.Sessions;
@@ -128,6 +129,18 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("id=\"cloud_signup\"", local, "the sign-in form links to signup");
                         MuxAssert.AreEqual(11, local.Split("\"cloud.noAccount\":").Length - 1, "every locale asks whether there is an account");
                         MuxAssert.AreEqual(11, local.Split("\"cloud.createAccountAt\":").Length - 1, "every locale says where to create one");
+                        foreach (string key in new string[] { CloudStateKeys.NotSignedIn, CloudStateKeys.Off, CloudStateKeys.Connecting, CloudStateKeys.Connected, CloudStateKeys.Reconnecting, CloudStateKeys.SignedOut, CloudStateKeys.Removed, "unavailable" })
+                        {
+                            MuxAssert.AreEqual(11, local.Split("\"cloud.state." + key + "\":").Length - 1, "every locale labels the " + key + " state");
+                        }
+
+                        foreach (string code in new string[] { CloudReasonCodes.NotSignedIn, CloudReasonCodes.TurnedOff, CloudReasonCodes.AgentNotRunning, CloudReasonCodes.AnotherProcess, CloudReasonCodes.NotHostedHere, CloudReasonCodes.ClockSkew, CloudReasonCodes.CredentialRejected, CloudReasonCodes.Removed, CloudReasonCodes.UpgradeRequired, CloudReasonCodes.Unreachable, CloudReasonCodes.ConnectionDropped, CloudReasonCodes.HeartbeatTimeout, CloudReasonCodes.Replaced, CloudReasonCodes.ServerRestarting, CloudReasonCodes.RateLimited, CloudReasonCodes.HandshakeRejected })
+                        {
+                            MuxAssert.AreEqual(11, local.Split("\"cloud.reason." + code + "\":").Length - 1, "every locale explains " + code);
+                            MuxAssert.IsTrue(CloudStatusText.Message(code) != null, "the CLI has English text for " + code);
+                        }
+
+                        MuxAssert.Contains("st.StateKey", local, "the badge uses the state key, not the enum name");
 
                         using HttpRequestMessage relayed = new HttpRequestMessage(HttpMethod.Get, "http://127.0.0.1:" + port + "/dashboard");
                         relayed.Headers.Add("X-Mux-Relay", "cloud");

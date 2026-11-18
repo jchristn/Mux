@@ -45,7 +45,24 @@ test('cloud status text uses the shared state names and wording', () => {
     assert.match(text.remoteAccessNotice(), /approving tools/);
     assert.match(text.remoteAccessNotice(), /allowRemoteToolApproval/);
     assert.equal(text.statusSummary(status('Connected')), 'Mux Cloud: Connected · studio');
-    assert.equal(text.statusSummary(status('Reconnecting', 'dropped')), 'Mux Cloud: Reconnecting. Reconnecting to https://app.usemux.ai: dropped');
+    assert.equal(text.statusSummary(status('Reconnecting', 'dropped')), 'Mux Cloud: Reconnecting. dropped');
+});
+
+test('state labels come from the state key, and known reason codes read as sentences', () => {
+    const text = loadCloudText();
+    const notSignedIn = { ...status('Disabled', 'This machine is not signed in to Mux Cloud.'), MachineId: '', StateKey: 'not_signed_in', ReasonCode: 'not_signed_in' };
+    assert.equal(text.stateLabel(notSignedIn), 'Not signed in');
+    assert.equal(text.reasonText(notSignedIn), '', 'the label already says it');
+    assert.equal(text.statusSummary(notSignedIn), 'Mux Cloud: Not signed in');
+    const skew = { ...status('Reconnecting', 'Mux Cloud rejected the handshake: timestamp is more than 120 seconds from server time'), StateKey: 'reconnecting', ReasonCode: 'clock_skew' };
+    assert.equal(text.stateLabel(skew), 'Reconnecting');
+    assert.match(text.reasonText(skew), /clock is off by more than 2 minutes/);
+    const unknown = { ...status('Reconnecting', 'something new'), StateKey: 'reconnecting', ReasonCode: 'brand_new_code' };
+    assert.equal(text.reasonText(unknown), 'something new', 'an unknown code shows the raw reason');
+    assert.equal(text.stateLabel(status('Revoked')), 'Removed', 'older hubs without StateKey map from the state name');
+    assert.equal(text.stateLabel(status('SignedOut')), 'Signed out');
+    assert.equal(text.stateLabel(status('Disabled')), 'Off', 'signed in but not connected');
+    assert.equal(text.stateLabel({ ...status('Disabled'), MachineId: '' }), 'Not signed in');
 });
 
 test('every Mux Cloud string has a translation in every runtime l10n bundle', () => {

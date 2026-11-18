@@ -111,7 +111,8 @@ namespace Mux.Server.Routes
         {
             if (_Server.CloudHost != null) return _Server.CloudHost.Status;
             MuxSettings settings = SettingsLoader.LoadSettings();
-            return CloudAccountService.OfflineStatus(settings.Cloud, settings.Cloud.IsEnrolled && settings.Cloud.Enabled ? "This mux process is not running the Mux Cloud tunnel." : null);
+            bool notHere = settings.Cloud.IsEnrolled && settings.Cloud.Enabled;
+            return CloudAccountService.OfflineStatus(settings.Cloud, notHere ? "This mux process is not running the Mux Cloud tunnel." : null, notHere ? CloudReasonCodes.NotHostedHere : null);
         }
 
         #endregion

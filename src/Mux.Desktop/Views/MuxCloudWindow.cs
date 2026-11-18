@@ -210,8 +210,9 @@ namespace Mux.Desktop.Views
             });
         }
 
-        // Status in the shared state names, colored by state, with the reason under it (the Connected state needs no
-        // description: the rows below say where and as whom).
+        // Status as a translated state label (Not signed in, Off, Connected, ...), colored by state, with the reason
+        // under it. A known reason code shows its translated sentence; the Connected state needs no description (the
+        // rows below say where and as whom), and "Not signed in" needs none either.
         private Control StatusRow()
         {
             IBrush color = _Status.State switch
@@ -224,10 +225,20 @@ namespace Mux.Desktop.Views
                 _ => _Theme.Muted
             };
             StackPanel value = new StackPanel { Spacing = 2 };
-            value.Children.Add(new TextBlock { Text = "● " + _Status.StateName, Foreground = color, FontSize = 12, FontWeight = FontWeight.SemiBold });
-            string detail = _Status.State == CloudStateEnum.Connected
-                ? (_Status.LatencyMs.HasValue ? Math.Round(_Status.LatencyMs.Value).ToString(System.Globalization.CultureInfo.InvariantCulture) + " ms" : string.Empty)
-                : _Status.Describe();
+            value.Children.Add(new TextBlock { Text = "● " + (Translated("cloud.state." + _Status.StateKey) ?? _Status.StateLabel), Foreground = color, FontSize = 12, FontWeight = FontWeight.SemiBold });
+            string detail;
+            if (_Status.State == CloudStateEnum.Connected)
+            {
+                detail = _Status.LatencyMs.HasValue ? Math.Round(_Status.LatencyMs.Value).ToString(System.Globalization.CultureInfo.InvariantCulture) + " ms" : string.Empty;
+            }
+            else if (CloudStatusText.IsRedundant(_Status))
+            {
+                detail = string.Empty;
+            }
+            else
+            {
+                detail = (string.IsNullOrEmpty(_Status.ReasonCode) ? null : Translated("cloud.reason." + _Status.ReasonCode)) ?? _Status.Describe();
+            }
             if (!string.IsNullOrEmpty(detail))
             {
                 value.Children.Add(new TextBlock { Text = detail, Foreground = _Theme.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap });
@@ -239,6 +250,13 @@ namespace Mux.Desktop.Views
             row.Children.Add(name);
             row.Children.Add(value);
             return row;
+        }
+
+        // The translation for a key, or null when the catalog has none (Localizer.T returns the key itself then).
+        private static string? Translated(string key)
+        {
+            string value = Localizer.T(key);
+            return string.IsNullOrEmpty(value) || value == key ? null : value;
         }
 
         // "No account yet? Create one at app.usemux.ai/signup", under the sign-in button. The link follows the Server

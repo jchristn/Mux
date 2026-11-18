@@ -183,6 +183,8 @@ namespace Test.Shared.Suites
                                 await Task.Delay(500, ct).ConfigureAwait(false);
                                 MuxAssert.AreEqual(CloudStateEnum.Disabled, secondHost.Status.State, "second host stays off");
                                 MuxAssert.Contains("Another mux process", secondHost.Status.Reason, "explains why");
+                                MuxAssert.AreEqual(CloudReasonCodes.AnotherProcess, secondHost.Status.ReasonCode, "stable reason code");
+                                MuxAssert.AreEqual(CloudStateKeys.Off, secondHost.Status.StateKey, "shown as Off");
                                 MuxAssert.AreEqual(1, cloud.Hellos.Count, "only one tunnel");
                             }).ConfigureAwait(false);
                         }).ConfigureAwait(false);

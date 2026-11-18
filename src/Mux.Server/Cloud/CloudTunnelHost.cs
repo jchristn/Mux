@@ -178,7 +178,7 @@ namespace Mux.Server.Cloud
                 {
                     if (!_Lock.TryAcquire())
                     {
-                        _IdleStatus = CloudAccountService.OfflineStatus(cloud, "Another mux process on this machine is running the Mux Cloud tunnel.");
+                        _IdleStatus = CloudAccountService.OfflineStatus(cloud, "Another mux process on this machine is running the Mux Cloud tunnel.", CloudReasonCodes.AnotherProcess);
                         _Server.CloudPolicy.CloudConnected = false;
                     }
                     else

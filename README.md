@@ -363,7 +363,7 @@ dashboard, conversations, tool approvals, and settings. Sign in once:
 
 ```text
 mux cloud login          Sign this machine in (email and password; the password is never stored)
-mux cloud status         Show the connection: Disabled, Connecting, Connected, Reconnecting, SignedOut, Revoked
+mux cloud status         Show the connection (Not signed in, Off, Connected, Reconnecting, Signed out, ...)
 mux cloud remote-approval off   Refuse tool approvals that come through Mux Cloud
 mux cloud logout         Sign this machine out
 ```

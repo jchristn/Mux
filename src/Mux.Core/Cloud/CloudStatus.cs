@@ -12,11 +12,42 @@ namespace Mux.Core.Cloud
         /// <summary>Connection state.</summary>
         public CloudStateEnum State { get; set; } = CloudStateEnum.Disabled;
 
-        /// <summary>State name as shown to users (<c>Disabled</c>, <c>Connecting</c>, <c>Connected</c>, <c>Reconnecting</c>, <c>SignedOut</c>, <c>Revoked</c>).</summary>
+        /// <summary>Enum name (<c>Disabled</c>, <c>Connecting</c>, <c>Connected</c>, <c>Reconnecting</c>, <c>SignedOut</c>, <c>Revoked</c>), kept for API compatibility. Show <see cref="StateKey"/> or <see cref="StateLabel"/> to users.</summary>
         public string StateName => State.ToString();
 
-        /// <summary>Why the connection is in this state (the last error or close reason), or empty.</summary>
+        /// <summary>
+        /// What the user sees as the state, a <see cref="CloudStateKeys"/> value: <c>not_signed_in</c>, <c>off</c>,
+        /// <c>connecting</c>, <c>connected</c>, <c>reconnecting</c>, <c>signed_out</c>, or <c>removed</c>. Surfaces
+        /// translate it; <see cref="StateName"/> keeps the enum name.
+        /// </summary>
+        public string StateKey
+        {
+            get
+            {
+                switch (State)
+                {
+                    case CloudStateEnum.Connecting: return CloudStateKeys.Connecting;
+                    case CloudStateEnum.Connected: return CloudStateKeys.Connected;
+                    case CloudStateEnum.Reconnecting: return CloudStateKeys.Reconnecting;
+                    case CloudStateEnum.SignedOut: return CloudStateKeys.SignedOut;
+                    case CloudStateEnum.Revoked: return CloudStateKeys.Removed;
+                    default:
+                        return ReasonCode == CloudReasonCodes.NotSignedIn || string.IsNullOrEmpty(MachineId) ? CloudStateKeys.NotSignedIn : CloudStateKeys.Off;
+                }
+            }
+        }
+
+        /// <summary>English label for <see cref="StateKey"/>, for example <c>Not signed in</c>.</summary>
+        public string StateLabel => CloudStatusText.Label(StateKey);
+
+        /// <summary>Why the connection is in this state (the last error or close reason, English), or empty.</summary>
         public string Reason { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Stable code for <see cref="Reason"/>, a <see cref="CloudReasonCodes"/> value, or empty when the reason has no
+        /// code. Surfaces show their translated sentence for a known code and <see cref="Reason"/> otherwise.
+        /// </summary>
+        public string ReasonCode { get; set; } = string.Empty;
 
         /// <summary>Mux Cloud server URL.</summary>
         public string ServerUrl { get; set; } = string.Empty;
@@ -65,13 +96,15 @@ namespace Mux.Core.Cloud
                 case CloudStateEnum.Connecting:
                     return "Connecting to " + ServerUrl;
                 case CloudStateEnum.Reconnecting:
-                    return "Reconnecting to " + ServerUrl + (string.IsNullOrEmpty(Reason) ? string.Empty : ": " + Reason);
+                    string retry = CloudStatusText.Message(ReasonCode) ?? Reason;
+                    return "Reconnecting to " + ServerUrl + (string.IsNullOrEmpty(retry) ? string.Empty : ": " + retry);
                 case CloudStateEnum.SignedOut:
                     return "Signed out of Mux Cloud" + (string.IsNullOrEmpty(Reason) ? string.Empty : ": " + Reason) + ". Sign in again.";
                 case CloudStateEnum.Revoked:
                     return "This machine was removed from Mux Cloud. Sign in again to reconnect it.";
                 default:
-                    return string.IsNullOrEmpty(Reason) ? "Not connected to Mux Cloud." : Reason;
+                    string message = CloudStatusText.Message(ReasonCode) ?? Reason;
+                    return string.IsNullOrEmpty(message) ? "Not connected to Mux Cloud." : message;
             }
         }
 

@@ -166,7 +166,17 @@ namespace Test.Shared.Suites
                     MuxAssert.AreEqual("https://cloud.example.test/signup", CloudSignup.Url("https://cloud.example.test/"), "signup URL follows the server and drops a trailing slash");
                     MuxAssert.AreEqual("https://app.usemux.ai/signup", CloudSignup.Url("  "), "blank server uses the default");
                     MuxAssert.AreEqual("app.usemux.ai/signup", CloudSignup.DisplayUrl(null), "display form drops the scheme");
-                    MuxAssert.AreEqual(1, signedOut.ToString().Split("not signed in").Length - 1, "reason shown once");
+                    MuxAssert.Contains("Mux Cloud : Not signed in", signedOut.ToString(), "friendly state label");
+                    MuxAssert.DoesNotContain("This machine is not signed in", signedOut.ToString(), "the label already says it");
+                    MuxAssert.DoesNotContain("Disabled", signedOut.ToString(), "no enum name");
+                    StringWriter skew = new StringWriter();
+                    CloudCommand.WriteStatus(new CloudStatus { State = CloudStateEnum.Reconnecting, Reason = "Mux Cloud rejected the handshake: timestamp is more than 120 seconds from server time", ReasonCode = CloudReasonCodes.ClockSkew, ServerUrl = "https://app.usemux.ai", MachineId = "mch_1", MachineName = "box" }, skew);
+                    MuxAssert.Contains("Mux Cloud : Reconnecting", skew.ToString(), "reconnecting label");
+                    MuxAssert.Contains("clock is off by more than 2 minutes", skew.ToString(), "clock skew explained in plain language");
+                    StringWriter off = new StringWriter();
+                    CloudCommand.WriteStatus(CloudAccountService.OfflineStatus(new Mux.Core.Models.CloudSettings { MachineId = "mch_1", MachineSecret = "mcs_x", Enabled = false }, null), off);
+                    MuxAssert.Contains("Mux Cloud : Off", off.ToString(), "signed in but turned off reads Off");
+                    MuxAssert.Contains("turned off on this machine", off.ToString(), "and says why");
                     MuxAssert.Contains("latency         : 42 ms", text, "latency");
                     return Task.CompletedTask;
                 })

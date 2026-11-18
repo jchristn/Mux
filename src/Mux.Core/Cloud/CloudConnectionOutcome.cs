@@ -19,6 +19,9 @@ namespace Mux.Core.Cloud
         /// <summary>Human-readable reason.</summary>
         public string Reason { get; set; } = string.Empty;
 
+        /// <summary>Stable code for <see cref="Reason"/> (<see cref="CloudReasonCodes"/>), or empty.</summary>
+        public string ReasonCode { get; set; } = string.Empty;
+
         /// <summary>WebSocket close code, when the socket closed cleanly.</summary>
         public int? CloseCode { get; set; } = null;
 

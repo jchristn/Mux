@@ -616,8 +616,10 @@ Anyone signed in to the Mux Cloud account can operate this machine remotely, inc
 `allowRemoteToolApproval` is false. Turn it off with `mux cloud remote-approval off`, `/cloud remote-approval off`,
 the checkbox in the desktop app or dashboard, or `MUX_CLOUD_ALLOW_REMOTE_TOOL_APPROVAL=false`.
 
-`mux cloud status` shows the connection: `Disabled`, `Connecting`, `Connected`, `Reconnecting`, `SignedOut` (the
-credential was rejected; sign in again), or `Revoked` (the machine was removed in Mux Cloud). Only one process per
+`mux cloud status` shows the connection as `Not signed in`, `Off` (signed in, but the connection is turned off or no
+mux process is running it), `Connecting`, `Connected`, `Reconnecting`, `Signed out` (the credential was rejected; sign
+in again), or `Removed` (the machine was removed in Mux Cloud), with a plain-language reason such as "This machine's
+clock is off by more than 2 minutes". Every surface shows the same labels, translated where the surface is. Only one process per
 machine runs the tunnel (a `cloud-tunnel.lock` file in the config directory). The protocol is described in
 [WEBSOCKETS_API.md](../WEBSOCKETS_API.md#9-mux-cloud-tunnel-client-side).
 
