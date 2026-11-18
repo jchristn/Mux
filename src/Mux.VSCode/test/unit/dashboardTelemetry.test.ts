@@ -16,7 +16,7 @@ function context(detail: object) {
         messages: [], currentSessionId: 'session-1', currentModel: '', busy: false,
         api: () => Promise.resolve(detail), el: (id: string) => id === 'messages' ? messagesBox : null,
         esc: (value: unknown) => String(value), md: (value: unknown) => String(value), t: (value: unknown) => String(value),
-        fmtMs: (value: unknown) => String(value), setChatTitle: () => {}, highlightConvo: () => {},
+        fmtMs: (value: unknown) => String(value), setChatTitle: () => {}, setCwd: () => {}, highlightConvo: () => {},
         watchConvo: () => {}, loadConvos: () => {}, toast: () => {},
         setTimeout: (callback: () => void) => { callback(); return 1; }
     };

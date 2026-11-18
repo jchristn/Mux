@@ -49,6 +49,7 @@
   "cmd.manage.toggleSkill": "स्किल टॉगल करें",
   "cmd.manage.editSettings": "सेटिंग्स संपादित करें",
   "cmd.showHelp": "mux से कनेक्ट करने में सहायता",
+  "cmd.cloud": "Mux Cloud से कनेक्ट करें",
   "cmd.about": "mux के बारे में",
   "cmd.manage.addPrompt": "प्रॉम्प्ट जोड़ें",
   "cmd.manage.editPrompt": "प्रॉम्प्ट संपादित करें",

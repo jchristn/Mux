@@ -49,6 +49,7 @@
   "cmd.manage.toggleSkill": "Переключить навык",
   "cmd.manage.editSettings": "Изменить настройки",
   "cmd.showHelp": "Помощь с подключением к mux",
+  "cmd.cloud": "Подключиться к Mux Cloud",
   "cmd.about": "О mux",
   "cmd.manage.addPrompt": "Добавить промпт",
   "cmd.manage.editPrompt": "Изменить промпт",

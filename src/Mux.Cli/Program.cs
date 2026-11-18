@@ -71,7 +71,8 @@ namespace Mux.Cli
                 || a == "worktree"
                 || a == "memory"
                 || a == "mcp"
-                || a == "mirror")
+                || a == "mirror"
+                || a == "cloud")
                 || (args.Length > 0 && string.Equals(args[0], "agent", StringComparison.OrdinalIgnoreCase));
 
             if (!isNonInteractiveCommand && !Console.IsOutputRedirected)
@@ -124,6 +125,7 @@ USAGE:
     mux mirror <sessionId> [OPTIONS]     Live-tail a run on a running mux server (read-only)
     mux mcp serve [OPTIONS]              Serve mux as an MCP server (stdio, or --http <port>)
     mux agent <start|status>             Start the tray agent (server, dashboard), or show whether it runs
+    mux cloud <login|logout|status>      Connect this machine to Mux Cloud (use it from a browser or phone)
 
 OPTIONS:
     -h, --help, /?                       Show this help message and exit
@@ -293,6 +295,11 @@ CONFIG:
                 if (args.Length > 0 && string.Equals(args[0], "agent", StringComparison.OrdinalIgnoreCase))
                 {
                     return Mux.Cli.Commands.AgentCommand.Run(args.Skip(1).ToArray(), Console.Out, Console.Error);
+                }
+
+                if (args.Length > 0 && string.Equals(args[0], "cloud", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Mux.Cli.Commands.CloudCommand.Run(args.Skip(1).ToArray(), Console.In, Console.Out, Console.Error);
                 }
 
                 if (args.Length > 0 && string.Equals(args[0], "print", StringComparison.OrdinalIgnoreCase))

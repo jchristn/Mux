@@ -62,6 +62,16 @@ namespace Mux.Agent
         /// </summary>
         public void LaunchDashboard()
         {
+            LaunchDashboard(string.Empty);
+        }
+
+        /// <summary>
+        /// Ensures the server is serving and opens the web dashboard at a fragment (for example <c>#settings</c>).
+        /// Best-effort; never throws.
+        /// </summary>
+        /// <param name="fragment">A fragment naming a dashboard view, or empty for the home view.</param>
+        public void LaunchDashboard(string fragment)
+        {
             EnsureStarted();
 
             // Prefer the URL this agent bound. If binding failed because another process (a standalone
@@ -70,7 +80,7 @@ namespace Mux.Agent
             string url = !string.IsNullOrEmpty(BaseUrl) ? BaseUrl : ConfiguredBaseUrl();
             if (!string.IsNullOrEmpty(url))
             {
-                OpenUrl(url.TrimEnd('/') + "/dashboard");
+                OpenUrl(url.TrimEnd('/') + "/dashboard" + (fragment ?? string.Empty));
             }
         }
 

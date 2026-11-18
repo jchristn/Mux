@@ -49,6 +49,7 @@
   "cmd.manage.toggleSkill": "Togol kemahiran",
   "cmd.manage.editSettings": "Edit tetapan",
   "cmd.showHelp": "Bantuan menyambung ke mux",
+  "cmd.cloud": "Sambung ke Mux Cloud",
   "cmd.about": "Perihal mux",
   "cmd.manage.addPrompt": "Tambah prompt",
   "cmd.manage.editPrompt": "Edit prompt",

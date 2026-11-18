@@ -49,6 +49,7 @@
   "cmd.manage.toggleSkill": "Attiva/disattiva competenza",
   "cmd.manage.editSettings": "Modifica impostazioni",
   "cmd.showHelp": "Guida alla connessione a mux",
+  "cmd.cloud": "Connetti a Mux Cloud",
   "cmd.about": "Informazioni su mux",
   "cmd.manage.addPrompt": "Aggiungi prompt",
   "cmd.manage.editPrompt": "Modifica prompt",

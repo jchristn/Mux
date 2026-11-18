@@ -480,6 +480,7 @@ namespace Mux.Desktop.Shell
                 new PaletteCommand(L("main.palette.search"), L("main.palette.search.desc"), OpenSearchProvidersWindow),
                 new PaletteCommand(L("main.palette.plugins"), L("main.palette.plugins.desc"), OpenPluginsWindow),
                 new PaletteCommand(L("main.palette.localServer"), L("main.palette.localServer.desc"), OpenLocalServerWindow),
+                new PaletteCommand(L("main.palette.muxCloud"), L("main.palette.muxCloud.desc"), OpenMuxCloudWindow),
                 new PaletteCommand(L("main.palette.keybindings"), L("main.palette.keybindings.desc"), OpenKeybindingsWindow),
                 new PaletteCommand(L("main.palette.undo"), L("main.palette.undo.desc"), () => _ = UndoLastTurnAsync()),
                 new PaletteCommand(L("main.palette.redo"), L("main.palette.redo.desc"), () => _ = RedoLastUndoAsync()),
@@ -666,6 +667,7 @@ namespace Mux.Desktop.Shell
                 manageGroup.Children.Add(ManageDrawerItem("🔎", L("sidebar.search"), L("main.nav.search.tip"), OpenSearchProvidersWindow));
                 manageGroup.Children.Add(ManageDrawerItem("🧰", L("sidebar.plugins"), L("main.nav.plugins.tip"), OpenPluginsWindow));
                 manageGroup.Children.Add(ManageDrawerItem("🌐", L("sidebar.localServer"), L("main.nav.localServer.tip"), OpenLocalServerWindow));
+                manageGroup.Children.Add(ManageDrawerItem("☁", L("sidebar.muxCloud"), L("main.nav.muxCloud.tip"), OpenMuxCloudWindow));
                 manageGroup.Children.Add(ManageDrawerItem("⌨", L(StringKeys.NavKeybindings), L("main.nav.keybindings.tip"), OpenKeybindingsWindow));
                 bottom.Children.Add(HighlightBlock(manageGroup));
             }
@@ -1071,6 +1073,11 @@ namespace Mux.Desktop.Shell
             _ = new LocalServerWindow().ShowDialog(this);
         }
 
+        private void OpenMuxCloudWindow()
+        {
+            _ = new MuxCloudWindow().ShowDialog(this);
+        }
+
         private void OpenSkillsWindow()
         {
             _ = new SkillsWindow().ShowDialog(this);
@@ -1347,7 +1354,8 @@ namespace Mux.Desktop.Shell
                 NativeMenuFactory.Item("Settings…", OpenSettingsWindow)));
             bar.Items.Add(NativeMenuFactory.Submenu("Tools",
                 NativeMenuFactory.Item("Usage Dashboard", OpenUsageWindow, Key.U, shift: true),
-                NativeMenuFactory.Item("Local Server…", OpenLocalServerWindow)));
+                NativeMenuFactory.Item("Local Server…", OpenLocalServerWindow),
+                NativeMenuFactory.Item("Mux Cloud…", OpenMuxCloudWindow)));
             bar.Items.Add(NativeMenuFactory.Submenu("Window",
                 NativeMenuFactory.Item("Minimize", () => WindowState = WindowState.Minimized, Key.M),
                 NativeMenuFactory.Item("Zoom", () => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized),

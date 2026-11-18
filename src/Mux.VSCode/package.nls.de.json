@@ -49,6 +49,7 @@
   "cmd.manage.toggleSkill": "Fähigkeit umschalten",
   "cmd.manage.editSettings": "Einstellungen bearbeiten",
   "cmd.showHelp": "Hilfe zur Verbindung mit mux",
+  "cmd.cloud": "Mit Mux Cloud verbinden",
   "cmd.about": "Über mux",
   "cmd.manage.addPrompt": "Prompt hinzufügen",
   "cmd.manage.editPrompt": "Prompt bearbeiten",

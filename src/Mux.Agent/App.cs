@@ -18,6 +18,7 @@ namespace Mux.Agent
     {
         private AgentHost? _Host;
         private TrayIcon? _Tray;
+        private NativeMenuItem? _CloudItem;
 
         /// <summary>
         /// Initialize application-level styles.
@@ -86,6 +87,21 @@ namespace Mux.Agent
 
             menu.Items.Add(new NativeMenuItemSeparator());
 
+            // Mux Cloud: the header shows the tunnel state with the names every surface uses; clicking signs in
+            // (through the dashboard's Mux Cloud panel) when signed out, or opens Mux Cloud when connected.
+            _CloudItem = new NativeMenuItem(CloudHeader(_Host?.Cloud?.Status));
+            _CloudItem.Click += OnCloudClicked;
+            menu.Items.Add(_CloudItem);
+            if (_Host?.Cloud != null)
+            {
+                _Host.Cloud.StatusChanged += status => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    if (_CloudItem != null) _CloudItem.Header = CloudHeader(status);
+                });
+            }
+
+            menu.Items.Add(new NativeMenuItemSeparator());
+
             NativeMenuItem about = new NativeMenuItem("About");
             about.Click += OnAbout;
             menu.Items.Add(about);
@@ -124,6 +140,26 @@ namespace Mux.Agent
                     });
                 };
             }
+        }
+
+        private static string CloudHeader(Mux.Core.Cloud.CloudStatus? status)
+        {
+            if (status == null) return "Mux Cloud: Disabled";
+            if (status.State == Mux.Core.Cloud.CloudStateEnum.Disabled && string.IsNullOrEmpty(status.MachineId)) return "Connect to Mux Cloud…";
+            return "Mux Cloud: " + status.StateName + (status.State == Mux.Core.Cloud.CloudStateEnum.Connected && !string.IsNullOrEmpty(status.MachineName) ? " (" + status.MachineName + ")" : string.Empty);
+        }
+
+        private void OnCloudClicked(object? sender, EventArgs e)
+        {
+            Mux.Core.Cloud.CloudStatus? status = _Host?.Cloud?.Status;
+            if (status != null && status.State == Mux.Core.Cloud.CloudStateEnum.Connected && !string.IsNullOrEmpty(status.ServerUrl))
+            {
+                AgentHost.OpenUrl(status.ServerUrl);
+                return;
+            }
+
+            // Sign in from the dashboard's Settings view, which hosts the Mux Cloud panel.
+            _Host?.LaunchDashboard("#settings");
         }
 
         internal static WindowIcon? LoadIcon()

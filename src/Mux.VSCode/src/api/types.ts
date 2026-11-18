@@ -217,6 +217,38 @@ export interface RestSettings {
     ApiKey?: string;
 }
 
+/** The Mux Cloud block of the editable settings (the machine secret is never returned). */
+export interface CloudSettings {
+    Enabled: boolean;
+    ServerUrl: string;
+    MachineName?: string | null;
+    MachineId?: string | null;
+    AccountEmail?: string | null;
+    MachineSecretSet: boolean;
+    AllowRemoteToolApproval: boolean;
+    HeartbeatSeconds: number;
+    ReconnectMaxDelaySeconds: number;
+    AllowInvalidCertificates: boolean;
+}
+
+/** `GET /v1.0/api/cloud/status`: the Mux Cloud tunnel status on this machine. */
+export interface CloudStatus {
+    /** 0 Disabled, 1 Connecting, 2 Connected, 3 Reconnecting, 4 SignedOut, 5 Revoked. */
+    State: number;
+    StateName: 'Disabled' | 'Connecting' | 'Connected' | 'Reconnecting' | 'SignedOut' | 'Revoked' | string;
+    Reason: string;
+    ServerUrl: string;
+    MachineId: string;
+    MachineName: string;
+    AccountEmail: string;
+    AllowRemoteToolApproval: boolean;
+    HostedHere: boolean;
+    ConnectionId: string;
+    ConnectedUtc?: string | null;
+    LatencyMs?: number | null;
+    RetryInSeconds?: number | null;
+}
+
 /** The editable settings object as returned by `GET /v1.0/api/settings`. */
 export interface MuxServerSettings {
     DefaultApprovalPolicy: string;
@@ -238,6 +270,7 @@ export interface MuxServerSettings {
     ShowBoundaryLines: boolean;
     DefaultEnqueueBehavior: string;
     Rest: RestSettings;
+    Cloud?: CloudSettings;
     [key: string]: unknown;
 }
 

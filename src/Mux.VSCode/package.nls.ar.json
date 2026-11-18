@@ -49,6 +49,7 @@
   "cmd.manage.toggleSkill": "تبديل المهارة",
   "cmd.manage.editSettings": "تعديل الإعدادات",
   "cmd.showHelp": "مساعدة الاتصال بـ mux",
+  "cmd.cloud": "الاتصال بـ Mux Cloud",
   "cmd.about": "حول mux",
   "cmd.manage.addPrompt": "إضافة موجّه",
   "cmd.manage.editPrompt": "تعديل الموجّه",

@@ -49,6 +49,7 @@
   "cmd.manage.toggleSkill": "スキルを切り替え",
   "cmd.manage.editSettings": "設定を編集",
   "cmd.showHelp": "mux への接続ヘルプ",
+  "cmd.cloud": "Mux Cloud に接続",
   "cmd.about": "mux について",
   "cmd.manage.addPrompt": "プロンプトを追加",
   "cmd.manage.editPrompt": "プロンプトを編集",

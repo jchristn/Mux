@@ -1,0 +1,57 @@
+import * as vscode from 'vscode';
+import { CloudStatus } from '../api/types';
+
+/**
+ * The notice every Mux Cloud connect screen shows before signing in, identical in meaning on every mux surface.
+ *
+ * @returns The localized notice.
+ */
+export function remoteAccessNotice(): string {
+    return vscode.l10n.t(
+        'Anyone signed in to this Mux Cloud account can use this machine remotely, as if they were at it, including approving tools that edit files and run commands. To keep remote use read-only for those tools, turn off remote tool approval (Mux Cloud command, or set cloud.allowRemoteToolApproval to false).',
+    );
+}
+
+/**
+ * A one-line description of a status, matching the wording the terminal and desktop use.
+ *
+ * @param status The status.
+ * @returns The description.
+ */
+export function describeStatus(status: CloudStatus): string {
+    switch (status.StateName) {
+        case 'Connected':
+            return vscode.l10n.t('Connected to {0} as {1}', status.ServerUrl, status.MachineName);
+        case 'Connecting':
+            return vscode.l10n.t('Connecting to {0}', status.ServerUrl);
+        case 'Reconnecting':
+            return vscode.l10n.t('Reconnecting to {0}: {1}', status.ServerUrl, status.Reason || '');
+        case 'SignedOut':
+            return vscode.l10n.t('Signed out of Mux Cloud: {0}', status.Reason || '');
+        case 'Revoked':
+            return vscode.l10n.t('This machine was removed from Mux Cloud. Sign in again to reconnect it.');
+        default:
+            return status.Reason ? vscode.l10n.t('Not connected to Mux Cloud: {0}', status.Reason) : vscode.l10n.t('Not connected to Mux Cloud');
+    }
+}
+
+/**
+ * The codicon for a state.
+ *
+ * @param stateName The state name.
+ * @returns A codicon reference.
+ */
+export function stateIcon(stateName: string): string {
+    switch (stateName) {
+        case 'Connected':
+            return '$(cloud)';
+        case 'Connecting':
+        case 'Reconnecting':
+            return '$(sync~spin)';
+        case 'SignedOut':
+        case 'Revoked':
+            return '$(warning)';
+        default:
+            return '$(cloud-upload)';
+    }
+}

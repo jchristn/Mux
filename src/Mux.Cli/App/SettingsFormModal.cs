@@ -68,6 +68,10 @@ namespace Mux.Cli.App
         private readonly TextField _SummaryChunkLines;
         private readonly Checkbox _SummaryCacheEnabled;
         private readonly TextField _SummaryCacheRetentionDays;
+        private readonly Checkbox _CloudEnabled;
+        private readonly TextField _CloudServerUrl;
+        private readonly TextField _CloudMachineName;
+        private readonly Checkbox _CloudRemoteApproval;
 
         #endregion
 
@@ -120,6 +124,12 @@ namespace Mux.Cli.App
             _SummaryCacheEnabled = new Checkbox("Cache large-file summaries", _Settings.Context.SummaryCacheEnabled);
             _SummaryCacheRetentionDays = new TextField { Value = _Settings.Context.SummaryCacheRetentionDays.ToString(CultureInfo.InvariantCulture) };
 
+            _CloudEnabled = new Checkbox("Connect when signed in (/cloud login)", _Settings.Cloud.Enabled);
+            // The caller saves the connect switch through SettingsLoader.UpdateCloud (SaveSettings preserves it).
+            _CloudServerUrl = new TextField { Value = _Settings.Cloud.ServerUrl };
+            _CloudMachineName = new TextField { Value = _Settings.Cloud.MachineName ?? string.Empty };
+            _CloudRemoteApproval = new Checkbox("Remote users may approve tools", _Settings.Cloud.AllowRemoteToolApproval);
+
             _Form = new Form();
             _Form.AddSection("Agent");
             _Form.Add("Max agent iterations", _MaxAgentIterations, () => ValidateInt(_MaxAgentIterations.Value, "Max agent iterations", 1, 1024));
@@ -155,6 +165,11 @@ namespace Mux.Cli.App
             _Form.Add("Summary chunk lines", _SummaryChunkLines, () => ValidateInt(_SummaryChunkLines.Value, "Summary chunk lines", 50, 5000));
             _Form.Add("Summary cache", _SummaryCacheEnabled);
             _Form.Add("Summary cache retention (days)", _SummaryCacheRetentionDays, () => ValidateInt(_SummaryCacheRetentionDays.Value, "Summary cache retention", 1, 365));
+            _Form.AddSection("Mux Cloud (sign in with /cloud login)");
+            _Form.Add("Mux Cloud", _CloudEnabled);
+            _Form.Add("Server URL", _CloudServerUrl, () => ValidateUrl(_CloudServerUrl.Value));
+            _Form.Add("Machine name (blank = host name)", _CloudMachineName);
+            _Form.Add("Remote tool approval", _CloudRemoteApproval);
             _Form.SubmitRequested += (sender, e) => Complete();
             _Host = new ScrollingFormHost(_Form);
         }
@@ -282,6 +297,10 @@ namespace Mux.Cli.App
             _Settings.TaskParallelismEnabled = _TaskParallelism.Checked;
             _Settings.IgnoreCertErrors = _IgnoreCertErrors.Checked;
             _Settings.ShowBoundaryLines = _ShowBoundaryLines.Checked;
+            _Settings.Cloud.Enabled = _CloudEnabled.Checked;
+            _Settings.Cloud.ServerUrl = _CloudServerUrl.Value;
+            _Settings.Cloud.MachineName = _CloudMachineName.Value;
+            _Settings.Cloud.AllowRemoteToolApproval = _CloudRemoteApproval.Checked;
             _Settings.Context.LargeFileMode = _LargeFileMode.SelectedOption;
             _Settings.Context.InlineThresholdBytes = ParseInt(_InlineThresholdBytes.Value);
             _Settings.Context.InlineContextWindowFraction = ParseDouble(_InlineContextWindowFraction.Value);
@@ -309,6 +328,18 @@ namespace Mux.Cli.App
             {
                 group.HandleKey(KeyEvent.Special(KeyCode.Down));
             }
+        }
+
+        private static string? ValidateUrl(string value)
+        {
+            string trimmed = (value ?? string.Empty).Trim();
+            if (trimmed.Length == 0) return null;
+            if (!Uri.TryCreate(trimmed, UriKind.Absolute, out Uri? uri) || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+            {
+                return "Server URL must be an http or https URL.";
+            }
+
+            return null;
         }
 
         private static string? ValidateInt(string value, string label, int min, int max)

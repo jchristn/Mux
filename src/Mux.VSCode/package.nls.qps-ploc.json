@@ -51,6 +51,7 @@
   "cmd.usage": "⟦Usage dashboard······⟧",
   "cmd.runSetup": "⟦Run setup wizard·······⟧",
   "cmd.showHelp": "⟦Help connecting to mux·········⟧",
+  "cmd.cloud": "⟦Connect to Mux Cloud·········⟧",
   "cmd.about": "⟦About mux····⟧",
   "config.server.autoStart": "⟦Start a local mux server when none is reachable.····················⟧",
   "config.server.port": "⟦The mux server port. 0 uses the extension default (8710).·······················⟧",
