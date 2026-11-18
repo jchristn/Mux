@@ -1,5 +1,7 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
+import { PALETTE_UPDATE_SCRIPT, paletteStyleTag } from '../theme/palette';
+import { PaletteService } from '../theme/PaletteService';
 import { copyButtonHtml } from './formCopy';
 
 /**
@@ -130,6 +132,7 @@ export class FormPanel {
   .labelrow label { margin-bottom: 0; }
   button.copy { padding: 2px 10px; }
 </style>
+${paletteStyleTag(nonce, PaletteService.css)}
 </head>
 <body>
 <h1>${FormPanel.escape(title)}</h1>
@@ -142,6 +145,7 @@ ${controls}
 </div>
 </form>
 <script nonce="${nonce}">
+${PALETTE_UPDATE_SCRIPT}
   const vscode = acquireVsCodeApi();
   const fields = ${fieldsJson};
   const required = ${JSON.stringify(fields.filter((f) => f.required).map((f) => f.key))};

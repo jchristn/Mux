@@ -11,6 +11,11 @@ namespace Mux.Cli.App
         Add,
         Edit,
         Remove,
-        Import
+        Import,
+
+        /// <summary>
+        /// Discover the models an existing endpoint's backend offers and add them as endpoints.
+        /// </summary>
+        ImportModels
     }
 }

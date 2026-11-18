@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ChatViewProvider } from './chat/ChatViewProvider';
 import { EndpointPicker } from './config/endpointPicker';
+import { PaletteService } from './theme/PaletteService';
 import { MuxCodeActionProvider, registerInlineCommands } from './commands/inlineCommands';
 import { workspaceRootPath } from './context/providers';
 import { AboutPanel } from './manage/AboutPanel';
@@ -29,6 +30,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const lifecycle = new MuxServerLifecycle(context);
     context.subscriptions.push(lifecycle);
+
+    // Created before any webview so the chat, usage, and form views can read and follow the palette.
+    const palettes = new PaletteService(lifecycle);
+    context.subscriptions.push(
+        palettes,
+        vscode.commands.registerCommand('mux.selectPalette', () => palettes.pick()),
+        vscode.commands.registerCommand('mux.editPalette', () => palettes.edit()),
+    );
 
     const chat = new ChatViewProvider(context.extensionUri, lifecycle);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chat));
@@ -76,6 +85,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand('mux.manage.editEndpoint', (node: ManageNode) => manageActions.editEndpoint(node)),
         vscode.commands.registerCommand('mux.manage.deleteEndpoint', (node: ManageNode) => manageActions.deleteEndpoint(node)),
         vscode.commands.registerCommand('mux.manage.setDefaultEndpoint', (node: ManageNode) => manageActions.setDefaultEndpoint(node)),
+        vscode.commands.registerCommand('mux.manage.importModels', (node: ManageNode) => manageActions.importModels(node)),
         vscode.commands.registerCommand('mux.manage.addMcp', () => manageActions.addMcpServer()),
         vscode.commands.registerCommand('mux.manage.editMcp', (node: ManageNode) => manageActions.editMcpServer(node)),
         vscode.commands.registerCommand('mux.manage.validateMcp', (node: ManageNode) => manageActions.validateMcpServer(node)),

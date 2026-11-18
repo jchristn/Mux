@@ -51,7 +51,7 @@ body{background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
 .nav-label{color:var(--sidebar-muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:8px 10px 4px}
 .nav-item{display:flex;align-items:center;gap:10px;padding:5px 12px;border-radius:6px;color:var(--sidebar-text);cursor:pointer;font-size:14px;user-select:none}
 .nav-item:hover{background:rgba(255,255,255,.06)}
-.nav-item.active{background:var(--accent);color:#fff}
+.nav-item.active{background:var(--accent);color:var(--accent-text,#fff)}
 .sidebar-foot{margin-top:auto;padding:12px 18px;color:var(--sidebar-muted);font-size:12px}
 .main{display:flex;flex-direction:column;min-width:0;height:100vh}
 .topbar{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--line);background:var(--panel)}
@@ -73,7 +73,7 @@ body{background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
 .convo-empty{color:var(--muted);font-size:12px;padding:14px 10px;text-align:center}
 .convo-item{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:6px;cursor:pointer;color:var(--text)}
 .convo-item:hover{background:var(--hover,rgba(127,127,127,.10))}
-.convo-item.active{background:var(--accent);color:#fff}
+.convo-item.active{background:var(--accent);color:var(--accent-text,#fff)}
 .convo-item .ct{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
 .convo-item .convo-menu{display:none;background:none;border:none;cursor:pointer;color:inherit;font-size:16px;line-height:1;padding:2px 6px;border-radius:4px;flex:none}
 .convo-item:hover .convo-menu,.convo-item.active .convo-menu{display:inline-flex}
@@ -103,7 +103,7 @@ body.resizing-convos{cursor:col-resize;user-select:none}
 select,input,textarea{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:14px;font-family:inherit}
 select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .grow{flex:1}
-.btn{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:14px;font-weight:500}
+.btn{background:var(--accent);color:var(--accent-text,#fff);border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:14px;font-weight:500}
 .btn:hover{background:var(--accent-2)}
 .btn.secondary{background:transparent;color:var(--text);border:1px solid var(--line)}
 .messages{overflow-y:auto;padding:24px max(20px,7vw);display:flex;flex-direction:column;gap:16px}
@@ -183,7 +183,7 @@ select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .field label{font-size:13px}
 .field .sub{color:var(--muted);font-size:11px}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.toast{position:fixed;bottom:20px;right:20px;background:var(--accent);color:#fff;padding:12px 18px;border-radius:8px;opacity:0;transform:translateY(8px);transition:.25s;pointer-events:none;z-index:50}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--accent);color:var(--accent-text,#fff);padding:12px 18px;border-radius:8px;opacity:0;transform:translateY(8px);transition:.25s;pointer-events:none;z-index:50}
 .toast.show{opacity:1;transform:none}
 .toast.err{background:var(--danger)}
 table.info{width:100%;border-collapse:collapse;font-size:13px}
@@ -228,11 +228,31 @@ table.grid td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-
 /* ================= UX polish ================= */
 :root{--shadow:0 1px 2px rgba(16,24,32,.05),0 3px 14px rgba(16,24,32,.05)}
 :root[data-theme="dark"]{--shadow:0 1px 2px rgba(0,0,0,.3),0 6px 22px rgba(0,0,0,.35)}
+/* palette caret, selection, picker, and color fields */
+input,textarea,[contenteditable]{caret-color:var(--cursor,var(--accent))}
+::selection{background:var(--selection,rgba(127,127,127,.35));color:var(--text)}
+.pal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.pal-card{display:flex;flex-direction:column;gap:8px;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);cursor:pointer;font-family:inherit;font-size:13px}
+.pal-card:hover{outline:2px solid var(--accent);outline-offset:1px}
+.pal-card.active{outline:2px solid var(--accent);outline-offset:1px;box-shadow:var(--shadow)}
+.pal-name{font-weight:600}
+.pal-tag{font-weight:500;font-size:11px}
+.pal-sample{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:4px 8px;border-radius:5px}
+.pal-caret{display:inline-block;width:7px;height:13px;margin-left:2px;vertical-align:-2px;animation:palblink 1.06s steps(1) infinite}
+@keyframes palblink{50%{opacity:0}}
+.pal-dots{display:flex;gap:4px;flex-wrap:wrap}
+.pal-dot{width:14px;height:14px;border-radius:50%;border:1px solid rgba(127,127,127,.45)}
+.colorfield{display:flex;gap:8px;align-items:center}
+.colorfield input[type=color]{width:42px;height:34px;padding:2px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+.colorfield input[type=text]{flex:1}
+.imp-list{max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:4px}
+.imp-row{display:flex;gap:8px;align-items:center;padding:4px 6px;border-radius:5px}
+.imp-row:hover{background:var(--hover,rgba(127,127,127,.1))}
 body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 .brand{font-size:17px}.brand img{box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .nav-item{margin:0;transition:background .12s,color .12s;border:none;background:none;width:100%;font-family:inherit;font-size:14px;text-align:left}
 .nav-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-.nav-item.active{background:rgba(255,255,255,.09);color:#fff;position:relative}
+.nav-item.active{background:rgba(255,255,255,.09);color:var(--sidebar-text,#fff);position:relative}
 .nav-item.active::before{content:"";position:absolute;left:-10px;top:4px;bottom:4px;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
 .topbar h1{font-size:17px}
 .btn{border-radius:7px;box-shadow:var(--shadow);transition:background .12s,transform .05s,box-shadow .12s;font-weight:550}
@@ -319,7 +339,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 .useg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
 .useg button{border:none;background:var(--panel);color:var(--text);padding:6px 13px;font-size:13px;cursor:pointer;font-family:inherit}
 .useg button+button{border-left:1px solid var(--line)}
-.useg button.active{background:var(--accent);color:#fff}
+.useg button.active{background:var(--accent);color:var(--accent-text,#fff)}
 .usebar{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center;margin:0 0 18px}
 .usebar>label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-left:8px}
 .usebar>label:first-child{margin-left:0}
@@ -546,7 +566,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
         <a class="iconbtn icononly" href="https://discord.gg/tRAN8HgvK5" target="_blank" rel="noopener" title="Join the mux Discord" aria-label="Join the mux Discord">
           <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M13.545 2.907a13.23 13.23 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.19 12.19 0 0 0-3.658 0 8.26 8.26 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032c.001.014.01.028.021.037a13.28 13.28 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019c.308-.42.582-.863.818-1.329a.05.05 0 0 0-.028-.069 8.75 8.75 0 0 1-1.248-.595.05.05 0 0 1-.005-.084c.084-.063.168-.129.248-.195a.05.05 0 0 1 .051-.007c2.619 1.196 5.454 1.196 8.041 0a.05.05 0 0 1 .053.006c.08.066.164.133.248.196a.05.05 0 0 1-.004.084c-.399.233-.813.43-1.249.594a.05.05 0 0 0-.027.07c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.24 13.24 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.107a.04.04 0 0 0-.02-.018ZM5.347 10.215c-.789 0-1.438-.724-1.438-1.612 0-.889.637-1.613 1.438-1.613.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612Zm5.316 0c-.788 0-1.438-.724-1.438-1.612 0-.889.637-1.613 1.438-1.613.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612Z"/></svg>
         </a>
-        <button class="iconbtn icononly" id="themeBtn" title="Toggle light/dark" aria-label="Toggle theme"><span id="themeIcon">🌙</span></button>
+        <button class="iconbtn icononly" id="themeBtn" title="Choose a color palette (shared with the terminal, desktop app, and VS Code)" aria-label="Color palette"><span id="themeIcon">🎨</span></button>
       </div>
     </header>
 
@@ -770,6 +790,7 @@ __SLASH_COMPLETION_JS__
 var API_KEY="__MUX_API_KEY__";
 var I18N={
 en:{
+"pal.title":"Color palette","pal.system":"System (follow OS)","pal.custom":"custom","pal.new":"New palette…","pal.edit":"Edit palette","pal.delete":"Delete palette","pal.deleteConfirm":"Delete the palette “{name}”?","pal.saved":"Palette saved","pal.hint":"Palettes and the active choice are shared with the terminal UI, the desktop app, and VS Code.","pal.id":"Id","pal.idTip":"Lowercase kebab-case, for example my-palette.","pal.name":"Name","pal.dark":"Dark palette","pal.base":"Base palette","pal.baseTip":"Supplies any color left blank.","pal.colors":"Colors (hex)","ep.import":"Import models…","ep.importTitle":"Import models from {name}","ep.importHint":"Each model you pick becomes its own endpoint with this endpoint's settings and credentials.","ep.importBtn":"Import","ep.importNone":"No new models found.","ep.importFailed":"The backend did not list its models.","ep.importAdded":"Added {n} endpoint(s).","ep.importQuerying":"Asking {name} for its models…",
 "us.endpoint":"Endpoint","us.model":"Model","us.label":"Label","us.tag":"Tag","us.endpoint.tip":"Filter to one endpoint","us.model.tip":"Filter to one model","us.label.tip":"Filter usage to sessions carrying this label","us.tag.tip":"Filter usage to sessions carrying this tag","us.allEndpoints":"All endpoints","us.allModels":"All models","us.allLabels":"All labels","us.allTags":"All tags","sess.labels":"Labels","sess.tags":"Tags","sess.editLabels":"Edit labels","sess.editTags":"Edit tags","sess.labelsPh":"Labels (comma-separated)","sess.tagsPh":"Tags (key: value, comma-separated)","sess.metaSaved":"Metadata updated",
 "nav.home":"Home","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"MCP Servers","nav.prompts":"Prompts","nav.subagents":"Subagents","nav.hooks":"Hooks","nav.commands":"Commands","nav.keybindings":"Keybindings","nav.skills":"Skills","nav.sessions":"Sessions","nav.settings":"Settings","grp.observability":"Observability","nav.usage":"Usage","nav.pricing":"Pricing",
 "grp.config":"Configuration","grp.system":"System",
@@ -792,6 +813,7 @@ en:{
 "lang.label":"Language"
 },
 es:{
+"pal.title":"Paleta de colores","pal.system":"Sistema (seguir el SO)","pal.custom":"personalizada","pal.new":"Nueva paleta…","pal.edit":"Editar paleta","pal.delete":"Eliminar paleta","pal.deleteConfirm":"¿Eliminar la paleta “{name}”?","pal.saved":"Paleta guardada","pal.hint":"Las paletas y la elección activa se comparten con la interfaz de terminal, la app de escritorio y VS Code.","pal.id":"Id","pal.idTip":"Minúsculas en kebab-case, por ejemplo my-palette.","pal.name":"Nombre","pal.dark":"Paleta oscura","pal.base":"Paleta base","pal.baseTip":"Aporta los colores que se dejen en blanco.","pal.colors":"Colores (hex)","ep.import":"Importar modelos…","ep.importTitle":"Importar modelos de {name}","ep.importHint":"Cada modelo elegido se convierte en su propio endpoint con la configuración y credenciales de este.","ep.importBtn":"Importar","ep.importNone":"No se encontraron modelos nuevos.","ep.importFailed":"El backend no listó sus modelos.","ep.importAdded":"Se añadieron {n} endpoint(s).","ep.importQuerying":"Consultando los modelos de {name}…",
 "nav.home":"Inicio","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"Servidores MCP","nav.prompts":"Prompts","nav.subagents":"Subagentes","nav.hooks":"Hooks","nav.commands":"Comandos","nav.keybindings":"Atajos de teclado","nav.skills":"Habilidades","nav.sessions":"Sesiones","nav.settings":"Ajustes",
 "grp.config":"Configuración","grp.system":"Sistema",
 "vt.mcp":"Servidores MCP","vt.hooks":"Hooks de eventos","vt.commands":"Comandos personalizados",
@@ -813,6 +835,7 @@ es:{
 "lang.label":"Idioma"
 },
 pt:{
+"pal.title":"Paleta de cores","pal.system":"Sistema (seguir o SO)","pal.custom":"personalizada","pal.new":"Nova paleta…","pal.edit":"Editar paleta","pal.delete":"Excluir paleta","pal.deleteConfirm":"Excluir a paleta “{name}”?","pal.saved":"Paleta salva","pal.hint":"As paletas e a escolha ativa são compartilhadas com a interface de terminal, o app desktop e o VS Code.","pal.id":"Id","pal.idTip":"Minúsculas em kebab-case, por exemplo my-palette.","pal.name":"Nome","pal.dark":"Paleta escura","pal.base":"Paleta base","pal.baseTip":"Fornece as cores deixadas em branco.","pal.colors":"Cores (hex)","ep.import":"Importar modelos…","ep.importTitle":"Importar modelos de {name}","ep.importHint":"Cada modelo escolhido vira um endpoint próprio com as configurações e credenciais deste.","ep.importBtn":"Importar","ep.importNone":"Nenhum modelo novo encontrado.","ep.importFailed":"O backend não listou seus modelos.","ep.importAdded":"{n} endpoint(s) adicionado(s).","ep.importQuerying":"Consultando os modelos de {name}…",
 "nav.home":"Início","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"Servidores MCP","nav.prompts":"Prompts","nav.subagents":"Subagentes","nav.hooks":"Hooks","nav.commands":"Comandos","nav.keybindings":"Atalhos de teclado","nav.skills":"Habilidades","nav.sessions":"Sessões","nav.settings":"Configurações",
 "grp.config":"Configuração","grp.system":"Sistema",
 "vt.mcp":"Servidores MCP","vt.hooks":"Hooks de eventos","vt.commands":"Comandos personalizados",
@@ -834,6 +857,7 @@ pt:{
 "lang.label":"Idioma"
 },
 fr:{
+"pal.title":"Palette de couleurs","pal.system":"Système (suivre l'OS)","pal.custom":"personnalisée","pal.new":"Nouvelle palette…","pal.edit":"Modifier la palette","pal.delete":"Supprimer la palette","pal.deleteConfirm":"Supprimer la palette “{name}” ?","pal.saved":"Palette enregistrée","pal.hint":"Les palettes et le choix actif sont partagés avec l'interface terminal, l'application de bureau et VS Code.","pal.id":"Id","pal.idTip":"Minuscules en kebab-case, par exemple my-palette.","pal.name":"Nom","pal.dark":"Palette sombre","pal.base":"Palette de base","pal.baseTip":"Fournit les couleurs laissées vides.","pal.colors":"Couleurs (hex)","ep.import":"Importer des modèles…","ep.importTitle":"Importer des modèles depuis {name}","ep.importHint":"Chaque modèle choisi devient un point de terminaison avec les paramètres et identifiants de celui-ci.","ep.importBtn":"Importer","ep.importNone":"Aucun nouveau modèle trouvé.","ep.importFailed":"Le backend n'a pas listé ses modèles.","ep.importAdded":"{n} point(s) de terminaison ajouté(s).","ep.importQuerying":"Interrogation des modèles de {name}…",
 "nav.home":"Accueil","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"Serveurs MCP","nav.prompts":"Prompts","nav.subagents":"Sous-agents","nav.hooks":"Hooks","nav.commands":"Commandes","nav.keybindings":"Raccourcis clavier","nav.skills":"Compétences","nav.sessions":"Sessions","nav.settings":"Paramètres",
 "grp.config":"Configuration","grp.system":"Système",
 "vt.mcp":"Serveurs MCP","vt.hooks":"Hooks d’événements","vt.commands":"Commandes personnalisées",
@@ -855,6 +879,7 @@ fr:{
 "lang.label":"Langue"
 },
 it:{
+"pal.title":"Tavolozza di colori","pal.system":"Sistema (segui il SO)","pal.custom":"personalizzata","pal.new":"Nuova tavolozza…","pal.edit":"Modifica tavolozza","pal.delete":"Elimina tavolozza","pal.deleteConfirm":"Eliminare la tavolozza “{name}”?","pal.saved":"Tavolozza salvata","pal.hint":"Le tavolozze e la scelta attiva sono condivise con l'interfaccia da terminale, l'app desktop e VS Code.","pal.id":"Id","pal.idTip":"Minuscole in kebab-case, ad esempio my-palette.","pal.name":"Nome","pal.dark":"Tavolozza scura","pal.base":"Tavolozza di base","pal.baseTip":"Fornisce i colori lasciati vuoti.","pal.colors":"Colori (hex)","ep.import":"Importa modelli…","ep.importTitle":"Importa modelli da {name}","ep.importHint":"Ogni modello scelto diventa un endpoint con le impostazioni e le credenziali di questo.","ep.importBtn":"Importa","ep.importNone":"Nessun nuovo modello trovato.","ep.importFailed":"Il backend non ha elencato i suoi modelli.","ep.importAdded":"Aggiunti {n} endpoint.","ep.importQuerying":"Richiesta dei modelli a {name}…",
 "nav.home":"Home","nav.chat":"Chat","nav.endpoints":"Endpoint","nav.mcp":"Server MCP","nav.prompts":"Prompt","nav.subagents":"Subagent","nav.hooks":"Hook","nav.commands":"Comandi","nav.keybindings":"Scorciatoie da tastiera","nav.skills":"Competenze","nav.sessions":"Sessioni","nav.settings":"Impostazioni",
 "grp.config":"Configurazione","grp.system":"Sistema",
 "vt.mcp":"Server MCP","vt.hooks":"Hook di eventi","vt.commands":"Comandi personalizzati",
@@ -876,6 +901,7 @@ it:{
 "lang.label":"Lingua"
 },
 de:{
+"pal.title":"Farbpalette","pal.system":"System (dem OS folgen)","pal.custom":"eigene","pal.new":"Neue Palette…","pal.edit":"Palette bearbeiten","pal.delete":"Palette löschen","pal.deleteConfirm":"Palette „{name}“ löschen?","pal.saved":"Palette gespeichert","pal.hint":"Paletten und die aktive Auswahl werden mit der Terminal-Oberfläche, der Desktop-App und VS Code geteilt.","pal.id":"ID","pal.idTip":"Kleinbuchstaben in Kebab-Case, z. B. my-palette.","pal.name":"Name","pal.dark":"Dunkle Palette","pal.base":"Basispalette","pal.baseTip":"Liefert leer gelassene Farben.","pal.colors":"Farben (Hex)","ep.import":"Modelle importieren…","ep.importTitle":"Modelle von {name} importieren","ep.importHint":"Jedes gewählte Modell wird ein eigener Endpunkt mit den Einstellungen und Zugangsdaten dieses Endpunkts.","ep.importBtn":"Importieren","ep.importNone":"Keine neuen Modelle gefunden.","ep.importFailed":"Das Backend hat seine Modelle nicht aufgelistet.","ep.importAdded":"{n} Endpunkt(e) hinzugefügt.","ep.importQuerying":"Frage Modelle von {name} ab…",
 "nav.home":"Start","nav.chat":"Chat","nav.endpoints":"Endpunkte","nav.mcp":"MCP-Server","nav.prompts":"Prompts","nav.subagents":"Subagenten","nav.hooks":"Hooks","nav.commands":"Befehle","nav.keybindings":"Tastenkürzel","nav.skills":"Fähigkeiten","nav.sessions":"Sitzungen","nav.settings":"Einstellungen",
 "grp.config":"Konfiguration","grp.system":"System",
 "vt.mcp":"MCP-Server","vt.hooks":"Ereignis-Hooks","vt.commands":"Benutzerdefinierte Befehle",
@@ -897,6 +923,7 @@ de:{
 "lang.label":"Sprache"
 },
 zh:{
+"pal.title":"调色板","pal.system":"系统（跟随操作系统）","pal.custom":"自定义","pal.new":"新建调色板…","pal.edit":"编辑调色板","pal.delete":"删除调色板","pal.deleteConfirm":"删除调色板“{name}”？","pal.saved":"调色板已保存","pal.hint":"调色板和当前选择会与终端界面、桌面应用和 VS Code 共享。","pal.id":"ID","pal.idTip":"小写 kebab-case，例如 my-palette。","pal.name":"名称","pal.dark":"深色调色板","pal.base":"基础调色板","pal.baseTip":"为留空的颜色提供取值。","pal.colors":"颜色（十六进制）","ep.import":"导入模型…","ep.importTitle":"从 {name} 导入模型","ep.importHint":"所选的每个模型都会成为一个独立端点，沿用此端点的设置和凭据。","ep.importBtn":"导入","ep.importNone":"未发现新模型。","ep.importFailed":"后端未列出其模型。","ep.importAdded":"已添加 {n} 个端点。","ep.importQuerying":"正在向 {name} 查询模型…",
 "nav.home":"主页","nav.chat":"聊天","nav.endpoints":"端点","nav.mcp":"MCP 服务器","nav.prompts":"提示词","nav.subagents":"子代理","nav.hooks":"钩子","nav.commands":"命令","nav.keybindings":"快捷键","nav.skills":"技能","nav.sessions":"会话","nav.settings":"设置",
 "grp.config":"配置","grp.system":"系统",
 "vt.mcp":"MCP 服务器","vt.hooks":"事件钩子","vt.commands":"自定义命令",
@@ -918,6 +945,7 @@ zh:{
 "lang.label":"语言"
 },
 ar:{
+"pal.title":"لوحة الألوان","pal.system":"النظام (اتباع نظام التشغيل)","pal.custom":"مخصّصة","pal.new":"لوحة جديدة…","pal.edit":"تعديل اللوحة","pal.delete":"حذف اللوحة","pal.deleteConfirm":"حذف اللوحة «{name}»؟","pal.saved":"تم حفظ اللوحة","pal.hint":"تُشارك اللوحات والاختيار النشط مع واجهة الطرفية وتطبيق سطح المكتب وVS Code.","pal.id":"المعرّف","pal.idTip":"أحرف صغيرة بصيغة kebab-case، مثل my-palette.","pal.name":"الاسم","pal.dark":"لوحة داكنة","pal.base":"اللوحة الأساسية","pal.baseTip":"توفّر الألوان المتروكة فارغة.","pal.colors":"الألوان (ست عشري)","ep.import":"استيراد النماذج…","ep.importTitle":"استيراد النماذج من {name}","ep.importHint":"يصبح كل نموذج تختاره نقطة نهاية مستقلة بإعدادات نقطة النهاية هذه وبيانات اعتمادها.","ep.importBtn":"استيراد","ep.importNone":"لم يُعثر على نماذج جديدة.","ep.importFailed":"لم يعرض الخادم نماذجه.","ep.importAdded":"أُضيفت {n} نقطة نهاية.","ep.importQuerying":"جارٍ سؤال {name} عن نماذجه…",
 "nav.home":"الرئيسية","nav.chat":"الدردشة","nav.endpoints":"نقاط النهاية","nav.mcp":"خوادم MCP","nav.prompts":"التوجيهات","nav.subagents":"الوكلاء الفرعيون","nav.hooks":"الخطافات","nav.commands":"الأوامر","nav.keybindings":"اختصارات المفاتيح","nav.skills":"المهارات","nav.sessions":"الجلسات","nav.settings":"الإعدادات",
 "grp.config":"الإعداد","grp.system":"النظام",
 "vt.mcp":"خوادم MCP","vt.hooks":"خطافات الأحداث","vt.commands":"أوامر مخصصة",
@@ -939,6 +967,7 @@ ar:{
 "lang.label":"اللغة"
 },
 ru:{
+"pal.title":"Цветовая палитра","pal.system":"Системная (как в ОС)","pal.custom":"своя","pal.new":"Новая палитра…","pal.edit":"Изменить палитру","pal.delete":"Удалить палитру","pal.deleteConfirm":"Удалить палитру «{name}»?","pal.saved":"Палитра сохранена","pal.hint":"Палитры и текущий выбор общие для терминального интерфейса, настольного приложения и VS Code.","pal.id":"ID","pal.idTip":"Строчные буквы в kebab-case, например my-palette.","pal.name":"Название","pal.dark":"Тёмная палитра","pal.base":"Базовая палитра","pal.baseTip":"Задаёт незаполненные цвета.","pal.colors":"Цвета (hex)","ep.import":"Импорт моделей…","ep.importTitle":"Импорт моделей из {name}","ep.importHint":"Каждая выбранная модель станет отдельной конечной точкой с настройками и учётными данными этой.","ep.importBtn":"Импортировать","ep.importNone":"Новых моделей не найдено.","ep.importFailed":"Бэкенд не вернул список моделей.","ep.importAdded":"Добавлено конечных точек: {n}.","ep.importQuerying":"Запрашиваю модели у {name}…",
 "nav.home":"Главная","nav.chat":"Чат","nav.endpoints":"Эндпоинты","nav.mcp":"Серверы MCP","nav.prompts":"Промпты","nav.subagents":"Субагенты","nav.hooks":"Хуки","nav.commands":"Команды","nav.keybindings":"Горячие клавиши","nav.skills":"Навыки","nav.sessions":"Сессии","nav.settings":"Настройки",
 "grp.config":"Конфигурация","grp.system":"Система",
 "vt.mcp":"Серверы MCP","vt.hooks":"Хуки событий","vt.commands":"Пользовательские команды",
@@ -960,6 +989,7 @@ ru:{
 "lang.label":"Язык"
 },
 ms:{
+"pal.title":"Palet warna","pal.system":"Sistem (ikut OS)","pal.custom":"tersuai","pal.new":"Palet baharu…","pal.edit":"Sunting palet","pal.delete":"Padam palet","pal.deleteConfirm":"Padam palet “{name}”?","pal.saved":"Palet disimpan","pal.hint":"Palet dan pilihan aktif dikongsi dengan UI terminal, aplikasi desktop dan VS Code.","pal.id":"Id","pal.idTip":"Huruf kecil kebab-case, contohnya my-palette.","pal.name":"Nama","pal.dark":"Palet gelap","pal.base":"Palet asas","pal.baseTip":"Membekalkan warna yang dibiarkan kosong.","pal.colors":"Warna (hex)","ep.import":"Import model…","ep.importTitle":"Import model daripada {name}","ep.importHint":"Setiap model yang dipilih menjadi titik akhir sendiri dengan tetapan dan kelayakan titik akhir ini.","ep.importBtn":"Import","ep.importNone":"Tiada model baharu ditemui.","ep.importFailed":"Backend tidak menyenaraikan modelnya.","ep.importAdded":"{n} titik akhir ditambah.","ep.importQuerying":"Bertanya {name} tentang modelnya…",
 "nav.home":"Laman Utama","nav.chat":"Sembang","nav.endpoints":"Titik Akhir","nav.mcp":"Pelayan MCP","nav.prompts":"Gesaan","nav.subagents":"Subejen","nav.hooks":"Cangkuk","nav.commands":"Perintah","nav.keybindings":"Pintasan Papan Kekunci","nav.skills":"Kemahiran","nav.sessions":"Sesi","nav.settings":"Tetapan",
 "grp.config":"Konfigurasi","grp.system":"Sistem",
 "vt.mcp":"Pelayan MCP","vt.hooks":"Cangkuk Peristiwa","vt.commands":"Perintah Tersuai",
@@ -981,6 +1011,7 @@ ms:{
 "lang.label":"Bahasa"
 },
 hi:{
+"pal.title":"रंग पैलेट","pal.system":"सिस्टम (OS का पालन करें)","pal.custom":"कस्टम","pal.new":"नया पैलेट…","pal.edit":"पैलेट संपादित करें","pal.delete":"पैलेट हटाएँ","pal.deleteConfirm":"पैलेट “{name}” हटाएँ?","pal.saved":"पैलेट सहेजा गया","pal.hint":"पैलेट और सक्रिय चयन टर्मिनल UI, डेस्कटॉप ऐप और VS Code के साथ साझा होते हैं।","pal.id":"आईडी","pal.idTip":"छोटे अक्षरों में kebab-case, जैसे my-palette।","pal.name":"नाम","pal.dark":"गहरा पैलेट","pal.base":"आधार पैलेट","pal.baseTip":"खाली छोड़े गए रंग देता है।","pal.colors":"रंग (hex)","ep.import":"मॉडल आयात करें…","ep.importTitle":"{name} से मॉडल आयात करें","ep.importHint":"चुना गया हर मॉडल इस एंडपॉइंट की सेटिंग और क्रेडेंशियल के साथ अपना एंडपॉइंट बनेगा।","ep.importBtn":"आयात करें","ep.importNone":"कोई नया मॉडल नहीं मिला।","ep.importFailed":"बैकएंड ने अपने मॉडल सूचीबद्ध नहीं किए।","ep.importAdded":"{n} एंडपॉइंट जोड़े गए।","ep.importQuerying":"{name} से मॉडल पूछे जा रहे हैं…",
 "nav.home":"होम","nav.chat":"चैट","nav.endpoints":"एंडपॉइंट","nav.mcp":"MCP सर्वर","nav.prompts":"प्रॉम्प्ट","nav.subagents":"सबएजेंट","nav.hooks":"हुक","nav.commands":"कमांड","nav.keybindings":"कीबाइंडिंग","nav.skills":"स्किल","nav.sessions":"सत्र","nav.settings":"सेटिंग्स",
 "grp.config":"कॉन्फ़िगरेशन","grp.system":"सिस्टम",
 "vt.mcp":"MCP सर्वर","vt.hooks":"इवेंट हुक","vt.commands":"कस्टम कमांड",
@@ -1723,6 +1754,7 @@ function fieldHtml(f){
   if(f.type==="checkbox")inp='<input type="checkbox" id="'+id+'">';
   else if(f.type==="textarea"||f.type==="lines"){inp='<textarea id="'+id+'" rows="'+(f.rows||4)+'"'+(f.placeholder?' placeholder="'+esc(f.placeholder)+'"':'')+'></textarea>';if(f.copy)inp='<div class="copywrap">'+inp+'<button type="button" class="copybtn icon fieldcopy" data-copy-target="'+id+'" title="'+esc(t("act.copyskill"))+'" aria-label="'+esc(t("act.copyskill"))+'">⧉</button></div>';tall=" tall";}
   else if(f.type==="select"){var o="";for(var i=0;i<f.options.length;i++)o+='<option>'+esc(f.options[i])+'</option>';inp='<select id="'+id+'">'+o+'</select>';}
+  else if(f.type==="color")inp='<div class="colorfield"><input type="color" data-color-for="'+id+'" aria-label="'+esc(f.label)+'"><input type="text" id="'+id+'" placeholder="#rrggbb" spellcheck="false"></div>';
   else if(f.type==="multiselect"){var c="";for(var i=0;i<f.options.length;i++){var ov=f.options[i];c+='<label class="chip"><input type="checkbox" value="'+esc(ov)+'">'+esc(ov)+'</label>';}inp='<div class="chips" id="'+id+'">'+c+'</div>';tall=" tall";}
   else{inp='<input type="'+(f.type==="password"?"password":(f.type==="number"?"number":"text"))+'" id="'+id+'"'+(f.placeholder?' placeholder="'+esc(f.placeholder)+'"':'')+(f.step?' step="'+f.step+'"':'')+(f.tip?' title="'+esc(f.tip)+'"':'')+(f.list?' list="dl_'+f.id+'"':'')+'>';
     if(f.list){var dl="";for(var di=0;di<f.list.length;di++)dl+='<option value="'+esc(f.list[di])+'">';inp+='<datalist id="dl_'+f.id+'">'+dl+'</datalist>';}}
@@ -2920,12 +2952,97 @@ function switchView(view){
   if(VIEW_LOADERS[view])VIEW_LOADERS[view]();
 }
 
-function applyTheme(t){document.documentElement.setAttribute("data-theme",t);localStorage.setItem("mux.theme",t);
-  el("brandLogo").src=(t==="dark")?"__LOGO_DARK__":"__LOGO_LIGHT__";
-  el("themeIcon").textContent=(t==="dark")?"☀️":"🌙";}
+/* ================= Color palettes (shared with the TUI, desktop app, and VS Code) ================= */
+/* The palette list and the active choice come from /v1.0/api/palettes (settings.json colorPalette). Mux and
+   Mux Light keep the dashboard's own hand-tuned light/dark styles; every other palette maps its fourteen roles
+   onto the page's CSS custom properties. The last applied palette is cached per browser so a reload paints in
+   it before the API answers. */
+var PALETTES=null;
+var PALETTE_VARS=["--bg","--panel","--panel-2","--line","--text","--muted","--accent","--accent-2","--accent-text","--danger","--warning","--info","--hover","--sidebar","--sidebar-text","--sidebar-muted","--heat-0"];
+function hexRgb(h){h=(""+(h||"")).replace("#","");if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];var n=parseInt(h,16);return isNaN(n)||h.length!==6?null:[(n>>16)&255,(n>>8)&255,n&255];}
+function hexMix(a,b,t){var x=hexRgb(a),y=hexRgb(b);if(!x||!y)return a;var o="#";for(var i=0;i<3;i++){var v=Math.round(x[i]+(y[i]-x[i])*t);o+=(v<16?"0":"")+v.toString(16);}return o;}
+function paletteCss(p){var c=p.Colors||{},dark=!!p.Dark;
+  return {"--bg":c.background,"--panel":c.surface,"--panel-2":c.surfaceAlt,"--line":c.border,"--text":c.text,"--muted":c.muted,
+    "--accent":c.accent,"--accent-2":hexMix(c.accent,c.background,0.22),"--accent-text":c.accentText,"--danger":c.error,"--warning":c.warning,"--info":c.info,
+    "--hover":hexMix(c.surface,c.text,0.07),
+    "--sidebar":dark?hexMix(c.background,"#000000",0.3):hexMix(c.text,"#000000",0.12),
+    "--sidebar-text":dark?c.text:c.background,"--sidebar-muted":dark?c.muted:hexMix(c.background,c.text,0.4),
+    "--heat-0":hexMix(c.surface,c.text,0.1)};}
+function applyPalette(p){if(!p)return;var root=document.documentElement,native=(p.Id==="mux"||p.Id==="mux-light");
+  root.setAttribute("data-theme",p.Dark?"dark":"light");root.setAttribute("data-palette",p.Id);
+  for(var i=0;i<PALETTE_VARS.length;i++)root.style.removeProperty(PALETTE_VARS[i]);
+  if(!native){var css=paletteCss(p);for(var k in css)if(css[k])root.style.setProperty(k,css[k]);}
+  var c=p.Colors||{};root.style.setProperty("--cursor",c.cursor||c.accent);root.style.setProperty("--selection",c.selection||c.surfaceAlt);
+  el("brandLogo").src=p.Dark?"__LOGO_DARK__":"__LOGO_LIGHT__";
+  try{localStorage.setItem("mux.palette",JSON.stringify(p));localStorage.setItem("mux.theme",p.Dark?"dark":"light");}catch(e){}}
+function systemDark(){try{return window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;}catch(e){return false;}}
+function findPalette(id){if(!PALETTES)return null;for(var i=0;i<PALETTES.Palettes.length;i++)if(PALETTES.Palettes[i].Id===id)return PALETTES.Palettes[i];return null;}
+// The active choice: the shared colorPalette, else this browser's legacy light/dark toggle (light by default).
+function activePaletteId(){var id=PALETTES&&PALETTES.Active;
+  if(!id){var legacy=null;try{legacy=localStorage.getItem("mux.theme");}catch(e){}id=legacy==="dark"?"mux":"mux-light";}
+  return id;}
+function resolvePalette(id){if(id==="system")id=systemDark()?"mux":"mux-light";return findPalette(id)||findPalette("mux-light");}
+function loadPalettes(){return api("/v1.0/api/palettes").then(function(d){PALETTES=d;applyPalette(resolvePalette(activePaletteId()));return d;});}
+function setActivePalette(id){return api("/v1.0/api/palettes/active","PUT",{Id:id}).then(function(d){PALETTES=d;applyPalette(resolvePalette(id));});}
+function paletteSwatches(p){var c=p.Colors||{},keys=["background","surface","accent","text","cursor","success","warning","error"],h="";
+  for(var i=0;i<keys.length;i++)h+='<span class="pal-dot" style="background:'+esc(c[keys[i]]||"transparent")+'" title="'+esc(keys[i])+'"></span>';return h;}
+function openPalettePicker(){
+  var show=function(){var active=activePaletteId(),h='<div class="pal-grid">';
+    h+='<button class="pal-card'+(active==="system"?" active":"")+'" data-pal="system"><div class="pal-name">'+esc(t("pal.system"))+'</div><div class="pal-dots">'+paletteSwatches(findPalette("mux-light")||{})+paletteSwatches(findPalette("mux")||{})+'</div></button>';
+    PALETTES.Palettes.forEach(function(p){h+='<button class="pal-card'+(p.Id===active?" active":"")+'" data-pal="'+esc(p.Id)+'" style="background:'+esc(p.Colors.background)+';color:'+esc(p.Colors.text)+';border-color:'+esc(p.Colors.border)+'">'
+      +'<div class="pal-name">'+esc(p.Name)+(p.BuiltIn?'':' <span class="pal-tag" style="color:'+esc(p.Colors.accent)+'">'+esc(t("pal.custom"))+'</span>')+'</div>'
+      +'<div class="pal-sample" style="background:'+esc(p.Colors.surfaceAlt)+';color:'+esc(p.Colors.text)+'"><span style="color:'+esc(p.Colors.accent)+'">&gt;</span> mux<span class="pal-caret" style="background:'+esc(p.Colors.cursor)+'"></span></div>'
+      +'<div class="pal-dots">'+paletteSwatches(p)+'</div></button>';});
+    h+='</div><div class="hint" style="margin-top:10px">'+esc(t("pal.hint"))+'</div>';
+    var cur=findPalette(active);
+    var buttons=[{label:t("pal.new"),onClick:function(){openPaletteForm(null,cur||findPalette("mux"));}}];
+    if(cur&&!cur.BuiltIn)buttons.push({label:t("pal.edit"),onClick:function(){openPaletteForm(cur,cur);}});
+    buttons.push({label:t("act.close"),primary:true,onClick:closeModal});
+    openModal(t("pal.title"),h,buttons,true);
+    var cards=el("modalBody").querySelectorAll("[data-pal]");
+    for(var i=0;i<cards.length;i++)cards[i].addEventListener("click",function(){var id=this.getAttribute("data-pal");
+      setActivePalette(id).then(function(){show();}).catch(function(e){toast(e.message,true);});});};
+  (PALETTES?Promise.resolve(PALETTES):loadPalettes()).then(show).catch(function(e){toast(e.message,true);});}
+var PALETTE_ROLES=["background","surface","surfaceAlt","border","text","muted","accent","accentText","cursor","selection","success","warning","error","info"];
+function openPaletteForm(existing,seed){var isEdit=!!existing,bases=PALETTES.Palettes.filter(function(p){return !existing||p.Id!==existing.Id;}).map(function(p){return p.Id;});
+  var fields=[{id:"Id",label:t("pal.id"),placeholder:"my-palette",tip:t("pal.idTip"),disabled:isEdit},{id:"Name",label:t("pal.name")},
+    {id:"Dark",label:t("pal.dark"),type:"checkbox"},{id:"Base",label:t("pal.base"),type:"select",options:[""].concat(bases),tip:t("pal.baseTip")},{type:"section",label:t("pal.colors")}];
+  PALETTE_ROLES.forEach(function(r){fields.push({id:"c_"+r,label:r,type:"color"});});
+  var v={Id:isEdit?existing.Id:"",Name:isEdit?existing.Name:(seed.Name+" copy"),Dark:!!seed.Dark,Base:isEdit?(existing.Base||""):(seed.BuiltIn?seed.Id:(seed.Base||""))};
+  PALETTE_ROLES.forEach(function(r){v["c_"+r]=(seed.Colors||{})[r]||"";});
+  var extra=isEdit?[{label:t("pal.delete"),danger:true,onClick:function(){confirmModal(t("pal.deleteConfirm",{name:existing.Name}),function(){
+      api("/v1.0/api/palettes?id="+encodeURIComponent(existing.Id),"DELETE").then(function(d){PALETTES=d;applyPalette(resolvePalette(activePaletteId()));toast(t("toast.deleted"));closeModal();}).catch(function(e){toast(e.message,true);});});}}]:[];
+  formModal(isEdit?t("pal.edit"):(""+t("pal.new")).replace(/…$/,""),fields,v,function(o){var colors={};PALETTE_ROLES.forEach(function(r){var x=(o["c_"+r]||"").trim();if(x)colors[r]=x;});
+    var body={Activate:true,Palette:{Id:isEdit?existing.Id:(o.Id||"").trim(),Name:(o.Name||"").trim(),Dark:!!o.Dark,Base:o.Base||null,Colors:colors}};
+    api("/v1.0/api/palettes","PUT",body).then(function(d){PALETTES=d;var saved=findPalette(body.Palette.Id.toLowerCase());if(saved)applyPalette(saved);closeModal();toast(t("pal.saved"));}).catch(function(e){toast(e.message,true);});},true,extra);
+  wireColorFields();}
+// Pairs each color field's text input with a native color picker and keeps them in sync.
+function wireColorFields(){var pickers=el("modalBody").querySelectorAll("input[data-color-for]");
+  for(var i=0;i<pickers.length;i++){(function(pk){var txt=el(pk.getAttribute("data-color-for"));if(!txt)return;
+    var sync=function(){var r=hexRgb(txt.value);if(r)pk.value="#"+r.map(function(n){return (n<16?"0":"")+n.toString(16);}).join("");};sync();
+    pk.addEventListener("input",function(){txt.value=pk.value;});txt.addEventListener("input",sync);})(pickers[i]);}}
+/* Import models: ask the endpoint's backend which models its credentials can use, then add the chosen ones as
+   copies of the endpoint (cloned on the server so stored keys carry over). */
+function importEpModels(i){var src=_ep[i];if(!src)return;toast(t("ep.importQuerying",{name:src.Name}));
+  api("/v1.0/api/endpoints/models?name="+encodeURIComponent(src.Name)).then(function(r){
+    if(!r||!r.Success){toast((r&&r.ErrorMessage)||t("ep.importFailed"),true);return;}
+    var have={};_ep.forEach(function(e){if(e.AdapterType===src.AdapterType&&(""+(e.BaseUrl||"")).replace(/\/+$/,"")===(""+(src.BaseUrl||"")).replace(/\/+$/,""))have[(e.Model||"").toLowerCase()]=1;});
+    var fresh=(r.Models||[]).filter(function(m){return !have[(m||"").toLowerCase()];});
+    if(!fresh.length){toast(t("ep.importNone"));return;}
+    var h='<div class="hint" style="margin-bottom:8px">'+esc(t("ep.importHint"))+'</div><div class="imp-list">';
+    fresh.forEach(function(m,k){h+='<label class="imp-row"><input type="checkbox" value="'+esc(m)+'"> <span class="mono">'+esc(m)+'</span></label>';});
+    h+='</div>';
+    openModal(t("ep.importTitle",{name:src.Name}),h,[{label:t("act.cancel"),onClick:closeModal},{label:t("ep.importBtn"),primary:true,onClick:function(){
+      var picked=[],bs=el("modalBody").querySelectorAll(".imp-row input:checked");for(var j=0;j<bs.length;j++)picked.push(bs[j].value);
+      if(!picked.length){closeModal();return;}
+      api("/v1.0/api/endpoints/import","POST",{Source:src.Name,Models:picked}).then(function(d){_ep=(d&&d.Items)||_ep;closeModal();renderEp();loadEndpoints();toast(t("ep.importAdded",{n:picked.length}));}).catch(function(e){toast(e.message,true);});}}],true);
+  }).catch(function(e){toast(e.message,true);});}
+// Legacy light/dark entry point, kept for callers and tests: maps onto the Mux / Mux Light palettes.
+function applyTheme(mode){var p=findPalette(mode==="dark"?"mux":"mux-light");if(p)applyPalette(p);
+  else{document.documentElement.setAttribute("data-theme",mode);el("brandLogo").src=(mode==="dark")?"__LOGO_DARK__":"__LOGO_LIGHT__";try{localStorage.setItem("mux.theme",mode);}catch(e){}}}
 
 document.querySelectorAll(".nav-item").forEach(function(n){n.addEventListener("click",function(){switchView(n.dataset.view);});});
-el("themeBtn").addEventListener("click",function(){applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");});
+el("themeBtn").addEventListener("click",openPalettePicker);
 el("sendBtn").addEventListener("click",function(){if(busy)stopChat();else sendChat();});
 el("newChatBtn").addEventListener("click",newChat);
 el("delMultiBtn").addEventListener("click",function(){if(convoSel)exitConvoSelect();else enterConvoSelect();});
@@ -2998,7 +3115,7 @@ on("keybindings_add",function(){openKb(-1);});on("keybindings_reload",loadKeybin
 on("skills_add",function(){openSk(null);});on("skills_packs",openPacks);on("skills_reload",loadSkills);(function(){var sc=el("sk_cat");if(sc)sc.addEventListener("change",function(){_skCat=sc.value;renderSk();});})();loadSkCats();on("sessions_reload",loadSessions);on("sessions_delmulti",deleteMultiple);
 on("usage_refresh",refreshUsage);on("pricing_add",function(){openPrice(-1);});on("pricing_reload",loadPricing);
 /* row context-menus + row-click-to-edit + empty-state add */
-wireTable("endpoints_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openEp(i);}},{label:t("act.duplicate"),run:function(){openEp(-1,dupOf(_ep[i],"Name"));}},{label:t("act.viewjson"),run:function(){viewJson("Endpoint · "+_ep[i].Name,_ep[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delEp(_ep[i].Name);}}];},row:function(i){openEp(i);},add:function(){openEp(-1);}});
+wireTable("endpoints_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openEp(i);}},{label:t("act.duplicate"),run:function(){openEp(-1,dupOf(_ep[i],"Name"));}},{label:t("ep.import"),run:function(){importEpModels(i);}},{label:t("act.viewjson"),run:function(){viewJson("Endpoint · "+_ep[i].Name,_ep[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delEp(_ep[i].Name);}}];},row:function(i){openEp(i);},add:function(){openEp(-1);}});
 wireTable("mcp_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openMcp(i);}},{label:t("act.duplicate"),run:function(){openMcp(-1,dupOf(_mcp[i],"Name"));}},{label:t("act.validate"),run:function(){validateMcp(_mcp[i].Name);}},{label:t("act.viewjson"),run:function(){viewJson("MCP server · "+_mcp[i].Name,_mcp[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delMcp(_mcp[i].Name);}}];},row:function(i){openMcp(i);},add:function(){openMcp(-1);}});
 wireTable("prompts_list",{menu:function(i){return [{label:t("act.edit"),run:function(){openPr(i);}},{label:t("act.duplicate"),run:function(){openPr(-1,dupOf(_pr[i],"Name"));}},{label:t("act.viewjson"),run:function(){viewJson("Prompt profile · "+_pr[i].Name,_pr[i]);}},{sep:true},{label:t("act.delete"),danger:true,run:function(){delPr(i);}}];},row:function(i){openPr(i);},add:function(){openPr(-1);}});
 wireTable("catalog_list",{menu:function(i){var c=_cat[i];var items=[];if(c.Editable){items.push({label:t("act.edit"),run:function(){openCat(i);}});if(c.Overridden)items.push({label:t("act.reset"),run:function(){resetCat(i);}});}else{items.push({label:t("act.view"),run:function(){openCat(i);}});}items.push({label:t("act.viewjson"),run:function(){viewJson("Prompt · "+c.Key,c);}});return items;},row:function(i){openCat(i);}});
@@ -3027,7 +3144,10 @@ el("view-home").addEventListener("click",function(e){
   var r=e.target.closest?e.target.closest("[data-retryhome]"):null;if(r){loadHome();return;}
   var c=e.target.closest?e.target.closest("[data-copytext]"):null;if(c){copyText(c.getAttribute("data-copytext"),c);return;}
 });
-applyTheme(localStorage.getItem("mux.theme")||"light");
+(function(){var cached=null;try{cached=JSON.parse(localStorage.getItem("mux.palette")||"null");}catch(e){}
+  if(cached&&cached.Colors)applyPalette(cached);else{var legacy=null;try{legacy=localStorage.getItem("mux.theme");}catch(e){}applyTheme(legacy||"light");}
+  loadPalettes().catch(function(){});
+  try{window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",function(){if(activePaletteId()==="system")applyPalette(resolvePalette("system"));});}catch(e){}})();
 el("serverUrl").textContent=location.host;
 /* i18n: apply saved locale to the static chrome, wire the language picker */
 el("langSel").value=LOCALE;

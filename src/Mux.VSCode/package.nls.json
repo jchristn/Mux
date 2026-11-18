@@ -63,5 +63,11 @@
   "config.locale": "Display language override (BCP 47). Empty follows the editor language.",
   "cmd.manage.editCatalog": "Edit prompt override",
   "cmd.manage.resetCatalog": "Reset to default",
-  "config.context.largeFileMode": "How a large active file becomes editor context: inherit the server’s setting, or force map, summarize, or truncate."
+  "config.context.largeFileMode": "How a large active file becomes editor context: inherit the server’s setting, or force map, summarize, or truncate.",
+  "cmd.selectPalette": "Select Color Palette",
+  "cmd.editPalette": "Create or Edit Color Palette",
+  "cmd.manage.importModels": "Import Models…",
+  "config.colorPalette": "Colors for the mux webviews (chat, usage, forms). `editor` follows your VS Code theme; `mux` uses the palette chosen on any mux surface (terminal, desktop app, web dashboard), shared through settings.json.",
+  "config.colorPalette.editor": "Follow the VS Code color theme.",
+  "config.colorPalette.mux": "Use the shared mux color palette."
 }

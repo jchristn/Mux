@@ -1,6 +1,8 @@
 import * as crypto from 'crypto';
 import * as os from 'os';
 import * as vscode from 'vscode';
+import { PALETTE_UPDATE_SCRIPT, paletteStyleTag } from '../theme/palette';
+import { PaletteService } from '../theme/PaletteService';
 import { ApiClient } from '../api/ApiClient';
 import { UsageBreakdownRow, UsageBucket, UsageDistribution, UsageErrorCount, UsageEventRow, UsageHeatmap, UsageSeries, UsageSummary } from '../api/types';
 import { MuxServerLifecycle } from '../server/lifecycle';
@@ -233,7 +235,9 @@ export class UsagePanel {
                 void UsagePanel.exportPng(message.tab ?? '', message.dataUrl ?? '');
             }
         });
+        const paletteSub = PaletteService.subscribe((css) => void panel.webview.postMessage({ type: 'muxPalette', css }));
         panel.onDidDispose(() => {
+            paletteSub.dispose();
             UsagePanel.current = undefined;
         });
         UsagePanel.current = panel;
@@ -671,6 +675,7 @@ export class UsagePanel {
   .table-wrap { overflow-x: auto; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 </style>
+${paletteStyleTag(nonce, PaletteService.css)}
 </head>
 <body>
 <h1 id="title"></h1>
@@ -703,6 +708,7 @@ export class UsagePanel {
 </div>
 <div class="sr" id="live" aria-live="polite"></div>
 <script nonce="${nonce}">
+${PALETTE_UPDATE_SCRIPT}
   const vscode = acquireVsCodeApi();
   const S = ${strings};
   const NS = 'http://www.w3.org/2000/svg';

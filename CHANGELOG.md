@@ -62,6 +62,42 @@ or Google accounts, and does not use subscription quotas.
   `mux endpoint show`.
 - Docs: a "Which adapter?" table for OpenAI, a Google Antigravity note (its Gemini models are reached through
   `gemini` with an AI Studio key; account sign-in is not supported), and the API-keys-only policy.
+- **Shared color palettes on every surface.** Fourteen built-in palettes (Mux, Mux Light, Midnight, Ocean,
+  Aurora, Forest, Ember, Rosewood, Lavender Dusk, Graphite, Glacier, Sandstone, Meadow, High Contrast), each
+  checked against WCAG contrast floors, plus custom palettes that inherit any color they leave out from a base
+  palette. The choice is `colorPalette` in `settings.json`, so picking a palette in one surface applies it to
+  the others:
+  - Terminal: `/theme` (or `/palette`) lists every palette and can create, edit, and delete custom ones.
+    Palettes other than Mux paint the whole screen.
+  - Desktop app: **View > Theme** and **Settings > Theme**, with a **Customize palettes…** editor that shows a
+    live swatch per color.
+  - Web dashboard: the palette button in the top bar opens a picker with previews, and **New palette…** opens a
+    form with color pickers.
+  - VS Code: **mux: Select Color Palette** and **mux: Create or Edit Color Palette**. The new
+    `mux.colorPalette` setting defaults to `editor` (follow the VS Code theme); `mux` applies the shared
+    palette to the chat, usage, form, and about views.
+- **A blinking caret in the palette's cursor color** in the terminal prompt (`cursorBlink`, default on; toggle it
+  in the palette picker). The desktop app, web dashboard, and VS Code use the cursor color for their own
+  native caret and the palette's selection color for selected text.
+- **REST:** `GET /v1.0/api/palettes`, `PUT /v1.0/api/palettes/active`, `PUT /v1.0/api/palettes`, and
+  `DELETE /v1.0/api/palettes`; `GET /v1.0/api/endpoints/models?name=` lists an endpoint's models, and
+  `POST /v1.0/api/endpoints/import` adds chosen models as copies of an endpoint. The copies are made on the
+  server, so stored keys carry over.
+- **Import models from any endpoint** in the terminal (**Endpoints / models > Import models from an
+  endpoint…**), the web dashboard (endpoint row menu **Import models…**), and VS Code (endpoint context menu
+  **Import Models…**), alongside the desktop app's existing import. Each model becomes an endpoint that copies
+  the source's adapter, URL, credentials, region, and project.
+
+### Fixed
+
+- **The terminal endpoint editor (`/endpoints`, `/models`, Ctrl+E) offers every adapter.** It listed only
+  `openai-compatible`, `ollama`, `openai`, `vllm`, `ollama-cloud`, and `xai`. Editing an `anthropic`, `gemini`,
+  `azure-openai`, `vertex`, or `bedrock` endpoint silently saved it as `openai-compatible` and dropped its
+  `region`, `project`, and `apiVersion`. The form now has all 11 adapters, region and project fields for Vertex
+  and Bedrock, and shows only the fields that apply to the selected adapter, as the desktop, web, and VS Code
+  forms already did. Fields the form does not show are kept on save.
+- **`tuiTheme` was dropped every time settings loaded**, so a terminal theme choice did not survive a restart.
+  Settings normalization now keeps it, along with the new `colorPalette`, `customPalettes`, and `cursorBlink`.
 
 ### Notes
 
@@ -84,6 +120,12 @@ or Google accounts, and does not use subscription quotas.
   missing key), endpoint advisories, the `mux probe` Responses check, applied effort storage, the schema v1
   to v2 `usage.db` migration, and `--effort none`/`xhigh`/`max`.
 - No live provider calls were made.
+- Palettes and endpoint editors: Test.Automated on .NET 10 ran 2055 cases: 2031 passed, 23 skipped, and 1
+  failed. The failure is `IdleArtworkLifecycle`, which fails the same way on the unmodified previous commit in
+  this environment. The 16-case `Palettes` suite, plus `FormModals`, `Polish`, `MuxServerRoutes`,
+  `KeybindingEditor`, `EndpointManagement`, and `BoundaryLines`, pass on .NET 8 and .NET 10. VS Code extension:
+  142 passed. The web dashboard was driven in headless Chrome (palette picker, a light palette, the palette
+  form) with no script errors.
 
 ## 1.7.0 (unreleased)
 

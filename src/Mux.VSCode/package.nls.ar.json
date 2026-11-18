@@ -63,5 +63,11 @@
   "cmd.runSetup": "تشغيل معالج الإعداد",
   "cmd.manage.editCatalog": "تحرير تجاوز الموجه",
   "cmd.manage.resetCatalog": "إعادة التعيين إلى الافتراضي",
-  "config.context.largeFileMode": "كيف يصبح الملف النشط الكبير سياقًا في المحرر: وراثة إعداد الخادم أو فرض map أو summarize أو truncate."
+  "config.context.largeFileMode": "كيف يصبح الملف النشط الكبير سياقًا في المحرر: وراثة إعداد الخادم أو فرض map أو summarize أو truncate.",
+  "cmd.selectPalette": "اختيار لوحة الألوان",
+  "cmd.editPalette": "إنشاء لوحة ألوان أو تعديلها",
+  "cmd.manage.importModels": "استيراد النماذج…",
+  "config.colorPalette": "ألوان واجهات الويب في mux (الدردشة والاستخدام والنماذج). `editor` يتبع سمة VS Code؛ و`mux` يستخدم اللوحة المختارة في أي واجهة mux (الطرفية وتطبيق سطح المكتب ولوحة الويب)، وتُشارك عبر settings.json.",
+  "config.colorPalette.editor": "اتباع سمة ألوان VS Code.",
+  "config.colorPalette.mux": "استخدام لوحة ألوان mux المشتركة."
 }

@@ -10,6 +10,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Media;
     using Mux.Core.Models;
     using Mux.Core.Settings;
+    using Mux.Core.Theming;
     using Mux.Desktop.I18n;
 
     /// <summary>
@@ -21,7 +22,8 @@ namespace Mux.Desktop.Views
     /// </summary>
     public sealed class SettingsWindow : Window
     {
-        private static readonly string[] ThemeValues = { "system", "light", "dark", "highcontrast" };
+        // "system" (follow the OS) followed by every palette id, in picker order; rebuilt after palette edits.
+        private string[] _ThemeValues = Array.Empty<string>();
         private static readonly string[] ApprovalValues = { "ask", "auto", "deny" };
         private static readonly string[] CompactionValues = { "summary", "trim" };
         private static readonly string[] EnqueueValues = { "ask", "run_now", "queue_after", "add_to_focused" };
@@ -31,6 +33,7 @@ namespace Mux.Desktop.Views
         private readonly Action<string>? _OnThemeMode;
 
         private readonly ComboBox _ThemeSelector = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
+        private bool _PopulatingThemes;
         private readonly TextBox _ToolAutoApproveSeconds = new TextBox();
         private readonly ComboBox _ApprovalPolicy = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly TextBox _MaxIterations = new TextBox();
@@ -89,18 +92,15 @@ namespace Mux.Desktop.Views
             _OnThemeMode = onThemeMode;
             _Settings = SettingsLoader.LoadSettings();
 
-            _ThemeSelector.ItemsSource = new List<string>
-            {
-                Localizer.T("settings.theme.system"), Localizer.T("settings.theme.light"),
-                Localizer.T("settings.theme.dark"), Localizer.T("settings.theme.highContrast")
-            };
-            _ThemeSelector.SelectedIndex = IndexOfValue(ThemeValues, currentThemeMode, 2);
+            PopulateThemeSelector(currentThemeMode);
             _ThemeSelector.SelectionChanged += (sender, args) =>
             {
                 int index = _ThemeSelector.SelectedIndex;
-                if (index >= 0 && index < ThemeValues.Length)
+                if (!_PopulatingThemes && index >= 0 && index < _ThemeValues.Length)
                 {
-                    _OnThemeMode?.Invoke(ThemeValues[index]);
+                    // Keep the settings object in step so a later Save does not write back the old palette.
+                    _Settings.ColorPalette = _ThemeValues[index];
+                    _OnThemeMode?.Invoke(_ThemeValues[index]);
                 }
             };
 
@@ -190,6 +190,22 @@ namespace Mux.Desktop.Views
 
             form.Children.Add(Section(Localizer.T("settings.sec.general")));
             form.Children.Add(LabeledRow(Localizer.T("settings.theme"), _ThemeSelector, Localizer.T("settings.theme.tip")));
+            Button customize = new Button { Content = Localizer.T("settings.theme.customize"), HorizontalAlignment = HorizontalAlignment.Left };
+            customize.Click += async (sender, args) =>
+            {
+                string current = _ThemeSelector.SelectedIndex >= 0 && _ThemeSelector.SelectedIndex < _ThemeValues.Length
+                    ? _ThemeValues[_ThemeSelector.SelectedIndex]
+                    : ColorPaletteCatalog.DefaultId;
+                string? chosen = await new PaletteEditorDialog(current).ShowDialog<string?>(this);
+                _Settings.CustomPalettes = SettingsLoader.LoadSettings().CustomPalettes;
+                PopulateThemeSelector(chosen ?? current);
+                if (chosen != null)
+                {
+                    _Settings.ColorPalette = chosen;
+                    _OnThemeMode?.Invoke(chosen);
+                }
+            };
+            form.Children.Add(LabeledRow(string.Empty, customize, Localizer.T("settings.theme.customize.tip")));
             form.Children.Add(LabeledRow("Tool auto-approve seconds", _ToolAutoApproveSeconds, "0 disables timed approval. Endpoints can override this value."));
             form.Children.Add(LabeledRow(Localizer.T("settings.approval"), _ApprovalPolicy, Localizer.T("settings.approval.tip")));
             form.Children.Add(LabeledRow(Localizer.T("settings.maxIter"), _MaxIterations, Localizer.T("settings.maxIter.tip")));
@@ -354,6 +370,31 @@ namespace Mux.Desktop.Views
         }
 
         // Map a stored canonical value to its index in the option list (for preselecting a localized combo).
+        // Fills the theme picker with "System" and every built-in and custom palette, then selects the current one.
+        private void PopulateThemeSelector(string? current)
+        {
+            List<ColorPalette> palettes = ColorPaletteCatalog.GetAll(SettingsLoader.LoadSettings().CustomPalettes);
+            List<string> values = new List<string> { ColorPaletteCatalog.SystemId };
+            List<string> labels = new List<string> { Localizer.T("settings.theme.system") };
+            foreach (ColorPalette palette in palettes)
+            {
+                values.Add(palette.Id);
+                labels.Add(palette.BuiltIn ? palette.Name : palette.Name + " (" + Localizer.T("settings.theme.custom") + ")");
+            }
+
+            _PopulatingThemes = true;
+            try
+            {
+                _ThemeValues = values.ToArray();
+                _ThemeSelector.ItemsSource = labels;
+                _ThemeSelector.SelectedIndex = IndexOfValue(_ThemeValues, current, 1);
+            }
+            finally
+            {
+                _PopulatingThemes = false;
+            }
+        }
+
         private static int IndexOfValue(string[] values, string? current, int fallback)
         {
             string candidate = (current ?? string.Empty).Trim().ToLowerInvariant();

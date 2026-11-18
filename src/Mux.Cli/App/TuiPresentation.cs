@@ -88,45 +88,22 @@ namespace Mux.Cli.App
             }
         }
 
-        public static int ThemeIndexForName(string? name)
+        /// <summary>
+        /// The picker label for a palette: its name, whether it is light or dark, and a custom tag.
+        /// </summary>
+        /// <param name="palette">The palette.</param>
+        /// <returns>For example "Midnight (dark)" or "Team (light, custom)".</returns>
+        public static string PaletteLabel(Mux.Core.Theming.ColorPalette palette)
         {
-            switch ((name ?? string.Empty).Trim().ToLowerInvariant())
+            if (palette == null) return "palette";
+            string name = string.IsNullOrWhiteSpace(palette.Name) ? palette.Id : palette.Name;
+            string kind = palette.Dark ? "dark" : "light";
+            if (string.Equals(palette.Id, Mux.Core.Theming.ColorPaletteCatalog.DefaultId, StringComparison.Ordinal))
             {
-                case "dark":
-                    return 1;
-                case "light":
-                    return 2;
-                case "highcontrast":
-                    return 3;
-                default:
-                    return 0;
-            }
-        }
-
-        public static string ThemeNameForIndex(int index)
-        {
-            switch (index)
-            {
-                case 1:
-                    return "dark";
-                case 2:
-                    return "light";
-                case 3:
-                    return "highcontrast";
-                default:
-                    return "mux";
-            }
-        }
-
-        public static string ThemeLabel(Theme theme)
-        {
-            string name = theme.Name ?? string.Empty;
-            if (name.Length == 0)
-            {
-                return "theme";
+                kind = "default, terminal background";
             }
 
-            return char.ToUpperInvariant(name[0]) + name.Substring(1);
+            return name + " (" + kind + (palette.BuiltIn ? string.Empty : ", custom") + ")";
         }
 
         public static string ScopeLabel(Mux.Core.Memory.MemoryScopeEnum scope)

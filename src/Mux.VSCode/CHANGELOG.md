@@ -2,6 +2,15 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## Unreleased
+
+- **Color palettes.** The new `mux.colorPalette` setting defaults to `editor`, which follows your VS Code theme.
+  Set it to `mux` to render the chat, usage, form, and about views in the palette chosen on any mux surface
+  (terminal, desktop app, web dashboard). **mux: Select Color Palette** picks a palette, and that choice is saved
+  for every surface. **mux: Create or Edit Color Palette** creates or edits a custom palette.
+- **Import Models…** on an endpoint's context menu lists the models the endpoint's backend offers and adds the
+  chosen ones as endpoints, each copying the source endpoint's settings and stored credentials.
+
 ## 1.8.2
 
 - The mux mark above "Ask mux about your code" in an empty Chat view is now the pixel "M" logo. It was a

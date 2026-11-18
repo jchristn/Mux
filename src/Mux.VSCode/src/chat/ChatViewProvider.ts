@@ -1,6 +1,8 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
+import { PALETTE_UPDATE_SCRIPT, paletteStyleTag } from '../theme/palette';
+import { PaletteService } from '../theme/PaletteService';
 import { ApiClient } from '../api/ApiClient';
 import { LargeFileMode, readSettings } from '../config/settings';
 import { collectContext, workspaceRootPath } from '../context/providers';
@@ -61,6 +63,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         };
         view.webview.html = this.renderHtml(view.webview);
         view.webview.onDidReceiveMessage((message: InboundMessage) => this.onMessage(message));
+        const paletteSub = PaletteService.subscribe((css) => void view.webview.postMessage({ type: 'muxPalette', css }));
+        view.onDidDispose(() => paletteSub.dispose());
     }
 
     /** Starts a new, empty conversation bound to this workspace. */
@@ -652,7 +656,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const strings = JSON.stringify(this.uiStrings());
         const csp = [
             "default-src 'none'",
-            `style-src ${webview.cspSource}`,
+            `style-src ${webview.cspSource} 'nonce-${nonce}'`,
             `script-src 'nonce-${nonce}'`,
             `font-src ${webview.cspSource}`,
         ].join('; ');
@@ -663,6 +667,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 <meta charset="UTF-8" />
 <meta http-equiv="Content-Security-Policy" content="${csp}" />
 <link rel="stylesheet" href="${asset('style.css')}" />
+${paletteStyleTag(nonce, PaletteService.css)}
 </head>
 <body>
 <div id="transcript" aria-live="polite"></div>
@@ -672,6 +677,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   <textarea id="input" rows="1" placeholder="${this.uiStrings()['composer.aria']}" aria-label="${this.uiStrings()['composer.aria']}"></textarea>
   <button id="send" type="submit">${this.uiStrings()['composer.send']}</button>
 </form>
+<script nonce="${nonce}">${PALETTE_UPDATE_SCRIPT}</script>
 <script nonce="${nonce}">window.MUX_STRINGS = ${strings}; window.MUX_SLASH_COMMANDS = ${JSON.stringify(CHAT_SLASH_COMMANDS)};</script>
 <script nonce="${nonce}">${this.readAsset('markdown.js')}</script>
 <script nonce="${nonce}">${this.readAsset('slash-completion.js')}</script>

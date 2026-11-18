@@ -63,5 +63,11 @@
   "cmd.runSetup": "सेटअप विज़ार्ड चलाएँ",
   "cmd.manage.editCatalog": "प्रॉम्प्ट ओवरराइड संपादित करें",
   "cmd.manage.resetCatalog": "डिफ़ॉल्ट पर रीसेट करें",
-  "config.context.largeFileMode": "एक बड़ी सक्रिय फ़ाइल एडिटर संदर्भ कैसे बनती है: सर्वर सेटिंग इनहेरिट करें, या map, summarize या truncate को बाध्य करें।"
+  "config.context.largeFileMode": "एक बड़ी सक्रिय फ़ाइल एडिटर संदर्भ कैसे बनती है: सर्वर सेटिंग इनहेरिट करें, या map, summarize या truncate को बाध्य करें।",
+  "cmd.selectPalette": "रंग पैलेट चुनें",
+  "cmd.editPalette": "रंग पैलेट बनाएँ या संपादित करें",
+  "cmd.manage.importModels": "मॉडल आयात करें…",
+  "config.colorPalette": "mux वेबव्यू (चैट, उपयोग, फ़ॉर्म) के रंग। `editor` आपकी VS Code थीम का पालन करता है; `mux` किसी भी mux सतह (टर्मिनल, डेस्कटॉप ऐप, वेब डैशबोर्ड) पर चुने गए पैलेट का उपयोग करता है, जो settings.json से साझा होता है।",
+  "config.colorPalette.editor": "VS Code रंग थीम का पालन करें।",
+  "config.colorPalette.mux": "साझा mux रंग पैलेट का उपयोग करें।"
 }

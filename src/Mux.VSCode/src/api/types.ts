@@ -537,3 +537,14 @@ export type StreamEvent =
     | { event: 'done'; data: ChatDone }
     | { event: 'canceled'; data: ChatRunEvent }
     | { event: 'error'; data: string };
+
+/** The models an endpoint's backend advertises, from `GET /v1.0/api/endpoints/models`. */
+export interface EndpointModels {
+    Name: string;
+    AdapterType: string;
+    ConfiguredModel: string;
+    Success: boolean;
+    Models: string[];
+    ErrorCode?: string | null;
+    ErrorMessage?: string | null;
+}

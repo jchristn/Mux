@@ -78,6 +78,51 @@ export class ManageActions {
         });
     }
 
+    /**
+     * Asks the endpoint's backend which models its credentials can use and adds the chosen ones as new endpoints
+     * (copies of this one, made on the server so stored keys carry over).
+     */
+    public async importModels(node: ManageNode): Promise<void> {
+        const summary = node.data as { Name: string } | undefined;
+        if (!summary) {
+            return;
+        }
+
+        await this.withClient(async (client) => {
+            const listing = await vscode.window.withProgress(
+                { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t('Asking {0} for its models…', summary.Name) },
+                () => client.getEndpointModels(summary.Name),
+            );
+            if (!listing.Success) {
+                void vscode.window.showWarningMessage(listing.ErrorMessage || vscode.l10n.t('The backend did not list its models.'));
+                return;
+            }
+
+            const all = await client.getEndpointDetails();
+            const source = all.find((e) => e.Name === summary.Name);
+            const sameBackend = (e: EndpointDetail): boolean => !!source && e.AdapterType === source.AdapterType
+                && (e.BaseUrl ?? '').replace(/\/+$/, '') === (source.BaseUrl ?? '').replace(/\/+$/, '');
+            const configured = new Set(all.filter(sameBackend).map((e) => (e.Model ?? '').toLowerCase()));
+            const fresh = listing.Models.filter((m) => !configured.has(m.toLowerCase()));
+            if (fresh.length === 0) {
+                void vscode.window.showInformationMessage(vscode.l10n.t('No new models found on {0}.', summary.Name));
+                return;
+            }
+
+            const picked = await vscode.window.showQuickPick(fresh.map((m) => ({ label: m })), {
+                canPickMany: true,
+                placeHolder: vscode.l10n.t('Models to add as endpoints (each copies {0}\'s settings and credentials)', summary.Name),
+            });
+            if (!picked || picked.length === 0) {
+                return;
+            }
+
+            await client.importEndpointModels(summary.Name, picked.map((p) => p.label));
+            this.refresh();
+            void vscode.window.showInformationMessage(vscode.l10n.t('Added {0} endpoint(s).', picked.length));
+        });
+    }
+
     private editEndpointForm(existing: EndpointDetail | undefined): Promise<void> {
         return this.withClient(async (client) => {
             const all = await client.getEndpointDetails();

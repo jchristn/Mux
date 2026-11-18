@@ -153,6 +153,92 @@ namespace Mux.Server.Routes
                     return (object)new ApiError("DeleteFailed", "Failed to delete endpoint: " + ex.Message);
                 }
             }, Documentation.ApiDoc.EndpointsDelete);
+
+            app.Get("/v1.0/api/endpoints/models", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();
+
+                string? name = req.Http.Request.Query.Elements["name"];
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiError("BadRequest", "A 'name' query parameter is required.");
+                }
+
+                EndpointConfig? endpoint = _EndpointsProvider()
+                    .FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (endpoint == null)
+                {
+                    req.Http.Response.StatusCode = 404;
+                    return (object)new ApiError("NotFound", "No endpoint named '" + name + "'.");
+                }
+
+                // Asks the endpoint's backend which models its credentials can use (OpenAI, Anthropic, Gemini,
+                // Bedrock, Azure OpenAI, xAI, Ollama, Ollama Cloud, and OpenAI-compatible model lists; Vertex has
+                // no listing API and reports models_not_supported).
+                using System.Threading.CancellationTokenSource cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(30));
+                Mux.Core.Utility.EndpointModelListResult result = await Mux.Core.Utility.EndpointModelLister
+                    .ListModelsAsync(endpoint, SettingsLoader.LoadSettings().IgnoreCertErrors, cts.Token)
+                    .ConfigureAwait(false);
+
+                req.Http.Response.StatusCode = 200;
+                return new EndpointModelsDto
+                {
+                    Name = endpoint.Name,
+                    AdapterType = endpoint.AdapterType.ToKebab(),
+                    ConfiguredModel = endpoint.Model,
+                    Success = result.Success,
+                    Models = result.Models,
+                    ErrorCode = string.IsNullOrEmpty(result.ErrorCode) ? null : result.ErrorCode,
+                    ErrorMessage = string.IsNullOrEmpty(result.ErrorMessage) ? null : result.ErrorMessage
+                };
+            }, Documentation.ApiDoc.EndpointsModels);
+
+            app.Post("/v1.0/api/endpoints/import", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();
+
+                EndpointImportRequest? body;
+                try
+                {
+                    body = JsonSerializer.Deserialize<EndpointImportRequest>(req.Http.Request.DataAsString ?? string.Empty, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+                catch (Exception)
+                {
+                    body = null;
+                }
+
+                if (body == null || string.IsNullOrWhiteSpace(body.Source) || body.Models == null || body.Models.Count == 0)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiError("BadRequest", "'Source' (an endpoint name) and a non-empty 'Models' list are required.");
+                }
+
+                try
+                {
+                    // Cloning happens here, not in the browser, so the copies keep the source endpoint's stored
+                    // API key and headers (the detail listing masks them).
+                    List<EndpointConfig> all = SettingsLoader.LoadEndpoints();
+                    EndpointConfig? source = all.FirstOrDefault(e => string.Equals(e.Name, body.Source, StringComparison.OrdinalIgnoreCase));
+                    if (source == null)
+                    {
+                        req.Http.Response.StatusCode = 404;
+                        return (object)new ApiError("NotFound", "No endpoint named '" + body.Source + "'.");
+                    }
+
+                    List<EndpointConfig> created = Mux.Core.Utility.EndpointModelImport.CreateEndpoints(source, body.Models, all);
+                    all.AddRange(created);
+                    SettingsLoader.SaveEndpoints(all);
+                    List<EndpointDto> saved = SettingsLoader.LoadEndpoints().Select(ToDto).ToList();
+                    req.Http.Response.StatusCode = 200;
+                    return await Task.FromResult<object>(new ListResponse<EndpointDto>(saved)).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    req.Http.Response.StatusCode = 500;
+                    return (object)new ApiError("SaveFailed", "Failed to import models: " + ex.Message);
+                }
+            }, Documentation.ApiDoc.EndpointsImport);
         }
 
         private object Unauthorized()
@@ -261,5 +347,62 @@ namespace Mux.Server.Routes
             return config;
         }
 
+    }
+
+    /// <summary>
+    /// The models an endpoint's backend advertises, from <c>GET /v1.0/api/endpoints/models</c>.
+    /// </summary>
+    public sealed class EndpointModelsDto
+    {
+        /// <summary>
+        /// The endpoint name.
+        /// </summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The endpoint's adapter (kebab-case).
+        /// </summary>
+        public string AdapterType { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The model the endpoint is configured with.
+        /// </summary>
+        public string ConfiguredModel { get; set; } = string.Empty;
+
+        /// <summary>
+        /// True when the listing succeeded.
+        /// </summary>
+        public bool Success { get; set; }
+
+        /// <summary>
+        /// The advertised model ids.
+        /// </summary>
+        public List<string> Models { get; set; } = new List<string>();
+
+        /// <summary>
+        /// A machine-readable failure code (for example <c>models_not_supported</c>), or null.
+        /// </summary>
+        public string? ErrorCode { get; set; }
+
+        /// <summary>
+        /// A human-readable failure message, or null.
+        /// </summary>
+        public string? ErrorMessage { get; set; }
+    }
+
+    /// <summary>
+    /// Body of <c>POST /v1.0/api/endpoints/import</c>.
+    /// </summary>
+    public sealed class EndpointImportRequest
+    {
+        /// <summary>
+        /// The endpoint whose settings the new endpoints copy.
+        /// </summary>
+        public string? Source { get; set; }
+
+        /// <summary>
+        /// The model ids to add, one endpoint each (already-configured models are skipped).
+        /// </summary>
+        public List<string>? Models { get; set; }
     }
 }

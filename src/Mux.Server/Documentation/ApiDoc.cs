@@ -75,6 +75,9 @@ namespace Mux.Server.Documentation
         /// <summary>Run lifecycle: list, inspect, and cancel active runs.</summary>
         public const string TagRuns = "Runs";
 
+        /// <summary>Tag for the shared color palette routes.</summary>
+        public const string TagPalettes = "Palettes";
+
         #endregion
 
         #region Configuration
@@ -160,6 +163,7 @@ namespace Mux.Server.Documentation
                 new OpenApiTag { Name = TagMcp, Description = "Manage Model Context Protocol servers (stdio and HTTP)." },
                 new OpenApiTag { Name = TagSkills, Description = "Discover, enable/disable, create, edit, and delete skills." },
                 new OpenApiTag { Name = TagSettings, Description = "Read and update the editable server settings (secrets masked)." },
+                new OpenApiTag { Name = TagPalettes, Description = "List, choose, create, and delete the color palettes every mux surface shares." },
                 new OpenApiTag { Name = TagUsage, Description = "Query usage telemetry (summary, time series, breakdowns, events) and manage pricing." },
                 new OpenApiTag { Name = TagRuns, Description = "List active and recently-finished runs, inspect a run's state and task plan, and cancel a run." },
                 new OpenApiTag { Name = TagContext, Description = "Build a model-context block (map, summary, or truncation) from a large file." },
@@ -229,6 +233,28 @@ namespace Mux.Server.Documentation
             "Deletes the endpoint named by the `name` query parameter.",
             operationId: "deleteEndpoint"))
             .WithParameter(Query("name", "The endpoint name to delete.", true))
+            .WithResponse(200, OkList("EndpointDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/endpoints/models</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> EndpointsModels = m => Sec(Init(m, TagEndpoints,
+            "List an endpoint's available models",
+            "Asks the named endpoint's backend which models its credentials can use (OpenAI, Anthropic, Gemini, Bedrock, Azure OpenAI, xAI, Ollama, Ollama Cloud, and OpenAI-compatible model lists). A backend that cannot list models returns `Success: false` with an `ErrorCode` such as `models_not_supported` (Vertex AI).",
+            operationId: "listEndpointModels"))
+            .WithParameter(Query("name", "The endpoint name.", true))
+            .WithResponse(200, Ok("EndpointModelsDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
+        /// <summary>Metadata for <c>POST /v1.0/api/endpoints/import</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> EndpointsImport = m => Sec(Init(m, TagEndpoints,
+            "Import models as endpoints",
+            "Adds one endpoint per model in `Models`, each a copy of the `Source` endpoint (adapter, URL, stored credentials, region, project, tuning) with its own model and a unique name. Models already configured on the same adapter and URL are skipped. Returns the full endpoint list.",
+            operationId: "importEndpointModels"))
+            .WithRequestBody(Body("EndpointImportRequest", "The source endpoint and the models to add."))
             .WithResponse(200, OkList("EndpointDto"))
             .WithResponse(400, BadRequest())
             .WithResponse(401, Unauthorized())
@@ -778,6 +804,48 @@ namespace Mux.Server.Documentation
             .WithResponse(200, Ok("SettingsDto"))
             .WithResponse(400, BadRequest())
             .WithResponse(401, Unauthorized());
+
+        // --- Palettes ---
+
+        /// <summary>Metadata for <c>GET /v1.0/api/palettes</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> PalettesGet = m => Sec(Init(m, TagPalettes,
+            "List color palettes",
+            "Returns every built-in and custom palette (fully resolved, with all fourteen color roles), the active palette id (`Active`, null until one is chosen; `system` follows the OS), and whether the TUI caret blinks.",
+            operationId: "listPalettes"))
+            .WithResponse(200, Ok("PaletteListDto"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>PUT /v1.0/api/palettes/active</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> PalettesSetActive = m => Sec(Init(m, TagPalettes,
+            "Choose the active palette",
+            "Sets the palette every surface renders with (`colorPalette` in settings.json). `Id` is a built-in or custom palette id, or `system`.",
+            operationId: "setActivePalette"))
+            .WithRequestBody(Body("PaletteActiveRequest", "The palette to activate."))
+            .WithResponse(200, Ok("PaletteListDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
+        /// <summary>Metadata for <c>PUT /v1.0/api/palettes</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> PalettesPut = m => Sec(Init(m, TagPalettes,
+            "Save a custom palette",
+            "Adds or replaces a custom palette (matched by id). The id must be kebab-case and not a built-in id; colors must be hex. Colors left out are inherited from `Base` (default `mux` for a dark palette, `mux-light` for a light one). `Activate: true` also makes it the active palette.",
+            operationId: "putPalette"))
+            .WithRequestBody(Body("PaletteSaveRequest", "The palette to save."))
+            .WithResponse(200, Ok("PaletteListDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>DELETE /v1.0/api/palettes</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> PalettesDelete = m => Sec(Init(m, TagPalettes,
+            "Delete a custom palette",
+            "Deletes the custom palette named by the `id` query parameter. When it was active, the default palette becomes active. Built-in palettes cannot be deleted.",
+            operationId: "deletePalette"))
+            .WithParameter(Query("id", "The custom palette id.", true))
+            .WithResponse(200, Ok("PaletteListDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
 
         // --- Usage ---
 
@@ -1484,6 +1552,48 @@ namespace Mux.Server.Documentation
                 ["ApiKeySet"] = Pbool("Whether an API key is set (the value is never returned)."),
                 ["ApiKey"] = PstrNullable("Write-only: a new API key to set. Ignored on read; ignored on write when blank.")
             }, new Dictionary<string, object?> { ["Enabled"] = true, ["Hostname"] = "127.0.0.1", ["Port"] = 8710, ["Ssl"] = false, ["CorsAllowOrigin"] = "*", ["ApiKeySet"] = true, ["ApiKey"] = "" });
+
+            M colorMap = new M { Type = "object", Description = "Role name (background, surface, surfaceAlt, border, text, muted, accent, accentText, cursor, selection, success, warning, error, info) to a `#rrggbb` color." };
+            s["PaletteDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Id"] = Pstr("Palette id (kebab-case)."),
+                ["Name"] = Pstr("Display name."),
+                ["Dark"] = Pbool("True for a dark palette."),
+                ["BuiltIn"] = Pbool("True for a palette that ships with mux (read-only)."),
+                ["Base"] = PstrNullable("For a custom palette, the palette that supplies colors it leaves out."),
+                ["Colors"] = colorMap
+            }, new Dictionary<string, object?> { ["Id"] = "midnight", ["Name"] = "Midnight", ["Dark"] = true, ["BuiltIn"] = true });
+            s["PaletteListDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Active"] = PstrNullable("The chosen palette id, `system`, or null when none has been chosen."),
+                ["DefaultId"] = Pstr("The default palette id (`mux`)."),
+                ["CursorBlink"] = Pbool("Whether the TUI caret blinks."),
+                ["Palettes"] = Parr(Ref("PaletteDto"), "Every palette, built-ins first.")
+            });
+            s["PaletteActiveRequest"] = Obj(new Dictionary<string, M>
+            {
+                ["Id"] = Pstr("A palette id or `system`.")
+            }, new Dictionary<string, object?> { ["Id"] = "ocean" }, new List<string> { "Id" });
+            s["PaletteSaveRequest"] = Obj(new Dictionary<string, M>
+            {
+                ["Palette"] = Ref("PaletteDto"),
+                ["Activate"] = Pbool("Also make it the active palette.")
+            }, null, new List<string> { "Palette" });
+            s["EndpointImportRequest"] = Obj(new Dictionary<string, M>
+            {
+                ["Source"] = Pstr("The endpoint whose settings the new endpoints copy."),
+                ["Models"] = Parr(Pstr("Model id."), "Model ids to add, one endpoint each.")
+            }, new Dictionary<string, object?> { ["Source"] = "anthropic", ["Models"] = new[] { "claude-sonnet-5-5" } }, new List<string> { "Source", "Models" });
+            s["EndpointModelsDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Name"] = Pstr("Endpoint name."),
+                ["AdapterType"] = Pstr("Adapter (kebab-case)."),
+                ["ConfiguredModel"] = Pstr("The endpoint's configured model."),
+                ["Success"] = Pbool("True when the backend listed its models."),
+                ["Models"] = Parr(Pstr("Model id."), "Advertised model ids."),
+                ["ErrorCode"] = PstrNullable("Failure code, e.g. `models_not_supported`."),
+                ["ErrorMessage"] = PstrNullable("Failure message.")
+            });
 
             s["SettingsDto"] = Obj(new Dictionary<string, M>
             {

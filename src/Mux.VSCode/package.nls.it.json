@@ -63,5 +63,11 @@
   "cmd.runSetup": "Esegui configurazione guidata",
   "cmd.manage.editCatalog": "Modifica override del prompt",
   "cmd.manage.resetCatalog": "Ripristina predefinito",
-  "config.context.largeFileMode": "Come un file attivo di grandi dimensioni diventa contesto dell’editor: eredita l’impostazione del server oppure forza map, summarize o truncate."
+  "config.context.largeFileMode": "Come un file attivo di grandi dimensioni diventa contesto dell’editor: eredita l’impostazione del server oppure forza map, summarize o truncate.",
+  "cmd.selectPalette": "Seleziona tavolozza di colori",
+  "cmd.editPalette": "Crea o modifica tavolozza di colori",
+  "cmd.manage.importModels": "Importa modelli…",
+  "config.colorPalette": "Colori delle webview di mux (chat, utilizzo, moduli). `editor` segue il tema di VS Code; `mux` usa la tavolozza scelta su qualsiasi superficie mux (terminale, app desktop, dashboard web), condivisa tramite settings.json.",
+  "config.colorPalette.editor": "Segui il tema colori di VS Code.",
+  "config.colorPalette.mux": "Usa la tavolozza di colori condivisa di mux."
 }

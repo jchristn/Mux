@@ -140,8 +140,18 @@ commands, then skills.
 Key chords for these commands can be rebound in `~/.mux/keybindings.json` — see
 [CONFIG.md](CONFIG.md#keybindingsjson-custom-key-chords). `/help` lists the current command ids.
 
-`/theme` opens a theme selector (pick a theme and apply it); the whole UI — including the panes behind
-the text — conforms to the chosen theme.
+`/theme` (or `/palette`) opens the color palette picker: fourteen built-in palettes plus your own, with
+actions to create, edit, or delete a custom palette and to turn the caret blink on or off. The whole UI,
+including the panes behind the text, takes the palette's colors, and the prompt caret blinks in its cursor
+color. The choice is saved as `colorPalette` in `settings.json`, which the desktop app and web dashboard
+share. See [Color palettes](CONFIG.md#color-palettes).
+
+The endpoints picker (`/endpoints`, `/models`, Ctrl+E) adds and edits endpoints of every adapter: `ollama`,
+`ollama-cloud`, `openai`, `openai-compatible`, `vllm`, `anthropic`, `gemini`, `azure-openai`, `vertex`,
+`bedrock`, and `xai`. The form shows only the fields the selected adapter uses: an API key (named with its
+environment fallback), key placement for the Chat Completions adapters, a region for Vertex and Bedrock, and a
+project for Vertex. **Import models from an endpoint…** asks an endpoint's backend which models its
+credentials can use and adds the ones you pick as copies of that endpoint.
 
 `/effort` (`/reasoning`) opens a reasoning-effort picker — Off, None, Minimal, Low, Medium, High, Extra
 high, Max — for the active endpoint. The choice persists to `endpoints.json` and applies to the next turn,

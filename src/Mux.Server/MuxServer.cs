@@ -299,6 +299,7 @@ namespace Mux.Server
             new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder, _SessionStore, _AllowInteractiveTools, _Checkpoints, _Runs, _Processes).Register(app);
             new CheckpointRoutes(apiKey, _Checkpoints).Register(app);
             new SettingsRoutes(apiKey).Register(app);
+            new PaletteRoutes(apiKey).Register(app);
             new McpRoutes(apiKey).Register(app);
             new ConfigRoutes(apiKey).Register(app);
             new PromptCatalogRoutes(apiKey).Register(app);

@@ -63,5 +63,11 @@
   "cmd.runSetup": "Jalankan bestari persediaan",
   "cmd.manage.editCatalog": "Edit gantian prompt",
   "cmd.manage.resetCatalog": "Set semula ke lalai",
-  "config.context.largeFileMode": "Cara fail aktif yang besar menjadi konteks editor: warisi tetapan pelayan, atau paksa map, summarize atau truncate."
+  "config.context.largeFileMode": "Cara fail aktif yang besar menjadi konteks editor: warisi tetapan pelayan, atau paksa map, summarize atau truncate.",
+  "cmd.selectPalette": "Pilih palet warna",
+  "cmd.editPalette": "Cipta atau sunting palet warna",
+  "cmd.manage.importModels": "Import model…",
+  "config.colorPalette": "Warna untuk webview mux (sembang, penggunaan, borang). `editor` mengikut tema VS Code anda; `mux` menggunakan palet yang dipilih pada mana-mana permukaan mux (terminal, aplikasi desktop, papan pemuka web), dikongsi melalui settings.json.",
+  "config.colorPalette.editor": "Ikut tema warna VS Code.",
+  "config.colorPalette.mux": "Guna palet warna mux yang dikongsi."
 }

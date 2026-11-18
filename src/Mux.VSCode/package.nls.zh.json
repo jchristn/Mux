@@ -63,5 +63,11 @@
   "cmd.runSetup": "运行设置向导",
   "cmd.manage.editCatalog": "编辑提示词覆盖",
   "cmd.manage.resetCatalog": "重置为默认",
-  "config.context.largeFileMode": "较大的活动文件如何成为编辑器上下文：继承服务器设置，或强制使用 map、summarize 或 truncate。"
+  "config.context.largeFileMode": "较大的活动文件如何成为编辑器上下文：继承服务器设置，或强制使用 map、summarize 或 truncate。",
+  "cmd.selectPalette": "选择调色板",
+  "cmd.editPalette": "创建或编辑调色板",
+  "cmd.manage.importModels": "导入模型…",
+  "config.colorPalette": "mux 网页视图（聊天、用量、表单）的颜色。`editor` 跟随 VS Code 主题；`mux` 使用在任一 mux 界面（终端、桌面应用、网页仪表板）中选择的调色板，通过 settings.json 共享。",
+  "config.colorPalette.editor": "跟随 VS Code 颜色主题。",
+  "config.colorPalette.mux": "使用共享的 mux 调色板。"
 }

@@ -63,5 +63,11 @@
   "cmd.runSetup": "Ejecutar asistente de configuración",
   "cmd.manage.editCatalog": "Editar anulación de prompt",
   "cmd.manage.resetCatalog": "Restablecer al valor predeterminado",
-  "config.context.largeFileMode": "Cómo un archivo activo grande se convierte en contexto del editor: heredar la configuración del servidor o forzar map, summarize o truncate."
+  "config.context.largeFileMode": "Cómo un archivo activo grande se convierte en contexto del editor: heredar la configuración del servidor o forzar map, summarize o truncate.",
+  "cmd.selectPalette": "Seleccionar paleta de colores",
+  "cmd.editPalette": "Crear o editar paleta de colores",
+  "cmd.manage.importModels": "Importar modelos…",
+  "config.colorPalette": "Colores de las vistas web de mux (chat, uso, formularios). `editor` sigue tu tema de VS Code; `mux` usa la paleta elegida en cualquier superficie de mux (terminal, app de escritorio, panel web), compartida mediante settings.json.",
+  "config.colorPalette.editor": "Seguir el tema de color de VS Code.",
+  "config.colorPalette.mux": "Usar la paleta de colores compartida de mux."
 }

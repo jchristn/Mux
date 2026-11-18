@@ -89,7 +89,8 @@ section reads the server's live configuration:
 
 - **Endpoints** — add, edit, delete, and set the default from a form (adapter, base URL, model, API key,
   token/context limits, per-endpoint tool auto-approval). The API key field is blank on edit and leaving it
-  blank keeps the stored key.
+  blank keeps the stored key. **Import Models…** on an endpoint's context menu lists the models its backend
+  offers and adds the ones you pick as endpoints that copy its settings and stored credentials.
 - **MCP Servers**: add, edit, validate, and delete stdio or HTTP servers. **Validate MCP server** (right-click a server) connects through `mux serve` and reports the tool count, or on failure the one-line cause with a **Show details** button that opens the full diagnosis (URL, HTTP status, headers, response body, stdio stderr) in an editor tab.
 - **Prompts** — edit your prompt profiles (system, tools-disabled, and compaction prompts) and set which one
   is active, and browse the operational prompt catalog grouped by kind — edit or reset any entry. Subagent
@@ -120,6 +121,11 @@ through the same local server — so a change you make in the editor shows up ev
 - `mux.server.path` — the `mux` executable name or full path.
 - `mux.defaultEndpoint` — the endpoint runs use; empty follows the server's default. Change it from the status
   bar.
+- `mux.colorPalette`: `editor` (the default) follows your VS Code theme. `mux` renders the chat, usage, form,
+  and about views in the palette chosen on any mux surface, read from the shared `colorPalette` in
+  `settings.json`. **mux: Select Color Palette** picks a palette and saves it for every surface. **mux: Create
+  or Edit Color Palette** starts a custom palette from any palette, or edits or deletes a custom one. See
+  [Color palettes](CONFIG.md#color-palettes).
 - `mux.approvalPosture` — prompt for mutating tools, or auto-safe.
 - `mux.context.sources` — the context attached by default.
 - `mux.locale` — a display-language override; empty follows the editor language.

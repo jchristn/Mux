@@ -25,6 +25,7 @@ namespace Mux.Desktop.Shell
     using Mux.Core.Prompting;
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
+    using Mux.Core.Theming;
     using Mux.Core.Skills;
     using Mux.Core.Tasks;
     using Mux.Core.Telemetry;
@@ -219,7 +220,19 @@ namespace Mux.Desktop.Shell
             _Localization.SetActiveLocale(_LocaleCode);
             _LocaleCode = _Localization.CurrentLocale;
             FlowDirection = _Localization.IsRightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
-            ApplyThemeForMode(prefs.ThemeMode);
+            // The shared colorPalette (settings.json) wins; before one is chosen, the desktop's own theme mode
+            // maps onto the equivalent palette.
+            string? sharedPalette = null;
+            try
+            {
+                sharedPalette = SettingsLoader.LoadSettings().ColorPalette;
+            }
+            catch (Exception)
+            {
+                // Fall back to the desktop preference.
+            }
+
+            ApplyThemeForMode(sharedPalette ?? ColorPaletteCatalog.FromLegacyTheme(prefs.ThemeMode, fromTui: false));
             _Theme = AppTheme.Current;
 
             Background = _Theme.Surface;
@@ -408,9 +421,10 @@ namespace Mux.Desktop.Shell
                 case "mux.clear": ClearActiveConversation(); return true;
                 case "mux.sidebar.toggle": ToggleSidebarCollapse(); return true;
                 case "mux.usage": OpenUsageWindow(); return true;
-                case "mux.theme": SetThemeMode(_Theme.IsDark ? "light" : "dark"); return true;
-                case "mux.theme.dark": SetThemeMode("dark"); return true;
-                case "mux.theme.light": SetThemeMode("light"); return true;
+                case "mux.theme": SetThemeMode(_Theme.IsDark ? ColorPaletteCatalog.LightId : ColorPaletteCatalog.DefaultId); return true;
+                case "mux.theme.dark": SetThemeMode(ColorPaletteCatalog.DefaultId); return true;
+                case "mux.theme.light": SetThemeMode(ColorPaletteCatalog.LightId); return true;
+                case "mux.palette": OpenPaletteEditor(); return true;
                 case "mux.menu": OpenCommandPalette(); return true;
                 case "mux.help": ShowHelpMenu(); return true;
                 default:
@@ -1315,11 +1329,7 @@ namespace Mux.Desktop.Shell
             bar.Items.Add(NativeMenuFactory.Submenu("View",
                 NativeMenuFactory.Item("Toggle Sidebar", ToggleSidebarCollapse, Key.B),
                 null,
-                NativeMenuFactory.Submenu("Theme",
-                    NativeMenuFactory.Item("System", () => SetThemeMode("system")),
-                    NativeMenuFactory.Item("Light", () => SetThemeMode("light")),
-                    NativeMenuFactory.Item("Dark", () => SetThemeMode("dark")),
-                    NativeMenuFactory.Item("High Contrast", () => SetThemeMode("highcontrast"))),
+                NativeMenuFactory.Submenu("Theme", BuildThemeMenuItems()),
                 null,
                 NativeMenuFactory.Item("Context and Stats", () => _ = ShowStatsAsync()),
                 NativeMenuFactory.Item("Project Instructions", ShowProjectInstructions)));
@@ -1381,24 +1391,87 @@ namespace Mux.Desktop.Shell
             SaveThemeMode();
         }
 
-        // Apply the palette for an explicit theme mode ("system"/"light"/"dark"/"highcontrast"). Does not
-        // rebuild the layout — callers rebuild when appropriate. Shared by startup and the settings selector.
+        // The View > Theme menu: System, every built-in and custom palette, then the palette editor.
+        private NativeMenuItemBase?[] BuildThemeMenuItems()
+        {
+            List<NativeMenuItemBase?> items = new List<NativeMenuItemBase?>
+            {
+                NativeMenuFactory.Item("System", () => SetThemeMode(ColorPaletteCatalog.SystemId)),
+                null
+            };
+
+            List<ColorPalette> palettes = ColorPaletteCatalog.GetAll(null);
+            try
+            {
+                palettes = ColorPaletteCatalog.GetAll(SettingsLoader.LoadSettings().CustomPalettes);
+            }
+            catch (Exception)
+            {
+                // Built-ins only.
+            }
+
+            foreach (ColorPalette palette in palettes)
+            {
+                string id = palette.Id;
+                items.Add(NativeMenuFactory.Item(palette.Name, () => SetThemeMode(id)));
+            }
+
+            items.Add(null);
+            items.Add(NativeMenuFactory.Item("Customize Palettes…", OpenPaletteEditor));
+            return items.ToArray();
+        }
+
+        private async void OpenPaletteEditor()
+        {
+            try
+            {
+                string? chosen = await new PaletteEditorDialog(_ThemeMode).ShowDialog<string?>(this);
+                if (chosen != null)
+                {
+                    SetThemeMode(chosen);
+                }
+            }
+            catch (Exception)
+            {
+                // A failed dialog leaves the current palette in place.
+            }
+        }
+
+        // Apply the palette for a palette id or "system" (legacy "light"/"dark"/"highcontrast" modes map onto
+        // their palettes). Does not rebuild the layout — callers rebuild when appropriate. Shared by startup and
+        // the settings selector.
         private void ApplyThemeForMode(string mode)
         {
-            if (string.Equals(mode, "highcontrast", StringComparison.OrdinalIgnoreCase))
+            string id = ColorPaletteCatalog.NormalizeId(mode);
+            if (id == "light" || id == "dark" || id == "highcontrast")
             {
-                _ThemeMode = mode;
-                if (Application.Current != null)
-                {
-                    // High contrast is a dark-based accessibility palette; keep the OS variant dark.
-                    Application.Current.RequestedThemeVariant = ThemeVariant.Dark;
-                }
+                id = ColorPaletteCatalog.FromLegacyTheme(id, fromTui: false);
+            }
 
-                AppTheme.SetHighContrast();
+            if (id == ColorPaletteCatalog.SystemId)
+            {
+                AppTheme.Set(ResolveThemeVariant(ColorPaletteCatalog.SystemId));
                 return;
             }
 
-            AppTheme.Set(ResolveThemeVariant(mode));
+            List<ColorPalette>? custom = null;
+            try
+            {
+                custom = SettingsLoader.LoadSettings().CustomPalettes;
+            }
+            catch (Exception)
+            {
+                // Built-ins only.
+            }
+
+            ColorPalette palette = ColorPaletteCatalog.Resolve(id, custom);
+            _ThemeMode = palette.Id;
+            if (Application.Current != null)
+            {
+                Application.Current.RequestedThemeVariant = palette.Dark ? ThemeVariant.Dark : ThemeVariant.Light;
+            }
+
+            AppTheme.SetPalette(palette);
         }
 
         private LocaleInfo? CurrentLocaleInfo()
@@ -1469,6 +1542,14 @@ namespace Mux.Desktop.Shell
         private void SaveThemeMode()
         {
             SavePreferences();
+            try
+            {
+                ColorPaletteSettings.SetActive(_ThemeMode);
+            }
+            catch (Exception)
+            {
+                // Best-effort; the palette still applies for this session.
+            }
         }
 
         private void SavePreferences()
@@ -1477,7 +1558,9 @@ namespace Mux.Desktop.Shell
             {
                 new DesktopPreferencesStore(_ConfigDirectory).Save(new DesktopPreferences
                 {
-                    ThemeMode = _ThemeMode,
+                    // The desktop preference keeps its legacy light/dark/system/highcontrast vocabulary; the exact
+                    // palette lives in the shared settings.json (colorPalette).
+                    ThemeMode = LegacyThemeMode(),
                     SidebarCollapsed = _SidebarCollapsed,
                     AutoExpandThinking = _AutoExpandThinking,
                     LocaleCode = _LocaleCode
@@ -1487,6 +1570,13 @@ namespace Mux.Desktop.Shell
             {
                 // Best-effort; a failed write just means the choice is not remembered.
             }
+        }
+
+        private string LegacyThemeMode()
+        {
+            if (_ThemeMode == ColorPaletteCatalog.SystemId) return "system";
+            if (_ThemeMode == ColorPaletteCatalog.HighContrastId) return "highcontrast";
+            return AppTheme.Current.IsDark ? "dark" : "light";
         }
 
         private void OnActualThemeVariantChanged(object? sender, EventArgs e)

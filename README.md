@@ -27,6 +27,10 @@ Azure OpenAI, keyed adapters fall back to their standard API-key environment var
 gains `none`, `xhigh`, and `max`, and the usage views show the effort actually sent. Credentials are API
 keys only. See [model providers](docs/PROVIDERS.md) for the one change to check: an `openai` endpoint
 pointed at a Chat Completions gateway should use `openai-compatible`.
+It also adds fourteen color palettes, plus your own, shared by the terminal, desktop app, web dashboard, and VS
+Code, along with a blinking caret in the palette's cursor color. The terminal endpoint editor now covers all 11
+adapters, and models can be imported from any endpoint on every surface. See
+[color palettes](docs/CONFIG.md#color-palettes).
 
 Version 1.7.0 brought the same usage charts to the terminal, desktop app, web dashboard, and VS Code:
 calls by outcome with failure reasons, tokens by model, endpoint, provider, or call kind, latency box plots,
@@ -484,7 +488,7 @@ Every command is also reachable by key binding and the `F1` menu (one catalog, t
 /save                             Save the current session
 /export, /share                   Export the session to HTML + Markdown (server-free)
 /undo, /redo                      Roll the working tree back/forward a turn (git repos)
-/theme                            Open the theme selector
+/theme, /palette                  Pick a color palette (14 built-in or your own; shared by every surface)
 /sidebar                          Toggle the sidebar
 /borders                          Toggle the boundary lines (off by default)
 /mouse                            Toggle mouse capture (on by default)

@@ -152,6 +152,7 @@ namespace Test.Shared
 
                     // Mux.Cli form and editor modals on TUIKit's form support (paste, field errors, scrolling).
                     FormModalsSuite.Create(),
+                    PalettesSuite.Create(),
 
                     // Mux.Cli sidebar + responsive collapse suite (M8).
                     SidebarSuite.Create(),

@@ -63,5 +63,11 @@
   "cmd.runSetup": "セットアップウィザードを実行",
   "cmd.manage.editCatalog": "プロンプトの上書きを編集",
   "cmd.manage.resetCatalog": "既定に戻す",
-  "config.context.largeFileMode": "大きなアクティブ ファイルをエディターのコンテキストにする方法：サーバー設定を継承するか、map・summarize・truncate を強制します。"
+  "config.context.largeFileMode": "大きなアクティブ ファイルをエディターのコンテキストにする方法：サーバー設定を継承するか、map・summarize・truncate を強制します。",
+  "cmd.selectPalette": "カラーパレットを選択",
+  "cmd.editPalette": "カラーパレットを作成または編集",
+  "cmd.manage.importModels": "モデルをインポート…",
+  "config.colorPalette": "mux の Web ビュー（チャット、使用状況、フォーム）の色。`editor` は VS Code のテーマに従い、`mux` はいずれかの mux 画面（ターミナル、デスクトップアプリ、Web ダッシュボード）で選んだパレットを使います（settings.json で共有）。",
+  "config.colorPalette.editor": "VS Code のカラーテーマに従う。",
+  "config.colorPalette.mux": "共有の mux カラーパレットを使う。"
 }

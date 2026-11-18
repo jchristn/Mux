@@ -270,6 +270,9 @@ Example:
   "maxTokenBudget": null,
   "ignoreCertErrors": false,
   "showBoundaryLines": false,
+  "colorPalette": "midnight",
+  "cursorBlink": true,
+  "customPalettes": [],
   "skillsEnabled": true,
   "skillRefreshIntervalSeconds": 30,
   "skillsDirectory": null,
@@ -318,6 +321,10 @@ Fields:
 | `maxTokenBudget` | int or null | optional ceiling on estimated working-context tokens; when set and exceeded before a model call, the run stops with a `budget_exceeded` error; backend-agnostic (mux's estimate, not provider billing); overridden per run by `--max-token-budget`; `null` (default) disables the cap |
 | `ignoreCertErrors` | bool | disable TLS certificate validation for mux-owned network requests; default `false` |
 | `showBoundaryLines` | bool | draw dark-grey boundary lines in the interactive shell (above the prompt input, above the queued-messages strip, and left of the sidebar); toggle live with `/borders`; default `false` |
+| `colorPalette` | string or omitted | the color palette every surface renders with: a built-in id (`mux`, `mux-light`, `midnight`, `ocean`, `aurora`, `forest`, `ember`, `rosewood`, `lavender`, `graphite`, `glacier`, `sandstone`, `meadow`, `high-contrast`), a custom palette id, or `system` (follow the OS light/dark setting; the terminal reads it as `mux`). Omitted until a palette is chosen, in which case the terminal uses `tuiTheme`, the desktop app its own theme mode, and the web dashboard its light/dark toggle. See [Color palettes](#color-palettes) |
+| `customPalettes` | array | your own palettes (see [Color palettes](#color-palettes)); default `[]` |
+| `cursorBlink` | bool | blink the terminal's prompt caret (drawn in the palette's `cursor` color); default `true` |
+| `tuiTheme` | string | legacy terminal theme (`mux`, `dark`, `light`, `highcontrast`), used only while `colorPalette` is unset; `dark` maps to Graphite and `light` to Mux Light |
 | `skillsEnabled` | bool | load user-authored skills and expose them to the model in the interactive shell; default `true` |
 | `skillRefreshIntervalSeconds` | int | how often the shell re-scans the skills directory for changes; clamped to a minimum of `5`; default `30` |
 | `skillsDirectory` | string or null | override for the skills directory (for a shared, version-controlled library); `null` uses `~/.mux/skills` |
@@ -418,6 +425,39 @@ Provider fields:
 Use `/search add`, `/search edit`, `/search show`, and `/search remove`/`delete`/`rm` in interactive mode to maintain this configuration without editing JSON by hand.
 
 `web_search` discovers candidate web results. `web_retrieve` fetches a known HTTP or HTTPS URL and does not require external-search configuration.
+
+### Color palettes
+
+Every surface (terminal, desktop app, web dashboard, and VS Code when `mux.colorPalette` is `mux`) renders
+with the palette named by `colorPalette`. Pick one with `/theme` or `/palette` in the terminal, **View > Theme** or
+**Settings > Theme** in the desktop app, the palette button in the web dashboard's top bar, or **mux: Select
+Color Palette** in VS Code. Each surface writes the choice here, so the others follow on their next launch.
+
+A palette has fourteen color roles: `background`, `surface`, `surfaceAlt` (inputs, the prompt rectangle,
+hover rows), `border`, `text`, `muted`, `accent`, `accentText` (text on the accent), `cursor` (the caret),
+`selection`, `success`, `warning`, `error`, and `info`. Every built-in palette meets WCAG contrast floors:
+7:1 for text, 4.5:1 for muted text and the accent, and 3:1 for the caret and status colors.
+
+Custom palettes go in `customPalettes`. Any role you leave out comes from `base`, which can be any built-in or
+custom palette id. Without a `base`, a dark palette inherits from `mux` and a light one from `mux-light`. Ids
+are lowercase kebab-case and cannot reuse a built-in id or `system`. Colors are `#rrggbb` or `#rgb`. The palette
+editors in every surface write this array for you:
+
+```json
+"customPalettes": [
+  {
+    "id": "team-dark",
+    "name": "Team Dark",
+    "dark": true,
+    "base": "midnight",
+    "colors": { "accent": "#ff8a3d", "cursor": "#ff8a3d" }
+  }
+]
+```
+
+In the terminal, the Mux palette keeps your terminal's own background. Every other palette paints the whole
+screen and the prompt rectangle. The caret blinks in the palette's `cursor` color, stays solid while you
+type, and stops blinking when `cursorBlink` is `false`. The palette picker toggles it.
 
 ## `prompts.json`
 

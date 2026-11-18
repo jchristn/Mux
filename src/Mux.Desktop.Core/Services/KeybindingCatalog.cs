@@ -66,6 +66,7 @@ namespace Mux.Desktop.Services
                 new KeybindingCommand("mux.theme", "Theme", "View", null),
                 new KeybindingCommand("mux.theme.dark", "Dark mode", "View", null),
                 new KeybindingCommand("mux.theme.light", "Light mode", "View", null),
+                new KeybindingCommand("mux.palette", "Color palette", "View", null),
                 new KeybindingCommand("mux.mouse", "Toggle mouse capture", "View", "f12"),
                 new KeybindingCommand("mux.borders", "Toggle boundary lines", "View", null),
                 new KeybindingCommand("mux.thinking", "Toggle thinking display", "View", null),

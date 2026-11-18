@@ -63,5 +63,11 @@
   "cmd.runSetup": "Запустить мастер настройки",
   "cmd.manage.editCatalog": "Изменить переопределение промпта",
   "cmd.manage.resetCatalog": "Сбросить к значению по умолчанию",
-  "config.context.largeFileMode": "Как большой активный файл становится контекстом редактора: наследовать настройку сервера или принудительно применять map, summarize или truncate."
+  "config.context.largeFileMode": "Как большой активный файл становится контекстом редактора: наследовать настройку сервера или принудительно применять map, summarize или truncate.",
+  "cmd.selectPalette": "Выбрать цветовую палитру",
+  "cmd.editPalette": "Создать или изменить цветовую палитру",
+  "cmd.manage.importModels": "Импорт моделей…",
+  "config.colorPalette": "Цвета веб-представлений mux (чат, использование, формы). `editor` следует теме VS Code; `mux` использует палитру, выбранную в любом интерфейсе mux (терминал, настольное приложение, веб-панель), общую через settings.json.",
+  "config.colorPalette.editor": "Следовать цветовой теме VS Code.",
+  "config.colorPalette.mux": "Использовать общую палитру mux."
 }

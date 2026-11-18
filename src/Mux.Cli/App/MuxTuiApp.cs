@@ -17,6 +17,7 @@ namespace Mux.Cli.App
     using Mux.Core.Sessions;
     using Mux.Core.Settings;
     using Mux.Core.Skills;
+    using Mux.Core.Theming;
     using Mux.Core.Tools;
     using Mux.Core.Utility;
     using TUIKit;
@@ -52,8 +53,12 @@ namespace Mux.Cli.App
         private bool _PromptPinned;
         private PaneLineHandle? _CurrentPromptLine;
         private StyledText _CurrentPromptText = StyledText.Empty;
-        // A render-only marker on the current prompt prefix, normalized back to InputSurface by the overlay.
-        private static readonly Color CurrentPromptMarker = Color.FromRgb(0x3A, 0x3A, 0x3B);
+        // A render-only marker on the current prompt prefix, normalized back to the input surface by the overlay.
+        // Both follow the active palette; every background and marker used this session is remembered so prompt
+        // rows written under an earlier palette are still recognized (and repainted) after a switch.
+        private Color _CurrentPromptMarker = TuiPalette.MarkerFor(TuiPalette.MuxInputBackground);
+        private readonly HashSet<Color> _PromptBackgrounds = new HashSet<Color>();
+        private readonly HashSet<Color> _PromptMarkers = new HashSet<Color>();
 
         private const string PromptLabelRegion = "promptlabel";
         private const string FooterRegion = "footer";
@@ -179,13 +184,19 @@ namespace Mux.Cli.App
         private int _ComposerHeight = 1;
 
         private static readonly Theme MuxTheme = CreateTheme();
-        private static readonly Theme[] _Themes = { MuxTheme, Theme.Dark, Theme.Light, Theme.HighContrast };
+
+        // The palettes the theme picker offers (built-ins, then custom palettes from settings). Index 0 is the
+        // mux default, which keeps the terminal's own background; every other palette paints the whole screen.
+        private List<ColorPalette> _Palettes = ColorPaletteCatalog.GetAll(null);
+        private ColorPalette _CaretPalette = ColorPaletteCatalog.Resolve(ColorPaletteCatalog.DefaultId, null);
+        private volatile ColorPalette? _PaintedPalette;
+        private volatile bool _CursorBlink = true;
+        private long _LastComposerInputMs;
 
         // The input rectangle and submitted prompts share a lighter charcoal surface so it
         // reads as a distinct input affordance regardless of the active theme; the light-grey foreground
         // (palette 7, the mux text color) keeps typed text legible against it.
-        private static readonly CellStyle InputSurface =
-            CellStyle.Default.WithForeground(Color.FromPalette(7)).WithBackground(Color.FromRgb(0x3A, 0x3A, 0x3A));
+        private CellStyle _InputSurface = TuiPalette.InputSurfaceFor(null);
 
         #endregion
 
@@ -314,6 +325,7 @@ namespace Mux.Cli.App
             {
                 DrawBoundaries(surface);
                 SeverityToastRenderer.Render(surface, _App.Notifications, _App.NowMilliseconds);
+                ApplyPaletteFrame(surface);
             };
 
             BuildLayouts(1, 0);
@@ -323,14 +335,14 @@ namespace Mux.Cli.App
             _PromptLabel = new Pane(PromptLabelRegion);
             _Footer = new Pane(FooterRegion);
             _QueuePane = new Pane(QueueRegion);
-            _Composer = new TextEditor { IsFocused = true, NormalStyle = InputSurface, WordWrap = true };
+            _Composer = new TextEditor { IsFocused = true, NormalStyle = _InputSurface, WordWrap = true };
             _Sidebar = new SidebarView(_SidebarPane);
 
             _PromptLabel.WriteLine(Text.From(PromptText).Green().Bold());
 
             _App.BindPane(TranscriptRegion, _Conversation);
             _App.Bind("pinnedprompt", new PinnedPromptView(_PinnedPrompt));
-            _PinnedPrompt.Background = InputSurface;
+            _PinnedPrompt.Background = _InputSurface;
             _App.BindPane(SidebarRegion, _SidebarPane);
             _App.BindPane(PromptLabelRegion, _PromptLabel);
             _App.BindPane(FooterRegion, _Footer);
@@ -376,6 +388,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.theme", "Theme", null, OpenThemeSelector, "View", new[] { "theme" }));
             _Catalog.Add(new CommandDescriptor("mux.theme.dark", "Dark mode", null, () => ApplyThemeByName("dark", persist: true), "View", new[] { "dark" }));
             _Catalog.Add(new CommandDescriptor("mux.theme.light", "Light mode", null, () => ApplyThemeByName("light", persist: true), "View", new[] { "light" }));
+            _Catalog.Add(new CommandDescriptor("mux.palette", "Color palette", null, OpenThemeSelector, "View", new[] { "palette", "palettes", "colors" }));
             _Catalog.Add(new CommandDescriptor("mux.mouse", "Toggle mouse capture", "f12", ToggleMouseCapture, "View", new[] { "mouse" }));
             _Catalog.Add(new CommandDescriptor("mux.borders", "Toggle boundary lines", null, ToggleBoundaries, "View", new[] { "borders", "boundaries", "boundary", "lines" }));
             _Catalog.Add(new CommandDescriptor("mux.thinking", "Toggle thinking display", null, ToggleThinking, "View", new[] { "thinking", "think", "reasoning-display" }));
@@ -428,7 +441,10 @@ namespace Mux.Cli.App
             // Restore the persisted theme (best-effort) so the shell opens in the user's chosen appearance.
             try
             {
-                ApplyThemeByName(SettingsLoader.LoadSettings().TuiTheme, persist: false);
+                MuxSettings themeSettings = SettingsLoader.LoadSettings();
+                _Palettes = ColorPaletteCatalog.GetAll(themeSettings.CustomPalettes);
+                _CursorBlink = themeSettings.CursorBlink;
+                ApplyThemeByName(ColorPaletteSettings.EffectiveTuiId(themeSettings), persist: false);
             }
             catch (Exception)
             {
@@ -682,6 +698,15 @@ namespace Mux.Cli.App
         public void RenderOnce()
         {
             _App.RenderOnce();
+        }
+
+        /// <summary>
+        /// A copy of the last composed frame (after the palette and caret pass), for tests.
+        /// </summary>
+        /// <returns>The frame, or null when nothing has rendered.</returns>
+        internal CellBuffer? CaptureFrame()
+        {
+            return _App.CaptureFrame();
         }
 
         /// <summary>
@@ -1007,48 +1032,232 @@ namespace Mux.Cli.App
 
 
         /// <summary>
-        /// Opens a modal theme selector. The chosen theme is applied to the whole UI — text and the
-        /// rectangles behind it — via <see cref="ApplyTheme"/>.
+        /// Opens the color palette picker: every built-in and custom palette (the active one marked), then
+        /// actions to create, edit, or delete a custom palette and to toggle the caret blink. The chosen palette
+        /// is applied to the whole UI via <see cref="ApplyTheme"/> and saved as the shared <c>colorPalette</c>,
+        /// so the desktop app and web dashboard open in it too.
         /// </summary>
         public void OpenThemeSelector()
         {
-            List<string> labels = new List<string>();
-            for (int i = 0; i < _Themes.Length; i++)
+            // Pick up palettes created or deleted on another surface since this shell started.
+            try
             {
-                string marker = i == _ThemeIndex ? "● " : "  ";
-                labels.Add(marker + TuiPresentation.ThemeLabel(_Themes[i]));
+                ReloadPalettes();
+            }
+            catch (Exception)
+            {
+                // Keep the palettes already loaded.
             }
 
-            WideSelectModal modal = WideSelectModal.Fit("Theme — ↑↓ then Enter to apply", labels);
+            List<string> labels = new List<string>();
+            List<int> paletteRows = new List<int>();
+            List<ColorPalette> palettes;
+            int active;
+            lock (_Sync)
+            {
+                palettes = new List<ColorPalette>(_Palettes);
+                active = _ThemeIndex;
+            }
+
+            bool anyCustom = false;
+            for (int i = 0; i < palettes.Count; i++)
+            {
+                ColorPalette palette = palettes[i];
+                anyCustom |= !palette.BuiltIn;
+                string marker = i == active ? "● " : "  ";
+                labels.Add(marker + TuiPresentation.PaletteLabel(palette));
+                paletteRows.Add(i);
+            }
+
+            labels.Add(string.Empty);
+            paletteRows.Add(-1);
+            labels.Add("+ New custom palette…");
+            paletteRows.Add(-2);
+            if (anyCustom)
+            {
+                labels.Add("✎ Edit custom palette…");
+                paletteRows.Add(-3);
+                labels.Add("- Delete custom palette…");
+                paletteRows.Add(-4);
+            }
+
+            labels.Add("  Cursor blink: " + (_CursorBlink ? "on" : "off"));
+            paletteRows.Add(-5);
+
+            WideSelectModal modal = WideSelectModal.Fit("Color palette — ↑↓ then Enter to apply", labels);
             _App.Modals.Push(modal);
-            _ = ResolveThemeSelectorAsync(modal);
+            _ = ResolveThemeSelectorAsync(modal, palettes, paletteRows);
         }
 
-        private async Task ResolveThemeSelectorAsync(WideSelectModal modal)
+        private async Task ResolveThemeSelectorAsync(WideSelectModal modal, List<ColorPalette> palettes, List<int> rows)
         {
             object? result = await modal.Completion.ConfigureAwait(false);
-            if (result is int index && index >= 0 && index < _Themes.Length)
+            if (!(result is int index) || index < 0 || index >= rows.Count)
             {
-                ApplyTheme(index);
-                PersistThemeName(TuiPresentation.ThemeNameForIndex(_ThemeIndex));
+                return;
+            }
+
+            int row = rows[index];
+            if (row >= 0)
+            {
+                ApplyThemeByName(palettes[row].Id, persist: true);
+                return;
+            }
+
+            switch (row)
+            {
+                case -2:
+                    await EditPaletteAsync(null).ConfigureAwait(false);
+                    break;
+                case -3:
+                    {
+                        ColorPalette? target = await PickCustomPaletteAsync(palettes, "Edit which palette?").ConfigureAwait(false);
+                        if (target != null) await EditPaletteAsync(target).ConfigureAwait(false);
+                        break;
+                    }
+
+                case -4:
+                    {
+                        ColorPalette? target = await PickCustomPaletteAsync(palettes, "Delete which palette?").ConfigureAwait(false);
+                        if (target != null) DeleteCustomPalette(target);
+                        break;
+                    }
+
+                case -5:
+                    ToggleCursorBlink();
+                    break;
+            }
+        }
+
+        private async Task<ColorPalette?> PickCustomPaletteAsync(List<ColorPalette> palettes, string title)
+        {
+            List<ColorPalette> custom = palettes.FindAll(p => !p.BuiltIn);
+            if (custom.Count == 0)
+            {
+                return null;
+            }
+
+            List<string> labels = custom.ConvertAll(p => TuiPresentation.PaletteLabel(p));
+            WideSelectModal picker = WideSelectModal.Fit(title, labels);
+            _App.Modals.Push(picker);
+            object? chosen = await picker.Completion.ConfigureAwait(false);
+            return chosen is int i && i >= 0 && i < custom.Count ? custom[i] : null;
+        }
+
+        private async Task EditPaletteAsync(ColorPalette? existing)
+        {
+            ColorPalette seed = existing ?? (_PaintedPalette ?? _CaretPalette);
+            List<ColorPalette> custom;
+            lock (_Sync)
+            {
+                custom = _Palettes.FindAll(p => !p.BuiltIn);
+            }
+
+            PaletteFormModal form = new PaletteFormModal(existing == null ? "New color palette" : "Edit color palette", seed, existing != null, custom);
+            _App.Modals.Push(form);
+            object? result = await form.Completion.ConfigureAwait(false);
+            if (!(result is ColorPalette palette))
+            {
+                return;
+            }
+
+            try
+            {
+                ColorPalette saved = ColorPaletteSettings.SaveCustom(palette, activate: true);
+                ReloadPalettes();
+                ApplyThemeByName(saved.Id, persist: false);
+                WriteNotice("Saved color palette '" + saved.Name + "' (" + saved.Id + ").");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("⚠ Could not save the palette: " + ex.Message);
+            }
+        }
+
+        private void DeleteCustomPalette(ColorPalette palette)
+        {
+            try
+            {
+                string activeId;
+                lock (_Sync)
+                {
+                    activeId = _Palettes[_ThemeIndex].Id;
+                }
+
+                if (ColorPaletteSettings.DeleteCustom(palette.Id))
+                {
+                    ReloadPalettes();
+                    ApplyThemeByName(activeId == palette.Id ? ColorPaletteCatalog.DefaultId : activeId, persist: false);
+                    WriteNotice("Deleted color palette '" + palette.Name + "'.");
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("⚠ Could not delete the palette: " + ex.Message);
+            }
+        }
+
+        private void ReloadPalettes()
+        {
+            List<ColorPalette> all = ColorPaletteCatalog.GetAll(SettingsLoader.LoadSettings().CustomPalettes);
+            lock (_Sync)
+            {
+                // Keep pointing at the active palette by id; the list may have gained or lost entries before it.
+                string activeId = _Palettes[_ThemeIndex].Id;
+                _Palettes = all;
+                int index = all.FindIndex(p => p.Id == activeId);
+                _ThemeIndex = index >= 0 ? index : Math.Min(_ThemeIndex, all.Count - 1);
             }
         }
 
         /// <summary>
-        /// Applies the theme at the given index to the application and to every bound pane, so the whole
-        /// UI conforms to the selected theme (the panes' blank cells inherit the theme background and any
-        /// foreground-only text composes over it). The index wraps.
+        /// Turns the caret blink on or off and saves the choice (<c>cursorBlink</c> in settings.json).
         /// </summary>
-        /// <param name="index">The index into the theme preset list; wraps if out of range.</param>
+        public void ToggleCursorBlink()
+        {
+            _CursorBlink = !_CursorBlink;
+            try
+            {
+                MuxSettings settings = SettingsLoader.LoadSettings();
+                settings.CursorBlink = _CursorBlink;
+                SettingsLoader.SaveSettings(settings);
+            }
+            catch (Exception)
+            {
+                // Best-effort; the choice still applies for this session.
+            }
+
+            _App.Notify("Cursor blink " + (_CursorBlink ? "on" : "off"), timeoutMilliseconds: 1500);
+        }
+
+        /// <summary>
+        /// Applies the palette at the given index to the application and to every bound pane. The mux default
+        /// (index 0) keeps the terminal's background; every other palette paints the screen, the prompt
+        /// rectangle, and the caret in its own colors. The index wraps.
+        /// </summary>
+        /// <param name="index">The index into the palette list; wraps if out of range.</param>
         public void ApplyTheme(int index)
         {
-            Theme theme;
             lock (_Sync)
             {
-                _ThemeIndex = ((index % _Themes.Length) + _Themes.Length) % _Themes.Length;
-                theme = _Themes[_ThemeIndex];
+                int count = _Palettes.Count;
+                _ThemeIndex = ((index % count) + count) % count;
+                ColorPalette palette = _Palettes[_ThemeIndex];
+                bool native = string.Equals(palette.Id, ColorPaletteCatalog.DefaultId, StringComparison.Ordinal);
+                Theme theme = native ? MuxTheme : TuiPalette.BuildTheme(palette);
+
+                _CaretPalette = palette;
+                _PaintedPalette = native ? null : palette;
+                _InputSurface = TuiPalette.InputSurfaceFor(native ? null : palette);
+                _CurrentPromptMarker = TuiPalette.MarkerFor(_InputSurface.Background);
+                _PromptBackgrounds.Add(_InputSurface.Background);
+                _PromptMarkers.Add(_CurrentPromptMarker);
+
                 _App.Theme = theme;
+                _Composer.NormalStyle = _InputSurface;
+                _PinnedPrompt.Background = _InputSurface;
                 ApplyPaneBackgrounds(theme);
+                RebuildLayoutNoLock();
             }
 
             // Rewrite the panes so the new background repaints immediately rather than on the next content
@@ -1059,40 +1268,112 @@ namespace Mux.Cli.App
         }
 
         /// <summary>
-        /// Applies a theme by name (<c>mux</c>, <c>dark</c>, <c>light</c>, <c>highcontrast</c>) and, when
-        /// requested, persists it to settings so it survives restarts.
+        /// Applies a palette by id (any built-in or custom palette) or by a legacy theme name (<c>dark</c>,
+        /// <c>light</c>, <c>highcontrast</c>) and, when requested, saves it as the shared <c>colorPalette</c>.
         /// </summary>
-        /// <param name="name">The theme name; unknown names fall back to the mux default.</param>
+        /// <param name="name">The palette id or legacy theme name; unknown names fall back to the mux default.</param>
         /// <param name="persist">True to save the choice to settings.json.</param>
         public void ApplyThemeByName(string name, bool persist)
         {
-            ApplyTheme(TuiPresentation.ThemeIndexForName(name));
+            int index = IndexOfPalette(name);
+            if (index < 0)
+            {
+                index = Math.Max(0, IndexOfPalette(ColorPaletteCatalog.FromLegacyTheme(name, fromTui: true)));
+            }
+
+            ApplyTheme(index);
 
             if (persist)
             {
-                PersistThemeName(TuiPresentation.ThemeNameForIndex(_ThemeIndex));
+                PersistPalette(_Palettes[_ThemeIndex].Id);
             }
         }
 
-        private void PersistThemeName(string name)
+        private int IndexOfPalette(string? id)
+        {
+            string normalized = ColorPaletteCatalog.NormalizeId(id);
+            lock (_Sync)
+            {
+                return _Palettes.FindIndex(p => p.Id == normalized);
+            }
+        }
+
+        private static void PersistPalette(string id)
         {
             try
             {
-                MuxSettings settings = SettingsLoader.LoadSettings();
-                settings.TuiTheme = name;
-                SettingsLoader.SaveSettings(settings);
+                ColorPaletteSettings.SetActive(id);
             }
             catch (Exception)
             {
-                // Best-effort; the theme still applies for this session.
+                // Best-effort; the palette still applies for this session.
             }
         }
 
+        // Runs after the panes and overlays compose each frame: paints cells left at the terminal default with
+        // the active palette (painted palettes only), then redraws the composer's caret in the palette's cursor
+        // color, blinking unless cursorBlink is off.
+        private void ApplyPaletteFrame(ISurface surface)
+        {
+            if (!(surface is BufferSurface buffer))
+            {
+                return;
+            }
 
+            ColorPalette? painted = _PaintedPalette;
+            ColorPalette caret = _CaretPalette;
+            if (painted != null)
+            {
+                TuiPalette.PaintDefaults(
+                    buffer,
+                    TuiPalette.ToColor(painted.Colors.Background, Color.Default),
+                    TuiPalette.ToColor(painted.Colors.Text, Color.Default));
+            }
+
+            Rect? bounds = _App.GetRegionContentBounds(ComposerRegion);
+            if (bounds.HasValue)
+            {
+                bool visible = TuiPalette.CaretVisible(_App.NowMilliseconds, Interlocked.Read(ref _LastComposerInputMs), _CursorBlink);
+                TuiPalette.RestyleCaret(
+                    buffer,
+                    bounds.Value,
+                    TuiPalette.ToColor(caret.Colors.Cursor, Color.FromPalette(2)),
+                    _InputSurface.Background,
+                    visible);
+            }
+        }
 
         /// <summary>
-        /// Advances to the next theme preset. Retained for programmatic and test use; the interactive
-        /// surface is the modal selector (<see cref="OpenThemeSelector"/>).
+        /// The active palette's id (for example <c>mux</c>, <c>midnight</c>, or a custom id).
+        /// </summary>
+        public string PaletteId
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _Palettes[_ThemeIndex].Id;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The number of palettes the picker offers (built-in plus custom).
+        /// </summary>
+        public int PaletteCount
+        {
+            get
+            {
+                lock (_Sync)
+                {
+                    return _Palettes.Count;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Advances to the next palette. Retained for programmatic and test use; the interactive surface is
+        /// the modal picker (<see cref="OpenThemeSelector"/>).
         /// </summary>
         public void CycleTheme()
         {
@@ -1109,10 +1390,10 @@ namespace Mux.Cli.App
         {
             CellStyle background = theme.Text;
             _Conversation.Background = background;
-            _SidebarPane.Background = background;
-            // The prompt marker shares the composer's dark-grey input surface, not the theme background, so
-            // the "> " label and the composer read as one continuous input rectangle across theme switches.
-            _PromptLabel.Background = InputSurface;
+            _SidebarPane.Background = _PaintedPalette != null && theme.HasStyle(Theme.SidebarRole) ? theme.GetStyle(Theme.SidebarRole) : background;
+            // The prompt marker shares the composer's input surface, not the theme background, so the "> " label
+            // and the composer read as one continuous input rectangle across palette switches.
+            _PromptLabel.Background = _InputSurface;
             _Footer.Background = background;
         }
 
@@ -1268,7 +1549,7 @@ namespace Mux.Cli.App
             bool visible = false;
             for (int y = 0; y < height && !visible; y++)
                 for (int x = 0; x < width; x++)
-                    if (probe.Get(x, y).Style.Background == CurrentPromptMarker) { visible = true; break; }
+                    if (_PromptMarkers.Contains(probe.Get(x, y).Style.Background)) { visible = true; break; }
             bool pinned = !visible;
             bool changed = _PromptPinned != pinned;
             if (changed)
@@ -1301,13 +1582,13 @@ namespace Mux.Cli.App
             {
                 bool promptRow = false;
                 for (int x = 0; x < width; x++)
-                    if (readable.Get(x, y).Style.Background == InputSurface.Background || readable.Get(x, y).Style.Background == CurrentPromptMarker) { promptRow = true; break; }
+                    if (_PromptBackgrounds.Contains(readable.Get(x, y).Style.Background) || _PromptMarkers.Contains(readable.Get(x, y).Style.Background)) { promptRow = true; break; }
                 if (!promptRow) continue;
                 for (int x = 0; x < width; x++)
                 {
                     Cell cell = readable.Get(x, y);
                     if (!cell.IsContinuation)
-                        surface.Set(x, y, Cell.Glyph(cell.Grapheme, cell.Style.WithBackground(InputSurface.Background), cell.Width));
+                        surface.Set(x, y, Cell.Glyph(cell.Grapheme, cell.Style.WithBackground(_InputSurface.Background), cell.Width));
                 }
             }
         }
@@ -1816,27 +2097,27 @@ namespace Mux.Cli.App
                 .Add(TranscriptRegion, r => r.FillWidth(0, SidebarWidth + SidebarGap).FillHeight(_PromptPinned ? 1 : 0, reserve).WithPadding(0))
                 .Add(SidebarRegion, r => r.RightAnchored(0, SidebarWidth).FillHeight(0, reserve).WithPadding(0))
                 .Add(FooterRegion, r => r.FillWidth().BottomAnchored(footerOffset, footerHeight).WithPadding(0))
-                .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).Background(InputSurface.Background).WithPadding(0))
+                .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).Background(_InputSurface.Background).WithPadding(0))
                 .Add(ComposerRegion, r => r.FillWidth(promptWidth, 0).BottomAnchored(0, composerHeight).WithPadding(0));
             if (queueHeight > 0)
             {
                 expanded.Add(QueueRegion, r => r.FillWidth(0, SidebarWidth + SidebarGap).BottomAnchored(queueOffset, queueHeight).WithPadding(0));
             }
 
-            if (_PromptPinned) expanded.Add("pinnedprompt", r => r.FillWidth(0, SidebarWidth + SidebarGap).TopAnchored(0, 1).Background(InputSurface.Background).WithPadding(0));
+            if (_PromptPinned) expanded.Add("pinnedprompt", r => r.FillWidth(0, SidebarWidth + SidebarGap).TopAnchored(0, 1).Background(_InputSurface.Background).WithPadding(0));
             _ExpandedLayout = expanded.Build();
 
             LayoutBuilder collapsed = Layout.Create()
                 .Add(TranscriptRegion, r => r.FillWidth().FillHeight(_PromptPinned ? 1 : 0, reserve).WithPadding(0))
                 .Add(FooterRegion, r => r.FillWidth().BottomAnchored(footerOffset, footerHeight).WithPadding(0))
-                .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).Background(InputSurface.Background).WithPadding(0))
+                .Add(PromptLabelRegion, r => r.LeftAnchored(0, promptWidth).BottomAnchored(0, composerHeight).Background(_InputSurface.Background).WithPadding(0))
                 .Add(ComposerRegion, r => r.FillWidth(promptWidth, 0).BottomAnchored(0, composerHeight).WithPadding(0));
             if (queueHeight > 0)
             {
                 collapsed.Add(QueueRegion, r => r.FillWidth().BottomAnchored(queueOffset, queueHeight).WithPadding(0));
             }
 
-            if (_PromptPinned) collapsed.Add("pinnedprompt", r => r.FillWidth().TopAnchored(0, 1).Background(InputSurface.Background).WithPadding(0));
+            if (_PromptPinned) collapsed.Add("pinnedprompt", r => r.FillWidth().TopAnchored(0, 1).Background(_InputSurface.Background).WithPadding(0));
             _CollapsedLayout = collapsed.Build();
         }
 
@@ -2744,6 +3025,7 @@ namespace Mux.Cli.App
         // visible as they are typed. Called after any composer edit; rebuilds the layout only on a change.
         private void RefreshComposerLayout()
         {
+            Interlocked.Exchange(ref _LastComposerInputMs, _App.NowMilliseconds);
             UpdateSlashSuggestions();
             UpdateMentionSuggestions();
 
@@ -3287,21 +3569,21 @@ namespace Mux.Cli.App
 
             string[] lines = (prompt ?? string.Empty).Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
             _PinnedPrompt.Clear();
-            _PinnedPrompt.WriteLine(Text.From(PromptText + lines[0], InputSurface));
-            for (int i = 1; i < lines.Length; i++) _PinnedPrompt.WriteLine(Text.From(lines[i], InputSurface));
+            _PinnedPrompt.WriteLine(Text.From(PromptText + lines[0], _InputSurface));
+            for (int i = 1; i < lines.Length; i++) _PinnedPrompt.WriteLine(Text.From(lines[i], _InputSurface));
             _HasPinnedPrompt = true;
             _PromptPinned = false;
             lock (_Sync) RebuildLayoutNoLock();
 
             _CurrentPromptLine?.Update(_CurrentPromptText);
-            _CurrentPromptText = Text.From(PromptText, InputSurface).Green().Bold().Append(Text.From(lines[0], InputSurface));
-            _CurrentPromptLine = _Conversation.WriteLine(Text.From(PromptText, InputSurface.WithBackground(CurrentPromptMarker)).Green().Bold()
-                .Append(Text.From(lines[0], InputSurface)));
+            _CurrentPromptText = Text.From(PromptText, _InputSurface).Green().Bold().Append(Text.From(lines[0], _InputSurface));
+            _CurrentPromptLine = _Conversation.WriteLine(Text.From(PromptText, _InputSurface.WithBackground(_CurrentPromptMarker)).Green().Bold()
+                .Append(Text.From(lines[0], _InputSurface)));
 
             string indent = new string(' ', PromptText.Length);
             for (int i = 1; i < lines.Length; i++)
             {
-                _Conversation.WriteLine(Text.From(indent + lines[i], InputSurface));
+                _Conversation.WriteLine(Text.From(indent + lines[i], _InputSurface));
             }
         }
 
@@ -4213,6 +4495,12 @@ namespace Mux.Cli.App
                 actions.Add(EndpointMenuAction.Remove);
             }
 
+            if (endpoints.Count > 0)
+            {
+                options.Add("⬇ Import models from an endpoint…");
+                actions.Add(EndpointMenuAction.ImportModels);
+            }
+
             options.Add("⬇ Import from Ollama…");
             actions.Add(EndpointMenuAction.Import);
 
@@ -4283,6 +4571,9 @@ namespace Mux.Cli.App
                     break;
                 case EndpointMenuAction.Import:
                     await ImportFromOllamaAsync().ConfigureAwait(false);
+                    break;
+                case EndpointMenuAction.ImportModels:
+                    await ImportModelsFromEndpointAsync(endpoints).ConfigureAwait(false);
                     break;
                 case EndpointMenuAction.None:
                 default:
@@ -4825,6 +5116,83 @@ namespace Mux.Cli.App
             }
         }
 
+
+        // Asks a configured endpoint's backend which models its credentials can use (OpenAI, Anthropic, Gemini,
+        // Bedrock, Azure OpenAI, xAI, Ollama, Ollama Cloud, OpenAI-compatible lists) and adds the chosen ones as
+        // copies of that endpoint, keeping its adapter, URL, credentials, region, and project.
+        private async Task ImportModelsFromEndpointAsync(List<EndpointConfig> endpoints)
+        {
+            if (endpoints.Count == 0)
+            {
+                return;
+            }
+
+            List<string> labels = endpoints.ConvertAll(e => $"{e.Name}  ({AdapterTypeEnumExtensions.ToKebab(e.AdapterType)} · {e.Model})");
+            WideSelectModal sourcePicker = WideSelectModal.Fit("Import models from which endpoint?", labels);
+            _App.Modals.Push(sourcePicker);
+            object? sourceResult = await sourcePicker.Completion.ConfigureAwait(false);
+            if (!(sourceResult is int sourceIndex) || sourceIndex < 0 || sourceIndex >= endpoints.Count)
+            {
+                return;
+            }
+
+            EndpointConfig source = endpoints[sourceIndex];
+            WriteNotice($"Asking {source.Name} for its models…");
+            EndpointModelListResult listing;
+            try
+            {
+                listing = await EndpointModelLister.ListModelsAsync(source, LoadIgnoreCertSafe(), _Cts.Token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Model listing failed: " + ex.Message);
+                return;
+            }
+
+            if (!listing.Success)
+            {
+                WriteNotice($"⚠ {source.Name} did not list its models: {listing.ErrorMessage}");
+                return;
+            }
+
+            List<EndpointConfig> existing = LoadEndpointsSafe();
+            List<string> candidates = listing.Models.FindAll(m => !EndpointModelImport.IsConfigured(source, m, existing));
+            if (candidates.Count == 0)
+            {
+                WriteNotice($"All {listing.Models.Count} model(s) on {source.Name} are already configured.");
+                return;
+            }
+
+            MultiSelectModal<string> picker = new MultiSelectModal<string>($"Import from {source.Name} ({candidates.Count} new)", candidates)
+            {
+                FooterHint = "Space toggle · a all · Enter import · Esc cancel"
+            };
+            _App.Modals.Push(picker);
+            object? pickResult = await picker.Completion.ConfigureAwait(false);
+            if (!(pickResult is IReadOnlyList<int> chosen) || chosen.Count == 0)
+            {
+                return;
+            }
+
+            List<string> models = new List<string>();
+            foreach (int index in chosen)
+            {
+                if (index >= 0 && index < candidates.Count) models.Add(candidates[index]);
+            }
+
+            try
+            {
+                List<EndpointConfig> current = LoadEndpointsSafe();
+                List<EndpointConfig> created = EndpointModelImport.CreateEndpoints(source, models, current);
+                current.AddRange(created);
+                SettingsLoader.SaveEndpoints(current);
+                WriteNotice($"Added {created.Count} endpoint(s) from {source.Name}.");
+            }
+            catch (Exception ex)
+            {
+                WriteNotice("Import save failed: " + ex.Message);
+            }
+        }
 
         private static bool LoadIgnoreCertSafe()
         {

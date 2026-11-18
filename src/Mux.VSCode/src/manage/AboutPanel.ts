@@ -1,6 +1,8 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
+import { PALETTE_UPDATE_SCRIPT, paletteStyleTag } from '../theme/palette';
+import { PaletteService } from '../theme/PaletteService';
 import { ConnectionState } from '../server/lifecycle';
 
 const GITHUB_URL = 'https://github.com/jchristn/Mux';
@@ -37,7 +39,9 @@ export class AboutPanel {
                 void vscode.env.openExternal(vscode.Uri.parse(message.url));
             }
         });
+        const paletteSub = PaletteService.subscribe((css) => void panel.webview.postMessage({ type: 'muxPalette', css }));
         panel.onDidDispose(() => {
+            paletteSub.dispose();
             AboutPanel.current = undefined;
         });
         AboutPanel.current = panel;
@@ -78,6 +82,7 @@ export class AboutPanel {
   button.link:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
   .tagline { color: var(--vscode-descriptionForeground); margin: 8px auto 22px; max-width: 380px; line-height: 1.5; }
 </style>
+${paletteStyleTag(nonce, PaletteService.css)}
 </head>
 <body>
   ${logo ? `<img src="${logo}" alt="mux" />` : ''}
@@ -91,6 +96,7 @@ export class AboutPanel {
     <button class="link secondary" data-url="${DOCS_URL}">${AboutPanel.escape(vscode.l10n.t('Extension documentation'))}</button>
   </div>
 <script nonce="${nonce}">
+${PALETTE_UPDATE_SCRIPT}
   const vscode = acquireVsCodeApi();
   document.querySelectorAll('button.link').forEach((b) => b.addEventListener('click', () => vscode.postMessage({ type: 'open', url: b.getAttribute('data-url') })));
 </script>

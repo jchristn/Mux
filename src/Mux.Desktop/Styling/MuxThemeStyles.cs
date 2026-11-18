@@ -138,7 +138,7 @@ namespace Mux.Desktop.Styling
             resources["TextControlBackgroundDisabled"] = theme.Hover;
             resources["TextControlBorderBrushDisabled"] = theme.Border;
             resources["TextControlForegroundDisabled"] = theme.Muted;
-            resources["TextControlSelectionHighlightColor"] = theme.AccentButton;
+            resources["TextControlSelectionHighlightColor"] = theme.Selection;
 
             resources["ComboBoxBackground"] = theme.SurfaceAlt;
             resources["ComboBoxBackgroundPointerOver"] = theme.Hover;
@@ -204,7 +204,10 @@ namespace Mux.Desktop.Styling
                 x => x.OfType<TextBox>(),
                 new Setter(TemplatedControl.CornerRadiusProperty, new CornerRadius(6)),
                 new Setter(TemplatedControl.PaddingProperty, new Thickness(10, 7, 10, 7)),
-                new Setter(Layoutable.MinHeightProperty, 34.0)));
+                new Setter(Layoutable.MinHeightProperty, 34.0),
+                new Setter(TextBox.CaretBrushProperty, theme.Cursor),
+                new Setter(TextBox.SelectionBrushProperty, theme.Selection),
+                new Setter(TextBox.SelectionForegroundBrushProperty, theme.Text)));
             styles.Add(Style(
                 x => x.OfType<ComboBox>(),
                 new Setter(TemplatedControl.CornerRadiusProperty, new CornerRadius(6)),

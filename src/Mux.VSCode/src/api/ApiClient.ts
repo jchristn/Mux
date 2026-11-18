@@ -5,6 +5,7 @@
  * can be unit-tested against a stub server.
  */
 
+import { PaletteDto, PaletteListDto } from '../theme/palette';
 import { ApiError } from './ApiError';
 import { drainBuffer } from './streaming';
 import {
@@ -13,6 +14,7 @@ import {
     CheckpointActionResult,
     CheckpointStatus,
     EndpointDetail,
+    EndpointModels,
     EndpointSummary,
     FileContextRequest,
     FileContextResponse,
@@ -130,6 +132,37 @@ export class ApiClient {
     /** Replaces the endpoint collection. A blank ApiKey on an item preserves the stored one. */
     public async putEndpoints(items: EndpointDetail[], signal?: AbortSignal): Promise<void> {
         await this.sendJson('PUT', '/v1.0/api/endpoints', { Items: items }, signal);
+    }
+
+    /** Asks an endpoint's backend which models its credentials can use. */
+    public getEndpointModels(name: string, signal?: AbortSignal): Promise<EndpointModels> {
+        return this.getJson<EndpointModels>(`/v1.0/api/endpoints/models?name=${encodeURIComponent(name)}`, signal);
+    }
+
+    /** Adds one endpoint per model, each a server-side copy of the source endpoint (stored keys carry over). */
+    public async importEndpointModels(source: string, models: string[], signal?: AbortSignal): Promise<EndpointDetail[]> {
+        const response = await this.sendJson<{ Items: EndpointDetail[] }>('POST', '/v1.0/api/endpoints/import', { Source: source, Models: models }, signal);
+        return response.Items ?? [];
+    }
+
+    /** Lists the shared color palettes and the active choice. */
+    public getPalettes(signal?: AbortSignal): Promise<PaletteListDto> {
+        return this.getJson<PaletteListDto>('/v1.0/api/palettes', signal);
+    }
+
+    /** Sets the shared active palette (a palette id or `system`). */
+    public setActivePalette(id: string, signal?: AbortSignal): Promise<PaletteListDto> {
+        return this.sendJson<PaletteListDto>('PUT', '/v1.0/api/palettes/active', { Id: id }, signal);
+    }
+
+    /** Adds or replaces a custom palette. */
+    public putPalette(palette: Partial<PaletteDto> & { Id: string; Name: string }, activate: boolean, signal?: AbortSignal): Promise<PaletteListDto> {
+        return this.sendJson<PaletteListDto>('PUT', '/v1.0/api/palettes', { Palette: palette, Activate: activate }, signal);
+    }
+
+    /** Deletes a custom palette. */
+    public deletePalette(id: string, signal?: AbortSignal): Promise<PaletteListDto> {
+        return this.sendJson<PaletteListDto>('DELETE', `/v1.0/api/palettes?id=${encodeURIComponent(id)}`, undefined, signal);
     }
 
     /** Deletes an endpoint by name. */

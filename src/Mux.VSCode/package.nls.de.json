@@ -63,5 +63,11 @@
   "cmd.runSetup": "Einrichtungsassistent ausführen",
   "cmd.manage.editCatalog": "Prompt-Überschreibung bearbeiten",
   "cmd.manage.resetCatalog": "Auf Standard zurücksetzen",
-  "config.context.largeFileMode": "Wie eine große aktive Datei zu Editor-Kontext wird: die Servereinstellung übernehmen oder map, summarize oder truncate erzwingen."
+  "config.context.largeFileMode": "Wie eine große aktive Datei zu Editor-Kontext wird: die Servereinstellung übernehmen oder map, summarize oder truncate erzwingen.",
+  "cmd.selectPalette": "Farbpalette auswählen",
+  "cmd.editPalette": "Farbpalette erstellen oder bearbeiten",
+  "cmd.manage.importModels": "Modelle importieren…",
+  "config.colorPalette": "Farben der mux-Webviews (Chat, Nutzung, Formulare). `editor` folgt deinem VS Code-Design; `mux` verwendet die auf einer beliebigen mux-Oberfläche gewählte Palette (Terminal, Desktop-App, Web-Dashboard), geteilt über settings.json.",
+  "config.colorPalette.editor": "Dem VS Code-Farbdesign folgen.",
+  "config.colorPalette.mux": "Die gemeinsame mux-Farbpalette verwenden."
 }

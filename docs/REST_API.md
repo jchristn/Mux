@@ -100,6 +100,12 @@ All paths are versioned under `/v1.0/api`.
 | GET | `/v1.0/api/endpoints/detail` | key | Full endpoint fields for editing, **secrets masked** (`apiKeySet` flag; header/key values blanked). |
 | PUT | `/v1.0/api/endpoints` | key | Replace the endpoint collection (`{ "items": [ … ] }`). A blank secret preserves the stored one. |
 | DELETE | `/v1.0/api/endpoints?name=<name>` | key | Delete an endpoint. |
+| GET | `/v1.0/api/endpoints/models?name=<name>` | key | Ask the endpoint's backend which models its credentials can use: `{ Name, AdapterType, ConfiguredModel, Success, Models, ErrorCode, ErrorMessage }`. Vertex AI reports `models_not_supported`. |
+| POST | `/v1.0/api/endpoints/import` | key | `{ "Source": "<endpoint>", "Models": [ … ] }` adds one endpoint per model, each a server-side copy of the source endpoint (stored keys carry over), with a unique name. Already-configured models are skipped. Returns the endpoint list. |
+| GET | `/v1.0/api/palettes` | key | Every built-in and custom color palette, fully resolved, with `Active` (the shared `colorPalette`; omitted until one is chosen) and `CursorBlink`. |
+| PUT | `/v1.0/api/palettes/active` | key | `{ "Id": "<palette id or system>" }` sets the palette every surface renders with. Returns the listing. |
+| PUT | `/v1.0/api/palettes` | key | `{ "Palette": { Id, Name, Dark, Base, Colors }, "Activate": true }` adds or replaces a custom palette. `Colors` maps role names to hex values, and roles left out inherit from `Base`. |
+| DELETE | `/v1.0/api/palettes?id=<id>` | key | Delete a custom palette. If it was active, the default becomes active. Built-ins cannot be deleted. |
 | GET/PUT/DELETE | `/v1.0/api/mcp-servers` | key | CRUD over MCP servers (auth secret masked/preserved). DELETE takes `?name=`. |
 | POST | `/v1.0/api/mcp-servers/validate` | key | Connect to a saved server (`{ "Name" }`) or an unsaved definition (`{ "Server": { … } }`; a blank `AuthSecret` reuses the saved secret), run the MCP handshake, and list its tools. Optional `TimeoutSeconds` (1 to 120, default 30). Always `200` with `{ "Name", "Connected", "Method", "ToolCount", "Tools", "Error", "Details", "ElapsedMs" }`. On failure `Error` is the one-line cause (`connection refused by host:port`, `host not found`, `TLS handshake … failed`, `no response … within N s`, `HTTP 401 Unauthorized`, `initialize returned JSON-RPC error …`, or `command 'x' was not found on PATH`), and `Details` is the diagnosis: the request URL, HTTP status, `Content-Type`, `Content-Length`, `WWW-Authenticate`, `Retry-After`, `Server`, whether an `Mcp-Session-Id` was issued, the start of the response body, the MCP client's error, and for stdio the resolved command path and the server's stderr. Auth secrets never appear. `404` for an unknown name, `400` for an empty or invalid body. |
 | GET/PUT | `/v1.0/api/prompts` | key | Prompt profiles (name, active, and all three prompt fields: `systemPrompt`, `toolsDisabledPrompt`, `compactionPrompt`). On PUT a blank field inherits the built-in default; a `null` (omitted) advanced field preserves the stored value. |
@@ -249,7 +255,8 @@ inlined). It provides:
 - **Pricing** — a form-based editor over `pricing.json` (per-model input/cached/output rates in USD per
   million tokens) used to derive usage cost. Backed by `GET`/`PUT /v1.0/api/usage/pricing`.
 - **Server Info** — health/version/uptime and the configured endpoints.
-- Light/dark theme (persisted), using the mux logos from `assets/`.
+- Color palettes shared with every surface: the top-bar palette button opens a picker with previews of all
+  fourteen built-ins and your custom palettes, plus a form for creating or editing one with color pickers.
 
 The usage routes read a shared local SQLite database (`~/.mux/usage.db`) written by every mux instance on
 the machine, so the dashboard reflects CLI activity too. When telemetry is disabled the query routes return

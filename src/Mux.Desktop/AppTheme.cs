@@ -2,6 +2,7 @@ namespace Mux.Desktop
 {
     using System;
     using Avalonia.Media;
+    using Mux.Core.Theming;
 
     /// <summary>
     /// The application color palette: slate neutrals (shared with the Armada dashboard and Armada Harbor) with
@@ -70,40 +71,129 @@ namespace Mux.Desktop
         public IBrush Success { get; private set; } = Brushes.Green;
 
         /// <summary>The active palette. Defaults to the dark (TUI-anchored) variant.</summary>
-        public static AppTheme Current { get; private set; } = CreateDark();
+        /// <summary>
+        /// The text caret color (the palette's <c>cursor</c> role).
+        /// </summary>
+        public IBrush Cursor { get; private set; } = Brushes.Green;
 
         /// <summary>
-        /// Swap the active palette between light and dark.
+        /// The background of selected text and rows.
         /// </summary>
-        /// <returns>The new active palette.</returns>
+        public IBrush Selection { get; private set; } = Brushes.LightGreen;
+
+        /// <summary>
+        /// Warning states.
+        /// </summary>
+        public IBrush Warning { get; private set; } = Brushes.Orange;
+
+        /// <summary>
+        /// Informational states.
+        /// </summary>
+        public IBrush Info { get; private set; } = Brushes.SteelBlue;
+
+        /// <summary>
+        /// The id of the palette this theme was built from (for example <c>mux</c> or <c>midnight</c>).
+        /// </summary>
+        public string PaletteId { get; private set; } = ColorPaletteCatalog.DefaultId;
+
+        /// <summary>
+        /// Gets the active palette.
+        /// </summary>
+        public static AppTheme Current { get; private set; } = FromPalette(ColorPaletteCatalog.Resolve(ColorPaletteCatalog.DefaultId, null));
+
+        /// <summary>
+        /// Makes a palette the active theme and raises <see cref="Changed"/>.
+        /// </summary>
+        /// <param name="palette">A resolved palette.</param>
+        /// <returns>The new current theme.</returns>
+        public static AppTheme SetPalette(ColorPalette palette)
+        {
+            Current = FromPalette(palette);
+            Changed?.Invoke(null, EventArgs.Empty);
+            return Current;
+        }
+
+        /// <summary>
+        /// Builds a theme from a shared palette. The Mux, Mux Light, and High Contrast palettes keep the desktop
+        /// app's hand-tuned brushes (so the default look is unchanged); every other palette maps its roles
+        /// directly and derives the secondary shades (hover, soft accent, input border) by blending.
+        /// </summary>
+        /// <param name="palette">A resolved palette (every color set).</param>
+        /// <returns>The theme.</returns>
+        public static AppTheme FromPalette(ColorPalette palette)
+        {
+            if (palette == null) throw new ArgumentNullException(nameof(palette));
+            ColorPaletteColors c = palette.Colors;
+            AppTheme theme;
+            switch (palette.Id)
+            {
+                case ColorPaletteCatalog.DefaultId:
+                    theme = CreateDark();
+                    break;
+                case ColorPaletteCatalog.LightId:
+                    theme = CreateLight();
+                    break;
+                case ColorPaletteCatalog.HighContrastId:
+                    theme = CreateHighContrast();
+                    break;
+                default:
+                    string background = c.Background ?? "#000000";
+                    theme = new AppTheme
+                    {
+                        IsDark = palette.Dark,
+                        Surface = Solid(background),
+                        SurfaceAlt = Solid(c.Surface ?? background),
+                        Text = Solid(c.Text ?? "#ffffff"),
+                        Muted = Solid(c.Muted ?? "#888888"),
+                        Border = Solid(c.Border ?? "#444444"),
+                        Hover = Solid(c.SurfaceAlt ?? background),
+                        InputBorder = Solid(ColorPaletteCatalog.Mix(c.Border ?? "#444444", c.Text ?? "#ffffff", 0.22)),
+                        Accent = Solid(c.Accent ?? "#4ade80"),
+                        AccentSoft = Solid(ColorPaletteCatalog.Mix(background, c.Accent ?? "#4ade80", palette.Dark ? 0.2 : 0.16)),
+                        AccentButton = Solid(c.Accent ?? "#4ade80"),
+                        AccentText = Solid(c.AccentText ?? "#000000"),
+                        UserBubble = Solid(c.SurfaceAlt ?? background),
+                        AssistantBubble = Solid(c.Surface ?? background),
+                        Error = Solid(c.Error ?? "#ff5555"),
+                        Success = Solid(c.Success ?? "#55ff55")
+                    };
+                    break;
+            }
+
+            theme.PaletteId = palette.Id;
+            theme.Cursor = Solid(c.Cursor ?? c.Accent ?? "#4ade80");
+            theme.Selection = Solid(c.Selection ?? c.SurfaceAlt ?? "#335533");
+            theme.Warning = Solid(c.Warning ?? "#ffaa00");
+            theme.Info = Solid(c.Info ?? "#55aaff");
+            return theme;
+        }
+
+        /// <summary>
+        /// Switches between the Mux and Mux Light palettes.
+        /// </summary>
+        /// <returns>The new current theme.</returns>
         public static AppTheme Toggle()
         {
-            Current = Current.IsDark ? CreateLight() : CreateDark();
-            Changed?.Invoke(null, EventArgs.Empty);
-            return Current;
+            return Set(!Current.IsDark);
         }
 
         /// <summary>
-        /// Set the active palette to a specific variant.
+        /// Applies the Mux (dark) or Mux Light palette.
         /// </summary>
-        /// <param name="dark">True for the dark variant; false for light.</param>
-        /// <returns>The new active palette.</returns>
+        /// <param name="dark">True for dark.</param>
+        /// <returns>The new current theme.</returns>
         public static AppTheme Set(bool dark)
         {
-            Current = dark ? CreateDark() : CreateLight();
-            Changed?.Invoke(null, EventArgs.Empty);
-            return Current;
+            return SetPalette(ColorPaletteCatalog.Resolve(dark ? ColorPaletteCatalog.DefaultId : ColorPaletteCatalog.LightId, null));
         }
 
         /// <summary>
-        /// Set the active palette to the high-contrast accessibility variant.
+        /// Applies the High Contrast palette.
         /// </summary>
-        /// <returns>The new active palette.</returns>
+        /// <returns>The new current theme.</returns>
         public static AppTheme SetHighContrast()
         {
-            Current = CreateHighContrast();
-            Changed?.Invoke(null, EventArgs.Empty);
-            return Current;
+            return SetPalette(ColorPaletteCatalog.Resolve(ColorPaletteCatalog.HighContrastId, null));
         }
 
         /// <summary>

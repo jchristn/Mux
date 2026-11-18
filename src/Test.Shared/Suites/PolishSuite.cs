@@ -41,9 +41,12 @@ namespace Test.Shared.Suites
                             string start = app.ThemeName; // "mux" default
                             app.CycleTheme();
                             MuxAssert.IsFalse(string.Equals(start, app.ThemeName, StringComparison.Ordinal), "theme changed");
-                            app.CycleTheme();
-                            app.CycleTheme();
-                            app.CycleTheme(); // four presets (mux + three built-ins) -> back to start
+                            for (int i = 1; i < app.PaletteCount; i++)
+                            {
+                                app.CycleTheme(); // every palette once -> back to start
+                            }
+
+                            MuxAssert.IsTrue(app.PaletteCount >= 12, "at least a dozen built-in palettes offered");
                             MuxAssert.AreEqual(start, app.ThemeName, "wrapped to start");
                         }
                     }),

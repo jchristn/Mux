@@ -11,15 +11,16 @@ namespace Mux.Cli.App
     using TUIKit.Widgets;
 
     /// <summary>
-    /// A single modal form for creating or editing an endpoint. It hosts a <see cref="Form"/> with fields
-    /// for the name, adapter type, base URL, model, an optional API key, the API-key placement (bearer /
-    /// header / query) and its parameter name, and every tunable endpoint parameter (default flag, max output
-    /// tokens, temperature, context window, timeout, tool auto-approval, and the optional max-agent-iterations
-    /// override), navigated with Tab; Enter validates and returns a populated <see cref="EndpointConfig"/>
-    /// (via <see cref="Modal.Completion"/>), and Escape cancels (returns null). The placement fields let the
-    /// key be sent as a bearer header (the default), a caller-named header, or a query-string parameter — the
-    /// last two for services that do not accept bearer tokens. Fields that are not surfaced here — the nested
-    /// <see cref="EndpointConfig.Quirks"/> and any custom headers — are carried over unchanged.
+    /// A single modal form for creating or editing an endpoint, covering every adapter mux supports
+    /// (Ollama, Ollama Cloud, OpenAI, OpenAI-compatible, vLLM, Anthropic, Gemini, Azure OpenAI, Vertex AI,
+    /// AWS Bedrock, and xAI). It hosts a <see cref="Form"/> with fields for the name, adapter type, base URL,
+    /// model, the credentials the adapter uses (an API key and, for the Chat Completions adapters and Ollama,
+    /// its placement and parameter name; a region for Vertex and Bedrock and a project for Vertex), and every
+    /// tunable endpoint parameter, navigated with Tab. Fields that do not apply to the selected adapter are
+    /// hidden, the same rules the desktop app, web dashboard, and VS Code forms use. Enter validates and
+    /// returns a populated <see cref="EndpointConfig"/> (via <see cref="Modal.Completion"/>), and Escape cancels
+    /// (returns null). Fields that are not surfaced here — the nested <see cref="EndpointConfig.Quirks"/>,
+    /// custom headers, and a stored Azure <see cref="EndpointConfig.ApiVersion"/> — are carried over unchanged.
     /// </summary>
     public sealed class EndpointFormModal : Modal
     {
@@ -36,7 +37,12 @@ namespace Mux.Cli.App
         private const string OllamaDefaultBaseUrl = "http://localhost:11434";
         private const string OpenAiDefaultBaseUrl = "http://localhost:11434/v1";
 
-        private static readonly string[] _Adapters = { "openai-compatible", "ollama", "openai", "vllm", "ollama-cloud", "xai" };
+        // Every adapter, in the order the picker shows them: local runners first, then hosted APIs and clouds.
+        private static readonly string[] _Adapters =
+        {
+            "openai-compatible", "ollama", "vllm", "ollama-cloud", "openai", "anthropic", "gemini",
+            "azure-openai", "vertex", "bedrock", "xai"
+        };
         private static readonly string[] _Placements = { "bearer", "header", "query" };
 
 
@@ -51,6 +57,8 @@ namespace Mux.Cli.App
         private readonly TextField _ApiKey;
         private readonly TextField _AuthPlacement;
         private readonly TextField _AuthParameterName;
+        private readonly TextField _Region;
+        private readonly TextField _Project;
         private readonly Checkbox _Default;
         private readonly TextField _MaxTokens;
         private readonly TextField _Temperature;
@@ -88,6 +96,8 @@ namespace Mux.Cli.App
             _ApiKey = new TextField();
             _AuthPlacement = new TextField();
             _AuthParameterName = new TextField();
+            _Region = new TextField { Value = source.Region ?? string.Empty };
+            _Project = new TextField { Value = source.Project ?? string.Empty };
             _Default = new Checkbox("Use as default endpoint", source.IsDefault);
             _MaxTokens = new TextField();
             _Temperature = new TextField();
@@ -103,11 +113,7 @@ namespace Mux.Cli.App
             if (existing != null)
             {
                 _Name.Value = existing.Name;
-                int target = IndexOfAdapter(existing.AdapterType);
-                for (int i = 0; i < target; i++)
-                {
-                    _Adapter.HandleKey(KeyEvent.Special(KeyCode.Down));
-                }
+                _Adapter.SelectedIndex = IndexOfAdapter(existing.AdapterType);
 
                 _BaseUrl.Value = existing.BaseUrl;
                 _Model.Value = existing.Model;
@@ -148,11 +154,13 @@ namespace Mux.Cli.App
             _Form = new Form();
             _Form.Add("Name", _Name, () => _Name.Value.Trim().Length == 0 ? "Name is required." : null);
             _Form.Add("Adapter", _Adapter);
-            _Form.Add("Base URL", _BaseUrl, () => !UsesFixedBearer(ParseAdapter(_Adapter.SelectedOption)) && _BaseUrl.Value.Trim().Length == 0 ? "Base URL is required." : null);
-            _Form.Add("Model", _Model, () => _Model.Value.Trim().Length == 0 ? "Model is required." : null);
+            _Form.Add("Base URL", _BaseUrl, () => RequiresBaseUrl(SelectedAdapter) && _BaseUrl.Value.Trim().Length == 0 ? "Base URL is required." : null);
+            _Form.Add("Model", _Model, () => _Model.Value.Trim().Length == 0 ? (SelectedAdapter == AdapterTypeEnum.AzureOpenAi ? "Deployment name is required." : "Model is required.") : null);
             _Form.Add("API key (optional)", _ApiKey);
-            _Form.Add("API key placement (bearer/header/query)", _AuthPlacement, () => UsesFixedBearer(ParseAdapter(_Adapter.SelectedOption)) ? null : ValidatePlacement(_AuthPlacement.Value));
-            _Form.Add("Auth parameter name (for header/query)", _AuthParameterName, () => UsesFixedBearer(ParseAdapter(_Adapter.SelectedOption)) ? null : ValidateParameterName(_AuthPlacement.Value, _AuthParameterName.Value));
+            _Form.Add("API key placement (bearer/header/query)", _AuthPlacement, () => IsOpenAiFamily(SelectedAdapter) ? ValidatePlacement(_AuthPlacement.Value) : null);
+            _Form.Add("Auth parameter name (for header/query)", _AuthParameterName, () => IsOpenAiFamily(SelectedAdapter) ? ValidateParameterName(_AuthPlacement.Value, _AuthParameterName.Value) : null);
+            _Form.Add("Region", _Region, () => UsesRegion(SelectedAdapter) && _Region.Value.Trim().Length == 0 ? "Region is required for " + AdapterTypeEnumExtensions.ToKebab(SelectedAdapter) + "." : null);
+            _Form.Add("Google Cloud project", _Project, () => SelectedAdapter == AdapterTypeEnum.Vertex && _Project.Value.Trim().Length == 0 ? "Project is required for vertex." : null);
             _Form.Add("Default", _Default);
             _Form.Add("Max output tokens", _MaxTokens, () => ValidateInt(_MaxTokens.Value, "Max output tokens", 1024, 131072));
             _Form.Add("Temperature", _Temperature, () => ValidateDouble(_Temperature.Value, "Temperature", 0.0, 2.0));
@@ -166,6 +174,7 @@ namespace Mux.Cli.App
             _Form.Add("Show thinking", _ShowThinking);
             _Form.SubmitRequested += (sender, e) => Complete();
             _Host = new ScrollingFormHost(_Form);
+            UpdateAdaptiveFields();
         }
 
         #endregion
@@ -192,12 +201,7 @@ namespace Mux.Cli.App
             // has typed or edited is never clobbered.
             int adapterBefore = _Adapter.SelectedIndex;
             bool handled = _Form.HandleKey(key);
-
-            if (_Adapter.SelectedIndex != adapterBefore && IsDefaultBaseUrl(_BaseUrl.Value))
-            {
-                _BaseUrl.Value = DefaultBaseUrlFor(ParseAdapter(_Adapter.SelectedOption));
-            }
-
+            OnAdapterMaybeChanged(adapterBefore);
             return handled;
         }
 
@@ -215,12 +219,9 @@ namespace Mux.Cli.App
             int adapterBefore = _Adapter.SelectedIndex;
             _Host.HandleMouse(mouse);
 
-            // Clicking the adapter selector can re-seed the Base URL prefill, mirroring the keyboard path.
-            if (_Adapter.SelectedIndex != adapterBefore && IsDefaultBaseUrl(_BaseUrl.Value))
-            {
-                _BaseUrl.Value = DefaultBaseUrlFor(ParseAdapter(_Adapter.SelectedOption));
-            }
-
+            // Clicking the adapter selector re-seeds the Base URL prefill and the visible fields, mirroring the
+            // keyboard path.
+            OnAdapterMaybeChanged(adapterBefore);
             return true;
         }
 
@@ -309,9 +310,14 @@ namespace Mux.Cli.App
                 // The key is stored on the endpoint and placed by AuthPlacement (bearer header, a caller-named
                 // header, or a query-string parameter) — the engine applies it, so no Authorization header is
                 // written here.
-                ApiKey = apiKey.Length > 0 ? apiKey : null,
-                AuthPlacement = UsesFixedBearer(adapterType) ? AuthPlacementEnum.Bearer : AuthPlacementEnumConverter.Parse(_AuthPlacement.Value),
-                AuthParameterName = !UsesFixedBearer(adapterType) && _AuthParameterName.Value.Trim().Length > 0 ? _AuthParameterName.Value.Trim() : null,
+                ApiKey = UsesApiKey(adapterType) && apiKey.Length > 0 ? apiKey : null,
+                AuthPlacement = IsOpenAiFamily(adapterType) ? AuthPlacementEnumConverter.Parse(_AuthPlacement.Value) : AuthPlacementEnum.Bearer,
+                AuthParameterName = IsOpenAiFamily(adapterType) && _AuthParameterName.Value.Trim().Length > 0 ? _AuthParameterName.Value.Trim() : null,
+                Region = UsesRegion(adapterType) && _Region.Value.Trim().Length > 0 ? _Region.Value.Trim() : null,
+                Project = adapterType == AdapterTypeEnum.Vertex && _Project.Value.Trim().Length > 0 ? _Project.Value.Trim() : null,
+
+                // Azure's v1 API needs no api-version; a stored value is kept as is (the engine ignores it).
+                ApiVersion = _Existing?.ApiVersion,
 
                 // The quirks object is not editable here; carry it over so an edit never silently resets a
                 // hand-tuned backend behavior profile back to the adapter defaults.
@@ -464,20 +470,111 @@ namespace Mux.Cli.App
             return int.Parse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture);
         }
 
-        // The openai adapter speaks the OpenAI Responses API and, like xAI and Ollama Cloud, always sends a bearer key.
-        private static bool UsesFixedBearer(AdapterTypeEnum adapter) => adapter == AdapterTypeEnum.OllamaCloud || adapter == AdapterTypeEnum.XAi || adapter == AdapterTypeEnum.OpenAi;
+        private AdapterTypeEnum SelectedAdapter => ParseAdapter(_Adapter.SelectedOption);
+
+        // Re-seeds a still-default Base URL and re-applies field visibility when the adapter selection moved.
+        private void OnAdapterMaybeChanged(int adapterBefore)
+        {
+            if (_Adapter.SelectedIndex == adapterBefore)
+            {
+                return;
+            }
+
+            if (IsDefaultBaseUrl(_BaseUrl.Value))
+            {
+                _BaseUrl.Value = DefaultBaseUrlFor(SelectedAdapter);
+            }
+
+            UpdateAdaptiveFields();
+        }
+
+        // Shows only the fields that apply to the selected adapter, matching the desktop, web, and VS Code
+        // endpoint forms: key placement for the Chat Completions adapters and Ollama; an API key for every
+        // keyed adapter (not the cloud-IAM ones); region for Vertex and Bedrock; project for Vertex.
+        private void UpdateAdaptiveFields()
+        {
+            AdapterTypeEnum adapter = SelectedAdapter;
+            bool openAiFamily = IsOpenAiFamily(adapter);
+            SetVisible(_ApiKey, UsesApiKey(adapter));
+            SetVisible(_AuthPlacement, openAiFamily);
+            SetVisible(_AuthParameterName, openAiFamily);
+            SetVisible(_Region, UsesRegion(adapter));
+            SetVisible(_Project, adapter == AdapterTypeEnum.Vertex);
+            SetVisible(_GeminiThinkingBudget, adapter == AdapterTypeEnum.Gemini || adapter == AdapterTypeEnum.Vertex);
+
+            SetLabel(_BaseUrl, RequiresBaseUrl(adapter)
+                ? (adapter == AdapterTypeEnum.AzureOpenAi ? "Base URL (https://RESOURCE.openai.azure.com)" : "Base URL")
+                : adapter == AdapterTypeEnum.OllamaCloud ? "Base URL (fixed: https://ollama.com)" : "Base URL (blank = provider default)");
+            SetLabel(_Model, adapter == AdapterTypeEnum.AzureOpenAi ? "Deployment name" : adapter == AdapterTypeEnum.Bedrock ? "Model or inference profile id" : "Model");
+            SetLabel(_ApiKey, KeyLabel(adapter));
+            SetLabel(_Region, adapter == AdapterTypeEnum.Bedrock
+                ? "AWS region (auth: AWS_ACCESS_KEY_ID + SECRET)"
+                : "GCP region (auth: Application Default Credentials)");
+        }
+
+        private void SetVisible(IWidget widget, bool visible)
+        {
+            int index = IndexOfField(widget);
+            if (index >= 0)
+            {
+                _Form.SetFieldVisible(index, visible);
+            }
+        }
+
+        private void SetLabel(IWidget widget, string label)
+        {
+            int index = IndexOfField(widget);
+            if (index >= 0)
+            {
+                _Form.SetFieldLabel(index, label);
+            }
+        }
+
+        private int IndexOfField(IWidget widget)
+        {
+            for (int i = 0; i < _Form.FieldCount; i++)
+            {
+                if (ReferenceEquals(_Form.GetField(i), widget))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private static string KeyLabel(AdapterTypeEnum adapter)
+        {
+            switch (adapter)
+            {
+                case AdapterTypeEnum.OpenAi: return "API key (blank = OPENAI_API_KEY)";
+                case AdapterTypeEnum.Anthropic: return "API key (blank = ANTHROPIC_API_KEY)";
+                case AdapterTypeEnum.Gemini: return "API key (blank = GEMINI_API_KEY / GOOGLE_API_KEY)";
+                case AdapterTypeEnum.XAi: return "API key (blank = XAI_API_KEY)";
+                case AdapterTypeEnum.OllamaCloud: return "API key (blank = OLLAMA_API_KEY)";
+                case AdapterTypeEnum.AzureOpenAi: return "API key (Azure OpenAI)";
+                default: return "API key (optional; ${ENV_VAR} references work)";
+            }
+        }
+
+        // The Chat Completions adapters and Ollama honor a configurable key placement; every other keyed adapter
+        // has a fixed scheme (bearer for openai/xai/ollama-cloud, x-api-key for anthropic, and so on).
+        private static bool IsOpenAiFamily(AdapterTypeEnum adapter) =>
+            adapter == AdapterTypeEnum.Ollama || adapter == AdapterTypeEnum.OpenAiCompatible || adapter == AdapterTypeEnum.Vllm;
+
+        // Vertex and Bedrock authenticate with cloud credentials (ADC / AWS signing), never an API key.
+        private static bool UsesApiKey(AdapterTypeEnum adapter) => adapter != AdapterTypeEnum.Vertex && adapter != AdapterTypeEnum.Bedrock;
+
+        private static bool UsesRegion(AdapterTypeEnum adapter) => adapter == AdapterTypeEnum.Vertex || adapter == AdapterTypeEnum.Bedrock;
+
+        // Self-hosted servers and Azure have no public default; the hosted adapters fall back to their API.
+        private static bool RequiresBaseUrl(AdapterTypeEnum adapter) =>
+            IsOpenAiFamily(adapter) || adapter == AdapterTypeEnum.AzureOpenAi;
 
         private static int IndexOfAdapter(AdapterTypeEnum adapterType)
         {
-            switch (adapterType)
-            {
-                case AdapterTypeEnum.Ollama: return 1;
-                case AdapterTypeEnum.OpenAi: return 2;
-                case AdapterTypeEnum.Vllm: return 3;
-                case AdapterTypeEnum.OllamaCloud: return 4;
-                case AdapterTypeEnum.XAi: return 5;
-                default: return 0;
-            }
+            int index = Array.IndexOf(_Adapters, AdapterTypeEnumExtensions.ToKebab(adapterType));
+            return index < 0 ? 0 : index;
         }
 
         private static AdapterTypeEnum ParseAdapter(string adapter)
@@ -487,15 +584,22 @@ namespace Mux.Cli.App
 
         private static string DefaultBaseUrlFor(AdapterTypeEnum adapterType)
         {
-            return adapterType == AdapterTypeEnum.XAi ? "https://api.x.ai/v1"
-                : adapterType == AdapterTypeEnum.OllamaCloud ? "https://ollama.com"
-                : adapterType == AdapterTypeEnum.Ollama ? OllamaDefaultBaseUrl : OpenAiDefaultBaseUrl;
+            switch (adapterType)
+            {
+                case AdapterTypeEnum.XAi: return "https://api.x.ai/v1";
+                case AdapterTypeEnum.OllamaCloud: return "https://ollama.com";
+                case AdapterTypeEnum.Ollama: return OllamaDefaultBaseUrl;
+                case AdapterTypeEnum.OpenAiCompatible:
+                case AdapterTypeEnum.Vllm: return OpenAiDefaultBaseUrl;
+                default: return string.Empty; // hosted APIs use their public default; Azure needs the resource URL
+            }
         }
 
         private static bool IsDefaultBaseUrl(string? value)
         {
             string trimmed = (value ?? string.Empty).Trim().TrimEnd('/');
-            return string.Equals(trimmed, "https://api.x.ai/v1", StringComparison.OrdinalIgnoreCase)
+            return trimmed.Length == 0
+                || string.Equals(trimmed, "https://api.x.ai/v1", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(trimmed, "https://ollama.com", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(trimmed, OllamaDefaultBaseUrl, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(trimmed, OpenAiDefaultBaseUrl, StringComparison.OrdinalIgnoreCase);

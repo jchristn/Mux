@@ -118,7 +118,11 @@ The **Local server** window starts and stops an embedded `mux serve` instance (t
 
 The desktop app reads the same configuration as the rest of mux, under `~/.mux/` by default. Set `MUX_CONFIG_DIR` before launching to point at an isolated config directory — endpoints, settings, sessions, and usage telemetry are all shared with the CLI and the tray agent. See [`CONFIG.md`](CONFIG.md).
 
-Theme (System / Light / Dark, plus a **High contrast** accessibility variant) and other preferences live in the **Settings** window. The theme choice is remembered across launches.
+The color palette is set in **View > Theme** or the **Settings** window. The choices are System (follow the
+OS), the fourteen built-in palettes, or your own. **Customize palettes…** opens an editor where you can start
+from any palette, change its colors (each shows a live swatch), and save or delete custom palettes. The choice
+is saved as `colorPalette` in the shared `settings.json`, so the terminal UI and web dashboard use it too. Text
+boxes draw their caret in the palette's cursor color. See [Color palettes](CONFIG.md#color-palettes).
 
 ## Parallel conversations
 

@@ -31,6 +31,9 @@ namespace Mux.Core.Models
         private bool _IgnoreCertErrors = false;
         private bool _ShowBoundaryLines = false;
         private string _TuiTheme = "mux";
+        private string? _ColorPalette = null;
+        private List<Mux.Core.Theming.ColorPalette> _CustomPalettes = new List<Mux.Core.Theming.ColorPalette>();
+        private bool _CursorBlink = true;
         private bool _SkillsEnabled = true;
         private int _SkillRefreshIntervalSeconds = 30;
         private string? _SkillsDirectory = null;
@@ -296,6 +299,47 @@ namespace Mux.Core.Models
                         break;
                 }
             }
+        }
+
+        /// <summary>
+        /// The color palette every surface (TUI, desktop app, web dashboard, and VS Code when set to follow
+        /// mux) renders with: a built-in id such as <c>mux</c>, <c>midnight</c>, or <c>glacier</c>, a custom
+        /// palette id from <see cref="CustomPalettes"/>, or <c>system</c> to follow the operating system's light
+        /// or dark preference. Null until a palette is chosen, in which case each surface keeps its previous
+        /// theme setting (<see cref="TuiTheme"/> for the TUI). See <see cref="Mux.Core.Theming.ColorPaletteCatalog"/>.
+        /// </summary>
+        [JsonPropertyName("colorPalette")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ColorPalette
+        {
+            get => _ColorPalette;
+            set
+            {
+                string normalized = Mux.Core.Theming.ColorPaletteCatalog.NormalizeId(value);
+                _ColorPalette = normalized.Length == 0 ? null : normalized;
+            }
+        }
+
+        /// <summary>
+        /// User-defined palettes. Each has an id, a name, a dark flag, an optional base palette, and any of the
+        /// fourteen color roles; roles left out are inherited from the base. Null is treated as empty.
+        /// </summary>
+        [JsonPropertyName("customPalettes")]
+        public List<Mux.Core.Theming.ColorPalette> CustomPalettes
+        {
+            get => _CustomPalettes;
+            set => _CustomPalettes = value ?? new List<Mux.Core.Theming.ColorPalette>();
+        }
+
+        /// <summary>
+        /// Whether the TUI's text caret blinks (in the palette's cursor color). Defaults to true. Graphical
+        /// surfaces use their platform's caret blink and only take the cursor color from the palette.
+        /// </summary>
+        [JsonPropertyName("cursorBlink")]
+        public bool CursorBlink
+        {
+            get => _CursorBlink;
+            set => _CursorBlink = value;
         }
 
         /// <summary>

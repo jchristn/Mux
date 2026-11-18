@@ -7,7 +7,8 @@ same pattern: connection, credentials, endpoint example, and provider-specific n
 ## Configure an endpoint
 
 Endpoints live in `~/.mux/endpoints.json`, or under your `MUX_CONFIG_DIR`. The TUI,
-desktop, web dashboard, and VS Code extension share this file. Use their endpoint
+desktop, web dashboard, and VS Code extension share this file, and each one's endpoint editor offers every
+adapter below with the fields that adapter uses. Use their endpoint
 editors or edit the JSON directly. Each example below is **one entry** in the
 `endpoints` array; add it alongside your other endpoints:
 
