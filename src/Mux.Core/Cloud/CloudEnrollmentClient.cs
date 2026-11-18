@@ -9,8 +9,9 @@ namespace Mux.Core.Cloud
     using MuxCloud.Protocol;
 
     /// <summary>
-    /// Exchanges an account email and password for a machine credential (<c>POST /v1.0/api/machines/enroll</c>).
-    /// The password is sent once and never stored.
+    /// Exchanges an account email and password for a machine credential (<c>POST /v1.0/api/machines/enroll</c>),
+    /// and signs the machine out again (<c>POST /v1.0/api/machines/sign-out</c>). The password is sent once and never
+    /// stored.
     /// <para>Thread safety: safe to call concurrently.</para>
     /// </summary>
     public sealed class CloudEnrollmentClient
@@ -123,6 +124,41 @@ namespace Mux.Core.Cloud
                 }
 
                 return result;
+            }
+        }
+
+        /// <summary>
+        /// Tell Mux Cloud this machine is signing out (<c>POST /v1.0/api/machines/sign-out</c>), so the cloud revokes it
+        /// instead of listing it as offline. Authenticated by a sign-out proof over the machine secret; no password or
+        /// token is sent. Best effort: never throws for network or server failures.
+        /// </summary>
+        /// <param name="serverUrl">Mux Cloud server URL; blank uses <see cref="TunnelProtocol.DefaultServerUrl"/>.</param>
+        /// <param name="machineId">Machine identifier.</param>
+        /// <param name="machineSecret">Machine secret.</param>
+        /// <param name="allowInvalidCertificates">Accept invalid TLS certificates (self-hosted development).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the cloud confirmed (204), or no longer recognizes the machine (401, already revoked or removed).</returns>
+        public async Task<bool> SignOutAsync(string? serverUrl, string machineId, string machineSecret, bool allowInvalidCertificates, CancellationToken token)
+        {
+            if (string.IsNullOrWhiteSpace(machineId) || string.IsNullOrWhiteSpace(machineSecret)) return false;
+            try
+            {
+                Uri uri = TunnelProtocol.ToHttpUri(serverUrl, TunnelProtocol.SignOutPath);
+                HttpMessageHandler handler = _Handler ?? CreateHandler(allowInvalidCertificates);
+                using HttpClient http = new HttpClient(handler, _Handler == null) { Timeout = _Timeout };
+                string body = TunnelProtocol.SerializeSignOut(MachineSignOutRequest.Create(machineId, machineSecret, DateTime.UtcNow));
+                using HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Post, uri) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+                using HttpResponseMessage response = await http.SendAsync(message, token).ConfigureAwait(false);
+                int status = (int)response.StatusCode;
+                return status == 204 || status == 200 || status == 401;
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                return false;
             }
         }
 

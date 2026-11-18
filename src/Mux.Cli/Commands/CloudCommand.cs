@@ -53,8 +53,8 @@ namespace Mux.Cli.Commands
                     case "login":
                         return LoginAsync(args, input, output, error, CancellationToken.None).GetAwaiter().GetResult();
                     case "logout":
-                        CloudAccountService.Logout();
-                        output.WriteLine("Signed this machine out of Mux Cloud. It stays listed in your account (offline) until you remove it there.");
+                        bool confirmed = CloudAccountService.LogoutAsync(CancellationToken.None).GetAwaiter().GetResult();
+                        output.WriteLine(CloudAccountService.LogoutMessage(confirmed));
                         return 0;
                     case "status":
                         return Status(output);

@@ -76,10 +76,44 @@ namespace Test.Shared.Suites
                         MuxAssert.AreEqual(CloudCommand.FailedExitCode, statusCode, "not connected without a running hub");
                         MuxAssert.Contains("remote approval : off", status.ToString(), "status shows the switch");
 
-                        MuxAssert.AreEqual(0, CloudCommand.Run(new[] { "logout" }, new StringReader(string.Empty), new StringWriter(), new StringWriter()), "logout");
+                        StringWriter logoutOut = new StringWriter();
+                        MuxAssert.AreEqual(0, CloudCommand.Run(new[] { "logout" }, new StringReader(string.Empty), logoutOut, new StringWriter()), "logout");
+                        MuxAssert.AreEqual(1, cloud.ValidSignOuts, "the cloud was told, with a valid sign-out proof");
+                        MuxAssert.Contains("Signed this machine out of Mux Cloud.", logoutOut.ToString(), "confirmed message");
                         CloudSettings after = SettingsLoader.LoadSettings().Cloud;
                         MuxAssert.IsFalse(after.IsEnrolled, "credential removed");
                         MuxAssert.IsFalse(after.Enabled, "connection off");
+                    }
+                    finally
+                    {
+                        Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", original);
+                        Environment.SetEnvironmentVariable("MUX_AGENT_AUTOSTART", autostart);
+                        try { Directory.Delete(dir, true); } catch (Exception) { }
+                    }
+                }),
+                new TestCaseDescriptor(Suite, "LogoutWhenCloudUnreachable", "Logout still deletes the credential when Mux Cloud cannot be reached, and says the machine stays listed", async (CancellationToken ct) =>
+                {
+                    string dir = Path.Combine(Path.GetTempPath(), "mux-cloudcli-" + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(dir);
+                    string? original = Environment.GetEnvironmentVariable("MUX_CONFIG_DIR");
+                    string? autostart = Environment.GetEnvironmentVariable("MUX_AGENT_AUTOSTART");
+                    Environment.SetEnvironmentVariable("MUX_CONFIG_DIR", dir);
+                    Environment.SetEnvironmentVariable("MUX_AGENT_AUTOSTART", "0");
+                    try
+                    {
+                        using (FakeCloudServer cloud = new FakeCloudServer())
+                        {
+                            MuxSettings seed = SettingsLoader.LoadSettings();
+                            seed.Rest.Port = 1;
+                            SettingsLoader.SaveSettings(seed);
+                            int code = await Task.Run(() => CloudCommand.Run(new[] { "login", "--email", "dev@example.test", "--password-stdin", "--server", cloud.Url }, new StringReader("secret-pw\n"), new StringWriter(), new StringWriter()), ct).ConfigureAwait(false);
+                            MuxAssert.AreEqual(0, code, "login");
+                        }
+
+                        StringWriter output = new StringWriter();
+                        MuxAssert.AreEqual(0, await Task.Run(() => CloudCommand.Run(new[] { "logout" }, new StringReader(string.Empty), output, new StringWriter()), ct).ConfigureAwait(false), "logout");
+                        MuxAssert.Contains("could not be reached", output.ToString(), "explains the machine stays listed");
+                        MuxAssert.IsFalse(SettingsLoader.LoadSettings().Cloud.IsEnrolled, "credential removed anyway");
                     }
                     finally
                     {

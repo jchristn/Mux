@@ -96,10 +96,10 @@ namespace Mux.Server.Routes
             app.Post("/v1.0/api/cloud/logout", async (req) =>
             {
                 if (!ApiAuth.Authorize(req.Http, _ApiKey)) return (object)new ApiError("Unauthorized", "Authentication required.");
-                CloudAccountService.Logout();
+                await CloudAccountService.LogoutAsync(req.Http.Token).ConfigureAwait(false);
                 _Server.CloudHost?.Refresh();
                 req.Http.Response.StatusCode = 200;
-                return await System.Threading.Tasks.Task.FromResult<object>(CurrentStatus()).ConfigureAwait(false);
+                return (object)CurrentStatus();
             }, Documentation.ApiDoc.CloudLogout);
         }
 

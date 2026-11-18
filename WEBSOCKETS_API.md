@@ -239,6 +239,11 @@ On the machine side:
 - **Enrollment.** `mux cloud login` exchanges your email and password for a machine id and machine secret
   (`POST https://app.usemux.ai/v1.0/api/machines/enroll`). They are saved in `settings.json` under `cloud`. The
   password is never stored.
+- **Sign-out.** `mux cloud logout` (and Sign out on every other surface) first calls
+  `POST /v1.0/api/machines/sign-out` with an HMAC proof of the machine secret (prefix `mux-signout:`), so the cloud
+  revokes the machine and closes its tunnel with `4403` instead of listing it as offline. Then it deletes the
+  credential. If the cloud cannot be reached, the local sign-out still happens and the machine stays listed (offline)
+  until it is removed in the cloud dashboard.
 - **Handshake and heartbeat.** The tunnel sends `tunnel.hello` with an HMAC proof of the machine secret. The machine
   counts as online after `tunnel.welcome`. Both sides ping on the welcome's `heartbeatSeconds`, and three missed pongs
   trigger a reconnect.

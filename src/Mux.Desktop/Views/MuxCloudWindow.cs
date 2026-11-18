@@ -139,11 +139,12 @@ namespace Mux.Desktop.Views
             Button open = new Button { Content = Localizer.T("cloud.open"), Background = _Theme.SurfaceAlt, Foreground = _Theme.Text, BorderBrush = _Theme.Border, BorderThickness = new Thickness(1), Padding = new Thickness(14, 6, 14, 6) };
             open.Click += (sender, args) => BrowserLauncher.OpenUrl(settings.Cloud.ServerUrl);
             Button signOut = new Button { Content = Localizer.T("cloud.signOut"), Background = _Theme.Error, Foreground = _Theme.AccentText, Padding = new Thickness(14, 6, 14, 6) };
-            signOut.Click += (sender, args) =>
+            signOut.Click += async (sender, args) =>
             {
-                CloudAccountService.Logout();
-                _Message.Text = string.Empty;
-                _Message.IsVisible = false;
+                signOut.IsEnabled = false;
+                bool confirmed = await CloudAccountService.LogoutAsync(CancellationToken.None);
+                _Message.Text = confirmed ? string.Empty : Localizer.T("cloud.signedOutOffline");
+                _Message.IsVisible = !confirmed;
                 Render(true);
                 _ = RefreshAsync();
             };

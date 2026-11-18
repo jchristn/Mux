@@ -9,7 +9,8 @@ namespace Mux.Core.Cloud
     /// <summary>
     /// Sign this machine in to and out of Mux Cloud, shared by every surface (CLI, terminal UI, desktop app, local
     /// dashboard, VS Code). Signing in exchanges the email and password for a machine credential and saves it in
-    /// <c>settings.json</c>; the password is never stored. Signing out deletes the credential.
+    /// <c>settings.json</c>; the password is never stored. Signing out revokes the machine in Mux Cloud (best effort)
+    /// and deletes the credential.
     /// <para>Thread safety: safe to call concurrently; settings writes are last-writer-wins.</para>
     /// </summary>
     public static class CloudAccountService
@@ -79,8 +80,42 @@ namespace Mux.Core.Cloud
         }
 
         /// <summary>
-        /// Delete the machine credential and turn the connection off. The machine stays listed in Mux Cloud (offline)
-        /// until it is removed there.
+        /// Sign this machine out: tell Mux Cloud first (best effort, so the cloud revokes the machine instead of listing
+        /// it as offline), then delete the credential and turn the connection off. The local sign-out always happens,
+        /// even when the cloud cannot be reached.
+        /// </summary>
+        /// <param name="token">Cancellation token.</param>
+        /// <param name="client">Optional enrollment client (tests).</param>
+        /// <returns>True when Mux Cloud confirmed the sign-out; false when it could not be reached.</returns>
+        public static async Task<bool> LogoutAsync(CancellationToken token, CloudEnrollmentClient? client = null)
+        {
+            CloudSettings cloud = SettingsLoader.LoadSettings().Cloud;
+            bool confirmed = false;
+            if (cloud.IsEnrolled)
+            {
+                CloudEnrollmentClient signOut = client ?? new CloudEnrollmentClient { Timeout = TimeSpan.FromSeconds(10) };
+                confirmed = await signOut.SignOutAsync(cloud.ServerUrl, cloud.MachineId ?? string.Empty, cloud.MachineSecret ?? string.Empty, cloud.AllowInvalidCertificates, token).ConfigureAwait(false);
+            }
+
+            Logout();
+            return confirmed;
+        }
+
+        /// <summary>
+        /// What to tell the user after <see cref="LogoutAsync"/>.
+        /// </summary>
+        /// <param name="confirmed">Whether Mux Cloud confirmed the sign-out.</param>
+        /// <returns>Message.</returns>
+        public static string LogoutMessage(bool confirmed)
+        {
+            return confirmed
+                ? "Signed this machine out of Mux Cloud. It can no longer be used from your account until you sign in again."
+                : "Signed this machine out locally. Mux Cloud could not be reached, so the machine stays listed in your account (offline) until you remove it there.";
+        }
+
+        /// <summary>
+        /// Delete the machine credential and turn the connection off, without telling Mux Cloud. Prefer
+        /// <see cref="LogoutAsync"/>, which also revokes the machine in the cloud.
         /// </summary>
         /// <returns>The saved cloud settings.</returns>
         public static CloudSettings Logout()

@@ -320,7 +320,7 @@ it started in. `GET /v1.0/api/sessions` and `GET /v1.0/api/sessions/detail` incl
 |---|---|
 | `GET /v1.0/api/cloud/status` | The machine's Mux Cloud status: `State` and `StateName` (both the state name: `Disabled`, `Connecting`, `Connected`, `Reconnecting`, `SignedOut`, `Revoked`), `Reason`, `ServerUrl`, `MachineId`, `MachineName`, `AccountEmail`, `AllowRemoteToolApproval`, `HostedHere`, `ConnectionId`, `ConnectedUtc`, `LatencyMs`, `RetryInSeconds`. |
 | `POST /v1.0/api/cloud/login` | Body `{ "Email", "Password", "ServerUrl"?, "MachineName"? }`. Exchanges the credentials for a machine credential (the password is sent to Mux Cloud once and never stored), connects, and returns the status. 400 for a missing field or a refusal, 401 for wrong credentials, 502 when Mux Cloud cannot be reached. |
-| `POST /v1.0/api/cloud/logout` | Deletes the machine credential, turns the connection off, and returns the status. |
+| `POST /v1.0/api/cloud/logout` | Signs the machine out of Mux Cloud first (best effort: the cloud revokes it, see the cloud's `POST /v1.0/api/machines/sign-out`), then deletes the machine credential, turns the connection off, and returns the status. The local sign-out happens even when the cloud cannot be reached. |
 
 `GET /v1.0/api/settings` includes a `Cloud` block (`Enabled`, `ServerUrl`, `MachineName`, `MachineId`,
 `AccountEmail`, `MachineSecretSet`, `AllowRemoteToolApproval`, `HeartbeatSeconds`, `ReconnectMaxDelaySeconds`,

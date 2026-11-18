@@ -28,6 +28,7 @@ namespace Test.Shared.Support
         private readonly Channel<TunnelEnvelope> _Inbound = Channel.CreateUnbounded<TunnelEnvelope>();
         private readonly object _Sync = new object();
         private WebSocketSession? _Current;
+        private int _ValidSignOuts;
         private int _Connections;
 
         #endregion
@@ -69,6 +70,9 @@ namespace Test.Shared.Support
 
         /// <summary>Status code the enrollment route returns. Default 200.</summary>
         public int EnrollStatus { get; set; } = 200;
+
+        /// <summary>Number of sign-out requests that carried a valid sign-out proof for <see cref="MachineId"/>.</summary>
+        public int ValidSignOuts => Volatile.Read(ref _ValidSignOuts);
 
         #endregion
 
@@ -276,6 +280,27 @@ namespace Test.Shared.Support
                     await ctx.Response.Send("{\"error\":\"Unauthorized\",\"message\":\"bad credentials\"}").ConfigureAwait(false);
                 }
 
+                return;
+            }
+
+            if (ctx.Request.Method == WatsonWebserver.Core.HttpMethod.POST && (ctx.Request.Url.RawWithoutQuery ?? string.Empty) == TunnelProtocol.SignOutPath)
+            {
+                bool valid = false;
+                try
+                {
+                    MachineSignOutRequest? request = System.Text.Json.JsonSerializer.Deserialize(ctx.Request.DataAsString ?? string.Empty, TunnelJsonContext.Default.MachineSignOutRequest);
+                    valid = request != null
+                        && request.MachineId == MachineId
+                        && TunnelProof.IsTimestampFresh(request.TimestampUtc, DateTime.UtcNow)
+                        && TunnelProof.VerifySignOutProof(MachineSecret, request.MachineId, request.TimestampUtc, request.Nonce, request.Proof);
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                }
+
+                if (valid) Interlocked.Increment(ref _ValidSignOuts);
+                ctx.Response.StatusCode = valid ? 204 : 401;
+                await ctx.Response.Send(valid ? string.Empty : "{\"error\":\"Unauthorized\",\"message\":\"bad proof\"}").ConfigureAwait(false);
                 return;
             }
 

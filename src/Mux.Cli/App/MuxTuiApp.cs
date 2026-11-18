@@ -5840,8 +5840,7 @@ namespace Mux.Cli.App
                     _ = ResolveCloudLoginAsync(modal);
                     return;
                 case "logout":
-                    Mux.Core.Cloud.CloudAccountService.Logout();
-                    WriteNotice("✓ Signed this machine out of Mux Cloud. It stays listed in your account (offline) until you remove it there.");
+                    _ = CloudLogoutAsync();
                     return;
                 case "remote-approval":
                     string value = parts.Length > 1 ? parts[1].ToLowerInvariant() : string.Empty;
@@ -5874,6 +5873,19 @@ namespace Mux.Cli.App
                 WriteNotice(line.TrimEnd('\r'));
             }
 
+        }
+
+        private async Task CloudLogoutAsync()
+        {
+            WriteNotice("Signing this machine out of Mux Cloud…");
+            try
+            {
+                bool confirmed = await Mux.Core.Cloud.CloudAccountService.LogoutAsync(_Cts.Token).ConfigureAwait(false);
+                WriteNotice((confirmed ? "✓ " : "⚠ ") + Mux.Core.Cloud.CloudAccountService.LogoutMessage(confirmed));
+            }
+            catch (OperationCanceledException)
+            {
+            }
         }
 
         private async Task ResolveCloudLoginAsync(CloudLoginModal modal)

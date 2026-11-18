@@ -12,7 +12,8 @@ All notable changes to mux are documented here.
   the hub port keeps one outbound WebSocket to Mux Cloud (handshake proof of a per-machine secret, two-way
   heartbeat, reconnect with backoff, concurrent relayed requests with streamed responses, relayed WebSockets). The
   password is never stored. New `cloud` settings block; `cloud.allowRemoteToolApproval` (default on) controls
-  whether tools can be approved remotely.
+  whether tools can be approved remotely. Signing out on any surface revokes the machine in Mux Cloud too (best
+  effort, with a sign-out proof of the machine secret) before deleting the local credential.
 - **Tool approvals on the WebSocket.** Runs emit `approval_requested` and `approval_resolved` frames into the run
   stream (and its replay buffer), and an `approve` frame resolves the run named by its `runId`.
 - **Working directory for new conversations.** `GET /v1.0/api/workspaces` suggests folders, sessions report their
