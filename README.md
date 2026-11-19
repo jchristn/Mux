@@ -124,6 +124,29 @@ same `mux` engine and the same configuration under `~/.mux`. Install the CLI onc
 your endpoints, sessions, and settings. Pick the surface (or surfaces) you want below; they are not mutually
 exclusive, and a conversation started in one resumes in another.
 
+### Download an installer
+
+Installers for macOS, Windows, and Linux are attached to every release on the
+[GitHub Releases page](https://github.com/jchristn/Mux/releases). They are self-contained, so no .NET SDK is needed.
+
+| OS | Download | Notes |
+| --- | --- | --- |
+| macOS (Apple silicon or Intel) | `mux-<version>-osx-arm64.dmg` or `-osx-x64.dmg` | Drag Mux to Applications |
+| Windows (x64 or arm64) | `mux-<version>-win-x64-setup.exe` or `-win-arm64-setup.exe` | Run the installer |
+| Linux (x64 or arm64) | `.deb`, `.rpm`, `.AppImage`, or `.tar.gz` | `sudo apt install ./mux_<version>_amd64.deb`, `sudo dnf install ./mux-<version>-1.x86_64.rpm`, or `chmod +x` the AppImage |
+| CLI only, any OS | `mux-<version>-<os>-<arch>.tar.gz` / `.zip`, or `Mux.Cli.<version>.nupkg` | Unpack and put `mux` on your `PATH` |
+
+Each release also lists `SHA256SUMS-*.txt` checksums.
+
+The installers are not code-signed, so the first launch needs one extra step:
+
+- **macOS:** if macOS says Mux "cannot be opened" or "is damaged", open System Settings, Privacy & Security, and
+  click **Open Anyway** next to the Mux message. Or run `xattr -dr com.apple.quarantine /Applications/Mux.app`.
+- **Windows:** when SmartScreen shows "Windows protected your PC", click **More info**, then **Run anyway**.
+- **Linux:** packages install normally; make an AppImage executable with `chmod +x` before running it.
+
+To build from source instead, follow the steps below.
+
 ### Prerequisites
 
 - **.NET 8 SDK or later** (the install scripts default to .NET 10 when present, otherwise .NET 8).
