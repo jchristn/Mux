@@ -46,6 +46,9 @@ namespace Mux.Server.Routes
         // Server-lifetime tool runtimes, created lazily on the first chat so MCP servers are connected once
         // and reused across requests. Not disposed — they live for the server process.
         private readonly object _ToolSync = new object();
+
+        /// <summary>How long a run waits for an answer to an <c>ask_user</c> question before continuing without one.</summary>
+        internal const int AskUserTimeoutSeconds = 900;
         private McpRuntime? _Mcp;
         private SkillRuntime? _Skills;
         private bool _ToolsInitialized;
@@ -86,6 +89,11 @@ namespace Mux.Server.Routes
         }
 
         /// <summary>
+        /// The server-lifetime skills runtime, once the first chat started it; null before then or when skills are off.
+        /// </summary>
+        internal SkillRuntime? SkillsRuntime => _Skills;
+
+        /// <summary>
         /// Register routes.
         /// </summary>
         /// <param name="app">Watson webserver.</param>
@@ -113,6 +121,44 @@ namespace Mux.Server.Routes
                 req.Http.Response.StatusCode = 200;
                 return await Task.FromResult<object>(Capabilities(RelayContext.IsRelayed(req.Http))).ConfigureAwait(false);
             }, Documentation.ApiDoc.ChatCapabilitiesGet);
+
+            // Answer an ask_user question raised during a streamed run. ask_user has no side effects of its own (the
+            // model only receives the answer), so it is answerable through the relay even when remote tool approval
+            // is off.
+            app.Post("/v1.0/api/chat/answer", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey))
+                {
+                    return (object)new ApiError("Unauthorized", "Authentication required.");
+                }
+
+                ChatAnswerRequest? answer;
+                try
+                {
+                    answer = JsonSerializer.Deserialize<ChatAnswerRequest>(req.Http.Request.DataAsString ?? string.Empty, _JsonOptions);
+                }
+                catch (Exception)
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiError("BadRequest", "Request body is not valid JSON.");
+                }
+
+                if (answer == null || string.IsNullOrWhiteSpace(answer.RunId) || string.IsNullOrWhiteSpace(answer.QuestionId))
+                {
+                    req.Http.Response.StatusCode = 400;
+                    return (object)new ApiError("BadRequest", "'runId' and 'questionId' are required.");
+                }
+
+                if (_Runs.TryGet(answer.RunId, out RunHandle? handle) && handle != null
+                    && handle.ResolveQuestion(answer.QuestionId, ToResponse(answer.Answers, answer.Other, answer.Skip)))
+                {
+                    req.Http.Response.StatusCode = 200;
+                    return await Task.FromResult<object>(new { ok = true }).ConfigureAwait(false);
+                }
+
+                req.Http.Response.StatusCode = 404;
+                return (object)new ApiError("NotFound", "No pending question for that run and question id.");
+            }, Documentation.ApiDoc.ChatAnswer);
 
             app.Post("/v1.0/api/chat/approve", async (req) =>
             {
@@ -511,6 +557,9 @@ namespace Mux.Server.Routes
                             ? (toolCall, seconds, token) => Task.FromResult("y")
                             : (toolCall, seconds, token) => RequestBrowserApprovalAsync(ctx, runHandle, toolCall, seconds, token))
                         : null,
+                    // ask_user questions go to a client that opted in (AskUser) over this stream and to run subscribers;
+                    // the run waits for an answer, a skip, or the timeout. Other clients keep the no-user answer.
+                    AskUserFunc = request.AskUser ? (question, token) => RequestBrowserAnswerAsync(ctx, runHandle, question, token) : null,
                     WorkingDirectory = runDirectory,
                     MuxSettings = settings,
                     MaxIterations = settings.GetEffectiveMaxAgentIterations(endpoint),
@@ -550,7 +599,12 @@ namespace Mux.Server.Routes
                 {
                     try
                     {
-                        prompt = (await new Mux.Core.Context.FileMentionResolver(runDirectory, settings.FileMentionMaxBytes).ResolveAsync(prompt, runHandle.Token).ConfigureAwait(false)).Prompt;
+                        Mux.Core.Context.FileMentionResult mentions = await new Mux.Core.Context.FileMentionResolver(runDirectory, settings.FileMentionMaxBytes).ResolveAsync(prompt, runHandle.Token).ConfigureAwait(false);
+                        prompt = mentions.Prompt;
+                        if (mentions.HadMentions)
+                        {
+                            await ctx.Response.SendEvent(new ServerSentEvent { Event = "attachments", Data = JsonSerializer.Serialize(ToAttachmentsEvent(mentions)) }, false, ctx.Token).ConfigureAwait(false);
+                        }
                     }
                     catch (Exception ex) when (!(ex is OperationCanceledException))
                     {
@@ -598,11 +652,29 @@ namespace Mux.Server.Routes
                             await ctx.Response.SendEvent(new ServerSentEvent { Event = "thinking", Data = JsonSerializer.Serialize(thinkingEvent.Text) }, false, ctx.Token).ConfigureAwait(false);
                             break;
                         case ToolCallProposedEvent proposed:
-                            await ctx.Response.SendEvent(new ServerSentEvent { Event = "tool", Data = JsonSerializer.Serialize(new ChatToolEvent { Id = proposed.ToolCall.Id ?? string.Empty, Name = proposed.ToolCall.Name, Status = "running" }) }, false, ctx.Token).ConfigureAwait(false);
+                            await ctx.Response.SendEvent(new ServerSentEvent { Event = "tool", Data = JsonSerializer.Serialize(new ChatToolEvent { Id = proposed.ToolCall.Id ?? string.Empty, Name = proposed.ToolCall.Name, Status = "running", Arguments = proposed.ToolCall.Arguments ?? string.Empty }) }, false, ctx.Token).ConfigureAwait(false);
                             break;
                         case ToolCallCompletedEvent completed:
                             bool ok = completed.Result != null && completed.Result.Success;
-                            await ctx.Response.SendEvent(new ServerSentEvent { Event = "tool", Data = JsonSerializer.Serialize(new ChatToolEvent { Id = completed.ToolCallId ?? string.Empty, Name = completed.ToolName, Status = ok ? "ok" : "fail", ElapsedMs = completed.ElapsedMs }) }, false, ctx.Token).ConfigureAwait(false);
+                            string resultText = completed.Result?.Content ?? string.Empty;
+                            bool truncated = resultText.Length > ChatToolEvent.MaxResultChars;
+                            await ctx.Response.SendEvent(new ServerSentEvent { Event = "tool", Data = JsonSerializer.Serialize(new ChatToolEvent { Id = completed.ToolCallId ?? string.Empty, Name = completed.ToolName, Status = ok ? "ok" : "fail", ElapsedMs = completed.ElapsedMs, Result = truncated ? resultText.Substring(0, ChatToolEvent.MaxResultChars) : resultText, ResultTruncated = truncated }) }, false, ctx.Token).ConfigureAwait(false);
+                            break;
+                        case ContextCompactedEvent compacted:
+                            await ctx.Response.SendEvent(new ServerSentEvent
+                            {
+                                Event = "compacted",
+                                Data = JsonSerializer.Serialize(new ChatCompactedEvent
+                                {
+                                    MessagesBefore = compacted.MessagesBefore,
+                                    MessagesAfter = compacted.MessagesAfter,
+                                    EstimatedTokensBefore = compacted.EstimatedTokensBefore,
+                                    EstimatedTokensAfter = compacted.EstimatedTokensAfter,
+                                    SummaryCreated = compacted.SummaryCreated,
+                                    Strategy = compacted.Strategy,
+                                    Reason = compacted.Reason
+                                })
+                            }, false, ctx.Token).ConfigureAwait(false);
                             break;
                         case ErrorEvent errorEvent:
                             errorMessage = errorEvent.Message;
@@ -738,6 +810,7 @@ namespace Mux.Server.Routes
                 DateTime now = DateTime.UtcNow;
                 SessionSnapshot snapshot = existing ?? new SessionSnapshot { Id = sessionId, CreatedUtc = now };
                 snapshot.Id = sessionId;
+                int charsBefore = SessionTitleGenerator.ConversationCharCount(existing?.ConversationHistory ?? priorFromRequest);
 
                 // Prefer the stored history (preserves tool-call structure from prior turns); fall back to the
                 // request's prior messages only for a brand-new session.
@@ -797,11 +870,108 @@ namespace Mux.Server.Routes
                 // uniform signal that also reaches viewers attached only session-scoped, and it fires for the
                 // upsert path too.
                 _Runs.NotifyTranscriptChanged(sessionId);
+
+                // Once the conversation crosses the summary threshold, replace the first-prompt title with an AI
+                // summary of the whole conversation, the way the desktop does. Runs in the background so the reply
+                // is not held up; viewers reload on the transcript signal it raises.
+                if (!snapshot.TitlePinned && SessionTitleGenerator.CrossesThreshold(charsBefore, SessionTitleGenerator.ConversationCharCount(snapshot.ConversationHistory)))
+                {
+                    List<ConversationMessage> titleHistory = new List<ConversationMessage>(snapshot.ConversationHistory);
+                    _ = Task.Run(() => ApplyGeneratedTitleAsync(sessionId, endpoint, titleHistory));
+                }
             }
             catch (Exception)
             {
                 // Best-effort persistence.
             }
+        }
+
+        // Generates an AI title for a session and saves it unless a title was pinned meanwhile. Best-effort.
+        private async Task ApplyGeneratedTitleAsync(string sessionId, EndpointConfig endpoint, List<ConversationMessage> history)
+        {
+            if (_SessionStore == null)
+            {
+                return;
+            }
+
+            try
+            {
+                bool ignoreCert = false;
+                try { ignoreCert = SettingsLoader.LoadSettings().IgnoreCertErrors; } catch (Exception) { }
+
+                string? title = await SessionTitleGenerator.GenerateAsync(endpoint, history, ignoreCert, CancellationToken.None).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    return;
+                }
+
+                SessionSnapshot? current = await _SessionStore.LoadAsync(sessionId, CancellationToken.None).ConfigureAwait(false);
+                if (current == null || current.TitlePinned)
+                {
+                    return;
+                }
+
+                current.Title = title!;
+                await _SessionStore.SaveAsync(current, CancellationToken.None).ConfigureAwait(false);
+                _Runs.NotifyTranscriptChanged(sessionId);
+            }
+            catch (Exception)
+            {
+                // A title is cosmetic; failures keep the first-prompt title.
+            }
+        }
+
+        // Builds the ask_user answer the agent loop receives from a client's answer (labels, free text, or skip).
+        internal static Mux.Core.Interaction.AskUserResponse ToResponse(List<string>? answers, string? other, bool skip)
+        {
+            if (skip)
+            {
+                return Mux.Core.Interaction.AskUserResponse.Dismiss();
+            }
+
+            Mux.Core.Interaction.AskUserResponse response = new Mux.Core.Interaction.AskUserResponse();
+            if (answers != null)
+            {
+                foreach (string label in answers)
+                {
+                    if (!string.IsNullOrWhiteSpace(label)) response.Selected.Add(label.Trim());
+                }
+            }
+
+            response.OtherText = string.IsNullOrWhiteSpace(other) ? null : other!.Trim();
+            if (response.Selected.Count == 0 && response.OtherText == null)
+            {
+                response.Dismissed = true;
+            }
+
+            return response;
+        }
+
+        // Projects a resolved @mention set into the attachments event.
+        private static ChatAttachmentsEvent ToAttachmentsEvent(Mux.Core.Context.FileMentionResult mentions)
+        {
+            ChatAttachmentsEvent result = new ChatAttachmentsEvent { TotalBytes = mentions.TotalBytes, Notes = new List<string>(mentions.Notes) };
+            foreach (Mux.Core.Context.FileMentionAttachment attachment in mentions.Attachments)
+            {
+                result.Attached.Add(new ChatAttachmentDto
+                {
+                    Path = attachment.RelativePath,
+                    Kind = attachment.Kind == Mux.Core.Context.FileMentionKindEnum.Directory ? "directory" : "file",
+                    Bytes = attachment.Bytes,
+                    Lines = attachment.Lines,
+                    Inlined = attachment.Inlined
+                });
+            }
+
+            foreach (string unresolved in mentions.Unresolved)
+            {
+                int split = unresolved.IndexOf(": ", StringComparison.Ordinal);
+                result.Skipped.Add(split > 0
+                    ? new ChatSkippedAttachmentDto { Path = unresolved.Substring(0, split), Reason = unresolved.Substring(split + 2) }
+                    : new ChatSkippedAttachmentDto { Path = unresolved, Reason = string.Empty });
+            }
+
+            return result;
         }
 
         // Streams an approval prompt to the browser and blocks the run until the browser answers (via
@@ -871,6 +1041,48 @@ namespace Mux.Server.Routes
 
             handle.ResolveApproval(toolCallId, "n");
             return "n";
+        }
+
+        // Streams an ask_user question to the client and waits for its answer (POST /v1.0/api/chat/answer or an "answer"
+        // WebSocket frame), a skip, the run ending, or the timeout. A timeout surfaces to the model as an unanswered
+        // question so it picks a sensible default and continues.
+        private async Task<Mux.Core.Interaction.AskUserResponse> RequestBrowserAnswerAsync(HttpContextBase ctx, RunHandle handle, Mux.Core.Interaction.AskUserRequest question, CancellationToken cancellationToken)
+        {
+            string questionId = "q_" + Guid.NewGuid().ToString("N");
+            TaskCompletionSource<Mux.Core.Interaction.AskUserResponse> source = handle.RegisterQuestion(questionId, question, AskUserTimeoutSeconds);
+
+            ChatAskUserEvent payload = new ChatAskUserEvent
+            {
+                RunId = handle.RunId,
+                QuestionId = questionId,
+                Question = question.Question,
+                MultiSelect = question.MultiSelect,
+                TimeoutSeconds = AskUserTimeoutSeconds
+            };
+
+            foreach (Mux.Core.Interaction.AskUserOption option in question.Options)
+            {
+                payload.Options.Add(new ChatAskUserOptionDto { Label = option.Label, Description = option.Description });
+            }
+
+            try
+            {
+                await ctx.Response.SendEvent(new ServerSentEvent { Event = "ask_user", Data = JsonSerializer.Serialize(payload) }, false, ctx.Token).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // The stream may be gone; a WebSocket subscriber can still answer until the timeout.
+            }
+
+            using CancellationTokenSource stop = CancellationTokenSource.CreateLinkedTokenSource(handle.Token, cancellationToken);
+            try
+            {
+                return await source.Task.WaitAsync(TimeSpan.FromSeconds(AskUserTimeoutSeconds), stop.Token).ConfigureAwait(false);
+            }
+            finally
+            {
+                handle.ResolveQuestion(questionId, null);
+            }
         }
 
         // Records durable usage telemetry for a server chat call (best-effort; shared by the buffered and

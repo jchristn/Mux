@@ -211,6 +211,22 @@ namespace Mux.Server.Runs
 
                         target?.ResolveApproval(frame.ToolCallId ?? string.Empty, NormalizeDecision(frame.Decision));
                     }
+                    else if (action == "answer")
+                    {
+                        // Answer an ask_user question. Questions have no side effects of their own, so the remote
+                        // approval switch does not gate them.
+                        RunHandle? target = null;
+                        if (!string.IsNullOrWhiteSpace(frame.RunId) && _Runs.TryGet(frame.RunId!, out RunHandle? named) && named != null)
+                        {
+                            target = named;
+                        }
+                        else if (string.IsNullOrWhiteSpace(frame.RunId))
+                        {
+                            target = approvalTarget;
+                        }
+
+                        target?.ResolveQuestion(frame.QuestionId ?? string.Empty, Mux.Server.Routes.ChatRoutes.ToResponse(frame.Answers, frame.Other, frame.Skip));
+                    }
                     else if (action == "publish" && !string.IsNullOrEmpty(frame.RunId))
                     {
                         // A producer (a run driven in another process) is streaming its events into this hub so

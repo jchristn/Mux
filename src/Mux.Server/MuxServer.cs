@@ -58,6 +58,11 @@ namespace Mux.Server
         public RunRegistry Runs => _Runs;
 
         /// <summary>
+        /// The background processes the model starts with <c>process_start</c>, exposed over <c>/v1.0/api/processes</c>.
+        /// </summary>
+        public Mux.Core.Processes.BackgroundProcessRegistry Processes => _Processes;
+
+        /// <summary>
         /// The Mux Cloud remote-approval policy chat runs and approval routes consult. A
         /// <see cref="Cloud.CloudTunnelHost"/> updates it as the tunnel connects and settings change.
         /// </summary>
@@ -327,7 +332,12 @@ namespace Mux.Server
             new EndpointRoutes(apiKey, _EndpointsProvider).Register(app);
             new SessionRoutes(apiKey, _SessionStore, _Runs).Register(app);
             new WorkspaceRoutes(apiKey, _SessionStore).Register(app);
-            new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder, _SessionStore, _AllowInteractiveTools, _Checkpoints, _Runs, _Processes, _CloudPolicy).Register(app);
+            ChatRoutes chat = new ChatRoutes(apiKey, _EndpointsProvider, _UsageRecorder, _SessionStore, _AllowInteractiveTools, _Checkpoints, _Runs, _Processes, _CloudPolicy);
+            chat.Register(app);
+            new SessionCompactRoutes(apiKey, _SessionStore, _Runs, _EndpointsProvider).Register(app);
+            new ProcessRoutes(apiKey, _Processes).Register(app);
+            new TrustRoutes(apiKey, () => chat.SkillsRuntime).Register(app);
+            new SearchProviderRoutes(apiKey).Register(app);
             new CloudRoutes(apiKey, this).Register(app);
             new CheckpointRoutes(apiKey, _Checkpoints).Register(app);
             new SettingsRoutes(apiKey).Register(app);

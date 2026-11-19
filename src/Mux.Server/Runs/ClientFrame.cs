@@ -9,7 +9,7 @@ namespace Mux.Server.Runs
     /// </summary>
     public sealed class ClientFrame
     {
-        /// <summary>The control action: <c>subscribe</c>, <c>approve</c>, <c>publish</c>, or <c>notify</c>.</summary>
+        /// <summary>The control action: <c>subscribe</c>, <c>approve</c>, <c>answer</c>, <c>publish</c>, or <c>notify</c>.</summary>
         public string? Action { get; set; }
 
         /// <summary>When true on a subscribe, receive global <c>sessions_changed</c> notifications (list changes).</summary>
@@ -26,6 +26,18 @@ namespace Mux.Server.Runs
 
         /// <summary>The approval decision: <c>y</c>, <c>always</c>, or <c>n</c> (approve action).</summary>
         public string? Decision { get; set; }
+
+        /// <summary>The <c>ask_user</c> question id being answered (answer action).</summary>
+        public string? QuestionId { get; set; }
+
+        /// <summary>The selected choice labels (answer action).</summary>
+        public System.Collections.Generic.List<string>? Answers { get; set; }
+
+        /// <summary>A free-text answer (answer action).</summary>
+        public string? Other { get; set; }
+
+        /// <summary>True to skip the question (answer action).</summary>
+        public bool Skip { get; set; }
 
         /// <summary>The published run's endpoint name (publish action).</summary>
         public string? EndpointName { get; set; }

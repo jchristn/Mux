@@ -142,6 +142,27 @@ namespace Mux.Server.Models
         /// <summary>REST server settings (API key masked).</summary>
         public RestSettingsDto Rest { get; set; } = new RestSettingsDto();
 
+        /// <summary>Path to a custom system prompt file, or null for the built-in prompt.</summary>
+        public string? SystemPromptPath { get; set; }
+
+        /// <summary>A per-run token budget, or null for none.</summary>
+        public int? MaxTokenBudget { get; set; }
+
+        /// <summary>Percent of the context window kept free as a safety margin (5 to 50).</summary>
+        public int ContextWindowSafetyMarginPercent { get; set; } = 15;
+
+        /// <summary>Characters per token used to estimate context size (2.0 to 6.0).</summary>
+        public double TokenEstimationRatio { get; set; } = 3.5;
+
+        /// <summary>How often, in seconds, skills are rescanned from disk.</summary>
+        public int SkillRefreshIntervalSeconds { get; set; } = 30;
+
+        /// <summary>A custom skills directory, or null for the default.</summary>
+        public string? SkillsDirectory { get; set; }
+
+        /// <summary>Whether OpenTelemetry export is enabled.</summary>
+        public bool TelemetryEnabled { get; set; }
+
         /// <summary>Mux Cloud connection settings (secret masked).</summary>
         public CloudSettingsDto? Cloud { get; set; }
 
@@ -177,6 +198,13 @@ namespace Mux.Server.Models
                 SummaryChunkLines = settings.Context.SummaryChunkLines,
                 SummaryCacheEnabled = settings.Context.SummaryCacheEnabled,
                 SummaryCacheRetentionDays = settings.Context.SummaryCacheRetentionDays,
+                SystemPromptPath = settings.SystemPromptPath,
+                MaxTokenBudget = settings.MaxTokenBudget,
+                ContextWindowSafetyMarginPercent = settings.ContextWindowSafetyMarginPercent,
+                TokenEstimationRatio = settings.TokenEstimationRatio,
+                SkillRefreshIntervalSeconds = settings.SkillRefreshIntervalSeconds,
+                SkillsDirectory = settings.SkillsDirectory,
+                TelemetryEnabled = settings.Telemetry.Enabled,
                 Rest = new RestSettingsDto
                 {
                     Hostname = settings.Rest.Hostname,
@@ -232,6 +260,13 @@ namespace Mux.Server.Models
             settings.Context.SummaryChunkLines = SummaryChunkLines;
             settings.Context.SummaryCacheEnabled = SummaryCacheEnabled;
             settings.Context.SummaryCacheRetentionDays = SummaryCacheRetentionDays;
+            settings.SystemPromptPath = string.IsNullOrWhiteSpace(SystemPromptPath) ? null : SystemPromptPath!.Trim();
+            settings.MaxTokenBudget = MaxTokenBudget.HasValue && MaxTokenBudget.Value > 0 ? MaxTokenBudget : null;
+            settings.ContextWindowSafetyMarginPercent = ContextWindowSafetyMarginPercent;
+            settings.TokenEstimationRatio = TokenEstimationRatio;
+            settings.SkillRefreshIntervalSeconds = SkillRefreshIntervalSeconds;
+            settings.SkillsDirectory = string.IsNullOrWhiteSpace(SkillsDirectory) ? null : SkillsDirectory!.Trim();
+            settings.Telemetry.Enabled = TelemetryEnabled;
 
             if (Rest != null)
             {

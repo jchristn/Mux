@@ -168,6 +168,13 @@ namespace Mux.Server.Models
         /// no interactive approvals, ignores it and keeps denying those tools.
         /// </summary>
         public bool AutoApproveTools { get; set; }
+
+        /// <summary>
+        /// When true, the client can answer the model's <c>ask_user</c> questions: the run streams an <c>ask_user</c>
+        /// event and waits for <c>POST /v1.0/api/chat/answer</c> (or an <c>answer</c> WebSocket frame). When false (the
+        /// default, for clients that predate questions), the model is told no user is available and picks a default.
+        /// </summary>
+        public bool AskUser { get; set; }
     }
 
     /// <summary>
@@ -223,6 +230,18 @@ namespace Mux.Server.Models
 
         /// <summary>Elapsed execution time in milliseconds (0 until completed).</summary>
         public long ElapsedMs { get; set; }
+
+        /// <summary>The tool-call arguments as raw JSON text (on the "running" event).</summary>
+        public string? Arguments { get; set; }
+
+        /// <summary>The tool result text, truncated to <see cref="MaxResultChars"/> (on the completed event).</summary>
+        public string? Result { get; set; }
+
+        /// <summary>Whether <see cref="Result"/> was truncated.</summary>
+        public bool ResultTruncated { get; set; }
+
+        /// <summary>The most result text a tool event carries, matching the desktop tool card.</summary>
+        public const int MaxResultChars = 8000;
     }
 
     /// <summary>

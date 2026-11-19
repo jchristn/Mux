@@ -276,7 +276,7 @@ namespace Mux.Server.Documentation
         /// <summary>Metadata for <c>POST /v1.0/api/chat/stream</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> ChatStream = m => Sec(Init(m, TagChat,
             "Run a streaming chat completion (SSE)",
-            "Runs a completion and streams the result as Server-Sent Events. Event names: `token` (a text delta), `thinking` (a reasoning delta), `tool` (a tool lifecycle event), `approval` (a tool-approval prompt, only when interactive tools are enabled), `done` (terminal, carries the final content and stats), and `error`. The request body is identical to `POST /v1.0/api/chat`. The response is `text/event-stream`, not JSON.",
+            "Runs a completion and streams the result as Server-Sent Events. Event names: `run` (the run and session ids, first), `token` (a text delta), `thinking` (a reasoning delta), `tool` (a tool lifecycle event; `Arguments` on `running`, the truncated `Result` when finished), `attachments` (what `@path` mentions attached or skipped), `compacted` (the context was compacted), `approval` (a tool-approval prompt, only when interactive tools are enabled), `ask_user` (a question for the user when the request set `AskUser`, answered with `POST /v1.0/api/chat/answer`), `plan` (a plan-mode proposal), `done` (terminal, carries the final content and stats), `canceled`, and `error`. The request body is identical to `POST /v1.0/api/chat`. The response is `text/event-stream`, not JSON.",
             operationId: "chatStream"))
             .WithRequestBody(Body("ChatRequest", "The endpoint and conversation to run."))
             .WithResponse(200, new OpenApiResponseMetadata
@@ -289,6 +289,111 @@ namespace Mux.Server.Documentation
             })
             .WithResponse(400, BadRequest())
             .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>POST /v1.0/api/chat/answer</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ChatAnswer = m => Sec(Init(m, TagChat,
+            "Answer an ask_user question",
+            "Resolves an `ask_user` event raised during a streaming run started with `AskUser: true`: pick choice labels in `Answers`, give free text in `Other`, or set `Skip`. Unanswered questions time out after 15 minutes and the model continues with a default. Questions have no side effects, so they are answerable through Mux Cloud even when remote tool approval is off.",
+            operationId: "chatAnswer"))
+            .WithRequestBody(Body("ChatAnswerRequest", "The answer."))
+            .WithResponse(200, RespJson("The answer was delivered.", Obj(new Dictionary<string, M> { ["ok"] = Pbool("Always true on success.") }, new Dictionary<string, object?> { ["ok"] = true })))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, RespJson("No pending question matched the run and question id.", Ref("ApiError")));
+
+        /// <summary>Metadata for <c>POST /v1.0/api/sessions/{id}/compact</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SessionCompact = m => Sec(Init(m, TagSessions,
+            "Compact a saved conversation",
+            "Summarizes the older turns of a saved conversation with the model (the `/compact` command) and saves the shorter history. The body is optional; `Endpoint` picks the model, else the session's endpoint, else the default. Returns 409 while a run for the session is in progress.",
+            operationId: "compactSession"))
+            .WithRequestBody(Body("SessionCompactRequest", "Optional: the endpoint that writes the summary."))
+            .WithResponse(200, Ok("SessionCompactResult"))
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound())
+            .WithResponse(409, RespJson("A run for the session is in progress.", Ref("ApiError")))
+            .WithResponse(502, RespJson("The model failed to write the summary.", Ref("ApiError")));
+
+        /// <summary>Metadata for <c>GET /v1.0/api/processes</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ProcessesList = m => Sec(Init(m, TagRuns,
+            "List background processes",
+            "The background processes the model started with `process_start` (dev servers, watchers), running and exited (the `/processes` command).",
+            operationId: "listProcesses"))
+            .WithResponse(200, OkList("BackgroundProcessInfo"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/processes/{id}/output</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ProcessesOutput = m => Sec(Init(m, TagRuns,
+            "Read a background process's recent output",
+            "The tail of the process's output buffer. `chars` (query, default 4000, at most 200000) limits the size.",
+            operationId: "getProcessOutput"))
+            .WithParameter(Query("chars", "How many trailing characters to return.", false, M.String()))
+            .WithResponse(200, Ok("ProcessOutputDto"))
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
+        /// <summary>Metadata for <c>POST /v1.0/api/processes/{id}/stop</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ProcessesStop = m => Sec(Init(m, TagRuns,
+            "Stop a background process",
+            "Stops the process (its whole process tree) and returns its final output. The id `all` stops every running process and returns `{ \"Stopped\": n }`.",
+            operationId: "stopProcess"))
+            .WithResponse(200, Ok("BackgroundProcessOutput"))
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
+        /// <summary>Metadata for <c>DELETE /v1.0/api/processes</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ProcessesClear = m => Sec(Init(m, TagRuns,
+            "Clear exited background processes",
+            "Removes processes that have exited from the list. Returns `{ \"Removed\": n }`.",
+            operationId: "clearProcesses"))
+            .WithResponse(200, RespJson("How many were removed.", Obj(new Dictionary<string, M> { ["Removed"] = Pint("Processes removed.") }, new Dictionary<string, object?> { ["Removed"] = 2 })))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/trust</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> TrustGet = m => Sec(Init(m, TagSkills,
+            "Read project trust",
+            "The trust decision for the project containing `workingDirectory` (the `/trust` command), which gates the project's checked-in skills that run commands.",
+            operationId: "getTrust"))
+            .WithParameter(Query("workingDirectory", "A directory inside the project. Defaults to the server's current directory.", false, M.String()))
+            .WithResponse(200, Ok("ProjectTrustDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>PUT /v1.0/api/trust</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> TrustPut = m => Sec(Init(m, TagSkills,
+            "Set project trust",
+            "Records `all`, `playbooks`, or `ignore` for the project containing `WorkingDirectory`; `reset` removes the decision.",
+            operationId: "setTrust"))
+            .WithRequestBody(Body("ProjectTrustRequest", "The directory and level."))
+            .WithResponse(200, Ok("ProjectTrustDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/search</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SearchGet = m => Sec(Init(m, TagSettings,
+            "Read web search settings",
+            "Whether web search is on, whether providers fall back, and the providers. API keys are never returned; `ApiKeySet` reports whether one is stored.",
+            operationId: "getSearch"))
+            .WithResponse(200, Ok("SearchSettingsDto"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>PUT /v1.0/api/search</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SearchPut = m => Sec(Init(m, TagSettings,
+            "Replace web search settings",
+            "Saves the whole search configuration. Providers left out are removed; a provider sent with a blank `ApiKey` keeps the key stored under the same name. The first enabled provider becomes the default when none is marked.",
+            operationId: "putSearch"))
+            .WithRequestBody(Body("SearchSettingsDto", "The search settings."))
+            .WithResponse(200, Ok("SearchSettingsDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>DELETE /v1.0/api/search/providers/{name}</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SearchProviderDelete = m => Sec(Init(m, TagSettings,
+            "Delete a web search provider",
+            "Removes the named provider and returns the updated settings.",
+            operationId: "deleteSearchProvider"))
+            .WithResponse(200, Ok("SearchSettingsDto"))
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
 
         /// <summary>Metadata for <c>POST /v1.0/api/chat/approve</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> ChatApprove = m => Sec(Init(m, TagChat,
@@ -635,6 +740,14 @@ namespace Mux.Server.Documentation
             .WithResponse(401, Unauthorized());
 
         // --- Keybindings ---
+
+        /// <summary>Metadata for <c>GET /v1.0/api/keybindings</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> KeybindingCommandsGet = m => Sec(Init(m, TagKeybindings,
+            "List bindable commands",
+            "Every bindable command with its title, category, shipped default chord, the chord in effect after overrides, and whether it is overridden.",
+            operationId: "listKeybindingCommands"))
+            .WithResponse(200, OkList("KeybindingCommandDto"))
+            .WithResponse(401, Unauthorized());
 
         /// <summary>Metadata for <c>GET /v1.0/api/keybindings</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> KeybindingsGet = m => Sec(Init(m, TagKeybindings,
@@ -1308,7 +1421,8 @@ namespace Mux.Server.Documentation
                 ["WorkingDirectory"] = PstrNullable("Optional working directory the run's tools resolve paths against. Must exist when set."),
                 ["Messages"] = Parr(Ref("ChatMessageDto"), "The conversation so far, including the new user turn."),
                 ["PlanMode"] = Pbool("Run the turn in plan mode (read-only tools, ending with a plan)."),
-                ["AutoApproveTools"] = Pbool("Run tools that would prompt for approval without asking. Honored only when this caller may approve tools (see `GET /v1.0/api/chat/capabilities`).")
+                ["AutoApproveTools"] = Pbool("Run tools that would prompt for approval without asking. Honored only when this caller may approve tools (see `GET /v1.0/api/chat/capabilities`)."),
+                ["AskUser"] = Pbool("The client can answer `ask_user` questions: the run streams `ask_user` events and waits for `POST /v1.0/api/chat/answer`. Without it the model is told no user is available.")
             }, new Dictionary<string, object?>
             {
                 ["Endpoint"] = "openai-gpt4o",
@@ -1718,6 +1832,13 @@ namespace Mux.Server.Documentation
                 ["IgnoreCertErrors"] = Pbool("Ignore TLS certificate errors."),
                 ["ShowBoundaryLines"] = Pbool("Show interactive boundary lines."),
                 ["DefaultEnqueueBehavior"] = Pstr("Default enqueue behavior."),
+                ["SystemPromptPath"] = PstrNullable("Custom system prompt file, or null for the built-in prompt."),
+                ["MaxTokenBudget"] = PintNullable("Per-run token budget, or null for none."),
+                ["ContextWindowSafetyMarginPercent"] = Pint("Percent of the context window kept free (5 to 50)."),
+                ["TokenEstimationRatio"] = Pnum("Characters per token for context estimates (2.0 to 6.0)."),
+                ["SkillRefreshIntervalSeconds"] = Pint("How often skills are rescanned, in seconds."),
+                ["SkillsDirectory"] = PstrNullable("Custom skills directory, or null for the default."),
+                ["TelemetryEnabled"] = Pbool("Whether OpenTelemetry export is on."),
                 ["Rest"] = Ref("RestSettingsDto"),
                 ["Cloud"] = Ref("CloudSettingsDto")
             }, new Dictionary<string, object?>
@@ -2069,12 +2190,118 @@ namespace Mux.Server.Documentation
                 ["Status"] = Pstr("Lifecycle status: `running`, `awaiting_approval`, `completed`, `failed`, or `canceled`."),
                 ["IsTerminal"] = Pbool("Whether the run has reached a terminal status."),
                 ["StartedUtc"] = Pstr("When the run started (UTC).", "date-time"),
-                ["CompletedUtc"] = new M { Type = "string", Format = "date-time", Nullable = true, Description = "When the run finished (UTC), or null while running." }
+                ["CompletedUtc"] = new M { Type = "string", Format = "date-time", Nullable = true, Description = "When the run finished (UTC), or null while running." },
+                ["PendingApprovalCount"] = Pint("Tool approvals waiting for a decision."),
+                ["PendingQuestionCount"] = Pint("ask_user questions waiting for an answer.")
             }, new Dictionary<string, object?>
             {
                 ["RunId"] = "8b2f…", ["SessionId"] = "9f1c…", ["EndpointName"] = "openai-gpt4o", ["Model"] = "gpt-4o",
                 ["Status"] = "running", ["IsTerminal"] = false, ["StartedUtc"] = "2026-09-15T12:00:00Z"
             });
+
+            s["ChatAnswerRequest"] = Obj(new Dictionary<string, M>
+            {
+                ["RunId"] = Pstr("The run id from the `ask_user` event."),
+                ["QuestionId"] = Pstr("The question id from the `ask_user` event."),
+                ["Answers"] = Parr(Pstr("A choice label."), "The selected choice labels."),
+                ["Other"] = PstrNullable("A free-text answer."),
+                ["Skip"] = Pbool("True to skip the question.")
+            }, new Dictionary<string, object?> { ["RunId"] = "run_7", ["QuestionId"] = "q_1", ["Answers"] = new List<string> { "Postgres" } },
+               new List<string> { "RunId", "QuestionId" }, "An answer to an ask_user question.");
+
+            s["SessionCompactRequest"] = Obj(new Dictionary<string, M>
+            {
+                ["Endpoint"] = PstrNullable("The endpoint that writes the summary; null uses the session's endpoint, then the default.")
+            }, new Dictionary<string, object?> { ["Endpoint"] = "ollama-local" });
+
+            s["SessionCompactResult"] = Obj(new Dictionary<string, M>
+            {
+                ["Compacted"] = Pbool("Whether the conversation changed."),
+                ["Message"] = Pstr("The outcome."),
+                ["Endpoint"] = Pstr("The endpoint that wrote the summary."),
+                ["MessagesBefore"] = Pint("Messages before."),
+                ["MessagesAfter"] = Pint("Messages after."),
+                ["EstimatedTokensBefore"] = Pint("Estimated tokens before."),
+                ["EstimatedTokensAfter"] = Pint("Estimated tokens after."),
+                ["ContextWindow"] = Pint("The endpoint's context window in tokens.")
+            }, new Dictionary<string, object?> { ["Compacted"] = true, ["Message"] = "Compacted 12 messages.", ["Endpoint"] = "ollama-local", ["MessagesBefore"] = 30, ["MessagesAfter"] = 9, ["EstimatedTokensBefore"] = 21000, ["EstimatedTokensAfter"] = 4200, ["ContextWindow"] = 32768 });
+
+            s["BackgroundProcessInfo"] = Obj(new Dictionary<string, M>
+            {
+                ["Id"] = Pstr("Process id (mux's, not the OS pid)."),
+                ["Name"] = Pstr("Display name."),
+                ["Command"] = Pstr("Command line."),
+                ["WorkingDirectory"] = Pstr("Directory it runs in."),
+                ["ProcessId"] = Pint("OS process id."),
+                ["StartedUtc"] = Pstr("Start time (UTC).", "date-time"),
+                ["ExitedUtc"] = PstrNullable("Exit time (UTC), or null while running."),
+                ["Running"] = Pbool("Whether it is running."),
+                ["ExitCode"] = PintNullable("Exit code once exited."),
+                ["StoppedByUser"] = Pbool("Whether a user stopped it."),
+                ["OutputChars"] = Pint("Characters of output captured.", "int64"),
+                ["UnreadChars"] = Pint("Characters not yet read by the model.", "int64")
+            }, new Dictionary<string, object?> { ["Id"] = "p1", ["Command"] = "npm run dev", ["Running"] = true, ["ProcessId"] = 4242 });
+
+            s["ProcessOutputDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Id"] = Pstr("Process id."),
+                ["Command"] = Pstr("Command line."),
+                ["Text"] = Pstr("The most recent output."),
+                ["Running"] = Pbool("Whether it is running."),
+                ["ExitCode"] = PintNullable("Exit code once exited.")
+            }, new Dictionary<string, object?> { ["Id"] = "p1", ["Command"] = "npm run dev", ["Text"] = "ready on http://localhost:5173", ["Running"] = true });
+
+            s["BackgroundProcessOutput"] = Obj(new Dictionary<string, M>
+            {
+                ["Id"] = Pstr("Process id."),
+                ["Text"] = Pstr("Output read."),
+                ["DroppedChars"] = Pint("Characters dropped because the buffer overflowed.", "int64"),
+                ["Running"] = Pbool("Whether it is running."),
+                ["ExitCode"] = PintNullable("Exit code once exited.")
+            }, new Dictionary<string, object?> { ["Id"] = "p1", ["Running"] = false, ["ExitCode"] = 0 });
+
+            s["ProjectTrustDto"] = Obj(new Dictionary<string, M>
+            {
+                ["WorkingDirectory"] = Pstr("The directory asked about."),
+                ["ProjectRoot"] = Pstr("The project root the decision applies to."),
+                ["Level"] = Pstr("`all`, `playbooks`, `ignore`, or `unknown`.")
+            }, new Dictionary<string, object?> { ["WorkingDirectory"] = "/src/app", ["ProjectRoot"] = "/src/app", ["Level"] = "playbooks" });
+
+            s["ProjectTrustRequest"] = Obj(new Dictionary<string, M>
+            {
+                ["WorkingDirectory"] = Pstr("A directory inside the project."),
+                ["Level"] = Pstr("`all`, `playbooks`, `ignore`, or `reset`.")
+            }, new Dictionary<string, object?> { ["WorkingDirectory"] = "/src/app", ["Level"] = "all" }, new List<string> { "WorkingDirectory", "Level" });
+
+            s["SearchProviderDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Name"] = Pstr("Unique provider name."),
+                ["ProviderType"] = Pstr("`tavily` or `you`."),
+                ["Endpoint"] = Pstr("Optional API base URL override."),
+                ["ApiKeySet"] = Pbool("Whether a key is stored (read only)."),
+                ["ApiKey"] = PstrNullable("A new key (write only); blank keeps the stored key."),
+                ["Enabled"] = Pbool("Whether the provider is enabled."),
+                ["IsDefault"] = Pbool("Whether it is the default provider."),
+                ["TimeoutMs"] = Pint("Request timeout in milliseconds.")
+            }, new Dictionary<string, object?> { ["Name"] = "tavily", ["ProviderType"] = "tavily", ["ApiKeySet"] = true, ["Enabled"] = true, ["IsDefault"] = true, ["TimeoutMs"] = 15000 });
+
+            s["SearchSettingsDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Enabled"] = Pbool("Whether web search is enabled."),
+                ["AllowFallback"] = Pbool("Whether a failing provider falls back to the next."),
+                ["Providers"] = Parr(Ref("SearchProviderDto"), "The providers, in order."),
+                ["ProviderTypes"] = Parr(Pstr("A provider type."), "Supported provider types (read only).")
+            }, new Dictionary<string, object?> { ["Enabled"] = true, ["AllowFallback"] = true });
+
+            s["KeybindingCommandDto"] = Obj(new Dictionary<string, M>
+            {
+                ["CommandId"] = Pstr("Command id."),
+                ["Title"] = Pstr("Display title."),
+                ["Category"] = Pstr("Group."),
+                ["DefaultChord"] = PstrNullable("Shipped default chord."),
+                ["EffectiveChord"] = PstrNullable("Chord in effect."),
+                ["Overridden"] = Pbool("Whether an override is recorded.")
+            }, new Dictionary<string, object?> { ["CommandId"] = "mux.save", ["Title"] = "Save session", ["Category"] = "Session", ["DefaultChord"] = "ctrl+s", ["EffectiveChord"] = "ctrl+s", ["Overridden"] = false });
 
             s["RunStateReply"] = Obj(new Dictionary<string, M>
             {
@@ -2097,7 +2324,9 @@ namespace Mux.Server.Documentation
                 ["LastError"] = PstrNullable("The most recent error message, or null."),
                 ["TotalTaskCount"] = Pint("Total tasks in the current task-plan snapshot."),
                 ["CompletedTaskCount"] = Pint("Completed tasks in the current task-plan snapshot."),
-                ["Tasks"] = Parr(Ref("RunTaskDto"), "The current task-plan checklist (empty when the run has no plan).")
+                ["Tasks"] = Parr(Ref("RunTaskDto"), "The current task-plan checklist (empty when the run has no plan)."),
+                ["PendingApprovalCount"] = Pint("Tool approvals waiting for a decision."),
+                ["PendingQuestionCount"] = Pint("ask_user questions waiting for an answer.")
             }, new Dictionary<string, object?>
             {
                 ["RunId"] = "8b2f…", ["SessionId"] = "9f1c…", ["EndpointName"] = "openai-gpt4o", ["Model"] = "gpt-4o",

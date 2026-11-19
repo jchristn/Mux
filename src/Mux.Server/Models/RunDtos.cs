@@ -61,6 +61,12 @@ namespace Mux.Server.Models
 
         /// <summary>When the run reached a terminal status (UTC), or null while running.</summary>
         public DateTime? CompletedUtc { get; set; }
+
+        /// <summary>Tool approvals waiting for a decision.</summary>
+        public int PendingApprovalCount { get; set; }
+
+        /// <summary><c>ask_user</c> questions waiting for an answer.</summary>
+        public int PendingQuestionCount { get; set; }
     }
 
     /// <summary>
@@ -128,5 +134,11 @@ namespace Mux.Server.Models
 
         /// <summary>The current task-plan checklist (empty when the run has no plan).</summary>
         public List<RunTaskDto> Tasks { get; set; } = new List<RunTaskDto>();
+
+        /// <summary>Tool approvals waiting for a decision.</summary>
+        public int PendingApprovalCount { get; set; }
+
+        /// <summary><c>ask_user</c> questions waiting for an answer.</summary>
+        public int PendingQuestionCount { get; set; }
     }
 }
