@@ -6,6 +6,7 @@ namespace Mux.Desktop.Views
     using Avalonia.Controls;
     using Avalonia.Layout;
     using Avalonia.Media;
+    using Mux.Core.Keybindings;
     using Mux.Core.Settings;
     using Mux.Desktop.I18n;
     using Mux.Desktop.Services;

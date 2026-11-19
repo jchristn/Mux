@@ -157,73 +157,12 @@ namespace Mux.Desktop.Conversation
                 MuxSettings settings = SettingsLoader.LoadSettings();
                 List<EndpointConfig> endpoints = SettingsLoader.LoadEndpoints();
                 EndpointConfig endpoint = SettingsLoader.ResolveEndpoint(endpoints, _EndpointName, null, null, null, null, null);
-
-                List<ConversationMessage> messages = new List<ConversationMessage>
-                {
-                    new ConversationMessage
-                    {
-                        Role = RoleEnum.System,
-                        Content = PromptResolver.Shared.GetEffective("title.system")
-                    },
-                    new ConversationMessage
-                    {
-                        Role = RoleEnum.User,
-                        Content = PromptResolver.Shared.GetEffective("title.user") + "\n\n" + BuildTitleTranscript(history)
-                    }
-                };
-
-                using LlmClient client = new LlmClient(endpoint, settings.IgnoreCertErrors);
-                ConversationMessage response = await client.SendAsync(messages, new List<ToolDefinition>(), token).ConfigureAwait(false);
-                return CleanTitle(response.Content);
+                return await Mux.Core.Sessions.SessionTitleGenerator.GenerateAsync(endpoint, history, settings.IgnoreCertErrors, token).ConfigureAwait(false);
             }
             catch (Exception)
             {
                 return null;
             }
-        }
-
-        private static string BuildTitleTranscript(IReadOnlyList<ConversationMessage> history)
-        {
-            StringBuilder builder = new StringBuilder();
-            foreach (ConversationMessage message in history)
-            {
-                if (string.IsNullOrWhiteSpace(message.Content))
-                {
-                    continue;
-                }
-
-                string role = message.Role == RoleEnum.User ? "User" : message.Role == RoleEnum.Assistant ? "Assistant" : "System";
-                builder.Append(role).Append(": ").Append(message.Content!.Trim()).Append('\n');
-                if (builder.Length > 4000)
-                {
-                    break;
-                }
-            }
-
-            return builder.ToString();
-        }
-
-        private static string? CleanTitle(string? raw)
-        {
-            if (string.IsNullOrWhiteSpace(raw))
-            {
-                return null;
-            }
-
-            string title = raw.Trim();
-            int newline = title.IndexOfAny(new[] { '\n', '\r' });
-            if (newline >= 0)
-            {
-                title = title.Substring(0, newline).Trim();
-            }
-
-            title = title.Trim('"', '\'', '`', ' ').TrimEnd('.', ' ').Trim();
-            if (title.Length > 80)
-            {
-                title = title.Substring(0, 80).Trim();
-            }
-
-            return title.Length == 0 ? null : title;
         }
 
         /// <summary>
