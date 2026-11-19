@@ -288,8 +288,9 @@ On the machine side:
   frame.
 - **Parity.** A relayed caller can do everything a local caller can. The one remote-specific switch is
   `cloud.allowRemoteToolApproval` (default `true`). When it is `false`, relayed runs deny tools that would prompt.
-- **Status pushes.** The tunnel sends `machine.status` frames (active runs, runs awaiting approval, approval
-  requested, run completed) so the cloud machine list and mobile notifications stay current. They carry no
+- **Status pushes.** The tunnel sends `machine.status` frames so the cloud machine list and mobile notifications stay
+  current: `status` (active runs and runs awaiting approval, on connect, on each new run, and every 60 seconds),
+  `approval_requested` (a tool approval or an `ask_user` question is waiting), and `run_completed`. They carry no
   conversation content.
 
 ## 10. Minimal client checklist
