@@ -6,6 +6,26 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **REST routes and stream events for desktop parity on other surfaces (the Mux Cloud mobile app first).**
+  - `ask_user` questions reach REST clients that opt in with `askUser: true`: an `ask_user` SSE event and run
+    frame, answered with `POST /v1.0/api/chat/answer` or an `answer` WebSocket frame (choice labels, free text, or
+    skip; 15-minute timeout; answerable through Mux Cloud even with remote tool approval off, and a pending question
+    raises a push).
+  - `tool` SSE events carry the call's `Arguments` and the truncated `Result`; new `attachments` (resolved and skipped
+    `@path` mentions) and `compacted` (auto-compaction) events.
+  - `POST /v1.0/api/sessions/{id}/compact` compacts a saved conversation.
+  - `GET /v1.0/api/processes`, `GET /v1.0/api/processes/{id}/output`, `POST /v1.0/api/processes/{id}/stop`, and
+    `DELETE /v1.0/api/processes` manage background processes.
+  - `GET` and `PUT /v1.0/api/trust` read and set project trust.
+  - `GET` and `PUT /v1.0/api/search` and `DELETE /v1.0/api/search/providers/{name}` manage web search providers (keys
+    never returned).
+  - `GET /v1.0/api/keybindings/commands` lists every bindable command with its default and effective chord. The
+    command catalog moved from the desktop library to `Mux.Core.Keybindings` so the server can share it.
+  - Settings gain `SystemPromptPath`, `MaxTokenBudget`, `ContextWindowSafetyMarginPercent`, `TokenEstimationRatio`,
+    `SkillRefreshIntervalSeconds`, `SkillsDirectory`, and `TelemetryEnabled`.
+  - Run summaries and run state report `PendingApprovalCount` and `PendingQuestionCount`.
+  - Conversations started over REST get an AI-generated title once they pass 250 characters, as on the desktop (the
+    generator moved to `Mux.Core.Sessions.SessionTitleGenerator`).
 - **Auto-approve tools in the web chat.** The dashboard chat (local, and through Mux Cloud) has an
   **Auto-approve tools** switch that runs tools without an approval prompt, saved per browser, with a note above the
   composer while it is on. Chat runs take `autoApproveTools`, and `GET /v1.0/api/chat/capabilities` reports whether the
@@ -45,6 +65,11 @@ All notable changes to mux are documented here.
   account (`<server>/signup`), and a rejected email or password repeats it.
 - The dashboard header fits on phones and tablets: uptime, host, and version drop out on narrow screens, and the
   closed navigation drawer no longer casts a shadow at the left edge.
+
+### Fixed
+
+- `PUT /v1.0/api/settings` no longer resets fields the body leaves out: a partial body is merged onto the current
+  settings.
 
 ## 1.8.0 (unreleased)
 

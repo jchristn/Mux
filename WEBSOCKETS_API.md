@@ -102,6 +102,8 @@ Every frame of a subscribed run. Common fields: `contractVersion`, `eventType`, 
 | `tool_call_proposed` | `toolCall: { id, name, arguments }` | The model proposed a tool call |
 | `approval_requested` | `runId`, `sessionId`, `toolCallId`, `toolName`, `arguments`, `toolAutoApproveSeconds` | The run is waiting for a decision on a tool call (section 6) |
 | `approval_resolved` | `runId`, `sessionId`, `toolCallId`, `decision` | The pending approval was decided: `y`, `always`, or `n` |
+| `ask_user` | `runId`, `sessionId`, `questionId`, `question`, `options: [ { label, description } ]`, `multiSelect`, `allowOther`, `allowSkip`, `timeoutSeconds` | The model asked the user a question and the run is waiting (section 6a) |
+| `ask_user_resolved` | `runId`, `sessionId`, `questionId`, `dismissed` | The question was answered, skipped, or timed out |
 | `tool_call_approved` | `toolCallId` | The tool call will run |
 | `tool_call_completed` | `toolCallId`, `toolName`, `elapsedMs`, `result: { success, ... }` | The tool finished |
 | `heartbeat` | `stepNumber` | Progress marker while tools run |
@@ -161,6 +163,16 @@ or anything else (deny). When `runId` is present, the approval resolves on that 
 subscribed to it. Without `runId`, it resolves on the most recently attached run that has not ended. This
 resolves the same pending approval as `POST /v1.0/api/chat/approve`.
 
+### `answer`
+
+```json
+{ "action": "answer", "runId": "8b2f...", "questionId": "q_3c1...", "answers": ["Postgres"], "other": "and keep SQLite for tests", "skip": false }
+```
+
+Answer a pending `ask_user` question: `answers` are choice labels (one unless `multiSelect`), `other` is free text,
+and `skip: true` skips. Run targeting works like `approve`. Not gated by `cloud.allowRemoteToolApproval`, because a
+question has no side effects of its own. This resolves the same question as `POST /v1.0/api/chat/answer`.
+
 ### `publish`
 
 ```json
@@ -207,10 +219,21 @@ immediately. A tool that would prompt (writing a file, running a process) behave
   never auto-approves on a timer, and canceling the run or disconnecting the chat stream denies the call.
 - A run started with `autoApproveTools: true` (the dashboard's **Auto-approve tools** switch) approves these tools
   itself, so no `approval_requested` is emitted. It applies only when the caller could approve interactively.
-- While a run waits, `GET /v1.0/api/runs/{runId}` reports status `AwaitingApproval`.
+- While a run waits, `GET /v1.0/api/runs/{runId}` reports status `awaiting_approval`.
 
 For a run relayed from Mux Cloud while `cloud.allowRemoteToolApproval` is false, prompting tools are denied as if
 interactive approvals were off, and `autoApproveTools` is ignored.
+
+## 6a. Questions (`ask_user`)
+
+A run started through `POST /v1.0/api/chat/stream` with `askUser: true` hands the model's `ask_user` calls to the user
+(without it, the model is told no user is available and picks a default). The hub emits
+`ask_user` into the run's stream (so it is in the replay buffer) and the chat stream response receives an `ask_user`
+SSE event. Any client answers with an `answer` frame or `POST /v1.0/api/chat/answer`; the first answer wins and the
+hub emits `ask_user_resolved`. An unanswered question times out after `timeoutSeconds` (900), and the model is told
+to choose a sensible default. While a question waits, the run's status reads `awaiting_approval` and
+`GET /v1.0/api/runs/{runId}` reports `PendingQuestionCount`. A question also raises the Mux Cloud
+`approval_requested` machine status, so a phone gets a push notification.
 
 ## 7. Ordering, replay, and limits
 
