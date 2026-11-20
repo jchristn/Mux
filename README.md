@@ -9,22 +9,26 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.8.0-blue.svg" alt="v1.8.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.0-blue.svg" alt="v2.0.0"></a>
   <a href="https://github.com/jchristn/Mux/actions/workflows/ci.yml"><img src="https://github.com/jchristn/Mux/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.nuget.org/packages/Mux.Core"><img src="https://img.shields.io/nuget/v/Mux.Core.svg" alt="NuGet Mux.Core"></a>
 </p>
 
 [Get started](#getting-started) · [Model providers](#model-providers) · [CLI usage](#cli-usage) · [Configuration](#configuration) · [Documentation](#documentation)
 
-Version 1.8.0 moves the `openai` adapter to OpenAI's Responses API on PolyPrompt 4.0, so every current
+Version 2.0.0 adds [Mux Cloud](https://app.usemux.ai): sign a machine in with `mux cloud login` (or from the
+desktop app, dashboard, VS Code, or the tray menu) and use it from any browser or the Mux mobile app as if you
+were at it. 2.0.0 also ships the 1.6.0 to 1.8.0 changes below, which were not released on their own.
+
+Version 1.8.0 moved the `openai` adapter to OpenAI's Responses API on PolyPrompt 4.0, so every current
 OpenAI model works, including the codex-tuned coding models, and reasoning models keep their reasoning
-across tool calls and resumed sessions. Model listing now covers OpenAI, Anthropic, Gemini, Bedrock, and
+across tool calls and resumed sessions. Model listing covers OpenAI, Anthropic, Gemini, Bedrock, and
 Azure OpenAI, keyed adapters fall back to their standard API-key environment variables, reasoning effort
 gains `none`, `xhigh`, and `max`, and the usage views show the effort actually sent. Credentials are API
 keys only. See [model providers](docs/PROVIDERS.md) for the one change to check: an `openai` endpoint
 pointed at a Chat Completions gateway should use `openai-compatible`.
-It also adds fourteen color palettes, plus your own, shared by the terminal, desktop app, web dashboard, and VS
-Code, along with a blinking caret in the palette's cursor color. The terminal endpoint editor now covers all 11
+It also added fourteen color palettes, plus your own, shared by the terminal, desktop app, web dashboard, and VS
+Code, along with a blinking caret in the palette's cursor color. The terminal endpoint editor covers all 11
 adapters, and models can be imported from any endpoint on every surface. See
 [color palettes](docs/CONFIG.md#color-palettes).
 

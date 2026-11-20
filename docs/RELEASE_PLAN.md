@@ -22,17 +22,20 @@ checksums.
 
 ## 2. Gaps before publishing 2.0.0
 
-1. **Version.** Mux reports 1.8.0; MuxCloud and `MuxCloud.Protocol` are 2.0.0, and the Mux work lives on
-   `feature/v2.0.0` (CHANGELOG "Unreleased"). Decision: bump Mux to 2.0.0 (VERSIONING.md requires explicit approval).
-   Versions 1.6.0 to 1.8.0 were never released; skip straight to 2.0.0.
+1. **Version.** Done 2026-11-19 (approved): every Mux project and `Defaults.ProductVersion` are 2.0.0, matching
+   MuxCloud and `MuxCloud.Protocol`. Versions 1.6.0 to 1.8.0 were never released; their CHANGELOG sections are marked
+   "shipped in 2.0.0". The VS Code extension (1.8.3) and the SDKs (1.5.0) keep their own versions.
 2. **Merge.** `feature/v2.0.0` is 17 or more commits ahead of `main`. Merge after validation; the release workflow
    checks out the branch it runs on, so run it from `main` (or pass `--ref`).
-3. **Tray agent in the installers.** The publisher packages the desktop app ("Mux") and the CLI, but not the tray
-   agent ("Mux Agent"). The agent hosts the hub and keeps the Mux Cloud connection open when no window is open, so
-   it should ship in the `.dmg`, the Windows setup, and the Linux packages, with an optional "start at login" step.
-   Work: add the agent as a publisher artifact, include it in the dmg, Inno, and deb/rpm/AppImage layouts, and
-   register login startup (the `run-at-startup` scripts already do this per OS).
-4. **Package managers (optional).** No repository secrets are set, so winget, Chocolatey, Homebrew, Scoop, NuGet, and
+3. **Tray agent in the installers.** Already done: the `desktop` artifact in `publisher.json` bundles `Mux.Agent`
+   and the CLI beside the desktop app, so the `.dmg` (`Mux.app/Contents/MacOS/Mux.Agent`, checked in the 1.8.0
+   build), the Windows setup, the `.deb`/`.rpm`, and the AppImage all carry it. The desktop app starts the agent on
+   launch (`AgentLauncher.EnsureRunning`), and the agent registers itself for login startup on first run
+   (`StartupRegistrar`: a LaunchAgent on macOS, the `Run` key on Windows, a systemd user unit or XDG autostart entry
+   on Linux; opt out with `MUX_AGENT_AUTOSTART=0`). Remaining: check it on each OS in the smoke test (gap 7).
+4. **Package managers (not in 2.0.0).** 2.0.0 ships installers for Windows, macOS, and Linux on GitHub Releases
+   only. Package managers (winget, Chocolatey, Scoop, Homebrew, apt/yum repositories) let users install with one
+   command and get updates; they can come later. No repository secrets are set, so winget, Chocolatey, Homebrew, Scoop, NuGet, and
    the apt/yum repositories are skipped; only the GitHub Release upload runs (it uses the workflow token). To turn
    them on later, add `WINGET_TOKEN`, `CHOCO_API_KEY`, `NUGET_API_KEY`, `GPG_PRIVATE_KEY` / `GPG_KEYID`, and the
    tap/bucket repositories. Homebrew casks for unsigned apps need `--no-quarantine` in the install instructions.
@@ -55,9 +58,9 @@ Right-click, Open no longer bypasses Gatekeeper on macOS 15, so the instructions
 
 ## 4. Steps to release 2.0.0
 
-1. Approve the 2.0.0 version bump, then bump every `<Version>` and the CHANGELOG heading on `feature/v2.0.0`.
-2. Ship the tray agent in the installers (gap 3) and add the smoke-test job (gap 7). Test locally with
-   `scripts/<os>/build-installers.sh 2.0.0 --dry-run` and a full build on this Mac.
+1. Bump to 2.0.0: done.
+2. Add the smoke-test job (gap 7), including a check that the tray agent starts and registers for login.
+   Test locally with `scripts/<os>/build-installers.sh 2.0.0 --dry-run` and a full build on this Mac.
 3. Validate: full test suite, MuxCloud end-to-end (`scripts/e2e-real.sh`), and one install per OS from a dry run:
    `gh workflow run release.yml -f version=2.0.0 -f publish=false`, then download the artifacts from the run.
 4. Merge `feature/v2.0.0` into `main`.
@@ -71,11 +74,13 @@ Right-click, Open no longer bypasses Gatekeeper on macOS 15, so the instructions
 
 MuxCloud has no installers; it ships the `jchristn77/muxcloud-server` Docker image and the `MuxCloud.Protocol` NuGet
 package. A `v2.0.0` GitHub release in `jchristn/MuxCloud` can carry the release notes, the Docker and NuGet links, and
-(optionally) the Android APK for sideloading until the Play listing is live.
+(later) the Android APK for sideloading.
 
-## 6. Decisions needed
+## 6. Decisions
 
-- Approve bumping Mux to 2.0.0.
-- Ship the tray agent in the installers (recommended) or keep it source-install only.
-- Turn on package managers now or after 2.0.0.
-- Attach the Android APK to the MuxCloud release or not.
+Made 2026-11-19:
+
+- Bump Mux to 2.0.0: yes (done).
+- Tray agent in the installers: yes (already bundled; see gap 3).
+- Package managers: not for 2.0.0. The first release is GitHub Releases installers for Windows, macOS, and Linux.
+- Android APK on a MuxCloud release: not now; the mobile release is separate.
