@@ -8,7 +8,7 @@ REM
 REM The token is a VS Code Marketplace Personal Access Token, created in Azure
 REM DevOps with scope "Marketplace: Manage" and organization "All accessible
 REM organizations". See PUBLISH_VSCODE.md for how to create it and how to create
-REM the "usemux" publisher.
+REM the "LatticeAI" publisher.
 REM
 REM Publishes whatever version is in src\Mux.VSCode\package.json. To re-publish,
 REM bump "version" there first - the Marketplace rejects a version that already
@@ -86,7 +86,7 @@ if errorlevel 1 (
 popd
 echo.
 echo Done. Published to the VS Code Marketplace:
-echo   https://marketplace.visualstudio.com/items?itemName=usemux.mux-ai
+echo   https://marketplace.visualstudio.com/items?itemName=LatticeAI.mux-ai
 endlocal
 exit /b 0
 
